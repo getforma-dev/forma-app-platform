@@ -1,0 +1,22 @@
+{
+  "stage": "owner-ask",
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "started_at": "2026-11-01T20:23:56.772Z",
+  "checks": [
+    "Real document Ask button selected exactly this app/work and its sole current record.",
+    "One journaled model request returned the real item and due date with exactly one matching server record receipt.",
+    "Rendered answer and expanded receipt match the HTTP response; record values, authority pins and listing metadata remain unchanged."
+  ],
+  "request_count": 1,
+  "page_error_count": 0,
+  "limits": [
+    "Response and record values stay private until inspected/redacted.",
+    "A hosted talk.answered source=model log correlation is separate evidence of actual provider use.",
+    "One question over the exact saved work and its one existing record; no other app or collection is added."
+  ],
+  "response_ms": 1520,
+  "http_status": 200,
+  "passed": true,
+  "journaled": true,
+  "finished_at": "2026-11-01T20:24:01.724Z"
+}

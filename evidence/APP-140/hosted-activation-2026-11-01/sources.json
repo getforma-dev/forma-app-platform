@@ -1,0 +1,31 @@
+{
+  "source": "Private reviewed deployment window 1608eea9; only non-secret fact extracts retained. Original activation request and false canvas oracle remain unmodified in private operator evidence.",
+  "sha256": {
+    "activation-supplemental-ready.json": "1ad4fafb0f3edebd4a7a6c2ac1cb11ea68ad7a90241c730129e61316abf8c179",
+    "auth-entry-public-probes.json": "696fb6574bf2a379eb22c984c42627484d2746f22e8beabc541fafff36bf09d1",
+    "uniform-anonymous-denial-probes.json": "b26f2325c53b1f4a6e2e87196001b30733bc05a02c79c62743329b8e8cd3ac53",
+    "verify-original-stale-oracle.json": "dec2101dbf556bca6dad1f819bf09a3723c92f1d05ad9ab9ac22416a7b753128",
+    "activation-receipt-normalization.json": "60b4dd3e9d8168dbdccf7e240e55d472f44e4a180bb40a737e166263f39084df",
+    "activation-services-final.json": "63f13807c87136e66a7e568bf1826e942e0e70224b5d5f1f470508587c372697",
+    "activation-tasks-final.json": "cd5adcbd3d9e1f330bd8caa24226f52bbdf5185f3d3d376647f739ba3eadbd09",
+    "run-baseline13-1.stopped.json": "ac5178a8f9358222737a309ba53cb0c85f910769f0478f4a6663f62537ecf00d",
+    "run-baseline13-1.log.json": "b8ff98d42696ec7affb216ca8353990658d98031cef5d6d2a0a1ef3648be6f56",
+    "run-migrate-1.stopped.json": "bf4d45264a245d10ba05f17461a0eb59601f1715d055d5b46f223e5da1a7fa71",
+    "run-migrate-1.log.json": "9ea811b33659ea634f1cf6b3bed88d67389731fdb163eca3aa8e21639be845a0",
+    "run-verify-catalog-1.stopped.json": "1e98e67e25513052fef89523f153ecbeb0a0484028988495cc128128b07b8cc6",
+    "run-migrate-repeat-1.stopped.json": "e3c4d5f6f3836945cc43a7111ad1c8de61d241bcde966e355d63073a94dac144",
+    "run-migrate-repeat-1.log.json": "2acf4660636bd277f0725aaaff928e23294f0041a9b16559840696d47791e72c",
+    "run-verify-catalog-repeat-1.stopped.json": "07c64cbf0082862e304a5f90458fe0b6a487ea5c4c7def289b03ad1242448a98",
+    "run-verify-catalog-repeat-1.log.json": "e45188f121625102c701553dd2ff6ee3126e490c23d81e67b099bc654c2f631b",
+    "run-provision-clean-1.stopped.json": "8a1629ccbfe1158a868a158e3b9fc187fbaa4e87b4ece30ff5dabfdf91bff6a4",
+    "run-verify-clean-1.stopped.json": "5ab76aa8649820a08938725a2c22959ddf81ef28f0e546faa6464fe6ef2fe8a5",
+    "run-verify-clean-1.log.json": "c10a388d9572d80cac56a46b6076545cbe50f5c501cea1101c4f9e9916a78995",
+    "run-issue-owner-1.stopped.json": "c7d723837de26ca4442dcc091a3b1beeee60647598d93ce566b8cb4d64b9d4db",
+    "run-list-owner-1.stopped.json": "c62b84a82cef0f1a2f217c1d544248dae36dbd38c5f9fdb5992495d5b566fe24",
+    "provider-zero-users-after-owner-invite.json": "71dc13dc4c7f266539114e7aea994c0b6c4bf05944220479730b172e7f129356",
+    "snapshot-available.json": "6fcfe81f83dd7826257bb07d76f710dc9d71092cf47a3c09e08a20a521449aa3",
+    "release-before-corrected-verifier-64ce1f0.json": "88a6b476a268c75189b0bb1c4c4e74b43f2628324822207368692c6877af7e95",
+    "verify-corrected-ops64ce1f0.json": "64c73f318f9e065c77d06201a57c0b3d57f3ed405e3f3b66416ad76f8f9ac599",
+    "verify-corrected-ops64ce1f0.txt": "454bfd0e774c041373fd20c2c39b248f5208fad7a8d29e8b90a86ba429302fdc"
+  }
+}

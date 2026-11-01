@@ -1,10 +1,10 @@
-# APP-140 clean hosted trial preparation
+# APP-140 clean hosted trial evidence
 
-November 1 source, local qualification and specifically authorized provider setup. This evidence does **not** claim the application was deployed or that a real owner/guest trial completed.
+The clean beta activated on November 1 at 20:13:41 UTC from exact candidate `711d87d`: application TD 13, broker TD 1 and catalog 18. [Actual activation evidence](hosted-activation-2026-11-01/README.md) records the healthy deployment, operator results, release tag and preserved verifier findings. The [genuine owner journey](../APP-139/hosted-owner-2026-11-01/README.md) separately passed; real new-recipient acceptance and recording remain open. The preparation sections below retain their earlier observation scope.
 
 - [hosted-preparation.json](hosted-preparation.json): sanitized live baseline, fresh provider tenant/client registration, the one SES verification request, local budget reconciliation and remaining execution boundaries.
 - [local-validation.json](local-validation.json): focused suite results. The full candidate check, CI and image identities belong to the integration delivery record.
-- [Image security follow-up](IMAGE-SECURITY.md): exact ARM64 scan findings, available Debian fixes, package resolution and the remaining vendor-open findings. Replacement image qualification and scans are required before deployment.
+- [Image security follow-up](IMAGE-SECURITY.md): exact ARM64 scan findings, available Debian fixes, package resolution and the remaining vendor-open findings. Final qualification and actual registry scans are recorded in [the candidate receipt](mvp-candidate-711d87d/README.md).
 - [Clean deployment sequence](../../docs/pitch/CLEAN-TRIAL-DEPLOY.md): actual inputs, operator steps, empty first-member admission and activation checks.
 
 ## Changes and checks

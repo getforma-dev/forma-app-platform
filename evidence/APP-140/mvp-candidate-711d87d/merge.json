@@ -1,0 +1,10 @@
+{
+  "baseRefName": "pivot/pitch-mvp",
+  "headRefOid": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "mergeCommit": {
+    "oid": "6c308f1a9c7db08d019332bb14b9b235db650362"
+  },
+  "mergedAt": "2026-11-01T19:48:13Z",
+  "state": "MERGED",
+  "url": "https://github.com/getforma-dev/forma-app-platform/pull/31"
+}

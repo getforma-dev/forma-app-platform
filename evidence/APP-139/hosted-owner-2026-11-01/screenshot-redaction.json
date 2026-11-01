@@ -1,0 +1,6 @@
+{
+  "artifact": "named-private-share-public.png",
+  "method": "The recipient label was temporarily replaced in the local browser DOM with [Recipient email redacted] before a new screenshot. No server data or grant was changed.",
+  "reason": "Screenshot mask and injected CSS did not obscure a top-layer dialog under the page policy; those private captures are excluded.",
+  "checked_at": "2026-11-01T20:25:48.374Z"
+}

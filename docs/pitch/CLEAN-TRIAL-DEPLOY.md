@@ -4,6 +4,12 @@ This is the clean profile of [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md), prepared on
 
 Local source qualification is not a hosted acceptance result. Complete the deployment receipt, real registration/sign-in and owner-to-external-recipient journey before closing APP-140. Keep the owner and recipient mailboxes, codes, provider keys and tokens in the private operator directory only.
 
+## Execution status — November 1, 20:26 UTC
+
+Window `1608eea9` completed clean activation at **20:13:41 UTC**: tested candidate `711d87d`, schema **18**, application TD **13**, broker TD **1**, both services healthy. The active reservation expires **November 30 at 20:00 UTC**, with projected totals **$169.81 GenUI / $207.81 combined** under the unchanged caps. These are the execution window's reservation and expiry; the 18:35 preparation calculation and older window below are dated history, not the current deployment state. [Actual activation evidence](../../evidence/APP-140/hosted-activation-2026-11-01/README.md) retains the verified baseline catalog 13, snapshot, migration to 18, healthy tasks, images and corrected public verifier.
+
+The [genuine owner journey](../../evidence/APP-139/hosted-owner-2026-11-01/README.md) subsequently passed admission, provider verification/sign-in, empty-workspace app creation, a committed record, a pending private share and contextual Ask. New-recipient signup/acceptance and the final recording remain open. The following baseline, provider setup and deployment sequence document the preparation and completed execution; **do not replay them against this completed window**. A later deployment needs its own current observations, qualified candidate and reviewed window. The original timed observations and amounts remain below for audit.
+
 ## Observed baseline and cost
 
 The read-only AWS snapshot at `2026-11-01T18:08:53Z` confirmed account `877573132739`, region `us-east-1`, `GenuiSyntheticFoundation` in `UPDATE_COMPLETE`, no pending change set and one healthy service at TD:12 (one desired/running, zero pending). Its ARM64 service digest was `sha256:b093b942d8840e2c1b580708b11ed95e8ceb4c4306f1710d3737d530d6b1e4c3`. The expiry was `2026-11-30T23:00:00Z`. This observation did not inspect the database catalog; schema 13 remains historical inference until the managed catalog check proves it.
@@ -24,7 +30,7 @@ The existing platform-admin secret can list tenants through `GET /platform/tenan
 | --- | --- |
 | Provider origin | `https://auth-staging.getforma.dev` |
 | Fresh tenant slug | `forma-trial-20261101` |
-| Tenant policy | email-only, invite-only, maximum 10 users |
+| Tenant policy | email and password, invite-only, maximum 10 users |
 | Member client | `forma-trial-20261101-platform` → `https://beta.getforma.dev/auth/callback` |
 | Shared client | `forma-trial-20261101-shared` → `https://beta.getforma.dev/auth/shared/callback` |
 | New management secret | `fauth-beta/management/forma-trial-20261101`, AWS-managed Secrets Manager encryption |

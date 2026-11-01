@@ -1,0 +1,13 @@
+{
+  "operator_source": "64ce1f04",
+  "application_candidate": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "result": {
+    "live": true,
+    "canvas": true,
+    "entry": true,
+    "mcp": true,
+    "slack": true,
+    "slack_mode": "on"
+  },
+  "scope": "Read-only public probes using the corrected verifier; no application redeploy or account action."
+}

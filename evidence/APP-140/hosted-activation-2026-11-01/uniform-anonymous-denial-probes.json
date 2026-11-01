@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "observed_at_utc": "2026-11-01T20:14:52.199155+00:00",
+  "probes": [
+    {
+      "path": "/canvas",
+      "status": 404,
+      "content_type": "application/problem+json",
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1"
+    },
+    {
+      "path": "/v1/mcp",
+      "status": 404,
+      "content_type": "application/problem+json",
+      "body_sha256": "fa0799bf968c2b0c16ccc985aaef61d060c2abdb50a0b32850fa329f8aa211d1"
+    }
+  ],
+  "uniform_not_found_body": true,
+  "original_verify_failure_preserved": true
+}

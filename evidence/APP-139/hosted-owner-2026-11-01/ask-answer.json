@@ -1,0 +1,29 @@
+{
+  "receipts": [
+    {
+      "app_id": "224f4bba-50dd-4547-bbdd-5451652a4c1b",
+      "collection_id": "a75a5778-4b3a-435e-a525-d6ce36c8cfdc",
+      "commit_sequence": 1,
+      "committed_at": "2026-11-01T20:16:34Z",
+      "definition_digest": "sha256:6b127ab08e82579780645bc755b68b18ec9259cbd8ea1f92334af8a0e3af9700",
+      "kind": "record",
+      "publication_id": "81c4a121-9454-4dc1-b943-225188c711e5",
+      "record_id": "15ded004-7ebe-47b0-bddf-0e59be0c71e5",
+      "reference": "r1",
+      "version": 1,
+      "work_id": "39590fb0-e829-473e-80ef-b86600d1072b",
+      "work_version": 1
+    }
+  ],
+  "references": [
+    {
+      "address": "",
+      "app_id": "224f4bba-50dd-4547-bbdd-5451652a4c1b",
+      "label": "Victor Villacis",
+      "record_id": "15ded004-7ebe-47b0-bddf-0e59be0c71e5",
+      "ref": "r1",
+      "work_id": "39590fb0-e829-473e-80ef-b86600d1072b"
+    }
+  ],
+  "text": "The item requested is a Portable display with a due date of 2026-11-02. The request was submitted by Victor Villacis for use at the Monday customer workshop."
+}

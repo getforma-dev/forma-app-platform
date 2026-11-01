@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "observed_at_utc": "2026-11-01T20:24:44.508313+00:00",
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "image_digest": "sha256:6d3f93f1ebd71c673a793faac8350efec00aef6f6e7ac6bcad86ed8369591362",
+  "browser_stage": "owner-ask",
+  "browser_started_at": "2026-11-01T20:23:56.772Z",
+  "browser_finished_at": "2026-11-01T20:24:01.724Z",
+  "browser_receipt_sha256": "9050dd8c57167001e0fbbe2af7c12260f3bd8d8207e03f5a42d3a5584a94ff52",
+  "private_source_receipt_sha256": "4b06ca91a1fa3a3d1e027ae63dc2d5fe43c6827ffee66b81d97688be5d4214e9",
+  "events": [
+    {
+      "event": "composer.model",
+      "model": "claude-haiku-4-5-20251001",
+      "requested_model": "claude-haiku-4-5-20251001",
+      "attempt": 0,
+      "input_tokens": 527,
+      "output_tokens": 54,
+      "duration_ms": 1028,
+      "observed_at_utc": "2026-11-01T20:24:01.036000+00:00",
+      "source_line_sha256": "079925ca50bc6a1c4a14d030fb10db84219c3e2a79efaf0b1a0d035e303af2bb"
+    },
+    {
+      "event": "talk.answered",
+      "source": "model",
+      "works": 1,
+      "records": 1,
+      "partial": false,
+      "references": 1,
+      "duration_ms": 1333,
+      "observed_at_utc": "2026-11-01T20:24:01.242000+00:00",
+      "source_line_sha256": "6cf5fea6838e26b3fdcd7c491c94e050269bcbf69e99beb5ce32c3448b88c46d"
+    }
+  ],
+  "same_trial_organization": true,
+  "exact_healthy_live_task_verified": true,
+  "no_endpoint_override": true,
+  "compiled_default_endpoint": "https://api.anthropic.com/v1/messages",
+  "read_only_evidence_collection": true,
+  "correlation_limit": "Timestamp and exact live service task; application does not log a browser request identifier in composer.model.",
+  "personal_content_retained": false,
+  "scope_limit": "Shows actual model response and app answer telemetry during the single journaled browser Ask; does not assert unqueried database row counts."
+}

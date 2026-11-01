@@ -1,0 +1,69 @@
+{
+  "scope": "Actual clean hosted owner identity and product journey; recipient has not registered. Request paths containing private tenant/sign-in handles are intentionally omitted.",
+  "stages": [
+    {
+      "stage": "owner-register",
+      "expected_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+      "started_at": "2026-11-01T20:15:17.472Z",
+      "finished_at": "2026-11-01T20:15:19.950Z",
+      "page_error_count": 0,
+      "result": "registered_pending_email_verification",
+      "passed": true
+    },
+    {
+      "stage": "owner-verify",
+      "expected_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+      "started_at": "2026-11-01T20:15:48.614Z",
+      "finished_at": "2026-11-01T20:15:49.231Z",
+      "page_error_count": 0,
+      "result": "provider_email_verified",
+      "passed": true
+    },
+    {
+      "stage": "owner-signin",
+      "expected_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+      "started_at": "2026-11-01T20:15:56.646Z",
+      "finished_at": "2026-11-01T20:15:59.228Z",
+      "page_error_count": 0,
+      "result": "verified_member_signed_in",
+      "passed": true
+    },
+    {
+      "stage": "owner-create",
+      "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+      "started_at": "2026-11-01T20:16:08.619Z",
+      "finished_at": "2026-11-01T20:16:21.918Z",
+      "checks": [
+        "Empty visible workspace and canvas before creation.",
+        "UI edited the selected template, observed HTTP200 adapted creation, retained base fields plus date, and admitted app has zero records."
+      ],
+      "page_errors": 0,
+      "passed": true,
+      "observed_post_count": 1
+    },
+    {
+      "stage": "owner-record",
+      "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+      "started_at": "2026-11-01T20:16:32.042Z",
+      "finished_at": "2026-11-01T20:16:36.977Z",
+      "checks": [
+        "Native admitted form sent one command; server returned committed audit receipt; real authorized record listing contains exactly one record."
+      ],
+      "page_errors": 0,
+      "passed": true,
+      "observed_post_count": 1
+    },
+    {
+      "stage": "owner-share",
+      "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+      "started_at": "2026-11-01T20:22:23.048Z",
+      "finished_at": "2026-11-01T20:22:25.676Z",
+      "checks": [
+        "Exact app had no prior shares; one intended recipient received a pending view-only grant, with explicit add-to-canvas permission. The guest still must sign up or sign in, verify email, and explicitly accept."
+      ],
+      "page_errors": 0,
+      "passed": true,
+      "observed_post_count": 1
+    }
+  ]
+}

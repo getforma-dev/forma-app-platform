@@ -6,6 +6,10 @@ The user requested fixes for available findings. The three runtime Dockerfiles r
 
 At this record, only package availability and dependency resolution have been verified. The next clean commit must build and qualify all three images, then the pushed ARM64 child digests must be scanned again. Expected counts based on Debian status are not a substitute for those scan results. The remaining **11 high, 10 medium and 3 low** findings are vendor-open in Bookworm; applicability is assessed below without calling them fixed.
 
+## Later completed rebuild and registry scans
+
+The historical observation above was followed by candidate `711d87d`, merged through PR 31 at `6c308f1`. All three ARM64 images were built and qualified; package readback confirms the exact installed fixes. Completed registry scans at 19:38:50 UTC each removed the expected 25 findings and introduced none, retaining 11 high, 10 medium and three low findings (zero critical). See [the final candidate receipt](mvp-candidate-711d87d/README.md) for exact image children, qualification and comparison. The original triage remains a dated record; the findings below still retain their stated applicability limits. This update does not claim hosted activation or zero vulnerabilities.
+
 ## Available fixes pinned
 
 Versions come from the official [Debian Security Tracker](https://security-tracker.debian.org/tracker/data/json) and the signed Bookworm / Bookworm-security ARM64 APT indexes. Source-package versions and binary versions can differ by epoch or rebuild suffix; notably `libcap2` is pinned to the available binary `1:2.66-4+deb12u3+b1` on both ARM64 and AMD64.

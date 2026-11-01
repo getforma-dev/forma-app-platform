@@ -1,0 +1,15 @@
+{
+  "retained_on": "2026-11-01",
+  "source_reports_directory": "rename-share",
+  "artifacts_sha256": {
+    "README.md": "c4d1772e5d2abed254e42f9407ed5341e71eda7b40bc5fc3f40d614634d27fd6",
+    "report.json": "d34891457253427c44724ff1603afac5c3c6dc93463dac2954fcd2cfaf7c1741",
+    "browser.mjs": "4d0e776a6cb8d4ab785030abaca5ea4cc799d7903f39d659c01fba9865c25f2e",
+    "recipient-before.png": "6efefc23aadf52594204ad68b8844c2b018d99403eb81035b8ba8da69123c545",
+    "recipient-after.png": "de86bae902c8cc3374d6f50e34407aa794613e3f610f2ae2c4ece3b2277fde3d",
+    "connected-before.png": "60088668fddd40964d26b621322da240bb4a25818adab208f805ac037a4464f4",
+    "connected-after.png": "c05b9b93b5d0c082c14ca721b450e24f7e1b3df55039388137fb6183cf74b110"
+  },
+  "screenshot_review": "All retained PNGs visually inspected: synthetic fixture names and data only; no visible email addresses, cookies, tokens or credentials.",
+  "limits": "Local synthetic identities. README may be edited for spacing and reproduction notes; original hashes are retained here. Scripts require their own disposable test share and local fixture setup; no hosted execution is authorized by these artifacts."
+}

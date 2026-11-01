@@ -1,0 +1,7 @@
+{
+  "live": true,
+  "canvas": false,
+  "mcp": true,
+  "slack": true,
+  "slack_mode": "on"
+}
