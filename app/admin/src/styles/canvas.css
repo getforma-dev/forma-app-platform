@@ -1322,6 +1322,41 @@
 .cv-lib-card.is-on .cv-lib-action::before { content: "● "; font-size: 0.6rem; vertical-align: 1px; }
 .cv-lib-card.is-on .cv-lib-toggle:hover .cv-lib-action { background: rgb(180 35 24 / 10%); color: var(--cv-bad); }
 .cv-lib-card.is-on .cv-lib-toggle:hover .cv-lib-action::before { content: "− "; }
+.cv-lib-card.is-dragging { opacity: 0.55; }
+body.is-library-dragging { cursor: grabbing; user-select: none; }
+.cv-lib-drag {
+  position: fixed;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.5rem;
+  align-items: center;
+  width: max-content;
+  max-width: 260px;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--cv-accent);
+  border-radius: 10px;
+  background: var(--cv-surface);
+  box-shadow: var(--cv-shadow-lift);
+  color: var(--cv-text);
+  font: 600 0.82rem var(--cv-sans);
+  pointer-events: none;
+}
+.cv-lib-drag .cv-lib-num { grid-row: 1 / span 2; }
+.cv-lib-drag-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-lib-drag-hint { color: var(--cv-muted); font-size: 0.68rem; font-weight: 550; }
+.cv-lib-drag[data-drop="outside"],
+.cv-lib-drag[data-drop="placed"] { border-style: dashed; border-color: var(--cv-line); }
+.cv-lib-drop {
+  position: fixed;
+  z-index: 25;
+  box-sizing: border-box;
+  border: 1.5px dashed var(--cv-accent);
+  border-radius: 16px;
+  background: var(--cv-accent-soft);
+  pointer-events: none;
+}
 .cv-slash-badge { justify-self: start; padding: 0 0.35rem; border-radius: 6px; background: var(--cv-sunken); color: var(--cv-muted); font-size: 0.75rem; }
 /* APP-118: the completion grid lives with the other slash rules (actions.css). */
 
@@ -1503,7 +1538,8 @@
 .bx-lineage li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem; color: var(--cv-text); font-size: 0.78rem; }
 .bx-lib-row .bx-lib-open { width: 100%; }
 .bx-lib-new { margin: 0.25rem 0 0.25rem 1.6rem; }
-.cv-canvas[data-file-drag="true"] { outline: 2px dashed var(--cv-accent); outline-offset: -8px; }
+.cv-canvas[data-file-drag="true"],
+.cv-canvas[data-library-drop="true"] { outline: 2px dashed var(--cv-accent); outline-offset: -8px; }
 
 /* The viewer and the data sheet: focus mode's look (APP-106), stacked above it. */
 .bx-backdrop {

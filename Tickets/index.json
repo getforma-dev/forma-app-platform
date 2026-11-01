@@ -3361,7 +3361,7 @@
       "Depends on": "APP-094, APP-101, APP-103",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`pivot/library-pane` (from `pivot/pitch-mvp` 8add820)",
+      "Branch / PR": "Library pane is on pivot/pitch-mvp. Card drag: pivot/app-104-library-drag. Fences and the other leftovers stay open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
