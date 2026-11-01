@@ -16,9 +16,18 @@ Layout and the set of cards the member brought onto the board stay in this brows
 
 There is no vector index and no client-side authority. Routing is server-side, under the member's session.
 
-`composer::matcher` scores the member's openable library apps from the compiled catalog (`catalog.json`, produced with the library fixtures). A clear hit places that app with no model call. A near tie returns a chooser. No hit, or "build something new", goes to generation. A slash address or a chooser click pins one app and does not route (`composer::routes::Pin`). `GET /v1/library` lists only apps the session may open. A foreign tenant's module is not in that list.
+`composer::matcher` scores the library apps the member may open now. An app whose definition digest is in the library sidecar (`contracts/fixtures/library/catalog.json`) is scored from that sidecar's routing metadata. An app outside the sidecar is scored from its title and its definition's vocabulary. The member's authoring app is never a candidate. `GET /v1/library` lists only apps the session may open. A foreign tenant's module is not in that list.
 
-The matcher runs in every organization. It is not a demo shortcut. Rehearsed sentences that skip the model are. Those are limited to organizations listed in `GENUI_DEMO_ORGANIZATIONS` and are off unless `demo::is_demo_org` is on (`app/src/demo.rs`).
+A confident pick is `Retrieve` and makes no model call (`Composer::route`). A miss does not go straight to generation. A near tie or no hit is sent to the router model, whose closed reply is `Retrieve`, `Adapt`, or `Generate` (`plan::decide`). An empty library is `Generate` with no call. With the matcher on and no model configured, a near tie or miss returns the nearest catalog app as `Retrieve` (`nearest`) or `ModelError::Unavailable` when there is no candidate. If the router call itself fails while a model is configured, `compose_instant` continues as `Generate` with confidence `router_failed`.
+
+Which of those paths runs depends on the pin (`composer::routes`):
+
+- `Pin::Free` is what `compose_for` uses. It calls `Composer::route` and does not stop a near tie for a chooser.
+- `Pin::Chooser` is the canvas. When the matcher is on, a near tie of at least two apps returns `First::Choose` and does not call the router. Any other intent then uses `Composer::route`.
+- `Pin::App` is a slash address or a chooser click. It retrieves that one app and does not route.
+- `Pin::Generate` is "build something new". It skips routing and asks for generation.
+
+The matcher is on for every organization unless `GENUI_COMPOSER_MATCHER=off`. It is not a demo shortcut. Rehearsed sentences that skip the model are. Those are limited to organizations listed in `GENUI_DEMO_ORGANIZATIONS` and are off unless `demo::is_demo_org` is on (`app/src/demo.rs`). `composer::tests::the_router_decides_only_within_the_catalog` is the check that a router reply cannot name an app it was not shown.
 
 ## Composer
 
@@ -41,7 +50,18 @@ Each invariant is ADR-011 §3. The check named is the one in this tree that prot
 | I3 Receipts | A governed number is shown with its receipt. A denied or failed view shows no number. | `storage::query_qualification::native_query_campaign`; `tests::canvas_page_renders_groups_cards_and_receipts_without_javascript` |
 | I4 Transactional commands | One command writes the record, the idempotency outcome, and one audit event, or it writes nothing. Retry returns the stored outcome. | `storage::command_qualification::native_command_campaign` |
 | I5 Model output is data | A generated definition is admitted whole. Authoring rules run after admission. Model text is never code, SQL, markup, or a grant. | `composer::plan::plan_generated` then `require_authored`; `composer::tests::hostile_outputs_are_refused_by_admission_and_retries_carry_codes_only`; `composer::tests::generated_content_meets_the_authoring_verdict_and_offers_an_entry_form` |
-| I6 No secrets in evidence | Campaign reports and this note do not carry a credential, a raw code, or a model key. | The invite and pitch campaigns scan their reports; the key is read from the secret, not from argv |
+| I6 No credential, address, or code in public evidence | The rule is ADR-011. The automated checks cover some surfaces, not every report. | See the I6 limits below |
+
+## I6 limits
+
+These checks exist. They are not one scanner over every campaign report.
+
+- `auth::invite_tests` keeps the captured HTTP responses, the database dump, and the captured log lines free of the raw code, the invitation token, and the issued code. The authorize redirect may carry the bounded `request_uri`. The same test's negative control shows the observer detects a planted secret.
+- `native_invite_race_campaign` asserts that the JSON it is about to write for `GENUI_INVITE_RACE_REPORT` does not contain those secrets, then writes it. That assertion is on the race report only.
+- `native_slack_campaign` asserts that the captured log and every posted Slack message contain no bot token, signing secret, or link token. The bot token is allowed only on the Web API `Authorization` header.
+- `composer::model::tests::debug_output_never_carries_the_key` asserts that `Debug` of the Anthropic client redacts the key. It does not read a campaign report.
+
+`native_pitch_campaign` writes `GENUI_PITCH_CAMPAIGN_REPORT` and prints it (`storage/pitch_qualification.rs`) without that kind of scan. Addresses in public evidence are an ADR-011 rule checked by reading the evidence, not by an assertion in these campaigns. This note was read for a credential, a raw code, and a model key. That reading is not a test.
 
 ## Shortcuts
 
