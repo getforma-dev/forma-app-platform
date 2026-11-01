@@ -115,7 +115,7 @@ There are ten tenant-foundation and eight pitch campaigns in the current CI cata
 
 ## Parser and release images
 
-`just parser` builds the separate parser workspace into `.cache/parser-target/`; `just parser --print-dir` reports the path. Build it before local CSV/XLSX import testing, and before the dev server starts, because the server loads that directory at startup. These are local development bytes; the image stages build and qualify their own sealed parser.
+`just parser` builds the separate parser workspace with its cargo target at `.cache/parser-target/`. The host binary is `release/parser-host` and the guest is `wasm32-unknown-unknown/release/parser_guest.wasm`. `just parser --print-dir` prints that cache directory, not those two files. Build it before local CSV/XLSX import testing, and before the dev server starts, because the server loads that directory at startup. These are local development bytes; the image stages build and qualify their own sealed parser.
 
 `just images <candidate-sha>` builds the service, qualification and operator images for **Linux ARM64**, checks all three and compares the parser manifests. Use a clean checkout at the candidate commit, already pushed and checked. The result is `.cache/images/<sha7>/build.json` plus logs/check reports, and local `genui-{service,qualification,operator}:pitch-<sha7>` tags. No image is pushed by this recipe. The later push step verifies that the local image IDs still match the qualified build record. Do not use the dirty-tree escape hatch for a deploy candidate.
 
