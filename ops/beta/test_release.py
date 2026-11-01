@@ -52,6 +52,39 @@ def activated():
 
 
 class ReleaseRecordTests(unittest.TestCase):
+    def activation_fixture(self):
+        record = activated()
+        record["stack"]["task_definition"] = "arn:aws:ecs:r:0:task-definition/Task:13"
+        receipt = {"status": "activation_requested_not_healthy", "desired_count": 1,
+                   "observed_at_utc": "2026-11-01T09:25:00Z", "task_definition": record["stack"]["task_definition"]}
+        return record, {"status": "reserved_local_plan_only", "window_id": WINDOW,
+                        "observed_at_utc": "2026-11-01T09:20:00Z", "activation": receipt}
+
+    def test_activation_receipt_uses_the_bound_nested_observation(self):
+        record, response = self.activation_fixture()
+        receipt = release.activation_receipt(response, record)
+        self.assertEqual(receipt, response["activation"])
+        self.assertNotEqual(receipt["observed_at_utc"], response["observed_at_utc"])
+
+    def test_activation_receipt_refuses_foreign_or_unconfirmed_results(self):
+        for field, value in (("status", "ready"), ("desired_count", True), ("desired_count", "1"),
+                             ("desired_count", 0), ("observed_at_utc", "2026-02-31T09:25:00Z"),
+                             ("task_definition", "arn:aws:ecs:r:0:task-definition/Other:14")):
+            with self.subTest(field=field, value=value):
+                record, response = self.activation_fixture()
+                response["activation"][field] = value
+                with self.assertRaises(ValueError): release.activation_receipt(response, record)
+        for change in ({"window_id": LIVE}, {"status": "activated"}, {"activation": None}):
+            record, response = self.activation_fixture()
+            response.update(change)
+            with self.assertRaises(ValueError): release.activation_receipt(response, record, record_only=True)
+
+    def test_reconciled_flat_receipt_requires_explicit_record_only(self):
+        record, response = self.activation_fixture()
+        flat = response["activation"]
+        with self.assertRaises(ValueError): release.activation_receipt(flat, record)
+        self.assertEqual(release.activation_receipt(flat, record, record_only=True), flat)
+
     def test_init_carries_the_build_and_passes_the_schema(self):
         record = release.check(release.init(WINDOW, LIVE, SHA, "origin/pivot/pitch-mvp", 15, build_json()))
         self.assertEqual(record["images"]["service"]["local_id"], "sha256:local-service")
@@ -135,17 +168,37 @@ out=/dev/null url=""
 while (( $# )); do case $1 in -o) out=$2; shift 2 ;; -w|-X|-H|--data|--max-time) shift 2 ;; -*) shift ;; *) url=$1; shift ;; esac; done
 case $url in
   */health/live) printf '200 ' ;;
-  */canvas) echo "Sign in" > "$out"; printf '200 ' ;;
+  */canvas)
+    case ${SHIM_CANVAS_MODE:-uniform} in
+      uniform) echo '{"code":"not_found","status":404}' > "$out"; printf '404 ' ;;
+      signin) echo 'Sign in' > "$out"; printf '200 ' ;;
+      missing) echo 'Not found' > "$out"; printf '404 ' ;;
+    esac ;;
+  */invite)
+    if [[ ${SHIM_ENTRY_MODE:-ready} == ready ]]; then
+      echo '<form method="post" action="/invite/validate"><input id="invite-code" name="code"></form>' > "$out"; printf '200 '
+    elif [[ $SHIM_ENTRY_MODE == missing ]]; then echo '{"code":"not_found","status":404}' > "$out"; printf '404 '
+    else echo '<html>Unavailable</html>' > "$out"; printf '200 '; fi ;;
   */v1/mcp) printf '404 ' ;;
   */v1/slack/commands) printf '401 ' ;;
 esac
 '''
-PREFLIGHT = r'''import json, sys
-if "--activate" in sys.argv:
-    print(json.dumps({"status": "activation_requested_not_healthy", "observed_at_utc": "2026-11-01T09:25:00Z",
-                      "task_definition": "arn:aws:ecs:r:0:task-definition/Task:13"}))
-else:
-    print(json.dumps({"status": "reserved_local_plan_only"}))
+PREFLIGHT = r'''import importlib.util, os
+# Exercise the canonical CLI's real ledger/output wrapping. Only its reservation
+# decision and AWS-activating function are replaced; no live API is reachable.
+spec = importlib.util.spec_from_file_location("real_preflight", os.environ["TEST_PREFLIGHT_SOURCE"])
+real = importlib.util.module_from_spec(spec); spec.loader.exec_module(real)
+def reserve(config, ledger, now, activating=False):
+    return ledger, {"status": "reserved_local_plan_only", "window_id": config["window_id"],
+                    "observed_at_utc": "2026-11-01T09:20:00Z", "limits": ["synthetic fixture"]}
+def activate(config, report, call, clock):
+    with open(os.environ["SHIM_LOG"], "a") as log: log.write("preflight --activate\n")
+    if os.environ.get("SHIM_ACTIVATION_UNKNOWN") == "1": raise SystemExit(7)
+    return {"status": "activation_requested_not_healthy", "observed_at_utc": "2026-11-01T09:25:00Z",
+            "desired_count": 1, "task_definition": "arn:aws:ecs:r:0:task-definition/Task:13"}
+def no_aws(*args): raise AssertionError("Unexpected AWS call in hermetic preflight fixture")
+real.reserve = reserve; real.activate = activate; real.aws_call = no_aws
+real.main()
 '''
 
 
@@ -165,10 +218,13 @@ class DeployFlowTests(unittest.TestCase):
         (repo / "docs/pitch").mkdir(parents=True)
         shutil.copy2(HERE.parents[1] / "docs/pitch/RELEASES.md", repo / "docs/pitch/RELEASES.md")
         self.env = dict(os.environ, GENUI_OPS_PRIV=str(priv), SHIM_LOG=str(self.tmp / "shim.log"),
+                        TEST_PREFLIGHT_SOURCE=str(HERE.parents[1] / "infra/scripts/preflight.py"),
                         PATH="%s:%s" % (shims, os.environ["PATH"]), GENUI_HEALTH_WAIT_SECONDS="20",
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid", GIT_COMMITTER_NAME="t",
                         GIT_COMMITTER_EMAIL="t@example.invalid", GIT_CONFIG_GLOBAL="/dev/null")
         self.env.pop("SHIM_BAD_ID", None)
+        for key in ("SHIM_ACTIVATION_UNKNOWN", "SHIM_CANVAS_MODE", "SHIM_ENTRY_MODE"):
+            self.env.pop(key, None)
         git = lambda *a, cwd=repo: subprocess.run(["git", *a], cwd=cwd, env=self.env, check=True, capture_output=True)
         git("init", "-q", "-b", "main")
         git("add", "-A")
@@ -182,6 +238,8 @@ class DeployFlowTests(unittest.TestCase):
             (shims / name).write_text(body)
             (shims / name).chmod(0o755)
         priv.mkdir(mode=0o700)
+        (priv / "budget-ledger.json").write_text("{}")
+        (priv / "budget-ledger.json").chmod(0o600)
         (priv / "env.sh").write_text("export AWS_REGION=r\nSTACK=s\nREG=reg.invalid\nCLUSTER=c\nSERVICE=v\n")
         build = repo / ".cache/images" / self.sha[:7]
         build.mkdir(parents=True)
@@ -233,9 +291,14 @@ class DeployFlowTests(unittest.TestCase):
         record = self.record()
         self.assertEqual((record["stack"]["name"], record["stack"]["task_definition_revision"]), ("s", 13))
 
-        (self.priv / "windows" / self.window / "deployment-input.json").write_text('{"service_desired_count":0}')
+        (self.priv / "windows" / self.window / "deployment-input.json").write_text(json.dumps({"service_desired_count": 0, "window_id": self.window}))
         out = self.deploy("activate", self.window, "--approved", "activate it")
         record = self.record()
+        raw = json.loads((self.priv / "windows" / self.window / "activation.json").read_text())
+        self.assertEqual(raw["status"], "reserved_local_plan_only")
+        self.assertEqual(raw["activation"]["status"], "activation_requested_not_healthy")
+        self.assertEqual(record["activation_requested_at_utc"], raw["activation"]["observed_at_utc"])
+        self.assertNotEqual(record["activation_requested_at_utc"], raw["observed_at_utc"])
         tag = "beta/%s-%s" % (record["activated_at_utc"][:10].replace("-", ""), self.sha[:7])
         self.assertEqual(record["git_tag"], {"name": tag, "pushed": True})
         self.assertIn(tag, subprocess.run(["git", "tag"], cwd=self.origin, capture_output=True, text=True).stdout)
@@ -247,12 +310,19 @@ class DeployFlowTests(unittest.TestCase):
 
         self.deploy("activate", self.window, "--record-only", "--approved", "record it")
         self.assertEqual((self.repo / "docs/pitch/RELEASES.md").read_text().count("`%s`" % self.window[:8]), 1)
+        self.assertEqual(self.shim_log().count("preflight --activate"), 1, "record-only never repeats activation")
+        (self.priv / "windows" / self.window / "activation.json").write_text(json.dumps(raw["activation"]))
+        self.deploy("activate", self.window, "--record-only", "--approved", "reconciled legacy receipt")
+        self.assertEqual(self.record()["activated_at_utc"], record["activated_at_utc"])
+        self.assertEqual(self.shim_log().count("preflight --activate"), 1)
+        self.deploy("activate", self.window, "--approved", "do not repeat", expect=1)
+        self.assertEqual(self.shim_log().count("preflight --activate"), 1)
 
         out = self.deploy("verify")
         self.assertIn("release: %s %s" % (self.sha[:7], tag), out)
         verified = self.record()["verified"]
-        self.assertEqual({k: verified[k] for k in ("live", "canvas", "mcp", "slack")},
-                         {"live": True, "canvas": True, "mcp": True, "slack": True})
+        self.assertEqual({k: verified[k] for k in ("live", "canvas", "entry", "mcp", "slack")},
+                         {"live": True, "canvas": True, "entry": True, "mcp": True, "slack": True})
         self.assertNotIn("git push", self.shim_log())
 
     def test_push_refuses_images_that_were_not_qualified(self):
@@ -269,6 +339,32 @@ class DeployFlowTests(unittest.TestCase):
         self.assertIsNone(self.record()["activated_at_utc"])
         self.assertFalse((self.priv / "approvals.md").exists())
         self.assertEqual(subprocess.run(["git", "tag"], cwd=self.origin, capture_output=True, text=True).stdout, "")
+
+    def test_unknown_activation_is_not_repeated_or_recorded_as_healthy(self):
+        self.new_window()
+        window = self.priv / "windows" / self.window
+        (window / "deployment-input.json").write_text(json.dumps({"service_desired_count": 0, "window_id": self.window}))
+        self.env["SHIM_ACTIVATION_UNKNOWN"] = "1"
+        self.deploy("activate", self.window, "--approved", "synthetic unknown", expect=7)
+        self.assertEqual((window / "activation.json").read_bytes(), b"")
+        self.deploy("activate", self.window, "--approved", "must not repeat", expect=1)
+        self.deploy("activate", self.window, "--record-only", "--approved", "unconfirmed", expect=1)
+        self.assertEqual(self.shim_log().count("preflight --activate"), 1)
+        self.assertIsNone(self.record()["activated_at_utc"])
+        self.assertEqual(subprocess.run(["git", "tag"], cwd=self.origin, capture_output=True, text=True).stdout, "")
+
+    def test_verification_requires_uniform_canvas_denial_and_real_public_entry(self):
+        for canvas, entry, expected_canvas, expected_entry in (
+                ("signin", "ready", False, True), ("missing", "ready", False, True),
+                ("uniform", "missing", True, False), ("uniform", "unavailable", True, False)):
+            with self.subTest(canvas=canvas, entry=entry):
+                output = self.tmp / "verify.json"
+                result = subprocess.run(["bash", str(self.repo / "ops/beta/verify.sh"), "--json", str(output)],
+                                        env=dict(self.env, SHIM_CANVAS_MODE=canvas, SHIM_ENTRY_MODE=entry), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                report = json.loads(output.read_text())
+                self.assertEqual((report["canvas"], report["entry"]), (expected_canvas, expected_entry))
+                self.assertTrue(all(report[k] for k in ("live", "mcp", "slack")))
 
 
 if __name__ == "__main__":

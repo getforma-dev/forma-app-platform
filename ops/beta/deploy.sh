@@ -35,7 +35,7 @@
 #                         the docs/pitch/RELEASES.md row and creates and pushes the tag
 #                         beta/<yyyymmdd>-<sha7> (ADR-013 D13.2, D13.5). --record-only
 #                         redoes only that part (activation.json already there)
-#   verify     [read]     [<window id>] the four HTTPS checks of 6.2 (no AWS API) against
+#   verify     [read]     [<window id>] the five HTTPS checks of 6.2 (no AWS API) against
 #                         the window's release (default: the newest activated one);
 #                         the results go into its release.json
 #   rollback-deny [MUTATION] the service onto the deny-all revision; --restore puts it back (Rollback)
@@ -329,19 +329,23 @@ jq -c "[.objects[].state] | group_by(.) | map({(.[0]): length}) | add" "$W/libra
       [[ -f "$W/activation.json" ]] || (( DRY_RUN )) || die "--record-only: no $W/activation.json (run the activation first)"
       mutate "activate --record-only" 'true'
     else
+      [[ ! -e "$W/activation.json" ]] || die "activation response already exists; reconcile it and use --record-only, never repeat activation blindly"
       prepare 'jq ".service_desired_count = 1" "$W/deployment-input.json" > "$W/deployment-input-activate.json"'
       mutate activate '
 python3 "$REPO/infra/scripts/preflight.py" --input "$W/deployment-input-activate.json" --ledger "$PRIV/budget-ledger.json" --activate > "$W/activation.json"
-jq -c "{status, window_id}" "$W/activation.json"'
+jq -c "{status, window_id, activation_status: .activation.status}" "$W/activation.json"'
     fi
     if (( DRY_RUN )); then
       echo "(dry run: would wait for $origin/health/live, record the activation in release.json, append docs/pitch/RELEASES.md, git tag -a beta/<yyyymmdd>-<sha7> and git push origin <tag>)"
       exit 0
     fi
-    [[ "$(jq -r .status "$W/activation.json")" == activation_requested_not_healthy ]] || die "activation.json does not record a requested activation; no release record, no tag"
+    receipt_args=(activation-receipt "$W/activation.json" "$W/release.json"); (( record_only )) && receipt_args+=(--record-only)
+    release_py "${receipt_args[@]}" > "$W/activation-receipt.json.new" \
+      || die "activation response is unconfirmed; reconcile it before --record-only (no repeated activation, release row or tag)"
+    mv "$W/activation-receipt.json.new" "$W/activation-receipt.json"
     release_set '.activation_requested_at_utc = $o | .stack.task_definition = $t
                  | .stack.task_definition_revision = ($t | capture(":(?<n>[0-9]+)$").n | tonumber)' \
-      --arg o "$(jq -r .observed_at_utc "$W/activation.json")" --arg t "$(jq -r .task_definition "$W/activation.json")"
+      --arg o "$(jq -r .observed_at_utc "$W/activation-receipt.json")" --arg t "$(jq -r .task_definition "$W/activation-receipt.json")"
     # 6.1: one healthy target. The public health route only (no AWS API).
     wait_s=${GENUI_HEALTH_WAIT_SECONDS:-600} waited=0
     echo "waiting up to ${wait_s}s for $origin/health/live ..."

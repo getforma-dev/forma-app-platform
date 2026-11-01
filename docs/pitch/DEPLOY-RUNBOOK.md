@@ -218,7 +218,7 @@ If the original `RunTask` response was lost, stop and reconcile the original req
 
 ## 6. Activate and check
 
-- [ ] 6.1 → **`just deploy activate <window-id> --approved "…"`** (writes `deployment-input-activate.json`). In `$W/deployment-input.json`, set `service_desired_count: 1` and run `preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json --activate > $W/activation.json` **[MUTATION]**.
+- [ ] 6.1 → **`just deploy activate <window-id> --approved "…"`** writes `deployment-input-activate.json` with `service_desired_count: 1`, then calls preflight `--activate` once **[MUTATION]**. It preserves the full reservation report in `activation.json` and validates its nested `activation` result into `activation-receipt.json`; reservation status alone is not an activation or readiness result.
 
   The window now records its activation request, so it can no longer be abandoned. Activation checks that each of these matches the reservation:
   - the stack parameters;
@@ -229,9 +229,12 @@ If the original `RunTask` response was lost, stop and reconcile the original req
   It refuses the Anthropic key, the Slack token or the Slack signing secret as a plain environment variable. Wait until the service is stable with one healthy target. **The outage ends here.**
 
   `just deploy activate` then waits (up to 10 minutes) for `/health/live` to answer 200, records the activation in `release.json`, appends the window's row to [RELEASES.md](RELEASES.md) and creates the annotated tag `beta/<yyyymmdd>-<sha7>` on the candidate and pushes it to `origin` (ADR-013 D13.2, D13.5; a Git mutation inside this approved step). Commit the RELEASES.md row on `pivot/pitch-mvp` with the command it prints. If the target is not healthy in time, no row and no tag are written; once it is, `just deploy activate <window-id> --record-only --approved "…"` does only that part.
+
+  An existing `activation.json`, including an empty response after an unknown outcome, blocks another ordinary activation attempt. Reconcile the original attempt before `--record-only`; that mode never calls preflight or repeats the activation API calls. It accepts the canonical nested report or an explicitly reconciled legacy flat receipt, validates numeric desired count one and this window's executed task definition, then checks health before recording a release. An invalid or unconfirmed response produces no release row or tag.
 - [ ] 6.2 → **`just deploy verify [<window-id>]`** (default: the newest activated window; the results go into its `release.json`). HTTPS surface from the operator machine, checked with plain `curl` (no `-k`):
   - `/health/live` gives 200;
-  - `/canvas` signed out gives the sign-in page;
+  - `/canvas` signed out gives the canonical uniform JSON 404;
+  - `/invite` gives 200 with the real invitation-code form, proving the public entry is available as well as protected routes denying access;
   - `/v1/mcp` without a bearer gives the uniform 404;
   - `/v1/slack/commands` unsigned gives 401 (Slack on) or 404 (Slack off).
 - [ ] 6.3 With the laptop as Diego and the phone as Sarah, walk scenarios 1–4 of `SCENARIOS.md`:
