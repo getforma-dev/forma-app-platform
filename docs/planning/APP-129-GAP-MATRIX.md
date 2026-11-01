@@ -72,7 +72,7 @@ Locally, new sentence compositions now pass through `require_authored` (gap 1). 
 
 **Acceptance.** `catalog.edition`, `EDITION`, and `LIBRARY_EDITION` are one string. `make_library.py --check` still passes. A second `seed-library` of an unchanged tree still reports no change.
 
-**Authorization.** Changing the string changes the seed identity. On beta, `seed-library` would then hit "existing seed differs" and refuse. That refusal must stay. Do not overwrite the seeded definitions to make the new label match.
+**Authorization.** `EDITION` is written onto `catalog.json` only. The seeded bundle rows do not carry that label. `library_catalog` refuses a catalog whose `edition` is not `LIBRARY_EDITION` (`library catalog refused`), and `seed-library` surfaces that as `seed_bundle_refused` before any row is compared. `existing seed differs` is the later check, and it fires only when a seeded row's values change. A label-only change of `catalog.edition`, `EDITION`, and `LIBRARY_EDITION` together, with those two still equal, leaves the seed rows identical, so a second `seed-library` reports `changed: false`. Do not overwrite stored definitions to make a label match. The pin that does change when the catalog bytes change is `seed_library_sha256`.
 
 **Depends on.** Gap 2 if the intent of the label change is to re-seed beta. A comment-only decision depends on nothing.
 
