@@ -391,6 +391,26 @@ class PackageTests(unittest.TestCase):
         for source in check_image.dockerfile_sources():
             self.assertTrue(source in names or any(name.startswith(source.rstrip("/") + "/") for name in names), source)
 
+    def test_copied_contract_validator_validates_record_receipts(self):
+        import check_image
+        with tempfile.TemporaryDirectory(prefix="genui-contract-package-") as directory:
+            root = Path(directory)
+            # Stage only the top-level contract files the actual Dockerfile copies.
+            for source in check_image.dockerfile_sources():
+                path = Path(source)
+                if path.parent == Path("contracts") and (REPOSITORY / path).is_file():
+                    shutil.copyfile(REPOSITORY / path, root / path.name)
+            probe = check_image.record_receipts_probe(str(root))
+            result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {
+                "member": "valid", "guest": "valid", "invalid_budget": "refused"})
+            # The old image's omitted helper must fail this same behavioral probe.
+            (root / "record_components_contract.py").unlink()
+            result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ModuleNotFoundError", result.stderr)
+
     def test_object_keys_are_the_adr_009_b1_layout(self):
         source, revision = str(uuid.uuid4()), str(uuid.uuid4())
         self.assertEqual(op.object_key(NORTHSTAR, source, revision, "original"), "o/%s/s/%s/r/%s/original" % (NORTHSTAR, source, revision))

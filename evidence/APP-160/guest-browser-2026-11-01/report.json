@@ -1,22 +1,24 @@
 {
-  "manifest_sha256": "4f593c7328b5fed8a954f0ffe5e9324855f7569e3fb491f02fde4efdec224104",
-  "resumed_confirmed_fixture": true,
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "resumed_confirmed_fixture": false,
   "scope": "Synthetic local owner and account-only recipient. Real admitted empty template, immutable presentation publication, audited commands, named exact-work sharing, authorized record projections and guest browser leases. No hosted/provider claim.",
-  "started_at": "2026-11-01T23:22:40.382Z",
+  "started_at": "2026-11-01T23:43:39.768Z",
   "checks": [
+    "Ordinary template picker created an empty app with five actual empty query receipts; authorized versioned presentation publication persisted generic actions and dark/green/mono theme.",
     "Actual computed root/card/text/receipt colors match the dark theme on all 3 live surfaces and separate JavaScript-disabled member/shared native renders. The no-JS connected canvas deliberately exposes inventory and an exact Open app fallback, with no record components/actions before authorized refresh.",
     "Actual guest acceptance and Add to my canvas preserve the published section order/theme; native HTML contains authoritative record views and real receipts, while command/Ask/editor/member links are absent.",
     "Forward and reverse keyboard cycles stay inside both actual guest record dialogs.",
     "A real owner command updated both already-open recipient record dialogs without navigation; visible values and record version match the command and owner projection, with actual snapshot/result receipt digests.",
+    "At 320 and 390 CSS pixels, record values stay unbroken in the labeled horizontal table region without page overflow.",
     "Offline masks both open dialogs and protected app roots; reconnect reauthorizes both surfaces before restoring data and does not reopen a stale dialog.",
     "Actual owner revoke while both record dialogs are open closes and masks both within the observed five-second bound; JSON/authority/member routes refuse, connected inventory removes the grant, and stale actions cannot reopen content. Browser denials do not claim exhaustive database membership absence."
   ],
   "timings": {
-    "command_http_ms": 267,
-    "shared_modal_record_after_http_ms": 3322,
-    "connected_modal_record_after_http_ms": 4329,
-    "offline_both_mask_ms": 130,
-    "revoked_both_mask_after_http_ms": 750
+    "command_http_ms": 256,
+    "shared_modal_record_after_http_ms": 1811,
+    "connected_modal_record_after_http_ms": 1292,
+    "offline_both_mask_ms": 157,
+    "revoked_both_mask_after_http_ms": 1655
   },
   "errors": [],
   "artifacts": [
@@ -33,7 +35,7 @@
   "native": {
     "status": 200,
     "cache_control": "no-store",
-    "html_sha256": "d11cf7a4327f0acbf455a0dedd2c24ec477da2e0b2f62dbe6b98f626d1f52634",
+    "html_sha256": "49b9b3c04cd33e9e93577112297ad4529ae149f30e3156407ed802957f25412e",
     "native_record_components": true,
     "native_receipts": true,
     "member_commands": false
@@ -82,9 +84,9 @@
       "id": "ledger",
       "state": "ready",
       "population": "1",
-      "digest": "sha256:89bbb3f4dd29d989d3ef1adfc20c7bd7a3590c135e4041249d43b14e52b265f5",
-      "snapshot_digest": "sha256:e3c2ccf0946157a484675aa371350951ebec2b65fecc590e2f06261ba78b4a37",
-      "result_digest": "sha256:dea794f6293c40a54308ac8faebe1b25634938f51bad6771470c56d074db1e5c",
+      "digest": "sha256:a2b6233e5a2c44d60aa506597dc58e7279f7f1343f962e65fe87ba0bcc951ce5",
+      "snapshot_digest": "sha256:2977edab9f1d920cc6afe6072cecdae76352633c4230a15c053ef27df7e131b3",
+      "result_digest": "sha256:b1e14fc260dd2e238e7a7008596e5a29067f88ce54582c4ffd412f8e9cbc7506",
       "partial": false,
       "total_scope": "full_authorized_filtered_collection"
     },
@@ -92,9 +94,9 @@
       "id": "total",
       "state": "ready",
       "population": "1",
-      "digest": "sha256:89bbb3f4dd29d989d3ef1adfc20c7bd7a3590c135e4041249d43b14e52b265f5",
-      "snapshot_digest": "sha256:e3c2ccf0946157a484675aa371350951ebec2b65fecc590e2f06261ba78b4a37",
-      "result_digest": "sha256:dea794f6293c40a54308ac8faebe1b25634938f51bad6771470c56d074db1e5c",
+      "digest": "sha256:a2b6233e5a2c44d60aa506597dc58e7279f7f1343f962e65fe87ba0bcc951ce5",
+      "snapshot_digest": "sha256:2977edab9f1d920cc6afe6072cecdae76352633c4230a15c053ef27df7e131b3",
+      "result_digest": "sha256:b1e14fc260dd2e238e7a7008596e5a29067f88ce54582c4ffd412f8e9cbc7506",
       "partial": false,
       "total_scope": "full_authorized_filtered_collection"
     },
@@ -102,9 +104,9 @@
       "id": "monthly",
       "state": "ready",
       "population": "1",
-      "digest": "sha256:89bbb3f4dd29d989d3ef1adfc20c7bd7a3590c135e4041249d43b14e52b265f5",
-      "snapshot_digest": "sha256:e3c2ccf0946157a484675aa371350951ebec2b65fecc590e2f06261ba78b4a37",
-      "result_digest": "sha256:dea794f6293c40a54308ac8faebe1b25634938f51bad6771470c56d074db1e5c",
+      "digest": "sha256:a2b6233e5a2c44d60aa506597dc58e7279f7f1343f962e65fe87ba0bcc951ce5",
+      "snapshot_digest": "sha256:2977edab9f1d920cc6afe6072cecdae76352633c4230a15c053ef27df7e131b3",
+      "result_digest": "sha256:b1e14fc260dd2e238e7a7008596e5a29067f88ce54582c4ffd412f8e9cbc7506",
       "partial": false,
       "total_scope": "full_authorized_filtered_collection"
     },
@@ -112,9 +114,9 @@
       "id": "restaurants",
       "state": "ready",
       "population": "1",
-      "digest": "sha256:89bbb3f4dd29d989d3ef1adfc20c7bd7a3590c135e4041249d43b14e52b265f5",
-      "snapshot_digest": "sha256:e3c2ccf0946157a484675aa371350951ebec2b65fecc590e2f06261ba78b4a37",
-      "result_digest": "sha256:dea794f6293c40a54308ac8faebe1b25634938f51bad6771470c56d074db1e5c",
+      "digest": "sha256:a2b6233e5a2c44d60aa506597dc58e7279f7f1343f962e65fe87ba0bcc951ce5",
+      "snapshot_digest": "sha256:2977edab9f1d920cc6afe6072cecdae76352633c4230a15c053ef27df7e131b3",
+      "result_digest": "sha256:b1e14fc260dd2e238e7a7008596e5a29067f88ce54582c4ffd412f8e9cbc7506",
       "partial": false,
       "total_scope": "full_authorized_filtered_collection"
     },
@@ -122,9 +124,9 @@
       "id": "budget",
       "state": "ready",
       "population": "1",
-      "digest": "sha256:89bbb3f4dd29d989d3ef1adfc20c7bd7a3590c135e4041249d43b14e52b265f5",
-      "snapshot_digest": "sha256:e3c2ccf0946157a484675aa371350951ebec2b65fecc590e2f06261ba78b4a37",
-      "result_digest": "sha256:dea794f6293c40a54308ac8faebe1b25634938f51bad6771470c56d074db1e5c",
+      "digest": "sha256:a2b6233e5a2c44d60aa506597dc58e7279f7f1343f962e65fe87ba0bcc951ce5",
+      "snapshot_digest": "sha256:2977edab9f1d920cc6afe6072cecdae76352633c4230a15c053ef27df7e131b3",
+      "result_digest": "sha256:b1e14fc260dd2e238e7a7008596e5a29067f88ce54582c4ffd412f8e9cbc7506",
       "partial": false,
       "total_scope": "full_authorized_filtered_collection"
     }
@@ -132,10 +134,10 @@
   "command": {
     "record_version": 1,
     "work_version": 2,
-    "commit_sequence": 12,
+    "commit_sequence": 24,
     "has_audit_event": true
   },
-  "reconnect_authority_successes": 3,
+  "reconnect_authority_successes": 4,
   "passed": true,
-  "finished_at": "2026-11-01T23:23:06.633Z"
+  "finished_at": "2026-11-01T23:44:17.439Z"
 }

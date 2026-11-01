@@ -88,3 +88,25 @@ rect.record-bar { fill:var(--app-accent); }
 
 /* Keep record values intact; the named, keyboard-focusable region owns scrolling. */
 .composed-app .record-component th,.composed-app .record-component td { white-space:nowrap; }
+
+/* A card keeps its published palette when moved out of its app frame into Focus.
+   Adapt the canvas vocabulary locally; platform chrome outside the app is unchanged. */
+.cv-card.composed-app[data-app-mode],.cv-unite.composed-app[data-app-mode] {
+  --cv-surface:var(--app-panel);--cv-canvas:var(--app-bg);--cv-sunken:var(--app-bg);
+  --cv-text:var(--app-ink);--cv-muted:var(--app-muted);--cv-faint:var(--app-muted);
+  --cv-line:var(--app-line);--cv-hairline:var(--app-line);--cv-edge:var(--app-control-line);
+  --cv-accent:var(--app-accent);--cv-on-accent:var(--app-on-accent);
+  --cv-accent-soft:color-mix(in srgb,var(--app-accent) 12%,var(--app-bg));
+  --cv-seal:var(--app-accent);--cv-seal-soft:var(--cv-accent-soft);
+  --cv-chart:var(--app-accent);--cv-chart-peak:var(--app-accent);--cv-chart-fill:var(--cv-accent-soft);
+  --cv-bad:#9f1239;--cv-busy:#92400e;
+  color:var(--app-ink);background:var(--app-panel);border-color:var(--app-line);
+}
+.cv-unite.composed-app[data-app-mode] { background:var(--app-bg); }
+.cv-card.composed-app[data-app-mode=dark],.cv-unite.composed-app[data-app-mode=dark] { --cv-bad:#fda4af;--cv-busy:#fcd34d; }
+.cv-card.composed-app[data-app-mode] :is(input,select,textarea) { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-control-line); }
+.cv-unite.composed-app[data-app-mode] .cv-secondary { background:var(--app-panel);color:var(--app-ink);border-color:var(--app-control-line); }
+.cv-unite.composed-app[data-app-mode] .cv-secondary:hover { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-accent); }
+.cv-card.composed-app[data-app-mode] .cv-origin,.cv-unite.composed-app[data-app-mode] .cv-origin { color:var(--app-accent);background:var(--cv-accent-soft); }
+
+.cv-card.composed-app[data-app-mode] .receipt summary { color:var(--app-accent); }

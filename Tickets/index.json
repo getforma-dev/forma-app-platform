@@ -5014,10 +5014,10 @@
       "Depends on": "APP-154, APP-155, APP-156, APP-157, APP-158, APP-159",
       "External dependencies": "None beyond listed local predecessors; any hosted replay requires its own approved environment and delivery evidence.",
       "Assignee": "Codex \u2014 cross-surface browser and backend qualification",
-      "Branch / PR": "codex/composed-app-implementation \u2014 local runtime candidate; review and delivery pending",
+      "Branch / PR": "codex/composed-app-implementation \u2014 [PR #38](https://github.com/getforma-dev/forma-app-platform/pull/38); final review and delivery pending",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
-      "Unblock evidence": "Victor explicitly authorized implementing APP-155\u2013160 now. Final local guest/native/theme and real-record live/revocation evidence is retained below; broader member/canvas, manual accessibility and release gates remain separate.",
+      "Unblock evidence": "Explicit implementation authorization is followed by final local member 12 checks, guest 8 checks, independent keyboard/canvas 7 checks and dark/default-light palette checks. Manual screen-reader, broader predecessor and release gates remain distinct.",
       "dependencies": [
         "APP-154",
         "APP-155",

@@ -6,6 +6,7 @@ The clean beta activated on November 1 at 20:13:41 UTC from exact candidate `711
 - [local-validation.json](local-validation.json): focused suite results. The full candidate check, CI and image identities belong to the integration delivery record.
 - [Image security follow-up](IMAGE-SECURITY.md): exact ARM64 scan findings, available Debian fixes, package resolution and the remaining vendor-open findings. Final qualification and actual registry scans are recorded in [the candidate receipt](mvp-candidate-711d87d/README.md).
 - [Clean deployment sequence](../../docs/pitch/CLEAN-TRIAL-DEPLOY.md): actual inputs, operator steps, empty first-member admission and activation checks.
+- [Composed-app operator packaging check](composed-app-preflight/README.md): the missing receipt-validator module found before image qualification, its correction and the focused regression. This is preparation, not a new deployment.
 
 ## Changes and checks
 

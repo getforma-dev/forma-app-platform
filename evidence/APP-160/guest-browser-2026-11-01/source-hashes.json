@@ -1,13 +1,13 @@
 {
-  "recorded_at": "2026-11-01T23:25:29.586502+00:00",
-  "base_commit": "0fd3968a187b5a740d3e2ce3c8df7579a8ea6489",
-  "candidate": "Uncommitted codex/composed-app-implementation; these byte hashes, not the base commit, identify the tested UI source.",
-  "manifest_sha256": "4f593c7328b5fed8a954f0ffe5e9324855f7569e3fb491f02fde4efdec224104",
-  "build": "d708e8042295",
+  "recorded_at": "2026-11-01T23:46:28.945722+00:00",
+  "base_commit": "e67968088028a857fbe9920a352afa758ddbc342",
+  "candidate": "Uncommitted final repair over the base commit; source byte hashes and strict asset manifest identify the observed run.",
+  "build": "e4f3f4839e09",
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
   "source_sha256": {
     "app/admin/src/presentation/presentation.ts": "9a470462ec30402d4fe652fe5b002efc4f0808d052c6b42c3cd7eabd21b906b6",
     "app/admin/src/presentation/header.tsx": "565cdec1914a826876b9359629d70afbbbe8b51110d8746e5e20578789786fbe",
-    "app/admin/src/styles/presentation.css": "222da8f64fe7920d18dd2c8f54db7d698d42df05d8b00f3b8f0887efb5caa049",
+    "app/admin/src/styles/presentation.css": "a92e46ff1dec1a4152ccb831f48af58864c6f8cc9e3661737f3a5dcdf5713784",
     "app/admin/src/work/app.tsx": "897956e2697e88a1d747a867b7050ba83b396bde79d8c4b983f64914ecbafcd5",
     "app/admin/src/work/document.ts": "89ddff3df937ba71fd075f8b5566569e11abeb5c17b6957ee34d323a64fe9ba7",
     "app/admin/src/work/render.ts": "8d7907a6af51fef1b4a4513a1d2309c65851b12e32ad085fa7e8dba37960572f",
@@ -18,21 +18,19 @@
     "app/admin/src/shared/parts.tsx": "2594a0d4ae725327eede03cfa57df7c973dc51e92f5024a629c9a42d561c8f9b",
     "app/admin/src/shared/types.ts": "de39dcb0a3e547507109fd66e0a2dcc7906b1232968a5270723c161a781569ac",
     "app/admin/test/presentation.test.ts": "4944bcc073a63f239382cc6fbc1286b2d2f932ecc5177272809490e2689f0feb",
-    "app/scripts/composed_guest_browser.mjs": "27e64eb80ef2b9dc5d5d89c9ba11bbc20b7c95c119a97e1161acc6eb7cc0a2b9"
+    "app/scripts/composed_guest_browser.mjs": "75520504fc8ef6e74d80de10e243835f5b2a102a64a4d9484731a76c8c09f50e"
   },
   "artifact_sha256": {
     "connected-revoked.png": "98d33340ea9f7ec1b55f2013009ea7f46839a475065228ee4d982b9ace40de15",
-    "report.json": "9fc33490ade57576f58eaa54cf7ff583cf46e11a0ca0f4a133b00ed55fc27aa2",
+    "report.json": "cc514146abcda0c2a5806fe249f317df9741caafd99b147fd05b930d8405e846",
+    "initial-unavailable.png": "0277d7e3d40e672d1f38d8eb36ca9eb877609a9c97405604c6288087642735ca",
     "initial-native-inventory-oracle.json": "99efc471de9444c308005d99515ef850efbedb3d5a6f1b8a01aa69f111e5603c",
-    "guest-live-dialog.png": "65515e61fb1faaaa06369456a35fff526718a54d0c43794cd5dbd04886be9dd3",
-    "guest-mobile-dialog.png": "2f50ad0d554cca63da4acb62e89bd0a1850f91856a9c0e33bd788d4e5e8dde7d",
-    "connected-live-dialog.png": "bec362ec839dd626724a046f939995ca0e4641686117359a173c7732f8e85892",
-    "guest-revoked.png": "7800697bcf4d8c69f6d29df453c1ee72ddc2a7fb2bceb60b5024e6c7361edcb5"
-  },
-  "focused_tests": {
-    "command": "cd app/admin && npx tsx --test test/presentation.test.ts",
-    "passed": 7,
-    "failed": 0
+    "README.md": "1e45a481e4bde85601c4b63de34de6ea5c00988811a2d00c996b8acc595c5c60",
+    "guest-live-dialog.png": "9feea9cdaa96ae7e6485a966a96a635d168af62cf0951b36680d19935cf5d7c2",
+    "guest-mobile-dialog.png": "30696e6b3a8c0b8c6e17ccf5a514af0db7d7e27df4e46baed525e17e37b70f08",
+    "connected-live-dialog.png": "8e4744f055d6ccff023da416519bcf1cc4b5f5f292911b10b86bdfe6f16f6912",
+    "guest-revoked.png": "7800697bcf4d8c69f6d29df453c1ee72ddc2a7fb2bceb60b5024e6c7361edcb5",
+    "initial-unavailable-report.json": "a794847f3287d5ddc869db8db2cec19a42aa660ba1b640b8d1d5796c4804b846"
   },
   "browser_exit_code": 0
 }

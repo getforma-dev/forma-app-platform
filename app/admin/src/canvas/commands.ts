@@ -22,8 +22,8 @@ export function moneyMinorUnits(raw: string, exponent: unknown): string | null {
   return `${negative && digits !== '0' ? '-' : ''}${digits}`;
 }
 
-/** A form text under the published field's value type (`commands::routes::typed_value`). */
-export function typedValue(spec: Record<string, unknown>, raw: string): Record<string, unknown> | null {
+/** HTML form text only; mirrors `commands::routes::form_typed_value`, not normalized action values. */
+export function typedFormValue(spec: Record<string, unknown>, raw: string): Record<string, unknown> | null {
   if (raw === '') return { type: 'null' };
   const kind = spec.type;
   switch (kind) {
@@ -70,7 +70,7 @@ export function commandRequest(form: HTMLFormElement, app: string, work: string)
     } catch {
       return null;
     }
-    const value = typedValue(spec, element.value);
+    const value = typedFormValue(spec, element.value);
     if (!value) return null;
     values.push({ field_id: id, value });
   }

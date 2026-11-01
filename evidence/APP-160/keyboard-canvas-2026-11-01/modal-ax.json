@@ -1,0 +1,162 @@
+{
+  "scope": "Read-only synthetic local app keyboard and Chromium accessibility-tree checks. No VoiceOver or real screen-reader announcement claim.",
+  "nodes": [
+    {
+      "role": "RootWebArea",
+      "name": "Dining tracker"
+    },
+    {
+      "role": "dialog",
+      "name": "Log meal",
+      "modal": true
+    },
+    {
+      "role": "banner",
+      "name": ""
+    },
+    {
+      "role": "article",
+      "name": ""
+    },
+    {
+      "role": "heading",
+      "name": "Log meal"
+    },
+    {
+      "role": "button",
+      "name": "Close"
+    },
+    {
+      "role": "region",
+      "name": "Add meal"
+    },
+    {
+      "role": "StaticText",
+      "name": "Log meal"
+    },
+    {
+      "role": "StaticText",
+      "name": "Close"
+    },
+    {
+      "role": "heading",
+      "name": "Add meal"
+    },
+    {
+      "role": "form",
+      "name": ""
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "Log meal"
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "Close"
+    },
+    {
+      "role": "StaticText",
+      "name": "Add meal"
+    },
+    {
+      "role": "LabelText",
+      "name": ""
+    },
+    {
+      "role": "LabelText",
+      "name": ""
+    },
+    {
+      "role": "LabelText",
+      "name": ""
+    },
+    {
+      "role": "LabelText",
+      "name": ""
+    },
+    {
+      "role": "button",
+      "name": "Add"
+    },
+    {
+      "role": "status",
+      "name": ""
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "Add meal"
+    },
+    {
+      "role": "StaticText",
+      "name": "restaurant"
+    },
+    {
+      "role": "textbox",
+      "name": "restaurant"
+    },
+    {
+      "role": "StaticText",
+      "name": "amount (USD)"
+    },
+    {
+      "role": "textbox",
+      "name": "amount (USD)"
+    },
+    {
+      "role": "StaticText",
+      "name": "date"
+    },
+    {
+      "role": "textbox",
+      "name": "date"
+    },
+    {
+      "role": "StaticText",
+      "name": "notes"
+    },
+    {
+      "role": "textbox",
+      "name": "notes"
+    },
+    {
+      "role": "StaticText",
+      "name": "Add"
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "restaurant"
+    },
+    {
+      "role": "generic",
+      "name": ""
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "amount (USD)"
+    },
+    {
+      "role": "generic",
+      "name": ""
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "date"
+    },
+    {
+      "role": "generic",
+      "name": ""
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "notes"
+    },
+    {
+      "role": "generic",
+      "name": ""
+    },
+    {
+      "role": "InlineTextBox",
+      "name": "Add"
+    }
+  ]
+}

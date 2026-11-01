@@ -1,0 +1,24 @@
+{
+  "recorded_at": "2026-11-01T23:46:28.954279+00:00",
+  "base_commit": "e67968088028a857fbe9920a352afa758ddbc342",
+  "source_basis": "Final uncommitted repair over this base; exact byte hashes below identify the tested sources.",
+  "build": "e4f3f4839e09",
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "source_sha256": {
+    "app/admin/src/styles/presentation.css": "a92e46ff1dec1a4152ccb831f48af58864c6f8cc9e3661737f3a5dcdf5713784",
+    "app/admin/src/presentation/presentation.ts": "9a470462ec30402d4fe652fe5b002efc4f0808d052c6b42c3cd7eabd21b906b6",
+    "app/scripts/composed_palette_browser.mjs": "39fced39f2e9ace7f773f9f31776c3c466ca704aed30d74ebf121adc4a45fbf4",
+    "app/scripts/COMPOSED-BROWSER.md": "a539c89c861dcc5e56eeef3fd3a28d122e532a5a07739b568c529f38393244a6"
+  },
+  "artifact_sha256": {
+    "report.json": "c915aaebb5c11836a659ba1dff90ebaf0988a32c31a328162c883c992787cf95",
+    "equipment-united.png": "095c7e0b92a1463a0ff0fb9db6a3ab9b53f71b346c01c9cb9b0186f3719f2d15",
+    "dining-united.png": "63e826f65e7ebd15c38b5178f42006cd76839f1dbbe7e2d59ff506f9dfbe0839",
+    "dining-record-focus.png": "36f961e7cf44c8d7c2c79a56f6f15a277de2636a3ceec47d25b97a7ffc3999d0",
+    "equipment-focus.png": "c7752b06ffe6f07440613c4f47df92ec6cbbd35030a5d51599151ce6b14cbf3f",
+    "dining-focus.png": "098371ac2ffc6d1883a971c200947136e3cb461978535a92ef7e8bfc0b2afbaf",
+    "README.md": "579faecd7d418e0dc281cd4fa0e5afe9895664a13e28fd8cbc14595825d29203",
+    "prior-test-oracles.json": "f81e4c6ba55cabf337ed5ea15d6c0190c8e43894e9967f623b3c3c34778b3395"
+  },
+  "runner_exit_code": 0
+}

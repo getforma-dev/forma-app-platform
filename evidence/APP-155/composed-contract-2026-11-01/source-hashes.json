@@ -14,11 +14,11 @@
     "app/src/admission/validate.rs": "7582bde913bb77da5fe8374600041247248f30cf58f2545551c7168e05071bd3",
     "contracts/test_presentation.py": "ea4e3b28db884e59018a0cc78b8baee3897e0c889b6e94a20f1d92a13f2d88aa",
     "app/src/commands/mod.rs": "1e288b5bf5d57ed4620bd14d3577d536a0612b0501d9d7c41d1ebf4b54f5a297",
-    "app/src/commands/routes.rs": "8356dd7edeff3d11be81c51a89690d973cedf4930ea86bd82b7b0d085702ee2a",
-    "app/src/commands/tests.rs": "dd409af14a83e2c0d429c43dd3d67b43a39bed8ce18d3156afe80ab1bf1cbb61",
+    "app/src/commands/routes.rs": "f3deead0231e8d2a47594fa59dea3fec6d4419d2888ddad948d1bea2e5278c19",
+    "app/src/commands/tests.rs": "9a0750783ea86f04927b31d0846ae877e4a59e05cf917277fb5b6c12aae8d37a",
     "app/src/storage/commands.rs": "83d80280ff2c1cfb3cdaa9ff1c176626e864c7121807175ccab78f6b3ddf461c",
-    "app/admin/src/canvas/commands.ts": "13a12128782a28a7e18c54fa1cb4a07350099daba9b343256375cf57f9a9a5d7",
-    "app/admin/test/money-form.test.ts": "0194087dc442abb5aa6471603a8e897984ff45d88b1dfaa3277d74a0dd74a219",
+    "app/admin/src/canvas/commands.ts": "108a19c8676590c4bcab32f1e15aedae5eee29aceabbb0796d634836edaf4fd9",
+    "app/admin/test/money-form.test.ts": "620520755e762b4241cc71219fd852d05487c33e979453fe7aff612a59bb9e3f",
     "app/src/admission/tests.rs": "5f9f23657b107836c65bc8d6d28045d27ff4f8ca425948b73c77e2e3f75790be"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "scope": "Local focused regressions; no browser, hosted identity or deployment claim",
+  "scope": "Historical initial form-only focused regressions; subsequent CI found a shared action normalization defect, repaired and qualified in money-boundary/repair.json. No browser, hosted identity or deployment claim.",
   "passed": true,
   "checks": [
     {
@@ -63,5 +63,6 @@
     "Actual native keyboard and accessibility-tree behavior is qualified by APP-160 separately.",
     "No real screen-reader announcement is inferred from these tests."
   ],
-  "calendar_boundary": "Storage uses the existing contract grammar to refuse impossible days/months, invalid leap days and out-of-range UTC clocks before a command can persist them."
+  "calendar_boundary": "Storage uses the existing contract grammar to refuse impossible days/months, invalid leap days and out-of-range UTC clocks before a command can persist them.",
+  "superseding_money_boundary": "money-boundary/repair.json"
 }

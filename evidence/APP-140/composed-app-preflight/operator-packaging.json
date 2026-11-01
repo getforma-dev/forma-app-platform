@@ -1,0 +1,25 @@
+{
+  "observed_at_utc": "2026-11-01T23:35:07.757372Z",
+  "finding": "The operator build context allowed record_components_contract.py but Dockerfile omitted it, leaving the new receipt validator lazy import unavailable.",
+  "fix": "Copy the helper and exercise packaged member/guest receipt validation and semantic tampering refusal.",
+  "stopped_candidate": "e67968088028a857fbe9920a352afa758ddbc342",
+  "new_candidate": null,
+  "local_package_tests": {
+    "command": "app/operator/.venv/bin/python -m unittest discover -s app/operator -p test_operator.py -k PackageTests -v",
+    "passed": 18,
+    "duration_seconds": 3.06,
+    "log_sha256": "a9621e8f3a622c21b77ac488ae94f103ca585c317d8868b13b565d8af776f220",
+    "skipped": 0
+  },
+  "source_sha256": {
+    "app/operator/Dockerfile": "91515bccdf67c6e915c65465688f5006e6fa258692b45260b977e21672540c51",
+    "app/operator/check_image.py": "63989760be5f790219809ff39ea012ff7f7b023e15868bfff9ea53e6315f03fe",
+    "app/operator/test_operator.py": "2de7b0255b22d944457d4c94b157f09ccdf1353df592754c560011737d45de05"
+  },
+  "actual_image_check": "Pending next clean-candidate image build; no qualified image or deployment claim.",
+  "aws_mutations": false,
+  "independent_review": {
+    "scope": "Dockerfile copy, packaged validator probe and staged-copy regression",
+    "disposition": "No blocker found; no authority or command-surface expansion."
+  }
+}

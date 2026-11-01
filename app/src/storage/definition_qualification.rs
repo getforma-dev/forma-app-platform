@@ -879,6 +879,14 @@ async fn campaign() {
         (&stores.data.inner, work_sql),
         (
             &stores.workspace.inner,
+            format!("UPDATE genui.saved_work SET context='forged' WHERE organization_id='{ORG}'"),
+        ),
+        (
+            &stores.control.inner,
+            format!("UPDATE genui.saved_work SET version=2 WHERE organization_id='{ORG}'"),
+        ),
+        (
+            &stores.data.inner,
             format!("UPDATE genui.saved_work SET version=2 WHERE organization_id='{ORG}'"),
         ),
         (
@@ -902,7 +910,61 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, before);
     check(
         &mut checks,
-        "workspace and data cannot write publications, control and data cannot write saved work, workspace cannot bump a saved work version, control cannot advance the workspace chain (42501 or no visible row); nothing written",
+        "workspace and data cannot write publications, control and data cannot insert saved work or update its version, workspace cannot rewrite work context, control cannot advance the workspace chain (42501 or no visible row); nothing written",
+    );
+
+    // Schema 19 deliberately grants the workspace these two UPDATE columns
+    // for fenced presentation adoption. The exact grant set and forbidden
+    // identity/binding columns are checked by the schema qualifier; the
+    // composer campaign checks current-owner authorization and raced adoption.
+    let version_sql = format!(
+        "SELECT version::bigint FROM genui.saved_work WHERE organization_id='{ORG}' AND app_id='{SPEND_APP}' AND work_id='{}'",
+        s05.work
+    );
+    let original_version = scalar(&fixture, &version_sql).await;
+    let transaction = Transaction::begin(&stores.workspace.inner, &author)
+        .await
+        .unwrap();
+    let changed = transaction
+        .lease
+        .client()
+        .execute(
+            &format!("UPDATE genui.saved_work SET publication_id=publication_id, version=version+1 WHERE organization_id='{ORG}' AND app_id='{SPEND_APP}' AND work_id='{}'", s05.work),
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        changed, 1,
+        "the exact local work has the adopted-column grants"
+    );
+    let changed_version: i64 = transaction
+        .lease
+        .client()
+        .query_one(&version_sql, &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(changed_version, original_version + 1);
+    assert_eq!(
+        transaction
+            .lease
+            .client()
+            .execute(
+                &format!("UPDATE genui.saved_work SET publication_id=publication_id, version=version+1 WHERE organization_id='{OTHER}'"),
+                &[],
+            )
+            .await
+            .unwrap(),
+        0,
+        "tenant RLS still hides every foreign work from the new column grants"
+    );
+    transaction.finish(false).await.unwrap();
+    assert_eq!(scalar(&fixture, &version_sql).await, original_version);
+    assert_eq!(footprint(&fixture).await, before);
+    check(
+        &mut checks,
+        "schema 19 workspace publication/version column grants update one exact local work inside a rolled-back probe, cannot touch a foreign tenant, and leave the original version and footprint unchanged; current-owner and immutable-adoption gates are separately exercised by the composer campaign",
     );
 
     // --- D7.6: one 40001 retry, then Stale ---

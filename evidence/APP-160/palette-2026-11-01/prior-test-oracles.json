@@ -1,0 +1,20 @@
+[
+  {
+    "case": "read-query-oracle",
+    "started_at": "2026-11-01T23:36:52.125Z",
+    "finished_at": "2026-11-01T23:37:05.936Z",
+    "passed": false,
+    "disposition": "The initial test incorrectly classified the exact authorized record-components POST query as a mutation; no product write occurred.",
+    "source_bytes": 34157,
+    "source_sha256": "a7da3cc672b0807b9f2d828205497bbbee4e61067ec36dec208604cd30b61d15"
+  },
+  {
+    "case": "record-focus-locator",
+    "started_at": "2026-11-01T23:42:35.707Z",
+    "finished_at": "2026-11-01T23:42:58.772Z",
+    "passed": false,
+    "disposition": "The added record test expected a direct Focus button on the record wrapper. The corrected runner uses the existing Focus thumbnail strip instead.",
+    "source_bytes": 21591,
+    "source_sha256": "999b75409fd4ce5665166aaa343ae6661abe3abbe0c10c5aa6562eccaa1073f8"
+  }
+]

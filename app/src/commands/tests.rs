@@ -3,7 +3,7 @@
 //! parse into the same request, form texts are typed by the echoed spec, the
 //! notice set is closed, and the problem bodies carry their authorized members.
 use super::{
-    routes::{self, typed_value},
+    routes::{self, form_typed_value, typed_value},
     Notice,
 };
 use crate::{
@@ -196,7 +196,7 @@ fn form_bodies_type_their_texts_by_the_echoed_spec_and_equal_the_json_request() 
     assert_eq!(
         typed_value(
             &json!({"type": "money", "currency": "USD", "minor_unit_exponent": 2}),
-            "45000.00"
+            "4500000"
         ),
         Some(
             json!({"type": "money", "minor_units": "4500000", "currency": "USD", "minor_unit_exponent": 2})
@@ -872,6 +872,59 @@ fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
 }
 
 #[test]
+fn normalized_action_money_and_human_form_money_share_one_minor_unit_request() {
+    let spec = json!({"type":"money","currency":"USD","minor_unit_exponent":2});
+    let minor = crate::actions::resolve::cents("$86.00").unwrap();
+    let action_value = typed_value(&spec, &minor).unwrap();
+    assert_eq!(action_value["minor_units"], "8600");
+    assert_eq!(crate::actions::resolve::display(&action_value), "$86.00");
+
+    let (mut command, _) = fixture_request();
+    command["values"] = json!([{"field_id":"amount","value":action_value}]);
+    let mut fields = [
+        "publication_id",
+        "schema_id",
+        "schema_version_expected",
+        "record_id",
+        "expected_record_version",
+        "expected_work_version",
+        "idempotency_key",
+    ]
+    .into_iter()
+    .map(|key| {
+        let value = &command[key];
+        (
+            key.to_owned(),
+            value
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| value.to_string()),
+        )
+    })
+    .collect::<Vec<_>>();
+    fields.extend([
+        (
+            "collection_id".into(),
+            "00000000-0000-4000-8000-0000000000ce".into(),
+        ),
+        ("value.amount".into(), "86.00".into()),
+        ("spec.amount".into(), spec.to_string()),
+    ]);
+    let app = command["app_id"].as_str().unwrap();
+    let work = command["work_id"].as_str().unwrap();
+    let id = command["command_id"].as_str().unwrap();
+    let (form, _) = routes::parse_form_for_tests(&fields, app, work, id).unwrap();
+    let json =
+        routes::parse_json_for_tests(&serde_json::to_vec(&command).unwrap(), app, work, id, None)
+            .unwrap();
+    assert_eq!(
+        form, json,
+        "only the human form boundary converts major units"
+    );
+    assert_eq!(form.values[0]["value"]["minor_units"], "8600");
+}
+
+#[test]
 fn money_forms_use_exact_major_units_while_json_remains_minor_units() {
     let spec = json!({"type":"money","currency":"USD","minor_unit_exponent":2});
     for (display, minor) in [
@@ -888,11 +941,14 @@ fn money_forms_use_exact_major_units_while_json_remains_minor_units() {
             "99999999999999999999999999999999999999",
         ),
     ] {
-        assert_eq!(typed_value(&spec, display).unwrap()["minor_units"], minor);
+        assert_eq!(
+            form_typed_value(&spec, display).unwrap()["minor_units"],
+            minor
+        );
         let value =
             json!({"type":"money","minor_units":minor,"currency":"USD","minor_unit_exponent":2});
         let shown = super::value_text(&value);
-        assert_eq!(typed_value(&spec, &shown).unwrap(), value);
+        assert_eq!(form_typed_value(&spec, &shown).unwrap(), value);
     }
     for invalid in [
         "1e2",
@@ -906,7 +962,7 @@ fn money_forms_use_exact_major_units_while_json_remains_minor_units() {
         ".",
         "9999999999999999999999999999999999999.99",
     ] {
-        assert_eq!(typed_value(&spec, invalid), None, "accepted {invalid}");
+        assert_eq!(form_typed_value(&spec, invalid), None, "accepted {invalid}");
     }
     assert_eq!(
         super::value_text(&json!({"type":"money","minor_units":"1","minor_unit_exponent":2})),
