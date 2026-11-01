@@ -62,6 +62,8 @@ jobs:
         run: GENUI_SESSION_REPORT="$RUNNER_TEMP/tenant-foundation/session.json" cargo test --locked -p forma-app-platform --lib auth::tests::native_session_campaign -- --ignored --exact --nocapture
       - name: Qualify invite redemption and entitlement (APP-074)
         run: GENUI_INVITE_REPORT="$RUNNER_TEMP/tenant-foundation/invite.json" cargo test --locked -p forma-app-platform --lib auth::invite_tests::native_invite_campaign -- --ignored --exact --nocapture
+      - name: Qualify route-level invitation races and provider faults (APP-082)
+        run: GENUI_INVITE_RACE_REPORT="$RUNNER_TEMP/tenant-foundation/invite-races.json" cargo test --locked -p forma-app-platform --lib auth::invite_tests::native_invite_race_campaign -- --ignored --exact --nocapture
       - name: Qualify explicit record commands, outcomes and audit (APP-013)
         run: GENUI_COMMAND_REPORT="$RUNNER_TEMP/tenant-foundation/command.json" cargo test --locked -p forma-app-platform --lib storage::command_qualification::native_command_campaign -- --ignored --exact --nocapture
       - name: Qualify command races, revocation and restart (APP-014)

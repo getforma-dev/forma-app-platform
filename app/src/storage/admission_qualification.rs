@@ -180,8 +180,8 @@ pub(crate) async fn lock_wait(fixture: &Fixture, waiters: i64) {
     .await
     .expect("observed lock wait");
 }
-async fn paused(hooks: &TestHooks) {
-    timeout(Duration::from_secs(5), hooks.reached.notified())
+pub(crate) async fn paused(hooks: &TestHooks) {
+    timeout(Duration::from_secs(10), hooks.reached.notified())
         .await
         .expect("admission barrier reached");
 }

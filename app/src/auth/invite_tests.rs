@@ -19,7 +19,10 @@ use super::{
 use crate::{
     http::{self, proxy::TrustedProxies},
     storage::{
-        admission_qualification::{operator, operator_with, FakeProvider, FakeSecret},
+        admission_qualification::{
+            accepted, cli_command, lock_wait, operator, operator_with, paused, wait, FakeProvider,
+            FakeSecret,
+        },
         code_digest,
         qualification::{fixture_python, Fixture},
         FlowKind, Stores,
@@ -1823,7 +1826,7 @@ async fn campaign() {
             0
         );
     }
-    c.record("provider faults at the backend PAR (503, and an answer past the 3-second client deadline) give the neutral page inside the 5-second handler deadline, discard the flow and consume no slot; the presignup reservation simply lapses in 10 minutes (the create/revoke timeout and reconciliation exercise is APP-082's)");
+    c.record("provider faults at the backend PAR (503, and an answer past the 3-second client deadline) give the neutral page inside the 5-second handler deadline, discard the flow and consume no slot; the presignup reservation simply lapses in 10 minutes (the create/revoke timeout and reconciliation exercise is auth::invite_tests::native_invite_race_campaign)");
 
     // --- 11. No code, invitation token or bearer credential leaks -----------
     let replies = c.log.lock().unwrap().clone();
@@ -1939,7 +1942,7 @@ async fn campaign() {
             "The provider is the cfg(test) synthetic loopback issuer (PAR, hosted registration, token) plus the loopback management stand-in app/runtime/fake_fauth.py; the operator writes each capability into the environment's secret (app/runtime/local_secrets.py, a loopback Secrets Manager stand-in reached through the real boto3 client; ADR-003 amendment 2026-10-30), the supervisor's own writer (runtime.write_capabilities) materializes it as the service's 0600 files after each operator command, and the test copies each invitation token from the service's file into the issuer (one simulated provider). Never the deployed fAuth; hosted PAR, real mail and browsers are APP-076/079.",
             "Synthetic local password authentication over TLS, not RDS IAM; synthetic identifiers.",
             "Rate-limit windows are in-process (D7.5, D7.18).",
-            "The route-level admission race repeat and the provider create/revoke fault exercise are APP-082's (ADR-010).",
+            "The route-level admission race repeat and the provider create/revoke fault exercise are auth::invite_tests::native_invite_race_campaign (APP-082).",
             "Raw codes and invitation tokens are never written to this report."
         ]
     });
@@ -1950,6 +1953,1200 @@ async fn campaign() {
         "APP074 invite campaign: {} checks passed",
         report["checks"].as_array().unwrap().len()
     );
+}
+
+// --- APP-082: route-level races and provider faults ----------------------------
+
+fn duplicate(browser: &Browser) -> Browser {
+    Browser {
+        jar: browser.jar.clone(),
+        peer: browser.peer,
+        log: browser.log.clone(),
+    }
+}
+fn spawn_get(app: Router, browser: Browser, path: String) -> tokio::task::JoinHandle<Reply> {
+    tokio::spawn(async move {
+        let mut browser = browser;
+        browser.get(&app, &path).await
+    })
+}
+fn spawn_post(
+    app: Router,
+    browser: Browser,
+    path: &'static str,
+    body: String,
+) -> tokio::task::JoinHandle<Reply> {
+    tokio::spawn(async move {
+        let mut browser = browser;
+        browser.post(&app, path, &body).await
+    })
+}
+fn session_value(reply: &Reply) -> String {
+    reply
+        .sets(cookies::SESSION)
+        .expect("workspace session cookie")
+        .split(';')
+        .next()
+        .unwrap()
+        .split_once('=')
+        .unwrap()
+        .1
+        .to_owned()
+}
+fn neutral_refusal(reply: &Reply) -> bool {
+    reply.status == StatusCode::BAD_REQUEST && reply.body == NEUTRAL
+}
+/// A denial clears an existing session cookie. That clear is not a minted session.
+fn no_live_session(reply: &Reply) -> bool {
+    reply
+        .sets(cookies::SESSION)
+        .is_none_or(|cookie| cookie.contains("Max-Age=0"))
+}
+fn denied_page(reply: &Reply) -> bool {
+    reply.status == StatusCode::FORBIDDEN && field(&reply.body, "page") == "denied"
+}
+fn peer_of(n: u16) -> String {
+    format!("192.0.2.{}:{}", 200 + (n % 50), 8100 + n)
+}
+fn subject_for(n: u32) -> String {
+    format!(
+        "usr_00000000-0000-4000-8000-{:012x}",
+        0x0820_0000_0001u64 + u64::from(n)
+    )
+}
+fn posts(provider: &mut FakeProvider) -> i64 {
+    provider.control(json!({"op": "count", "method": "POST", "path": "/manage/invites"}))["count"]
+        .as_i64()
+        .unwrap()
+}
+fn remember(secrets: &mut Vec<String>, code: &Code) {
+    secrets.push(code.raw.clone());
+    if let Some(token) = &code.token {
+        secrets.push(token.clone());
+    }
+}
+/// A provider-backed issue that may fail the remote create. Unlike `Run::issue`,
+/// a missing capability is a result to assert, not a harness failure.
+fn issue_invited(run: &Run, email: &str) -> Value {
+    let grants = [
+        format!("discover:{APP}"),
+        format!("run:{APP}"),
+        format!("record_read:{APP}:{BOUND_WORK}"),
+        format!("record_write:{APP}:{BOUND_WORK}"),
+        format!("source_read:{SOURCE}"),
+        format!("source_read:{INVENTORY}"),
+    ];
+    let mut owned = vec![
+        "issue".to_owned(),
+        "--organization".to_owned(),
+        ORG.to_owned(),
+        "--issued-by".to_owned(),
+        "invite-race".to_owned(),
+        "--max-redemptions".to_owned(),
+        "1".to_owned(),
+        "--provider-email".to_owned(),
+        email.to_owned(),
+        "--provider-role".to_owned(),
+        "user".to_owned(),
+        "--provider-issuer".to_owned(),
+        ISSUER.to_owned(),
+        "--provider-tenant".to_owned(),
+        NORTHSTAR_TENANT.to_owned(),
+    ];
+    for grant in &grants {
+        owned.push("--grant".to_owned());
+        owned.push(grant.clone());
+    }
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    operator_with(&run.fixture, &run.northstar, &refs)
+}
+fn reconcile(run: &Run) -> Value {
+    operator_with(
+        &run.fixture,
+        &run.northstar,
+        &["reconcile", "--organization", ORG],
+    )
+}
+async fn cell(run: &Run, sql: &str) -> String {
+    run.fixture
+        .operator()
+        .await
+        .client
+        .query_one(sql, &[])
+        .await
+        .unwrap()
+        .get(0)
+}
+async fn principals(run: &Run, subject: &str) -> i64 {
+    run.scalar(&format!(
+        "SELECT count(*) FROM genui.principals WHERE provider_subject='{subject}'"
+    ))
+    .await
+}
+async fn active_entitlements(run: &Run, subject: &str) -> i64 {
+    run.scalar(&format!("SELECT count(*) FROM genui.entitlements e JOIN genui.principals p ON p.organization_id=e.organization_id AND p.principal_id=e.principal_id WHERE p.provider_subject='{subject}' AND e.status='active' AND e.expires_at>clock_timestamp()")).await
+}
+async fn entitlement_rows(run: &Run, subject: &str) -> i64 {
+    run.scalar(&format!("SELECT count(*) FROM genui.entitlements e JOIN genui.principals p ON p.organization_id=e.organization_id AND p.principal_id=e.principal_id WHERE p.provider_subject='{subject}'")).await
+}
+async fn sessions_of(run: &Run, subject: &str) -> i64 {
+    run.scalar(&format!("SELECT count(*) FROM genui.sessions s JOIN genui.principals p ON p.organization_id=s.organization_id AND p.principal_id=s.principal_id WHERE p.provider_subject='{subject}'")).await
+}
+async fn live_pending(run: &Run, code_id: &str) -> i64 {
+    run.scalar(&format!("SELECT count(*) FROM genui.code_reservations WHERE code_id='{code_id}' AND kind='pending' AND state='live' AND expires_at>now()")).await
+}
+async fn denied_pending(run: &Run, subject: &str) -> i64 {
+    run.scalar(&format!("SELECT count(*) FROM genui.code_reservations WHERE provider_subject='{subject}' AND state='denied_for_reconciliation'")).await
+}
+async fn redeemed(run: &Run, code_id: &str) -> i64 {
+    run.scalar(&format!(
+        "SELECT redeemed_count FROM genui.access_codes WHERE code_id='{code_id}'"
+    ))
+    .await
+}
+async fn code_status(run: &Run, code_id: &str) -> String {
+    cell(
+        run,
+        &format!("SELECT status FROM genui.access_codes WHERE code_id='{code_id}'"),
+    )
+    .await
+}
+async fn audits(run: &Run, code_id: &str, kind: &str) -> i64 {
+    run.scalar(&format!(
+        "SELECT count(*) FROM genui.audit_events WHERE code_id='{code_id}' AND kind='{kind}'"
+    ))
+    .await
+}
+async fn provider_states(run: &Run, code_id: &str) -> Vec<(String, String)> {
+    let operator = run.fixture.operator().await;
+    let rows = operator.client.query("SELECT operation,state FROM genui.provider_invitations WHERE organization_id=$1::text::uuid AND code_id=$2::text::uuid ORDER BY operation,created_at", &[&ORG, &code_id]).await.unwrap();
+    rows.iter().map(|row| (row.get(0), row.get(1))).collect()
+}
+async fn age_rows(run: &Run, code_id: &str) {
+    run.superuser(&format!("UPDATE genui.provider_invitations SET created_at=created_at-make_interval(secs=>900), updated_at=updated_at-make_interval(secs=>900) WHERE organization_id='{ORG}' AND code_id='{code_id}'::uuid")).await;
+}
+fn shift(provider: &mut FakeProvider, email: &str) {
+    let shifted = provider.control(json!({"op": "shift", "email": email, "seconds": 900}));
+    assert!(shifted.get("ids").is_some(), "{shifted}");
+}
+fn fault(provider: &mut FakeProvider, route: &str, mode: &str, extra: &[(&str, Value)]) {
+    let mut command = json!({"op": "fault", "route": route, "mode": mode});
+    for (key, value) in extra {
+        command[*key] = value.clone();
+    }
+    assert_eq!(provider.control(command)["ok"], true);
+}
+async fn prepared_sign_in(run: &Run, browser: &mut Browser, subject: &str) -> String {
+    run.auth.limits.clear();
+    let start = browser
+        .post(&run.app, &format!("/signin/{NORTHSTAR_HANDLE}"), "")
+        .await;
+    assert_eq!(start.status, StatusCode::SEE_OTHER, "{}", start.body);
+    run.issuer
+        .login(&start.location(), subject)
+        .expect("hosted sign-in")
+}
+async fn sign_in_on(run: &Run, app: &Router, browser: &mut Browser, subject: &str) -> Reply {
+    run.auth.limits.clear();
+    let start = browser
+        .post(app, &format!("/signin/{NORTHSTAR_HANDLE}"), "")
+        .await;
+    assert_eq!(start.status, StatusCode::SEE_OTHER, "{}", start.body);
+    let query = run
+        .issuer
+        .login(&start.location(), subject)
+        .expect("hosted sign-in");
+    browser.get(app, &format!("/auth/callback?{query}")).await
+}
+fn install_session(log: &Log, address: &str, reply: &Reply) -> Browser {
+    let mut browser = Browser::new(address, log);
+    browser
+        .jar
+        .insert(cookies::SESSION.into(), session_value(reply));
+    browser
+}
+
+struct Notes(Vec<Value>);
+impl Notes {
+    fn record(&mut self, name: &str) {
+        println!("APP082 check: {name}");
+        self.0.push(json!({"name": name, "passed": true}));
+    }
+}
+
+#[test]
+#[ignore = "requires local Docker, OpenSSL and the locked migration/contract Python environments"]
+fn native_invite_race_campaign() {
+    std::thread::Builder::new()
+        .name("app082-invite-race-campaign".into())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(4)
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(race_campaign());
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+async fn race_campaign() {
+    let fixture = Fixture::new();
+    fixture.sql(
+        "ALTER ROLE genui_migration PASSWORD 'synthetic-migration'",
+        "genui",
+    );
+    for org in [ORG, OTHER] {
+        operator(&fixture, &["backfill", "--organization", org]);
+    }
+    for (org, handle) in [(ORG, NORTHSTAR_HANDLE), (OTHER, CANARY_HANDLE)] {
+        operator(
+            &fixture,
+            &["issue-handle", "--organization", org, "--handle", handle],
+        );
+    }
+    // The same grant template Run::issue writes. The bound work is the one
+    // the invite campaign registers; without it the template's foreign key
+    // refuses the code.
+    for org in [ORG, OTHER] {
+        let revision = derived_revision(org);
+        let record = json!({
+            "organization_id": org, "source_id": SOURCE, "revision_id": revision,
+            "content_digest": CONTENT, "normalized_digest": NORMALIZED, "object_digest": NORMALIZED,
+            "row_count": 6, "contract_digest": CONTRACT,
+        })
+        .to_string();
+        let registered = operator(
+            &fixture,
+            &[
+                "register-source-revision",
+                "--organization",
+                org,
+                "--record-json",
+                &record,
+            ],
+        );
+        assert_eq!(registered["changed"], true);
+        let bound = operator(
+            &fixture,
+            &[
+                "create-bound-work",
+                "--organization",
+                org,
+                "--app",
+                APP,
+                "--from-work",
+                SEEDED_WORK,
+                "--work",
+                BOUND_WORK,
+                "--creator",
+                PRINCIPAL,
+                "--input",
+                "events",
+                "--source",
+                SOURCE,
+                "--revision",
+                &revision,
+            ],
+        );
+        assert_eq!(bound["changed"], true);
+    }
+    let issuer = Issuer::start(tenants()).await;
+    let (auth_config, registry, _auth_secret) = deliver_auth_configuration(
+        &fixture,
+        &issuer.origin,
+        "00000000-0000-4000-8000-000000000a82",
+    );
+    let capabilities = fixture.directory.0.join("capabilities");
+    let secret = Arc::new(crate::storage::admission_qualification::FakeSecret::start());
+    let northstar = FakeProvider::start_at(
+        &fixture,
+        NORTHSTAR_TENANT,
+        "northstar",
+        Some(&capabilities),
+        Some(&secret),
+    );
+    let canary = FakeProvider::start_at(
+        &fixture,
+        CANARY_TENANT,
+        "canary",
+        Some(&capabilities),
+        Some(&secret),
+    );
+    let stores = Arc::new(Stores::new(fixture.settings_with_registry(registry)).unwrap());
+    let hooks = stores.hooks();
+    let auth = Arc::new(
+        Auth::loopback(
+            auth_config.clone(),
+            Some(stores.clone()),
+            Arc::new(TestPages),
+        )
+        .with_invitations(Some(invite::Invitations::open(&capabilities).unwrap())),
+    );
+    let mut c = Run {
+        app: app(auth.clone()),
+        fixture,
+        stores,
+        issuer,
+        auth,
+        log: Arc::default(),
+        checks: Vec::new(),
+        northstar,
+        canary,
+        capabilities,
+        issued: 0,
+    };
+    let mut notes = Notes(Vec::new());
+    let mut secrets = Vec::new();
+    let mut peers = 0u16;
+    let mut next_peer = || {
+        peers += 1;
+        peer_of(peers)
+    };
+
+    // --- 1. Last slot: signup callback holds the code row; a second validate waits.
+    // One server-only invitation is single-use and email-bound, so a second
+    // subject cannot finish hosted registration on it. The public last-slot
+    // race is this hold against POST /invite/validate.
+    let slot = c.issue(ORG, true);
+    remember(&mut secrets, &slot);
+    let slot_subject = subject_for(1);
+    let mut holder = c.browser(&next_peer());
+    c.auth.limits.clear();
+    let entry = c.validate(&mut holder, &slot.raw).await;
+    assert_eq!(entry.status, StatusCode::SEE_OTHER, "{}", entry.body);
+    let query = c
+        .issuer
+        .register(&entry.location(), &slot_subject, &slot.email)
+        .expect("hosted registration");
+    let par_at_hold = c.issuer.count(|counter| &counter.par);
+    let creates_at_hold = posts(&mut c.northstar);
+    hooks.arm("pending");
+    let held = spawn_get(
+        c.app.clone(),
+        duplicate(&holder),
+        format!("/auth/callback?{query}"),
+    );
+    paused(&hooks).await;
+    assert_eq!(
+        live_pending(&c, &slot.id).await,
+        0,
+        "the pending row is not committed while the callback is stopped"
+    );
+    c.auth.limits.clear();
+    let loser = spawn_post(
+        c.app.clone(),
+        c.browser(&next_peer()),
+        "/invite/validate",
+        format!("code={}", slot.raw),
+    );
+    lock_wait(&c.fixture, 1).await;
+    hooks.release.notify_one();
+    let held = held.await.unwrap();
+    let loser = loser.await.unwrap();
+    assert_eq!(held.location(), "/auth/pending", "{}", held.body);
+    assert!(
+        neutral_refusal(&loser),
+        "second validate {}: {}",
+        loser.status,
+        loser.body
+    );
+    assert_eq!(c.issuer.count(|counter| &counter.par), par_at_hold);
+    assert_eq!(posts(&mut c.northstar), creates_at_hold);
+    assert_eq!(live_pending(&c, &slot.id).await, 1);
+    assert_eq!(redeemed(&c, &slot.id).await, 0);
+    assert_eq!(principals(&c, &slot_subject).await, 0);
+    assert_eq!(audits(&c, &slot.id, "admission.pending").await, 1);
+    assert_eq!(audits(&c, &slot.id, "admission.redeemed").await, 0);
+    c.issuer.set_verified(&slot_subject, true);
+    c.auth.limits.clear();
+    let admitted = c
+        .sign_in(&mut holder, NORTHSTAR_HANDLE, &slot_subject)
+        .await;
+    assert_eq!(admitted.location(), "/workspace", "{}", admitted.body);
+    let slot_session = session_value(&admitted);
+    assert_eq!(redeemed(&c, &slot.id).await, 1);
+    assert_eq!(code_status(&c, &slot.id).await, "exhausted");
+    assert_eq!(principals(&c, &slot_subject).await, 1);
+    assert_eq!(active_entitlements(&c, &slot_subject).await, 1);
+    assert_eq!(audits(&c, &slot.id, "admission.redeemed").await, 1);
+    c.auth.limits.clear();
+    let mut later = c.browser(&next_peer());
+    let again = c.validate(&mut later, &slot.raw).await;
+    assert!(neutral_refusal(&again), "{} {}", again.status, again.body);
+    assert_eq!(principals(&c, &slot_subject).await, 1);
+    assert_eq!(posts(&mut c.northstar), creates_at_hold);
+    notes.record("concurrent last slot (observed lock wait): the signup callback holds the code row before commit; the waiting POST /invite/validate is the neutral refusal, performs no PAR and no second create; exactly one pending admission is then admitted, and a later validate stays refused");
+
+    // --- 2. Two verified sign-ins of one pending identity.
+    let retry = c.issue(ORG, true);
+    remember(&mut secrets, &retry);
+    let retry_subject = subject_for(2);
+    let mut retry_browser = c.browser(&next_peer());
+    c.auth.limits.clear();
+    let pending = c.signup(&mut retry_browser, &retry, &retry_subject).await;
+    assert_eq!(pending.location(), "/auth/pending", "{}", pending.body);
+    c.issuer.set_verified(&retry_subject, true);
+    let mut first_browser = c.browser(&next_peer());
+    let mut second_browser = c.browser(&next_peer());
+    let first_query = prepared_sign_in(&c, &mut first_browser, &retry_subject).await;
+    let second_query = prepared_sign_in(&c, &mut second_browser, &retry_subject).await;
+    hooks.arm("admit");
+    let first = spawn_get(
+        c.app.clone(),
+        first_browser,
+        format!("/auth/callback?{first_query}"),
+    );
+    paused(&hooks).await;
+    assert_eq!(
+        redeemed(&c, &retry.id).await,
+        0,
+        "the admission is not committed while the first sign-in is stopped"
+    );
+    let second = spawn_get(
+        c.app.clone(),
+        second_browser,
+        format!("/auth/callback?{second_query}"),
+    );
+    lock_wait(&c.fixture, 1).await;
+    hooks.release.notify_one();
+    let first = first.await.unwrap();
+    let second = second.await.unwrap();
+    assert_eq!(first.location(), "/workspace", "{}", first.body);
+    assert_eq!(second.location(), "/workspace", "{}", second.body);
+    assert_ne!(session_value(&first), session_value(&second));
+    assert_eq!(redeemed(&c, &retry.id).await, 1);
+    assert_eq!(principals(&c, &retry_subject).await, 1);
+    assert_eq!(active_entitlements(&c, &retry_subject).await, 1);
+    assert_eq!(entitlement_rows(&c, &retry_subject).await, 1);
+    assert_eq!(audits(&c, &retry.id, "admission.redeemed").await, 1);
+    assert_eq!(sessions_of(&c, &retry_subject).await, 2);
+    c.auth.limits.clear();
+    for reply in [&first, &second] {
+        let mut browser = install_session(&c.log, &next_peer(), reply);
+        let page = browser.get(&c.app, "/workspace").await;
+        assert_eq!(field(&page.body, "page"), "workspace", "{}", page.body);
+    }
+    notes.record("identical retries (observed lock wait): two verified sign-ins of one pending identity return one stored admission, one principal, one entitlement and one admission.redeemed; each completion mints its own session");
+
+    // --- 3. A sign-in already inside mint cannot revive an expired entitlement.
+    // A later sign-in of an admitted member does not call admit again (the
+    // pending row is consumed). It reaches mint, which re-reads the
+    // entitlement after the member fence. Stop there, expire the row, and
+    // let the re-read run.
+    let mut late = c.browser(&next_peer());
+    let late_query = prepared_sign_in(&c, &mut late, &retry_subject).await;
+    hooks.arm("mint");
+    let late_task = spawn_get(c.app.clone(), late, format!("/auth/callback?{late_query}"));
+    paused(&hooks).await;
+    c.superuser(&format!("UPDATE genui.entitlements e SET expires_at=e.starts_at+interval '1 millisecond' FROM genui.principals p WHERE e.organization_id=p.organization_id AND e.principal_id=p.principal_id AND p.provider_subject='{retry_subject}'")).await;
+    hooks.release.notify_one();
+    let late_reply = late_task.await.unwrap();
+    assert!(
+        denied_page(&late_reply),
+        "late sign-in {}: {}",
+        late_reply.status,
+        late_reply.body
+    );
+    assert!(
+        no_live_session(&late_reply),
+        "late sign-in set a session: {:?}",
+        late_reply.sets(cookies::SESSION)
+    );
+    assert_eq!(active_entitlements(&c, &retry_subject).await, 0);
+    assert_eq!(entitlement_rows(&c, &retry_subject).await, 1);
+    assert_eq!(redeemed(&c, &retry.id).await, 1);
+    assert_eq!(principals(&c, &retry_subject).await, 1);
+    c.auth.limits.clear();
+    for reply in [&first, &second] {
+        let mut browser = install_session(&c.log, &next_peer(), reply);
+        assert!(
+            browser.get(&c.app, "/workspace").await.uniform_404(),
+            "expired entitlement invalidates the session"
+        );
+    }
+    c.auth.limits.clear();
+    let mut after = c.browser(&next_peer());
+    let after_reply = c
+        .sign_in(&mut after, NORTHSTAR_HANDLE, &retry_subject)
+        .await;
+    assert!(
+        denied_page(&after_reply),
+        "retry after expiry {}: {}",
+        after_reply.status,
+        after_reply.body
+    );
+    assert_eq!(active_entitlements(&c, &retry_subject).await, 0);
+    assert_eq!(entitlement_rows(&c, &retry_subject).await, 1);
+    notes.record("expired entitlement is not revived: a sign-in stopped after the member fence, before the entitlement re-read, is denied once the expiry is committed; the existing sessions are the uniform 404, a later sign-in stays denied, and no entitlement row is added");
+
+    // --- 4. Entitlement revocation waits on the member fence, then wins.
+    let slot_principal = cell(
+        &c,
+        &format!(
+            "SELECT principal_id::text FROM genui.principals WHERE provider_subject='{slot_subject}'"
+        ),
+    )
+    .await;
+    let mut racing_member = c.browser(&next_peer());
+    let racing_member_query = prepared_sign_in(&c, &mut racing_member, &slot_subject).await;
+    hooks.arm("mint");
+    let racing_member_task = spawn_get(
+        c.app.clone(),
+        racing_member,
+        format!("/auth/callback?{racing_member_query}"),
+    );
+    paused(&hooks).await;
+    let revoke_entitlement = cli_command(
+        &c.fixture,
+        "genui_migration",
+        "synthetic-migration",
+        &[
+            "revoke-entitlement",
+            "--organization",
+            ORG,
+            "--principal",
+            &slot_principal,
+        ],
+    )
+    .spawn()
+    .unwrap();
+    lock_wait(&c.fixture, 1).await;
+    hooks.release.notify_one();
+    let racing_member_reply = racing_member_task.await.unwrap();
+    let revoke_entitlement = accepted(
+        tokio::task::spawn_blocking(move || wait(revoke_entitlement, "revoke-entitlement"))
+            .await
+            .unwrap(),
+        "revoke-entitlement",
+    );
+    assert_eq!(
+        racing_member_reply.location(),
+        "/workspace",
+        "{}",
+        racing_member_reply.body
+    );
+    assert_eq!(revoke_entitlement["changed"], true);
+    assert_eq!(active_entitlements(&c, &slot_subject).await, 0);
+    assert_eq!(entitlement_rows(&c, &slot_subject).await, 1);
+    assert_eq!(redeemed(&c, &slot.id).await, 1);
+    c.auth.limits.clear();
+    let mut minted_then_revoked = install_session(&c.log, &next_peer(), &racing_member_reply);
+    assert!(minted_then_revoked
+        .get(&c.app, "/workspace")
+        .await
+        .uniform_404());
+    let mut earlier_session = c.browser(&next_peer());
+    earlier_session
+        .jar
+        .insert(cookies::SESSION.into(), slot_session);
+    assert!(earlier_session
+        .get(&c.app, "/workspace")
+        .await
+        .uniform_404());
+    c.auth.limits.clear();
+    let mut after_revoke = c.browser(&next_peer());
+    let after_revoke = c
+        .sign_in(&mut after_revoke, NORTHSTAR_HANDLE, &slot_subject)
+        .await;
+    assert!(
+        denied_page(&after_revoke),
+        "sign-in after entitlement revocation {}: {}",
+        after_revoke.status,
+        after_revoke.body
+    );
+    assert_eq!(active_entitlements(&c, &slot_subject).await, 0);
+    notes.record("entitlement revocation racing a sign-in (observed lock wait): the operator waits on the member fence until the mint commits, then the new session and the earlier session are the uniform 404 and a later sign-in is denied without a new entitlement");
+
+    // --- 5. Admission first, then code revocation.
+    let admit_first = c.issue(ORG, true);
+    remember(&mut secrets, &admit_first);
+    let admit_subject = subject_for(3);
+    let mut admit_browser = c.browser(&next_peer());
+    c.auth.limits.clear();
+    assert_eq!(
+        c.signup(&mut admit_browser, &admit_first, &admit_subject)
+            .await
+            .location(),
+        "/auth/pending"
+    );
+    c.issuer.set_verified(&admit_subject, true);
+    let mut racing = c.browser(&next_peer());
+    let racing_query = prepared_sign_in(&c, &mut racing, &admit_subject).await;
+    hooks.arm("admit");
+    let racing_task = spawn_get(
+        c.app.clone(),
+        racing,
+        format!("/auth/callback?{racing_query}"),
+    );
+    paused(&hooks).await;
+    let revoke = cli_command(
+        &c.fixture,
+        "genui_migration",
+        "synthetic-migration",
+        &[
+            "revoke",
+            "--organization",
+            ORG,
+            "--code-id",
+            &admit_first.id,
+        ],
+    )
+    .spawn()
+    .unwrap();
+    lock_wait(&c.fixture, 1).await;
+    hooks.release.notify_one();
+    let racing_reply = racing_task.await.unwrap();
+    let revoke_out = accepted(
+        tokio::task::spawn_blocking(move || wait(revoke, "revoke"))
+            .await
+            .unwrap(),
+        "revoke",
+    );
+    assert_eq!(
+        racing_reply.location(),
+        "/workspace",
+        "{}",
+        racing_reply.body
+    );
+    assert_eq!(revoke_out["changed"], true);
+    assert_eq!(
+        (
+            code_status(&c, &admit_first.id).await,
+            redeemed(&c, &admit_first.id).await
+        ),
+        ("revoked".to_owned(), 1)
+    );
+    assert_eq!(principals(&c, &admit_subject).await, 1);
+    assert_eq!(active_entitlements(&c, &admit_subject).await, 1);
+    c.auth.limits.clear();
+    let mut stood = install_session(&c.log, &next_peer(), &racing_reply);
+    assert_eq!(
+        field(&stood.get(&c.app, "/workspace").await.body, "page"),
+        "workspace"
+    );
+    c.auth.limits.clear();
+    let mut replay = c.browser(&next_peer());
+    let replay = c
+        .sign_in(&mut replay, NORTHSTAR_HANDLE, &admit_subject)
+        .await;
+    assert_eq!(replay.location(), "/workspace", "{}", replay.body);
+    assert_eq!(redeemed(&c, &admit_first.id).await, 1);
+    assert_eq!(audits(&c, &admit_first.id, "admission.redeemed").await, 1);
+    notes.record("admission-first: code revocation waits on the code row until the sign-in commits; the admission stands, the code is then revoked, and a later sign-in replays the stored admission without a second slot");
+
+    // --- 6. Revocation first: the sign-in waits, then the code is revoked.
+    let revoke_first = c.issue(ORG, true);
+    remember(&mut secrets, &revoke_first);
+    let revoke_subject = subject_for(4);
+    let mut revoke_browser = c.browser(&next_peer());
+    c.auth.limits.clear();
+    assert_eq!(
+        c.signup(&mut revoke_browser, &revoke_first, &revoke_subject)
+            .await
+            .location(),
+        "/auth/pending"
+    );
+    c.issuer.set_verified(&revoke_subject, true);
+    let mut blocked = c.browser(&next_peer());
+    let blocked_query = prepared_sign_in(&c, &mut blocked, &revoke_subject).await;
+    let writer = c.fixture.operator().await;
+    writer.client.batch_execute(&format!("BEGIN; SELECT 1 FROM genui.organizations WHERE organization_id='{ORG}' FOR SHARE; UPDATE genui.access_codes SET status='revoked',revoked_at=clock_timestamp() WHERE organization_id='{ORG}' AND code_id='{}'", revoke_first.id)).await.unwrap();
+    let blocked_task = spawn_get(
+        c.app.clone(),
+        blocked,
+        format!("/auth/callback?{blocked_query}"),
+    );
+    lock_wait(&c.fixture, 1).await;
+    assert_eq!(principals(&c, &revoke_subject).await, 0);
+    writer.client.batch_execute("COMMIT").await.unwrap();
+    drop(writer);
+    let blocked_reply = blocked_task.await.unwrap();
+    assert!(
+        denied_page(&blocked_reply),
+        "revocation-first {}: {}",
+        blocked_reply.status,
+        blocked_reply.body
+    );
+    assert!(
+        no_live_session(&blocked_reply),
+        "revocation-first set a session: {:?}",
+        blocked_reply.sets(cookies::SESSION)
+    );
+    assert_eq!(principals(&c, &revoke_subject).await, 0);
+    assert_eq!(active_entitlements(&c, &revoke_subject).await, 0);
+    assert_eq!(entitlement_rows(&c, &revoke_subject).await, 0);
+    assert_eq!(redeemed(&c, &revoke_first.id).await, 0);
+    assert_eq!(code_status(&c, &revoke_first.id).await, "revoked");
+    assert_eq!(denied_pending(&c, &revoke_subject).await, 1);
+    assert_eq!(
+        audits(&c, &revoke_first.id, "admission.denied_for_reconciliation").await,
+        1
+    );
+    c.auth.limits.clear();
+    let mut blocked_again = c.browser(&next_peer());
+    let blocked_again = c
+        .sign_in(&mut blocked_again, NORTHSTAR_HANDLE, &revoke_subject)
+        .await;
+    assert!(
+        denied_page(&blocked_again),
+        "late completion {}: {}",
+        blocked_again.status,
+        blocked_again.body
+    );
+    assert_eq!(principals(&c, &revoke_subject).await, 0);
+    notes.record("revocation-first (observed lock wait): the verified sign-in waits behind the code-row update and is denied with no principal, membership or entitlement; the pending admission is denied_for_reconciliation and a later sign-in stays denied");
+
+    // --- 7. Provider create timeout, lost response, and reconciliation.
+    let baseline_creates = posts(&mut c.northstar);
+    fault(&mut c.northstar, "create", "drop_before", &[]);
+    let lost_email = "drop-before@invite.example.test";
+    let lost = issue_invited(&c, lost_email);
+    secrets.push(lost["code"].as_str().unwrap().to_owned());
+    let lost_id = lost["code_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        (
+            lost["provider_invitation"]["state"].as_str(),
+            lost["provider_invitation"]["detail"].as_str(),
+            lost["provider_invitation"]["capability_stored"].as_bool(),
+            lost["provider_invitation"]["remote_invitation_id"].is_null()
+        ),
+        (
+            Some("unknown"),
+            Some("transport_ambiguous"),
+            Some(false),
+            true
+        )
+    );
+    assert_eq!(posts(&mut c.northstar), baseline_creates + 1);
+    let young = reconcile(&c);
+    assert!(young["deferred"].as_i64().unwrap() >= 1);
+    assert_eq!(
+        provider_states(&c, &lost_id).await,
+        vec![("create".to_owned(), "unknown".to_owned())]
+    );
+    age_rows(&c, &lost_id).await;
+    shift(&mut c.northstar, lost_email);
+    let settled = reconcile(&c);
+    assert_eq!(settled["provider_phase"], "completed");
+    assert_eq!(
+        provider_states(&c, &lost_id).await,
+        vec![("create".to_owned(), "failed".to_owned())]
+    );
+    assert_eq!(posts(&mut c.northstar), baseline_creates + 1);
+    let par_before_lost = c.issuer.count(|counter| &counter.par);
+    c.auth.limits.clear();
+    let mut lost_browser = c.browser(&next_peer());
+    let lost_reply = c
+        .validate(&mut lost_browser, lost["code"].as_str().unwrap())
+        .await;
+    assert!(
+        neutral_refusal(&lost_reply),
+        "unconfirmed create {}: {}",
+        lost_reply.status,
+        lost_reply.body
+    );
+    assert_eq!(c.issuer.count(|counter| &counter.par), par_before_lost);
+    assert_eq!(principals(&c, "usr_lost_create").await, 0);
+    notes.record("create dropped before a response is unknown, not sent again; reconcile inside the grace leaves it unknown and, after the row is aged, records failed by inspection with no second POST; public validate is the neutral refusal and mints nothing");
+
+    fault(
+        &mut c.northstar,
+        "create",
+        "delay_after",
+        &[("seconds", json!(13))],
+    );
+    let slow_email = "create-timeout@invite.example.test";
+    let slow_started = Instant::now();
+    let slow = issue_invited(&c, slow_email);
+    let slow_elapsed = slow_started.elapsed();
+    secrets.push(slow["code"].as_str().unwrap().to_owned());
+    let slow_id = slow["code_id"].as_str().unwrap().to_owned();
+    assert!(
+        slow_elapsed >= Duration::from_secs(8) && slow_elapsed < Duration::from_secs(18),
+        "create timeout returned in {slow_elapsed:?}"
+    );
+    assert_eq!(
+        (
+            slow["provider_invitation"]["state"].as_str(),
+            slow["provider_invitation"]["detail"].as_str(),
+            slow["provider_invitation"]["capability_stored"].as_bool()
+        ),
+        (Some("unknown"), Some("transport_ambiguous"), Some(false))
+    );
+    let creates_after_timeout = posts(&mut c.northstar);
+    assert_eq!(creates_after_timeout, baseline_creates + 2);
+    let still_young = reconcile(&c);
+    assert!(still_young["deferred"].as_i64().unwrap() >= 1);
+    assert_eq!(
+        provider_states(&c, &slow_id).await,
+        vec![("create".to_owned(), "unknown".to_owned())]
+    );
+    age_rows(&c, &slow_id).await;
+    shift(&mut c.northstar, slow_email);
+    assert_eq!(reconcile(&c)["provider_phase"], "completed");
+    assert_eq!(
+        provider_states(&c, &slow_id).await,
+        vec![
+            ("create".to_owned(), "confirmed".to_owned()),
+            ("revoke".to_owned(), "confirmed".to_owned())
+        ]
+    );
+    assert_eq!(posts(&mut c.northstar), creates_after_timeout);
+    let slow_remote = cell(
+        &c,
+        &format!("SELECT remote_invitation_id FROM genui.provider_invitations WHERE code_id='{slow_id}' AND operation='create'"),
+    )
+    .await;
+    assert_eq!(
+        c.northstar
+            .control(json!({"op": "status", "id": slow_remote}))["status"]
+            .as_str(),
+        Some("revoked")
+    );
+    c.auth.limits.clear();
+    let mut slow_browser = c.browser(&next_peer());
+    let slow_reply = c
+        .validate(&mut slow_browser, slow["code"].as_str().unwrap())
+        .await;
+    assert!(
+        neutral_refusal(&slow_reply),
+        "timed-out create {}: {}",
+        slow_reply.status,
+        slow_reply.body
+    );
+    assert_eq!(principals(&c, "usr_slow_create").await, 0);
+    notes.record("create timeout: one POST, an unknown outcome inside the client deadline, no capability; reconcile does not judge it inside the grace and afterwards confirms the invitation by inspection and revokes it (the token was lost) without a second create; public validate mints nothing");
+
+    // --- 8. Revoke timeout, retry, and signup after local revocation.
+    let remote_revoke = c.issue(ORG, true);
+    remember(&mut secrets, &remote_revoke);
+    let remote_subject = subject_for(5);
+    let mut remote_browser = c.browser(&next_peer());
+    c.auth.limits.clear();
+    assert_eq!(
+        c.signup(&mut remote_browser, &remote_revoke, &remote_subject)
+            .await
+            .location(),
+        "/auth/pending"
+    );
+    let creates_before_revoke = posts(&mut c.northstar);
+    fault(
+        &mut c.northstar,
+        "revoke",
+        "delay_after",
+        &[("seconds", json!(13))],
+    );
+    let revoke_started = Instant::now();
+    let revoke_unknown = operator_with(
+        &c.fixture,
+        &c.northstar,
+        &[
+            "revoke",
+            "--organization",
+            ORG,
+            "--code-id",
+            &remote_revoke.id,
+        ],
+    );
+    let revoke_elapsed = revoke_started.elapsed();
+    assert!(
+        revoke_elapsed >= Duration::from_secs(8) && revoke_elapsed < Duration::from_secs(18),
+        "revoke timeout returned in {revoke_elapsed:?}"
+    );
+    assert_eq!(revoke_unknown["changed"], true);
+    assert_eq!(
+        revoke_unknown["provider_revocations"][0]["state"],
+        "unknown"
+    );
+    assert_eq!(code_status(&c, &remote_revoke.id).await, "revoked");
+    assert_eq!(posts(&mut c.northstar), creates_before_revoke);
+    assert!(
+        !c.capabilities
+            .join(format!(
+                "{ORG}.{}.capability",
+                remote_revoke.invitation.as_deref().unwrap()
+            ))
+            .exists(),
+        "revocation removes the capability before the remote answer"
+    );
+    c.issuer.set_verified(&remote_subject, true);
+    c.auth.limits.clear();
+    let remote_denied = c
+        .sign_in(&mut remote_browser, NORTHSTAR_HANDLE, &remote_subject)
+        .await;
+    assert!(
+        denied_page(&remote_denied),
+        "signup after revocation {}: {}",
+        remote_denied.status,
+        remote_denied.body
+    );
+    assert_eq!(principals(&c, &remote_subject).await, 0);
+    assert_eq!(active_entitlements(&c, &remote_subject).await, 0);
+    assert_eq!(reconcile(&c)["provider_phase"], "completed");
+    assert_eq!(
+        provider_states(&c, &remote_revoke.id).await,
+        vec![
+            ("create".to_owned(), "confirmed".to_owned()),
+            ("revoke".to_owned(), "confirmed".to_owned())
+        ]
+    );
+    assert_eq!(posts(&mut c.northstar), creates_before_revoke);
+    c.auth.limits.clear();
+    let remote_denied_again = c
+        .sign_in(&mut remote_browser, NORTHSTAR_HANDLE, &remote_subject)
+        .await;
+    assert!(denied_page(&remote_denied_again));
+    assert_eq!(principals(&c, &remote_subject).await, 0);
+    notes.record("revoke timeout: the local code stays revoked and the capability is gone when the remote answer is unknown; the verified sign-in mints nothing; reconcile retries the revocation to confirmed without a second create, and the sign-in stays denied");
+
+    // --- 9. Signup after local expiry and exhaustion.
+    let expired_code = c.issue(ORG, true);
+    remember(&mut secrets, &expired_code);
+    let expired_subject = subject_for(6);
+    let mut expired_browser = c.browser(&next_peer());
+    c.auth.limits.clear();
+    assert_eq!(
+        c.signup(&mut expired_browser, &expired_code, &expired_subject)
+            .await
+            .location(),
+        "/auth/pending"
+    );
+    c.superuser(&format!("UPDATE genui.access_codes SET expires_at=issued_at+interval '1 millisecond' WHERE code_id='{}'", expired_code.id)).await;
+    c.issuer.set_verified(&expired_subject, true);
+    c.auth.limits.clear();
+    let expired_sign_in = c
+        .sign_in(&mut expired_browser, NORTHSTAR_HANDLE, &expired_subject)
+        .await;
+    assert!(
+        denied_page(&expired_sign_in),
+        "signup after expiry {}: {}",
+        expired_sign_in.status,
+        expired_sign_in.body
+    );
+    assert_eq!(principals(&c, &expired_subject).await, 0);
+    assert_eq!(active_entitlements(&c, &expired_subject).await, 0);
+    assert_eq!(denied_pending(&c, &expired_subject).await, 1);
+    assert_eq!(
+        audits(&c, &expired_code.id, "admission.denied_for_reconciliation").await,
+        1
+    );
+    let exhausted = c.issue(ORG, true);
+    remember(&mut secrets, &exhausted);
+    let exhausted_subject = subject_for(7);
+    c.auth.limits.clear();
+    {
+        let mut browser = c.browser(&next_peer());
+        let pending = c.signup(&mut browser, &exhausted, &exhausted_subject).await;
+        assert_eq!(pending.location(), "/auth/pending");
+        c.issuer.set_verified(&exhausted_subject, true);
+        let arrived = c
+            .sign_in(&mut browser, NORTHSTAR_HANDLE, &exhausted_subject)
+            .await;
+        assert_eq!(arrived.location(), "/workspace", "{}", arrived.body);
+    }
+    assert_eq!(code_status(&c, &exhausted.id).await, "exhausted");
+    c.auth.limits.clear();
+    let mut exhausted_browser = c.browser(&next_peer());
+    let exhausted_reply = c.validate(&mut exhausted_browser, &exhausted.raw).await;
+    assert!(
+        neutral_refusal(&exhausted_reply),
+        "{} {}",
+        exhausted_reply.status,
+        exhausted_reply.body
+    );
+    assert_eq!(principals(&c, &exhausted_subject).await, 1);
+    assert_eq!(redeemed(&c, &exhausted.id).await, 1);
+    notes.record("signup after local expiry is denied and recorded for reconciliation, with no principal or entitlement; signup after exhaustion is the neutral refusal and does not add a principal or a slot");
+
+    // --- 10. Remote revocation propagates through reconcile.
+    let drifted = c.issue(ORG, true);
+    remember(&mut secrets, &drifted);
+    let drifted_remote = cell(
+        &c,
+        &format!("SELECT remote_invitation_id FROM genui.provider_invitations WHERE code_id='{}' AND operation='create'", drifted.id),
+    )
+    .await;
+    let creates_before_drift = posts(&mut c.northstar);
+    assert_eq!(
+        c.northstar
+            .control(json!({"op": "set_status", "id": drifted_remote, "status": "revoked"}))
+            ["status"]
+            .as_str(),
+        Some("revoked")
+    );
+    let drift = reconcile(&c);
+    assert_eq!(drift["provider_phase"], "completed");
+    assert_eq!(
+        provider_states(&c, &drifted.id).await,
+        vec![
+            ("create".to_owned(), "confirmed".to_owned()),
+            ("revoke".to_owned(), "confirmed".to_owned())
+        ]
+    );
+    assert!(!c
+        .capabilities
+        .join(format!(
+            "{ORG}.{}.capability",
+            drifted.invitation.as_deref().unwrap()
+        ))
+        .exists());
+    assert_eq!(code_status(&c, &drifted.id).await, "active");
+    assert_eq!(posts(&mut c.northstar), creates_before_drift);
+    let par_before_drift = c.issuer.count(|counter| &counter.par);
+    c.auth.limits.clear();
+    let mut drifted_browser = c.browser(&next_peer());
+    let drifted_reply = c.validate(&mut drifted_browser, &drifted.raw).await;
+    assert!(
+        neutral_refusal(&drifted_reply),
+        "remote revocation {}: {}",
+        drifted_reply.status,
+        drifted_reply.body
+    );
+    assert_eq!(c.issuer.count(|counter| &counter.par), par_before_drift);
+    assert_eq!(principals(&c, "usr_remote_revoked").await, 0);
+    notes.record("remote revocation propagation: reconcile records the provider's revoked invitation, removes the capability and does not create another; the code stays active and public validate mints nothing");
+
+    // --- 11. Restart and reopen.
+    let (reopen_subject, mut reopen_browser) = c.member(ORG, "a82reopen").await;
+    let reopen_page = reopen_browser.get(&c.app, "/workspace").await;
+    assert_eq!(field(&reopen_page.body, "page"), "workspace");
+    let pending_subject = subject_for(8);
+    let pending_code = c.issue(ORG, true);
+    remember(&mut secrets, &pending_code);
+    let mut pending_browser = c.browser(&next_peer());
+    c.auth.limits.clear();
+    assert_eq!(
+        c.signup(&mut pending_browser, &pending_code, &pending_subject)
+            .await
+            .location(),
+        "/auth/pending"
+    );
+    let pending_page = pending_browser.get(&c.app, "/auth/pending").await;
+    let old_csrf = field(&pending_page.body, "resend");
+    let mut unfinished = c.browser(&next_peer());
+    let unfinished_query = prepared_sign_in(&c, &mut unfinished, &reopen_subject).await;
+    let fresh = c.issue(ORG, true);
+    remember(&mut secrets, &fresh);
+    let principals_before_restart = principals(&c, &reopen_subject).await;
+    let restarted = Arc::new(
+        Auth::loopback(auth_config, Some(c.stores.clone()), Arc::new(TestPages))
+            .with_invitations(Some(invite::Invitations::open(&c.capabilities).unwrap())),
+    );
+    let restarted_app = app(restarted);
+    assert!(reopen_browser
+        .get(&restarted_app, "/workspace")
+        .await
+        .uniform_404());
+    let unfinished_reply = unfinished
+        .get(
+            &restarted_app,
+            &format!("/auth/callback?{unfinished_query}"),
+        )
+        .await;
+    assert_eq!(unfinished_reply.status, StatusCode::BAD_REQUEST);
+    assert_eq!(field(&unfinished_reply.body, "page"), "signin");
+    assert_eq!(
+        principals(&c, &reopen_subject).await,
+        principals_before_restart
+    );
+    let stale = pending_browser
+        .post(
+            &restarted_app,
+            "/auth/pending/resend",
+            &format!("csrf={old_csrf}"),
+        )
+        .await;
+    assert_eq!(stale.status, StatusCode::FORBIDDEN);
+    let fresh_page = pending_browser.get(&restarted_app, "/auth/pending").await;
+    assert_eq!(fresh_page.status, StatusCode::OK);
+    let resent = pending_browser
+        .post(
+            &restarted_app,
+            "/auth/pending/resend",
+            &format!("csrf={}", field(&fresh_page.body, "resend")),
+        )
+        .await;
+    assert_eq!(resent.location(), "/signin");
+    let mut reopened = c.browser(&next_peer());
+    let reopened = sign_in_on(&c, &restarted_app, &mut reopened, &reopen_subject).await;
+    assert_eq!(reopened.location(), "/workspace", "{}", reopened.body);
+    assert_eq!(
+        field(
+            &reopened_page(&c, &restarted_app, &reopened).await.body,
+            "page"
+        ),
+        "workspace"
+    );
+    let mut still_revoked = c.browser(&next_peer());
+    let still_revoked = sign_in_on(&c, &restarted_app, &mut still_revoked, &slot_subject).await;
+    assert!(
+        denied_page(&still_revoked),
+        "reopen of a revoked member {}: {}",
+        still_revoked.status,
+        still_revoked.body
+    );
+    assert_eq!(active_entitlements(&c, &slot_subject).await, 0);
+    c.auth.limits.clear();
+    let mut fresh_browser = Browser::new(&next_peer(), &c.log);
+    let fresh_reply = fresh_browser
+        .post(
+            &restarted_app,
+            "/invite/validate",
+            &format!("code={}", fresh.raw),
+        )
+        .await;
+    assert_eq!(
+        fresh_reply.status,
+        StatusCode::SEE_OTHER,
+        "{}",
+        fresh_reply.body
+    );
+    notes.record("restart/reopen: a new process admits no earlier session, completes no earlier pre-login flow and rejects the earlier synchronizer token; the pending identity can resend from a fresh page; a current member signs in again; a revoked member stays denied; an unspent code still validates from the capability directory");
+
+    let report = json!({
+        "schema_version": 1,
+        "scope": "APP-082 route-level invitation races and provider faults on the local PostgreSQL TLS fixture with the synthetic issuer and loopback fAuth stand-in",
+        "managed_acceptance": false,
+        "hosted_acceptance": false,
+        "server_version": c.fixture.server_version,
+        "checks": notes.0,
+        "dispatch": {
+            "par": c.issuer.count(|counter| &counter.par),
+            "register": c.issuer.count(|counter| &counter.register),
+            "exchange": c.issuer.count(|counter| &counter.exchange),
+            "provider_creates": posts(&mut c.northstar),
+        },
+        "passed": true,
+        "limits": [
+            "The provider is the cfg(test) synthetic loopback issuer plus app/runtime/fake_fauth.py. No deployed fAuth, mail, browser or AWS call.",
+            "Races stop on the cfg(test) admission checkpoints or on a PostgreSQL lock wait (pg_stat_activity). The provider deadline is the create/revoke timeout itself.",
+            "One server-only invitation is single-use and email-bound, so two subjects do not both complete hosted registration on one code. The public last slot is the signup callback against a second POST /invite/validate.",
+            "Raw codes and invitation tokens are not written to this report."
+        ]
+    });
+    let rendered = serde_json::to_string_pretty(&report).unwrap();
+    for secret in &secrets {
+        assert!(
+            !rendered.contains(secret.as_str()),
+            "the report carried a raw code or invitation token"
+        );
+    }
+    if let Ok(path) = std::env::var("GENUI_INVITE_RACE_REPORT") {
+        std::fs::write(&path, rendered.as_bytes()).unwrap();
+    }
+    println!(
+        "APP082 invite race campaign: {} checks passed",
+        report["checks"].as_array().unwrap().len()
+    );
+}
+
+async fn reopened_page(run: &Run, app: &Router, reply: &Reply) -> Reply {
+    let mut browser = install_session(&run.log, "192.0.2.250:8250", reply);
+    browser.get(app, "/workspace").await
 }
 
 fn raw_uuid(id: &str) -> [u8; 16] {

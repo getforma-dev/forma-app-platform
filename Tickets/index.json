@@ -2726,7 +2726,7 @@
       "Depends on": "APP-074",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "pivot/app-082-invite-races",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
