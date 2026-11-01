@@ -2,7 +2,7 @@
 
 Victor's November 1 direction is the app as a page within a clean new-user trial. Read the [pivot review](PIVOT-REVIEW-2026-11-01.md), [first-run decision](first-run/README.md), and the app-model notes ([app](app-model/app.md), [components](app-model/components.md), [widget](app-model/widget.md), [folder](app-model/box.md)). These separate intended behavior from current code and preserve app/publication/work identity.
 
-The implementation order stays:
+The November 1 sharing clarification prioritizes **APP-154** now: named live app guests, separate platform invitations, and optional connected canvas placement ([ADR-014](../architecture/ADR-014-LIVE-APP-SHARING.md)). APP-139 consumes this implementation for its complete first-run trial. The earlier sequence is retained below for context:
 
 1. **APP-145**, the prerequisite for a real first member: one authoring shell on intentional compose, with no shell created by discovery/listing. PR 25 exists; review repairs are not a deployment.
 2. **APP-141.** Create before placing. PR 26 currently supplies description examples and generation, not admitted-template instantiation; do not label those examples as templates.

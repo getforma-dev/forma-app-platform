@@ -66,6 +66,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
     // deadline: `forma_compose_app` waits on the model), bearer agent tokens
     // only, over the same query engine, composer and storage operations.
     let mcp_routes = mcp::router(Arc::new(mcp::Mcp::new(work.clone(), composer.clone())));
+    let shared_routes = sharing::live::router(work.clone());
     let canvas_routes = canvas::router(Arc::new(canvas::Canvas {
         work,
         pages: canvas_pages,
@@ -98,11 +99,13 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
     )));
     let router = Router::new()
         .merge(crate::auth::routes::router(auth.clone()))
+        .merge(crate::auth::shared::router(auth.clone()))
         .merge(commands::routes::router(command_routes))
         .merge(work_routes)
         // APP-095 (ADR-011 pitch): share with a teammate; the members
         // list; the session-gated event stream re-authorized at delivery.
         .merge(sharing::router(auth.clone()))
+        .merge(shared_routes)
         .merge(events::routes::router(auth.clone()))
         .merge(canvas_routes.clone())
         .merge(records_routes)

@@ -1,0 +1,10 @@
+{
+  "scope": "Final native navigation and visual check on local dev stand with synthetic identities",
+  "checks": [
+    "Account-only guest native shared canvas omits Workspace link.",
+    "Existing workspace member native shared canvas retains working Workspace link.",
+    "Final owner dialog copy includes data-source changes; one dialog and no mobile horizontal overflow.",
+    "Signed-out guest native canvas has no protected content, Workspace link or sign-out action."
+  ],
+  "errors": []
+}

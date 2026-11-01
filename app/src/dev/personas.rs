@@ -44,6 +44,48 @@ pub(crate) struct Minter {
     pub organization: &'static str,
 }
 impl Minter {
+    /// Synthetic account proof for a loopback persona only. This is deliberately
+    /// feature-gated with the dev binary and proves no hosted signup behavior.
+    pub async fn mint_shared(&self, subject: &str, email: &str) -> Result<String, String> {
+        let token = crate::auth::provider::Token {
+            access_token: "synthetic-shared-access".into(),
+            refresh_token: crate::auth::capability::random_capability()
+                .ok_or("random capability")?,
+            token_type: "Bearer".into(),
+            expires_in: 900,
+            expires_at: crate::auth::now() + 900,
+            user: crate::auth::provider::User {
+                id: subject.into(),
+                email: email.into(),
+                name: None,
+                avatar: None,
+                email_verified: true,
+                roles: vec![],
+                auth_method: "dev-persona".into(),
+                mfa_verified: false,
+            },
+        };
+        let reference = self
+            .auth
+            .vault
+            .insert("northstar", &token)
+            .ok_or("shared vault is full")?;
+        let identity = genui_auth_verifier::VerifiedIdentity {
+            issuer: super::DEV_ISSUER.into(),
+            tenant_id: format!("ten_{}", self.organization),
+            subject: subject.into(),
+            issued_at: crate::auth::now(),
+            expires_at: token.expires_at,
+            key_id: "dev-persona-only".into(),
+        };
+        let proof = crate::storage::ShareIdentityProof::verified(&identity, email, true)
+            .ok_or("synthetic mailbox refused")?;
+        self.stores
+            .workspace
+            .mint_shared_session_live(&proof, &reference, &|r| self.auth.vault.contains(r))
+            .await
+            .map_err(|e| format!("minting a shared identity: {e}"))
+    }
     pub async fn mint(&self, principal: &str) -> Result<String, String> {
         let token = crate::auth::provider::Token {
             access_token: "synthetic-access".into(),
@@ -80,6 +122,7 @@ impl Minter {
 struct Gate {
     persona: usize,
     sessions: Arc<RwLock<Vec<Vec<String>>>>,
+    shared_sessions: Arc<RwLock<Vec<Vec<String>>>>,
     clients: Mutex<HashMap<String, usize>>,
     /// Set on the clean profile: the database's epoch.
     clear_on_reset: Option<String>,
@@ -135,7 +178,7 @@ async fn persona_layer(
         None if page => (Some(random_id()), true),
         None => (None, false),
     };
-    let session = {
+    let (session, shared_session) = {
         let sessions = gate.sessions.read().expect("sessions lock");
         let slots = &sessions[gate.persona];
         let index = client.as_ref().map(|id| {
@@ -143,14 +186,26 @@ async fn persona_layer(
             let next = clients.len() % (BROWSER_SLOTS - 1);
             *clients.entry(id.clone()).or_insert(next)
         });
-        slots[index.unwrap_or(BROWSER_SLOTS - 1)].clone()
+        let slot = index.unwrap_or(BROWSER_SLOTS - 1);
+        (
+            slots[slot].clone(),
+            gate.shared_sessions.read().expect("shared sessions lock")[gate.persona][slot].clone(),
+        )
     };
     let mut kept: Vec<String> = jar
         .iter()
-        .filter(|(name, _)| name != crate::auth::cookies::SESSION)
+        .filter(|(name, _)| {
+            name != crate::auth::cookies::SESSION && name != crate::auth::cookies::SHARED_SESSION
+        })
         .map(|(name, value)| format!("{name}={value}"))
         .collect();
-    kept.push(format!("{}={session}", crate::auth::cookies::SESSION));
+    if !session.is_empty() {
+        kept.push(format!("{}={session}", crate::auth::cookies::SESSION));
+    }
+    kept.push(format!(
+        "{}={shared_session}",
+        crate::auth::cookies::SHARED_SESSION
+    ));
     let headers = request.headers_mut();
     headers.remove(header::COOKIE);
     if let Ok(value) = HeaderValue::from_str(&kept.join("; ")) {
@@ -216,16 +271,51 @@ pub(crate) async fn serve(
     sessions: Vec<Vec<String>>,
     clear_on_reset: Option<String>,
 ) -> Result<Vec<String>, String> {
+    let mut sessions = sessions;
+    let mut ports = ports.to_vec();
+    let mut identities: Vec<(String, String)> = personas
+        .iter()
+        .map(|p| {
+            (
+                format!("usr_{}", p.principal),
+                format!("{}@example.test", p.key),
+            )
+        })
+        .collect();
+    if let Some(value) = std::env::var_os("GENUI_DEV_SHARED_GUEST_PORT") {
+        let port = value
+            .to_str()
+            .ok_or("guest port is not UTF-8")?
+            .parse::<u16>()
+            .map_err(|_| "guest port must be numeric")?;
+        if port == 0 || ports.contains(&port) {
+            return Err("guest port must be distinct and nonzero".into());
+        }
+        ports.push(port);
+        sessions.push(vec![String::new(); BROWSER_SLOTS]);
+        identities.push(("usr_external_dev_guest".into(), "guest@example.test".into()));
+        println!("genui-dev: synthetic account-only guest@example.test at http://127.0.0.1:{port}/shared (no workspace membership or hosted signup proof)");
+    }
+    let mut shared_slots = Vec::new();
+    for (subject, email) in &identities {
+        let mut slots = Vec::new();
+        for _ in 0..BROWSER_SLOTS {
+            slots.push(minter.mint_shared(subject, email).await?);
+        }
+        shared_slots.push(slots);
+    }
+    let shared_sessions = Arc::new(RwLock::new(shared_slots));
     let sessions = Arc::new(RwLock::new(sessions));
     let mut origins = Vec::new();
     for (index, port) in ports.iter().enumerate() {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", *port))
             .await
-            .map_err(|e| format!("127.0.0.1:{port} ({}): {e}", personas[index].name))?;
+            .map_err(|e| format!("127.0.0.1:{port}: {e}"))?;
         origins.push(format!("http://127.0.0.1:{port}"));
         let gate = Arc::new(Gate {
             persona: index,
             sessions: sessions.clone(),
+            shared_sessions: shared_sessions.clone(),
             clients: Mutex::new(HashMap::new()),
             clear_on_reset: clear_on_reset.clone(),
         });
@@ -246,7 +336,7 @@ pub(crate) async fn serve(
         loop {
             tokio::time::sleep(KEEPALIVE).await;
             let current = sessions.read().expect("sessions lock").clone();
-            for (index, slots) in current.iter().enumerate() {
+            for (index, slots) in current.iter().enumerate().take(personas.len()) {
                 for (slot, session) in slots.iter().enumerate() {
                     if status(&app, session).await == StatusCode::OK {
                         continue;
@@ -258,6 +348,35 @@ pub(crate) async fn serve(
                                 "genui-dev: session for {} minted again",
                                 personas[index].name
                             );
+                        }
+                        Err(reason) => eprintln!("genui-dev: {reason}"),
+                    }
+                }
+            }
+            let current = shared_sessions
+                .read()
+                .expect("shared sessions lock")
+                .clone();
+            for (index, slots) in current.iter().enumerate() {
+                for (slot, cookie) in slots.iter().enumerate() {
+                    if minter
+                        .stores
+                        .workspace
+                        .resolve_shared_session(cookie, &|r| minter.auth.vault.contains(r))
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some()
+                    {
+                        continue;
+                    }
+                    match minter
+                        .mint_shared(&identities[index].0, &identities[index].1)
+                        .await
+                    {
+                        Ok(fresh) => {
+                            shared_sessions.write().expect("shared sessions lock")[index][slot] =
+                                fresh
                         }
                         Err(reason) => eprintln!("genui-dev: {reason}"),
                     }

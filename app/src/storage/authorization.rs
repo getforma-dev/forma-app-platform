@@ -235,6 +235,37 @@ impl<'a> Transaction<'a> {
         )
         .await
     }
+    /// Account-only authentication and exact-work sharing. This never creates a
+    /// member Permit. Callers must judge the account session and share before
+    /// reading any organization data; only storage's closed sharing modules use it.
+    pub(super) async fn begin_shared(
+        pool: &Arc<RolePool>,
+        organization: Option<&str>,
+        account: Option<&str>,
+    ) -> Result<Self> {
+        require(
+            matches!(pool.role(), Role::Workspace | Role::Data)
+                && organization.is_none_or(valid_id)
+                && account.is_none_or(valid_id),
+        )?;
+        let transaction = Self::open(
+            pool,
+            None,
+            organization.unwrap_or(""),
+            "",
+            "",
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            None,
+        )
+        .await?;
+        transaction
+            .query(
+                "SELECT set_config('genui.account_id',$1,true)",
+                &[&account.unwrap_or("")],
+            )
+            .await?;
+        Ok(transaction)
+    }
     async fn open(
         pool: &Arc<RolePool>,
         request: Option<&'a TrustedRequest>,

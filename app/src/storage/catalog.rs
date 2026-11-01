@@ -6,8 +6,8 @@ use serde_json::Value;
 use tokio_postgres::Client;
 
 const QUERY: &str = include_str!("../../migrations/catalog-query.json");
-const EXPECTED: &str = include_str!("../../migrations/catalog-v16.json");
-const BOUND: usize = 524_288;
+const EXPECTED: &str = include_str!("../../migrations/catalog-v17.json");
+const BOUND: usize = 786_432;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,7 +32,7 @@ impl Catalog {
         if query.schema_version != 1
             || query.search_path != "pg_catalog, pg_temp"
             || query.max_output_bytes != BOUND
-            || query.section_row_limit != 1025
+            || query.section_row_limit != 2049
             || !expected.is_object()
             || query.sql.is_empty()
         {

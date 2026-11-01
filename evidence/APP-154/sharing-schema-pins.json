@@ -1,0 +1,34 @@
+{
+  "agree": true,
+  "pins": {
+    "app/migrations/manifest.json database_version": 17,
+    "app/runtime/runtime.py DATABASE_SCHEMA_VERSION": 17,
+    "app/src/storage/catalog.rs EXPECTED include": 17,
+    "app/src/storage/managed_qualification.rs CATALOG include": 17,
+    "app/src/storage/pool.rs verify_schema_version literal": 17
+  },
+  "catalog_bound": {
+    "app/migrations/catalog-query.json max_output_bytes": 786432,
+    "app/migrations/catalog-query.json SQL octet_length literal": 786432,
+    "app/runtime/runtime.py CATALOG_BOUND": 786432,
+    "app/src/storage/catalog.rs BOUND": 786432
+  },
+  "catalog_version_checks": {
+    "catalog-v2.json": 2,
+    "catalog-v3.json": 3,
+    "catalog-v4.json": 4,
+    "catalog-v5.json": 5,
+    "catalog-v6.json": 6,
+    "catalog-v7.json": 7,
+    "catalog-v8.json": 8,
+    "catalog-v9.json": 9,
+    "catalog-v10.json": 10,
+    "catalog-v11.json": 11,
+    "catalog-v12.json": 12,
+    "catalog-v13.json": 13,
+    "catalog-v14.json": 14,
+    "catalog-v15.json": 15,
+    "catalog-v16.json": 16,
+    "catalog-v17.json": 17
+  }
+}

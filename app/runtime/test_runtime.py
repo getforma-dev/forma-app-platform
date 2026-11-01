@@ -513,14 +513,14 @@ class GeneratorTests(unittest.TestCase):
                 small = generator.readable({'relations': [['genui', 'unit_only', 'r']]})
                 base = len(generator.readable({'relations': [['pad', '']]}).encode())
                 def padded(size): return generator.readable({'relations': [['pad', 'x' * (size - base)]]})
-                # ADR-007 D7.12: 80 % of the moved 524,288-byte bound.
-                self.assertEqual((runtime.CATALOG_BOUND, runtime.CATALOG_BOUND * 4 // 5), (524288, 419430))
-                self.assertEqual(len(padded(419430).encode()), 419430)
-                cases = (('at_cap', padded(419430), None),
+                # APP-154: retain the 80% guard at the additive schema's 786,432-byte bound.
+                self.assertEqual((runtime.CATALOG_BOUND, runtime.CATALOG_BOUND * 4 // 5), (786432, 629145))
+                self.assertEqual(len(padded(629145).encode()), 629145)
+                cases = (('at_cap', padded(629145), None),
                          # Compact body under the guard, readable file over it.
-                         ('file_over_cap', json.dumps(json.loads(padded(419431)), separators=(',', ':')),
-                          r'catalog-v3 candidate file length 419431 exceeds 419430 bytes'),
-                         ('projection_over_cap', padded(419430) + ' ', r'catalog-v3 candidate body length 419431 exceeds 419430 bytes'))
+                         ('file_over_cap', json.dumps(json.loads(padded(629146)), separators=(',', ':')),
+                          r'catalog-v3 candidate file length 629146 exceeds 629145 bytes'),
+                         ('projection_over_cap', padded(629145) + ' ', r'catalog-v3 candidate body length 629146 exceeds 629145 bytes'))
                 for case, third, refusal in cases:
                     with self.subTest(case=case):
                         feed[:] = [small, small, third]; statements.clear()
@@ -529,7 +529,7 @@ class GeneratorTests(unittest.TestCase):
                             receipt = generator.generate(output)
                             self.assertEqual(sorted(p.name for p in output.iterdir()),
                                              ['catalog-v1.json', 'catalog-v2.json', 'catalog-v3.json', 'generation.json'])
-                            self.assertEqual(len((output / 'catalog-v3.json').read_bytes()), 419430)
+                            self.assertEqual(len((output / 'catalog-v3.json').read_bytes()), 629145)
                             self.assertEqual(sorted(receipt['candidate_sha256']), ['catalog-v1.json', 'catalog-v2.json', 'catalog-v3.json'])
                         else:
                             with self.assertRaisesRegex(ValueError, refusal): generator.generate(output)

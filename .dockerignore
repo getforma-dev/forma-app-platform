@@ -38,6 +38,8 @@ app/src/auth/**
 !app/src/auth/pkce.rs
 !app/src/auth/provider.rs
 !app/src/auth/routes.rs
+!app/src/auth/shared.rs
+!app/src/auth/shared_broker.rs
 !app/src/auth/vault.rs
 !app/src/http/
 app/src/http/**
@@ -63,6 +65,7 @@ app/src/actions/**
 !app/src/sharing/
 app/src/sharing/**
 !app/src/sharing/mod.rs
+!app/src/sharing/live.rs
 !app/src/mcp/
 app/src/mcp/**
 !app/src/mcp/mod.rs
@@ -145,6 +148,9 @@ app/src/storage/**
 !app/src/storage/cards.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
+!app/src/storage/shared_reads.rs
+!app/src/storage/shared_identity.rs
+!app/src/storage/shared_access.rs
 !app/src/storage/boxes.rs
 !app/src/storage/actions.rs
 !app/src/query/
@@ -206,6 +212,19 @@ app/admin/src/work/**
 !app/admin/src/work/app.tsx
 !app/admin/src/work/document.ts
 !app/admin/src/work/render.ts
+!app/admin/src/shared/
+app/admin/src/shared/**
+!app/admin/src/shared/app.tsx
+!app/admin/src/shared/canvas.tsx
+!app/admin/src/shared/parts.tsx
+!app/admin/src/shared/types.ts
+!app/admin/src/shared/document.ts
+!app/admin/src/shared/authority.ts
+!app/admin/src/shared/canvas-controller.ts
+!app/admin/src/sharing/
+app/admin/src/sharing/**
+!app/admin/src/sharing/api.ts
+!app/admin/src/sharing/dialog.ts
 # ADR-011 pitch canvas (APP-092/094): the canvas page, its island modules and the vendored runtime canvas.
 !app/admin/src/canvas/
 app/admin/src/canvas/**
@@ -293,6 +312,7 @@ app/admin/src/canvas-vendor/**
 !app/admin/src/styles/
 app/admin/src/styles/**
 !app/admin/src/styles/app.css
+!app/admin/src/styles/sharing.css
 !app/admin/src/fonts/
 app/admin/src/fonts/**
 !app/admin/src/fonts/space-grotesk-latin-5.3.0.woff2
@@ -325,6 +345,7 @@ app/migrations/**
 !app/migrations/0014_labels.sql
 !app/migrations/0015_member_cards.sql
 !app/migrations/0016_authoring_shell.sql
+!app/migrations/0017_live_sharing.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -344,6 +365,7 @@ app/migrations/**
 !app/migrations/catalog-v14.json
 !app/migrations/catalog-v15.json
 !app/migrations/catalog-v16.json
+!app/migrations/catalog-v17.json
 !app/certs/
 app/certs/**
 !app/certs/rds-global-bundle.pem

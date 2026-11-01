@@ -129,6 +129,7 @@ pub struct Tenant {
 
 struct Par {
     slug: String,
+    redirect_uri: String,
     state: String,
     challenge: String,
     /// The pending invitation's token this request was pushed with.
@@ -159,6 +160,7 @@ pub enum ParMode {
 }
 struct Grant {
     slug: String,
+    redirect_uri: String,
     challenge: String,
     subject: String,
     created: Instant,
@@ -391,6 +393,7 @@ impl Issuer {
             code.clone(),
             Grant {
                 slug,
+                redirect_uri: par.redirect_uri,
                 challenge: par.challenge,
                 subject: subject.into(),
                 created: Instant::now(),
@@ -528,7 +531,10 @@ async fn par(
     if form.iter().any(|(k, _)| !allowed.contains(&k.as_str()))
         || get("provider").as_deref() != Some("email")
         || get("client_id").as_deref() != Some(tenant.client_id)
-        || get("redirect_uri").as_deref() != Some(CALLBACK)
+        || !matches!(
+            get("redirect_uri").as_deref(),
+            Some(CALLBACK | "https://beta.getforma.dev/auth/shared/callback")
+        )
         || get("response_type").as_deref() != Some("code")
         || get("code_challenge_method").as_deref() != Some("S256")
         || get("code_challenge").is_none_or(|c| c.len() != 43)
@@ -572,6 +578,7 @@ async fn par(
         request_uri.clone(),
         Par {
             slug,
+            redirect_uri: get("redirect_uri").unwrap(),
             state: get("state").unwrap(),
             challenge: get("code_challenge").unwrap(),
             invitation: invite,
@@ -701,9 +708,9 @@ async fn token(
             let grant = state.grants.lock().unwrap().remove(text("code"));
             let valid = fields.len() == 5
                 && tenant.is_some_and(|t| t.client_id == text("client_id"))
-                && text("redirect_uri") == CALLBACK
                 && grant.as_ref().is_some_and(|g| {
                     g.slug == slug
+                        && text("redirect_uri") == g.redirect_uri
                         && g.created.elapsed() <= Duration::from_secs(60)
                         && super::pkce::challenge(text("code_verifier")) == g.challenge
                 });

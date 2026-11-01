@@ -12,6 +12,7 @@
 !app/operator/Dockerfile
 !app/operator/Dockerfile.dockerignore
 !app/operator/operator.py
+!app/operator/shared_invite_broker.py
 !app/operator/overrides.json
 !app/operator/requirements.lock
 !app/runtime/runtime.py
@@ -33,6 +34,7 @@
 !app/migrations/0014_labels.sql
 !app/migrations/0015_member_cards.sql
 !app/migrations/0016_authoring_shell.sql
+!app/migrations/0017_live_sharing.sql
 !app/migrations/0009_slack_links.sql
 !app/migrations/manifest.json
 !app/migrations/catalog-query.json
@@ -52,6 +54,7 @@
 !app/migrations/catalog-v14.json
 !app/migrations/catalog-v15.json
 !app/migrations/catalog-v16.json
+!app/migrations/catalog-v17.json
 !app/certs/rds-global-bundle.pem
 !contracts/validate.py
 !contracts/schema.json

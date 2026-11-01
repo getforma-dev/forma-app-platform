@@ -24,7 +24,7 @@
 use super::worker::WorkerResult;
 use crate::{
     admission::{self, digest as identity},
-    storage::{query_digests, QueryRun},
+    storage::{query_digests, GuestQueryRun, QueryActor, QueryRun},
 };
 use serde_json::{json, Value};
 
@@ -40,14 +40,26 @@ pub fn digest(document: &Value) -> Option<String> {
     let mut body = document.as_object()?.clone();
     body.remove("digest");
     let canonical = admission::encode(&Value::Object(body)).ok()?;
-    Some(identity::digest(identity::QUERY_RECEIPT, &canonical))
+    Some(identity::digest(
+        if document["kind"] == "shared_query_receipt" {
+            identity::SHARED_QUERY_RECEIPT
+        } else {
+            identity::QUERY_RECEIPT
+        },
+        &canonical,
+    ))
 }
 
 /// `contracts/validate.py` `validate` for a complete receipt document: the
 /// closed contract shape and the recomputed `digest`. The error names the
 /// refused location, never a value.
 pub fn conforms(document: &Value) -> Result<(), String> {
-    admission::admit_receipt(document).map_err(|error| format!("{}: {error:?}", error.code()))?;
+    if document["kind"] == "shared_query_receipt" {
+        admission::admit_shared_receipt(document)
+    } else {
+        admission::admit_receipt(document)
+    }
+    .map_err(|error| format!("{}: {error:?}", error.code()))?;
     let declared = document["digest"]
         .as_str()
         .ok_or("$.digest: required field missing")?;
@@ -62,6 +74,20 @@ pub fn conforms(document: &Value) -> Result<(), String> {
 /// parameter outside its contract), which the caller treats as a failed
 /// execution: no receipt, no number.
 pub fn build(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
+    if !matches!(run.actor(), QueryActor::Member) {
+        return None;
+    }
+    build_attributed(run, result)
+}
+
+pub fn build_shared(run: &GuestQueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
+    if !matches!(run.engine_plan().actor(), QueryActor::Guest { .. }) {
+        return None;
+    }
+    build_attributed(run.engine_plan(), result)
+}
+
+fn build_attributed(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
     let (query_digest, predicate_digest) = query_digests(run)?;
     let source_revisions: Vec<Value> = run
         .dependencies()
@@ -99,6 +125,20 @@ pub fn build(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
         "total_scope": "full_authorized_filtered_input",
         "provenance": {"query_digest": query_digest, "predicate_digest": predicate_digest},
     });
+    if let QueryActor::Guest {
+        account,
+        share,
+        version,
+    } = run.actor()
+    {
+        let fields = document.as_object_mut()?;
+        fields.remove("principal_id");
+        fields.remove("membership_epoch");
+        fields.insert("kind".into(), json!("shared_query_receipt"));
+        fields.insert("account_id".into(), json!(account));
+        fields.insert("share_id".into(), json!(share));
+        fields.insert("share_version".into(), json!(version));
+    }
     let id = digest(&document)?;
     document["digest"] = json!(id);
     if let Err(reason) = conforms(&document) {
@@ -109,4 +149,55 @@ pub fn build(run: &QueryRun, result: &WorkerResult) -> Option<QueryReceipt> {
         document,
         digest: id,
     })
+}
+
+#[cfg(test)]
+mod shared_contract_tests {
+    use super::*;
+    fn fixture() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../contracts/fixtures/shared-v1/query-receipt.json"
+        ))
+        .unwrap()
+    }
+    #[test]
+    fn guest_receipt_preserves_common_provenance_and_has_no_member_authority() {
+        let receipt = fixture();
+        assert_eq!(conforms(&receipt), Ok(()));
+        assert!(admission::admit_receipt(&receipt).is_err());
+        assert!(receipt.get("principal_id").is_none());
+        assert!(receipt.get("membership_epoch").is_none());
+        let mut wrong_domain = receipt.clone();
+        wrong_domain["kind"] = json!("query_receipt");
+        assert_ne!(digest(&receipt), digest(&wrong_domain));
+        for key in ["publication_id", "account_id", "share_id", "share_version"] {
+            let mut altered = receipt.clone();
+            altered.as_object_mut().unwrap().remove(key);
+            assert!(
+                admission::admit_shared_receipt(&altered).is_err(),
+                "missing {key}"
+            );
+        }
+        for (key, value) in [
+            (
+                "principal_id",
+                json!("00000000-0000-4000-8000-000000000001"),
+            ),
+            ("membership_epoch", json!(1)),
+            ("share_version", json!(0)),
+            ("mode", json!("synthetic_preview")),
+            ("account_id", json!("invalid")),
+            ("share_id", json!("invalid")),
+        ] {
+            let mut altered = receipt.clone();
+            altered[key] = value;
+            assert!(
+                admission::admit_shared_receipt(&altered).is_err(),
+                "invalid {key}"
+            );
+        }
+        let mut altered = receipt.clone();
+        altered["share_version"] = json!(4);
+        assert!(conforms(&altered).is_err(), "grant version is digest-bound");
+    }
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 16,
+  "database_version": 17,
   "migrations": [
     {
       "version": 1,
@@ -81,12 +81,17 @@
       "version": 16,
       "file": "0016_authoring_shell.sql",
       "sha256": "e9f5ad002af82bbd79934d71457112386661442610ca0834ea869acf1a8f87ec"
+    },
+    {
+      "version": 17,
+      "file": "0017_live_sharing.sql",
+      "sha256": "34b9484d791eff75c85a9f270432b8aea6c47480cf065c428546681e8fc6a805"
     }
   ],
   "catalog": [
     {
       "file": "catalog-query.json",
-      "sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba"
+      "sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b"
     },
     {
       "file": "catalog-v1.json",
@@ -151,6 +156,10 @@
     {
       "file": "catalog-v16.json",
       "sha256": "3ba0a86750eb36a2e2fa5673f17176d64da30b8115ac058d81b47d4f2cab7d3a"
+    },
+    {
+      "file": "catalog-v17.json",
+      "sha256": "4cfd700fc0acf5786cb33edc313a0c31b064b9caa299a182cd7d6ed4fb04279d"
     }
   ]
 }

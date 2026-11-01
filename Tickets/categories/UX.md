@@ -33,11 +33,11 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 140 | [APP-141: Create an app before it reaches the canvas](../0-backlog/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-093, APP-104, APP-120, APP-145 |
 | 141 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../0-backlog/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
 | 142 | [APP-144: Open an app as a page and use it there](../0-backlog/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
-| 144 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](../0-backlog/APP-139.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095, APP-145, APP-144 |
-| 146 | [APP-146: Spike — what an app is](../0-backlog/APP-146.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
-| 147 | [APP-147: Spike — what a component of an app is](../0-backlog/APP-147.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
-| 148 | [APP-148: Spike — what a widget is](../0-backlog/APP-148.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-103, APP-120 |
-| 149 | [APP-149: Spike — what a box is, and where it sits](../0-backlog/APP-149.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-108, APP-120 |
-| 150 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
-| 151 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
-| 153 | [APP-153: Spike — why the library pane has four tabs](../0-backlog/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
+| 145 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](../0-backlog/APP-139.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095, APP-145, APP-144, APP-154 |
+| 147 | [APP-146: Spike — what an app is](../0-backlog/APP-146.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
+| 148 | [APP-147: Spike — what a component of an app is](../0-backlog/APP-147.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
+| 149 | [APP-148: Spike — what a widget is](../0-backlog/APP-148.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-103, APP-120 |
+| 150 | [APP-149: Spike — what a box is, and where it sits](../0-backlog/APP-149.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-108, APP-120 |
+| 151 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
+| 152 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
+| 154 | [APP-153: Spike — why the library pane has four tabs](../0-backlog/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |

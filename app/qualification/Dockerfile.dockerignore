@@ -42,6 +42,9 @@ app/src/bin/**
 !app/src/auth/pkce.rs
 !app/src/auth/provider.rs
 !app/src/auth/routes.rs
+!app/src/auth/shared.rs
+!app/src/auth/shared_broker.rs
+!app/src/auth/shared_tests.rs
 !app/src/auth/synthetic_issuer.rs
 !app/src/auth/tests.rs
 !app/src/auth/vault.rs
@@ -65,6 +68,7 @@ app/src/bin/**
 !app/src/actions/routes.rs
 !app/src/actions/tests.rs
 !app/src/sharing/mod.rs
+!app/src/sharing/live.rs
 !app/src/mcp/mod.rs
 !app/src/mcp/drafts.rs
 !app/src/mcp/governance.rs
@@ -163,6 +167,10 @@ app/src/bin/**
 !app/src/storage/rules.rs
 !app/src/storage/sessions.rs
 !app/src/storage/sharing.rs
+!app/src/storage/shared_campaign.rs
+!app/src/storage/shared_reads.rs
+!app/src/storage/shared_identity.rs
+!app/src/storage/shared_access.rs
 !app/src/storage/boxes.rs
 !app/src/storage/box_campaign.rs
 !app/src/storage/sharing_qualification.rs
@@ -179,6 +187,7 @@ app/src/bin/**
 !app/migrations/catalog-v14.json
 !app/migrations/catalog-v15.json
 !app/migrations/catalog-v16.json
+!app/migrations/catalog-v17.json
 !app/certs/rds-global-bundle.pem
 !app/runtime/runtime.py
 !app/runtime/qualification_supervisor.py
@@ -223,3 +232,6 @@ contracts/fixtures/impl-2026-10-29.3/**
 !contracts/fixtures/stored/
 contracts/fixtures/stored/**
 !contracts/fixtures/stored/expense-claims-d70710d3.json
+!contracts/fixtures/shared-v1/
+contracts/fixtures/shared-v1/**
+!contracts/fixtures/shared-v1/query-receipt.json

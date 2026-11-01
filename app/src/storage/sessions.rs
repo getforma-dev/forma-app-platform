@@ -103,7 +103,7 @@ fn canonical_base64url(value: &str, bytes: usize) -> Option<Vec<u8>> {
     (raw.len() == bytes && URL_SAFE_NO_PAD.encode(&raw) == value).then_some(raw)
 }
 /// A fresh cookie capability for an organization (64 characters).
-fn capability(organization: &str) -> Result<String> {
+pub(super) fn capability(organization: &str) -> Result<String> {
     let organization = uuid_bytes(organization).ok_or(Error::Denied)?;
     let secret: [u8; 32] = random()?;
     let mut raw = [0u8; 48];
@@ -118,8 +118,14 @@ pub fn capability_organization(value: &str) -> Option<String> {
     valid_id(&organization).then_some(organization)
 }
 /// A fresh OAuth `state` (32 random bytes, 43 base64url characters).
-fn fresh_state() -> Result<String> {
+pub(super) fn fresh_state() -> Result<String> {
     Ok(URL_SAFE_NO_PAD.encode(random::<32>()?))
+}
+pub(super) fn fresh_uuid() -> Result<String> {
+    let mut bytes = random::<16>()?;
+    bytes[6] = (bytes[6] & 15) | 0x40;
+    bytes[8] = (bytes[8] & 63) | 0x80;
+    Ok(uuid_string(&bytes))
 }
 /// True for the exact shape of every 32-byte base64url capability this
 /// contract exchanges (our `state`, fAuth's code and refresh token).

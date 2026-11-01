@@ -352,6 +352,7 @@ export type FormJson = {
 };
 export type OriginJson = { id: string; kind: string; text: string };
 export type GroupJson = {
+  can_share?: boolean;
   id: string; app: string; work: string; app_card: string; title: string; label: string; origins?: OriginJson[];
   href: string; csrf: string; window_start: string; window_end: string; destination: string;
   cards: CardJson[]; forms: FormJson[]; records?: RecordsCardJson[]; ledger?: LedgerCardJson[];
@@ -445,7 +446,8 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     chips,
     el(document_, 'p', { class: 'sr-only' }, group.label),
     el(document_, 'details', { class: 'cv-window-wrap' }, el(document_, 'summary', {}, 'Time range and filters'), window_));
-  const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'aria-label': group.title }, app);
+  if (group.can_share) app.append(el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-manage-share': '', 'data-app': group.app, 'data-work': group.work, 'data-title': group.title }, 'Share app'));
+  const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'data-can-share': String(group.can_share === true), 'aria-label': group.title }, app);
   for (const card of group.cards) {
     section.append(el(document_, 'article', {
       class: 'cv-card cv-view', id: card.id, 'data-card': card.id, 'data-view': card.view, 'data-kind': card.kind,

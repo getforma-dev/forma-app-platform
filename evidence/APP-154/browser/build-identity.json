@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-11-01T17:36:01.200536+00:00",
+  "base_commit": "1b2f21f4cbab2b3c5fa4aa663ca40c958d492ee4",
+  "working_tree_changes": true,
+  "final_browser_manifest_build": "dev",
+  "final_browser_manifest_sha256": "d661f4b0d516309c038f555988ef2312261dacee57a2b462052b8991d24ac58e",
+  "final_browser_binary_sha256": "7ee24c295eaa1cf7c94ecc78624d44b39f85aef8cf876076a827380dcba73eb5",
+  "source_inventory_sha256": "47f2fc05e8dbbe72f903aa221a4bec8737f6857e01a081bd07bd48d01386a327",
+  "strict_production_build_log": "production-build.txt",
+  "strict_production_build_prefix": "0630d1f867c6",
+  "scope": "Final native navigation and screenshots use the development stand; strict production build is separate validation. Full behavior run preceded only the Workspace-link conditional and dialog-copy correction; final-navigation.json verifies those changes."
+}

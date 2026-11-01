@@ -14,10 +14,13 @@ await build({
     { entry: 'src/workspace/app.tsx', outfile: 'workspace.js' },
     { entry: 'src/record/app.tsx', outfile: 'record.js' },
     { entry: 'src/work/app.tsx', outfile: 'work.js' },
+    { entry: 'src/shared/app.tsx', outfile: 'shared.js' },
+    { entry: 'src/shared/canvas.tsx', outfile: 'sharedCanvas.js' },
     { entry: 'src/canvas/app.tsx', outfile: 'canvas.js' },
   ],
   cssEntries: [
     { input: 'src/styles/app.css', outfile: 'app.css' },
+    { input: 'src/styles/sharing.css', outfile: 'sharing.css' },
     // ADR-011: the vendored GenUI canvas geometry styles and the pitch canvas.
     { input: 'src/canvas-vendor/canvas.css', outfile: 'canvas-vendor.css' },
     { input: 'src/styles/canvas.css', outfile: 'canvas.css' },
@@ -44,10 +47,12 @@ await build({
     // APP-013: the record page serves /work/{app}/{work}/records/{collection}/{record}.
     '/record': { js: ['record'], css: ['app'] },
     // APP-012: the work page (GET and POST /w/{app}/{work}).
-    '/w/{app}/{work}': { js: ['work'], css: ['app'] },
+    '/w/{app}/{work}': { js: ['work'], css: ['app', 'sharing'] },
+    '/s/{share}': { js: ['shared'], css: ['app', 'sharing'] },
+    '/shared': { js: ['sharedCanvas'], css: ['app', 'canvas-vendor', 'sharing'], canvas: true },
     // ADR-011 (APP-092): the pitch canvas, one island; a declared canvas
     // route (365 KiB JavaScript ceiling; Forma's own code stays at N2's).
-    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger', 'widgets', 'governance'], canvas: true },
+    '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger', 'widgets', 'governance', 'sharing'], canvas: true },
   },
   outputDir: 'dist',
   // APP-138: the same self-hosted Space Grotesk face as getforma.dev.
@@ -66,6 +71,8 @@ await build({
     workspace: 'src/workspace/app.tsx',
     record: 'src/record/app.tsx',
     work: 'src/work/app.tsx',
+    shared: 'src/shared/app.tsx',
+    sharedCanvas: 'src/shared/canvas.tsx',
     canvas: 'src/canvas/app.tsx',
   } } : {}),
   // Unsupported native source is a mandatory coded refusal. Strict mode also

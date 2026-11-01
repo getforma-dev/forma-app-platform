@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v16.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v17.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 186] = [
+const SOURCES: [(&str, &[u8]); 195] = [
     // ADR-013 D13.3: the root workspace's manifest (profiles) and lockfile.
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
@@ -266,6 +266,18 @@ const SOURCES: [(&str, &[u8]); 186] = [
     (
         "app/src/auth/routes.rs",
         include_bytes!("../auth/routes.rs"),
+    ),
+    (
+        "app/src/auth/shared.rs",
+        include_bytes!("../auth/shared.rs"),
+    ),
+    (
+        "app/src/auth/shared_broker.rs",
+        include_bytes!("../auth/shared_broker.rs"),
+    ),
+    (
+        "app/src/auth/shared_tests.rs",
+        include_bytes!("../auth/shared_tests.rs"),
     ),
     (
         "app/src/auth/synthetic_issuer.rs",
@@ -491,6 +503,10 @@ const SOURCES: [(&str, &[u8]); 186] = [
     ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
     ("app/src/roles.rs", include_bytes!("../roles.rs")),
     (
+        "app/src/sharing/live.rs",
+        include_bytes!("../sharing/live.rs"),
+    ),
+    (
         "app/src/sharing/mod.rs",
         include_bytes!("../sharing/mod.rs"),
     ),
@@ -604,6 +620,22 @@ const SOURCES: [(&str, &[u8]); 186] = [
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/rules.rs", include_bytes!("rules.rs")),
     ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
+    (
+        "app/src/storage/shared_access.rs",
+        include_bytes!("shared_access.rs"),
+    ),
+    (
+        "app/src/storage/shared_campaign.rs",
+        include_bytes!("shared_campaign.rs"),
+    ),
+    (
+        "app/src/storage/shared_identity.rs",
+        include_bytes!("shared_identity.rs"),
+    ),
+    (
+        "app/src/storage/shared_reads.rs",
+        include_bytes!("shared_reads.rs"),
+    ),
     ("app/src/storage/sharing.rs", include_bytes!("sharing.rs")),
     (
         "app/src/storage/sharing_qualification.rs",
@@ -718,6 +750,10 @@ const SOURCES: [(&str, &[u8]); 186] = [
     (
         "contracts/fixtures/northstar.json",
         include_bytes!("../../../contracts/fixtures/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/shared-v1/query-receipt.json",
+        include_bytes!("../../../contracts/fixtures/shared-v1/query-receipt.json"),
     ),
     (
         "contracts/fixtures/spend-review.json",

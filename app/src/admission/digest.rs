@@ -17,6 +17,8 @@ pub const QUERY: &str = "forma:query:v1";
 pub const QUERY_RECEIPT: &str = "forma:query-receipt:v1";
 /// A command request without its `idempotency_key`.
 pub const COMMAND_PAYLOAD: &str = "forma:command-payload:v1";
+/// Account and exact-grant query attribution (APP-154 additive contract).
+pub const SHARED_QUERY_RECEIPT: &str = "forma:shared-query-receipt:v1";
 /// One saved-work source binding.
 pub const SOURCE_BINDING: &str = "forma:source-binding:v1";
 /// A query or job result.
@@ -28,7 +30,7 @@ pub const NORMALIZED_ROWS: &str = "forma:normalized-rows:v1";
 /// `genui.jobs.payload_digest`, ADR-009 D9.4).
 pub const JOB_PAYLOAD: &str = "forma:job-payload:v1";
 /// Every registered domain.
-pub const DOMAINS: [&str; 10] = [
+pub const DOMAINS: [&str; 11] = [
     APP_DEFINITION,
     INPUT_CONTRACT,
     RECORD_SCHEMA,
@@ -39,6 +41,7 @@ pub const DOMAINS: [&str; 10] = [
     RESULT,
     NORMALIZED_ROWS,
     JOB_PAYLOAD,
+    SHARED_QUERY_RECEIPT,
 ];
 
 /// The identity of canonical bytes within one registered domain:

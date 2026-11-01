@@ -21,7 +21,7 @@ type Form = {
 type Records = {
   title: string; summary: string; collection: string; has_no_rows: boolean; has_rows: boolean;
   columns: Cell[];
-  rows: { record_id: string; version: string; committed_at: string; commit_sequence: string; cells: Cell[] }[];
+  rows: { record_id?: string; version: string; committed_at: string; commit_sequence: string; cells: Cell[] }[];
 };
 export type DocumentProps = {
   app: string; work: string; action: string; forms: Form[]; record_cards: Records[];
@@ -82,7 +82,7 @@ function heading(document: Document, columns: Cell[], record = false): HTMLTable
   return element(document, 'thead', {}, row);
 }
 
-function recordSection(document: Document, props: DocumentProps, card: Records): HTMLElement {
+function recordSection(document: Document, props: DocumentProps | null, card: Records): HTMLElement {
   const section = element(document, 'section', {
     class: 'view document-records', 'data-collection': card.collection, 'aria-label': card.title,
   }, element(document, 'h2', {}, card.title), element(document, 'p', {}, card.summary));
@@ -92,14 +92,31 @@ function recordSection(document: Document, props: DocumentProps, card: Records):
     for (const row of card.rows) {
       const tr = element(document, 'tr');
       for (const cell of row.cells) tr.append(element(document, 'td', {}, cell.text));
-      const path = `/work/${encodeURIComponent(props.app)}/${encodeURIComponent(props.work)}/records/${encodeURIComponent(card.collection)}/${encodeURIComponent(row.record_id)}`;
-      tr.append(element(document, 'td', {}, element(document, 'a', { href: path }, 'Open record'),
-        element(document, 'small', {}, `Revision ${row.version} · ${row.committed_at} · Commit ${row.commit_sequence}`)));
+      const provenance = element(document, 'td');
+      if (props && row.record_id) {
+        const path = `/work/${encodeURIComponent(props.app)}/${encodeURIComponent(props.work)}/records/${encodeURIComponent(card.collection)}/${encodeURIComponent(row.record_id)}`;
+        provenance.append(element(document, 'a', { href: path }, 'Open record'));
+      }
+      provenance.append(element(document, 'small', {}, `Revision ${row.version} · ${row.committed_at} · Commit ${row.commit_sequence}`));
+      tr.append(provenance);
       body.append(tr);
     }
     section.append(element(document, 'table', {}, heading(document, card.columns, true), body));
   }
   return section;
+}
+
+export type ReadOnlyProps = Pick<DocumentProps, 'record_cards' | 'records_truncated' | 'views'>;
+/** Shared recipients receive no ordinary record links, form controls or write actions. */
+export function renderReadOnlyRegions(document: Document, props: ReadOnlyProps): HTMLElement {
+  const root = element(document, 'div', { class: 'shared-parts', 'data-shared-parts': '' });
+  const views = element(document, 'div', { 'data-document-views': '' });
+  for (const card of props.views) views.append(viewSection(document, card));
+  const records = element(document, 'div', { 'data-document-records': '' });
+  for (const card of props.record_cards) records.append(recordSection(document, null, card));
+  if (props.records_truncated) records.append(element(document, 'p', { class: 'notice' }, 'Showing the newest records. This listing has reached its limit.'));
+  root.append(views, records);
+  return root;
 }
 
 function viewSection(document: Document, card: View): HTMLElement {

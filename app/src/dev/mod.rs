@@ -426,6 +426,14 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
     let canvas_pages = Arc::new(SsrCanvasPages {
         page: modules.bind::<CanvasProps>("canvas").map_err(bind_error)?,
     });
+    let shared_pages = Arc::new(crate::sharing::live::SsrSharedPages {
+        app: modules
+            .bind::<crate::sharing::live::SharedPageProps>("shared")
+            .map_err(bind_error)?,
+        canvas: modules
+            .bind::<crate::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .map_err(bind_error)?,
+    });
     modules.finalize().map_err(bind_error)?;
     forma_server::sw::configure(forma_server::sw::ServiceWorker::off())
         .map_err(|_| "service worker configuration".to_string())?;
@@ -452,11 +460,14 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         rss_limit_bytes: worker::RSS_LIMIT_BYTES,
     })
     .map_err(|_| "query engine directories refused".to_string())?;
-    let work = Arc::new(Work::new(
-        auth.clone(),
-        Some(Arc::new(engine) as Arc<dyn Executor>),
-        work_pages,
-    ));
+    let work = Arc::new(
+        Work::new(
+            auth.clone(),
+            Some(Arc::new(engine) as Arc<dyn Executor>),
+            work_pages,
+        )
+        .with_shared_pages(shared_pages),
+    );
     let composer = Composer::from_env();
     println!(
         "genui-dev: model {}",

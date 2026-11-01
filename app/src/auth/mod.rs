@@ -23,12 +23,16 @@ pub mod pending;
 pub mod pkce;
 pub mod provider;
 pub mod routes;
+pub mod shared;
+pub mod shared_broker;
 pub mod vault;
 
 // Crate-visible to the APP-012 query campaign, which signs members in over
 // the same routes; still compiled only into the test executable.
 #[cfg(test)]
 mod invite_tests;
+#[cfg(test)]
+mod shared_tests;
 #[cfg(test)]
 pub(crate) mod synthetic_issuer;
 #[cfg(test)]
@@ -332,6 +336,7 @@ pub struct Auth {
     pub(crate) proxies: TrustedProxies,
     /// APP-073's provider invitation capabilities (none: no signup handoff).
     pub(crate) invitations: Option<invite::Invitations>,
+    pub(crate) shared_broker: Option<shared_broker::Client>,
     pub(crate) pages: Arc<dyn Pages>,
 }
 
@@ -350,6 +355,7 @@ impl Auth {
             limits: Limiter::default(),
             proxies: TrustedProxies::none(),
             invitations: None,
+            shared_broker: None,
             pages,
         })
     }
@@ -361,6 +367,10 @@ impl Auth {
     /// APP-074: the provider invitation capabilities for signup handoffs.
     pub fn with_invitations(mut self, invitations: Option<invite::Invitations>) -> Self {
         self.invitations = invitations;
+        self
+    }
+    pub fn with_shared_broker(mut self, broker: Option<shared_broker::Client>) -> Self {
+        self.shared_broker = broker;
         self
     }
     /// The limit key of a request's client (D7.14 trusted proxy).
@@ -435,6 +445,18 @@ impl Auth {
     /// revokes their refresh tokens. Run periodically by the binary.
     pub async fn sweep(&self) {
         if let Some(stores) = &self.stores {
+            match stores.workspace.sweep_shared_identity().await {
+                Ok(references) => {
+                    for reference in references {
+                        self.revoke(&Ended {
+                            organization: String::new(),
+                            refresh_ref: reference,
+                        })
+                        .await;
+                    }
+                }
+                Err(error) => tracing::warn!(code = %error, "auth.shared_sweep"),
+            }
             match stores.workspace.sweep_expired().await {
                 Ok(ended) => {
                     for record in &ended {

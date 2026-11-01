@@ -4,6 +4,7 @@ import { startAgents } from './agents';
 import { startBoard } from './board';
 import { startCreateApp } from './create-app';
 import { startLibrary } from './library';
+import { startSharing } from '../sharing/dialog';
 import { startNaming } from './naming';
 import { startControls } from './controls';
 import { startStacks } from './stacks';
@@ -167,6 +168,7 @@ type LedgerCard = {
   categories: LedgerRow[];
 };
 type Group = {
+  canShare: boolean;
   id: string;
   app: string;
   work: string;
@@ -321,6 +323,7 @@ function Canvas(props: CanvasProps) {
             <span class="cv-lib-open-text">Library</span>
             <span class="cv-kbd" aria-hidden="true">L</span>
           </button>
+          <a class="cv-link" href="/shared">Connected apps</a><span class="cv-connected-status" role="status" data-connected-status=""></span>
           <a class="cv-link" href="/workspace">Workspace</a>
           <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
             {props.memberInitials}
@@ -380,11 +383,13 @@ function Canvas(props: CanvasProps) {
               id={group.id}
               data-app={group.app}
               data-work={group.work}
+              data-can-share={group.canShare}
               data-auto={group.auto}
               aria-label={group.title}
             >
               <article class="cv-card cv-app" data-card={group.appCard} data-kind="app" aria-label={group.title}>
                 <h2>{group.title}</h2>
+                {createShow(() => group.canShare, () => <button type="button" class="cv-secondary" data-manage-share="" data-app={group.app} data-work={group.work} data-title={group.title}>Share app</button>)}
                 <p class="cv-origins" aria-label="How this app was assembled" title={group.label}>
                   {createList(() => group.origins, origin => origin.id, origin => (
                     <span class="cv-origin" data-origin={origin.kind}>{origin.text}</span>
@@ -830,6 +835,7 @@ function Canvas(props: CanvasProps) {
 
 await activateIslands({ IntentBar });
 startBoard(document);
+startSharing(document);
 // APP-116: timing chips (off by default; the More menu or ?timing=1).
 startTimings(document);
 startSlash(document);

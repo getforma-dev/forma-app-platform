@@ -437,6 +437,7 @@ pub struct GroupProps {
     /// `g-{work}`: the group's element id (the `#` target of the workspace's
     /// "Open on canvas" link).
     pub id: String,
+    pub can_share: bool,
     pub app: String,
     pub work: String,
     /// `a-{work}`: the app card's canvas item id.
@@ -1374,6 +1375,11 @@ async fn assemble(
         None => definition_provenance(&outline.description, &outline.definition_digest),
     };
     Ok(GroupProps {
+        can_share: stores
+            .workspace
+            .can_share_live_work(member, app, work)
+            .await
+            .map_err(|e| routes::storage_refusal(&e))?,
         id: format!("g-{work}"),
         app: app.to_owned(),
         work: work.to_owned(),

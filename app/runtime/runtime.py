@@ -35,12 +35,12 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 16
+DATABASE_SCHEMA_VERSION = 17
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;
 # scripts/check-schema-pins.py checks that agreement group.
-CATALOG_BOUND = 524288
+CATALOG_BOUND = 786432
 # The version whose upgrade created genui_meta.schema_migrations. A new ledger
 # always starts at its historical BETWEEN 1 AND 2 bound; every later migration
 # ALTERs both version CHECKs to its own number (ADR-007 D7.12).
@@ -729,10 +729,10 @@ def catalog_resources(directory):
     query = documents[0]
     require(set(query) == {"schema_version", "search_path", "max_output_bytes", "section_row_limit", "sql"})
     require(query["schema_version"] == 1 and query["search_path"] == "pg_catalog, pg_temp"
-            and query["max_output_bytes"] == CATALOG_BOUND and query["section_row_limit"] == 1025
+            and query["max_output_bytes"] == CATALOG_BOUND and query["section_row_limit"] == 2049
             and isinstance(query["sql"], str) and 0 < len(query["sql"].encode()) <= 65536)
     for expected in documents[1:]:
-        require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 1025 for rows in expected.values()))
+        require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 2049 for rows in expected.values()))
     require(all(set(expected) == set(documents[1]) for expected in documents[2:]))
     return query, dict(enumerate(documents[1:], 1))
 

@@ -35,6 +35,7 @@ use serde_json::Value;
 #[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct WorkProps {
     pub title: String,
+    pub can_share: bool,
     pub app: String,
     pub work: String,
     pub forms: Vec<super::canvas::FormCardProps>,
@@ -364,11 +365,37 @@ pub fn receipt_rows(document: &Value) -> Vec<PairProps> {
             "Record snapshot sequence",
             text(document, "record_snapshot_sequence"),
         ),
-        pair("principal", "Principal", text(document, "principal_id")),
+        pair(
+            "principal",
+            if document["kind"] == "shared_query_receipt" {
+                "Guest account"
+            } else {
+                "Principal"
+            },
+            text(
+                document,
+                if document["kind"] == "shared_query_receipt" {
+                    "account_id"
+                } else {
+                    "principal_id"
+                },
+            ),
+        ),
         pair(
             "membership",
-            "Membership epoch",
-            text(document, "membership_epoch"),
+            if document["kind"] == "shared_query_receipt" {
+                "Share version"
+            } else {
+                "Membership epoch"
+            },
+            text(
+                document,
+                if document["kind"] == "shared_query_receipt" {
+                    "share_version"
+                } else {
+                    "membership_epoch"
+                },
+            ),
         ),
         pair("policy", "Policy epoch", text(document, "policy_epoch")),
         pair("filter", "Filter epoch", text(document, "filter_epoch")),
@@ -553,6 +580,7 @@ pub struct WorkChrome {
     pub publication: String,
     pub work_version: i64,
     pub can_write: bool,
+    pub can_share: bool,
     pub app: String,
     pub work: String,
     pub forms: Vec<super::canvas::FormCardProps>,
@@ -594,6 +622,7 @@ pub fn props(
         has_records: !chrome.records.is_empty(),
         records: chrome.records,
         canvas: chrome.canvas,
+        can_share: chrome.can_share,
     }
 }
 

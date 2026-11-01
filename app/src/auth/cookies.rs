@@ -16,6 +16,9 @@ use axum::http::{header, HeaderMap, HeaderValue};
 pub const PRELOGIN: &str = "__Host-genui_prelogin";
 pub const PRE_ACCESS: &str = "__Host-genui_pre";
 pub const SESSION: &str = "__Host-genui_session";
+/// Account-only shared-app identity; independent of the workspace session.
+pub const SHARED_SESSION: &str = "__Host-genui_shared";
+pub const SHARED_PRELOGIN: &str = "__Host-genui_shared_flow";
 /// Routing convenience only (the organization's sign-in handle), never authority.
 pub const ORGANIZATION_HINT: &str = "__Host-genui_org";
 pub const ORGANIZATION_HINT_SECONDS: u64 = 30 * 86_400;
@@ -34,9 +37,9 @@ const MAX_VALUE: usize = 128;
 /// The lifetime each cookie is issued with (ADR-006 table).
 pub fn lifetime(name: &str) -> u64 {
     match name {
-        PRELOGIN => PRELOGIN_SECONDS,
+        PRELOGIN | SHARED_PRELOGIN => PRELOGIN_SECONDS,
         PRE_ACCESS => PRE_ACCESS_ABSOLUTE_SECONDS,
-        SESSION => SESSION_ABSOLUTE_SECONDS,
+        SESSION | SHARED_SESSION => SESSION_ABSOLUTE_SECONDS,
         RUN => RUN_SECONDS,
         _ => ORGANIZATION_HINT_SECONDS,
     }

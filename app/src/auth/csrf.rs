@@ -34,6 +34,8 @@ pub enum Form {
     Command,
     /// APP-012: the work page's run form (`POST /w/{app}/{work}`).
     Query,
+    SharedStart,
+    SharedSignOut,
 }
 impl Form {
     fn name(self) -> &'static [u8] {
@@ -43,6 +45,8 @@ impl Form {
             Self::SignOutAll => b"signout-all",
             Self::Command => b"command",
             Self::Query => b"query",
+            Self::SharedStart => b"shared-start",
+            Self::SharedSignOut => b"shared-signout",
         }
     }
 }

@@ -16,4 +16,4 @@ Released framework qualification, typed contracts and reproducible application s
 | 110 | [APP-110: Pitch scope ledger: what the demo ships, what is deferred, and what needs enterprise refinement](../0-backlog/APP-110.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-098, APP-105 |
 | 113 | [APP-113: Code review of the pitch (2026-10-30): findings, fixes and deferrals](../0-backlog/APP-113.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | S | Backlog | APP-099, APP-100, APP-104, APP-107, APP-108 |
 | 129 | [APP-129: Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)](../0-backlog/APP-129.md) | [PH08](../phases/PH08.md) | S14 | FND | P1 | S | Backlog | APP-107, APP-113 |
-| 145 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](../0-backlog/APP-140.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
+| 146 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](../0-backlog/APP-140.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
