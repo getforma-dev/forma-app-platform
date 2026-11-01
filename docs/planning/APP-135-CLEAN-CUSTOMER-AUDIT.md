@@ -40,18 +40,17 @@ Created app: Book Club Reading List, app `00000000-0000-4000-8000-00000000d0a4`,
 - Action: reload the same browser, then open `/canvas` in a new browser context.
 - Expected: the same name and generated provenance.
 - Observed: the same browser kept "Book Club Reading List", "Generated", and the three cards, still at 0 records. A new browser context does not place the group. The header can say "Empty canvas" and "Your canvas is empty" while the library lists "1 app · 3 cards" and "Open your library" appears. After a later command placed the group, the Generated label was still on the app card.
-- Verdict: name and provenance pass when the app is open. Placement across browsers fails.
-- Severity: medium.
-- Suggested fix: restore the member's placed works from the server. Local layout can remain a cache. "Layout saved locally" is the current copy.
+- Verdict: name and provenance pass when the app is open. A new browser does not place the group.
+- Classification: documented limitation. APP-104 keeps placement in this browser. APP-098 DS-67 records that loss and defers server persistence. This observation does not ask for server-side layout storage.
+- Separate defect, owned by pull request 5: "Open on the canvas" is an explicit request for this work. Following that link should load the work through the existing authorized placement path. That is not the same as restoring every placement after a fresh visit.
 - Evidence: reload text at 21:26 UTC; new-context text in the 21:28 UTC capture; [22-confirm-card.png](app-135-clean-customer/22-confirm-card.png) shows "Empty canvas" above a library that already has the app.
 
-### 4. Create a record: cancel once, then confirm — fail on the form, pass on the utterance
+### 4. Create a record: the form commits; the utterance confirms
 
 - Action A: on the New book form, fill Title "The Dispossessed" and Author, Genre, and Notes "Ursula K. Le Guin" (the last three are the tester's fill, because those inputs had no title-like label), then click Add. Look for Cancel, then submit again.
 - Expected: a confirm step, a cancel that writes nothing, then a confirmed save.
 - Observed: Add posted `POST /v1/work/.../commands/add` immediately. The form said "Committed. Record version 1, work version 1, commit 2. Audit event 87071760-cf32-4c84-81ef-74873aede6fe." The Add button was then disabled. No Cancel and no confirm card. Books showed 1 record, filed by Alex Rivera. Genre and Notes repeat the tester's author string.
-- Verdict: fail. Severity: high.
-- Suggested fix: the canvas form should use the same confirm card as the utterance path before the command is posted.
+- Verdict: observed, and not a defect. Add on a completed form is the explicit audited command (APP-094, `app/admin/src/canvas/commands.ts`). Confirm and Cancel belong to a model-interpreted draft. Do not add a second confirmation unless Victor asks for that product change.
 - Evidence: [05-form-committed.png](app-135-clean-customer/05-form-committed.png).
 
 - Action B: type `add The Left Hand of Darkness by Ursula K. Le Guin` and press Enter. Click Cancel. Repeat the sentence. Click "Add book".
@@ -60,15 +59,14 @@ Created app: Book Club Reading List, app `00000000-0000-4000-8000-00000000d0a4`,
 - Verdict: pass.
 - Evidence: [22-confirm-card.png](app-135-clean-customer/22-confirm-card.png).
 
-### 5. Open the record and check the saved values — fail
+### 5. Open the record and check the saved values — the create link is not the saved row
 
 - Action: read the Books card. Click its rows (they are not links). Open Workspace, then the work page, then the only record link, "New book record".
 - Expected: the saved title and author for each book.
 - Observed on the canvas card: "The Left Hand of Darkness" / "Ursula K. Le Guin" / genre "—" / notes "—", and "The Dispossessed" / "Ursula K. Le Guin" / genre and notes "Ursula K. Le Guin" / both "Filed by Alex Rivera". The canvas rows are not links, so there is no per-row detail page.
 - Observed on the work page: title "Book Club Reading List", "Saved work.", "Open on the canvas", "This work keeps records. Open them on the canvas.", and one record link, "New book record". No book titles. No Window start / Run views. No Generated chip (the full-page templates have no provenance field).
 - Observed after clicking that link: `/work/00000000-0000-4000-8000-00000000d0a4/2bbc9e92-12c8-491a-8825-cd4c902a6026/records/e3703dd6-4057-4858-b880-7145a818c733/deb4a555-2d4f-4f8f-9558-da7cd27a372b`. Page title "Record". "Saved app. Schema book version 1". "No record committed yet (version 0); work version 1." Empty title, author, genre, and notes, plus "Submit add". That button was not clicked. The collection id matches the New book form card, not one of the two committed rows.
-- Severity: high. The canvas list is right. The only full-page record says nothing was committed.
-- Suggested fix: list the committed Books rows, and link each row to its committed version. Do not present the form's version-0 slot as the saved record.
+- Verdict: usability gap, not lost data. `query/page.rs` `record_links` mints a fresh id and labels it "New book record." Version 0 is correct for that empty create target. The canvas list is the saved rows. Those rows do not link to a detail page. Do not describe the create link as a saved-record link, and do not say the saved books disappeared.
 - Evidence: [34-work-page.png](app-135-clean-customer/34-work-page.png), [42-empty-record.png](app-135-clean-customer/42-empty-record.png).
 
 ### 6. Ask about the new records — pass
@@ -78,14 +76,14 @@ Created app: Book Club Reading List, app `00000000-0000-4000-8000-00000000d0a4`,
 - Observed: `POST /v1/ask` 200. Text: "The reading list contains two books: The Left Hand of Darkness by Ursula K. Le Guin and The Dispossessed by Ursula K. Le Guin." Scope: "Asking about your canvas (1 app)". Both titles had receipt chips. "Ask reads; it never changes records, cards or the canvas." This was not a rehearsed demo answer.
 - Evidence: [26-ask.png](app-135-clean-customer/26-ask.png).
 
-### 7. Shape a supported card — fail on the Books card, pass on the app theme
+### 7. Shape — the title highlight was refused; the app theme applied
 
 - Action: `/shape books highlight the title`. Then the real card address from the command list, `/shape 1.records highlight the title`, and `/shape 1.records highlight the title in green`. Then `/shape 1.app dark compact` and Apply.
 - Expected: a preview of a highlight on the Books card, and Apply only after that preview.
 - Observed: `/shape books highlight the title` did not call the server. The page said "Nothing answers to books. Shape a card (app.card), an app or a widget." The command list names the card `1.2` / `1.records` ("Books"), the form `1.1` / `1.new`, and the app `1.0` / `1.app`. Both `1.records` phrases returned `POST /v1/shape` 422 `{"code":"could_not_shape","status":422}`. The page said "That came back as something other than a view, so nothing was shown. Nothing changed." Apply was absent. The credentials were present: the same server had just composed and answered with the model, and the next Shape call succeeded.
 - `/shape 1.app dark compact` returned 200 `{"spec":{"density":"compact","mode":"dark"},"target":"app"}`. Preview: "Nothing changes until you apply it." Apply was clicked. The app card went dark, gained "shaped" and "Revert", and the page said "Every /1 card is shaped; each keeps its own view. Revert is on the app card." Theme persistence after reload was not checked.
-- Severity: high for the generated list's records card.
-- Suggested fix: a highlight of a records card that already has rows should become the closed highlight spec this product already admits, or the model should be retried once when the reply is not a view. The refusal can stay when the reply is still not a view. "books" should resolve to `1.records`, or the message should name `1.records`.
+- Verdict: the refusal stands, and it is not a parser defect. The admitted highlight (`composer/shape.rs`) colors rows that match a field, an operator, and a value. It does not style an arbitrary title or column. The prompt allows `{}` when the request cannot be expressed, and the page keeps the records unchanged. `/shape books` does not resolve because the card address is `1.records`.
+- Not re-run for this correction: a supported request such as showing the title and author columns, or sorting the title ascending, on the isolated instance. That instance (`:5510`) is no longer running, and this correction does not start a new model session. Theme persistence after reload was not checked. Do not add title lookup or a broader Shape language from the 422 alone.
 - Evidence: [37-shape-refused.png](app-135-clean-customer/37-shape-refused.png), [41-theme-applied.png](app-135-clean-customer/41-theme-applied.png).
 
 ### 8. Make the answer a card and pin it — pass
