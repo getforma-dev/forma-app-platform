@@ -297,9 +297,10 @@
         "APP-145",
         "APP-150",
         "APP-151",
-        "APP-152"
+        "APP-152",
+        "APP-153"
       ],
-      "ticket_count": 57,
+      "ticket_count": 58,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -4632,6 +4633,35 @@
       "dependencies": [
         "APP-093",
         "APP-104"
+      ]
+    },
+    {
+      "id": "APP-153",
+      "title": "Spike \u2014 why the library pane has four tabs",
+      "path": "0-backlog/APP-153.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Spike",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "153",
+      "Size": "S",
+      "Repos": "forma-pitch-mvp",
+      "Decision": "Victor, 2026-11-01: find out why the pane has Library, Commands, Ask, and Shortcuts, and whether each one belongs there. The spike writes the answer. It does not move a tab.",
+      "Requirements": "C01, C11, SR1",
+      "Depends on": "APP-112, APP-122",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started.",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-112",
+        "APP-122"
       ]
     }
   ]
