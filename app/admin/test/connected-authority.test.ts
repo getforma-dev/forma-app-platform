@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startConnectedApps } from '../src/shared/canvas-controller';
 
-class Element {
+class Element extends EventTarget {
   dataset: Record<string, string> = {}; attributes: Record<string, string> = {}; children: Element[] = [];
   textContent = ''; parent: Element | null = null;
-  constructor(readonly tag: string) {}
+  constructor(readonly tag: string) { super(); }
   setAttribute(key: string, value: string) { this.attributes[key] = value; }
   append(...values: (Element | string)[]) { for (const value of values) if (typeof value === 'string') this.textContent += value; else { value.parent = this; this.children.push(value); } }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(node => node !== this); }

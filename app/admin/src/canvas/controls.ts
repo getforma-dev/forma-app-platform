@@ -80,6 +80,21 @@ function renderSelection(): void {
   }
 }
 
+/** Keep a control under the pointer until its native click/focus completes.
+ * Selecting a previously inactive canvas item on pointerdown can change its
+ * attention layout before pointerup, retargeting the click to the card itself.
+ * Header/empty-space drags, explicit pan mode and middle-button gestures keep
+ * their existing canvas path. Do not prevent the control's native default.
+ */
+export function preserveCanvasControlPointer(event: PointerEvent, host: HTMLElement): boolean {
+  const target = event.target as Element | null;
+  if (event.button !== 0 || event.defaultPrevented || host.querySelector('.is-pan-ready, .is-hand-tool')
+    || !target?.closest('.cv-card, .cv-unite') || !host.contains(target)
+    || !eventOriginatesInInteractiveControl(event)) return false;
+  event.stopPropagation();
+  return true;
+}
+
 function clearSelection(): void {
   selection.clear();
   canvasApi()?.clearActive();
@@ -457,6 +472,7 @@ export function startControls(document_: Document): void {
   // press on the empty canvas clears it.
   host.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || tool === 'hand') return;
+    if (preserveCanvasControlPointer(event, host)) return;
     const target = event.target as Element | null;
     const item = target?.closest<HTMLElement>('.widget-instance');
     if (!item) {

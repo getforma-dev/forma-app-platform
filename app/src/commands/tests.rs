@@ -196,7 +196,7 @@ fn form_bodies_type_their_texts_by_the_echoed_spec_and_equal_the_json_request() 
     assert_eq!(
         typed_value(
             &json!({"type": "money", "currency": "USD", "minor_unit_exponent": 2}),
-            "4500000"
+            "45000.00"
         ),
         Some(
             json!({"type": "money", "minor_units": "4500000", "currency": "USD", "minor_unit_exponent": 2})
@@ -869,4 +869,75 @@ fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
     );
     detail.can_write = false;
     assert!(!offered(&detail, Some("add_book")).can_write);
+}
+
+#[test]
+fn money_forms_use_exact_major_units_while_json_remains_minor_units() {
+    let spec = json!({"type":"money","currency":"USD","minor_unit_exponent":2});
+    for (display, minor) in [
+        ("12.50", "1250"),
+        ("12", "1200"),
+        (".50", "50"),
+        ("0.01", "1"),
+        ("-12.50", "-1250"),
+        ("-0.00", "0"),
+        ("00012.50", "1250"),
+        (" 12.50 ", "1250"),
+        (
+            "999999999999999999999999999999999999.99",
+            "99999999999999999999999999999999999999",
+        ),
+    ] {
+        assert_eq!(typed_value(&spec, display).unwrap()["minor_units"], minor);
+        let value =
+            json!({"type":"money","minor_units":minor,"currency":"USD","minor_unit_exponent":2});
+        let shown = super::value_text(&value);
+        assert_eq!(typed_value(&spec, &shown).unwrap(), value);
+    }
+    for invalid in [
+        "1e2",
+        "12.501",
+        "1,250.00",
+        "$12.50",
+        "NaN",
+        "+1.00",
+        "--1",
+        "1.2.3",
+        ".",
+        "9999999999999999999999999999999999999.99",
+    ] {
+        assert_eq!(typed_value(&spec, invalid), None, "accepted {invalid}");
+    }
+    assert_eq!(
+        super::value_text(&json!({"type":"money","minor_units":"1","minor_unit_exponent":2})),
+        "0.01"
+    );
+    assert_eq!(
+        super::value_text(&json!({"type":"money","minor_units":"-1","minor_unit_exponent":2})),
+        "-0.01"
+    );
+    assert_eq!(super::money_minor_units("2.5", 1), Some("25".into()));
+    assert_eq!(super::money_minor_units("2.5", 0), None);
+    assert_eq!(super::money_minor_units("1", 99), None);
+    let (mut command, _) = fixture_request();
+    command["values"] = json!([{"field_id":"amount","value":{"type":"money","minor_units":"1250","currency":"USD","minor_unit_exponent":2}}]);
+    let parse = |command: &Value| {
+        routes::parse_json_for_tests(
+            &serde_json::to_vec(command).unwrap(),
+            command["app_id"].as_str().unwrap(),
+            command["work_id"].as_str().unwrap(),
+            command["command_id"].as_str().unwrap(),
+            None,
+        )
+    };
+    assert_eq!(
+        parse(&command).unwrap().values[0]["value"]["minor_units"],
+        "1250"
+    );
+    command["values"][0]["value"]["minor_units"] = json!("12.50");
+    assert_eq!(
+        parse(&command).unwrap().values[0]["value"]["minor_units"],
+        "12.50",
+        "JSON values are never converted by the form boundary; storage separately refuses this noninteger"
+    );
 }

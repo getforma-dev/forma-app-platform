@@ -1,0 +1,11 @@
+# APP-158 — placed records and scoped filters
+
+A closed `records_list` view now references an admitted records input/schema, explicit columns, an optional stable field order and a page limit of 1–200. Concrete collection IDs come only from the exact saved work. Definitions may declare up to eight text, enum or half-open date filters with explicit component targets. One control set appears on the first targeted records list, or the first targeted component if no list exists. The same parameters affect every declared target.
+
+The authoritative snapshot, filtering, receipts, exact limits and eight passing real PostgreSQL checks are retained in [APP-159](../APP-159/README.md) and its [raw synthetic campaign report](../APP-159/record-components-campaign.json). The campaign proves that a matching record behind 202 newer normal command commits is found server-side, and that a population beyond the complete-input bound produces refusal instead of a false empty list. The five initial commands, exact rows, version/commit identities, filters and snapshot receipts are included in that report.
+
+Trusted native and imperative renderers consume the same typed props. Values remain text; no generated markup or SQL is interpreted. Tables have labelled keyboard-focusable scroll regions. Exact calculation receipts remain available under a collapsed “Calculation details” control. Shared records contain no command form or member record link. Inputs have no names, use a POST-only progressive-enhancement form, and stay disabled until the controller is installed, so no-JavaScript submission cannot put filter values into a URL.
+
+The integrated controller owns request epochs, aborts superseded requests, preserves filter drafts and unrelated unsent forms, and coordinates with member/shared/connected refresh and independent guest authority masking. Those browser and cross-surface gates are tracked by the parent APP-155/160 evidence. A new explicit list suppresses its collection's supplemental copy; definitions without an explicit list retain the existing listing.
+
+This document records implementation and local record-path qualification. Full integrated/browser acceptance and hosted deployment must be assessed from their own receipts, not inferred from these storage tests.

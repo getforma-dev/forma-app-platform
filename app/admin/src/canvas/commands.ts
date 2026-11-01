@@ -10,6 +10,18 @@ export type CommandOutcome =
   | { kind: 'committed'; recordVersion: string; workVersion: string; commit: string; audit: string }
   | { kind: 'conflict' | 'stale' | 'refused' | 'unconfirmed' | 'busy' | 'failed'; message: string };
 
+/** Exact human decimal -> canonical minor units; no floating point. */
+export function moneyMinorUnits(raw: string, exponent: unknown): string | null {
+  if (typeof exponent !== 'number' || !Number.isInteger(exponent) || exponent < 0 || exponent > 6 || raw.length > 64) return null;
+  const text = raw.trim(); const negative = text.startsWith('-'); const number = negative ? text.slice(1) : text;
+  const pieces = number.split('.'); if (pieces.length > 2) return null;
+  const [whole, fraction = ''] = pieces;
+  if ((!whole && !fraction) || !/^[0-9]*$/.test(whole) || !/^[0-9]*$/.test(fraction) || fraction.length > exponent || (exponent === 0 && pieces.length > 1)) return null;
+  const digits = `${whole}${fraction}${'0'.repeat(exponent - fraction.length)}`.replace(/^0+/, '') || '0';
+  if (digits.length > 38) return null;
+  return `${negative && digits !== '0' ? '-' : ''}${digits}`;
+}
+
 /** A form text under the published field's value type (`commands::routes::typed_value`). */
 export function typedValue(spec: Record<string, unknown>, raw: string): Record<string, unknown> | null {
   if (raw === '') return { type: 'null' };
@@ -28,10 +40,11 @@ export function typedValue(spec: Record<string, unknown>, raw: string): Record<s
       return spec.scale === undefined || spec.unit === undefined
         ? null
         : { type: 'decimal', coefficient: raw, scale: spec.scale, unit: spec.unit };
-    case 'money':
-      return spec.currency === undefined || spec.minor_unit_exponent === undefined
-        ? null
-        : { type: 'money', minor_units: raw, currency: spec.currency, minor_unit_exponent: spec.minor_unit_exponent };
+    case 'money': {
+      const minor = moneyMinorUnits(raw, spec.minor_unit_exponent);
+      return typeof spec.currency !== 'string' || minor === null ? null
+        : { type: 'money', minor_units: minor, currency: spec.currency, minor_unit_exponent: spec.minor_unit_exponent };
+    }
     case 'reference':
       return spec.target_input === undefined ? null : { type: 'reference', input_id: spec.target_input, record_id: raw };
     default:
@@ -113,6 +126,7 @@ const COPY: Required<OutcomeCopy> = {
  */
 export async function postCommand(path: string, body: unknown, key: string, copy: OutcomeCopy = {}): Promise<CommandOutcome> {
   const text = { ...COPY, ...copy };
+  const serialized = JSON.stringify(body);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     let response: Response;
     try {
@@ -121,7 +135,7 @@ export async function postCommand(path: string, body: unknown, key: string, copy
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { 'content-type': 'application/json', 'idempotency-key': key },
-        body: JSON.stringify(body),
+        body: serialized,
       });
     } catch {
       return lookUp(path, key, text.unconfirmed);
@@ -135,7 +149,9 @@ export async function postCommand(path: string, body: unknown, key: string, copy
     }
     if (response.status === 409) return { kind: 'conflict', message: text.conflict };
     if (response.status === 412) return { kind: 'stale', message: text.stale };
-    if (response.status === 503 && code === 'unknown_outcome') return lookUp(path, key, text.unconfirmed);
+    // A gateway/server failure may follow a committed transaction whose
+    // response was lost. Recover by the same key; never claim rollback.
+    if (response.status >= 500) return lookUp(path, key, text.unconfirmed);
     if (response.status === 400 || response.status === 404) return { kind: 'refused', message: text.refused };
     return { kind: 'failed', message: 'The command could not be committed right now. Nothing was changed.' };
   }

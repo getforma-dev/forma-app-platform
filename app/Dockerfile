@@ -74,6 +74,7 @@ COPY --from=native /source/genui /app/genui
 COPY app/runtime/runtime.py /app/runtime.py
 # APP-012 (ADR-007 D7.10): the confined DuckDB engine child, `runtime.py query`.
 COPY app/runtime/query_engine.py /app/query_engine.py
+COPY app/runtime/record_engine.py /app/record_engine.py
 # APP-108: the box data normalizer child, `runtime.py normalize`.
 COPY app/runtime/box_normalize.py /app/box_normalize.py
 COPY app/migrations /app/migrations

@@ -21,6 +21,7 @@ mod governance;
 mod labels;
 mod pool;
 mod queries;
+mod record_components;
 mod registry;
 pub mod rules;
 mod sessions;
@@ -29,6 +30,9 @@ mod shared_identity;
 mod shared_reads;
 mod sharing;
 mod work_labels;
+mod work_presentation;
+#[cfg(test)]
+mod work_presentation_checks;
 
 pub use actions::{
     CollectionSummary, DryRun, RecordRow, RecordsListing, WorkReads, READ_ONLY_WORKS, RECORDS_LIMIT,
@@ -75,6 +79,9 @@ pub use queries::{
     LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkPart,
     WorkView, COMMAND_MARKER, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
 };
+pub use record_components::{
+    record_component_digest, RecordComponentsRun, RECORD_COMPONENT_BYTES, RECORD_COMPONENT_ROWS,
+};
 pub use registry::RegistryIdentity;
 pub use sessions::{
     agent_token_organization, capability_organization, capability_shaped, slack_id, AdmittedMember,
@@ -92,6 +99,7 @@ pub use sharing::{
     SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};
+pub use work_presentation::WorkPresentation;
 
 use std::fmt;
 
@@ -101,6 +109,7 @@ pub enum Error {
     Denied,
     Unavailable,
     Deadline,
+    ProjectionLimit,
     UnknownOutcome,
 }
 
@@ -111,6 +120,7 @@ impl fmt::Display for Error {
             Self::Denied => "resource unavailable",
             Self::Unavailable => "storage unavailable",
             Self::Deadline => "storage deadline exceeded",
+            Self::ProjectionLimit => "record projection bound exceeded",
             Self::UnknownOutcome => "transaction outcome unknown",
         })
     }
@@ -183,6 +193,8 @@ pub(crate) mod qualification_cases;
 mod query_qualification;
 #[cfg(test)]
 mod race_qualification;
+#[cfg(test)]
+mod record_components_campaign;
 #[cfg(test)]
 mod shared_campaign;
 #[cfg(test)]

@@ -10,6 +10,8 @@ pub mod canvas_display;
 pub mod canvas_ledger;
 pub mod page;
 pub mod receipt;
+pub mod record_components;
+pub(crate) mod record_routes;
 pub mod routes;
 pub mod worker;
 

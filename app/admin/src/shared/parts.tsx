@@ -1,3 +1,4 @@
+import { RecordComponents } from '../record-components/parts';
 import { h, createList, createShow } from '@getforma/core';
 import type { View, RecordsCard, SharedPart } from './types';
 
@@ -5,7 +6,8 @@ import type { View, RecordsCard, SharedPart } from './types';
 export function SharedParts(props: { parts: SharedPart[]; views: View[]; recordCards: RecordsCard[]; recordsTruncated: boolean }) {
   return <div class="shared-parts" data-shared-parts="">
     <div class="document-parts" data-document-parts="">
-      {createList(() => props.parts, part => part.id, part => <article class={part.class} data-document-part={part.id}>
+      {createList(() => props.parts, part => part.id, part => <article class={part.class} data-document-part={part.id} data-component={part.id}>
+        {createShow(() => part.hasRecordComponents, () => <RecordComponents components={part.recordComponents} />)}
         {createShow(() => part.isNote, () => <section class="view document-note"><h2>{part.title}</h2><p>{part.text}</p></section>)}
         {createShow(() => part.isForm, () => <section class="view"><h2>{part.title}</h2><p class="document-form-message">{part.message}</p></section>)}
       {createList(() => part.views, view => view.id, view => <section class="view" data-view={view.id} data-state={view.state}>

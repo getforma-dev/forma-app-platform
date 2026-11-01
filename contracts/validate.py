@@ -36,7 +36,7 @@ VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FORMATS)
 # Edition impl-2026-10-29.2 adds normalized-rows (ADR-009 D9.3) and job-payload (genui.jobs.payload_digest, D9.4).
 DOMAINS = {name: f"forma:{name}:v1" for name in (
     "app-definition", "input-contract", "record-schema", "query", "query-receipt",
-    "command-payload", "source-binding", "result", "normalized-rows", "job-payload")}
+    "command-payload", "source-binding", "result", "normalized-rows", "job-payload", "record-components-receipt")}
 REGISTRY_EDITION = 1  # The operator and renderer registry edition every admitted definition names.
 MAX_RATIONAL_DIGITS = 38
 
@@ -237,6 +237,88 @@ def guard_holds(guard, state):
     return {"eq": a == b, "ne": a != b, "lt": a < b, "lte": a <= b, "gt": a > b, "gte": a >= b}[guard["comparison"]]
 
 
+
+def _presentation(presentation, views):
+    sections = unique(presentation.get("sections", []), "id", "presentation section")
+    actions = unique(presentation.get("actions", []), "id", "presentation action")
+    placed = []
+    for section in sections.values():
+        placed.extend(section["components"])
+    require(len(placed) == len(set(placed)), "duplicate presentation component")
+    require(set(placed) <= views.keys(), "unknown presentation component")
+    action_targets = set()
+    dialogs = set()
+    for action in actions.values():
+        require(action["label"].strip() != "", "presentation action label is empty")
+        require(action["target"] in views, "unknown presentation action target")
+        key = (action["behavior"], action["target"])
+        require(key not in action_targets, "duplicate presentation action target")
+        action_targets.add(key)
+        if action["behavior"] == "dialog":
+            dialogs.add(action["target"])
+        elif sections:
+            require(action["target"] in placed, "navigation target is not placed")
+    if sections:
+        require(set(placed) | dialogs == views.keys(), "presentation must reach every view")
+
+
+
+RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
+
+def _record_component(view, inputs, records):
+    config = view.get("records")
+    require(isinstance(config, dict), "record component requires records configuration")
+    require("query" not in view and "command_id" not in view and "text" not in view, "record component cannot carry query, command or literal text")
+    required, optional = {
+        "records_list": ({"columns"}, {"limit", "order"}),
+        "record_summary": ({"measure"}, set()),
+        "record_trend": ({"measure", "date_field"}, set()),
+        "record_ranking": ({"measure", "group_field"}, {"limit"}),
+        "record_budget": ({"measure", "budget"}, set()),
+    }[view["kind"]]
+    common = {"version", "input_id", "schema_id"}
+    require(common | required <= config.keys() and config.keys() <= common | required | optional, "record component properties do not match kind")
+    source, schema = inputs.get(config["input_id"]), records.get(config["schema_id"])
+    require(source is not None and source["kind"] == "records" and schema is not None, "unknown records input or schema")
+    require(source["fields"] == schema["fields"], "records input and schema fields differ")
+    fields = {field["id"]: field for field in schema["fields"]}
+    for name in config.get("columns", []):
+        require(name in fields, "unknown record component field")
+    if "order" in config:
+        require(config["order"]["field"] in fields, "unknown record component order field")
+        require(fields[config["order"]["field"]]["value_type"]["type"] != "reference", "reference record ordering is not qualified")
+    measure = config.get("measure", {})
+    if measure.get("op") == "sum":
+        field = fields.get(measure["field"])
+        require(field is not None and field["value_type"]["type"] in ("integer", "money"), "record sum requires integer or money")
+    if "date_field" in config:
+        field = fields.get(config["date_field"])
+        require(field is not None and field["value_type"]["type"] == "date", "record trend requires date field")
+    if "group_field" in config:
+        field = fields.get(config["group_field"])
+        require(field is not None and field["value_type"]["type"] in ("text", "enum"), "record ranking requires text or enum field")
+    if view["kind"] == "record_ranking":
+        require(config.get("limit", 5) <= 20, "record ranking limit exceeds bound")
+    if view["kind"] == "record_budget":
+        require(measure.get("op") == "sum", "record budget requires money sum")
+        field = fields.get(measure.get("field"), {})
+        require(field.get("value_type", {}).get("type") == "money", "record budget requires money sum")
+
+def _record_filters(filters, views, inputs):
+    filters = unique(filters, "id", "record filter")
+    require(not (filters.keys() & views.keys()), "record filter id conflicts with view")
+    for item in filters.values():
+        source = inputs.get(item["input_id"])
+        require(source is not None and source["kind"] == "records", "record filter requires records input")
+        fields = {field["id"]: field for field in source["fields"]}
+        field = fields.get(item["field"])
+        required = {"text_contains": "text", "enum": "enum", "date_range": "date"}[item["kind"]]
+        require(field is not None and field["value_type"]["type"] == required, "record filter field type mismatch")
+        for target in item["targets"]:
+            view = views.get(target)
+            require(view is not None and view["kind"] in RECORD_KINDS and view["records"]["input_id"] == item["input_id"], "record filter target scope mismatch")
+
+
 def _definition(content, new_content=False):
     inputs = unique(content["inputs"], "id", "input id")
     for item in inputs.values():
@@ -290,6 +372,10 @@ def _definition(content, new_content=False):
             declared = {rule["field_id"] for rule in command.get("initial", [])}
             require(governed & set(command["writable_fields"]) <= declared, "create writing a governed enum field requires initial")
     for view in views.values():
+        if view["kind"] in RECORD_KINDS:
+            _record_component(view, inputs, records)
+            continue
+        require("records" not in view, "records configuration only belongs to record components")
         if view["kind"] == "form":
             require(view.get("command_id") in commands and "query" not in view, "form requires declared command without query")
         else:
@@ -353,6 +439,10 @@ def _definition(content, new_content=False):
     require(layout.keys() == views.keys(), "layout must name each view exactly once")
     for position in layout.values():
         require(position["column"] + position["width"] <= 12, "layout exceeds grid")
+    if "record_filters" in content:
+        _record_filters(content["record_filters"], views, inputs)
+    if "presentation" in content:
+        _presentation(content["presentation"], views)
     for link in content["links"]:
         require(link["from_view"] in views and link["to_view"] in views and link["input_id"] in inputs, "unknown link target")
 
@@ -368,7 +458,15 @@ def validate(entity, *, new_content=False):
     if errors:
         raise ContractError("schema: " + errors[0].message)
     kind = entity["kind"]
-    if kind == "app_definition":
+    if kind == "record_components_receipt":
+        from record_components_contract import validate_semantics
+        try:
+            validate_semantics(entity)
+        except ValueError as exc:
+            raise ContractError(str(exc)) from exc
+        content = {key: value for key, value in entity.items() if key != "digest"}
+        require(entity["digest"] == digest("record-components-receipt", content), "record receipt digest mismatch")
+    elif kind == "app_definition":
         require(len(canonical(entity["content"])) <= 256 * 1024, "definition exceeds 256 KiB")
         _definition(entity["content"], new_content)
         require(entity["digest"] == digest("app-definition", entity["content"]), "definition digest mismatch")

@@ -1,3 +1,7 @@
+import { RecordComponentView } from '../record-components/parts';
+import type { RecordComponent } from '../record-components/types';
+import type { PresentationProps } from '../presentation/presentation';
+import { startPresentationEditor } from '../presentation/editor';
 import { h, mount, createShow, createList, createSignal, activateIslands } from '@getforma/core';
 import { submitUtterance } from './actions';
 import { startAgents } from './agents';
@@ -84,6 +88,7 @@ type Card = {
 };
 type Choice = { id: string; value: string; selected: boolean };
 type Field = {
+  inputMode: string;
   id: string;
   kind: string;
   label: string;
@@ -98,6 +103,7 @@ type Field = {
   choices: Choice[];
 };
 type FormCard = {
+  component: string;
   id: string;
   title: string;
   command: string;
@@ -168,6 +174,8 @@ type LedgerCard = {
   categories: LedgerRow[];
 };
 type Group = {
+  recordComponents: RecordComponent[]; hasRecordComponents: boolean;
+  presentation: PresentationProps; canEditPresentation: boolean;
   canShare: boolean;
   canLabelWork: boolean;
   workNameVersion: number;
@@ -306,6 +314,7 @@ function Canvas(props: CanvasProps) {
           ))}
         </div>
         <div class="cv-top-status">
+          <button type="button" class="cv-secondary" data-create-app="">Create app</button>
           <span id="cv-summary" class="cv-count">{props.summary}</span>
           {createShow(() => props.hasLive, () => (
             <span id="cv-live" class="cv-live" data-state="connecting" role="status" hidden>
@@ -391,6 +400,8 @@ function Canvas(props: CanvasProps) {
               data-app={group.app}
               data-work={group.work}
               data-can-share={group.canShare}
+              data-presentation={group.presentation.json}
+              data-can-edit-presentation={group.canEditPresentation}
               data-can-label-work={group.canLabelWork}
               data-work-name-version={group.workNameVersion}
               data-work-name-scope={group.workNameScope}
@@ -401,6 +412,7 @@ function Canvas(props: CanvasProps) {
             >
               <article class="cv-card cv-app" data-card={group.appCard} data-kind="app" aria-label={group.title}>
                 <h2>{group.title}</h2>
+                {createShow(() => group.canEditPresentation, () => <button type="button" class="cv-secondary" data-edit-presentation="" data-app={group.app} data-work={group.work}>Edit app</button>)}
                 {createShow(() => group.canShare, () => <button type="button" class="cv-secondary" data-manage-share="" data-app={group.app} data-work={group.work} data-title={group.title}>Share app</button>)}
                 <p class="cv-origins" aria-label="How this app was assembled" title={group.label}>
                   {createList(() => group.origins, origin => origin.id, origin => (
@@ -437,6 +449,7 @@ function Canvas(props: CanvasProps) {
                   id={card.id}
                   data-card={card.id}
                   data-view={card.view}
+                  data-component={card.view}
                   data-kind={card.kind}
                   data-state={card.state}
                   data-query={card.query}
@@ -569,8 +582,9 @@ function Canvas(props: CanvasProps) {
                   </div>
                 </article>
               ))}
+              {createList(() => group.recordComponents, component => component.cardId, component => <article class="cv-card cv-record-component" data-card={component.cardId} data-component={component.id} data-kind={component.kind} aria-label={component.title}><RecordComponentView component={component} /></article>)}
               {createList(() => group.forms, form => form.id, form => (
-                <article class="cv-card cv-form" data-card={form.id} data-kind="form" data-collection={form.collection} aria-label={form.title}>
+                <article class="cv-card cv-form" data-card={form.id} data-component={form.component} data-kind="form" data-collection={form.collection} aria-label={form.title}>
                   <header class="cv-card-head">
                     <h3>{form.title}</h3>
                     <span class="badge">record</span>
@@ -596,7 +610,7 @@ function Canvas(props: CanvasProps) {
                           </select>
                         ))}
                         {createShow(() => field.hasText, () => (
-                          <input type="text" name={field.input} value={field.value} aria-label={field.label} />
+                          h('input', { type: 'text', inputmode: field.inputMode, name: field.input, value: field.value, 'aria-label': field.label })
                         ))}
                         {createShow(() => field.writable, () => (
                           <input type="hidden" name={field.specInput} value={field.spec} />
@@ -613,7 +627,7 @@ function Canvas(props: CanvasProps) {
                 </article>
               ))}
               {createList(() => group.staticParts, part => part.id, part => (
-                <article class="cv-card cv-static-part" data-card={part.id} data-view={part.view} data-kind={part.kind} aria-label={part.title}>
+                <article class="cv-card cv-static-part" data-card={part.id} data-view={part.view} data-component={part.view} data-kind={part.kind} aria-label={part.title}>
                   <header class="cv-card-head"><h3>{part.title}</h3><span class="badge">{part.kind}</span></header>
                   <div class="cv-card-body"><p class="cv-static-text">{part.text}</p><p class="cv-message">{part.message}</p><a href={part.href}>Open app page</a></div>
                 </article>
@@ -871,6 +885,7 @@ startAgents(document);
 restoreWidgets();
 startLibrary(document);
 startCreateApp(document);
+startPresentationEditor(document);
 // APP-121: /rename, /alias, the Library's ✎ and double-click a card title.
 startNaming(document);
 // APP-108: boxes (cards, upload, viewer, data, /storage, the pane's Boxes).

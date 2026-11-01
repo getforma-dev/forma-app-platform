@@ -28,7 +28,7 @@ Beta and local source are separate states. The latest **recorded** beta deploy i
 
 The [October 31 continuation record](docs/planning/CONTINUATION-2026-10-31.md) preserves the pre-pivot backlog; the November 1 direction controls the current trial. [APP-007 foundation evidence](evidence/APP-007/managed/README.md) preserves an earlier stage; its stopped-service and incomplete-runtime observations are historical, not the current operating instructions. The pitch does not close the unfinished [Phase 1 gate](evidence/phases/PH01/GATE.md) or later platform obligations.
 
-The later [app composition decision](docs/architecture/ADR-015-COMPOSED-APP-PRESENTATION.md) treats cards as components of one coherent web app, with planned button-to-component actions, persisted themes and real record dashboards. [APP-155–161](Tickets/sprints/S15.md) track this follow-through and a future sleep/wake investigation separately from the November 2 trial. These new capabilities are planned, not deployed.
+The later [app composition decision](docs/architecture/ADR-015-COMPOSED-APP-PRESENTATION.md) treats cards as components of one coherent web app, with reusable button-to-component actions, persisted themes and real record dashboards. [APP-155–161](Tickets/sprints/S15.md) track this follow-through and a future sleep/wake investigation separately from the November 2 trial. The implementation on `codex/composed-app-implementation` is undergoing native/browser qualification and AWS delivery; see the [implementation record](docs/planning/COMPOSED-APP-IMPLEMENTATION-2026-11-01.md) for exact evidence and remaining acceptance.
 
 ## Find the owner
 

@@ -1,0 +1,28 @@
+.presentation-editor { color: #1b201a; background: #fafbf7; border: 1px solid #d1d7c9; border-radius: 18px; padding: 0; width: min(46rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-shadow: 0 24px 80px #0004; }
+.presentation-editor::backdrop { background: #10170db3; }
+.presentation-editor-form { padding: clamp(16px, 3vw, 28px); }
+.presentation-editor h2 { margin: 0 0 8px; font-size: 1.65rem; }
+.presentation-editor h3 { margin: 28px 0 12px; font-size: 1.1rem; }
+.presentation-editor-lead, .presentation-editor-note { color: #51594b; line-height: 1.55; }
+.presentation-editor-note { font-size: .85rem; margin-top: 24px; }
+.presentation-editor-field { display: grid; gap: 7px; min-width: 0; }
+.presentation-editor-field > span, .presentation-editor legend { font-size: .87rem; font-weight: 650; }
+.presentation-editor input, .presentation-editor textarea, .presentation-editor select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid #aeb8a3; border-radius: 8px; background: #fff; color: #1b201a; font: inherit; }
+.presentation-editor textarea { resize: vertical; }
+.presentation-editor button { min-height: 44px; padding: 9px 13px; border: 1px solid #aeb8a3; border-radius: 8px; background: #fff; color: #1b201a; font: inherit; cursor: pointer; }
+.presentation-editor button:disabled { cursor: default; opacity: .55; }
+.presentation-editor :focus-visible { outline: 3px solid #527d1c; outline-offset: 3px; }
+.presentation-editor-theme, .presentation-editor-action { padding: 16px; border: 1px solid #d1d7c9; border-radius: 12px; margin: 20px 0 12px; display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.presentation-editor-section { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 10px; }
+.presentation-editor-component { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid #e0e5da; }
+.presentation-editor-component > span { overflow-wrap: anywhere; }
+.presentation-editor-form > footer { position: sticky; bottom: -28px; background: #fafbf7; display: flex; justify-content: flex-end; gap: 10px; padding: 16px 0 8px; border-top: 1px solid #d1d7c9; }
+.presentation-editor .presentation-editor-save { background: #263d16; color: #fff; border-color: #263d16; }
+.presentation-editor-status:empty { display: none; }
+.presentation-editor-status { padding: 12px; background: #edf2e5; border-radius: 8px; line-height: 1.5; }
+@media (max-width: 520px) {
+  .presentation-editor-theme, .presentation-editor-action { grid-template-columns: minmax(0, 1fr); }
+  .presentation-editor-component { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .presentation-editor-component > span { grid-column: 1 / -1; }
+  .presentation-editor-form > footer { bottom: -16px; }
+}

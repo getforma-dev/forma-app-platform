@@ -587,6 +587,59 @@ impl Engine {
     }
 
     /// The confined engine child with one request; its raw output.
+    /// APP-158/159 uses the same organization/task admission and confinement
+    /// as source queries. The child receives only the authorized snapshot;
+    /// it has neither database credentials nor a collection selector.
+    pub async fn execute_records(
+        &self,
+        run: &crate::storage::RecordComponentsRun,
+        parameters: &Value,
+        deadline: Duration,
+    ) -> Result<super::record_components::RecordComponentsResult, QueryError> {
+        let started = Instant::now();
+        let until = started + deadline.min(INTERACTIVE_DEADLINE);
+        let slot = self.admit(run.organization(), until).await?;
+        let remaining = until.saturating_duration_since(Instant::now());
+        if remaining < Duration::from_millis(1) {
+            return Err(QueryError::Failed(Failure::QueueExpired));
+        }
+        let scratch = Scratch::new(&self.settings.scratch_root)
+            .map_err(|_| QueryError::Failed(Failure::Engine))?;
+        let request = json!({"kind":"record_components_v1","payload":run.payload(),"parameters":parameters,
+            "deadline_ms":u64::try_from(remaining.saturating_sub(STARTUP_ALLOWANCE).max(Duration::from_millis(1)).as_millis()).unwrap_or(1).min(1800)});
+        let bytes = admission::encode(&request).map_err(|_| QueryError::NarrowTheQuery)?;
+        self.running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .stats
+            .launched += 1;
+        tracing::info!(
+            event = "record_components.dispatch",
+            organization_id = run.organization(),
+            app_id = run.app(),
+            work_id = run.work(),
+            "record projection child dispatched"
+        );
+        let outcome = self.run_child(&scratch.0, bytes).await;
+        drop(scratch);
+        drop(slot);
+        let output = outcome.map_err(|e| {
+            QueryError::Failed(if matches!(e, Killed::Deadline) {
+                Failure::Deadline
+            } else {
+                Failure::Killed
+            })
+        })?;
+        if Instant::now() > until + LATE_GRACE {
+            return Err(QueryError::Failed(Failure::Deadline));
+        }
+        if !output.status.success() {
+            return Err(QueryError::Failed(Failure::Engine));
+        }
+        super::record_components::parse_result(run, parameters, &output.stdout)
+    }
+
+    /// The confined engine child with one request; its raw output.
     pub(crate) async fn run_child(
         &self,
         scratch: &Path,

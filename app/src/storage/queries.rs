@@ -896,6 +896,8 @@ pub struct WorkPart {
 /// and its runnable views, in definition order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkOutline {
+    /// Optional admitted immutable shell/action/theme metadata.
+    pub presentation: Option<Value>,
     pub title: String,
     /// The definition's description (APP-101: an adapted definition's first
     /// line carries the canvas chips, `composer::transform::chips_of`).
@@ -1014,6 +1016,10 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
             command: command.into(),
             schema: declaration
                 .and_then(|c| c["record_schema_id"].as_str())
+                .or_else(|| {
+                    view.get("records")
+                        .and_then(|records| records["schema_id"].as_str())
+                })
                 .unwrap_or_default()
                 .into(),
             operation: declaration
@@ -1030,6 +1036,7 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
     }
     parts.sort_by_key(|part| (part.row, part.column));
     Ok(WorkOutline {
+        presentation: content.get("presentation").cloned(),
         title,
         description,
         views,

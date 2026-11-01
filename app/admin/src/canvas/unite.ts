@@ -1,3 +1,4 @@
+import { presentationFor } from '../presentation/presentation';
 // APP-106 Unite, and APP-142 the page. An app's cards fly together into one
 // page. The parts stay that page until the member fans them out.
 //
@@ -29,7 +30,7 @@
 // - A page is one canvas item (it moves as one) and is kept per member in
 //   this browser (DS-06/DS-67).
 import { createCanvasItem } from '../canvas-vendor/index';
-import { addCards, GAP, onLayoutSaved, setUniteHooks, SLOT_WIDTH, stackBoard as board } from './board';
+import { addCards, refreshGroupPresentation, GAP, onLayoutSaved, setUniteHooks, SLOT_WIDTH, stackBoard as board } from './board';
 import { loadUnited, saveUnited } from './layout';
 import { findApps } from './library';
 import { pageSize } from './page';
@@ -134,7 +135,7 @@ function arrange(cards: HTMLElement[]): { kpi: HTMLElement[]; main: HTMLElement[
   return { kpi, main: primary ? [primary, ...views] : views, side };
 }
 
-function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[], canShare: boolean): Frame['root'] {
+function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[], canShare: boolean, canEdit: boolean, presentation: string): Frame['root'] {
   const head = el(document_, 'header', { class: 'cv-unite-head', 'data-canvas-drag-handle': '' },
     el(document_, 'span', { class: 'cv-unite-mark', 'aria-hidden': 'true' }),
     el(document_, 'div', { class: 'cv-unite-heading' },
@@ -146,11 +147,13 @@ function buildFrame(document_: Document, app: string, work: string, title: strin
       el(document_, 'a', { class: 'cv-secondary', href: `/w/${app}/${work}`, title: 'Open this app as a page' }, 'Open page'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-ask': '' }, 'Ask about this app'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus a part · F' }, 'Focus'),
+      ...(canEdit ? [el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-edit-presentation': '', 'data-app': app, 'data-work': work }, 'Edit app')] : []),
       ...(canShare ? [el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share')] : []),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Fan out · Shift+U' }, 'Fan out')));
-  return el(document_, 'article', { class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'aria-label': title },
+  return el(document_, 'article', { class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'data-presentation': presentation, 'data-app': app, 'data-work': work, 'aria-label': title },
     head,
-    el(document_, 'div', { class: 'cv-unite-grid' },
+    el(document_, 'div', { 'data-app-presentation-header': '' }),
+    el(document_, 'div', { class: 'cv-unite-grid', 'data-presentation-layout': '' },
       el(document_, 'div', { class: 'cv-unite-kpis', 'data-slot': 'kpi' }),
       el(document_, 'div', { class: 'cv-unite-main', 'data-slot': 'main' }),
       el(document_, 'div', { class: 'cv-unite-side', 'data-slot': 'side' })),
@@ -167,7 +170,7 @@ function fill(root: HTMLElement, cards: HTMLElement[], layout = ''): { order: HT
     root.dataset.declaredLayout = 'true';
     grid.replaceChildren(...slots.flatMap(slot => {
       const card = byId.get(slot.id); if (!card) return [];
-      return el(root.ownerDocument, 'section', { class: 'cv-unite-part', 'data-part-row': String(slot.row), 'data-part-column': String(slot.column), 'data-part-width': String(slot.width) }, card);
+      return el(root.ownerDocument, 'section', { class: 'cv-unite-part', 'data-component': card.dataset.component ?? '', 'data-part-row': String(slot.row), 'data-part-column': String(slot.column), 'data-part-width': String(slot.width) }, card);
     }));
     const width = phone() ? PHONE : WIDE;
     layoutPage(root, width);
@@ -194,7 +197,7 @@ function layoutPage(root: HTMLElement, width: number): void {
     const grid = root.querySelector<HTMLElement>('.cv-unite-grid')!;
     grid.style.gridTemplateColumns = single ? 'minmax(0, 1fr)' : 'repeat(12, minmax(0, 1fr))';
     grid.style.gridTemplateAreas = 'none';
-    for (const part of grid.querySelectorAll<HTMLElement>(':scope > .cv-unite-part')) {
+    for (const part of grid.querySelectorAll<HTMLElement>('.cv-unite-part')) {
       part.style.gridColumn = single ? '1' : `${Number(part.dataset.partColumn) + 1} / span ${Number(part.dataset.partWidth)}`;
       part.style.gridRow = single ? 'auto' : String(Number(part.dataset.partRow));
     }
@@ -424,7 +427,7 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
     y: Math.min(...[...previous.values()].map((spot) => spot.y)),
   };
   for (const card of members) board.lift(card.dataset.card ?? '');
-  const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare);
+  const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare, group.canEditPresentation, group.presentation);
   const { order, width } = fill(root, members, group.partLayout);
   for (const restoreScroll of scrolls) restoreScroll();
   const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root, chrome: false });
@@ -440,6 +443,7 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
   for (const restoreScroll of scrolls) restoreScroll();
   const frame: Frame = { work, app, title: group.title, cards: order.map((card) => card.dataset.card ?? ''), item, root, previous };
   frames.set(work, frame);
+  presentationFor(root);
   syncAppButton(members, true);
   syncLibrary(work, true);
   board.pin(work);
@@ -458,6 +462,7 @@ export function breakApart(work: string): string {
   const canvas = board.canvas();
   const frame = frames.get(work);
   if (!canvas || !frame) return 'That app is not open as a page.';
+  presentationFor(frame.root).dispose();
   releaseFocus(frame);
   const frameState = canvas.getItemState(frame.item);
   const before = new Map<HTMLElement, { x: number; y: number; width: number; height: number }>();
@@ -573,6 +578,17 @@ export function startUnite(document_: Document): void {
     if (title) { title.textContent = detail.name; title.title = detail.name; }
     frame.root.setAttribute('aria-label', detail.name);
   });
+  document_.addEventListener('forma:presentation-saved', event => {
+    const detail = (event as CustomEvent<{app: string; work: string}>).detail;
+    if (!detail) return;
+    void refreshGroupPresentation(detail.app, detail.work).then(ok => {
+      const frame = frames.get(detail.work); const group = board.group(detail.work);
+      if (!ok || !frame || !group || frame.app !== detail.app) return;
+      const presentation = presentationFor(frame.root); presentation.beforeRefresh();
+      presentation.afterRefresh(group.presentation);
+      layoutPage(frame.root, frame.item.offsetWidth);
+    });
+  });
   setUniteHooks({
     has: (id) => [...frames.values()].some((frame) => frame.cards.includes(id)),
     count: () => [...frames.values()].reduce((sum, frame) => sum + frame.cards.length, 0),
@@ -582,12 +598,15 @@ export function startUnite(document_: Document): void {
       for (const frame of [...frames.values()]) {
         const out = frame.cards.filter((id) => ids.includes(id));
         if (!out.length) continue;
+        presentationFor(frame.root).dispose();
         handled.push(...out);
         for (const id of out) {
           const card = board.findCard(id)?.card;
           if (card) {
             syncAppButton([card], false);
+            const wrapper = card.closest('.cv-unite-part');
             board.park(card);
+            wrapper?.remove();
           }
         }
         frame.cards = frame.cards.filter((id) => !out.includes(id));
@@ -598,6 +617,7 @@ export function startUnite(document_: Document): void {
         } else {
           const count = frame.root.querySelector('[data-unite-count]');
           if (count) count.textContent = `${frame.cards.length} ${frame.cards.length === 1 ? 'part' : 'parts'}`;
+          presentationFor(frame.root);
         }
       }
       if (handled.length) save();

@@ -442,12 +442,16 @@ pub struct GroupProps {
     pub id: String,
     pub can_share: bool,
     pub can_label_work: bool,
+    pub can_edit_presentation: bool,
+    pub presentation: crate::composer::presentation::PresentationProps,
     pub work_name_version: i64,
     pub work_name_scope: bool,
     /// Admitted part order, followed separately by record/ledger utilities.
     pub part_order: String,
     pub part_layout: String,
     pub static_parts: Vec<StaticPartProps>,
+    pub has_record_components: bool,
+    pub record_components: Vec<super::record_components::RecordComponentProps>,
     pub app: String,
     pub work: String,
     /// `a-{work}`: the app card's canvas item id.
@@ -638,6 +642,7 @@ pub struct CanvasRowProps {
 pub struct FormCardProps {
     /// `f-{work}-{collection}`.
     pub id: String,
+    pub component: String,
     pub title: String,
     pub command: String,
     pub action: String,
@@ -657,6 +662,7 @@ pub struct FormCardProps {
 
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct FormFieldProps {
+    pub input_mode: String,
     pub id: String,
     pub kind: String,
     pub label: String,
@@ -818,6 +824,7 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
     }
     Some(FormCardProps {
         id: format!("f-{work}-{}", view.collection),
+        component: String::new(),
         title: format!("New {} record", view.schema),
         command: view.command.clone(),
         action: view.action.clone(),
@@ -852,7 +859,13 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                 FormFieldProps {
                     id: field.id.clone(),
                     kind: field.kind.clone(),
-                    label: field.id.replace('_', " "),
+                    label: commands::field_label(field),
+                    input_mode: if field.kind == "money" {
+                        "decimal"
+                    } else {
+                        "text"
+                    }
+                    .into(),
                     input: field.input.clone(),
                     value: field.value.clone(),
                     spec: field.spec.clone(),
@@ -1239,10 +1252,18 @@ fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
         ));
     }
     if let Some(listing) = &read.listing {
-        for card in records_cards(app, work, listing, "") {
+        for card in page::automatic_records(&read.outline, records_cards(app, work, listing, "")) {
             cards.push(library_card(card.id, card.title, "records"));
         }
         for card in super::canvas_ledger::ledger_cards(app, work, listing) {
+            if read.outline.parts.iter().any(|part| {
+                part.kind == "records_list"
+                    && read.outline.collections.iter().any(|(collection, schema)| {
+                        collection == &card.collection && schema == &part.schema
+                    })
+            }) {
+                continue;
+            }
             cards.push(library_card(card.id, card.title, "ledger"));
         }
     }
@@ -1360,8 +1381,10 @@ async fn assemble(
         .parts
         .iter()
         .filter(|part| {
-            part.kind == "note"
-                || (!part.runnable && !forms.iter().any(|form| form.id == part_card_id(work, part)))
+            !super::record_routes::is_record_kind(&part.kind)
+                && (part.kind == "note"
+                    || (!part.runnable
+                        && !forms.iter().any(|form| form.id == part_card_id(work, part))))
         })
         .map(|part| StaticPartProps {
             id: part_card_id(work, part),
@@ -1399,8 +1422,21 @@ async fn assemble(
     })).collect::<Vec<_>>()).map_err(|_| http::unavailable())?;
     let (records, ledger) = match &listing {
         Some(listing) => (
-            records_cards(app, work, listing, member.principal()),
-            super::canvas_ledger::ledger_cards(app, work, listing),
+            page::automatic_records(
+                &outline,
+                records_cards(app, work, listing, member.principal()),
+            ),
+            super::canvas_ledger::ledger_cards(app, work, listing)
+                .into_iter()
+                .filter(|card| {
+                    !outline.parts.iter().any(|part| {
+                        part.kind == "records_list"
+                            && outline.collections.iter().any(|(collection, schema)| {
+                                collection == &card.collection && schema == &part.schema
+                            })
+                    })
+                })
+                .collect(),
         ),
         None => (Vec::new(), Vec::new()),
     };
@@ -1429,6 +1465,41 @@ async fn assemble(
         ),
         None => definition_provenance(&outline.description, &outline.definition_digest),
     };
+    let (mut record_components, record_run) = if outline
+        .parts
+        .iter()
+        .any(|part| super::record_routes::is_record_kind(&part.kind))
+    {
+        match super::record_routes::member_components(
+            &canvas.work,
+            member,
+            app,
+            work,
+            &super::record_components::default_parameters(),
+        )
+        .await
+        {
+            Ok(batch) => (batch.components, batch.run),
+            Err(response) if response.status() == StatusCode::NOT_FOUND => return Err(response),
+            Err(_) => (super::record_routes::unavailable_outline(&outline), None),
+        }
+    } else {
+        (Vec::new(), None)
+    };
+    for component in &mut record_components {
+        component.card_id = format!("c-{work}-{}", component.id);
+    }
+    let can_edit_presentation = !library
+        && stores
+            .workspace
+            .can_edit_presentation(member, app, work)
+            .await
+            .map_err(|e| routes::storage_refusal(&e))?;
+    let can_share = stores
+        .workspace
+        .can_share_live_work(member, app, work)
+        .await
+        .map_err(|e| routes::storage_refusal(&e))?;
     // Forms and queries can wait. Do not release records under stale work
     // authority or a publication that changed while this group assembled.
     let current = stores
@@ -1456,18 +1527,33 @@ async fn assemble(
             return Err(http::not_found());
         }
     }
+    if let Some(run) = &record_run {
+        stores
+            .data
+            .release_record_components(member, run)
+            .await
+            .map_err(|error| routes::storage_refusal(&error))?;
+    }
     Ok(GroupProps {
+        has_record_components: !record_components.is_empty(),
+        record_components,
+        presentation: crate::composer::presentation::project(
+            outline.presentation.as_ref(),
+            &outline
+                .parts
+                .iter()
+                .filter(|part| part.kind != "form" || outline.can_write)
+                .map(|part| part.id.clone())
+                .collect(),
+        ),
+        can_edit_presentation,
         work_name_scope: !library,
         part_order,
         part_layout,
         static_parts,
         can_label_work: !library && work_label.can_name,
         work_name_version: work_label.version,
-        can_share: stores
-            .workspace
-            .can_share_live_work(member, app, work)
-            .await
-            .map_err(|e| routes::storage_refusal(&e))?,
+        can_share,
         id: format!("g-{work}"),
         app: app.to_owned(),
         work: work.to_owned(),

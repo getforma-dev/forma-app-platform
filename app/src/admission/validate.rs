@@ -49,13 +49,33 @@ pub const RENDERER_VERSION: u32 = 1;
 /// The registered operator version.
 pub const OPERATOR_VERSION: u32 = 1;
 /// Registered renderer kinds (C04).
-pub const RENDERERS: [&str; 9] = [
-    "summary", "table", "detail", "timeline", "chart", "filter", "form", "note", "status",
+pub const RENDERERS: [&str; 14] = [
+    "summary",
+    "table",
+    "detail",
+    "timeline",
+    "chart",
+    "filter",
+    "form",
+    "note",
+    "status",
+    "records_list",
+    "record_summary",
+    "record_trend",
+    "record_ranking",
+    "record_budget",
 ];
 /// Registered query operators (C04).
 #[rustfmt::skip]
 pub const OPERATORS: [&str; 8] = [
     "project", "filter", "aggregate", "sort", "limit", "time_bucket", "ratio", "lookup",
+];
+const RECORD_KINDS: [&str; 5] = [
+    "records_list",
+    "record_summary",
+    "record_trend",
+    "record_ranking",
+    "record_budget",
 ];
 const MEASURES: [&str; 4] = ["count", "sum", "min", "max"];
 const COMPARISONS: [&str; 6] = ["eq", "ne", "lt", "lte", "gt", "gte"];
@@ -216,6 +236,22 @@ struct Content {
     commands: Vec<Command>,
     links: Vec<Link>,
     layout: Vec<Position>,
+    presentation: Option<Presentation>,
+    record_filters: Vec<RecordFilter>,
+}
+
+struct Presentation {
+    sections: Vec<PresentationSection>,
+    actions: Vec<PresentationAction>,
+}
+struct PresentationSection {
+    id: String,
+    components: Vec<String>,
+}
+struct PresentationAction {
+    id: String,
+    target: String,
+    dialog: bool,
 }
 
 /// An input contract or a record schema: an id and its typed fields.
@@ -224,8 +260,10 @@ struct Contract {
     fields: Vec<Field>,
     /// A records input declaring partial coverage (schema version 2).
     partial_records: bool,
+    record_input: bool,
 }
 
+#[derive(PartialEq)]
 struct Field {
     id: String,
     value_type: ValueType,
@@ -252,6 +290,25 @@ struct View {
     query: Option<Query>,
     command_id: Option<String>,
     text: bool,
+    records: Option<RecordComponent>,
+}
+
+struct RecordComponent {
+    input: String,
+    schema: String,
+    columns: Vec<String>,
+    sum: bool,
+    measure_field: Option<String>,
+    group: Option<String>,
+    date: Option<String>,
+    order: Option<String>,
+}
+struct RecordFilter {
+    id: String,
+    input: String,
+    field: String,
+    kind: String,
+    targets: Vec<String>,
 }
 
 struct Query {
@@ -704,7 +761,7 @@ impl Walk {
             "links",
             "default_layout",
         ];
-        let map = self.object(path, value, &required, &[])?;
+        let map = self.object(path, value, &required, &["presentation", "record_filters"])?;
         let at = |key: &str| member(path, key);
         self.text(&at("title"), map.get("title"));
         self.text(&at("description"), map.get("description"));
@@ -744,6 +801,138 @@ impl Walk {
             commands: commands?,
             links: links?,
             layout: layout?,
+            record_filters: if let Some(value) = map.get("record_filters") {
+                self.each(
+                    &at("record_filters"),
+                    Some(value),
+                    0..=8,
+                    Self::record_filter,
+                )?
+            } else {
+                Vec::new()
+            },
+            presentation: present(
+                map.get("presentation")
+                    .map(|v| self.presentation(&at("presentation"), v)),
+            )?,
+        })
+    }
+
+    fn bounded_text(&mut self, path: &str, value: Option<&Value>, min: usize, max: usize) {
+        let Some(value) = value else {
+            return;
+        };
+        match value.as_str() {
+            Some(text)
+                if (min..=max).contains(&text.chars().count())
+                    && (min == 0 || !text.trim().is_empty()) => {}
+            _ => self.mistyped(
+                path,
+                value,
+                refused(path, "presentation text outside bound"),
+            ),
+        }
+    }
+
+    fn presentation(&mut self, path: &str, value: &Value) -> Option<Presentation> {
+        let map = self.object(
+            path,
+            value,
+            &["version"],
+            &["description", "sections", "actions", "theme"],
+        )?;
+        let at = |key: &str| member(path, key);
+        self.exactly(&at("version"), map.get("version"), 1);
+        self.bounded_text(&at("description"), map.get("description"), 0, 1000);
+        let sections = if let Some(value) = map.get("sections") {
+            self.each(
+                &at("sections"),
+                Some(value),
+                0..=8,
+                Self::presentation_section,
+            )?
+        } else {
+            Vec::new()
+        };
+        let actions = if let Some(value) = map.get("actions") {
+            self.each(
+                &at("actions"),
+                Some(value),
+                0..=8,
+                Self::presentation_action,
+            )?
+        } else {
+            Vec::new()
+        };
+        if let Some(theme) = map.get("theme") {
+            let path = at("theme");
+            if let Some(theme) =
+                self.object(&path, theme, &["mode", "accent", "density"], &["font"])
+            {
+                self.choice(
+                    &member(&path, "mode"),
+                    theme.get("mode"),
+                    &["default", "light", "dark"],
+                    None,
+                );
+                self.choice(
+                    &member(&path, "accent"),
+                    theme.get("accent"),
+                    &[
+                        "default", "green", "crimson", "amber", "cyan", "violet", "rose", "ice",
+                        "slate",
+                    ],
+                    None,
+                );
+                self.choice(
+                    &member(&path, "density"),
+                    theme.get("density"),
+                    &["default", "compact", "comfortable", "spacious"],
+                    None,
+                );
+                if let Some(font) = theme.get("font") {
+                    self.choice(
+                        &member(&path, "font"),
+                        Some(font),
+                        &["default", "mono"],
+                        None,
+                    );
+                }
+            }
+        }
+        Some(Presentation { sections, actions })
+    }
+
+    fn presentation_section(&mut self, path: &str, value: &Value) -> Option<PresentationSection> {
+        let map = self.object(path, value, &["id", "components"], &["title"])?;
+        let id = self.id(&member(path, "id"), map.get("id"));
+        self.bounded_text(&member(path, "title"), map.get("title"), 0, 120);
+        let components = self.ids(
+            &member(path, "components"),
+            map.get("components"),
+            1..=MAX_VIEWS,
+        );
+        Some(PresentationSection {
+            id: id?,
+            components: components?,
+        })
+    }
+
+    fn presentation_action(&mut self, path: &str, value: &Value) -> Option<PresentationAction> {
+        let map = self.object(path, value, &["id", "label", "behavior", "target"], &[])?;
+        let id = self.id(&member(path, "id"), map.get("id"));
+        self.bounded_text(&member(path, "label"), map.get("label"), 1, 80);
+        let behavior = self.choice(
+            &member(path, "behavior"),
+            map.get("behavior"),
+            &["navigate", "dialog"],
+            None,
+        );
+        let target = self.id(&member(path, "target"), map.get("target"));
+        Some(PresentationAction {
+            id: id?,
+            target: target?,
+            dialog: behavior? == "dialog",
         })
     }
 
@@ -768,6 +957,7 @@ impl Walk {
         Some(Contract {
             id: id?,
             fields: fields?,
+            record_input: kind.as_deref() == Some("records"),
             partial_records: kind.as_deref() == Some("records")
                 && coverage.as_deref() == Some("partial"),
         })
@@ -783,6 +973,7 @@ impl Walk {
             id: id?,
             fields: fields?,
             partial_records: false,
+            record_input: false,
         })
     }
 
@@ -922,7 +1113,12 @@ impl Walk {
 
     fn view(&mut self, path: &str, value: &Value) -> Option<View> {
         let required = ["id", "kind", "renderer_version", "title"];
-        let map = self.object(path, value, &required, &["query", "command_id", "text"])?;
+        let map = self.object(
+            path,
+            value,
+            &required,
+            &["query", "command_id", "text", "records"],
+        )?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
         let kind = self.choice(
@@ -947,10 +1143,157 @@ impl Walk {
         self.text(&at("text"), map.get("text"));
         Some(View {
             id: id?,
+            records: present(map.get("records").map(|value| {
+                self.record_component(&at("records"), value, kind.as_deref().unwrap_or(""))
+            }))?,
             kind: kind?,
             query: present(query)?,
             command_id: present(command_id)?,
             text: map.contains_key("text"),
+        })
+    }
+
+    fn record_component(
+        &mut self,
+        path: &str,
+        value: &Value,
+        kind: &str,
+    ) -> Option<RecordComponent> {
+        let mut required = vec!["version", "input_id", "schema_id"];
+        let optional = match kind {
+            "records_list" => {
+                required.push("columns");
+                vec!["limit", "order"]
+            }
+            "record_summary" => {
+                required.push("measure");
+                vec![]
+            }
+            "record_trend" => {
+                required.extend(["measure", "date_field"]);
+                vec![]
+            }
+            "record_ranking" => {
+                required.extend(["measure", "group_field"]);
+                vec!["limit"]
+            }
+            "record_budget" => {
+                required.extend(["measure", "budget"]);
+                vec![]
+            }
+            _ => {
+                self.fail(refused(
+                    path,
+                    "records configuration requires records renderer",
+                ));
+                vec![]
+            }
+        };
+        let map = self.object(path, value, &required, &optional)?;
+        let at = |key: &str| member(path, key);
+        self.exactly(&at("version"), map.get("version"), 1);
+        let input = self.id(&at("input_id"), map.get("input_id"));
+        let schema = self.id(&at("schema_id"), map.get("schema_id"));
+        let columns = if let Some(value) = map.get("columns") {
+            self.ids(&at("columns"), Some(value), 1..=16)?
+        } else {
+            Vec::new()
+        };
+        if let Some(value) = map.get("limit") {
+            self.integer(
+                &at("limit"),
+                Some(value),
+                1..=if kind == "record_ranking" { 20 } else { 200 },
+            );
+        }
+        let mut sum = false;
+        let mut measure_field = None;
+        if let Some(value) = map.get("measure") {
+            let p = at("measure");
+            let map = self.object(&p, value, &["op"], &["field"])?;
+            let op = self.choice(&member(&p, "op"), map.get("op"), &["count", "sum"], None)?;
+            sum = op == "sum";
+            if sum {
+                measure_field = Some(self.id(&member(&p, "field"), map.get("field"))?);
+            } else if map.contains_key("field") {
+                self.fail(refused(&p, "count has no field"));
+            }
+        }
+        let group = present(
+            map.get("group_field")
+                .map(|v| self.id(&at("group_field"), Some(v))),
+        )?;
+        let date = present(
+            map.get("date_field")
+                .map(|v| self.id(&at("date_field"), Some(v))),
+        )?;
+        let order = if let Some(value) = map.get("order") {
+            let p = at("order");
+            let map = self.object(&p, value, &["field", "direction"], &[])?;
+            self.choice(
+                &member(&p, "direction"),
+                map.get("direction"),
+                &["asc", "desc"],
+                None,
+            );
+            Some(self.id(&member(&p, "field"), map.get("field"))?)
+        } else {
+            None
+        };
+        if let Some(value) = map.get("budget") {
+            let p = at("budget");
+            let map = self.object(
+                &p,
+                value,
+                &["origin", "minor_units", "currency", "minor_unit_exponent"],
+                &[],
+            )?;
+            self.choice(&member(&p, "origin"), map.get("origin"), &["preset"], None);
+            self.choice(&member(&p, "currency"), map.get("currency"), &["USD"], None);
+            self.exactly(
+                &member(&p, "minor_unit_exponent"),
+                map.get("minor_unit_exponent"),
+                2,
+            );
+            let units = self.string(
+                &member(&p, "minor_units"),
+                map.get("minor_units"),
+                Grammar::Integer,
+            )?;
+            if units.starts_with('-') {
+                self.fail(refused(&p, "budget must be nonnegative"));
+            }
+        }
+        Some(RecordComponent {
+            input: input?,
+            schema: schema?,
+            columns,
+            sum,
+            measure_field,
+            group,
+            date,
+            order,
+        })
+    }
+
+    fn record_filter(&mut self, path: &str, value: &Value) -> Option<RecordFilter> {
+        let map = self.object(
+            path,
+            value,
+            &["id", "input_id", "field", "kind", "targets"],
+            &[],
+        )?;
+        Some(RecordFilter {
+            id: self.id(&member(path, "id"), map.get("id"))?,
+            input: self.id(&member(path, "input_id"), map.get("input_id"))?,
+            field: self.id(&member(path, "field"), map.get("field"))?,
+            kind: self.choice(
+                &member(path, "kind"),
+                map.get("kind"),
+                &["text_contains", "enum", "date_range"],
+                None,
+            )?,
+            targets: self.ids(&member(path, "targets"), map.get("targets"), 1..=16)?,
         })
     }
 
@@ -1528,7 +1871,7 @@ impl Content {
             let declared = index(&input.fields, |field| &field.id, &path, "input field")?;
             fields.insert(&input.id, declared);
         }
-        index(
+        let record_schemas = index(
             &self.record_schemas,
             |schema| &schema.id,
             "$.content.record_schemas",
@@ -1616,6 +1959,91 @@ impl Content {
 
         for (position, view) in self.views.iter().enumerate() {
             let path = format!("$.content.views[{position}]");
+            if RECORD_KINDS.contains(&view.kind.as_str()) {
+                require(
+                    view.query.is_none() && view.command_id.is_none() && !view.text,
+                    &path,
+                    "records view has no query, command or text",
+                )?;
+                let records = view
+                    .records
+                    .as_ref()
+                    .ok_or_else(|| refused(&path, "records view requires records configuration"))?;
+                let input = inputs
+                    .get(records.input.as_str())
+                    .ok_or_else(|| refused(&path, "unknown records input"))?;
+                let schema = record_schemas
+                    .get(records.schema.as_str())
+                    .ok_or_else(|| refused(&path, "unknown record schema"))?;
+                require(
+                    input.record_input && input.fields == schema.fields,
+                    &path,
+                    "records input/schema mismatch",
+                )?;
+                let fields = &record_fields[records.schema.as_str()];
+                for id in records.columns.iter().chain(records.order.iter()) {
+                    require(
+                        fields.contains_key(id.as_str()),
+                        &path,
+                        "unknown records field",
+                    )?;
+                }
+                if let Some(id) = &records.order {
+                    require(
+                        !matches!(fields[id.as_str()].value_type, ValueType::Reference(_)),
+                        &path,
+                        "reference record ordering is not qualified",
+                    )?;
+                }
+                let measure = records
+                    .measure_field
+                    .as_ref()
+                    .and_then(|id| fields.get(id.as_str()));
+                if records.sum {
+                    require(
+                        measure.is_some_and(|field| {
+                            matches!(
+                                field.value_type,
+                                ValueType::Integer { .. } | ValueType::Money
+                            )
+                        }),
+                        &path,
+                        "record sum requires integer or money",
+                    )?;
+                }
+                if let Some(id) = &records.date {
+                    require(
+                        fields
+                            .get(id.as_str())
+                            .is_some_and(|f| matches!(f.value_type, ValueType::Date)),
+                        &path,
+                        "record trend requires date",
+                    )?;
+                }
+                if let Some(id) = &records.group {
+                    require(
+                        fields.get(id.as_str()).is_some_and(|f| {
+                            matches!(f.value_type, ValueType::Text | ValueType::Enum(_))
+                        }),
+                        &path,
+                        "record ranking requires text or enum",
+                    )?;
+                }
+                if view.kind == "record_budget" {
+                    require(
+                        records.sum
+                            && measure.is_some_and(|f| matches!(f.value_type, ValueType::Money)),
+                        &path,
+                        "record budget requires money sum",
+                    )?;
+                }
+                continue;
+            }
+            require(
+                view.records.is_none(),
+                &path,
+                "only records renderers carry records configuration",
+            )?;
             if view.kind == "form" {
                 let declared = view
                     .command_id
@@ -1647,6 +2075,47 @@ impl Content {
             }
         }
 
+        index(
+            &self.record_filters,
+            |filter| &filter.id,
+            "$.content.record_filters",
+            "record filter",
+        )?;
+        for filter in &self.record_filters {
+            let path = "$.content.record_filters";
+            require(
+                !views.contains_key(filter.id.as_str()),
+                path,
+                "filter id conflicts with view",
+            )?;
+            let input = inputs
+                .get(filter.input.as_str())
+                .ok_or_else(|| refused(path, "unknown records input"))?;
+            require(input.record_input, path, "filter requires records input")?;
+            let field = fields[filter.input.as_str()]
+                .get(filter.field.as_str())
+                .ok_or_else(|| refused(path, "unknown filter field"))?;
+            require(
+                matches!(
+                    (filter.kind.as_str(), &field.value_type),
+                    ("text_contains", ValueType::Text)
+                        | ("enum", ValueType::Enum(_))
+                        | ("date_range", ValueType::Date)
+                ),
+                path,
+                "record filter type mismatch",
+            )?;
+            for target in &filter.targets {
+                require(
+                    views
+                        .get(target.as_str())
+                        .and_then(|v| v.records.as_ref())
+                        .is_some_and(|r| r.input == filter.input),
+                    path,
+                    "record filter target/input mismatch",
+                )?;
+            }
+        }
         let layout = index(
             &self.layout,
             |position| &position.view_id,
@@ -1666,6 +2135,66 @@ impl Content {
                 &path,
                 "layout exceeds grid",
             )?;
+        }
+        if let Some(presentation) = &self.presentation {
+            let path = "$.content.presentation";
+            index(
+                &presentation.sections,
+                |section| &section.id,
+                path,
+                "presentation section",
+            )?;
+            index(
+                &presentation.actions,
+                |action| &action.id,
+                path,
+                "presentation action",
+            )?;
+            let mut placed = BTreeSet::new();
+            for section in &presentation.sections {
+                for id in &section.components {
+                    require(
+                        placed.insert(id.as_str()),
+                        path,
+                        "duplicate presentation component",
+                    )?;
+                    require(
+                        views.contains_key(id.as_str()),
+                        path,
+                        "unknown presentation component",
+                    )?;
+                }
+            }
+            let mut targets = BTreeSet::new();
+            let mut reachable = placed.clone();
+            for action in &presentation.actions {
+                require(
+                    views.contains_key(action.target.as_str()),
+                    path,
+                    "unknown presentation action target",
+                )?;
+                require(
+                    targets.insert((action.dialog, action.target.as_str())),
+                    path,
+                    "duplicate presentation action target",
+                )?;
+                if action.dialog {
+                    reachable.insert(action.target.as_str());
+                } else if !presentation.sections.is_empty() {
+                    require(
+                        placed.contains(action.target.as_str()),
+                        path,
+                        "navigation target is not placed",
+                    )?;
+                }
+            }
+            if !presentation.sections.is_empty() {
+                require(
+                    reachable.len() == views.len(),
+                    path,
+                    "presentation must reach every view",
+                )?;
+            }
         }
         for (slot, link) in self.links.iter().enumerate() {
             let known = views.contains_key(link.from_view.as_str())

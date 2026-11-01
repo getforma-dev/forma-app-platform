@@ -118,6 +118,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         .merge(composer::commands::router(auth.clone()))
         // APP-121: organization labels and personal shortcuts.
         .merge(composer::labels::router(auth.clone()))
+        .merge(composer::presentation::router(auth.clone()))
         // APP-123: cards made by you and pinned answers.
         .merge(composer::cards::router(auth))
         .merge(boxes::routes::router(boxes));

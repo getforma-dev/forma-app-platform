@@ -1,3 +1,5 @@
+import { recordComponentsFor } from '../record-components/controller';
+import { invalidatePresentation, disposePresentation } from '../presentation/presentation';
 import { WidgetCanvas, createCanvasItem, createCanvasSurface } from '../canvas-vendor/index';
 import { isShareKey, setConnected, sharingRequest } from '../sharing/api';
 import { fetchShared, replaceSharedParts } from './document';
@@ -34,12 +36,13 @@ function cardFor(document: Document, entry: ConnectedEntry): HTMLElement {
       node(document, 'div', {}, node(document, 'p', { class: 'share-policy' }, 'Connected · View only'), node(document, 'h2', {}, entry.title), node(document, 'p', { class: 'connected-owner' }, entry.owner_label)),
       node(document, 'a', { class: 'share-secondary', href: entry.href }, 'Open app'),
       node(document, 'button', { type: 'button', 'data-connected-remove': entry.id }, 'Remove from canvas')),
+    node(document, 'div', { 'data-app-presentation-header': '' }),
     node(document, 'p', { 'data-connected-loading': '', role: 'status' }, 'Checking live data…'));
 }
 /** Inventory and data are authorized independently. These are linked refs,
  * never local copies, ordinary work permissions or automatic share placement. */
 export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] = []): void {
-  type Target = { item: HTMLElement; card: HTMLElement; monitor: AuthorityMonitor | null; entry: ConnectedEntry; busy: boolean; epoch: number };
+  type Target = { records: ReturnType<typeof recordComponentsFor> | null; item: HTMLElement; card: HTMLElement; monitor: AuthorityMonitor | null; entry: ConnectedEntry; busy: boolean; epoch: number };
   const items = new Map<string, Target>();
   let busy = false;
   let generation = 0;
@@ -47,6 +50,8 @@ export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] =
   const removing = new Set<string>();
   function mask(target: Target, message: string): void {
     target.epoch += 1;
+    target.records?.invalidate();
+    invalidatePresentation(target.card);
     target.card.querySelector('[data-shared-parts]')?.remove();
     const title = target.card.querySelector('h2'); if (title) title.textContent = 'Private app';
     const owner = target.card.querySelector('.connected-owner'); if (owner) owner.textContent = '';
@@ -57,7 +62,7 @@ export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] =
   }
   const remove = (key: string) => {
     const target = items.get(key);
-    if (target) { target.monitor?.dispose(); host.remove(target.item); items.delete(key); }
+    if (target) { target.records?.dispose(); disposePresentation(target.card); target.monitor?.dispose(); host.remove(target.item); items.delete(key); }
   };
   async function refreshData(target: Target): Promise<void> {
     const key = target.entry.id;
@@ -70,7 +75,10 @@ export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] =
       const current = target.monitor?.current();
       if (!items.has(key) || epoch !== target.epoch || !current || current.version !== authority.version || !current.can_add_to_canvas || removing.has(key)) return;
       if (!props.available || !props.can_add_to_canvas || !props.added_to_canvas) { remove(key); return; }
+      target.records?.beforeRefresh();
       replaceSharedParts(target.card, props);
+      target.records ??= recordComponentsFor(target.card, { share: key });
+      target.records.afterRefresh();
       target.card.querySelector('[data-connected-loading]')?.remove();
       const title = target.card.querySelector('h2'); if (title) title.textContent = props.title;
       const owner = target.card.querySelector('.connected-owner'); if (owner) owner.textContent = props.owner_label;
@@ -79,8 +87,9 @@ export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] =
     finally { target.busy = false; }
   }
   function attach(entry: ConnectedEntry, card = cardFor(host.document, entry)): Target {
-    const target: Target = { entry, card, item: host.mount(entry.id, entry.title, card), monitor: null, busy: false, epoch: 0 };
+    const target: Target = { records: null, entry, card, item: host.mount(entry.id, entry.title, card), monitor: null, busy: false, epoch: 0 };
     items.set(entry.id, target);
+    card.addEventListener('forma:record-components-unavailable', () => { mask(target, 'This app is not available.'); target.monitor?.refresh(); });
     mask(target, 'Checking current access…');
     target.monitor = watchAuthority(entry.id, { document: host.document,
       active: () => target.item.dataset.attentionState !== 'parked',

@@ -48,6 +48,7 @@ pub mod lineage;
 pub mod matcher;
 pub mod model;
 pub mod plan;
+pub mod presentation;
 pub mod prompt;
 pub mod routes;
 pub mod shape;

@@ -13,6 +13,8 @@ use std::fmt;
 
 pub mod canonical;
 pub mod digest;
+pub mod record_receipt;
+pub use record_receipt::admit_record_components_receipt;
 pub mod validate;
 
 pub use canonical::{decode, encode};

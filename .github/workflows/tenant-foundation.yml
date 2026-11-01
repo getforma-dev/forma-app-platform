@@ -77,6 +77,8 @@ jobs:
         run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_LIVE_SHARING_REPORT="$RUNNER_TEMP/tenant-foundation/live-sharing.json" cargo test --locked -p forma-app-platform --lib storage::shared_campaign::native_live_sharing_campaign -- --ignored --exact --nocapture
       - name: Qualify account-only share identity and callback (APP-154)
         run: GENUI_SHARED_IDENTITY_REPORT="$RUNNER_TEMP/tenant-foundation/shared-identity.json" cargo test --locked -p forma-app-platform --lib auth::shared_tests::native_shared_identity_campaign -- --ignored --exact --nocapture
+      - name: Qualify record components, exact aggregates and guest release (APP-158/159)
+        run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_RECORD_COMPONENTS_REPORT="$RUNNER_TEMP/tenant-foundation/record-components.json" cargo test --locked -p forma-app-platform --lib storage::record_components_campaign::native_record_components_campaign -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

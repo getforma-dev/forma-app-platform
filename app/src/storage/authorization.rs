@@ -266,6 +266,28 @@ impl<'a> Transaction<'a> {
             .await?;
         Ok(transaction)
     }
+    /// Exact-share record projections use one read-only committed snapshot.
+    /// This entry has no member identity and cannot create a member Permit.
+    pub(super) async fn begin_shared_read_only(
+        pool: &Arc<RolePool>,
+        organization: &str,
+        account: &str,
+    ) -> Result<Self> {
+        require(pool.role() == Role::Data && valid_id(organization) && valid_id(account))?;
+        let tx = Self::open(
+            pool,
+            None,
+            organization,
+            "",
+            "",
+            READ_ONLY_BEGIN,
+            Some(Instant::now() + super::QUERY_HANDLER_DEADLINE),
+        )
+        .await?;
+        tx.query("SELECT set_config('genui.account_id',$1,true)", &[&account])
+            .await?;
+        Ok(tx)
+    }
     async fn open(
         pool: &Arc<RolePool>,
         request: Option<&'a TrustedRequest>,

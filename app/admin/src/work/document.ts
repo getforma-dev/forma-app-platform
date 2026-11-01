@@ -1,3 +1,5 @@
+import { recordComponentsFor } from '../record-components/controller';
+import { presentationFor } from '../presentation/presentation';
 import { renderRegions, type DocumentProps } from './render';
 import { submitCommand } from '../canvas/commands';
 import { subscribeLive, type LiveEvent } from '../canvas/live';
@@ -15,6 +17,8 @@ export function startDocument(): void {
   if (!root) return;
   const { app = '', work = '', path = '', csrf = '' } = root.dataset;
   if (!/^\/w\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/.test(path)) return;
+  const presentation = presentationFor(root);
+  const recordComponents = recordComponentsFor(root, { app, work });
   const status = root.querySelector<HTMLElement>('[data-document-state]');
   let stopped = false;
   let refreshing = false;
@@ -40,6 +44,8 @@ export function startDocument(): void {
   const stop = () => {
     if (stopped) return;
     stopped = true;
+    recordComponents.dispose();
+    presentation.dispose();
     unsubscribe();
     lifecycle.abort();
     window.clearInterval(timer);
@@ -80,6 +86,8 @@ export function startDocument(): void {
       if (props.action !== path || props.app !== app || props.work !== work) throw new Error('document mismatch');
       if (selectionAtRead !== selectionGeneration) { queued = true; return; }
       const regions = renderRegions(document, props);
+      recordComponents.beforeRefresh();
+      presentation.beforeRefresh();
       const incoming = regions.parts;
       const findForm = (scope: ParentNode, id: string) => Array.from(scope.querySelectorAll<HTMLElement>('[data-document-form]')).find(node => node.dataset.documentForm === id);
       const invalidate = (section: HTMLElement) => {
@@ -120,8 +128,11 @@ export function startDocument(): void {
       for (const select of incoming.querySelectorAll<HTMLSelectElement>('[data-document-selection] select')) selections.set(select.name, select.value);
       const title = root.querySelector<HTMLElement>('[data-document-title]');
       if (title && typeof props.title === 'string') title.textContent = props.title;
+      presentation.afterRefresh(props.presentation);
+      recordComponents.afterRefresh();
       say('Up to date.');
     } catch {
+      presentation.afterRefresh();
       if (!stopped) say('Updates are unavailable. Your unfinished form is kept. Try Refresh.');
     } finally {
       refreshing = false;
@@ -179,12 +190,17 @@ export function startDocument(): void {
       if (button) button.disabled = false;
     }
   }, { signal: lifecycle.signal });
+  root.addEventListener('forma:record-components-unavailable', () => { void refresh(); }, { signal: lifecycle.signal });
   const visible = () => { if (document.visibilityState === 'visible') void refresh(); };
   const requested = () => { void refresh(); };
   // The stream can omit a revocation hint; bounded reads also recheck access.
   const timer = window.setInterval(visible, 30_000);
   document.addEventListener('visibilitychange', visible);
   document.addEventListener('forma:document-refresh', requested);
+  document.addEventListener('forma:presentation-saved', event => {
+    const detail = (event as CustomEvent<{app: string; work: string}>).detail;
+    if (detail?.app === app && detail.work === work) void refresh();
+  }, { signal: lifecycle.signal });
   window.addEventListener('online', requested, { signal: lifecycle.signal });
   window.addEventListener('pagehide', event => {
     stop();

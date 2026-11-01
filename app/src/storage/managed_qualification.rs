@@ -118,7 +118,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "666f9d3626f2cb7d8998e0287631895785b85c007f99a33059a758ec42aacfaf",
+        "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
     ),
     // ADR-011 library (APP-094): the catalog pins every library fixture the
     // `seed-library` command places (each entry's `fixture_sha256`).
@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v18.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v19.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,8 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 197] = [
-    // ADR-013 D13.3: the root workspace's manifest (profiles) and lockfile.
+const SOURCES: [(&str, &[u8]); 205] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -223,6 +222,10 @@ const SOURCES: [(&str, &[u8]); 197] = [
     (
         "app/src/admission/mod.rs",
         include_bytes!("../admission/mod.rs"),
+    ),
+    (
+        "app/src/admission/record_receipt.rs",
+        include_bytes!("../admission/record_receipt.rs"),
     ),
     (
         "app/src/admission/tests.rs",
@@ -392,6 +395,10 @@ const SOURCES: [(&str, &[u8]); 197] = [
         include_bytes!("../composer/plan.rs"),
     ),
     (
+        "app/src/composer/presentation.rs",
+        include_bytes!("../composer/presentation.rs"),
+    ),
+    (
         "app/src/composer/prompt.rs",
         include_bytes!("../composer/prompt.rs"),
     ),
@@ -487,6 +494,14 @@ const SOURCES: [(&str, &[u8]); 197] = [
     (
         "app/src/query/receipt.rs",
         include_bytes!("../query/receipt.rs"),
+    ),
+    (
+        "app/src/query/record_components.rs",
+        include_bytes!("../query/record_components.rs"),
+    ),
+    (
+        "app/src/query/record_routes.rs",
+        include_bytes!("../query/record_routes.rs"),
     ),
     (
         "app/src/query/route_tests.rs",
@@ -621,6 +636,14 @@ const SOURCES: [(&str, &[u8]); 197] = [
         "app/src/storage/race_qualification.rs",
         include_bytes!("race_qualification.rs"),
     ),
+    (
+        "app/src/storage/record_components.rs",
+        include_bytes!("record_components.rs"),
+    ),
+    (
+        "app/src/storage/record_components_campaign.rs",
+        include_bytes!("record_components_campaign.rs"),
+    ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/rules.rs", include_bytes!("rules.rs")),
     ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
@@ -653,6 +676,14 @@ const SOURCES: [(&str, &[u8]); 197] = [
     (
         "app/src/storage/work_labels.rs",
         include_bytes!("work_labels.rs"),
+    ),
+    (
+        "app/src/storage/work_presentation.rs",
+        include_bytes!("work_presentation.rs"),
+    ),
+    (
+        "app/src/storage/work_presentation_checks.rs",
+        include_bytes!("work_presentation_checks.rs"),
     ),
     (
         "app/src/storage/workflows_campaign.rs",

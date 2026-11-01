@@ -1,0 +1,1132 @@
+{
+  "bounds": {
+    "bytes": 524288,
+    "rows": 2000
+  },
+  "campaign": "APP-158-159-record-components",
+  "checks": [
+    {
+      "name": "real admitted empty template gives released zero with empty state, no seeded records or model values",
+      "passed": true
+    },
+    {
+      "name": "five real command commits produce November4500/count3, CafeB2500/CafeA2000, month4500 and preset10000 budget45percent/5500remaining; half-open dates exclude October31/December1; typed receipt pins all5 revisions",
+      "passed": true
+    },
+    {
+      "name": "foreign tenant refuses snapshot/release; command after capture cannot mix rows in old result; subsequent snapshot includes commit and changes snapshot identity",
+      "passed": true
+    },
+    {
+      "name": "named external account reads exact shared record components through same confined engine; receipt identifies actual account/share; member/guest release types cannot substitute",
+      "passed": true
+    },
+    {
+      "name": "policy changes after execution deny both member and guest release; share revocation withholds already-computed guest values",
+      "passed": true
+    },
+    {
+      "name": "filter-before-page finds the older CafeB saved record behind202 newer real command commits; total follows same explicit filter targets",
+      "passed": true
+    },
+    {
+      "name": "over2000-row operator boundary fixture is refused before row materialization; no partial result or fabricated total",
+      "passed": true
+    },
+    {
+      "name": "expired execution deadline launches no child and yields no values; member revocation denies previously computed release and new snapshot before bounds/data reads",
+      "passed": true
+    }
+  ],
+  "definition": {
+    "commands": [
+      {
+        "id": "add",
+        "operation": "create",
+        "record_schema_id": "meal",
+        "transitions": [],
+        "writable_fields": [
+          "restaurant",
+          "amount",
+          "date",
+          "notes"
+        ]
+      }
+    ],
+    "default_layout": [
+      {
+        "column": 0,
+        "row": 0,
+        "view_id": "guide",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 1,
+        "view_id": "total",
+        "width": 6
+      },
+      {
+        "column": 6,
+        "row": 1,
+        "view_id": "budget",
+        "width": 6
+      },
+      {
+        "column": 0,
+        "row": 2,
+        "view_id": "monthly",
+        "width": 6
+      },
+      {
+        "column": 6,
+        "row": 2,
+        "view_id": "restaurants",
+        "width": 6
+      },
+      {
+        "column": 0,
+        "row": 3,
+        "view_id": "ledger",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 4,
+        "view_id": "add",
+        "width": 12
+      }
+    ],
+    "description": "Track meals, restaurants, spending, and a visible preset dining budget.",
+    "inputs": [
+      {
+        "contract_id": "meal_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "restaurant",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "amount",
+            "nullable": false,
+            "value_type": {
+              "currency": "USD",
+              "minor_unit_exponent": 2,
+              "type": "money"
+            }
+          },
+          {
+            "id": "date",
+            "nullable": false,
+            "value_type": {
+              "type": "date"
+            }
+          },
+          {
+            "id": "notes",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          }
+        ],
+        "id": "meals",
+        "kind": "records"
+      }
+    ],
+    "links": [],
+    "presentation": {
+      "actions": [
+        {
+          "behavior": "dialog",
+          "id": "primary",
+          "label": "Add meal",
+          "target": "add"
+        }
+      ],
+      "description": "Track meals, restaurants, spending, and a visible preset dining budget.",
+      "sections": [
+        {
+          "components": [
+            "guide",
+            "total",
+            "budget"
+          ],
+          "id": "overview"
+        },
+        {
+          "components": [
+            "monthly",
+            "restaurants"
+          ],
+          "id": "insights",
+          "title": "Spending patterns"
+        },
+        {
+          "components": [
+            "ledger"
+          ],
+          "id": "history",
+          "title": "Meal history"
+        }
+      ],
+      "theme": {
+        "accent": "green",
+        "density": "comfortable",
+        "font": "default",
+        "mode": "default"
+      },
+      "version": 1
+    },
+    "record_filters": [
+      {
+        "field": "restaurant",
+        "id": "restaurant_filter",
+        "input_id": "meals",
+        "kind": "text_contains",
+        "targets": [
+          "ledger",
+          "total",
+          "monthly",
+          "restaurants",
+          "budget"
+        ]
+      },
+      {
+        "field": "date",
+        "id": "date_filter",
+        "input_id": "meals",
+        "kind": "date_range",
+        "targets": [
+          "ledger",
+          "total",
+          "monthly",
+          "restaurants",
+          "budget"
+        ]
+      }
+    ],
+    "record_schemas": [
+      {
+        "fields": [
+          {
+            "id": "restaurant",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "amount",
+            "nullable": false,
+            "value_type": {
+              "currency": "USD",
+              "minor_unit_exponent": 2,
+              "type": "money"
+            }
+          },
+          {
+            "id": "date",
+            "nullable": false,
+            "value_type": {
+              "type": "date"
+            }
+          },
+          {
+            "id": "notes",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          }
+        ],
+        "id": "meal",
+        "version": 1
+      }
+    ],
+    "title": "Dining tracker",
+    "views": [
+      {
+        "command_id": "add",
+        "id": "add",
+        "kind": "form",
+        "renderer_version": 1,
+        "title": "Add meal"
+      },
+      {
+        "id": "guide",
+        "kind": "note",
+        "renderer_version": 1,
+        "text": "Record a meal to see actual spending. The budget is a preset USD 100 comparison. Filters apply to every spending component; date ranges include the start and exclude the end.",
+        "title": "Getting started"
+      },
+      {
+        "id": "ledger",
+        "kind": "records_list",
+        "records": {
+          "columns": [
+            "restaurant",
+            "amount",
+            "date",
+            "notes"
+          ],
+          "input_id": "meals",
+          "limit": 50,
+          "schema_id": "meal",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Meals"
+      },
+      {
+        "id": "total",
+        "kind": "record_summary",
+        "records": {
+          "input_id": "meals",
+          "measure": {
+            "field": "amount",
+            "op": "sum"
+          },
+          "schema_id": "meal",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Total spending"
+      },
+      {
+        "id": "monthly",
+        "kind": "record_trend",
+        "records": {
+          "date_field": "date",
+          "input_id": "meals",
+          "measure": {
+            "field": "amount",
+            "op": "sum"
+          },
+          "schema_id": "meal",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Monthly spending"
+      },
+      {
+        "id": "restaurants",
+        "kind": "record_ranking",
+        "records": {
+          "group_field": "restaurant",
+          "input_id": "meals",
+          "limit": 5,
+          "measure": {
+            "field": "amount",
+            "op": "sum"
+          },
+          "schema_id": "meal",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "By restaurant"
+      },
+      {
+        "id": "budget",
+        "kind": "record_budget",
+        "records": {
+          "budget": {
+            "currency": "USD",
+            "minor_unit_exponent": 2,
+            "minor_units": "10000",
+            "origin": "preset"
+          },
+          "input_id": "meals",
+          "measure": {
+            "field": "amount",
+            "op": "sum"
+          },
+          "schema_id": "meal",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Preset dining budget"
+      }
+    ]
+  },
+  "guest_receipt": {
+    "actor": {
+      "account_id": "71524bff-2070-4f76-801d-8f069d611e6c",
+      "kind": "guest",
+      "share_id": "d5afe170-90cb-4ddb-90b1-c71aaa80ddb0",
+      "share_version": 1
+    },
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "components": [
+      {
+        "budget": null,
+        "kind": "records_list",
+        "population": 4,
+        "truncated_page": false,
+        "view_id": "ledger"
+      },
+      {
+        "budget": null,
+        "kind": "record_summary",
+        "population": 4,
+        "truncated_page": false,
+        "view_id": "total"
+      },
+      {
+        "budget": null,
+        "kind": "record_trend",
+        "population": 4,
+        "truncated_page": false,
+        "view_id": "monthly"
+      },
+      {
+        "budget": null,
+        "kind": "record_ranking",
+        "population": 4,
+        "truncated_page": false,
+        "view_id": "restaurants"
+      },
+      {
+        "budget": {
+          "currency": "USD",
+          "minor_unit_exponent": 2,
+          "minor_units": "10000",
+          "origin": "preset"
+        },
+        "kind": "record_budget",
+        "population": 4,
+        "truncated_page": false,
+        "view_id": "budget"
+      }
+    ],
+    "definition_digest": "sha256:cb794332c73cef5540bf02113c5b8018276832cb0537f0cf7b40c927658f4c0b",
+    "digest": "sha256:6c19280cd43cb1a35fa0d0bde1f92c9b811d7bc91184347d7e821bd144ad567d",
+    "kind": "record_components_receipt",
+    "operator_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "parameters": {
+      "filter_epoch": 7,
+      "filters": [
+        {
+          "end": "2026-12-01",
+          "id": "date_filter",
+          "start": "2026-11-01"
+        }
+      ]
+    },
+    "partial": false,
+    "policy_epoch": 1,
+    "publication_id": "c589acaa-2a38-4830-a867-ee0e69e3de18",
+    "result_digest": "sha256:b82fdb9375b43fd8b6109d80fe67482148ca159c6b95f1c801fa9a8c6dba084b",
+    "schema_version": 1,
+    "snapshot": [
+      {
+        "collection_id": "d342e0e7-a8e5-4673-8880-06eee917c3f3",
+        "input_id": "meals",
+        "records": [
+          {
+            "commit_sequence": 7,
+            "record_id": "00000000-0000-4000-8000-000000000006",
+            "version": 1
+          },
+          {
+            "commit_sequence": 6,
+            "record_id": "00000000-0000-4000-8000-000000000005",
+            "version": 1
+          },
+          {
+            "commit_sequence": 5,
+            "record_id": "00000000-0000-4000-8000-000000000004",
+            "version": 1
+          },
+          {
+            "commit_sequence": 4,
+            "record_id": "00000000-0000-4000-8000-000000000003",
+            "version": 1
+          },
+          {
+            "commit_sequence": 3,
+            "record_id": "00000000-0000-4000-8000-000000000002",
+            "version": 1
+          },
+          {
+            "commit_sequence": 2,
+            "record_id": "00000000-0000-4000-8000-000000000001",
+            "version": 1
+          }
+        ],
+        "schema_id": "meal",
+        "schema_version": 1
+      }
+    ],
+    "snapshot_digest": "sha256:4b5fa6993c8e20410f0dbb8e339e5f5d2c4b8f8a1ae828a31b66bf7f88a6568d",
+    "total_scope": "full_authorized_filtered_collection",
+    "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+    "work_version": 1
+  },
+  "initial_command_outcomes": [
+    {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "audit_event_id": "2391959c-89b3-4073-a582-c8b9ea968871",
+      "command_id": "add",
+      "commit_sequence": 2,
+      "committed_at": "2026-11-01T23:13:54Z",
+      "idempotency_key": "00000000000000000000000000000001",
+      "kind": "command_outcome",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "payload_digest": "sha256:23e40840ca4ec932b470e47f47890eaa55176cd18bb6a11c31a693f45cfafb2d",
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "record_id": "00000000-0000-4000-8000-000000000001",
+      "record_version": 1,
+      "retry_expires_at": "2026-11-02T23:13:54Z",
+      "schema_version": 1,
+      "state": "committed",
+      "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+      "work_version": 1
+    },
+    {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "audit_event_id": "8bb6e8df-531f-4198-b835-e14fcdd72b4f",
+      "command_id": "add",
+      "commit_sequence": 3,
+      "committed_at": "2026-11-01T23:13:54Z",
+      "idempotency_key": "00000000000000000000000000000002",
+      "kind": "command_outcome",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "payload_digest": "sha256:6008e0ea8ea9bddf70fb89ec1219daa06c6d0bb831a96423c4c06619a58c3b9c",
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "record_id": "00000000-0000-4000-8000-000000000002",
+      "record_version": 1,
+      "retry_expires_at": "2026-11-02T23:13:54Z",
+      "schema_version": 1,
+      "state": "committed",
+      "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+      "work_version": 1
+    },
+    {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "audit_event_id": "9bbf4957-076c-4701-8d54-8104f7b5b905",
+      "command_id": "add",
+      "commit_sequence": 4,
+      "committed_at": "2026-11-01T23:13:55Z",
+      "idempotency_key": "00000000000000000000000000000003",
+      "kind": "command_outcome",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "payload_digest": "sha256:b64c71e2b9a8aac794230d63af1006aed38a96433f4e69e2f9fe0ce606d1c787",
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "record_id": "00000000-0000-4000-8000-000000000003",
+      "record_version": 1,
+      "retry_expires_at": "2026-11-02T23:13:55Z",
+      "schema_version": 1,
+      "state": "committed",
+      "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+      "work_version": 1
+    },
+    {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "audit_event_id": "10427de1-42e7-48c1-8508-778179431451",
+      "command_id": "add",
+      "commit_sequence": 5,
+      "committed_at": "2026-11-01T23:13:55Z",
+      "idempotency_key": "00000000000000000000000000000004",
+      "kind": "command_outcome",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "payload_digest": "sha256:f8569f7b48680c64e5667387a277dcfb6fd5f98ca20cf17bdbe5794c0f699ef2",
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "record_id": "00000000-0000-4000-8000-000000000004",
+      "record_version": 1,
+      "retry_expires_at": "2026-11-02T23:13:55Z",
+      "schema_version": 1,
+      "state": "committed",
+      "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+      "work_version": 1
+    },
+    {
+      "app_id": "00000000-0000-4000-8000-000000000065",
+      "audit_event_id": "14ad5a67-09ea-4f89-9046-0821085947af",
+      "command_id": "add",
+      "commit_sequence": 6,
+      "committed_at": "2026-11-01T23:13:55Z",
+      "idempotency_key": "00000000000000000000000000000005",
+      "kind": "command_outcome",
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "payload_digest": "sha256:95e9299345f327546cbbe5a807134289af488bdfaaa4bef4a30db867a6f0eeef",
+      "principal_id": "00000000-0000-4000-8000-000000000066",
+      "record_id": "00000000-0000-4000-8000-000000000005",
+      "record_version": 1,
+      "retry_expires_at": "2026-11-02T23:13:55Z",
+      "schema_version": 1,
+      "state": "committed",
+      "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+      "work_version": 1
+    }
+  ],
+  "initial_result": {
+    "components": [
+      {
+        "budget": null,
+        "columns": [
+          {
+            "id": "restaurant",
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "amount",
+            "value_type": {
+              "currency": "USD",
+              "minor_unit_exponent": 2,
+              "type": "money"
+            }
+          },
+          {
+            "id": "date",
+            "value_type": {
+              "type": "date"
+            }
+          },
+          {
+            "id": "notes",
+            "value_type": {
+              "type": "text"
+            }
+          }
+        ],
+        "groups": [],
+        "id": "ledger",
+        "kind": "records_list",
+        "partial": false,
+        "population": 3,
+        "rows": [
+          {
+            "cells": [
+              {
+                "type": "text",
+                "value": "Cafe B"
+              },
+              {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "2500",
+                "type": "money"
+              },
+              {
+                "type": "date",
+                "value": "2026-11-04"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "id": "00000000-0000-4000-8000-000000000004",
+            "sequence": 5,
+            "version": 1
+          },
+          {
+            "cells": [
+              {
+                "type": "text",
+                "value": "Cafe A"
+              },
+              {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "750",
+                "type": "money"
+              },
+              {
+                "type": "date",
+                "value": "2026-11-03"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "id": "00000000-0000-4000-8000-000000000003",
+            "sequence": 4,
+            "version": 1
+          },
+          {
+            "cells": [
+              {
+                "type": "text",
+                "value": "Cafe A"
+              },
+              {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "1250",
+                "type": "money"
+              },
+              {
+                "type": "date",
+                "value": "2026-11-02"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "id": "00000000-0000-4000-8000-000000000002",
+            "sequence": 3,
+            "version": 1
+          }
+        ],
+        "state": "ready",
+        "total_scope": "full_authorized_filtered_collection",
+        "truncated_page": false,
+        "value": null
+      },
+      {
+        "budget": null,
+        "columns": [],
+        "groups": [],
+        "id": "total",
+        "kind": "record_summary",
+        "partial": false,
+        "population": 3,
+        "rows": [],
+        "state": "ready",
+        "total_scope": "full_authorized_filtered_collection",
+        "truncated_page": false,
+        "value": "4500",
+        "value_type": {
+          "currency": "USD",
+          "minor_unit_exponent": 2,
+          "type": "money"
+        }
+      },
+      {
+        "budget": null,
+        "columns": [],
+        "groups": [
+          {
+            "count": 3,
+            "label": "2026-11",
+            "missing": false,
+            "value": "4500"
+          }
+        ],
+        "id": "monthly",
+        "kind": "record_trend",
+        "partial": false,
+        "population": 3,
+        "rows": [],
+        "state": "ready",
+        "total_scope": "full_authorized_filtered_collection",
+        "truncated_page": false,
+        "value": "4500",
+        "value_type": {
+          "currency": "USD",
+          "minor_unit_exponent": 2,
+          "type": "money"
+        }
+      },
+      {
+        "budget": null,
+        "columns": [],
+        "groups": [
+          {
+            "count": 1,
+            "label": "Cafe B",
+            "missing": false,
+            "value": "2500"
+          },
+          {
+            "count": 2,
+            "label": "Cafe A",
+            "missing": false,
+            "value": "2000"
+          }
+        ],
+        "id": "restaurants",
+        "kind": "record_ranking",
+        "partial": false,
+        "population": 3,
+        "rows": [],
+        "state": "ready",
+        "total_scope": "full_authorized_filtered_collection",
+        "truncated_page": false,
+        "value": "4500",
+        "value_type": {
+          "currency": "USD",
+          "minor_unit_exponent": 2,
+          "type": "money"
+        }
+      },
+      {
+        "budget": {
+          "minor_units": "10000",
+          "origin": "preset",
+          "ratio_basis_points": "4500",
+          "remaining_minor_units": "5500"
+        },
+        "columns": [],
+        "groups": [],
+        "id": "budget",
+        "kind": "record_budget",
+        "partial": false,
+        "population": 3,
+        "rows": [],
+        "state": "ready",
+        "total_scope": "full_authorized_filtered_collection",
+        "truncated_page": false,
+        "value": "4500",
+        "value_type": {
+          "currency": "USD",
+          "minor_unit_exponent": 2,
+          "type": "money"
+        }
+      }
+    ],
+    "elapsed_ms": 0,
+    "filter_epoch": 7,
+    "outcome": "record_components"
+  },
+  "member_receipt": {
+    "actor": {
+      "kind": "member",
+      "membership_epoch": 1,
+      "principal_id": "00000000-0000-4000-8000-000000000066"
+    },
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "components": [
+      {
+        "budget": null,
+        "kind": "records_list",
+        "population": 3,
+        "truncated_page": false,
+        "view_id": "ledger"
+      },
+      {
+        "budget": null,
+        "kind": "record_summary",
+        "population": 3,
+        "truncated_page": false,
+        "view_id": "total"
+      },
+      {
+        "budget": null,
+        "kind": "record_trend",
+        "population": 3,
+        "truncated_page": false,
+        "view_id": "monthly"
+      },
+      {
+        "budget": null,
+        "kind": "record_ranking",
+        "population": 3,
+        "truncated_page": false,
+        "view_id": "restaurants"
+      },
+      {
+        "budget": {
+          "currency": "USD",
+          "minor_unit_exponent": 2,
+          "minor_units": "10000",
+          "origin": "preset"
+        },
+        "kind": "record_budget",
+        "population": 3,
+        "truncated_page": false,
+        "view_id": "budget"
+      }
+    ],
+    "definition_digest": "sha256:cb794332c73cef5540bf02113c5b8018276832cb0537f0cf7b40c927658f4c0b",
+    "digest": "sha256:60ad950108f87ed5c316755759228fb35d2cd284556d65774ea3f9da77e0fd9e",
+    "kind": "record_components_receipt",
+    "operator_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "parameters": {
+      "filter_epoch": 7,
+      "filters": [
+        {
+          "end": "2026-12-01",
+          "id": "date_filter",
+          "start": "2026-11-01"
+        }
+      ]
+    },
+    "partial": false,
+    "policy_epoch": 1,
+    "publication_id": "c589acaa-2a38-4830-a867-ee0e69e3de18",
+    "result_digest": "sha256:b6728bb11dec11876f3f244656d9e68842155510a26165eed94e44cd9e7f4fb7",
+    "schema_version": 1,
+    "snapshot": [
+      {
+        "collection_id": "d342e0e7-a8e5-4673-8880-06eee917c3f3",
+        "input_id": "meals",
+        "records": [
+          {
+            "commit_sequence": 6,
+            "record_id": "00000000-0000-4000-8000-000000000005",
+            "version": 1
+          },
+          {
+            "commit_sequence": 5,
+            "record_id": "00000000-0000-4000-8000-000000000004",
+            "version": 1
+          },
+          {
+            "commit_sequence": 4,
+            "record_id": "00000000-0000-4000-8000-000000000003",
+            "version": 1
+          },
+          {
+            "commit_sequence": 3,
+            "record_id": "00000000-0000-4000-8000-000000000002",
+            "version": 1
+          },
+          {
+            "commit_sequence": 2,
+            "record_id": "00000000-0000-4000-8000-000000000001",
+            "version": 1
+          }
+        ],
+        "schema_id": "meal",
+        "schema_version": 1
+      }
+    ],
+    "snapshot_digest": "sha256:2e8cf8909975a8a127279a92ebfdc48650a0eb063279956e3efa78bdbf7248b9",
+    "total_scope": "full_authorized_filtered_collection",
+    "work_id": "9610deab-81e7-483a-ab94-2d1097ad50df",
+    "work_version": 1
+  },
+  "parameters": {
+    "filter_epoch": 7,
+    "filters": [
+      {
+        "end": "2026-12-01",
+        "id": "date_filter",
+        "start": "2026-11-01"
+      }
+    ]
+  },
+  "passed": true,
+  "provider_identity": "synthetic-test-proof-only",
+  "record_operator_version": 1,
+  "snapshot_datasets": [
+    {
+      "fields": [
+        {
+          "id": "restaurant",
+          "nullable": false,
+          "value_type": {
+            "type": "text"
+          }
+        },
+        {
+          "id": "amount",
+          "nullable": false,
+          "value_type": {
+            "currency": "USD",
+            "minor_unit_exponent": 2,
+            "type": "money"
+          }
+        },
+        {
+          "id": "date",
+          "nullable": false,
+          "value_type": {
+            "type": "date"
+          }
+        },
+        {
+          "id": "notes",
+          "nullable": true,
+          "value_type": {
+            "type": "text"
+          }
+        }
+      ],
+      "input_id": "meals",
+      "rows": [
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "sequence": 6,
+          "values": [
+            {
+              "field_id": "restaurant",
+              "value": {
+                "type": "text",
+                "value": "Outside"
+              }
+            },
+            {
+              "field_id": "amount",
+              "value": {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "9999",
+                "type": "money"
+              }
+            },
+            {
+              "field_id": "date",
+              "value": {
+                "type": "date",
+                "value": "2026-12-01"
+              }
+            },
+            {
+              "field_id": "notes",
+              "value": {
+                "type": "null"
+              }
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "sequence": 5,
+          "values": [
+            {
+              "field_id": "restaurant",
+              "value": {
+                "type": "text",
+                "value": "Cafe B"
+              }
+            },
+            {
+              "field_id": "amount",
+              "value": {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "2500",
+                "type": "money"
+              }
+            },
+            {
+              "field_id": "date",
+              "value": {
+                "type": "date",
+                "value": "2026-11-04"
+              }
+            },
+            {
+              "field_id": "notes",
+              "value": {
+                "type": "null"
+              }
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "sequence": 4,
+          "values": [
+            {
+              "field_id": "restaurant",
+              "value": {
+                "type": "text",
+                "value": "Cafe A"
+              }
+            },
+            {
+              "field_id": "amount",
+              "value": {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "750",
+                "type": "money"
+              }
+            },
+            {
+              "field_id": "date",
+              "value": {
+                "type": "date",
+                "value": "2026-11-03"
+              }
+            },
+            {
+              "field_id": "notes",
+              "value": {
+                "type": "null"
+              }
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "sequence": 3,
+          "values": [
+            {
+              "field_id": "restaurant",
+              "value": {
+                "type": "text",
+                "value": "Cafe A"
+              }
+            },
+            {
+              "field_id": "amount",
+              "value": {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "1250",
+                "type": "money"
+              }
+            },
+            {
+              "field_id": "date",
+              "value": {
+                "type": "date",
+                "value": "2026-11-02"
+              }
+            },
+            {
+              "field_id": "notes",
+              "value": {
+                "type": "null"
+              }
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "sequence": 2,
+          "values": [
+            {
+              "field_id": "restaurant",
+              "value": {
+                "type": "text",
+                "value": "Outside"
+              }
+            },
+            {
+              "field_id": "amount",
+              "value": {
+                "currency": "USD",
+                "minor_unit_exponent": 2,
+                "minor_units": "9999",
+                "type": "money"
+              }
+            },
+            {
+              "field_id": "date",
+              "value": {
+                "type": "date",
+                "value": "2026-10-31"
+              }
+            },
+            {
+              "field_id": "notes",
+              "value": {
+                "type": "null"
+              }
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "schema_id": "meal"
+    }
+  ]
+}

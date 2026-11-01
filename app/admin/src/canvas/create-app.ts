@@ -176,13 +176,14 @@ export function openCreateApp(document_: Document): void {
     });
 }
 
-/** The empty canvas's create choice opens the modal instead of the intent bar. */
+/** Both first-run and persistent Create controls open the same admitted catalog. */
 export function startCreateApp(document_: Document): void {
-  const button = document_.querySelector<HTMLElement>('[data-empty-describe]');
-  if (!button || button.dataset.createWired) return;
-  button.dataset.createWired = 'true';
-  button.addEventListener('click', (event) => {
-    event.preventDefault();
-    openCreateApp(document_);
-  });
+  for (const button of document_.querySelectorAll<HTMLElement>('[data-empty-describe], [data-create-app]')) {
+    if (button.dataset.createWired) continue;
+    button.dataset.createWired = 'true';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      openCreateApp(document_);
+    });
+  }
 }

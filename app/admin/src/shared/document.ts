@@ -1,3 +1,5 @@
+import { recordComponentsFor } from '../record-components/controller';
+import { presentationFor, invalidatePresentation } from '../presentation/presentation';
 import { isShareKey, canvasPath, sharingRequest } from '../sharing/api';
 import { renderReadOnlyRegions, type ReadOnlyProps } from '../work/render';
 import { watchAuthority, type AuthorityMonitor } from './authority';
@@ -22,6 +24,8 @@ export async function fetchShared(key: string): Promise<SharedJson> {
   return sharedJson(await sharingRequest(`/s/${key}`), key);
 }
 export function replaceSharedParts(root: HTMLElement, props: ReadOnlyProps): void {
+  const presentation = presentationFor(root);
+  presentation.beforeRefresh();
   // Preserve receipt disclosure while refreshing the authoritative values.
   const opened = new Set(Array.from(root.querySelectorAll<HTMLElement>('[data-view]')).filter(view => view.querySelector('details')?.open).map(view => view.dataset.view));
   const replacement = renderReadOnlyRegions(root.ownerDocument, props);
@@ -31,6 +35,7 @@ export function replaceSharedParts(root: HTMLElement, props: ReadOnlyProps): voi
   }
   const current = root.querySelector('[data-shared-parts]');
   if (current) current.replaceWith(replacement); else (root.querySelector('[data-shared-content]') ?? root).append(replacement);
+  presentation.afterRefresh(props.presentation);
 }
 export function startSharedPage(document_: Document = document): void {
   const root = document_.querySelector<HTMLElement>('[data-shared-page]');
@@ -44,7 +49,10 @@ export function startSharedPage(document_: Document = document): void {
   let wasAvailable = !!root.querySelector('[data-shared-parts]');
   let monitor: AuthorityMonitor | null = null;
   const say = (message: string) => { if (status) status.textContent = message; };
+  const recordComponents = recordComponentsFor(root, { share: key });
   function unavailable(message: string): void {
+    recordComponents.invalidate();
+    invalidatePresentation(root!);
     root!.querySelector('[data-shared-parts]')?.remove();
     const title = root!.querySelector('h1'); if (title) title.textContent = 'Private app';
     const owner = root!.querySelector<HTMLElement>('.shared-by'); if (owner) owner.hidden = true;
@@ -70,7 +78,9 @@ export function startSharedPage(document_: Document = document): void {
       }
       if (!wasAvailable) { wasAvailable = true; monitor?.refresh(); return; }
       if (!authority || monitor?.current()?.version !== authority.version) return;
+      recordComponents.beforeRefresh();
       replaceSharedParts(root!, props);
+      recordComponents.afterRefresh();
       if (accept) { accept.hidden = true; accept.disabled = true; }
       const title = root!.querySelector('h1'); if (title) title.textContent = props.title;
       const owner = root!.querySelector<HTMLElement>('.shared-by');
@@ -94,6 +104,7 @@ export function startSharedPage(document_: Document = document): void {
       }
     } finally { refreshing = false; }
   }
+  root.addEventListener('forma:record-components-unavailable', () => { generation++; unavailable('This app is not available.'); monitor?.refresh(); });
   // Native markup may have arrived in a hidden tab or from a slow navigation.
   // It receives a fresh browser authorization lease before being presented.
   if (wasAvailable) unavailable('Checking current access…');

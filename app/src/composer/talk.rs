@@ -1070,6 +1070,7 @@ mod tests {
             commands: Vec::new(),
         }];
         let outline = WorkOutline {
+            presentation: None,
             title: "Expenses".into(),
             description: String::new(),
             views: vec![WorkView {

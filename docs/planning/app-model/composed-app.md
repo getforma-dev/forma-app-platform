@@ -1,6 +1,6 @@
 # From cards to a composed app
 
-Accepted direction, 2026-11-01; implementation planned in [ADR-015](../../architecture/ADR-015-COMPOSED-APP-PRESENTATION.md). The eight user-supplied screenshots guide hierarchy and interaction. Their private preview address and original image files are not copied into this repository. This brief does not claim competitive feature parity or an implemented expense dashboard.
+Accepted direction, 2026-11-01; implementation follows [ADR-015](../../architecture/ADR-015-COMPOSED-APP-PRESENTATION.md). The eight user-supplied screenshots guide hierarchy and interaction. Their private preview address and original image files are not copied into this repository. The [implementation record](../COMPOSED-APP-IMPLEMENTATION-2026-11-01.md) records the actual delivered subset and qualification; this brief does not claim competitive feature parity.
 
 ## What someone should experience
 
@@ -52,7 +52,7 @@ Published work is still the exact `(organization_id, app_id, work_id)` with its 
 
 ## Build and prove it
 
-1. Complete the genuine clean-trial continuation already owned by APP-139/140. Do not replace the November 2 demonstration with a newly staged dashboard.
+1. Implement and deploy the composed-app capabilities now, as Victor subsequently directed. Continue the genuine APP-139/140 recipient trial independently; synthetic dashboard qualification does not substitute for that trial.
 2. APP-155 establishes a coherent shell using current supported components and deterministic layout fallback. APP-156 adds real actions and the target picker; APP-157 adds persisted safe themes.
 3. APP-158/159 implement record components and qualified calculations. Reuse the existing bounded query, record snapshot and receipt contracts; never derive an all-record total from the currently visible page.
 4. APP-160 creates a synthetic meal tracker through normal admission and real record submission. Its metric, trend, ranking and budget values must be recomputable from actual saved inputs and receipts. It is a test scenario, not a special-case renderer or fake customer dataset.

@@ -1,0 +1,67 @@
+{
+  "scope": "Local focused regressions; no browser, hosted identity or deployment claim",
+  "passed": true,
+  "checks": [
+    {
+      "command": "cargo test --lib --locked commands::",
+      "passed": 23,
+      "failed": 0,
+      "private_log": {
+        "name": "money-final-rust.log",
+        "bytes": 2777,
+        "sha256": "3d706f0ecfc46a5e1723301cdeb8a7cdaadf1fdfbcebd0c8018c30c2b97f9578"
+      }
+    },
+    {
+      "command": "npx tsx --test test/money-form.test.ts test/command-outcome.test.ts",
+      "passed": 7,
+      "failed": 0,
+      "private_log": {
+        "name": "money-final-ts.log",
+        "bytes": 1748,
+        "sha256": "8473d620fe8e43e4a72ac85a37871b7aeb62e427c9f137ef128ab4606fab6cdc"
+      }
+    },
+    {
+      "command": "cargo test --lib --locked vectors_match_contracts_lock",
+      "passed": 2,
+      "failed": 0,
+      "private_log": {
+        "name": "composed-edition-tests.log",
+        "bytes": 782,
+        "sha256": "0a373c70bc7fb4f1787bbc1fd99db320da0a1db479ffa9c655fb42f48ad7fcbc"
+      }
+    },
+    {
+      "command": "cargo test --lib --locked date_and_timestamp_values_require_real_calendar_days_and_utc_clock_times",
+      "passed": 1,
+      "failed": 0,
+      "private_log": {
+        "name": "calendar-form-rust.log",
+        "bytes": 695,
+        "sha256": "27f6857fb0d9fd3e2a012811c550dc316680925722c3d1026ebf0c255c457ca6"
+      }
+    }
+  ],
+  "form_semantics": {
+    "display": "12.50",
+    "wire_minor_units": "1250",
+    "currency": "USD",
+    "minor_unit_exponent": 2,
+    "arithmetic": "integer strings; no binary floating point",
+    "json_boundary": "No conversion; typed values stay unchanged until independent storage compatibility validation",
+    "integer_decimal_fields": "existing semantics preserved"
+  },
+  "refusals": [
+    "excess precision",
+    "exponent notation",
+    "punctuation/currency prefix",
+    "noncanonical noninteger JSON minor units at storage compatibility check",
+    "more than 38 digits"
+  ],
+  "limits": [
+    "Actual native keyboard and accessibility-tree behavior is qualified by APP-160 separately.",
+    "No real screen-reader announcement is inferred from these tests."
+  ],
+  "calendar_boundary": "Storage uses the existing contract grammar to refuse impossible days/months, invalid leap days and out-of-range UTC clocks before a command can persist them."
+}

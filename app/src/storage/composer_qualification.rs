@@ -1306,6 +1306,16 @@ async fn campaign() {
         "APP-141: renaming the second work leaves its sibling's title, definition and layout unchanged; names survive authorized reads; stale and concurrent versions conflict, foreign/ungranted callers deny, and the saved-work authority version stays unchanged",
     );
 
+    super::work_presentation_checks::run(
+        &fixture,
+        &stores,
+        &template_member,
+        &first_template,
+        &second_template,
+        &mut checks,
+    )
+    .await;
+
     // A second rename may wait on the exact work after its entitlement
     // precheck. Expiry while queued must leave the name and audit unchanged.
     let labels_before = chain_events(&fixture, "workspace", "app.labeled").await;

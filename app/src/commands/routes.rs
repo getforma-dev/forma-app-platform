@@ -290,7 +290,7 @@ pub(crate) fn typed_value(spec: &Value, raw: &str) -> Option<Value> {
             json!({"type": "decimal", "coefficient": raw, "scale": spec.get("scale")?, "unit": spec.get("unit")?})
         }
         "money" => {
-            json!({"type": "money", "minor_units": raw, "currency": spec.get("currency")?, "minor_unit_exponent": spec.get("minor_unit_exponent")?})
+            json!({"type": "money", "minor_units": super::money_minor_units(raw,spec.get("minor_unit_exponent")?.as_u64()?)?, "currency": spec.get("currency")?, "minor_unit_exponent": spec.get("minor_unit_exponent")?})
         }
         "reference" => {
             json!({"type": "reference", "input_id": spec.get("target_input")?, "record_id": raw})
