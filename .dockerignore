@@ -228,6 +228,7 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/dock-card.ts
 # APP-104: the library pane and the Figma-style canvas controls.
 !app/admin/src/canvas/library.ts
+!app/admin/src/canvas/library-drag.ts
 !app/admin/src/canvas/controls.ts
 !app/admin/src/canvas/stacks.ts
 # APP-106: focus mode and unite.
