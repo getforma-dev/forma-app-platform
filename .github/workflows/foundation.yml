@@ -23,7 +23,7 @@ jobs:
       - name: Match toolchains
         run: |
           npm install --global npm@11.6.2
-          rustup toolchain install 1.93.1 --profile minimal --component rustfmt
+          rustup toolchain install 1.93.1 --profile minimal --component clippy,rustfmt --target wasm32-unknown-unknown
           rustup default 1.93.1
       - name: Check local scaffold and CDK without deployment
         run: python3 scripts/check-foundation.py
