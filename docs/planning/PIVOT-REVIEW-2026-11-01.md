@@ -94,6 +94,10 @@ Victor subsequently authorized updating the tickets and PRs, pushing the fixes a
 | 26 | `febfaae53315d85c341804494dd7c22f47f6db43` | Explicit generation, member favorites, refusal/cancel regressions |
 | 27 | `808cca3bb48f6bb8f785a15d02d0cb53668207d9` | Responsive page, bounded sharing, successful owned-work sharing/live browser evidence |
 
+The retrospective source review also covered merged PRs 5–16: development-only issuer fallback, exact-work authorization/deep links, contract-library verification, library drag/placement, invitation fault/race fixtures and parser artifact paths; the evidence-only APP-013 close was checked against the current command/idempotency implementation. PRs 17–24 are planning/observation work; their original diffs were reconciled against current routes and ticket requirements. No additional blocking regression was found. Historical screenshots and hosted rehearsals were read as evidence, not re-executed or presented as fresh checks.
+
+This read-through also confirmed that current provider invitation capabilities reach the service only on task start. APP-139 now explicitly requires runtime invitation creation/delivery without a per-share operator restart and without expanding ordinary workspace authority.
+
 The handoff says Grok stopped after delivering PR 27 for review. A subsequent remote/worktree check found no new APP-139/143/144 branch or tracked work in the original checkout. A resident CLI process alone is not evidence of active implementation. APP-144 is the next isolated Codex lane; APP-139/143/140 remain unfinished. PR and CI links are the authoritative landing status; the inventory above records the initial review snapshot.
 
 ## Remaining work for the requested experience
@@ -104,7 +108,7 @@ The handoff says Grok stopped after delivering PR 27 for review. A subsequent re
 | Current app creation | APP-141 | Finish actual template instantiation if templates are promised; keep generation labeled. Combine creation and APP-142 into one coherent page presentation, with cancel/refusal/reload evidence. |
 | Current app presentation | APP-142 | Review and successful owned-work share/live update are evidenced. Preserve focus/fan-out, narrow layout and browser-local persistence while integrating creation. |
 | Standalone app | APP-144 | Extend the existing authorized `/w/{app}/{work}` from a legacy query/new-record surface into the admitted parts and form as one usable document; use the same command and receipt path. |
-| Required new recipient | APP-139 | Durable work-bound invitation, verified recipient signup, no premature grants, acceptance expiry/revocation/replay tests, preserved destination, recipient page/canvas placement and real live update. Existing active-member sharing cannot stand in for this. |
+| Required new recipient | APP-139 | Durable work-bound invitation, runtime provider capability delivery without a per-share task restart, verified recipient signup, no premature grants, acceptance expiry/revocation/replay tests, preserved destination, recipient page/canvas placement and real live update. Existing active-member sharing cannot stand in for this. |
 | Contextual Ask | APP-143 | Bind questions to the selected app/part/widget without creating authority. This remains planned; APP-153 owns the later placement decision for the Ask pane. |
 | Trial delivery | APP-140 | Correct beta to the clean world with reviewed images/schema; real accounts, actual provider/mail and clean local/live comparison; exact build rehearsal and a ≤180-second recording. |
 | After Nov 2 | APP-097, APP-129, PH01–PH07 | Reconcile pitch debt; remaining authoring-rule/contract gaps, managed trial residuals, recovery and production qualification. APP-150–153 are later, not required evidence for this recording. |
