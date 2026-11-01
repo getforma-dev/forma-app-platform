@@ -3121,7 +3121,7 @@
       "Depends on": "APP-092, APP-093, APP-094, APP-095",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`pivot/app-096-rehearsal` records the af63feb local rehearsal. Beta deploy and the live-beta acceptance stay open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
