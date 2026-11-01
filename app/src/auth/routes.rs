@@ -69,6 +69,8 @@ pub(crate) fn clear_all(response: &mut Response) {
         cookies::PRE_ACCESS,
         cookies::SESSION,
         cookies::RUN,
+        cookies::SHARED_SESSION,
+        cookies::SHARED_PRELOGIN,
     ] {
         add_cookie(response, cookies::clear(name));
     }
@@ -270,7 +272,7 @@ async fn signin_start(
 }
 
 /// The two callback parameters, each exactly once and canonical.
-fn callback_query(query: Option<&str>) -> Option<(String, String)> {
+pub(crate) fn callback_query(query: Option<&str>) -> Option<(String, String)> {
     let query = query?;
     if query.len() > 256 {
         return None;
@@ -615,6 +617,7 @@ async fn signout(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     }
     let session = cookies::read(&parts.headers, cookies::SESSION);
     let pre = cookies::read(&parts.headers, cookies::PRE_ACCESS);
+    let shared = cookies::read(&parts.headers, cookies::SHARED_SESSION);
     let Some(token) = body_token(body).await else {
         return http::payload_too_large();
     };
@@ -623,7 +626,7 @@ async fn signout(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         clear_all(&mut response);
         response
     };
-    if session.is_none() && pre.is_none() {
+    if session.is_none() && pre.is_none() && shared.is_none() {
         return done();
     }
     let tied = session
@@ -632,6 +635,12 @@ async fn signout(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         .any(|cookie| auth.csrf.verify(csrf::Form::SignOut, cookie, &token));
     if !tied {
         return http::cross_site();
+    }
+    if super::shared::end_browser(&auth, &parts.headers)
+        .await
+        .is_err()
+    {
+        return http::unavailable();
     }
     if let Some(stores) = &auth.stores {
         if let Some(cookie) = &session {
@@ -688,6 +697,12 @@ async fn signout_all(State(auth): State<Arc<Auth>>, request: Request) -> Respons
             tracing::info!(epoch, sessions = ended.len(), "auth.sign_out_all");
             for record in &ended {
                 auth.revoke(record).await;
+            }
+            if super::shared::end_browser(&auth, &parts.headers)
+                .await
+                .is_err()
+            {
+                return http::unavailable();
             }
             let mut response = http::see_other("/");
             clear_all(&mut response);

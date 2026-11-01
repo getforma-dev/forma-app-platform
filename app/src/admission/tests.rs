@@ -23,7 +23,11 @@ const LOCK: &str = include_str!("../../../contracts/implementation-lock.json");
 /// `storage::queries::every_library_definition_is_admitted_and_in_the_sidecar`.
 /// `stored/` holds edition four's stored-data vectors (documents admitted
 /// before a later rule, which keep their verdict).
-const FIXTURES: [(&str, &str); 19] = [
+const FIXTURES: [(&str, &str); 20] = [
+    (
+        "contracts/fixtures/shared-v1/query-receipt.json",
+        include_str!("../../../contracts/fixtures/shared-v1/query-receipt.json"),
+    ),
     (
         "contracts/fixtures/stored/expense-claims-d70710d3.json",
         include_str!("../../../contracts/fixtures/stored/expense-claims-d70710d3.json"),
@@ -232,8 +236,9 @@ const PYTHON_REFUSED: [&[u8]; 55] = [
     b"\"open",
 ];
 
-/// `{}` in every registered domain, from validate.py `digest(name, {})`.
-const DOMAIN_DIGESTS: [(&str, &str); 10] = [
+/// `{}` in every registered domain. The first ten are frozen validate.py
+/// vectors; the additive shared-receipt domain uses the same independent hash recipe.
+const DOMAIN_DIGESTS: [(&str, &str); 11] = [
     (
         "forma:app-definition:v1",
         "sha256:084dfaff00f2bb828c01a6262d2fa4e3d1cb8178151511976d85c73868b2ed3b",
@@ -273,6 +278,10 @@ const DOMAIN_DIGESTS: [(&str, &str); 10] = [
     (
         "forma:job-payload:v1",
         "sha256:6543802750686a3a2c6de5e84c01ecd2f73199bcf17c36315f968478fae2eb44",
+    ),
+    (
+        "forma:shared-query-receipt:v1",
+        "sha256:c98346dd1c9e7d5b3b3a44103c14ec8a7f1e9139bf15dd32b23283252ae05a41",
     ),
 ];
 
@@ -619,7 +628,7 @@ fn sized_definition(target: usize) -> Value {
 fn canonical_vectors_match_contracts_lock() {
     // The embedded vectors and specimens are exactly the locked edition's set.
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-10-31.4");
+    assert_eq!(lock["edition"], "impl-2026-11-01.1");
     assert_eq!(lock["canonical_encoding"], "forma-json-v1");
     let locked_fixtures: BTreeSet<&str> = lock["artifacts"]
         .as_object()
@@ -1418,7 +1427,7 @@ fn retained(name: &str) -> Value {
 #[test]
 fn edition_two_vectors_match_contracts_lock() {
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-10-31.4");
+    assert_eq!(lock["edition"], "impl-2026-11-01.1");
     let retained_lock = &lock["retained_editions"]["impl-2026-10-28.1"]["artifacts"];
     for (path, identity) in EDITION_ONE {
         assert_eq!(retained_lock[path], identity, "{path}");
@@ -1494,7 +1503,8 @@ fn edition_two_vectors_match_contracts_lock() {
     assert!(domains.contains(digest::NORMALIZED_ROWS));
     assert!(domains.contains(digest::JOB_PAYLOAD));
     assert!(rationals >= 3);
-    assert_eq!(DOMAINS.len(), 10);
+    assert_eq!(DOMAINS.len(), 11);
+    assert_eq!(DOMAINS.last(), Some(&digest::SHARED_QUERY_RECEIPT));
 
     // exact_rational: lowest terms, positive denominator, at most 38 digits.
     let largest = "9".repeat(38);

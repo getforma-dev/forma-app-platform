@@ -32,6 +32,7 @@ steps=(
   "infra|DEPLOY-RUNBOOK 0.2|cd infra && npm run typecheck && npm test"
   "py-scripts|tenant-foundation.yml|$py -m unittest discover -s scripts -p 'test_*.py'"
   "py-runtime|tenant-foundation.yml, foundation.yml|$py -m unittest discover -s app/runtime"
+  "shared-broker|tenant-foundation.yml (APP-154 isolated invitation broker)|$py -I app/operator/test_shared_invite_broker.py"
   "py-qualification|tenant-foundation.yml|$py -m unittest discover -s app/qualification"
   "py-app-scripts|DEPLOY-RUNBOOK 0.2|$py -m unittest discover -s app/scripts -p 'test_*.py'"
   "py-ops|ADR-013 D13.5 (release record, fake AWS)|python3 -m unittest discover -s ops/beta -p 'test_*.py'"

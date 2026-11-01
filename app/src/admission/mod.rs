@@ -18,8 +18,8 @@ pub mod validate;
 pub use canonical::{decode, encode};
 pub use digest::digest;
 pub use validate::{
-    admit_definition, admit_receipt, check_exact_rational, contract_timestamp, exact_rational,
-    AdmittedDefinition,
+    admit_definition, admit_receipt, admit_shared_receipt, check_exact_rational,
+    contract_timestamp, exact_rational, AdmittedDefinition,
 };
 
 /// Why a document was refused. Each variant has a stable [`code`](Self::code).

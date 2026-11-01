@@ -184,7 +184,19 @@ pub fn contract_timestamp(text: &str) -> bool {
 pub fn admit_receipt(document: &Value) -> Result<(), AdmissionError> {
     canonical::encode(document)?;
     let mut walk = Walk::default();
-    walk.receipt(document);
+    walk.receipt(document, false);
+    match walk.worst {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+/// APP-154's additive guest receipt contract. It has an account and grant,
+/// never a principal or membership epoch in the resource organization.
+pub fn admit_shared_receipt(document: &Value) -> Result<(), AdmissionError> {
+    canonical::encode(document)?;
+    let mut walk = Walk::default();
+    walk.receipt(document, true);
     match walk.worst {
         Some(error) => Err(error),
         None => Ok(()),
@@ -1336,7 +1348,7 @@ type Fields<'a> = BTreeMap<&'a str, BTreeMap<&'a str, &'a Field>>;
 
 impl Walk {
     /// `$defs.query_receipt` (schema version 1) as `validate.py` checks it.
-    fn receipt(&mut self, value: &Value) {
+    fn receipt(&mut self, value: &Value, shared: bool) {
         #[rustfmt::skip]
         const REQUIRED: [&str; 21] = [
             "kind", "schema_version", "organization_id", "app_id", "work_id", "mode",
@@ -1346,14 +1358,37 @@ impl Walk {
             "total_scope", "provenance",
         ];
         const SAFE: u64 = canonical::MAX_SAFE_INTEGER;
-        let Some(map) = self.object("$", value, &REQUIRED, &["publication_id", "digest"]) else {
+        let mut required = REQUIRED.to_vec();
+        if shared {
+            required.retain(|key| !matches!(*key, "principal_id" | "membership_epoch"));
+            required.extend(["account_id", "share_id", "share_version"]);
+        }
+        let Some(map) = self.object("$", value, &required, &["publication_id", "digest"]) else {
             return;
         };
         let at = |key: &str| member("$", key);
-        self.choice(&at("kind"), map.get("kind"), &["query_receipt"], None);
+        self.choice(
+            &at("kind"),
+            map.get("kind"),
+            &[if shared {
+                "shared_query_receipt"
+            } else {
+                "query_receipt"
+            }],
+            None,
+        );
         self.exactly(&at("schema_version"), map.get("schema_version"), 1);
-        for key in ["organization_id", "app_id", "work_id", "principal_id"] {
+        for key in [
+            "organization_id",
+            "app_id",
+            "work_id",
+            if shared { "account_id" } else { "principal_id" },
+        ] {
             self.string(&at(key), map.get(key), Grammar::Uuid);
+        }
+        if shared {
+            self.string(&at("share_id"), map.get("share_id"), Grammar::Uuid);
+            self.choice(&at("mode"), map.get("mode"), &["published"], None);
         }
         let mode = self.choice(
             &at("mode"),
@@ -1432,11 +1467,12 @@ impl Walk {
                 }
             }
         }
-        self.integer(
-            &at("membership_epoch"),
-            map.get("membership_epoch"),
-            1..=SAFE,
-        );
+        let actor_epoch = if shared {
+            "share_version"
+        } else {
+            "membership_epoch"
+        };
+        self.integer(&at(actor_epoch), map.get(actor_epoch), 1..=SAFE);
         self.integer(&at("policy_epoch"), map.get("policy_epoch"), 1..=SAFE);
         self.integer(&at("filter_epoch"), map.get("filter_epoch"), 0..=SAFE);
         if let Some(partial) = map.get("partial").filter(|p| p.as_bool() != Some(false)) {

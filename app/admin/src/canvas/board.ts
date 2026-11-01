@@ -20,6 +20,7 @@ import { refreshRecords, wireRecordsCard } from './records';
 import { refreshCommands } from './slash';
 import { refreshLedger, wireLedgerCard } from './ledger';
 import { wireReceiptAttach } from './receipt';
+import { startConnectedApps } from '../shared/canvas-controller';
 
 type Group = {
   app: string;
@@ -151,6 +152,7 @@ function nextRow(): number {
   for (const item of host?.querySelectorAll<HTMLElement>('.cv-item-stack, .cv-item-unite') ?? []) {
     bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + item.offsetHeight + ROW_GAP);
   }
+  for (const item of utilityItems) bottom = Math.max(bottom, Number(item.dataset.canvasY ?? 0) + item.offsetHeight + ROW_GAP);
   return bottom;
 }
 
@@ -517,14 +519,14 @@ export const stackBoard = {
   announce,
   flash,
   /** APP-106: a work's group as the frames need it (cards in definition order). */
-  group(work: string): { app: string; work: string; title: string; cards: HTMLElement[]; origins: string[]; pinned: boolean } | null {
+  group(work: string): { app: string; work: string; title: string; cards: HTMLElement[]; origins: string[]; pinned: boolean; canShare: boolean } | null {
     const group = groups.get(work);
     if (!group) return null;
     const origins = Array.from(group.section.ownerDocument.querySelectorAll<HTMLElement>('.cv-origin'))
       .filter((chip) => group.cards.some((card) => card.contains(chip)))
       .map((chip) => chip.textContent ?? '')
       .filter(Boolean);
-    return { app: group.app, work: group.work, title: group.title, cards: [...group.cards], origins, pinned: group.pinned };
+    return { app: group.app, work: group.work, title: group.title, cards: [...group.cards], origins, pinned: group.pinned, canShare: group.section.dataset.canShare === 'true' };
   },
   /** APP-106: keeps a group's hand arrangement (a unite or a break apart moved it). */
   pin(work: string): void {
@@ -1336,6 +1338,8 @@ export function placeUtilityCard(id: string, title: string, body: HTMLElement): 
 
 /** Removes a utility card (`/apps`), a widget-like card with no data. */
 export function removeUtilityItem(item: HTMLElement): boolean {
+  const linked = item.querySelector<HTMLButtonElement>('[data-connected-remove]');
+  if (linked) { linked.click(); return false; }
   if (!canvas || !utilityItems.delete(item)) return false;
   canvas.removeItem(item, { selectFallback: false });
   updateSummary();
@@ -1377,6 +1381,12 @@ function onLive(event: LiveEvent): void {
       keptEarly.add(event.work_id);
       window.setTimeout(() => keptEarly.delete(event.work_id), 30000);
     }
+    return;
+  }
+  if (event.kind === 'app.shared') {
+    // Permission is not placement. The recipient explicitly adds a live ref.
+    host?.ownerDocument.dispatchEvent(new CustomEvent('forma:connected-refresh'));
+    announce('An app was shared. Open its private link to review access.');
     return;
   }
   void placeWork(event.app_id, event.work_id).then(announce);
@@ -1490,6 +1500,17 @@ export function startBoard(document_: Document): void {
   flush();
   wireTools(document_);
   startLive(document_);
+  startConnectedApps({ document: document_,
+    mount(key, title, card) {
+      const item = createCanvasItem({ instanceId: `shared-${key.replace('.', '-')}`, displayName: title, preferredWidth: 700, minHeight: 300, content: card });
+      item.classList.add('cv-item', 'connected-item');
+      canvas!.mountItem(item, { x: ORIGIN, y: nextRow() }, { focus: false });
+      utilityItems.add(item); updateSummary();
+      return item;
+    },
+    remove(item) { canvas!.removeItem(item, { selectFallback: false }); utilityItems.delete(item); updateSummary(); },
+    status(message) { const status = document_.querySelector('[data-connected-status]'); if (status) status.textContent = message; },
+  });
   // "Try again" on a failed card re-runs that card's app (views, records, ledger).
   document_.addEventListener('click', (event) => {
     const button = (event.target as Element | null)?.closest<HTMLElement>('[data-card-retry]');

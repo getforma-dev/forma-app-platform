@@ -198,6 +198,14 @@ async fn main() {
             .bind::<genui::query::canvas::CanvasProps>("canvas")
             .unwrap_or_else(bind_errors),
     });
+    let shared_pages = Arc::new(genui::sharing::live::SsrSharedPages {
+        app: pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap_or_else(bind_errors),
+        canvas: pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap_or_else(bind_errors),
+    });
     pages.finalize().unwrap_or_else(|errors| {
         for error in errors {
             eprintln!("{error}");
@@ -215,11 +223,16 @@ async fn main() {
     // binds (where the APP-006 harness was constructed): a release binary
     // refuses the operator qualification configuration here.
     let qualification = qualification_router();
+    let shared_broker = std::env::var_os(auth::shared_broker::CONFIG_ENV).map(|path| {
+        auth::shared_broker::Client::load(std::path::Path::new(&path))
+            .unwrap_or_else(|reason| refuse(reason))
+    });
     let auth = Arc::new(
         Auth::new(auth_config, stores.clone(), auth_pages.clone())
             .unwrap_or_else(|reason| refuse(reason))
             .with_trusted_proxies(proxies)
-            .with_invitations(invitations),
+            .with_invitations(invitations)
+            .with_shared_broker(shared_broker),
     );
     // APP-012 (ADR-007 D7.10): the confined query engine beside the data
     // store, in the image's private cache and scratch under /run/genui.
@@ -229,7 +242,9 @@ async fn main() {
                 .unwrap_or_else(|_| refuse("query engine directories refused")),
         ) as Arc<dyn genui::query::Executor>
     });
-    let work = Arc::new(genui::query::Work::new(auth.clone(), engine, work_page));
+    let work = Arc::new(
+        genui::query::Work::new(auth.clone(), engine, work_page).with_shared_pages(shared_pages),
+    );
     // APP-108 (ADR-011 pitch): folders. Objects through the credentialed
     // `runtime.py object` child under the tenant role, the normalizer child,
     // the engine cache, and the sealed parser the image verified at start.
@@ -473,6 +488,12 @@ mod tests {
         modules
             .bind::<genui::query::canvas::CanvasProps>("canvas")
             .unwrap();
+        modules
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        modules
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
         modules.finalize().unwrap();
         let ctx = RenderCtx::new().with_title("Forma Canvas");
         let (status, headers, body) = html(respond("/", home.render(&HomeProps {}, &ctx))).await;
@@ -505,11 +526,17 @@ mod tests {
             workspace: pages.bind::<WorkspaceProps>("workspace").unwrap(),
             record: pages.bind::<RecordProps>("record").unwrap(),
         };
-        // Home and about stay unbound here; finalize judges only bound routes.
+        // Bind every native owner before finalizing the complete page set.
         let _ = pages.bind::<HomeProps>("home");
         let _ = pages.bind::<AboutProps>("about");
         let _ = pages.bind::<genui::query::page::WorkProps>("work");
         let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
+        pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
         pages.finalize().unwrap();
         ssr
     }
@@ -809,6 +836,12 @@ mod tests {
         let _ = pages.bind::<InviteProps>("invite");
         let _ = pages.bind::<RecordProps>("record");
         let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
+        pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
         pages.finalize().unwrap();
         let view = |id: &str, kind: &str| genui::storage::WorkView {
             id: id.into(),
@@ -1140,6 +1173,12 @@ mod tests {
         let _ = pages.bind::<InviteProps>("invite");
         let _ = pages.bind::<RecordProps>("record");
         let _ = pages.bind::<work::WorkProps>("work");
+        pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
         pages.finalize().unwrap();
         let (app, northstar, spend) = (
             "00000000-0000-4000-8000-000000000065",

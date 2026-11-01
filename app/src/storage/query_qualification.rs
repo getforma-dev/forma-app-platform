@@ -48,6 +48,58 @@ const CONTRACT: &str = "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546
 const PLACEHOLDER: &str = "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119";
 const DEADLINE: Duration = Duration::from_millis(1800);
 
+/// Shared-app HTTP qualification uses the same uploaded fixture identity and
+/// confined engine as this campaign. The caller owns the new work identifier.
+pub(super) fn prepare_shared_engine(
+    fixture: &Fixture,
+    work: &str,
+) -> (Directory, Arc<crate::query::Engine>) {
+    let uploaded = json!({"organization_id":ORG,"source_id":SOURCE,"revision_id":REVISION,
+        "content_digest":CONTENT,"normalized_digest":NORMALIZED,"object_digest":NORMALIZED,
+        "row_count":6,"contract_digest":CONTRACT});
+    let path = record(fixture, "shared-uploaded-source.json", &uploaded);
+    operator(
+        fixture,
+        &[
+            "register-source-revision",
+            "--organization",
+            ORG,
+            "--record",
+            &path,
+        ],
+    );
+    operator(
+        fixture,
+        &[
+            "create-bound-work",
+            "--organization",
+            ORG,
+            "--app",
+            APP,
+            "--from-work",
+            WORK,
+            "--work",
+            work,
+            "--creator",
+            PRINCIPAL,
+            "--input",
+            "events",
+            "--source",
+            SOURCE,
+            "--revision",
+            REVISION,
+        ],
+    );
+    let python = fixture_python();
+    let root = Directory::new("shared-http");
+    assert_eq!(
+        cache_northstar(&python, &root.0.join("cache"), ORG, REVISION),
+        NORMALIZED
+    );
+    let engine = Arc::new(real_engine(&python, &root.0));
+    (root, engine)
+}
+
 fn record(fixture: &Fixture, name: &str, value: &Value) -> String {
     let path = fixture.directory.0.join(name);
     std::fs::write(&path, serde_json::to_vec(value).unwrap()).unwrap();

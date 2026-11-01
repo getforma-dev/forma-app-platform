@@ -24,6 +24,9 @@ mod queries;
 mod registry;
 pub mod rules;
 mod sessions;
+mod shared_access;
+mod shared_identity;
+mod shared_reads;
 mod sharing;
 
 pub use actions::{
@@ -65,6 +68,7 @@ pub use labels::{
     Label, LabelChange, Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
 };
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
+pub use queries::QueryActor;
 pub use queries::{
     command_slug, events_fields, field_type, library_sidecar, parse_parameters, query_digests,
     LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkView,
@@ -77,6 +81,11 @@ pub use sessions::{
     PreAccessStart, SignedOut, AGENT_TOKEN_PREFIX, PRELOGIN_SECONDS, PRE_ACCESS_ABSOLUTE_SECONDS,
     PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS, SESSION_IDLE_SECONDS,
 };
+pub use shared_access::{
+    normalize_share_email, GuestAccess, LinkedApp, LiveShare, NewLiveShare, SharedAuthTarget,
+};
+pub use shared_identity::*;
+pub use shared_reads::GuestQueryRun;
 pub use sharing::{
     member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
     SHARE_HANDLER_DEADLINE,
@@ -172,6 +181,8 @@ pub(crate) mod qualification_cases;
 mod query_qualification;
 #[cfg(test)]
 mod race_qualification;
+#[cfg(test)]
+mod shared_campaign;
 #[cfg(test)]
 mod sharing_qualification;
 #[cfg(test)]

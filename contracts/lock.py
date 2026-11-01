@@ -9,7 +9,7 @@ LOCK = ROOT / "contracts/implementation-lock.json"
 SOURCE = "design/forma-generative-app-platform-v2/SHARED-CONTRACTS.md"
 DEMO_LOCK = "design/forma-northstar-demo/platform-contract-lock.json"
 SOURCE_SHA = "f209ccb05aa895080c6fd424fe979d65f276959536ee7d57b371428e1d049fd5"
-EDITION = "impl-2026-10-31.4"
+EDITION = "impl-2026-11-01.1"
 # Each prior edition's lock file and the fixture identities it locked. Its fixtures are retained
 # byte-identically under contracts/fixtures/<edition>/ and must keep these identities (ADR-002).
 RETAINED = {

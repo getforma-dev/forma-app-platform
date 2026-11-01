@@ -32,8 +32,9 @@ import { createCanvasItem } from '../canvas-vendor/index';
 import { addCards, GAP, onLayoutSaved, setUniteHooks, SLOT_WIDTH, stackBoard as board } from './board';
 import { loadUnited, saveUnited } from './layout';
 import { findApps } from './library';
-import { appShareRequest, pageSize } from './page';
-import { el, isUuid, originKind } from './render';
+import { pageSize } from './page';
+import { dismissSharing, openSharing } from '../sharing/dialog';
+import { el, originKind } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 import { collapseAll, releaseCards, stackCardsOf } from './stacks';
 
@@ -132,7 +133,7 @@ function arrange(cards: HTMLElement[]): { kpi: HTMLElement[]; main: HTMLElement[
   return { kpi, main: primary ? [primary, ...views] : views, side };
 }
 
-function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[]): Frame['root'] {
+function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[], canShare: boolean): Frame['root'] {
   const head = el(document_, 'header', { class: 'cv-unite-head', 'data-canvas-drag-handle': '' },
     el(document_, 'span', { class: 'cv-unite-mark', 'aria-hidden': 'true' }),
     el(document_, 'div', { class: 'cv-unite-heading' },
@@ -143,7 +144,7 @@ function buildFrame(document_: Document, app: string, work: string, title: strin
     el(document_, 'div', { class: 'cv-unite-actions', role: 'group', 'aria-label': 'Page' },
       el(document_, 'a', { class: 'cv-secondary', href: `/w/${app}/${work}`, title: 'Open this app as a page' }, 'Open page'),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus a part · F' }, 'Focus'),
-      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share'),
+      ...(canShare ? [el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share')] : []),
       el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Fan out · Shift+U' }, 'Fan out')));
   return el(document_, 'article', { class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'aria-label': title },
     head,
@@ -324,96 +325,11 @@ function bindResize(document_: Document): void {
   }, true);
 }
 
-type Member = { id: string; label: string };
-
-async function loadMembers(): Promise<Member[] | null> {
-  try {
-    const response = await fetch('/v1/members', {
-      credentials: 'same-origin',
-      headers: { accept: 'application/json' },
-      cache: 'no-store',
-    });
-    if (!response.ok) return null;
-    const body: unknown = await response.json();
-    const rows = (body as { members?: unknown } | null)?.members;
-    if (!Array.isArray(rows)) return null;
-    const members: Member[] = [];
-    for (const row of rows) {
-      if (!row || typeof row !== 'object') continue;
-      const entry = row as { principal_id?: unknown; label?: unknown };
-      const label = typeof entry.label === 'string' ? entry.label.trim().slice(0, 80) : '';
-      if (!isUuid(entry.principal_id) || !label) continue;
-      members.push({ id: entry.principal_id, label });
-    }
-    return members;
-  } catch {
-    return null;
-  }
-}
-
-async function shareApp(frame: Frame, grantee: string, label: string): Promise<string> {
-  const request = appShareRequest(frame.app, frame.work, grantee);
-  if (!request) return 'The share could not be sent.';
-  try {
-    const response = await fetch(request.url, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: request.body,
-    });
-    if (response.ok) return `Shared ${frame.title} with ${label}.`;
-    if (response.status === 404) return 'The share was refused.';
-    return 'The share could not be sent.';
-  } catch {
-    return 'The share could not be sent.';
-  }
-}
-
-function closeShareMenus(): void {
-  documentRef?.querySelectorAll('.cv-unite-share').forEach((node) => node.remove());
-}
-
-/** Escape closes the page's share menu before the library. True when a menu was open. */
-export function dismissPageShare(document_: Document): boolean {
-  const menu = document_.querySelector('.cv-unite-share');
-  if (!menu) return false;
-  menu.remove();
-  return true;
-}
-
-async function toggleShare(button: HTMLElement): Promise<void> {
+/** Escape returns focus to the app that opened the access dialog. */
+export function dismissPageShare(_document: Document): boolean { return dismissSharing(); }
+function toggleShare(button: HTMLElement): void {
   const frame = frames.get(button.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
-  const actions = button.closest('.cv-unite-actions');
-  if (!frame || !actions || !documentRef) return;
-  const existing = actions.querySelector('.cv-unite-share');
-  if (existing) {
-    existing.remove();
-    return;
-  }
-  closeShareMenus();
-  const menu = el(documentRef, 'div', { class: 'cv-unite-share', role: 'menu', 'aria-label': 'Share this app' });
-  actions.append(menu);
-  // A short page clips its children. Keep the member list in the remaining
-  // page space and let it scroll, including at the minimum window size.
-  const bounds = frame.root.getBoundingClientRect();
-  const scale = bounds.width / frame.root.offsetWidth || 1;
-  const room = (bounds.bottom - menu.getBoundingClientRect().top) / scale - 12;
-  menu.style.maxHeight = `${Math.max(48, Math.min(240, room))}px`;
-  const members = await loadMembers();
-  if (!menu.isConnected || !documentRef) return;
-  if (members === null) {
-    menu.append(el(documentRef, 'p', { class: 'cv-unite-share-note' }, 'The member list could not be loaded.'));
-    return;
-  }
-  if (!members.length) {
-    menu.append(el(documentRef, 'p', { class: 'cv-unite-share-note' }, 'No one else is in this organization yet.'));
-    return;
-  }
-  for (const member of members) {
-    menu.append(el(documentRef, 'button', {
-      type: 'button', role: 'menuitem', 'data-unite-grantee': member.id,
-    }, member.label));
-  }
+  if (frame && documentRef) openSharing(documentRef, frame.app, frame.work, frame.title);
 }
 
 /** Fan-out while a part is in focus puts that part back on the page first. */
@@ -478,7 +394,7 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
     y: Math.min(...[...previous.values()].map((spot) => spot.y)),
   };
   for (const card of members) board.lift(card.dataset.card ?? '');
-  const root = buildFrame(documentRef, app, work, group.title, group.origins);
+  const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare);
   const { order, width } = fill(root, members);
   for (const restoreScroll of scrolls) restoreScroll();
   const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root, chrome: false });
@@ -664,16 +580,6 @@ export function startUnite(document_: Document): void {
   onLayoutSaved(save);
   document_.addEventListener('click', (event) => {
     const target = event.target as Element | null;
-    if (!target?.closest('.cv-unite-share, [data-unite-share]')) closeShareMenus();
-    const grantee = target?.closest<HTMLElement>('[data-unite-grantee]');
-    if (grantee) {
-      const frame = frames.get(grantee.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
-      const id = grantee.dataset.uniteGrantee ?? '';
-      const label = (grantee.textContent ?? '').trim();
-      grantee.closest('.cv-unite-share')?.remove();
-      if (frame) void shareApp(frame, id, label).then((message) => board.announce(message));
-      return;
-    }
     const share = target?.closest<HTMLElement>('[data-unite-share]');
     if (share) {
       void toggleShare(share);

@@ -49,7 +49,7 @@ RUN python -m pip install --no-cache-dir --require-hashes --only-binary=:all: -r
 # Repository-relative layout under /operator, so the packaged modules resolve
 # their siblings exactly as in the checkout (tenant_seed -> contracts/,
 # runtime -> app/migrations/, qualify -> verify -> fixtures/phase-one/v1/).
-COPY --chmod=0444 app/operator/operator.py app/operator/overrides.json app/operator/requirements.lock /operator/app/operator/
+COPY --chmod=0444 app/operator/operator.py app/operator/shared_invite_broker.py app/operator/overrides.json app/operator/requirements.lock /operator/app/operator/
 COPY --chmod=0444 app/runtime/runtime.py app/runtime/tenant_seed.py app/runtime/admission_operator.py app/runtime/provider_management.py /operator/app/runtime/
 COPY --chmod=0444 app/migrations/ /operator/app/migrations/
 COPY --chmod=0444 contracts/validate.py contracts/schema.json /operator/contracts/

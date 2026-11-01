@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { renderRegions, type DocumentProps } from '../src/work/render.ts';
+import { renderReadOnlyRegions, renderRegions, type DocumentProps } from '../src/work/render.ts';
 
 // A closed DOM spy: there is deliberately no HTML parsing or innerHTML sink.
 // Strings remain distinct from created elements so a hostile label cannot
@@ -80,4 +80,16 @@ test('forms cannot redirect a command to another work or execute a supplied URL'
     source.forms[0]!.action = action;
     assert.throws(() => renderRegions(document, source), /invalid command action/);
   }
+});
+
+test('shared rendering retains actual values and receipt bytes without exposing record links or write controls', () => {
+  const source = props();
+  const result = renderReadOnlyRegions(document, source) as unknown as Element;
+  assert.ok(text(result).includes(HOSTILE));
+  assert.ok(text(result).includes('$12.34'));
+  assert.ok(text(result).includes('Revision 2'));
+  assert.equal(text(elements(result).find(node => node.tag === 'pre')!), source.views[0]!.receipt_json);
+  assert.ok(elements(result).every(node => !['a', 'form', 'input', 'button', 'select', 'script'].includes(node.tag)));
+  assert.ok(!text(result).includes(APP));
+  assert.ok(!elements(result).some(node => Object.hasOwn(node.attributes, 'href') || Object.hasOwn(node.attributes, 'action')));
 });

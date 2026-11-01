@@ -382,6 +382,10 @@ impl Browser {
     pub(crate) fn cookie(&self, name: &str) -> Option<String> {
         self.jar.get(name).cloned()
     }
+    /// Install a fixture-minted cookie; only compiled into test executables.
+    pub(crate) fn install_cookie(&mut self, name: &str, value: &str) {
+        self.jar.insert(name.into(), value.into());
+    }
     pub(crate) async fn send(
         &mut self,
         app: &Router,
@@ -435,7 +439,11 @@ impl Browser {
 
 // --- unit tests (no Docker) ------------------------------------------------
 
-async fn issued_token(issuer: &Issuer, client: &Client, subject: &str) -> provider::Token {
+pub(crate) async fn issued_token(
+    issuer: &Issuer,
+    client: &Client,
+    subject: &str,
+) -> provider::Token {
     let pkce = Pkce::fresh().unwrap();
     let state = capability::random_capability().unwrap();
     let request_uri = client

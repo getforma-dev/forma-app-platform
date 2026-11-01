@@ -1,5 +1,6 @@
 import { h, mount, createShow, createList, activateIslands } from '@getforma/core';
 import { startDocument } from './document';
+import { startSharing } from '../sharing/dialog';
 
 // APP-144 app document: native SSR with one registered enhancement island. Every value, state and
 // receipt row is resolved by the Rust handler; this page only lays them out.
@@ -123,6 +124,7 @@ type WorkProps = {
   hasRecords: boolean;
   records: RecordLink[];
   canvas: string;
+  canShare: boolean;
 };
 
 // This explicitly registered island retains the client entry for live updates
@@ -144,6 +146,7 @@ function Work(props: WorkProps) {
         One app, with the same saved work as your canvas.
       </p>
       <p><a href={props.canvas}>Open on the canvas</a></p>
+      {createShow(() => props.canShare, () => <button type="button" class="share-primary" data-manage-share="" data-app={props.app} data-work={props.work} data-title={props.title}>Share app</button>)}
       <DocumentStatus path={props.action} />
       {createShow(() => props.recordsOnly, () => (
         <p>This work keeps records. Changes appear here and on your canvas.</p>
@@ -295,6 +298,7 @@ function Work(props: WorkProps) {
 
 await activateIslands({ DocumentStatus });
 startDocument();
+startSharing(document);
 
 mount(
   () =>
@@ -317,6 +321,7 @@ mount(
       hasRecords: false,
       records: [],
       canvas: '/canvas',
+      canShare: false,
     }),
   '#app',
 );

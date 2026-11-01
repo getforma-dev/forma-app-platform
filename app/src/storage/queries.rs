@@ -96,29 +96,44 @@ impl RunSource {
     }
 }
 
+/// Explicit attribution; a guest is never a member of the resource organization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum QueryActor {
+    Member,
+    Guest {
+        account: String,
+        share: String,
+        version: i64,
+    },
+}
+
 /// An authorized, not yet released query: the identities its receipt pins.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryRun {
-    organization: String,
-    principal: String,
-    membership_epoch: i64,
-    app: String,
-    work: String,
-    work_version: i64,
-    publication: String,
-    definition_digest: String,
-    policy_epoch: i64,
-    view: String,
-    view_query: Value,
-    query: Value,
-    parameters: Vec<Value>,
-    filter_epoch: i64,
-    record_snapshot_sequence: i64,
-    source: RunSource,
-    dependencies: Vec<RunSource>,
-    fields: Vec<Value>,
+    pub(super) actor: QueryActor,
+    pub(super) organization: String,
+    pub(super) principal: String,
+    pub(super) membership_epoch: i64,
+    pub(super) app: String,
+    pub(super) work: String,
+    pub(super) work_version: i64,
+    pub(super) publication: String,
+    pub(super) definition_digest: String,
+    pub(super) policy_epoch: i64,
+    pub(super) view: String,
+    pub(super) view_query: Value,
+    pub(super) query: Value,
+    pub(super) parameters: Vec<Value>,
+    pub(super) filter_epoch: i64,
+    pub(super) record_snapshot_sequence: i64,
+    pub(super) source: RunSource,
+    pub(super) dependencies: Vec<RunSource>,
+    pub(super) fields: Vec<Value>,
 }
 impl QueryRun {
+    pub fn actor(&self) -> &QueryActor {
+        &self.actor
+    }
     pub fn organization(&self) -> &str {
         &self.organization
     }
@@ -214,6 +229,7 @@ impl QueryRun {
             normalized_digest: source.2.into(),
         };
         Self {
+            actor: QueryActor::Member,
             organization: organization.into(),
             principal: principal.into(),
             membership_epoch: 1,
@@ -311,7 +327,7 @@ pub fn parse_parameters(value: &Value) -> Option<Parameters> {
 
 impl Parameters {
     /// Receipt named values, in `field_id` order.
-    fn named_values(&self) -> Vec<Value> {
+    pub(super) fn named_values(&self) -> Vec<Value> {
         let mut values = Vec::new();
         if let Some(destination) = &self.destination {
             values.push(
@@ -336,7 +352,7 @@ impl Parameters {
     /// `window_field`/`destination_field`); otherwise `None`, so the
     /// parameter is refused rather than recorded in a receipt without
     /// having run.
-    fn apply(&self, query: &Value, fields: &[Value]) -> Option<Value> {
+    pub(super) fn apply(&self, query: &Value, fields: &[Value]) -> Option<Value> {
         let mut query = query.as_object()?.clone();
         let input = query
             .get("inputs")?
@@ -386,7 +402,7 @@ fn integer(row: &Row, index: usize) -> Result<i64> {
 /// The view's typed query in the re-admitted definition content, and the
 /// contract `fields` of its one `source` input (`Denied` for a view whose
 /// input is a records collection: Phase 1 runs source inputs only).
-fn view_query(content: &[u8], view: &str) -> Result<(Value, Vec<Value>)> {
+pub(super) fn view_query(content: &[u8], view: &str) -> Result<(Value, Vec<Value>)> {
     let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
     let views = content
         .get("views")
@@ -428,8 +444,8 @@ pub(super) struct Premise {
     pub(super) publication: String,
     pub(super) work_version: i64,
     pub(super) definition_digest: String,
-    policy_epoch: i64,
-    definition_revision: String,
+    pub(super) policy_epoch: i64,
+    pub(super) definition_revision: String,
 }
 
 /// What `premise` and then `stored_content` answer for one work of a batch:
@@ -650,7 +666,7 @@ async fn premise(
 
 /// The work's binding of `input`, which must be a live source revision whose
 /// stored `normalized_digest` the work bound.
-async fn bound_source(
+pub(super) async fn bound_source(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -682,7 +698,7 @@ async fn bound_source(
 /// `input_id` order: the receipt's `source_revisions` (APP-012 review M3).
 /// The precheck already required each to be a live revision under the
 /// member's `source_read`; the engine reads only the view's one input.
-async fn dependencies(
+pub(super) async fn dependencies(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -755,6 +771,7 @@ impl Data {
             let record_snapshot_sequence = integer(rows.first().ok_or(Error::Unavailable)?, 0)?;
             let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
             Ok(QueryRun {
+                actor: QueryActor::Member,
                 organization: org.clone(),
                 principal: request.principal.clone(),
                 membership_epoch: request.epoch,
@@ -789,7 +806,8 @@ impl Data {
     /// released.
     pub async fn release_result(&self, request: &TrustedRequest, run: &QueryRun) -> Result<()> {
         require(
-            run.organization == request.organization
+            matches!(run.actor, QueryActor::Member)
+                && run.organization == request.organization
                 && run.principal == request.principal
                 && run.membership_epoch == request.epoch,
         )?;

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-11-01T17:26:46.537044+00:00",
+  "scope": "Account-scoped named sharing storage and HTTP qualification",
+  "commands": [
+    {
+      "command": "GENUI_NATIVE_FIXTURE_PYTHON=\"$PWD/app/runtime/.venv/bin/python\" GENUI_LIVE_SHARING_REPORT=/tmp/forma-live-sharing-report.json cargo test --locked -p forma-app-platform --lib storage::shared_campaign::native_live_sharing_campaign -- --ignored --exact --nocapture",
+      "result": "passed",
+      "checks": 13,
+      "test_seconds": 43.29
+    },
+    {
+      "command": "PYTHONPATH=contracts/.venv/lib/python3.12/site-packages app/runtime/.venv/bin/python app/runtime/qualify_tenant_schema.py --output /tmp/forma-sharing-schema.json",
+      "result": "passed",
+      "checks": 381
+    },
+    {
+      "command": "python3 scripts/check-schema-pins.py",
+      "result": "passed"
+    }
+  ],
+  "source_sha256_at_capture": {
+    "app/src/storage/shared_access.rs": "e4ffb7ffc029c8ca6c52a930cfef24eed22e46c9ac889a4b7a2f50a5b00f854e",
+    "app/src/storage/shared_identity.rs": "dda6595f226eb3d15fc45ae07692ca94198e1bf1ecb71100451acda7bfff635e",
+    "app/src/storage/shared_reads.rs": "2501d3d79512b533c6b7180868774c0a71ab467d157db1be49ec11eca23df24a",
+    "app/src/storage/shared_campaign.rs": "ede22b5fcf1c4999845acda3c57f5e97fc8f8ef23f376dc0caa37705eb4e2f60",
+    "app/src/storage/query_qualification.rs": "7ab1fda528c5e8cdf1f525c5338cf54bbbef134f76879a6707d56cf49cf2be3c",
+    "app/src/storage/authorization.rs": "2002a9abcd0569e16b6c964ac047fd1ea0c9676944f8796ada6d6784080a0f36",
+    "app/migrations/0017_live_sharing.sql": "34b9484d791eff75c85a9f270432b8aea6c47480cf065c428546681e8fc6a805",
+    "app/migrations/catalog-v17.json": "4cfd700fc0acf5786cb33edc313a0c31b064b9caa299a182cd7d6ed4fb04279d",
+    "app/migrations/catalog-query.json": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+    "app/migrations/manifest.json": "9242bbcb68e65984a683314a4ff47fbd0d7aa49a95a805ded053c88dad3e6103",
+    "app/runtime/qualify_tenant_schema.py": "999638151499739e99fd33ba9055f44163bf5cac8f681d487d237842f144ed17",
+    "app/runtime/runtime.py": "a3c0ed9a4dca1274549d193dd3bb304c87fb87edc02408b6afbe810aacb4441a",
+    "app/src/storage/catalog.rs": "b7beea3ec0e643c79a5fa445ec0311471a5ca634cb8f5f8c633cf695db9a39c1",
+    "app/src/storage/pool.rs": "0b2793f5b69adc28fc055298d462efdedbf54faf90eb01e9e085c0545927449d",
+    "app/src/query/receipt.rs": "84e722c4f81146a629d1371f773dee5fc9c11bde1e842de08616595b4cdb5f18",
+    "app/src/sharing/live.rs": "8845d3889aa61022623320dec840da3a916bed0d52be69e1e1d8984d108e7b4d"
+  },
+  "catalog": {
+    "historical_versions_1_through_16": "unchanged logical catalog comparisons against disposable generation",
+    "v17_file_bytes": 449694,
+    "max_bytes": 786432,
+    "max_rows_per_section": 2049
+  },
+  "limits": [
+    "Local PostgreSQL password/TLS qualification does not claim RDS IAM or AWS deployment.",
+    "DB campaign uses synthetic verified identity proof; the separate account OAuth campaign qualifies the provider exchange.",
+    "Unsupported operator_version cannot be committed under the pinned schema; the test asserts database rejection rather than bypassing that constraint.",
+    "Commit identity is added by the final delivery record; hashes here identify source at evidence capture."
+  ],
+  "source_inventory_check": {
+    "captured_at": "2026-11-01T17:31:46.803158+00:00",
+    "command": "cargo test --locked -p forma-app-platform --lib storage::managed_qualification::tests::source_bundle_covers_every_compiled_source -- --exact",
+    "result": "passed",
+    "tests": 1,
+    "test_seconds": 0.05,
+    "entries": 195,
+    "source_sha256": "aa0085108baea643d5d5be2b74e191ffbf200dbe2261d38c65b1829f70d692c1",
+    "scope": "All compiled Rust source files except the separately shipped main.rs entry point, plus embedded resources; lexicographic order and exact bytes verified."
+  }
+}

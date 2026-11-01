@@ -48,16 +48,16 @@ class SchemaPinTests(unittest.TestCase):
         self.assertEqual(set(report["pins"].values()), {version})
         # Second agreement group (runner review m1): the moved catalog bound.
         self.assertEqual(len(report["catalog_bound"]), 4)
-        self.assertEqual(set(report["catalog_bound"].values()), {524288})
+        self.assertEqual(set(report["catalog_bound"].values()), {786432})
         # Runner review m3: every ledger-era catalog carries its own version bound.
         self.assertEqual(report["catalog_version_checks"], {f"catalog-v{k}.json": k for k in range(2, version + 1)})
 
     def test_mismatched_catalog_bound_fails(self):
         edits = {
-            "catalog-query.json max_output_bytes": (QUERY, '"max_output_bytes": 524288,', '"max_output_bytes": 524289,'),
-            "catalog-query.json SQL literal": (QUERY, "octet_length(body)<=524288", "octet_length(body)<=262144"),
-            "catalog.rs BOUND": (CATALOG, "const BOUND: usize = 524_288;", "const BOUND: usize = 262_144;"),
-            "runtime.py CATALOG_BOUND": (RUNTIME, "\nCATALOG_BOUND = 524288\n", "\nCATALOG_BOUND = 262144\n"),
+            "catalog-query.json max_output_bytes": (QUERY, '"max_output_bytes": 786432,', '"max_output_bytes": 786433,'),
+            "catalog-query.json SQL literal": (QUERY, "octet_length(body)<=786432", "octet_length(body)<=262144"),
+            "catalog.rs BOUND": (CATALOG, "const BOUND: usize = 786_432;", "const BOUND: usize = 262_144;"),
+            "runtime.py CATALOG_BOUND": (RUNTIME, "\nCATALOG_BOUND = 786432\n", "\nCATALOG_BOUND = 262144\n"),
         }
         for label, (name, old, new) in edits.items():
             with self.subTest(pin=label), tempfile.TemporaryDirectory() as directory:

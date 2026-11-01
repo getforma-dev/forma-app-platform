@@ -36,6 +36,7 @@ jobs:
           app/runtime/.venv/bin/python -m unittest discover -s scripts -p 'test_*.py' -v
           app/runtime/.venv/bin/python -m unittest discover -s app/runtime -v
           app/runtime/.venv/bin/python -m unittest discover -s app/qualification -v
+          app/runtime/.venv/bin/python -I app/operator/test_shared_invite_broker.py
       - name: Build source-owned native page assets
         working-directory: app/admin
         run: |
@@ -72,6 +73,10 @@ jobs:
         run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" cargo test --locked -p forma-app-platform --lib query::tests::engine_child_campaign -- --ignored --exact --nocapture
       - name: Qualify authorized queries, receipts and release (APP-012)
         run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_QUERY_REPORT="$RUNNER_TEMP/tenant-foundation/query.json" cargo test --locked -p forma-app-platform --lib storage::query_qualification::native_query_campaign -- --ignored --exact --nocapture
+      - name: Qualify named live sharing and connected references (APP-154)
+        run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_LIVE_SHARING_REPORT="$RUNNER_TEMP/tenant-foundation/live-sharing.json" cargo test --locked -p forma-app-platform --lib storage::shared_campaign::native_live_sharing_campaign -- --ignored --exact --nocapture
+      - name: Qualify account-only share identity and callback (APP-154)
+        run: GENUI_SHARED_IDENTITY_REPORT="$RUNNER_TEMP/tenant-foundation/shared-identity.json" cargo test --locked -p forma-app-platform --lib auth::shared_tests::native_shared_identity_campaign -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

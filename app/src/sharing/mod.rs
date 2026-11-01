@@ -26,6 +26,8 @@
 //! error alike answer the uniform 404 (fail closed; review m2: the deliberate
 //! choice, so that a store hiccup never distinguishes an existing work from a
 //! nonexistent one on these routes); the store error is logged.
+pub mod live;
+
 use crate::{
     auth::{cookies, csrf, Auth},
     events,

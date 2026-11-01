@@ -177,7 +177,7 @@ fn record_row(row: &Row, at: usize, collections: &[CollectionSummary]) -> Result
 
 /// For each `(app, work)`, its newest `RECORDS_LIMIT + 1` current records
 /// (newest commit first, as `list_records` reads them), in one statement.
-async fn records_many(
+pub(super) async fn records_many(
     transaction: &Transaction<'_>,
     organization: &str,
     works: &[(&str, &str)],
@@ -202,7 +202,7 @@ async fn records_many(
 /// `list_records`' listing of one batched work whose outline answered: its
 /// premise is the work's pin under the lock the batch holds, and its
 /// publication's content is the one the outline re-admitted.
-fn listing_of(
+pub(super) fn listing_of(
     (app, work): (&str, &str),
     can_write: bool,
     pinned: &Pinned,

@@ -119,6 +119,7 @@ pub struct Work {
     auth: Arc<Auth>,
     executor: Option<Arc<dyn Executor>>,
     pages: Arc<dyn WorkPages>,
+    pub(crate) shared_pages: Option<Arc<dyn crate::sharing::live::SharedPages>>,
 }
 impl Work {
     /// The sessions, synchronizer key and stores (the pitch canvas, ADR-011).
@@ -134,7 +135,15 @@ impl Work {
             auth,
             executor,
             pages,
+            shared_pages: None,
         }
+    }
+    pub fn with_shared_pages(mut self, pages: Arc<dyn crate::sharing::live::SharedPages>) -> Self {
+        self.shared_pages = Some(pages);
+        self
+    }
+    pub(crate) fn executor(&self) -> Option<&Arc<dyn Executor>> {
+        self.executor.as_ref()
     }
 }
 
@@ -590,6 +599,11 @@ async fn document(
         publication: listing.publication.clone(),
         work_version: listing.work_version,
         can_write: listing.can_write,
+        can_share: stores
+            .workspace
+            .can_share_live_work(member, app, saved)
+            .await
+            .map_err(|e| storage_refusal(&e))?,
         app: app.into(),
         work: saved.into(),
         forms,
