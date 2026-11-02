@@ -341,7 +341,6 @@
     }
   ],
   "ready_by_local_dependencies": [
-    "APP-014",
     "APP-015",
     "APP-016",
     "APP-026",
@@ -787,11 +786,11 @@
     {
       "id": "APP-014",
       "title": "Prove command retries, conflicts and authorization race ordering",
-      "path": "0-backlog/APP-014.md",
+      "path": "2-in-progress/APP-014.md",
       "Field": "Value",
       "---": "---",
       "Epic": "REC",
-      "Status": "Backlog",
+      "Status": "In progress",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -803,8 +802,8 @@
       "Requirements": "C07, N4, N5, P07, R8, S06, SR7, SR10",
       "Depends on": "APP-013",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "GenUI \u2014 Grok implementation, Codex independent review and fixture repair",
+      "Branch / PR": "`pivot/app-014-races` \u00b7 [PR 44](https://github.com/getforma-dev/forma-app-platform/pull/44)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
