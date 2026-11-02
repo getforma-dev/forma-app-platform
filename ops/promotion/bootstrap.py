@@ -71,6 +71,9 @@ def template(inventory):
         statement(['iam:PassRole'], ecs_task_roles, Condition={'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}),
         statement(['iam:PassRole'], scheduler_roles, Condition={'StringEquals': {'iam:PassedToService': 'scheduler.amazonaws.com'}}),
         statement(['iam:GetRole'], ecs_task_roles + scheduler_roles),
+        # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
+        # while creating the change set (before resource handlers execute).
+        statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),
         statement(['s3:GetObject'], bucket + '/' + PREFIX + '/promotions/*/template.json')]
     resources = {
         'State': {'Type': 'AWS::S3::Bucket', 'DeletionPolicy': 'Retain', 'UpdateReplacePolicy': 'Retain', 'Properties': {

@@ -2,6 +2,8 @@
 import hashlib
 import json
 import tarfile
+from datetime import datetime, timezone
+from pathlib import Path
 from .guards import REPOS
 from .state import digest, require
 
@@ -117,12 +119,48 @@ def finding_set(findings):
     return {(x['name'], x['severity'], tuple(sorted((a['key'], a['value']) for a in x.get('attributes', [])))) for x in findings}
 
 
-def guard_scan_delta(current, baseline):
+DISPOSITION = Path(__file__).with_name('scan-disposition.json')
+
+
+def scan_disposition():
+    raw = DISPOSITION.read_bytes()
+    value = json.loads(raw)
+    require(set(value) == {'schema_version', 'role', 'predecessor_manifest_digest',
+        'deployment_contract_sha256', 'expires_at_utc', 'evidence', 'findings'}
+        and value['schema_version'] == 1 and value['role'] == 'operator'
+        and value['evidence'] == 'evidence/APP-167/SCAN-DISPOSITION.md', 'invalid scan disposition')
+    require(len(value['findings']) == 3 and all(set(f) == {'name', 'severity', 'attributes'}
+        and f['severity'] == 'MEDIUM' for f in value['findings']), 'disposition cannot broaden severity or scope')
+    require({f['name'] for f in value['findings']} == {
+        'CVE-2026-114690', 'CVE-2026-114691', 'CVE-2026-115455'}, 'unexpected disposition finding')
+    return value, hashlib.sha256(raw).hexdigest()
+
+
+def guard_scan_delta(current, baseline, deployment_contract=None, clock=None):
+    clock = clock or datetime.now(timezone.utc)
+    result = {}
     for role in REPOS:
+        require(not any(f.get('severity') == 'CRITICAL' for f in current[role]['findings']),
+                'critical scan finding requires separate reviewed release')
         before = finding_set(baseline[role]['findings'])
         introduced = finding_set(current[role]['findings']) - before
-        require(not introduced, 'new scan findings require separately reviewed disposition: ' + role)
-    return {role: {'introduced': 0, 'observed': len(current[role]['findings'])} for role in REPOS}
+        reviewed = []; disposition_sha = None; expiry = None
+        if introduced:
+            disposition, disposition_sha = scan_disposition()
+            require(role == disposition['role']
+                and baseline[role]['manifest_digest'] == disposition['predecessor_manifest_digest']
+                and deployment_contract == disposition['deployment_contract_sha256']
+                and clock < datetime.fromisoformat(disposition['expires_at_utc'].replace('Z', '+00:00')),
+                'scan disposition scope changed or expired')
+            require(introduced <= finding_set(disposition['findings']),
+                'new scan findings require separately reviewed disposition: ' + role)
+            reviewed = sorted(x[0] for x in introduced)
+            require(len(reviewed) == len(set(reviewed)), 'ambiguous reviewed finding')
+            expiry = disposition['expires_at_utc']
+        result[role] = {'findings': len(current[role]['findings']), 'introduced': len(introduced),
+            'reviewed': reviewed, 'reviewed_count': len(reviewed), 'unreviewed': 0, 'disposition_sha256': disposition_sha,
+            'review_expires_at_utc': expiry}
+    return result
 
 
 def scan_complete(response):

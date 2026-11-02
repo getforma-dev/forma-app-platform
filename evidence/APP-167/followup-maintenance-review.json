@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "Positive ECR operation and exact receipt request allowlist; no unknown/runtime/template operations",
+    "Actual immutable receipt bytes and request bindings verified with bounded reads",
+    "Original workflow terminal for 65 minutes; operator identity and exact canonical-state CAS",
+    "Complete pending-change-set inventory and unchanged healthy runtime before unlock",
+    "Retained receipts and abandoned ledger allowances; no registry cleanup or runtime mutation"
+  ],
+  "files": {
+    "ops/promotion/maintenance.py": "f86d05057239cf766d8471769e290cd622a740a9d341e226d0be87c2fab02483",
+    "ops/promotion/test_maintenance.py": "7201fe234ed0ec36f2483094679cfdbff4c72eca908e2dd47197b54f94eb71fc"
+  },
+  "live_recovery_performed": false,
+  "result": "pass",
+  "reviewer": "root (independent of maintenance author review_shell)",
+  "scope": "Confirmed ECR-only pre-change-set preparation abandonment",
+  "tests": "88 promotion tests passed including 15 maintenance tests; independent full-suite review recorded separately"
+}

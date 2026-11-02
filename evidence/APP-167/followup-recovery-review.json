@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-02T06:41:09Z",
+  "kind": "author qualification of maintenance and independent source review of scan disposition",
+  "base_revision": "365c88344b9367990d55e668e90a5dcf217dfe77",
+  "source_sha256": {
+    "ops/promotion/maintenance.py": "f86d05057239cf766d8471769e290cd622a740a9d341e226d0be87c2fab02483",
+    "ops/promotion/test_maintenance.py": "7201fe234ed0ec36f2483094679cfdbff4c72eca908e2dd47197b54f94eb71fc",
+    "ops/promotion/registry.py": "93220b9602468181c6c1368d63b5562b81135f8869a061ae0a39e6eae688ce32",
+    "ops/promotion/runner.py": "3adca41ceaa1f3b4cde862420b909c386a5613f3d8a8e1c3dd413cca21b0fcf4",
+    "ops/promotion/github.py": "251e6dd44a7681b40aa358379b75ab9a39eaabcc6584110174f7f89be207c691",
+    "ops/promotion/scan-disposition.json": "a79596f31e62f5d03084fb476f5c39e928de4bf4810637e1f0914caae66b2f29",
+    "ops/promotion/test_scan.py": "bf2716e0e1359ebb2d0753bce9eefc56da21efbf1265afe58c5d997022713418",
+    "evidence/APP-167/SCAN-DISPOSITION.md": "cf55bfa36208ccc38f4b71705f57dbfb2a5f39c8101495de8b06cc68067f1c97"
+  },
+  "maintenance_author_result": {
+    "status": "passed local qualification; separately reviewed before any operator use",
+    "scope": "Only confirmed ECR-only preparation failures before any template or change-set operation; existing fully prepared abandonment remains.",
+    "retained_guards": [
+      "Exact reviewed canonical state hash and idle runtime boundary",
+      "Original trusted workflow completed for at least 65 minutes",
+      "Operator identity, never a workflow role",
+      "Nonempty confirmed ECR journal, exact fixed repositories and closed operation request shapes",
+      "Every actual immutable S3 receipt read with a 12 MiB cap, exact byte hash, duplicate-key rejection and closed envelope",
+      "Receipt request equality, response object and valid UTC observation",
+      "Complete bounded change-set inventories before and after the healthy runtime checks",
+      "No unknown operations, template upload, CloudFormation operation or runtime operation in the new path",
+      "Immutable journal and abandoned ledger window retained before conditional unlock"
+    ],
+    "new_path_cloud_actions": "Read-only ECS/CloudFormation/S3 evidence plus private immutable receipts and conditional canonical-state update when explicitly invoked; no runtime/ECR mutation.",
+    "tests": [
+      {
+        "command": "python3 -m unittest ops.promotion.test_maintenance -v",
+        "passed": true,
+        "tests": 15,
+        "log_sha256": "efecc02382378d08fa7f8d727892832906899dea23838a17399b9eb2ac4df570"
+      },
+      {
+        "command": "python3 -m unittest discover -s ops/promotion -p 'test_*.py'",
+        "passed": true,
+        "tests": 87,
+        "log_sha256": "c22702d220fe3a7e8731e7c4f7d5db8eda005a083f064ca537f9d52ea966020f"
+      }
+    ],
+    "negative_cases": [
+      "Missing, altered, oversized or rehashed malformed immutable receipt",
+      "Wrong journal request, unknown operation, extra receipt field or non-object response",
+      "Running workflow, credentials younger than 65 minutes, wrong operator or stale state",
+      "Pending change set on a later inventory page or repeated pagination token",
+      "Changed runtime health or failed immutable-receipt write"
+    ]
+  },
+  "independent_scan_source_review": {
+    "status": "no blocking source finding",
+    "reviewed_ownership": "Scan guard, disposition, runner integration and public summary were authored by another agent.",
+    "scope": [
+      "Exact operator predecessor ARM64 manifest",
+      "Unchanged deployment contract digest",
+      "Three exact MEDIUM CVE/package/version/CVSS attribute tuples",
+      "Temporary expiry checked at preparation and again before execution",
+      "Critical findings remain refused regardless of baseline",
+      "Other new findings, changed severity/package/attributes/role/predecessor/contract remain refused",
+      "Raw scans and original baseline remain intact",
+      "Public summary exposes introduced, reviewed and unreviewed counts, CVE IDs, disposition content hash and expiry"
+    ],
+    "limits": [
+      "This review does not establish package fixes or transitive unreachability.",
+      "Vendor and live API evidence retained by the implementation author was reviewed as provenance; no duplicate remote vendor/API reads were performed.",
+      "Later identical findings becoming the recorded baseline is explicit in the disposition evidence."
+    ]
+  },
+  "operations_performed": {
+    "aws_calls": 0,
+    "aws_mutations": 0,
+    "canonical_state_writes": 0,
+    "runtime_changes": 0
+  },
+  "limits": [
+    "Local tests use synthetic AWS transport; this report does not claim live recovery or successful deployment.",
+    "The author qualification of maintenance is not a substitute for the separately recorded independent review."
+  ]
+}

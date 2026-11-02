@@ -21,6 +21,15 @@ def statements(document, logical):
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_cdk_parameter_read_is_exact_and_only_on_cloudformation_role(self):
+        doc = template(inventory())
+        cf = statements(doc, 'RuntimeExecution')
+        reads = [row for row in cf if any(action.startswith('ssm:') for action in row['Action'])]
+        self.assertEqual(reads, [{'Effect': 'Allow', 'Action': ['ssm:GetParameters'],
+            'Resource': f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'}])
+        for role in ['Prepare', 'Execute']:
+            self.assertFalse(any(action.startswith('ssm:') for row in statements(doc, role) for action in row['Action']))
+
     def test_roles_have_disjoint_mutation_authority(self):
         doc=template(inventory())
         prep=statements(doc,'Prepare');execute=statements(doc,'Execute');cf=statements(doc,'RuntimeExecution')

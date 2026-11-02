@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-02T06:38:45Z",
+  "disposition": "No remaining source-review blocker in the bounded first-promotion scan disposition after the final expiry-race repair.",
+  "scope": "Independent source review, offline qualification and comparison with retained actual scan receipts; no cloud operations or deployment approval by this reviewer.",
+  "reviewed_base_commit": "365c88344b9367990d55e668e90a5dcf217dfe77",
+  "source_sha256": {
+    "ops/promotion/registry.py": "93220b9602468181c6c1368d63b5562b81135f8869a061ae0a39e6eae688ce32",
+    "ops/promotion/runner.py": "3adca41ceaa1f3b4cde862420b909c386a5613f3d8a8e1c3dd413cca21b0fcf4",
+    "ops/promotion/github.py": "251e6dd44a7681b40aa358379b75ab9a39eaabcc6584110174f7f89be207c691",
+    "ops/promotion/scan-disposition.json": "a79596f31e62f5d03084fb476f5c39e928de4bf4810637e1f0914caae66b2f29",
+    "ops/promotion/test_scan.py": "bf2716e0e1359ebb2d0753bce9eefc56da21efbf1265afe58c5d997022713418",
+    "ops/promotion/test_github.py": "116308fd34549f3a85a836b8ffa8251ca853d8b787f435146b85e21fbddd69ca",
+    "ops/promotion/test_runner.py": "2535b0ce79eeddcc901e817a41c3d77a3e01ad21e0e0157becc009925afaca31",
+    "evidence/APP-167/SCAN-DISPOSITION.md": "cf55bfa36208ccc38f4b71705f57dbfb2a5f39c8101495de8b06cc68067f1c97"
+  },
+  "private_source_artifacts": {
+    "historical_preparation_state": {
+      "bytes": 583482,
+      "sha256": "254ad53066797d8415bc8613cba60159a4b97f161d04d4938a7cfafdec16e372"
+    },
+    "deployed_scan_readback": {
+      "bytes": 178684,
+      "sha256": "7067b6c29bab3cdb67eb9ac94c4e4038008c2827d9f4e90540e9b6ba0914041c"
+    },
+    "candidate_scan_readback": {
+      "bytes": 182818,
+      "sha256": "d1556870c2cdcd472a8caa6087de0a7ae4cf620234d3e5089e6de4095eca75d6"
+    }
+  },
+  "actual_scan_comparison": {
+    "service": {
+      "complete": true,
+      "findings": 24,
+      "introduced": 0,
+      "removed": 0
+    },
+    "qualification": {
+      "complete": true,
+      "findings": 24,
+      "introduced": 0,
+      "removed": 0
+    },
+    "operator": {
+      "complete": true,
+      "findings": 24,
+      "introduced": 3,
+      "removed": 1
+    },
+    "operator_delta_equals_all_reviewed_full_fingerprints": true,
+    "reviewed_predecessor_matches_retained_operator_manifest": true,
+    "reviewed_deployment_contract_matches_retained_state": true,
+    "same_full_fingerprints_present_in_deployed_service_and_qualification_scan_readbacks": true,
+    "deployed_operator_exposure_proven_by_scan_comparison": false
+  },
+  "verification": {
+    "command": "python3 -m unittest discover -s ops/promotion -p 'test_*.py' -v",
+    "tests": 88,
+    "failures": 0,
+    "errors": 0,
+    "exit_code": 0,
+    "elapsed_seconds": 2.163,
+    "independently_executed": true,
+    "transport": "Offline fixtures replace AWS and GitHub transport. The final expiry regression executes the actual source disposition, artifact binding, scan guard, packet and lifecycle logic; it advances the clock inside the final current-candidate read."
+  },
+  "resolved_finding": {
+    "issue": "The first execute-time expiry check preceded final network reads, which could cross the disposition expiry before outage.",
+    "repair": "The actual guard is repeated after final check_current, immediately before recording executing phase and issuing stop operations.",
+    "regression": "test_real_disposition_expiring_during_final_network_checks_cannot_stop",
+    "observed_result": "Expiry at the final network boundary refuses with zero update_service or execute_change_set calls and leaves the promotion prepared."
+  },
+  "reviewed_behavior": [
+    "The source policy permits only the three exact operator MEDIUM fingerprints for the pinned predecessor manifest and deployment contract; changes to package, version, severity, attributes, role, predecessor or contract refuse.",
+    "Original complete scan inventories remain intact. Approval summary reports the actual introduced and reviewed counts, CVE identifiers, unreviewed count zero, source disposition hash and expiry.",
+    "Preparation and execution compare the same packet-bound scan decision; changed policy bytes or expiry before outage refuse. CRITICAL findings are never accepted by this mechanism.",
+    "Expiry limits admission of this first promotion. After a successful release, identical findings are part of the recorded baseline and do not require this expired delta disposition; the document and test state this limitation."
+  ],
+  "limitations": [
+    "The vendor-open vulnerabilities are not fixed or suppressed. This review does not establish transitive unreachability in native dependencies.",
+    "Package inventory extraction was performed separately by the primary reviewer; this reviewer independently checked retained scan fingerprints and policy bindings, not the OCI package extraction.",
+    "Offline passing tests are not evidence of successful live promotion, human approval, activation or cleanup of the failed preparation.",
+    "The failed preparation and its baseline must remain retained; reconciliation and credential-expiry fencing are owned by the separate maintenance review.",
+    "No real recipient, capability, account identifier, secret reference or raw private AWS response is copied into this record."
+  ]
+}

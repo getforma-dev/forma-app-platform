@@ -5212,7 +5212,7 @@
       "Depends on": "None",
       "External dependencies": "GitHub protected environments and AWS OIDC/bootstrap qualification.",
       "Assignee": "Codex \u2014 GenUI",
-      "Branch / PR": "`pivot/beta-promotion`",
+      "Branch / PR": "[PR #43](https://github.com/getforma-dev/forma-app-platform/pull/43), merged as `365c88344b9367990d55e668e90a5dcf217dfe77`",
       "Team": "GenUI",
       "Blocked by": "None \u2014 implementation underway",
       "Unblock evidence": "Current explicit user authorization supersedes the older manual-only sequencing.",

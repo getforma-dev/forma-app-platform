@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-02T06:45:06Z",
+  "review_type": "independent source and static write-surface review; script not executed",
+  "reviewed_script_sha256": "4e503b28052b58fdbf4af92719d5eddb2ea6680f0266400238a19156e67041fe",
+  "supporting_source_sha256": {
+    "ops/promotion/state.py": "5ccd8c87e7705ba1cd0b2885e5d00e0eee1628629cbeab3cc5aa7702d63ac0ac",
+    "ops/promotion/runner.py": "3adca41ceaa1f3b4cde862420b909c386a5613f3d8a8e1c3dd413cca21b0fcf4",
+    "ops/promotion/bootstrap.py": "56c8509b5ceda0f186c1eb1b2ec472e67eb38fc1f5d777b57692138c68c7e96b",
+    "infra/scripts/preflight.py": "374ca1904602ed62a1fec6fe5a2f62b94748409b23232ee7b7901ef356723d14"
+  },
+  "disposition": "clear for the separately authorized operator action after fenced abandonment and fresh exact-state review",
+  "scope": {
+    "policy_field": "policy.shorten_expiry_hours",
+    "previous": 2,
+    "proposed": 6,
+    "revision_delta": 1,
+    "persistent_default": true
+  },
+  "verified_guards": [
+    "Exact reviewed canonical state hash and no active deployment lease",
+    "Original policy must still be two hours",
+    "The exact first failed promotion must be recorded as abandoned and the existing live predecessor must remain unchanged",
+    "Operator identity is required; preparation and execution workflow roles are refused",
+    "Existing full healthy runtime boundary is checked read-only",
+    "Prospective six-hour-shortened successor with two task-hours must pass the existing canonical budget validator at the current clock",
+    "Prospective reservation is not written to the ledger",
+    "Private immutable before/after receipt is written before the state CAS, under the bucket-policy-enforced promotions prefix",
+    "The conditional state write changes only the shortening policy plus one revision increment",
+    "Readback must equal the complete expected state, preserving ledger history, money, caps, identities, aliases and runtime configuration",
+    "No automatic retry after an unknown outcome; subsequent application fails the original-policy guard"
+  ],
+  "finding_resolved": {
+    "finding": "Initial receipt path was outside the bucket-policy-enforced immutable prefix.",
+    "resolution": "Final reviewed script stores the receipt below promotions/ with If-None-Match, matching the installed immutable-write policy."
+  },
+  "offline_checks": {
+    "python_syntax": "passed",
+    "conditional_store_calls": [
+      "immutable",
+      "change",
+      "load"
+    ],
+    "runtime_mutation_calls_present": false
+  },
+  "operations_performed_by_reviewer": {
+    "script_executions": 0,
+    "aws_calls": 0,
+    "state_writes": 0,
+    "runtime_changes": 0
+  },
+  "limits": [
+    "This is approval of the reviewed source scope, not evidence that the policy has been applied.",
+    "The six-hour shortening remains the future default until another explicit idle-state review changes it; there is no automatic reset.",
+    "Current service counts, schedules and runtime remain unchanged by this policy-only action. The next promotion approval displays its calculated expiry.",
+    "Operational stderr and the detailed local result must remain private; the success projection contains hashes, expiry and cost totals only."
+  ]
+}

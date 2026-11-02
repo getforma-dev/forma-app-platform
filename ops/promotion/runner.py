@@ -157,7 +157,8 @@ class Runner:
         self.store.change(lambda d: (d.update(ledger=ledger), d['active'].update(config=config, reservation=receipt,
                           artifact_manifest_sha256=request['qualified_artifact_manifest_sha256'])))
         registry = publish(self.aws, self.store, directory, bundle)
-        scan_delta = guard_scan_delta(registry, state['live']['registry'])
+        scan_delta = guard_scan_delta(registry, state['live']['registry'],
+            state['baseline']['deployment_contract_sha256'], self.clock())
         check_current(request['candidate_sha'])
         parameters = guards.runtime_parameters(guards.parameters(before['stack']), receipt)
         template = state['baseline']['template']; template_bytes = encoded(template); template_hash = hashlib.sha256(template_bytes).hexdigest()
@@ -194,7 +195,7 @@ class Runner:
                     'preserved': dict.fromkeys(['schema', 'template', 'trial', 'aliases', 'secrets'], True),
                     'changes': [{'logical_id': c['ResourceChange']['LogicalResourceId'], 'resource_type': c['ResourceChange']['ResourceType'],
                                  'action': c['ResourceChange']['Action'], 'replacement': c['ResourceChange']['Replacement']} for c in described['Changes']],
-                    'scan': {role: {'findings': len(registry[role]['findings']), 'introduced': 0} for role in guards.REPOS},
+                    'scan': scan_delta,
                     'sequence': ['stop both services', 'execute reviewed change set', 'verify stopped boundaries', 'activate both services', 'verify health and images'],
                     'outage_required': True},
                 'cost_genui_cents': cost['genui_total_cents'],
@@ -214,6 +215,9 @@ class Runner:
         require(active['packet_sha256'] == request['packet_sha256'] and digest(active['packet']) == request['packet_sha256'], 'prepared packet differs')
         packet = active['packet']; self.bundle(directory, request)
         require(packet['artifact_manifest_sha256'] == request['qualified_artifact_manifest_sha256'] and packet['candidate_sha'] == request['candidate_sha'], 'candidate differs from approved packet')
+        require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
+            self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
+            'scan disposition changed after preparation')
         from .github import validate_approval
         validate_approval(approval, request['authorization']['run_id'], request['candidate_sha'])
         self.store.immutable('promotions/' + active['promotion_id'] + '/approval.json', approval)
@@ -227,6 +231,9 @@ class Runner:
         require(digest(template) == packet['template_sha256'], 'actual prepared template changed')
         from .candidate import check_current
         check_current(request['candidate_sha'])
+        require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
+            self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
+            'scan disposition expired during final execution checks')
         self.store.change(lambda d: d['active'].update(phase='executing', approval_sha256=digest(approval)))
         outputs = before['outputs']
         for label, key in [('main', 'ServiceName'), ('broker', 'SharedBrokerServiceName')]:
