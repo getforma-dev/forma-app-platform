@@ -310,7 +310,7 @@
         "APP-165"
       ],
       "ticket_count": 67,
-      "done_count": 1,
+      "done_count": 2,
       "blocked_count": 0
     },
     {
@@ -349,7 +349,8 @@
     "APP-085",
     "APP-087",
     "APP-088",
-    "APP-125"
+    "APP-125",
+    "APP-163"
   ],
   "tickets": [
     {
@@ -5078,11 +5079,11 @@
     {
       "id": "APP-162",
       "title": "Workspace name/link entry and explicit switch on sign-in",
-      "path": "0-backlog/APP-162.md",
+      "path": "4-done/APP-162.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S14",
@@ -5092,18 +5093,17 @@
       "Repos": "forma-app-platform",
       "Decision": "[ADR-016](../../docs/architecture/ADR-016-WORKSPACE-SIGNIN.md), explicitly authorized by Victor on November 1, 2026.",
       "Requirements": "C01, C11, SR1, SR2, SR5",
-      "Depends on": "APP-009, APP-117, APP-140",
+      "Depends on": "APP-009",
       "External dependencies": "None for the existing tenant-bound hosted login.",
       "Assignee": "Codex \u2014 GenUI",
-      "Branch / PR": "`codex/workspace-signin`",
-      "Implementation": "Implemented with focused local qualification and independent review; AWS delivery remains pending. Formal predecessor gates remain separate.",
+      "Branch / PR": "[PR 39](https://github.com/getforma-dev/forma-app-platform/pull/39), merged as `0fe030c`; qualified source `7c3ab12`",
+      "Implementation": "Complete; focused campaigns, full checks, all 28 CI checks and independent authentication/operations review passed.",
+      "Deployment": "Live on AWS as `7c3ab12`, tag `beta/20261102-7c3ab12`, activated 2026-11-02 03:29:22 UTC.",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 implementation authorized; historical completion gates remain evidence-based.",
-      "Unblock evidence": "Current user authorization selects this slice without declaring older gates complete.",
+      "Blocked by": "None",
+      "Unblock evidence": "APP-009 is Done; this ticket\u2019s own qualification, review, merge, AWS and live-entry evidence are complete.",
       "dependencies": [
-        "APP-009",
-        "APP-117",
-        "APP-140"
+        "APP-009"
       ]
     },
     {

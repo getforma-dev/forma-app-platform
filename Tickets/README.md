@@ -15,6 +15,8 @@ The subsequent screenshot-driven [app composition decision](../docs/architecture
 
 Sprints are ordered scope batches, not calendar commitments. Start dates and capacity are unset. Team ownership is assigned; individual implementers are selected when work starts. Later sprints are forecasts; refine or split a ticket before selection if it cannot fit a small, reviewable change. The GenUI and FormaStack teams work in parallel when actual dependencies permit it. An upstream integration gate blocks only the dependent behavior; continue unrelated app work and record precisely what evidence is needed to unblock integration.
 
+The workspace-entry follow-through [APP-162](4-done/APP-162.md) is Done and deployed as `7c3ab12`, retaining the composed-app runtime and original trial. Its [release evidence](../evidence/APP-162/aws-workspace-entry-2026-11-02/README.md) includes actual browser handoff and switching. APP-163 verified-email discovery, APP-164 authenticated workspace switching and APP-165 invitation email delivery remain Backlog.
+
 ## One authoritative ticket
 
 Each `APP-NNN.md` lives in exactly one status folder. Its Markdown fields, acceptance checklist and log are authoritative. `plan.json` defines phase gates, category and sprint metadata; `external-dependencies.json` records upstream gate evidence. `TRACKER.md`, `PHASES.md`, `SPRINTS.md`, phase/category/sprint pages, `COVERAGE.md`, `BLOCKERS.md` and `index.json` are derived views. Edit the source ticket or register, then regenerate; do not hand-edit those views.

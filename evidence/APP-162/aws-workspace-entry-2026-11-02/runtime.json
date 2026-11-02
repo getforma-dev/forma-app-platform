@@ -1,0 +1,183 @@
+{
+  "candidate_sha": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+  "merged_commit": "0fe030c7624bc29b31a7e659771f323281847420",
+  "candidate_and_merge_trees_identical": true,
+  "pull_request": "https://github.com/getforma-dev/forma-app-platform/pull/39",
+  "activated_at_utc": "2026-11-02T03:29:22Z",
+  "schema_version": 19,
+  "git_tag": {
+    "passed": true,
+    "observed_at_utc": "2026-11-02T03:29:50.269937+00:00",
+    "tag": "beta/20261102-7c3ab12",
+    "candidate_sha": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+    "annotated_tag_object": "408e69db3bbd80219e3d9e2747b6db60c6c309c0",
+    "remote_peeled_commit": "7c3ab123f524c4e9a7b855be0a2f582c626341ae"
+  },
+  "services": [
+    {
+      "service": "application",
+      "task_definition_revision": 16,
+      "desired": 1,
+      "running": 1,
+      "pending": 0
+    },
+    {
+      "service": "invitation_broker",
+      "task_definition_revision": 4,
+      "desired": 1,
+      "running": 1,
+      "pending": 0
+    }
+  ],
+  "runtime_passed": true,
+  "running_image_proof_passed": true,
+  "public_probes": {
+    "live": true,
+    "canvas": true,
+    "entry": true,
+    "mcp": true,
+    "slack": true,
+    "slack_mode": "on",
+    "at_utc": "2026-11-02T03:29:47Z",
+    "origin": "https://beta.getforma.dev"
+  },
+  "readiness": {
+    "observed_at_utc": "2026-11-02T03:29:50.269937+00:00",
+    "url": "https://beta.getforma.dev/health/ready",
+    "status": 200,
+    "verified_tls": true,
+    "redirects": 0
+  },
+  "alias": "forma-trial",
+  "alias_binds_original_trial": true,
+  "provider_identity_roles_secret_references_and_storage_preserved": true,
+  "migrations_performed": 0,
+  "operator_tasks_performed": 0,
+  "both_enabled_shutdown_schedules_utc": "2026-11-30T14:00:00Z",
+  "forecast_cents": {
+    "genui": 16984,
+    "project": 20784
+  },
+  "registry_images": [
+    {
+      "image": "service",
+      "registry_top_digest": "sha256:8b469c07c5501b2c86d49287ae640e0bb45ebe791f325ca4ad920914b94c191f",
+      "registry_arm64_child_digest": "sha256:ae57f38da68bcc254da268a23df99ca1147ec7d0c20aa7989bed31197fbb9862",
+      "registry_configuration_digest": "sha256:2a920d345959cd332faa307d1deeef2efb463fb943a54bbba0a552a6a9fd292b",
+      "counts": {
+        "HIGH": 8,
+        "MEDIUM": 13,
+        "LOW": 3
+      },
+      "new_findings": [
+        [
+          "CVE-2026-114690",
+          "MEDIUM",
+          "gcc-12",
+          "12.2.0-14+deb12u1"
+        ],
+        [
+          "CVE-2026-114691",
+          "MEDIUM",
+          "gcc-12",
+          "12.2.0-14+deb12u1"
+        ],
+        [
+          "CVE-2026-115455",
+          "MEDIUM",
+          "gcc-12",
+          "12.2.0-14+deb12u1"
+        ]
+      ],
+      "removed_findings": [
+        [
+          "CVE-2026-119586",
+          "HIGH",
+          "sqlite3",
+          "3.40.1-2+deb12u2"
+        ]
+      ],
+      "child_unchanged": false
+    },
+    {
+      "image": "qualification",
+      "registry_top_digest": "sha256:c3df74ce5d0ec7b9a3ffe8a67c7c4f2c7ec883dff1391dab586d2cb11709990e",
+      "registry_arm64_child_digest": "sha256:7857a84d69fbc535cafb4e402b293317f0e7bf2d38ba7fbdb07036244e400687",
+      "registry_configuration_digest": "sha256:a62b76c127657a31ddb79c8054f905a040a8522a8c261321c357a69309314246",
+      "counts": {
+        "HIGH": 8,
+        "MEDIUM": 13,
+        "LOW": 3
+      },
+      "new_findings": [
+        [
+          "CVE-2026-114690",
+          "MEDIUM",
+          "gcc-12",
+          "12.2.0-14+deb12u1"
+        ],
+        [
+          "CVE-2026-114691",
+          "MEDIUM",
+          "gcc-12",
+          "12.2.0-14+deb12u1"
+        ],
+        [
+          "CVE-2026-115455",
+          "MEDIUM",
+          "gcc-12",
+          "12.2.0-14+deb12u1"
+        ]
+      ],
+      "removed_findings": [
+        [
+          "CVE-2026-119586",
+          "HIGH",
+          "sqlite3",
+          "3.40.1-2+deb12u2"
+        ]
+      ],
+      "child_unchanged": false
+    },
+    {
+      "image": "operator",
+      "registry_top_digest": "sha256:d93266735e2ae8f8f091767efe277e87ec336238b18e1d46bfa8b3e488498e15",
+      "registry_arm64_child_digest": "sha256:d66e151ce70cc6ee6306ddc30182d22c75a530d8ae63c4c9a7c286b676774869",
+      "registry_configuration_digest": "sha256:55c751e0c1c4843de4664f8e12a96a2b55c37ee2e3d535bf05d1e5e8cd5e312c",
+      "counts": {
+        "HIGH": 9,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "new_findings": [],
+      "removed_findings": [],
+      "child_unchanged": true
+    }
+  ],
+  "installed_package_tuples_unchanged_per_image": 105,
+  "scan_disposition": "Retain three newly reported Medium GCC findings; no new High/Critical. No dependency change, package fix or unreachability is claimed. Debian lists no fixed package for these findings.",
+  "vendor_sources": [
+    "https://security-tracker.debian.org/tracker/CVE-2026-114690",
+    "https://security-tracker.debian.org/tracker/CVE-2026-114691",
+    "https://security-tracker.debian.org/tracker/CVE-2026-115455"
+  ],
+  "private_receipt_hashes": {
+    "release.json": "b6e091a3a755c9b5dbe2cb4d3a34e5e7589178b54f61612e58978b2e15948d0e",
+    "runtime-boundary-healthy.json": "f0678612496cf8c03dbae26ed6ea92d1887f538dbda4511d5be746e7131d93f8",
+    "running-tasks-proof.json": "3dc0fbcc7faa2c2c0970bcdd918ec6b6972a8974c82b3ea438c0f146d956b675",
+    "registry-scan-comparison.json": "18f61af04fe7e32ce65b482905a8e36186b1cb2ba011ce9f490accb0b3284537",
+    "ledger-continuity.json": "05ff5e223961fa06a69bafc6bf6897f97ecb46c5fd6d23633a7ef3da607491cb",
+    "DEPLOYMENT-REVIEW-PACKET.json": "84cf8fc31b0582df9dda797f39ba200042c2fa37869ebf7cff0e76d5bfbc45a8",
+    "RUNTIME-ROLLOUT-HANDOFF.json": "748621137ebbbc5b0cbd2e1795bb956fdbbcb29261639085d2d07bcd90655045",
+    "independent-final-runtime-5b239cd0.json": "96a486006ec436e6ac29fb59c6546cc92622e9967e8789463addfaeebc5af5b6"
+  },
+  "limitations": [
+    "Hosted credential login and guest signup are not implied by infrastructure health.",
+    "Existing trial identities and storage were retained; no new account or tenant was created."
+  ],
+  "independent_final_audit": {
+    "passed": true,
+    "aggregate_receipts_verified": 56,
+    "scope": "Running services/images, public probes, schema, ledger continuity, exact-candidate CI, merge tree and remote annotated release tag. No authenticated login claim."
+  }
+}

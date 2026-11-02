@@ -4,9 +4,15 @@ This is the clean profile of [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md), prepared on
 
 Local source qualification is not a hosted acceptance result. Complete the deployment receipt, real registration/sign-in and owner-to-external-recipient journey before closing APP-140. Keep the owner and recipient mailboxes, codes, provider keys and tokens in the private operator directory only.
 
-## Current status — November 2, 00:42 UTC
+## Current status — November 2, 03:29 UTC
 
-The [composed-app release](../../evidence/APP-140/composed-app-release-2026-11-02/README.md) activated exact candidate `9ee4a01` at **00:40:47 UTC**, with schema **19**, application TD **15** and broker TD **3** healthy at `1/1/0`. Window `f4449af8` supersedes `a58e69cd`; both enabled shutdown schedules target **November 30 at 16:00 UTC**. The reviewed reservation projects **$169.83 GenUI / $207.83 combined**, preserving prior history and allowances under the same caps. The available pre-migration snapshot, migration and repeated catalog checks, all five public TLS probes and readiness check passed. No tenant, invitation, secret, seed or library setup was replayed.
+The [workspace-entry release](../../evidence/APP-162/aws-workspace-entry-2026-11-02/README.md) activated exact candidate `7c3ab12` at **03:29:22 UTC**, retaining schema **19** and the same trial identity/storage. Application TD **16** and broker TD **4** are healthy at `1/1/0`; all five TLS probes and readiness passed. Window `5b239cd0` supersedes `f4449af8`; both enabled shutdown schedules now target **November 30 at 14:00 UTC**, with a canonical forecast of **$169.84 GenUI / $207.84 combined** under the unchanged caps and all prior history/allowances preserved. The only presentation configuration addition is the reviewed `forma-trial` alias pointing to the existing trial handle. No migration, snapshot, operator task, provider/secret/account change, invitation replay or reset was performed.
+
+Use [Sign in](https://beta.getforma.dev/signin) with workspace `forma-trial`, or its [direct link](https://beta.getforma.dev/signin/forma-trial). Existing opaque links remain supported. Verified-email discovery, authenticated multi-workspace switching and actual invitation-email delivery are APP-163–165; Northstar is not silently re-enabled by this form. The genuine recipient's final hosted acceptance and timed recording remain separate.
+
+## Previous composed-app release — November 2, 00:42 UTC
+
+The [composed-app release](../../evidence/APP-140/composed-app-release-2026-11-02/README.md) activated exact candidate `9ee4a01` at **00:40:47 UTC**, with schema **19**, application TD **15** and broker TD **3** healthy at `1/1/0`. Window `f4449af8` supersedes `a58e69cd`; that window’s enabled shutdown schedules targeted **November 30 at 16:00 UTC**. Its reviewed reservation projected **$169.83 GenUI / $207.83 combined**, preserving prior history and allowances under the same caps. The available pre-migration snapshot, migration and repeated catalog checks, all five public TLS probes and readiness check passed. No tenant, invitation, secret, seed or library setup was replayed.
 
 Fresh genuine owner sign-in passed. The original record and share inventories were unchanged, and the live composed-app journey passed empty Dining tracker creation, persisted layout/theme/action editing, one audited $12.50 meal with reloaded dashboard/list, and phone/canvas dialogs. Guest product-email verification, verified acceptance and the complete recorded journey remain separate and open.
 

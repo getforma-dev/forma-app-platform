@@ -1,0 +1,41 @@
+{
+  "candidate_sha": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+  "method": "Actual UI interactions in an isolated ChatGPT in-app browser; observations recorded by the operator.",
+  "checks": [
+    {
+      "name": "bare_entry",
+      "passed": true,
+      "observation": "GET /signin displays a labeled editable Workspace input and Sign in button."
+    },
+    {
+      "name": "alias_provider_handoff",
+      "passed": true,
+      "observation": "Submitting forma-trial reaches the existing tenant login with email/password controls. No intermediate Continue page.",
+      "destination_without_query": "https://auth-staging.getforma.dev/t/forma-trial-20261101/login"
+    },
+    {
+      "name": "remembered_workspace",
+      "passed": true,
+      "observation": "Returning to /signin displays editable forma-trial and Switch workspace."
+    },
+    {
+      "name": "switch_workspace",
+      "passed": true,
+      "observation": "Clicking Switch workspace opens /signin?switch=1 with an empty editable Workspace input."
+    },
+    {
+      "name": "direct_link",
+      "passed": true,
+      "observation": "GET /signin/forma-trial displays editable forma-trial and Switch workspace."
+    }
+  ],
+  "credential_login_performed": false,
+  "account_or_invitation_created": false,
+  "limitations": [
+    "Provider handoff is not a fresh authenticated user journey.",
+    "Authorization query values, cookies and private browser state are excluded.",
+    "An earlier native Chrome attempt was interrupted before submission; this result is from the later isolated in-app browser."
+  ],
+  "recorded_at_utc": "2026-11-02T03:38:18.665136+00:00",
+  "observation_window_utc": "2026-11-02 approximately 03:35\u201303:38 UTC"
+}
