@@ -2,6 +2,8 @@
 
 This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape), APP-123 (cards made by you, `@` mentions, `/forma`, `/<folder>`, pinned answers), APP-124 (start from your data) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
 
+**Decision precedence (2026-11-02):** [ADR-018: Whole apps, independent cards and presentation views](../architecture/ADR-018-WHOLE-APP-VIEWS.md) supersedes this page's older instructions for placing, separating or removing individual app components. An app is one canvas object; **App Card**, **Stack** and **Open** are views of that same app, preserving its identity, drafts, actions and permissions. The Library separates **Apps**, **Widgets** and **Cards**; app components stay inside their app. The November 2 file-card decision below extends that model for uploaded spreadsheets. Earlier APP-120–124 descriptions remain historical context where explicitly superseded; they do not override these later decisions. This records the local iteration's product rules, not a hosted release or deployment claim.
+
 ## The one sentence
 
 **Type `/` and a verb to change the canvas, `/` and a name to tell that thing something, or just type a sentence.**
@@ -19,6 +21,8 @@ Four jobs, and where you type picks the job, never the AI:
 
 ## What a canvas holds
 
+The following table retains APP-120's component vocabulary: its “card” means an app's internal renderer. ADR-018 governs whole-app placement, and the file cards below are independent uploaded-file artifacts, not extracted app components.
+
 | Kind | What it is | Contains | Governed? | Examples |
 | --- | --- | --- | --- | --- |
 | **App** | A team tool with its own data, permissions, approvals and receipts; shareable | **Cards**, its views | Yes | Expenses, Time off, Purchase requests |
@@ -32,6 +36,23 @@ Four jobs, and where you type picks the job, never the AI:
 - Arrangements are never listed in the Library; they only change how things sit.
 
 ## Start from your data (APP-124)
+
+### Uploaded spreadsheets: November 2 decision
+
+**Upload → File Card → App Card** is the direct CSV/XLSX path in this local iteration.
+
+1. **Upload keeps the original automatically.** A CSV or XLSX uploaded onto the canvas becomes its own **File Card**, showing the file's icon and name. There is no **Keep original**, **Open original file** or **Make a card** choice in a post-upload notice: the file is already kept and its canvas representation is already a card. Uploading alone creates no app or separate data card.
+2. **The file remains in Library → Cards.** Closing the File Card removes its canvas placement, not the stored file. **Add** in Cards restores it after checking current access. Saved placements contain references and layout, not a cached copy of private file contents.
+3. **Double-click opens the original.** Double-click the icon or noninteractive card face to view the original spreadsheet in a modal. Buttons, the Ask field and scrolling keep their normal interactions. The original stays available independently of any generated app.
+4. **Ask belongs to this file.** The card's footer has an Ask field and button. Its read-only request names the exact file under the folder's existing authorization; the answer carries that file's source-row references. An unavailable, hidden or unreadable file never falls back to a sibling file. Folder-wide Ask remains a separate scope.
+5. **Make an app is the explicit next step.** The card's owner action opens the column-and-purpose confirmation for this file. That confirmation offers **Cancel** and **Build the app**, with no **Keep as card**, **Make a card** or **Add to app** branch. Nothing is generated before Build. Retrying the same submitted intent reuses its creation identity rather than making another app.
+6. **Successful placement upgrades the card in place.** The resulting whole app appears at the source card's position in **App Card** view. Only successful placement removes the original File Card from the canvas; failure keeps the original available. Closing the source while work is pending must not resurrect its placement or remove a subsequently restored card. The stored file remains in Cards, and the app's source section retains original-file access and exact-file Ask through authorized lineage. Switching to Stack or Open still presents that same app. This path adds no loose **Summary** or separate data-card canvas object.
+
+The upgrade changes the canvas representation; it does not overwrite the uploaded bytes or discard their provenance. App-card visual design can evolve without changing that relationship.
+
+### Existing folder behavior and historical APP-124 flow
+
+Folders continue to offer **Ask**, **Make a card**, **✨ Make an app** and **Brief me** under their existing permissions. A folder's **Make a card** still creates a minimal saved app/work; it is distinct from the automatically created File Card above. Uploading into a folder and copying a File Card onto a folder keep their existing storage behavior. The earlier folder-first sequence below is retained as APP-124 history: its blanket claim that every empty-canvas upload creates a folder, and its separate card-creation step, are superseded for direct CSV/XLSX uploads by the November 2 decision.
 
 Data → card → app is one visible path, with no new concepts: a folder holds the files, Ask reads them, formation makes a card or an app.
 
@@ -59,7 +80,7 @@ Data → card → app is one visible path, with no new concepts: a folder holds 
 
 | Tab | Shows | Opens with |
 | --- | --- | --- |
-| **Library** | **Apps** (category → app → cards) and **Widgets** | `L`, `/apps [query]`, the Library button |
+| **Library** | **Apps**, **Widgets** and **Cards**, including uploaded File Cards; app components remain inside their app (ADR-018) | `L`, `/apps [query]`, the Library button |
 | **Commands** | Every verb, with its arguments and an example | `/commands`, `/help` |
 | **Ask** | A read-only conversation about your data (APP-122); `@` scopes it, its chip's × asks about the canvas (APP-123) | `/ask …` or `?` + text in the bar, ⋯ → Ask about this |
 | **Shortcuts** | Keys and gestures | `/shortcuts`, ⋯ → Shortcuts |

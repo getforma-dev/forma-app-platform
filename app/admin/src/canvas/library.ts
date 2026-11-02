@@ -15,7 +15,7 @@ import { ensureCommands, registerCommands, registerCompleter, setAppPlacer, type
 import { announce, el, isUuid } from './render';
 import { removeWidgets, runWidget, widgetCount } from './widgets/index';
 import { newNote, noteEntries, toggleNote } from './notes';
-import { closeFolders, folderEntries, newFolder, toggleFolder } from './boxes';
+import { closeFolders, fileCardEntries, folderEntries, newFolder, toggleFileCard, toggleFolder } from './boxes';
 import { focusFromItem } from './focus';
 
 type Report = (message: string) => void;
@@ -96,6 +96,64 @@ export function renderSavedCards(section: HTMLElement, entries: readonly SavedCa
     void refresh().then(message => {status.textContent = message; announce(message);}, () => {status.textContent = 'Saved cards could not be refreshed. Try again.';}).finally(() => {reload.disabled = false;});
   });
   section.replaceChildren(el(document_, 'h3', {class: 'cv-lib-cat-title'}, 'Saved cards and answers'), reload, status, list);
+}
+
+export type FileCardEntry = {boxId: string; fileId: string; title: string; detail: string; on: boolean};
+const pendingFileCards = new Set<string>();
+const fileCardRenders = new WeakMap<HTMLElement, {signature: string; toggle: (boxId: string, fileId: string) => Promise<string>}>();
+
+/** Uploaded file inventory is independent of canvas placement. Closing a file
+ * card changes its toggle, never removes the authorized file from this list. */
+export function renderFileCards(section: HTMLElement, entries: readonly FileCardEntry[], toggle = toggleFileCard): void {
+  const signature = JSON.stringify(entries);
+  const previous = fileCardRenders.get(section);
+  if (previous?.signature === signature && previous.toggle === toggle) return;
+  fileCardRenders.set(section, {signature, toggle});
+  const document_ = section.ownerDocument;
+  const status = el(document_, 'p', {class: 'cv-lib-hint', role: 'status', 'data-file-card-status': ''}, entries.length
+    ? 'Your uploaded files. Removing a card from the canvas keeps its file here.'
+    : 'Upload a CSV or Excel file to add its card here.');
+  const list = el(document_, 'ul', {class: 'cv-lib-apps'}, ...entries.map(entry => {
+    const key = `${entry.boxId}/${entry.fileId}`;
+    const button = el(document_, 'button', {
+      type: 'button', class: 'cv-lib-all', 'data-file-card-toggle': key,
+      'aria-pressed': String(entry.on), 'aria-label': `${entry.on ? 'Remove' : 'Add'} ${entry.title} ${entry.on ? 'from' : 'to'} canvas`,
+      title: entry.on ? 'Remove from the canvas. The uploaded file stays in Cards.' : 'Bring this file card onto the canvas',
+    }, entry.on ? 'Remove' : 'Add') as HTMLButtonElement;
+    button.disabled = pendingFileCards.has(key);
+    button.addEventListener('click', () => {
+      if (pendingFileCards.has(key)) return;
+      pendingFileCards.add(key); button.disabled = true;
+      status.textContent = entry.on ? 'Removing file card from canvas…' : 'Opening file card…';
+      const report = (message: string) => {
+        const current = section.querySelector('[data-file-card-status]');
+        if (current) current.textContent = message;
+        announce(message);
+      };
+      void toggle(entry.boxId, entry.fileId).then(message => {
+        report(message);
+      }, () => {
+        report('That file card could not be changed. Try again.');
+      }).finally(() => {
+        pendingFileCards.delete(key);
+        button.disabled = false;
+        // A canvas change may have replaced the row while placement was pending.
+        const current = section.querySelector<HTMLButtonElement>(`[data-file-card-toggle="${key}"]`);
+        if (current) current.disabled = false;
+      });
+    });
+    return el(document_, 'li', {
+      class: `cv-lib-app cv-lib-saved-card cv-lib-file-card${entry.on ? ' has-on' : ''}`,
+      'data-file-card': key, 'data-search': `${entry.title} ${entry.detail} file card`.toLowerCase(),
+    },
+    el(document_, 'div', {class: 'cv-lib-app-head'},
+      el(document_, 'div', {class: 'cv-lib-title-group'},
+        el(document_, 'span', {class: 'cv-lib-dot', 'data-lib-dot': '', 'data-on': String(entry.on), 'aria-hidden': 'true'}),
+        el(document_, 'span', {class: 'cv-lib-app-title', title: entry.title}, entry.title),
+        el(document_, 'span', {class: 'cv-lib-on', 'data-lib-on': ''}, entry.on ? 'On canvas' : '')), button),
+    el(document_, 'p', {class: 'cv-lib-hint'}, entry.detail));
+  }));
+  section.replaceChildren(el(document_, 'h3', {class: 'cv-lib-cat-title'}, 'Uploaded files'), status, list);
 }
 
 const phone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
@@ -505,6 +563,8 @@ export function syncLibrary(view: (work: string) => { mode: AppViewMode } | null
   }
   const widgets = pane?.querySelector<HTMLElement>('[data-category="widgets"]');
   if (widgets) renderWidgets(widgets, snapshot());
+  const files = pane?.querySelector<HTMLElement>('[data-category="file-cards"]');
+  if (files) renderFileCards(files, fileCardEntries());
   filter(search?.value ?? '');
 }
 
@@ -546,7 +606,7 @@ function filter(query: string): void {
       if (!row.hidden) shown += 1;
       if (words && !app) expand(row, Boolean(cardHits) && !appHit);
     }
-    section.hidden = shown === 0 && (Boolean(words) || !['standalone', 'saved-cards'].includes(section.dataset.category ?? ''));
+    section.hidden = shown === 0 && (Boolean(words) || !['standalone', 'saved-cards', 'file-cards'].includes(section.dataset.category ?? ''));
   }
   for (const group of pane?.querySelectorAll<HTMLElement>('[data-lib-group]') ?? []) {
     group.hidden = Boolean(words) && !group.querySelector('.cv-lib-cat:not([hidden])');
@@ -928,11 +988,13 @@ function sections(document_: Document): void {
     el(document_, 'h2', { class: 'cv-lib-group-title' }, 'Widgets'), buildWidgets(document_));
   const cardsGroup = el(document_, 'div', { class: 'cv-lib-group', 'data-lib-group': 'cards' },
     el(document_, 'h2', { class: 'cv-lib-group-title' }, 'Cards'),
+    el(document_, 'section', {class: 'cv-lib-cat', 'data-category': 'file-cards', 'aria-label': 'Uploaded files'}),
     el(document_, 'section', { class: 'cv-lib-cat', 'data-category': 'standalone', 'aria-label': 'Standalone cards' },
       el(document_, 'p', { class: 'cv-lib-hint' }, 'Whole card works. This personal category is saved in this browser.'),
       el(document_, 'ul', { class: 'cv-lib-apps' })),
     el(document_, 'section', {class: 'cv-lib-cat', 'data-category': 'saved-cards', 'aria-label': 'Saved cards and answers'}));
   list.replaceChildren(appsGroup, widgetsGroup, cardsGroup);
+  renderFileCards(cardsGroup.querySelector<HTMLElement>('[data-category="file-cards"]')!, fileCardEntries());
   renderSavedCards(cardsGroup.querySelector<HTMLElement>('[data-category="saved-cards"]')!, savedEntries, showSaved ?? (async () => 'Saved cards are still loading.'), savedMessage, refreshSaved);
 }
 

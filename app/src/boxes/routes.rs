@@ -30,9 +30,9 @@
 //!   either idempotent (ADR-011 I4): a repeat by the member on the folder
 //!   answers the first result (201, `Idempotent-Replayed: true`), the same
 //!   key with another body is 422 `idempotency_key_reused`.
-//! - `POST /v1/boxes/{box}/ask {"question"}`: APP-124, Ask on a folder
-//!   (`super::ask`): a read-only answer over its parsed tables, with the
-//!   file and row of every row it used.
+//! - `POST /v1/boxes/{box}/ask {"question", "file_id"?}`: APP-124, Ask on a
+//!   folder or one of its authorized files (`super::ask`): a read-only answer
+//!   with the file and row of every row it used.
 //! - `POST /v1/boxes/{box}/share {"grantee_principal_id"}`.
 //! - `GET /v1/boxes/lineage/{app}/{work}`: a work's provenance.
 //! - `GET|POST /v1/boxes/explain/{app}/{work}`: the explanation card.

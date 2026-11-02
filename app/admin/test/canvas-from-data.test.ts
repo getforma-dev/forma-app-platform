@@ -1,5 +1,5 @@
-// APP-124 (start from your data): the empty canvas's third choice, "Drop
-// files or upload", makes a folder holding the files; a folder with files
+// APP-124 (start from your data): "Drop files or upload" places spreadsheets
+// as file cards, while other files make a folder; a folder with files
 // offers Ask (the Ask tab scoped to the folder: `POST /v1/boxes/{box}/ask`),
 // Make a card (its confirm first, then `POST /v1/boxes/{box}/apps
 // {"one_card": true}`) and Make an app (the formation confirm, then the
@@ -104,7 +104,8 @@ class FakeDocument {
   ids = new Map<string, FakeNode>();
   activeElement: FakeNode | null = null;
   body = new FakeNode(this, 'body');
-  createElement(tag: string) { return new FakeNode(this, tag); }
+  created: FakeNode[] = [];
+  createElement(tag: string) { const node = new FakeNode(this, tag); this.created.push(node); return node; }
   createElementNS(_ns: string, tag: string) { return new FakeNode(this, tag); }
   createTextNode(text: string) { const node = new FakeNode(this, '#text'); node.text = text; return node; }
   getElementById(id: string) { return this.ids.get(id) ?? null; }
@@ -124,7 +125,8 @@ function freshDocument(): FakeDocument {
 }
 
 type Call = { url: string; method: string; body: Record<string, unknown> | null; key?: string };
-function fakeFetch(answer: (call: Call) => { status: number; body: unknown }): Call[] {
+type FetchAnswer = { status: number; body: unknown };
+function fakeFetch(answer: (call: Call) => FetchAnswer | Promise<FetchAnswer>): Call[] {
   const calls: Call[] = [];
   (globalThis as { fetch?: unknown }).fetch = async (url: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}) => {
     const call = {
@@ -132,7 +134,7 @@ function fakeFetch(answer: (call: Call) => { status: number; body: unknown }): C
       ...(init.headers?.['idempotency-key'] ? { key: init.headers['idempotency-key'] } : {}),
     };
     calls.push(call);
-    const { status, body } = answer(call);
+    const { status, body } = await answer(call);
     return { ok: status < 300, status, json: async () => body };
   };
   return calls;
@@ -206,19 +208,17 @@ test('the empty canvas offers "Drop files or upload": a spreadsheet becomes a fi
   assert.equal(calls.filter((c) => c.url === '/v1/boxes/uploads').length, 1, 'the file is kept in Uploads until the member chooses');
   const notice = document_.getElementById('bx-notice')!;
   assert.doesNotMatch(notice.textContent, /until you choose/);
-  assert.ok(button(notice, 'Open original file') && button(notice, 'Make a card') && button(notice, 'Make an app'), 'original viewing is separate from optional creation');
+  assert.equal(button(notice, 'Open original file'), undefined);
+  assert.equal(button(notice, 'Make a card'), undefined);
+  assert.equal(button(notice, 'Make an app'), undefined, 'creation belongs on the uploaded file card, not a second upload choice');
+  const fileCard = document_.created.find(node => node.classes.has('bx-sheet'))!;
+  assert.ok(fileCard, 'upload constructs the file itself as a card');
+  assert.ok(button(fileCard, 'Make an app'), 'the file card owns its upgrade action');
+  assert.equal(button(fileCard, 'Make a card'), undefined);
   notice.all().find((node) => node.getAttribute('aria-label') === 'Dismiss')!.click();
-  assert.equal(notice.hidden, true, 'dismissing the question places nothing');
+  assert.equal(notice.hidden, true, 'dismissing upload status does not undo the file');
   assert.equal(calls.filter((c) => c.url.includes('/apps')).length, 0, 'dismiss does not build an app or a card');
-  input.files = [new File(['amount\n1'], 'q3_metrics.csv', { type: 'text/csv' })];
-  input.click('change');
-  await settle();
-  const makeCard = button(document_.getElementById('bx-notice')!, 'Make a card')!;
-  makeCard.click();
-  makeCard.click();
-  await settle();
-  const cards = calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
-  assert.deepEqual(cards.map((c) => c.body), [{ one_card: true, file_ids: [FILE] }], 'Make a card sends this file, once');
+  assert.equal(calls.filter((c) => c.url.endsWith('/data')).length, 0, 'upload parses the original without creating a data work');
   input.files = [new File(['amount\n1'], 'notes.pdf', { type: 'application/pdf' })];
   input.click('change');
   await settle();
@@ -253,43 +253,30 @@ test('a spreadsheet dropped with another file stays a file, and the other file m
     'the other file still makes a folder',
   );
   const notice = document_.getElementById('bx-notice')!;
-  assert.ok(button(notice, 'Open original file'), 'file viewing stays available without creation');
+  assert.equal(button(notice, 'Open original file'), undefined, 'the file card opens its original on double-click');
+  assert.ok(document_.created.some(node => node.classes.has('bx-sheet')));
   assert.doesNotMatch(notice.textContent, /until you choose/);
 });
 
-test('several spreadsheets: Make an app requests the selected files and explains the server cap', async () => {
+test('several spreadsheet uploads make individual file cards without starting a bulk app', async () => {
   const document_ = freshDocument();
-  const bar = document_.createElement('input');
-  bar.setAttribute('id', 'intent-input');
-  const pick = document_.createElement('button');
-  pick.setAttribute('data-empty-upload-pick', '');
-  const input = document_.createElement('input');
-  input.setAttribute('data-empty-upload', '');
-  document_.body.append(bar, pick, input);
   const calls = fakeFetch(() => ({ status: 201, body: { box: { box_id: BOX, number: 1, name: 'Uploads', kind: 'uploads', owner: true, file_count: 0, created_at: '2026-10-31T00:00:00Z' } } }));
   (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
   const boxes = await import('../src/canvas/boxes.ts');
-  boxes.startEmptyChoices(document_ as unknown as Document);
-  input.files = [
+  await boxes.newUntitled([
     new File(['amount\n1'], 'q3_metrics.csv', { type: 'text/csv' }),
     new File(['pk'], 'other.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-  ];
-  input.click('change');
-  await settle();
+  ]);
+  const cards = document_.created.filter(node => node.classes.has('bx-sheet'));
+  assert.deepEqual(cards.map(card => card.dataset.file), [FILE, FILE2]);
+  for (const card of cards) {
+    assert.ok(button(card, 'Make an app'));
+    assert.equal(button(card, 'Make a card'), undefined);
+  }
   const notice = document_.getElementById('bx-notice')!;
-  assert.ok(button(notice, 'Open Uploads'), 'both originals are retained');
-  button(notice, 'Make an app')!.click();
-  const sheet = button(document_.body, 'Make an app from this');
-  assert.ok(sheet, 'the column sheet opens');
-  assert.match(document_.body.textContent, /2 files requested; apps use up to 3 readable tables/);
-  assert.match(document_.body.textContent, /These columns belong to q3_metrics.csv only/);
-  assert.doesNotMatch(document_.body.textContent, /includes all/);
-  sheet!.click();
-  assert.equal(calls.filter((c) => String(c.url).includes('/apps')).length, 0, 'the app is not built before the purpose is confirmed');
-  button(document_.body, 'Build the app')!.click();
-  await settle();
-  const built = calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
-  assert.deepEqual(built.map((c) => c.body), [{ purpose: 'an overview of this data', file_ids: [FILE, FILE2] }]);
+  assert.equal(button(notice, 'Make a card'), undefined);
+  assert.equal(button(notice, 'Make an app'), undefined);
+  assert.equal(calls.filter(call => call.url.endsWith('/apps') || call.url.endsWith('/data')).length, 0);
 });
 
 test('app result counts distinguish requested files from actually used tables and reject impossible success', async () => {
@@ -573,10 +560,224 @@ test('spreadsheet uploads keep partial and unknown outcomes visible without clai
   assert.match(partial, /stored\.csv is stored as a file/);
   assert.match(partial, /1 of 2 spreadsheet uploads confirmed/);
   assert.match(document_.getElementById('bx-notice')!.textContent, /lost\.csv/);
-  assert.ok(button(document_.getElementById('bx-notice')!, 'Open original file'), 'a parser refusal leaves the stored original available');
+  assert.equal(button(document_.getElementById('bx-notice')!, 'Open original file'), undefined);
+  assert.ok(document_.created.some(node => node.classes.has('bx-sheet') && node.dataset.file === FILE), 'a parser refusal leaves the original file card available');
   assert.equal(button(document_.getElementById('bx-notice')!, 'Make an app'), undefined);
   const unknown = await newUntitled([new File(['a'], 'lost.csv')]);
   assert.match(unknown, /0 of 1 spreadsheet uploads confirmed/);
   assert.doesNotMatch(unknown, /Nothing was stored/);
   assert.ok(button(document_.getElementById('bx-notice')!, 'Open Uploads'), 'unknown outcomes offer inspection before retry');
+});
+
+test('a file card owns Ask and Make an app, and Ask sends only that exact file', async () => {
+  const document_ = freshDocument();
+  const { fileCardFooter } = await import('../src/canvas/file-card.ts');
+  const answer = {
+    text: '<script>Amounts total 3.</script>',
+    references: [{ ref: 'f1r1', file_id: FILE, file: 'q3_metrics.csv', sha256: 'sha256:x', sheet: null, row: 1, label: 'Amount 1' }],
+  };
+  const calls = fakeFetch(() => ({ status: 200, body: answer }));
+  let built = 0;
+  const footer = fileCardFooter(document_ as unknown as Document, BOX, appSheetFile, () => { built += 1; }) as unknown as FakeNode;
+  document_.body.append(footer);
+  const input = footer.querySelector('input')!;
+  input.value = '  what is the total?  ';
+  const form = footer.querySelector('form')!;
+  form.click('submit'); form.click('submit');
+  await settle();
+  assert.deepEqual(calls.map(call => [call.url, call.body]), [[`/v1/boxes/${BOX}/ask`, { question: 'what is the total?', file_id: FILE }]]);
+  assert.match(footer.textContent, /Amounts total 3/);
+  assert.equal(footer.querySelector('script'), null, 'AI output is text, not executable markup');
+  assert.match(footer.textContent, /Source rows \(1\)/);
+  assert.equal(button(footer, 'Ask')!.disabled, false);
+  assert.equal(button(footer, 'Make a card'), undefined);
+  button(footer, 'Make an app')!.click();
+  assert.equal(built, 1, 'the on-card action opens the upgrade path');
+  const readOnly = fileCardFooter(document_ as unknown as Document, BOX, appSheetFile) as unknown as FakeNode;
+  assert.equal(button(readOnly, 'Make an app'), undefined, 'read-only cards retain Ask without an owner action');
+});
+
+test('file Ask refuses references to a sibling file and retains an actionable input', async () => {
+  const document_ = freshDocument();
+  const { fileCardFooter } = await import('../src/canvas/file-card.ts');
+  fakeFetch(() => ({ status: 200, body: {
+    text: 'Sibling file secret', references: [{ref: 'f2r1', file_id: FILE2, file: 'other.xlsx', row: 1}],
+  } }));
+  const footer = fileCardFooter(document_ as unknown as Document, BOX, appSheetFile) as unknown as FakeNode;
+  document_.body.append(footer);
+  footer.querySelector('input')!.value = 'what is the total?';
+  footer.querySelector('form')!.click('submit');
+  await settle();
+  assert.doesNotMatch(footer.textContent, /Sibling file secret/);
+  assert.equal(button(footer, 'Ask')!.disabled, false);
+  assert.equal(footer.querySelector('input')!.value, 'what is the total?');
+});
+
+test('the file-to-app sheet starts with a purpose and has no Keep as card or Add to app branch', async () => {
+  const document_ = freshDocument();
+  const calls = fakeFetch(() => ({ status: 200, body: {} }));
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  let placed = 0;
+  openDataSheet(BOX, appSheetFile, appSheetPreview, undefined, false, undefined, {appOnly: true, placeApp: async () => { placed += 1; }});
+  assert.match(document_.body.querySelector('.bx-modal-title')!.textContent, /Make an app · q3_metrics.csv/);
+  assert.equal(document_.body.querySelector('.bx-extra')!.hidden, false);
+  assert.deepEqual(document_.body.querySelector('.bx-modal-actions')!.querySelectorAll('button').map(node => node.textContent), ['Cancel', 'Build the app']);
+  assert.equal(button(document_.body, 'Keep as card'), undefined);
+  assert.equal(button(document_.body, 'Add to app…'), undefined);
+  assert.equal(calls.length, 0);
+  button(document_.body, 'Cancel')!.click();
+  await settle();
+  assert.equal(placed, 0);
+  assert.equal(calls.length, 0, 'cancel keeps the source file without creating any data work or app');
+  assert.equal(document_.body.querySelector('.bx-backdrop'), null);
+});
+
+test('file app retries reuse the exact intent/key and create no separate data card', async () => {
+  const document_ = freshDocument();
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  let attempts = 0;
+  const calls = fakeFetch(call => {
+    if (!call.url.endsWith('/apps')) return {status: 200, body: {}};
+    attempts++;
+    return attempts === 1 ? {status: 503, body: {code: 'unavailable'}}
+      : {status: 201, body: {app_id: APP, work_id: WORK, title: 'Metrics app', files: 1}};
+  });
+  const placed: unknown[] = [];
+  let completed = 0;
+  openDataSheet(BOX, appSheetFile, appSheetPreview, () => {completed++;}, false, undefined, {appOnly: true, placeApp: async card => {placed.push(card);}});
+  const purpose = document_.body.querySelector('[aria-label="Purpose of the app"]')!;
+  purpose.value = 'monthly metrics';
+  document_.body.querySelector('[aria-label="Type of Amount"]')!.value = 'integer';
+  const build = button(document_.body, 'Build the app')!;
+  build.click(); build.click();
+  await settle();
+  assert.equal(completed, 0);
+  assert.deepEqual(placed, []);
+  assert.equal(build.disabled, false, 'failed creation remains retryable');
+  assert.equal(purpose.disabled, true, 'a retry cannot silently change its original intent');
+  purpose.value = 'a different app';
+  build.click();
+  await settle();
+  const apps = calls.filter(call => call.url.endsWith('/apps'));
+  assert.equal(apps.length, 2);
+  assert.deepEqual(apps.map(call => call.body), Array.from({length: 2}, () => ({purpose: 'monthly metrics', file_ids: [FILE]})));
+  assert.ok(apps[0]!.key);
+  assert.equal(apps[0]!.key, apps[1]!.key);
+  assert.deepEqual(calls.filter(call => call.url.endsWith('/data')).map(call => call.body), [{columns: [{id: 'amount', type: 'integer', nullable: false}], card: false}], 'registration is once and never creates another card');
+  assert.deepEqual(placed, [{app_id: APP, work_id: WORK, title: 'Metrics app'}]);
+  assert.equal(completed, 1);
+});
+
+test('a generated app waits for successful placement before replacing its file and retries placement without regeneration', async () => {
+  const document_ = freshDocument();
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  const calls = fakeFetch(call => call.url.endsWith('/apps')
+    ? {status: 201, body: {app_id: APP, work_id: WORK, title: 'Metrics app', files: 1}}
+    : {status: 200, body: {}});
+  const source = document_.createElement('article');
+  source.setAttribute('class', 'bx-sheet');
+  document_.body.append(source);
+  let placement = 0, completed = 0;
+  openDataSheet(BOX, appSheetFile, appSheetPreview, () => {completed++;}, false, undefined, {appOnly: true, placeApp: async () => {
+    placement++;
+    if (placement === 1) throw Error('placement unavailable');
+    source.remove();
+  }});
+  const build = button(document_.body, 'Build the app')!;
+  build.click();
+  await settle();
+  assert.equal(source.isConnected, true, 'a placement failure retains the original file card');
+  assert.equal(completed, 0);
+  assert.equal(build.disabled, false);
+  build.click();
+  await settle();
+  assert.equal(source.isConnected, false, 'replacement belongs to the successful placement callback');
+  assert.equal(completed, 1);
+  assert.equal(calls.filter(call => call.url.endsWith('/apps')).length, 1, 'the created app is reused after placement failure');
+  assert.equal(calls.filter(call => call.url.endsWith('/data')).length, 1);
+});
+
+test('closing a pending file app keeps its attempt locked until settlement and reopening reuses the saved app', async () => {
+  const document_ = freshDocument();
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  type Attempt = import('../src/canvas/data-sheet.ts').DataSheetAppAttempt;
+  const attempt: Attempt = {key: 'file-card-reopen-attempt', registered: false};
+  let resolveApp!: (result: FetchAnswer) => void;
+  const pending = new Promise<FetchAnswer>(resolve => {resolveApp = resolve;});
+  const calls = fakeFetch(call => call.url.endsWith('/apps') ? pending : {status: 200, body: {}});
+  let released = 0, placed = 0, completed = 0;
+  const options = {
+    appOnly: true, attempt,
+    onRelease: () => {released++;},
+    placeApp: async () => {placed++;},
+  };
+  openDataSheet(BOX, appSheetFile, appSheetPreview, () => {completed++;}, false, undefined, options);
+  document_.body.querySelector('[aria-label="Purpose of the app"]')!.value = 'monthly metrics';
+  document_.body.querySelector('[aria-label="Type of Amount"]')!.value = 'integer';
+  button(document_.body, 'Build the app')!.click();
+  await settle();
+  assert.equal(calls.filter(call => call.url.endsWith('/apps')).length, 1);
+  assert.equal(attempt.registered, true);
+  document_.body.querySelector('[aria-label="Close (Esc)"]')!.click();
+  assert.equal(document_.body.querySelector('.bx-backdrop'), null);
+  assert.equal(released, 0, 'closing the modal does not release an unresolved creation attempt');
+  resolveApp({status: 201, body: {app_id: APP, work_id: WORK, title: 'Metrics app', files: 1}});
+  await settle();
+  assert.equal(released, 1, 'the attempt unlocks once its pending request settles');
+  assert.equal(placed, 0, 'closing before completion does not silently replace the source file');
+  assert.equal(completed, 0);
+  assert.equal(attempt.built?.app_id, APP, 'the generated result survives closing its dialog');
+  openDataSheet(BOX, appSheetFile, appSheetPreview, () => {completed++;}, false, undefined, options);
+  const purpose = document_.body.querySelector('[aria-label="Purpose of the app"]')!;
+  assert.equal(purpose.value, 'monthly metrics');
+  assert.equal(purpose.disabled, true);
+  button(document_.body, 'Build the app')!.click();
+  await settle();
+  assert.equal(placed, 1);
+  assert.equal(completed, 1);
+  assert.equal(released, 2, 'successful replacement releases the reopened dialog once');
+  assert.equal(calls.filter(call => call.url.endsWith('/apps')).length, 1, 'reopening places the saved app without another generation');
+  assert.equal(calls.filter(call => call.url.endsWith('/data')).length, 1, 'reopening keeps the original data registration');
+});
+
+test('closing during app placement invalidates its callback before it can replace the file card', async () => {
+  const document_ = freshDocument();
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  const calls = fakeFetch(call => call.url.endsWith('/apps')
+    ? {status: 201, body: {app_id: APP, work_id: WORK, title: 'Metrics app', files: 1}}
+    : {status: 200, body: {}});
+  const source = document_.createElement('article');
+  source.setAttribute('class', 'bx-sheet');
+  document_.body.append(source);
+  let resolvePlacement!: () => void;
+  const pendingPlacement = new Promise<void>(resolve => {resolvePlacement = resolve;});
+  let released = 0, placed = 0;
+  const validity: boolean[] = [];
+  openDataSheet(BOX, appSheetFile, appSheetPreview, undefined, false, undefined, {
+    appOnly: true,
+    onRelease: () => {released++;},
+    placeApp: async (_card, isCurrent) => {
+      validity.push(isCurrent());
+      await pendingPlacement;
+      validity.push(isCurrent());
+      if (!isCurrent()) return false;
+      placed++;
+      source.remove();
+      return true;
+    },
+  });
+  button(document_.body, 'Build the app')!.click();
+  await settle();
+  assert.deepEqual(validity, [true], 'placement begins while its dialog is current');
+  document_.body.querySelector('[aria-label="Close (Esc)"]')!.click();
+  assert.equal(released, 0, 'closing during placement retains the attempt lock');
+  assert.equal(source.isConnected, true);
+  resolvePlacement();
+  await settle();
+  assert.deepEqual(validity, [true, false], 'the placement guard observes dismissal after its awaited work');
+  assert.equal(placed, 0, 'dismissed placement cannot install the app');
+  assert.equal(source.isConnected, true, 'the original file card stays on the canvas');
+  assert.equal(released, 1, 'the lock releases after the guarded placement settles');
+  assert.equal(calls.filter(call => call.url.endsWith('/apps')).length, 1);
+  assert.equal(document_.body.querySelector('.bx-backdrop'), null);
 });

@@ -19,6 +19,7 @@ class FakeNode {
   children: FakeNode[] = [];
   listeners = new Map<string, Listener[]>();
   hidden = false;
+  disabled = false;
   value = '';
   parent: FakeNode | null = null;
   text = '';
@@ -559,4 +560,86 @@ test('explicit standalone classification admits one whole work and is reversible
   board.setStandaloneWork(expenses.app, expenses.work, false);
   assert.deepEqual(library.cardCompletions('expenses'), []);
   assert.ok(library.findCards('expenses.ledger').length, 'naming and Ask metadata survives category changes');
+});
+
+test('uploaded file Cards remain in inventory after closing and route placement by exact box/file identity', async () => {
+  const { document_, library } = await setup();
+  const section = document_.createElement('section');
+  const entries = [
+    {boxId: EXPENSE_APP, fileId: EXPENSE_WORK, title: 'Checking.csv', detail: 'CSV · Uploads', on: true},
+    {boxId: PTO_APP, fileId: EXPENSE_WORK, title: '<img src=x>.xlsx', detail: 'Excel · Audit folder', on: false},
+  ];
+  const calls: string[][] = [];
+  const render = () => library.renderFileCards(section as unknown as HTMLElement, entries, toggle);
+  const toggle = async (box: string, file: string) => {
+    calls.push([box, file]);
+    const entry = entries.find(entry => entry.boxId === box && entry.fileId === file)!;
+    entry.on = !entry.on;
+    render();
+    return entry.on ? 'File card added.' : 'File card removed; the file stays.';
+  };
+  render();
+  const firstKey = `${EXPENSE_APP}/${EXPENSE_WORK}`;
+  const secondKey = `${PTO_APP}/${EXPENSE_WORK}`;
+  const first = () => section.querySelector(`[data-file-card-toggle="${firstKey}"]`)!;
+  const rows = () => section.querySelectorAll('.cv-lib-file-card');
+  assert.deepEqual(rows().map(row => row.querySelector('.cv-lib-app-title')?.textContent), entries.map(entry => entry.title));
+  assert.equal(section.querySelector('img'), null, 'file names remain text');
+  assert.match(rows()[1]!.dataset.search!, /audit folder/);
+  assert.equal(first().textContent, 'Remove');
+  assert.equal(first().getAttribute('aria-pressed'), 'true');
+  first().click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(rows().length, 2, 'closing changes placement without removing the inventory row');
+  assert.equal(first().textContent, 'Add');
+  assert.equal(first().getAttribute('aria-pressed'), 'false');
+  first().click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  section.querySelector(`[data-file-card-toggle="${secondKey}"]`)!.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls, [[EXPENSE_APP, EXPENSE_WORK], [EXPENSE_APP, EXPENSE_WORK], [PTO_APP, EXPENSE_WORK]], 'same file ID in another authorized folder keeps its own reference');
+  assert.equal(first().textContent, 'Remove');
+});
+
+test('file card placement guards repeated clicks across rerenders and re-enables the current row', async () => {
+  const { document_, library } = await setup();
+  const section = document_.createElement('section');
+  const entries = [{boxId: EXPENSE_APP, fileId: EXPENSE_WORK, title: 'Checking.csv', detail: 'CSV · Uploads', on: false}];
+  let complete!: (message: string) => void;
+  let calls = 0;
+  const toggle = () => {calls++; return new Promise<string>(resolve => {complete = resolve;});};
+  const render = () => library.renderFileCards(section as unknown as HTMLElement, entries, toggle);
+  const button = () => section.querySelector('[data-file-card-toggle]')!;
+  render();
+  const original = button(); original.focus();
+  render();
+  assert.equal(button(), original, 'unchanged canvas notifications retain the focused Library control');
+  original.click(); original.click();
+  assert.equal(calls, 1);
+  assert.equal(original.disabled, true);
+  entries[0]!.on = true; render();
+  assert.notEqual(button(), original);
+  assert.equal(button().disabled, true);
+  button().click();
+  assert.equal(calls, 1, 'a canvas-driven replacement cannot duplicate pending placement');
+  complete('Shown.');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(button().disabled, false, 'the replacement row is usable once the request completes');
+});
+
+test('file Cards report placement failures without losing inventory or disabling retry', async () => {
+  const { document_, library } = await setup();
+  const section = document_.createElement('section');
+  const entries = [{boxId: PTO_APP, fileId: PTO_WORK, title: 'Forecast.xlsx', detail: 'Excel · Planning', on: false}];
+  let calls = 0;
+  library.renderFileCards(section as unknown as HTMLElement, entries, async () => {calls++; throw new Error('unavailable');});
+  const button = section.querySelector('[data-file-card-toggle]')!;
+  button.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(section.textContent, /could not be changed/);
+  assert.equal(button.disabled, false);
+  assert.equal(section.querySelectorAll('.cv-lib-file-card').length, 1);
+  button.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(calls, 2);
 });

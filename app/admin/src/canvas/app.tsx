@@ -373,7 +373,7 @@ function Canvas(props: CanvasProps) {
               <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A spreadsheet can stay a file on the canvas. Other files go in a new folder">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                 <span class="cv-choice-title">Bring your files</span>
-                <span class="cv-choice-copy">A spreadsheet can stay the file itself. Double-click it to open the sheet, or make a card or an app from it.</span>
+                <span class="cv-choice-copy">Your spreadsheet becomes a file card. Double-click to view it, ask about it, or make an app from it.</span>
               </button>
               {createShow(() => props.hasLibrary, () => (
                 <button type="button" class="cv-empty-choice cv-empty-library" data-lib-open>

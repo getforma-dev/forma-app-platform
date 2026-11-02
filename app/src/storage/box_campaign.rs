@@ -1014,6 +1014,67 @@ async fn campaign() {
             && sent.contains("South")
     );
     assert!(!sent.contains("strongest month"), "the PDF is not a table");
+    // A file card's Ask is an exact scope, not a hint embedded in its question.
+    stub.script(
+        "folder_ask",
+        json!({"text": "South led July with the highest revenue.", "references": ["f1r2"]})
+            .to_string(),
+    );
+    let scoped = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "which region led July?", "file_id": files["q3_metrics.csv"]})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(scoped.status, StatusCode::OK, "{}", scoped.text());
+    let scoped_answer = scoped.json();
+    let scoped_refs = scoped_answer["references"].as_array().unwrap();
+    assert!(!scoped_refs.is_empty());
+    assert!(scoped_refs.iter().all(|reference| {
+        reference["file_id"] == files["q3_metrics.csv"] && reference["file"] == "q3_metrics.csv"
+    }));
+    let scoped_calls = stub.calls("folder_ask");
+    let scoped_input: Value = serde_json::from_str(
+        scoped_calls.last().unwrap()["messages"][0]["content"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(scoped_input["tables"].as_array().unwrap().len(), 1);
+    assert_eq!(scoped_input["tables"][0]["file"], "q3_metrics.csv");
+    let scoped_count = scoped_calls.len();
+    let unknown_file = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "how many?", "file_id": "00000000-0000-4000-8000-00000000dead"})
+                .to_string(),
+        )
+        .await;
+    assert!(
+        unknown_file.uniform_404(),
+        "unknown file scope never falls back"
+    );
+    let not_a_table = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "how many?", "file_id": files["q3_metrics_brief.pdf"]}).to_string(),
+        )
+        .await;
+    assert_eq!(not_a_table.status, StatusCode::OK);
+    assert_eq!(not_a_table.json()["references"], json!([]));
+    assert!(not_a_table.json()["text"]
+        .as_str()
+        .unwrap()
+        .contains("This file could not be read as a table"));
+    assert_eq!(
+        stub.calls("folder_ask").len(),
+        scoped_count,
+        "no other file or model fallback"
+    );
     // A reply citing a row it was not shown, or carrying a view, is refused.
     for hostile in [
         json!({"text": "Row nine.", "references": ["f1r99"]}),

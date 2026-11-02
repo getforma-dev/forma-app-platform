@@ -20,7 +20,7 @@ type Frame = {
   openSize: {width: number; height: number}; previous: Map<string, Spot>;
 };
 export type AppView = Pick<Frame, 'app'|'work'|'mode'|'top'|'item'> & {cards: string[]};
-export type AppViewOptions = {at?: Spot; focus?: boolean; preserveMode?: boolean; restore?: StoredUnite};
+export type AppViewOptions = {at?: Spot; focus?: boolean; preserveMode?: boolean; restore?: StoredUnite; isCurrent?: () => boolean};
 type Report = (message: string) => void;
 const frames = new Map<string, Frame>();
 const pending = new Map<string, Promise<string>>();
@@ -281,6 +281,7 @@ async function setAppViewNow(app: string, work: string, mode: AppViewMode, optio
   if ((generations.get(work) ?? 0) !== generation) return 'That placement was cancelled.';
   if (options.restore && removedWorks.has(work)) return 'That placement was removed.';
   if (!await ensureAppGroup(app, work)) return 'That app could not be opened. Nothing was placed.';
+  if (options.isCurrent && !options.isCurrent()) return 'That placement was cancelled.';
   if ((generations.get(work) ?? 0) !== generation) return 'That placement was cancelled.';
   const group = board.group(work);
   if (!group || group.app !== app) return 'That app could not be opened.';

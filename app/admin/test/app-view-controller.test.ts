@@ -114,6 +114,14 @@ test('overlapping mode requests serialize one placement and a removal cancels pe
  assert.match(await pending,/cancelled/);assert.equal(g.mounts(),0);assert.equal(g.remembered(),0);
 });
 
+test('a dismissed file conversion cannot place an app after acquisition resolves',async()=>{
+ const f=await fixture({defer:true});let current=true;
+ const pending=f.api.setAppView(APP,WORK,'face',{isCurrent:()=>current});
+ await new Promise(resolve=>setTimeout(resolve,0));current=false;f.release();
+ assert.match(await pending,/cancelled/);assert.equal(f.mounts(),0);assert.equal(f.remembered(),0);
+ assert.equal(f.api.appViewForWork(WORK),null);
+});
+
 test('atomic independent card suppresses alternate modes and all app split entry points refuse',async()=>{
  const f=await fixture({standalone:true});await f.api.setAppView(APP,WORK,'face');const view=f.api.appViewForWork(WORK);
  assert.equal(view.mode,'open');assert.equal(view.item.querySelector('.cv-app-view-picker').hidden,true);

@@ -1506,6 +1506,21 @@ body.is-library-dragging { cursor: grabbing; user-select: none; }
 .bx-sheet-icon { width: 54px; height: 66px; font-size: 0.72rem; }
 .bx-sheet-name { margin: 0; max-width: 100%; overflow: hidden; font-size: 0.9rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .bx-sheet-meta { margin: 0; color: var(--cv-faint); font-size: 0.72rem; }
+.bx-file-footer { width: 100%; min-width: 0; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--cv-line); text-align: left; }
+.bx-file-ask { display: flex; align-items: stretch; gap: 6px; }
+.bx-file-ask input { flex: 1; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid var(--cv-line); border-radius: 8px; background: var(--cv-surface); color: var(--cv-text); font: 0.8rem/1.4 var(--cv-sans); }
+.bx-file-ask input:focus-visible { outline: 2px solid var(--cv-accent); outline-offset: 2px; }
+.bx-file-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.bx-file-actions:empty { display: none; }
+.bx-file-build { color: var(--cv-accent); font-weight: 650; }
+.bx-file-answer { max-height: 220px; overflow: auto; overscroll-behavior: contain; margin-top: 10px; padding: 10px; border-radius: 8px; background: var(--cv-sunken); color: var(--cv-text); font: 0.8rem/1.5 var(--cv-sans); }
+.bx-file-answer p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bx-file-answer details { margin-top: 8px; }
+.bx-file-answer ul { margin: 6px 0 0; padding-left: 18px; }
+.bx-file-answer summary, .bx-app-sources summary { cursor: pointer; }
+.bx-app-sources { flex-shrink: 0; max-height: 180px; overflow: auto; overscroll-behavior: contain; padding: 8px 10px; border: 1px solid var(--cv-line); border-radius: 8px; color: var(--cv-muted); font: 0.78rem/1.5 var(--cv-sans); }
+.bx-app-sources > summary { overflow-wrap: anywhere; }
+.bx-app-sources > button { margin-top: 8px; }
 .cv-item-sheet.is-dragging .bx-sheet { cursor: grabbing; }
 .bx-name { max-width: 100%; overflow: hidden; font-weight: 600; font-size: 0.8rem; text-overflow: ellipsis; white-space: nowrap; }
 .bx-meta { color: var(--cv-faint); font-size: 0.72rem; }
