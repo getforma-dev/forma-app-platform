@@ -7,6 +7,7 @@ import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
 import { startCreateApp } from './create-app';
+import { startPalette } from './palette';
 import { startLibrary } from './library';
 import { startSharing } from '../sharing/dialog';
 import { startNaming } from './naming';
@@ -341,6 +342,16 @@ function Canvas(props: CanvasProps) {
           </button>
           <a class="cv-link" href="/shared">Connected apps</a><span class="cv-connected-status" role="status" data-connected-status=""></span>
           <a class="cv-link" href="/workspace">Workspace</a>
+          <label class="cv-palette">
+            <span class="sr-only">Palette</span>
+            <select id="cv-palette" aria-label="Palette">
+              <option value="site">Forma</option>
+              <option value="ink">Ink</option>
+              <option value="harbor">Harbor</option>
+              <option value="stone">Stone</option>
+              <option value="grove">Grove</option>
+            </select>
+          </label>
           <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
             {props.memberInitials}
           </span>
@@ -867,6 +878,7 @@ function Canvas(props: CanvasProps) {
 }
 
 await activateIslands({ IntentBar });
+startPalette(document);
 startBoard(document);
 startSharing(document);
 // APP-116: timing chips (off by default; the More menu or ?timing=1).

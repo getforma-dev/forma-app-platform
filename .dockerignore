@@ -241,6 +241,7 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/commands.ts
 !app/admin/src/canvas/compose.ts
 !app/admin/src/canvas/create-app.ts
+!app/admin/src/canvas/palette.ts
 !app/admin/src/canvas/page-layout.ts
 !app/admin/src/canvas/work-name.ts
 !app/admin/src/canvas/display.ts

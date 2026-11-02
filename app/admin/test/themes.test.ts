@@ -92,4 +92,31 @@ test('every theme block assigns the full role set, and text clears 4.5:1', () =>
   assert.doesNotMatch(canvas, /--cv-paper|--cv-ink|#f7f4ee|#1c1915/);
   assert.doesNotMatch(canvas, /#18a974|#12805c|#d0343b/);
   assert.doesNotMatch(css, /data-theme="cupcake"|data-theme="cyberpunk"/);
+  for (const name of ['harbor', 'stone', 'grove']) {
+    const light = block(css, `[data-theme="${name}"] {`);
+    const dark = block(css, `[data-theme="${name}-dark"] {`);
+    for (const role of ROLES) {
+      assert.match(light, new RegExp(`${role}:`), `${name} ${role}`);
+      assert.match(dark, new RegExp(`${role}:`), `${name}-dark ${role}`);
+    }
+    assert.ok(contrast(decl(light, '--role-text'), decl(light, '--role-surface')) >= 4.5, name);
+    assert.ok(contrast(decl(light, '--role-muted'), decl(light, '--role-surface')) >= 4.5, name);
+    assert.ok(contrast(decl(light, '--role-on-accent'), decl(light, '--role-accent')) >= 4.5, name);
+    assert.ok(contrast(decl(light, '--role-edge'), decl(light, '--role-shell')) >= 3, name);
+    assert.ok(contrast(decl(dark, '--role-text'), decl(dark, '--role-canvas')) >= 4.5, `${name}-dark`);
+    assert.ok(contrast(decl(dark, '--role-on-accent'), decl(dark, '--role-accent')) >= 4.5, `${name}-dark`);
+    assert.ok(contrast(decl(dark, '--role-edge'), decl(dark, '--role-canvas')) >= 3, `${name}-dark`);
+  }
+});
+
+test('a canvas palette is a closed name and follows the color scheme', async () => {
+  const { paletteName, themeForPalette } = await import('../src/canvas/palette.ts');
+  assert.equal(paletteName('harbor'), 'harbor');
+  assert.equal(paletteName('cupcake'), 'site');
+  assert.equal(paletteName(null), 'site');
+  assert.equal(themeForPalette('site', 'light'), 'site');
+  assert.equal(themeForPalette('site', 'dark'), 'site-dark');
+  assert.equal(themeForPalette('stone', 'light'), 'stone');
+  assert.equal(themeForPalette('grove', 'dark'), 'grove-dark');
+  assert.equal(themeForPalette('nope', 'dark'), 'site-dark');
 });

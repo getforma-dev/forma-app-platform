@@ -206,6 +206,17 @@
   cursor: pointer;
 }
 .cv-signout button:hover, .cv-secondary:hover { background: var(--cv-sunken); }
+.cv-palette select {
+  height: 32px;
+  max-width: 7.5rem;
+  padding: 0 1.4rem 0 0.55rem;
+  border: 1px solid var(--cv-line);
+  border-radius: var(--radius-1, 4px);
+  background: var(--cv-surface);
+  color: var(--cv-text);
+  font: 12px/1 var(--cv-sans);
+  cursor: pointer;
+}
 
 .cv-canvas {
   position: relative;
