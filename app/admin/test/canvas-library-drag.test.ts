@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  acceptsDrop, createDragController, dropOrigin, DROP_INSET_PX, ghostScreen, worldPoint,
+  acceptsDrop, bindLibraryDrag, createDragController, dropOrigin, DROP_INSET_PX, ghostScreen, worldPoint,
   type Camera, type DragCard,
 } from '../src/canvas/library-drag.ts';
 
@@ -98,4 +98,26 @@ test('touch and the naming control do not start a drag', () => {
   assert.equal(down(drag, { pointerType: 'pen', pointerId: 6, editing: true }).type, 'ignore');
   assert.equal(down(drag, { pointerType: 'pen', pointerId: 7, button: 2 }).type, 'ignore');
   assert.equal(down(drag, { pointerId: 9, card: null }).type, 'ignore');
+});
+
+
+test('the DOM binding starts only from an explicit whole standalone entry, never app parts or controls', () => {
+  const listeners = new Map<string, (event: unknown) => void>();
+  const document_ = { addEventListener: (name: string, handler: (event: unknown) => void) => listeners.set(name, handler) };
+  const seen: unknown[] = [];
+  bindLibraryDrag(document_ as unknown as Document, {
+    cardFrom: row => { seen.push(row); return card; }, onBoard: () => false,
+    place: () => assert.fail('pointerdown must never place'), camera: () => camera,
+    viewport: () => null, footprint: () => ({ width: 400, height: 250 }),
+  });
+  const row = { closest: (selector: string) => selector === '#cv-library' ? {} : null };
+  const target = (entry: boolean, interactive: boolean) => ({
+    closest: (selector: string) => selector === '[data-lib-entry-drag]' ? (entry ? row : null) : (interactive ? {} : null),
+  });
+  const downOn = (value: unknown) => listeners.get('pointerdown')!({ target: value, pointerType: 'mouse', button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+  downOn(target(false, false)); // App heading or hidden component metadata.
+  downOn(target(true, true)); // Add, menu, alias, or naming control.
+  assert.deepEqual(seen, []);
+  downOn(target(true, false));
+  assert.deepEqual(seen, [row]);
 });

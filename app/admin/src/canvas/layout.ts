@@ -3,7 +3,7 @@
 // parameter is stored, and nothing here reaches the server. Storage that is
 // unavailable (private mode, blocked site data) just means the default layout.
 import { storedPageSize } from './page';
-import { isUuid } from './render';
+import { isUuid } from './ids';
 
 export type ItemLayout = { x: number; y: number; width?: number; height?: number; z?: number; manualScale?: number };
 export type Camera = { panX: number; panY: number; zoom: number };
@@ -141,7 +141,11 @@ export type StoredUnite = {
   previous: Record<string, { x: number; y: number }>;
   width?: number;
   height?: number;
+  /** Missing on earlier records: an old united page is Open. */
+  mode?: AppViewMode;
+  top?: number;
 };
+export type AppViewMode = 'face' | 'stack' | 'open';
 const unitedKey = (member: string) => `forma.canvas.united.v1:${member}`;
 export function loadUnited(member: string): StoredUnite[] {
   if (!/^[0-9a-f]{16}$/.test(member)) return [];
@@ -156,9 +160,54 @@ export function loadUnited(member: string): StoredUnite[] {
       if (CARD.test(id) && spot && finite(spot.x) && finite(spot.y)) previous[id] = { x: spot.x, y: spot.y };
     }
     const size = storedPageSize(entry.width, entry.height);
-    return [{ work: entry.work, app: entry.app, x: entry.x, y: entry.y, previous, ...size }];
+    const mode = entry.mode === 'face' || entry.mode === 'stack' ? entry.mode : 'open';
+    const top = finite(entry.top) ? Math.min(MAX_CARDS - 1, Math.max(0, Math.floor(entry.top))) : 0;
+    return [{ work: entry.work, app: entry.app, x: entry.x, y: entry.y, previous, mode, top, ...size }];
   });
 }
 export function saveUnited(member: string, united: StoredUnite[]): void {
   if (/^[0-9a-f]{16}$/.test(member)) write(unitedKey(member), united.slice(-MAX_FRAMES));
+}
+
+/** Frontend-only migration: one whole-work placement, never persisted data. */
+export function migrateAppViews(
+  united: StoredUnite[], stacks: StoredStack[],
+  works: {app: string; work: string; cards: string[]; standalone?: boolean; at?: {x: number; y: number}}[],
+): StoredUnite[] {
+  const result: StoredUnite[] = [];
+  for (const work of works) {
+    const prior = united.find(row => row.app === work.app && row.work === work.work);
+    if (prior) {
+      result.push({...prior, mode: work.standalone ? 'open' : prior.mode ?? 'open'});
+      continue;
+    }
+    const pile = stacks.find(row => row.cards.some(id => work.cards.includes(id)));
+    const siblings = pile ? works.filter(candidate => pile.cards.some(id => candidate.cards.includes(id))) : [];
+    const offset = Math.max(0, siblings.findIndex(candidate => candidate.work === work.work)) * 488;
+    const at = pile ? {x: pile.x + offset, y: pile.y} : work.at ?? {x: 64, y: 64};
+    const topId = pile?.cards[Math.min(pile.top, pile.cards.length - 1)];
+    result.push({app: work.app, work: work.work, ...at, previous: {},
+      mode: work.standalone ? 'open' : pile ? 'stack' : 'face',
+      top: Math.max(0, work.cards.indexOf(topId ?? ''))});
+  }
+  return result;
+}
+
+// Personal Library classification recorded only from explicit creation/user intent.
+const standaloneKey = (member: string) => `forma.canvas.standalone.v1:${member}`;
+export function loadStandaloneWorks(member: string): Set<string> {
+  if (!/^[0-9a-f]{16}$/.test(member)) return new Set();
+  const values = read(standaloneKey(member));
+  return new Set(Array.isArray(values) ? values.filter((value): value is string => {
+    if (typeof value !== 'string') return false;
+    const parts = value.split('/');
+    return parts.length === 2 && isUuid(parts[0]) && isUuid(parts[1]);
+  }).slice(-MAX_WORKS) : []);
+}
+export function saveStandaloneWorks(member: string, works: Set<string>): void {
+  if (!/^[0-9a-f]{16}$/.test(member)) return;
+  write(standaloneKey(member), [...works].filter(value => {
+    const parts = value.split('/');
+    return parts.length === 2 && isUuid(parts[0]) && isUuid(parts[1]);
+  }).slice(-MAX_WORKS));
 }

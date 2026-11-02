@@ -2923,3 +2923,48 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 .bx-sheet-selection { margin-block: .75rem; }
 .bx-sheet-selection select { max-width: 100%; }
 .bx-sheet-limit { font-size: .8rem; color: var(--muted, #596476); }
+
+/* Whole-work Library views: component metadata remains indexed but is never a placement UI. */
+.cv-library .cv-lib-metadata { display: none !important; }
+.cv-library .cv-lib-app-head { display: flex; flex-wrap: wrap; padding: 0.6rem; gap: 0.4rem; }
+.cv-library .cv-lib-title-group { display: flex; align-items: center; gap: 0.45rem; min-width: 0; flex: 1 1 100%; }
+.cv-library .cv-lib-title-group .cv-lib-app-title { flex: 1; font-weight: 600; }
+.cv-library .cv-lib-view-actions { display: flex; align-items: center; gap: 0.35rem; margin-left: auto; }
+.cv-library .cv-lib-view-actions > button { opacity: 1; padding: 0.35rem 0.55rem; }
+.cv-library .cv-lib-view-actions > button[hidden] { display: none; }
+.cv-library .cv-lib-menu { position: relative; }
+.cv-library .cv-lib-menu summary { list-style: none; cursor: pointer; border: 1px solid var(--cv-line); border-radius: 5px; padding: 0.2rem 0.55rem; }
+.cv-library .cv-lib-menu summary::-webkit-details-marker { display: none; }
+.cv-library .cv-lib-menu-items { position: absolute; right: 0; top: 100%; z-index: 5; min-width: 11rem; padding: 0.35rem; border: 1px solid var(--cv-line); border-radius: 8px; background: var(--cv-surface); box-shadow: 0 8px 24px #0002; }
+.cv-library .cv-lib-menu-items button { display: block; width: 100%; padding: 0.45rem; border: 0; background: transparent; color: var(--cv-text); text-align: left; cursor: pointer; }
+.cv-library .cv-lib-menu-items button[hidden] { display: none; }
+.cv-library .cv-lib-menu-items button:hover { background: var(--cv-accent-soft); }
+.cv-library .cv-lib-menu summary:focus-visible, .cv-library .cv-lib-menu-items button:focus-visible { outline: 2px solid var(--cv-accent); outline-offset: 2px; }
+.cv-library [data-lib-entry-drag] .cv-lib-title-group { cursor: grab; }
+
+/* APP-168: one canvas object, three presentations. Components keep their own data state. */
+.cv-unite[data-app-view] [hidden] { display: none !important; }
+.cv-unite[data-app-view] .cv-unite-head,
+.cv-unite[data-app-view].is-single .cv-unite-head {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: .6rem .75rem;
+  align-items: center; flex: none;
+}
+.cv-unite[data-app-view] .cv-unite-heading { grid-column: 2; }
+.cv-unite[data-app-view] .cv-unite-title { white-space: normal; overflow-wrap: anywhere; }
+.cv-unite[data-app-view] .cv-unite-count { grid-column: 3; grid-row: 1; }
+.cv-app-view-picker { display: flex; gap: .25rem; grid-column: 1 / -1; padding: .25rem; border-radius: 10px; background: var(--cv-sunken); }
+.cv-app-view-picker button { flex: 1; }
+.cv-app-view-picker [aria-pressed="true"] { color: var(--cv-fg); background: var(--cv-surface); box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
+.cv-unite[data-app-view] .cv-unite-actions,
+.cv-unite[data-app-view].is-single .cv-unite-actions { grid-column: 1 / -1; flex-wrap: wrap; justify-content: flex-start; }
+.cv-unite[data-app-view] .cv-unite-actions .cv-secondary { font-size: .75rem; min-height: 30px; }
+.cv-unite[data-app-view] :is([data-app-view-face], [data-app-view-stack], [data-app-view-open]) { min-height: 0; overflow: auto; flex: 1; }
+.cv-unite[data-app-view] :is(.cv-card-tools, .cv-app-tools, [data-card-remove], [data-focus-card]) { display: none; }
+.cv-unite[data-app-view] .cv-card[data-state="ready"] > .cv-card-head > .badge { display: none; }
+.cv-unite[data-app-view] .cv-app > :is(h2, [data-edit-presentation], [data-manage-share], .cv-origins) { display: none; }
+.cv-unite[data-app-view="face"] .cv-app { min-height: 130px; border: 0; background: transparent; box-shadow: none; }
+.cv-app-stack-nav { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; }
+.cv-unite[data-app-view="stack"] [data-app-stack-holder] > .cv-card { width: 100%; min-width: 0; box-sizing: border-box; }
+.cv-unite[data-app-view="face"] .cv-unite-count { display: none; }
+
+.cv-app-face-summary { margin: 0 0 .75rem; color: var(--cv-muted); font-size: .9rem; line-height: 1.5; overflow-wrap: anywhere; }

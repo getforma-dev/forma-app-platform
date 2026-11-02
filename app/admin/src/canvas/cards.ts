@@ -29,6 +29,18 @@ export type StoredCard = {
   card_id: string; kind: 'card' | 'answer'; app_id: string | null; work_id: string | null; source: string; address: string; title: string;
   spec: unknown; everyone: boolean; mine: boolean; can_share: boolean; can_manage: boolean; created_at: string;
 };
+export type StoredCardChange = {card: StoredCard} | {removed: string};
+const changeListeners = new Set<(change: StoredCardChange) => void>();
+export function onStoredCardChange(listener: (change: StoredCardChange) => void): () => void {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+function changed(change: StoredCardChange): void {
+  for (const listener of changeListeners) {
+    // A view notification cannot make a confirmed server mutation uncertain.
+    try {listener(change);} catch { /* other listeners still receive it */ }
+  }
+}
 /** Where a made card reads its data: its records card's collection, or its view card's view. */
 export type From = { collection: string } | { view: string };
 export type Reference = { ref: string; app_id: string; work_id: string; record_id: string; address: string; label: string };
@@ -126,17 +138,24 @@ async function send(method: 'GET' | 'POST', url: string, body?: Record<string, u
 }
 
 /** The member's cards and pinned answers (their own and those added for everyone). */
-export async function listCards(): Promise<StoredCard[]> {
+export async function cardInventory(): Promise<{ok: true; cards: StoredCard[]} | {ok: false; message: string}> {
   const answer = await send('GET', CARDS_URL);
-  if (typeof answer === 'string' || !Array.isArray(answer.cards)) return [];
-  return answer.cards.map(storedCard).filter((card): card is StoredCard => card !== null);
+  if (typeof answer === 'string' || !Array.isArray(answer.cards)) return {ok: false, message: 'Saved cards could not be refreshed. Use Refresh saved cards to retry; listed metadata may be out of date.'};
+  return {ok: true, cards: answer.cards.map(storedCard).filter((card): card is StoredCard => card !== null)};
+}
+/** Compatibility helper for callers that only consume the first inventory. */
+export async function listCards(): Promise<StoredCard[]> {
+  const result = await cardInventory();
+  return result.ok ? result.cards : [];
 }
 
 /** Stores a made card or a pinned answer: the stored card, or why not. */
 export async function storeCard(body: Record<string, unknown>): Promise<StoredCard | string> {
   const answer = await send('POST', CARDS_URL, body);
   if (typeof answer === 'string') return answer;
-  return storedCard(answer.card) ?? 'The saved card came back in the wrong shape.';
+  const card = storedCard(answer.card);
+  if (card) changed({card});
+  return card ?? 'The saved card came back in the wrong shape.';
 }
 
 /** Adds the member's card for everyone who can open its app (the owner or an admin), or keeps it for them. */
@@ -144,14 +163,18 @@ export async function shareCard(id: string, everyone: boolean): Promise<StoredCa
   if (!UUID.test(id)) return 'That card cannot be shared.';
   const answer = await send('POST', `${CARDS_URL}/${id}/everyone`, { everyone });
   if (typeof answer === 'string') return answer;
-  return storedCard(answer.card) ?? 'The card came back in the wrong shape.';
+  const card = storedCard(answer.card);
+  if (card) changed({card});
+  return card ?? 'The card came back in the wrong shape.';
 }
 
 /** Removes the member's card or pinned answer (for everyone, when it was added for everyone). */
 export async function removeCard(id: string): Promise<true | string> {
   if (!UUID.test(id)) return 'That card cannot be removed.';
   const answer = await send('POST', `${CARDS_URL}/${id}/remove`, {});
-  return typeof answer === 'string' ? answer : true;
+  if (typeof answer === 'string') return answer;
+  changed({removed: id});
+  return true;
 }
 
 /**

@@ -19,7 +19,7 @@
 //   an app card or frame, a widget: `/shape <address> ` in the bar), through
 //   hooks the Ask and Shape modules set (`setTalkActions`);
 // - APP-106 / APP-142: F focuses the selected card (`focus.ts`), U opens its
-//   app as a page and Shift + U fans that page out (`unite.ts`); the toolbar
+//   app as a page and the App Card and Stack keep the app whole (`unite.ts`); the toolbar
 //   menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
 // - touch: one finger on the empty canvas pans (the vendor's), two fingers
@@ -40,7 +40,7 @@ import { focusFromItem, isFocusOpen } from './focus';
 import { isModalOpen } from './box-viewer';
 import { isNoteItem, newNote, removeNoteItem } from './notes';
 import { toggleTimings } from './timing';
-import { dismissPageShare, frameCardsOfItem, isUniteItem, splitFromItem, uniteFromItem } from './unite';
+import { dismissPageShare, frameCardsOfItem, isUniteItem, appViewOf, setAppView, shuffleAppView, uniteFromItem } from './unite';
 import { primeAsk } from './address-chip';
 
 /** APP-122: what ⋯ → Ask about this and ⋯ → Shape… do with the chosen item (set by `talk.ts`). */
@@ -171,8 +171,8 @@ export function selectedCanvasItem(): HTMLElement | null {
 function focusSelected(): void {
   if (!focusFromItem(chosenItem())) announce('Select a card first, then press F to focus it.');
 }
-function uniteSelected(split = false): void {
-  const outcome = split ? splitFromItem(chosenItem()) : uniteFromItem(chosenItem());
+function uniteSelected(): void {
+  const outcome = uniteFromItem(chosenItem());
   void Promise.resolve(outcome).then(announce);
 }
 
@@ -186,14 +186,11 @@ function chosenItems(): HTMLElement[] {
   return items;
 }
 function stackChosen(): void {
+  const app = appViewOf(chosenItem());
+  if (app) { void setAppView(app.app, app.work, 'stack').then(announce); return; }
   if (!stackSelection(chosenItems())) announce('Select two or more cards first (Shift + click their headers), then choose Stack them.');
   selection.clear();
   renderSelection();
-}
-function spreadChosen(): void {
-  const stacks = chosenItems().map((item) => stackOfItem(item)).filter((stack) => stack !== null);
-  if (!stacks.length) announce('Select a stack first.');
-  for (const stack of stacks) dissolve(stack);
 }
 function removeChosen(): void {
   const items = chosenItems();
@@ -213,9 +210,7 @@ function action(name: string): void {
     case 'library': toggleLibrary(); break;
     case 'new-note': void newNote('').then(announce); break;
     case 'timings': toggleTimings(); break;
-    case 'split': uniteSelected(true); break;
     case 'stack': stackChosen(); break;
-    case 'spread': spreadChosen(); break;
     case 'remove': removeChosen(); break;
     case 'zoom-in': canvas.zoomBy(1.25); break;
     case 'zoom-out': canvas.zoomBy(1 / 1.25); break;
@@ -244,20 +239,10 @@ export function onKey(event: KeyboardEvent): void {
   const typing = eventOriginatesInTextEntry(event);
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
-  // Cmd/Ctrl+G stacks the selection; with Shift, spreads the selected stacks.
+  // Cmd/Ctrl+G changes the whole selected app to Stack; no component extraction.
   if (mod && !event.altKey && event.code === 'KeyG' && !typing) {
     event.preventDefault();
-    const chosen = [...selection].filter((item) => item.isConnected);
-    if (event.shiftKey) {
-      for (const item of chosen) {
-        const stack = stackOfItem(item);
-        if (stack) dissolve(stack);
-      }
-    } else if (!stackSelection(chosen)) {
-      announce('Select two or more cards (Shift + click), then press G with Cmd or Ctrl to stack them.');
-    }
-    selection.clear();
-    renderSelection();
+    if (!event.shiftKey) stackChosen();
     return;
   }
   if (mod && !event.altKey && ['=', '+', '-', '_'].includes(event.key)) {
@@ -314,15 +299,15 @@ export function onKey(event: KeyboardEvent): void {
   }
   // Inside the library pane and the toolbar, keys belong to their controls.
   if ((event.target as Element | null)?.closest?.('#cv-library, .cv-tools, .cv-dock')) return;
-  // APP-106 / APP-142: F focus, U opens the page, Shift + U fans it out.
+  // APP-106 / APP-142: F focuses the app, U opens it on the canvas.
   if (key === 'f' && !event.shiftKey) {
     event.preventDefault();
     focusSelected();
     return;
   }
-  if (key === 'u') {
+  if (key === 'u' && !event.shiftKey) {
     event.preventDefault();
-    uniteSelected(event.shiftKey);
+    uniteSelected();
     return;
   }
   const selected = [...selection].filter((item) => item.isConnected);
@@ -331,7 +316,14 @@ export function onKey(event: KeyboardEvent): void {
     if (active && (event.key === 'Delete' || event.key === 'Backspace')) selected.push(active);
   }
   if (!selected.length) return;
-  // A selected stack: ←/→ leaf through it, Enter or Space fans it out.
+  const whole = selected.length === 1 ? appViewOf(selected[0]!) : null;
+  if (whole && !event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !eventOriginatesInInteractiveControl(event)) {
+    if (shuffleAppView(whole.item, event.key === 'ArrowRight' ? 1 : -1)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+  }
+  if (whole && event.key === 'Enter' && !eventOriginatesInInteractiveControl(event)) {
+    event.preventDefault(); event.stopImmediatePropagation(); void setAppView(whole.app, whole.work, 'open').then(announce); return;
+  }
+  // Legacy independent stacks keep their original navigation.
   const stack = selected.length === 1 ? stackOfItem(selected[0]!) : null;
   if (stack && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !event.shiftKey) {
     event.preventDefault();

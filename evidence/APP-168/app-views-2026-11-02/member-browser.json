@@ -1,0 +1,113 @@
+{
+  "scope": "Owned 4703 synthetic member; real template admission, authorized reads and UI. No hosted identity claim.",
+  "started_at": "2026-11-02T15:35:36.162Z",
+  "manifest_sha256": "d7c49c2b83bf728e1a8920a4eb8bf4b825e339499f929324c84a5da6f794e796",
+  "checks": [
+    "Reused the exact journaled template work; no duplicate creation.",
+    "The new owner work exposes common Edit and Share controls; both open their authorized management UI.",
+    "Card \u2192 Stack \u2192 Open retains one outer item, the same unsent form node, its value and original idempotency key.",
+    "Personal hide removes the form action and skips the same hidden form in Stack and Focus. /focus returns to the unchanged Stack mode/top.",
+    "A new-tab authorized /w page honors this browser preference, while publication/digest/work version and presentation are byte-for-byte unchanged.",
+    "Unhide restores the original generic action and exact unsent draft/key, without a command or publication request.",
+    "At 375\u00d7812 the authorized app page and generic dialog fit the viewport and keep form controls reachable."
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/work/00000000-0000-4000-8000-00000000d0a3/4846e175-020b-481a-8fb7-1c5e33a8ed4f/record-components"
+    }
+  ],
+  "artifacts": [
+    "page-hidden.png",
+    "draft-restored.png",
+    "canvas-375.png",
+    "page-dialog-375.png"
+  ],
+  "mobile": {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "dialog": {
+      "x": 18,
+      "y": 71.515625,
+      "width": 339,
+      "height": 668.953125
+    }
+  },
+  "passed": true,
+  "completed_at": "2026-11-02T15:35:51.185Z"
+}

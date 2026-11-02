@@ -7,10 +7,12 @@
 // from; this card shows text parts as text nodes and each value as a button
 // that brings that view card into focus and opens its receipt. Nothing is
 // stored in the browser; a reload fetches again when the work is placed.
-import { addCards, boardWorks, canvasApi, focusCard, mountWidget, onBoardChange, unmountWidget } from './board';
+import { boardWorks, canvasApi, ensureAppGroup, isOnBoard, mountWidget, onBoardChange, unmountWidget } from './board';
 import { lineage } from './box-api';
-import { registerFocusCard, unregisterFocusCard } from './focus';
-import { el, isUuid } from './render';
+import { openFocus, registerFocusCard, unregisterFocusCard } from './focus';
+import { announce, el, isUuid } from './render';
+import { setAppView } from './unite';
+import { appComponentVisible } from '../presentation/presentation';
 
 const LABEL = 'AI summary · numbers from receipts';
 type Part = { text: string } | { value: string; exact: string; view_id: string; view_title: string; receipt_digest: string };
@@ -72,14 +74,17 @@ async function call(method: 'GET' | 'POST', app: string, work: string): Promise<
 
 /** Brings the view card of a value into focus and opens its receipt. */
 export async function showValue(app: string, work: string, view: string): Promise<void> {
+  if (!isUuid(app) || !isUuid(work) || !/^[a-z][a-z0-9_]{0,63}$/.test(view)) return;
   const id = `c-${work}-${view}`;
-  let card = document.querySelector<HTMLElement>(`.cv-item [data-card="${id}"]`);
-  if (!card) {
-    await addCards(app, work, [id], { focus: false });
-    card = document.querySelector<HTMLElement>(`.cv-item [data-card="${id}"]`);
+  const group = await ensureAppGroup(app, work);
+  const card = group?.cards.find(card => card.dataset.card === id);
+  if (!card) { announce('That value’s app component could not be opened.'); return; }
+  if (!appComponentVisible(app, work, card)) {
+    announce('That component is hidden in your views on this browser. Change your view preferences in Edit app to show it.');
+    return;
   }
-  if (!card) return;
-  focusCard(card);
+  if (!isOnBoard(id)) await setAppView(app, work, 'open', { focus: false });
+  if (!openFocus(id)) { announce('That value’s app component could not be focused.'); return; }
   const receipt = card.querySelector<HTMLDetailsElement>('details.cv-receipt');
   if (receipt) receipt.open = true;
 }

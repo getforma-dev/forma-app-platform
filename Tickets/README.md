@@ -15,6 +15,8 @@ The subsequent screenshot-driven [app composition decision](../docs/architecture
 
 Sprints are ordered scope batches, not calendar commitments. Start dates and capacity are unset. Team ownership is assigned; individual implementers are selected when work starts. Later sprints are forecasts; refine or split a ticket before selection if it cannot fit a small, reviewable change. The GenUI and FormaStack teams work in parallel when actual dependencies permit it. An upstream integration gate blocks only the dependent behavior; continue unrelated app work and record precisely what evidence is needed to unblock integration.
 
+The November 2 [whole-app decision](../docs/architecture/ADR-018-WHOLE-APP-VIEWS.md) supersedes app component fan-out in the frontend: one App Card/Stack/Open object, Focus, new-tab member pages and separate Apps/Widgets/Cards Library categories. [APP-168](3-in-review/APP-168.md) carries current implementation and local qualification; APP-169–171 capture durable artifact classification/cleanup, published component visibility and desktop icon exploration. Deployment remains held for this redesign PR; inherited spreadsheet fixes remain included.
+
 The workspace-entry follow-through [APP-162](4-done/APP-162.md) is Done and deployed as `7c3ab12`, retaining the composed-app runtime and original trial. Its [release evidence](../evidence/APP-162/aws-workspace-entry-2026-11-02/README.md) includes actual browser handoff and switching. APP-163 verified-email discovery, APP-164 authenticated workspace switching and APP-165 invitation email delivery remain Backlog.
 
 ## One authoritative ticket

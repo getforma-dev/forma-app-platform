@@ -394,7 +394,8 @@
         "Typed component actions with builder target selection and preserved command/draft semantics; persisted bounded themes (APP-156/157).",
         "Admitted record components and scoped filters, bounded exact record calculations and receipts (APP-158/159).",
         "A normally created reference app with actual saved records, cross-presentation interaction, permission and accessibility evidence (APP-160).",
-        "Measured future idle/wake options, an architecture decision and follow-up ownership; no automatic infrastructure change (APP-161)."
+        "Measured future idle/wake options, an architecture decision and follow-up ownership; no automatic infrastructure change (APP-161).",
+        "Whole-app canvas views and Apps/Widgets/Cards Library (APP-168); explicit follow-ups for durable artifact kind/legacy cleanup (APP-169), published visibility (APP-170) and desktop icon exploration (APP-171)."
       ],
       "exit_criteria": [
         "All APP-155–161 tickets are Done with their own required evidence; visual references and planning checks do not pass runtime acceptance.",

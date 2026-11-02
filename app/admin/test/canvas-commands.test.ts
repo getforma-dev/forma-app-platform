@@ -366,7 +366,7 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   assert.equal(document_.activeElement, shortcutsTab);
   // The tab lists every action with its click path and keys; rows keep their /commands.
   const text = shortcutsPanel.textContent;
-  assert.ok(text.includes('Unite an app') && text.includes('/unite expense'), 'a row with its /command');
+  assert.ok(text.includes('Open an app') && text.includes('/unite expense'), 'a row with its /command');
   assert.ok(text.includes('Shortcuts tab') && !text.includes('This sheet') && !text.includes('this sheet'), 'the Shortcuts row describes the tab');
   assert.ok(text.includes('Ask about your data') && text.includes('? where are the red invoices'), 'APP-122: the Ask and Shape rows');
   assert.ok(text.includes('/shape calculator make it a TI-84') && !text.includes('Restyle'), 'APP-122: widgets shape, the Restyle row is gone');

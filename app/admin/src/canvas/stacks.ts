@@ -26,6 +26,7 @@ import { FAN_ROW_HEIGHT, GAP, SLOT_WIDTH as WIDTH, setStackHooks, stackBoard as 
 import { loadStacks, saveStacks, type StoredStack } from './layout';
 import { el } from './render';
 import { refreshRecords } from './records';
+import { setAppView } from './unite';
 
 type Stack = {
   id: string;
@@ -143,6 +144,9 @@ function build(document_: Document, stack: Omit<Stack, 'item' | 'root' | 'holder
 export function createStack(ids: string[], options: { title?: string; at?: { x: number; y: number }; id?: string; top?: number; quiet?: boolean } = {}): Stack | null {
   const canvas = board.canvas();
   if (!canvas || !documentRef) return null;
+  // A saved work is one atomic placement. Its component nodes may not be
+  // stolen by a second pile while an app view still owns them.
+  if (ids.some(id => board.findCard(id))) return null;
   const cards: string[] = [];
   for (const id of ids) {
     if (cards.includes(id)) continue;
@@ -183,6 +187,7 @@ export function createStack(ids: string[], options: { title?: string; at?: { x: 
 
 /** Adds cards to a stack (on top unless `bottom`). */
 function addTo(stack: Stack, ids: string[], bottom = false): void {
+  if (ids.some(id => board.findCard(id))) return;
   const fresh = ids.filter((id) => !stack.cards.includes(id) && board.findCard(id));
   for (const id of fresh) {
     const other = [...stacks.values()].find((candidate) => candidate !== stack && candidate.cards.includes(id));
@@ -212,6 +217,7 @@ function removeStack(stack: Stack, _why: string): void {
 
 /** Spreads a stack's cards onto the canvas (Cmd/Ctrl+Shift+G). */
 export function dissolve(stack: Stack): void {
+  if (stack.cards.some(id => board.findCard(id))) return;
   const canvas = board.canvas();
   if (!canvas) return;
   collapse(stack, true);
@@ -226,6 +232,7 @@ export function dissolve(stack: Stack): void {
 
 /** Fans a stack's cards out in a grid beside it (macOS Stacks' grid). */
 export function expand(stack: Stack): void {
+  if (stack.cards.some(id => board.findCard(id))) return;
   const canvas = board.canvas();
   if (!canvas || stack.fanned || stack.folding) return;
   for (const other of stacks.values()) if (other !== stack) collapse(other, true);
@@ -393,6 +400,13 @@ export function stackSelection(items: HTMLElement[]): boolean {
 
 /** "Stack" in the library pane: an app's cards as one stack. */
 export function stackCards(ids: string[], title: string): void {
+  const groups = ids.flatMap(id => board.findCard(id)?.group ?? []);
+  if (groups.length) {
+    const first = groups[0]!;
+    if (groups.every(group => group.app === first.app && group.work === first.work)) void setAppView(first.app, first.work, 'stack');
+    else board.announce('Apps stay separate. Choose Stack view for one app.');
+    return;
+  }
   const existing = [...stacks.values()].find((stack) => ids.every((id) => stack.cards.includes(id)));
   if (existing) {
     board.canvas()?.centerItem(existing.item);
@@ -426,7 +440,7 @@ function wireDragToStack(document_: Document): void {
     const under = document_.elementsFromPoint(event.clientX, event.clientY)
       .map((node) => node.closest<HTMLElement>('.widget-instance'))
       .find((item): item is HTMLElement => Boolean(item) && item !== dragged && !item!.dataset.fanned) ?? null;
-    const stackable = (item: HTMLElement | null) => Boolean(item && (isStackItem(item) || item.dataset.group));
+    const stackable = (item: HTMLElement | null) => Boolean(item && !item.dataset.unite && !board.findCard(item.dataset.instanceId ?? '') && (isStackItem(item) || item.dataset.group));
     const next = stackable(under) && stackable(dragged) ? under : null;
     if (next === target) return;
     clear();
@@ -537,6 +551,9 @@ export function startStacks(document_: Document): void {
     },
     settled: () => {
       for (const row of loadStacks(board.member())) {
+        // unite.ts consumes these legacy memberships as whole-work Stack
+        // placements. Never restore their component wrappers first.
+        if (row.cards.some(id => board.findCard(id))) continue;
         const ids = row.cards.filter((id) => board.findCard(id)?.item);
         if (ids.length >= 2) createStack(ids, { id: row.id, title: row.title, at: { x: row.x, y: row.y }, top: row.top, quiet: true });
       }

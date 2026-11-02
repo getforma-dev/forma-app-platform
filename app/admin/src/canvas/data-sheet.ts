@@ -15,18 +15,31 @@ import {
   type BoxFile, type Card, type ConfirmedColumn, type ColumnType, type Preview,
 } from './box-api';
 import { openModal, previewTable } from './box-viewer';
-import { boardWorks, placeWork } from './board';
+import { boardWorks, markStandaloneWork, placeWork } from './board';
 import { announce, el, isUuid } from './render';
 
 export type SheetDone = { kind: 'card' | 'app' | 'attached' | 'data'; card: Card | null };
 
-/** Opens the sheet for `file` (in box `boxId`) with its `preview`. `also` names other spreadsheets from the same upload that Make an app includes. */
+// Mirrors the server's MAX_CONTEXT_DATA_FILES for guidance and result validation;
+// selection remains server-owned and file_ids is sent unchanged.
+const APP_TABLE_LIMIT = 3;
+
+/** Report only the server's actual used count, never the requested count as used. */
+export function appFileSummary(requested: number, used: number): string {
+  if (!Number.isSafeInteger(requested) || requested < 1 || requested > 20
+    || !Number.isSafeInteger(used) || used < 1 || used > Math.min(APP_TABLE_LIMIT, requested)) {
+    throw new Error('invalid_app_file_count');
+  }
+  return requested === 1 ? 'using 1 requested file' : `using ${used} of ${requested} requested files`;
+}
+
+/** Opens the sheet for `file` (in box `boxId`) with its `preview`. `also` names other spreadsheets requested for the server's capped app context. */
 export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, onDone?: (done: SheetDone) => void, adjust = false, also?: readonly string[]): void {
   const document_ = document;
   const fileIds = [...new Set([file.file_id, ...(also ?? []).filter(isUuid)])];
   const many = fileIds.length > 1;
   const modal = openModal(adjust || file.data ? `Adjust types · ${file.name}` : `Make data · ${file.name}`,
-    `${preview.rows} rows · ${preview.columns.length} columns${preview.sheet ? ` · sheet ${preview.sheet}` : ''} · types inferred by the parser; change any before you confirm${many ? `. The app includes all ${fileIds.length} spreadsheets.` : ''}`, undefined, true);
+    `${preview.rows} rows · ${preview.columns.length} columns${preview.sheet ? ` · sheet ${preview.sheet}` : ''} · types inferred by the parser; change any before you confirm${many ? `. ${fileIds.length} files requested; apps use up to ${APP_TABLE_LIMIT} readable tables, with confirmed tables first, then the newest.` : ''}`, undefined, true);
   const choices = preview.columns.map((column) => {
     const select = el(document_, 'select', { 'aria-label': `Type of ${column.header}` },
       ...COLUMN_TYPES.map((type) => {
@@ -50,6 +63,7 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
   });
   const status = el(document_, 'p', { class: 'bx-status', role: 'status' }, '');
   modal.body.append(
+    ...(many ? [el(document_, 'p', { class: 'bx-hint' }, `These columns belong to ${file.name} only. Other requested files use their saved types or inferred defaults. Unreadable files may be skipped; the result reports how many were used.`)] : []),
     el(document_, 'ul', { class: 'bx-cols', 'aria-label': 'Columns and their types' }, ...choices.map((choice) => choice.row)),
     el(document_, 'p', { class: 'bx-hint' }, `First ${Math.min(preview.sample.length, 20)} rows as the parser read them:`),
     previewTable(document_, preview),
@@ -83,7 +97,7 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
     status.textContent = 'Registering the data and placing its card…';
     try {
       const made = await makeData(boxId, file.file_id, columns(), true);
-      if (made.card) await placeWork(made.card.app_id, made.card.work_id, []);
+      if (made.card) { markStandaloneWork(made.card.app_id, made.card.work_id); await placeWork(made.card.app_id, made.card.work_id, []); }
       finish({ kind: 'card', card: made.card }, made.card
         ? `${file.name} is data now (${made.data?.row_count ?? preview.rows} rows); its card is on the canvas.`
         : `${file.name} is registered as data. No card could be placed for you.`);
@@ -104,13 +118,14 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
     const words = purpose.value.trim() || 'an overview of this data';
     busy(true);
     status.textContent = many
-      ? `Registering the data, then generating an app from these ${fileIds.length} files…`
+      ? `Registering this file's columns, then requesting an app from up to ${Math.min(APP_TABLE_LIMIT, fileIds.length)} of ${fileIds.length} files…`
       : 'Registering the data, then generating an app from this file…';
     try {
       await makeData(boxId, file.file_id, columns(), false);
       const built = await makeApp(boxId, words, fileIds);
+      const used = appFileSummary(fileIds.length, built.files);
       await placeWork(built.app_id, built.work_id, []);
-      finish({ kind: 'app', card: { app_id: built.app_id, work_id: built.work_id, title: built.title } }, `${built.title} was generated from ${many ? `${fileIds.length} files` : file.name} and placed.`);
+      finish({ kind: 'app', card: { app_id: built.app_id, work_id: built.work_id, title: built.title } }, `${built.title} was generated ${used} and placed.`);
     } catch (error) {
       status.textContent = refusalText(error);
       busy(false);
@@ -133,7 +148,7 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
     try {
       await makeData(boxId, file.file_id, columns(), false);
       const attached = await attachFile(boxId, file.file_id, appId, workId);
-      if (attached.card) await placeWork(attached.card.app_id, attached.card.work_id, []);
+      if (attached.card) { markStandaloneWork(attached.card.app_id, attached.card.work_id); await placeWork(attached.card.app_id, attached.card.work_id, []); }
       const title = works.find((work) => work.app === appId && work.work === workId)?.title ?? 'the app';
       finish({ kind: 'attached', card: attached.card }, `${file.name} was added to ${title}’s ${noun}${attached.card ? '; its data card is beside the app' : ''}.`);
     } catch (error) {

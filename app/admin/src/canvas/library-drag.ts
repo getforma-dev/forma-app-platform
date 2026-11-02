@@ -1,7 +1,7 @@
-// APP-104: drag one library card onto the canvas. A desktop pointer (mouse
+// APP-104 / whole-app views: drag an explicitly standalone whole work from Cards. A desktop pointer (mouse
 // or pen) that moves past a short threshold picks the card up. Touch never
 // starts a drag, so the library list keeps scrolling. Dropping on the canvas
-// places that one card through the board's existing `addCards` path, at the
+// places that whole work through the atomic view controller, at the
 // world point under the pointer (the stage is `translate(pan) scale(zoom)`
 // with its origin at 0,0). A drop on the library, the dock or anywhere else,
 // or Escape, places nothing. A card already on the board is not placed again.
@@ -287,9 +287,9 @@ export function bindLibraryDrag(document_: Document, hooks: LibraryDragHooks): v
   document_.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch') return;
     const target = event.target as Element | null;
-    const row = target?.closest<HTMLElement>('.cv-lib-card');
+    const row = target?.closest<HTMLElement>('[data-lib-entry-drag]');
     if (!row || !row.closest('#cv-library')) return;
-    const editing = !!target?.closest('[data-lib-edit]');
+    const editing = !!target?.closest('button, a, summary, details, input, select, textarea, [data-lib-edit]');
     const card = editing ? null : hooks.cardFrom(row);
     const effect = controller.down({
       pointerType: event.pointerType,

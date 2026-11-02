@@ -20,7 +20,8 @@ import { eventOriginatesInTextEntry } from '../canvas-vendor/index';
 import { isOnBoard, onBoardSettled, paneKind, stackBoard as board } from './board';
 import { el } from './render';
 import { stackCardsOf } from './stacks';
-import { frameCardsOf, isUniteItem, keepScroll } from './unite';
+import { appViewOf, frameCardsOf, isUniteItem, keepScroll, selectedAppCard } from './unite';
+import { appComponentVisible } from '../presentation/presentation';
 
 type Session = {
   ids: string[];
@@ -84,6 +85,10 @@ export function unregisterFocusCard(card: HTMLElement): void {
 }
 function cardOf(id: string): HTMLElement | undefined {
   return board.findCard(id)?.card ?? standalone.get(id)?.card;
+}
+function visiblePart(id: string): boolean {
+  const found = board.findCard(id);
+  return !found || appComponentVisible(found.group.app, found.group.work, found.card);
 }
 /** A dialog stacked above focus (a file viewer opened from a focused card) owns the keys. */
 function modalAbove(): boolean {
@@ -198,12 +203,12 @@ function build(document_: Document): HTMLElement {
 function sequenceFor(id: string): string[] {
   if (standalone.has(id)) return [id];
   const stack = stackCardsOf(id);
-  if (stack) return stack.cards;
+  if (stack) return stack.cards.filter(visiblePart);
   const frame = frameCardsOf(id);
-  if (frame) return frame;
+  if (frame) return frame.filter(visiblePart);
   const found = board.findCard(id);
-  const ids = (found?.group.cards ?? []).map((card) => card.dataset.card ?? '').filter((card) => card && isOnBoard(card));
-  return ids.includes(id) ? ids : [id];
+  const ids = (found?.group.cards ?? []).map((card) => card.dataset.card ?? '').filter((card) => card && isOnBoard(card) && visiblePart(card));
+  return ids.includes(id) ? ids : visiblePart(id) ? [id] : [];
 }
 
 function titleOf(card: HTMLElement | undefined): string {
@@ -302,10 +307,7 @@ function show(index: number): void {
   session.index = next;
   const restoreScroll = keepScroll(card);
   let placeholder: HTMLElement | null = null;
-  if (card.closest('#cv-board')) {
-    // A stack's hidden card: wired and run, then shown here.
-    board.show(id);
-  } else {
+  if (!card.closest('#cv-board')) {
     placeholder = el(documentRef, 'div', { class: 'cv-focus-placeholder', 'aria-hidden': 'true' }, 'In focus');
     placeholder.style.height = `${card.offsetHeight}px`;
     card.replaceWith(placeholder);
@@ -315,6 +317,9 @@ function show(index: number): void {
   restoreScroll();
   session.card = card;
   session.placeholder = placeholder;
+  // Face and Stack park unshown components. Start their governed read only
+  // after the same node is in the visible Focus stage, never while parked.
+  if (!dialog.hidden) board.show(id);
   focusAsk?.(card, dialog.querySelector<HTMLElement>('[data-focus-ask-panel]'), false);
   const work = board.workOf(card) ?? '';
   const app = dialog.querySelector('[data-focus-app]');
@@ -351,14 +356,17 @@ function go(step: number): void {
 /** Opens card `id` in focus (it must be on the canvas). */
 export function openFocus(id: string, opener: HTMLElement | null = null): boolean {
   const document_ = documentRef;
-  if (!document_ || !((board.findCard(id) && isOnBoard(id)) || standalone.get(id)?.card.isConnected)) return false;
-  dialog ??= build(document_);
+  if (!document_ || !visiblePart(id) || !((board.findCard(id) && isOnBoard(id)) || standalone.get(id)?.card.isConnected)) return false;
   const ids = sequenceFor(id);
+  if (!ids.length) return false;
+  dialog ??= build(document_);
+  const wasHidden = dialog.hidden;
   if (session) putBack();
   session = { ids, index: Math.max(0, ids.indexOf(id)), card: null, placeholder: null, opener: opener ?? (document_.activeElement as HTMLElement | null) };
   renderStrip();
   show(session.index);
   dialog.hidden = false;
+  if (wasHidden && session.card) board.show(session.card.dataset.card ?? id);
   for (const selector of INERT) document_.querySelector<HTMLElement>(selector)?.setAttribute('inert', '');
   document_.getElementById('cv-shell')?.classList.add('is-focus-open');
   watch();
@@ -397,8 +405,12 @@ export function closeFocus(): void {
 }
 
 /** F on a selected canvas item: a card, a stack's top card, or the frame's last touched card. */
-export function focusFromItem(item: HTMLElement | null): boolean {
+export function focusFromItem(item: HTMLElement | null, opener: HTMLElement | null = null): boolean {
   if (!item) return false;
+  if (appViewOf(item)) {
+    const card = selectedAppCard(item);
+    return card ? openFocus(card.dataset.card ?? '', opener) : false;
+  }
   if (isUniteItem(item)) {
     const pointed = lastPointed && item.contains(lastPointed) ? lastPointed : item.querySelector<HTMLElement>('.cv-card[data-card]');
     return openFocus(pointed?.dataset.card ?? '');
@@ -450,10 +462,21 @@ export function startFocus(document_: Document): void {
     }
     const frameFocus = target?.closest<HTMLElement>('[data-unite-focus]');
     if (frameFocus) {
-      const first = frameFocus.closest('.cv-unite')?.querySelector<HTMLElement>('.cv-card[data-card]');
-      if (first) openFocus(first.dataset.card ?? '', frameFocus);
+      focusFromItem(frameFocus.closest<HTMLElement>('.cv-item-unite'), frameFocus);
     }
   });
+  const preferences = () => {
+    if (!session?.card) return;
+    const current = session.card.dataset.card ?? '';
+    const ids = sequenceFor(current);
+    if (!visiblePart(current) || !ids.length) { closeFocus(); return; }
+    session.ids = ids; session.index = Math.max(0, ids.indexOf(current)); renderStrip();
+    const pos = dialog?.querySelector('[data-focus-pos]');
+    if (pos) pos.textContent = ids.length > 1 ? `${session.index + 1} / ${ids.length}` : '';
+    for (const step of dialog?.querySelectorAll<HTMLButtonElement>('[data-focus-step]') ?? []) step.disabled = ids.length < 2;
+  };
+  document_.addEventListener('forma:app-view-preferences', preferences);
+  document_.defaultView?.addEventListener('storage', preferences);
   onBoardSettled(() => {
     const match = location.hash.match(/^#focus=([A-Za-z0-9_-]{1,96})$/);
     if (match?.[1]) openFocus(match[1]);

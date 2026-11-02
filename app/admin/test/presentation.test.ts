@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPresentationTheme, parsePresentation, presentationFor, invalidatePresentation } from '../src/presentation/presentation.ts';
+import { applyPresentationTheme, parsePresentation, presentationFor, invalidatePresentation, hiddenAppComponents, saveHiddenAppComponents, appComponentVisible } from '../src/presentation/presentation.ts';
 // Move-aware DOM spy, with no HTML parser or executable markup sink.
 class N {
   parentElement: E | null = null;
@@ -40,7 +40,15 @@ class E extends N {
   focus(){this.ownerDocument.activeElement=this;}scrollIntoView(){}showModal(){this.open=true;}close(){this.open=false;this.emit('close');}
 }
 const data=(s:string)=>s.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase());
-class D{root=new E(this,'main');activeElement:E|null=null;createElement(t:string){return new E(this,t);}createComment(_t:string){return new N(this);}querySelector(s:string){return this.root.querySelector(s);}}
+class D{
+ root=new E(this,'main');activeElement:E|null=null;
+ listeners=new Map<string,((event:any)=>void)[]>();
+ defaultView={addEventListener:(type:string,listener:(event:any)=>void)=>this.addEventListener('window:'+type,listener),removeEventListener:(type:string,listener:(event:any)=>void)=>this.removeEventListener('window:'+type,listener)};
+ addEventListener(type:string,listener:(event:any)=>void){this.listeners.set(type,[...(this.listeners.get(type)??[]),listener]);}
+ removeEventListener(type:string,listener:(event:any)=>void){this.listeners.set(type,(this.listeners.get(type)??[]).filter(item=>item!==listener));}
+ dispatchEvent(event:Event){for(const listener of [...this.listeners.get(event.type)??[]])listener(event);return true;}
+ createElement(t:string){return new E(this,t);}createComment(_t:string){return new N(this);}querySelector(s:string){return this.root.querySelector(s);}
+}
 const source={version:1,description:'<script>inert text</script>',sections:[{id:'main',title:'Overview',components:['summary']}],actions:[{id:'create',label:'Log something',behavior:'dialog',target:'form'},{id:'overview',label:'Overview',behavior:'navigate',target:'summary'}],theme:{mode:'dark',accent:'green',density:'compact',font:'mono'}};
 function fixture(){const d=new D(),root=d.root;root.dataset.presentation=JSON.stringify(source);const header=d.createElement('div');header.dataset.appPresentationHeader='';const parts=d.createElement('div');parts.dataset.documentParts='';const summary=d.createElement('article');summary.dataset.component='summary';const form=d.createElement('article');form.dataset.component='form';const input=d.createElement('input');input.value='Unsent draft';const key=d.createElement('input');key.type='hidden';key.value='original-key';form.append(input,key);parts.append(summary,form);root.append(header,parts);return{d,root,parts,form,input,key};}
 function dom(run:()=>void){const prior=Object.getOwnPropertyDescriptor(globalThis,'HTMLElement');Object.defineProperty(globalThis,'HTMLElement',{configurable:true,value:E});try{run();}finally{if(prior)Object.defineProperty(globalThis,'HTMLElement',prior);else Reflect.deleteProperty(globalThis,'HTMLElement');}}
@@ -95,3 +103,59 @@ test('Tab and Shift+Tab wrap visible controls without leaving the component dial
  input.focus();assert.equal(dialog.emit('keydown',input,{key:'Tab',shiftKey:false}).defaultPrevented,true);assert.equal(root.ownerDocument.activeElement,close);
  assert.equal(dialog.emit('keydown',close,{key:'Tab',shiftKey:true}).defaultPrevented,true);assert.equal(root.ownerDocument.activeElement,input);
 }));
+
+const APP='11111111-1111-4111-8111-111111111111',WORK='22222222-2222-4222-8222-222222222222';
+function localStorageFixture(run:(storage:Storage)=>void){
+ const before=Object.getOwnPropertyDescriptor(globalThis,'localStorage'), values=new Map<string,string>();
+ const storage={getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value),removeItem:(key:string)=>values.delete(key),clear:()=>values.clear(),key:(index:number)=>[...values.keys()][index]??null,get length(){return values.size;}} as Storage;
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,value:storage});
+ try{run(storage);}finally{if(before)Object.defineProperty(globalThis,'localStorage',before);else Reflect.deleteProperty(globalThis,'localStorage');}
+}
+function memberFixture(){const f=fixture();f.root.setAttribute('data-document','');f.root.setAttribute('data-app',APP);f.root.setAttribute('data-work',WORK);return f;}
+
+test('visibility storage accepts bounded IDs only and isolates exact app/work',()=>localStorageFixture(storage=>{
+ assert.equal(saveHiddenAppComponents(APP,WORK,['summary','form','summary'],undefined,storage),true);
+ assert.deepEqual([...hiddenAppComponents(APP,WORK,storage)],['form','summary']);
+ assert.deepEqual([...hiddenAppComponents(WORK,APP,storage)],[]);
+ assert.deepEqual([...hiddenAppComponents('invalid',WORK,storage)],[]);
+ const key=storage.key(0)!;assert.equal(storage.getItem(key),'["form","summary"]');
+ for(const invalid of [['name with spaces'],['../path'],Array.from({length:65},(_,i)=>`part_${i}`)])assert.equal(saveHiddenAppComponents(APP,WORK,invalid,undefined,storage),false);
+ assert.equal(saveHiddenAppComponents(APP,WORK,['form'],undefined,{setItem(){throw Error('blocked');}}),false);
+ for(const raw of ['{"hidden":["form"]}','["form",1]','["<script>"]',' '.repeat(8193)]){storage.setItem(key,raw);assert.deepEqual([...hiddenAppComponents(APP,WORK,storage)],[]);}
+}));
+
+test('member preferences hide sections and actions without removing form nodes, and restore on the same node',()=>dom(()=>localStorageFixture(storage=>{
+ const{d,root,form,input,key}=memberFixture();const controller=presentationFor(root as unknown as HTMLElement);
+ root.emit('click',root.querySelector('[data-app-action="create"]')!);assert.ok(root.querySelector('dialog'));
+ assert.equal(saveHiddenAppComponents(APP,WORK,['form','summary'],d as unknown as Document,storage),true);
+ assert.equal(root.querySelector('dialog'),null,'hiding the open form closes only its component dialog');
+ assert.equal(form.hidden,true);assert.equal(root.querySelector('[data-app-section]')?.hidden,true);
+ assert.equal(root.querySelector('[data-app-action]'),null);
+ assert.equal(form.querySelector('input'),input);assert.equal(input.value,'Unsent draft');assert.equal(key.value,'original-key');
+ assert.equal(root.querySelectorAll('[data-component="form"]').length,1);
+ assert.equal(appComponentVisible(APP,WORK,form as unknown as HTMLElement),false);
+ saveHiddenAppComponents(APP,WORK,[],d as unknown as Document,storage);
+ assert.equal(form.hidden,false);assert.equal(root.querySelector('[data-app-section]')?.hidden,false);
+ assert.ok(root.querySelector('[data-app-action="create"]'));assert.equal(input.value,'Unsent draft');
+ controller.dispose();
+})));
+
+test('preferences survive another member page/controller and storage events, but guest surfaces ignore them',()=>dom(()=>localStorageFixture(storage=>{
+ saveHiddenAppComponents(APP,WORK,['summary'],undefined,storage);
+ const first=memberFixture(),a=presentationFor(first.root as unknown as HTMLElement);
+ assert.equal(first.root.querySelector('[data-component="summary"]')?.hidden,true);
+ const second=memberFixture(),b=presentationFor(second.root as unknown as HTMLElement);
+ assert.equal(second.root.querySelector('[data-component="summary"]')?.hidden,true);
+ saveHiddenAppComponents(APP,WORK,[],undefined,storage);
+ second.d.dispatchEvent(new Event('window:storage'));
+ // Real StorageEvent supplies a key; null means another tab cleared storage.
+ const event=new Event('window:storage');Object.defineProperty(event,'key',{value:null});second.d.dispatchEvent(event);
+ assert.equal(second.root.querySelector('[data-component="summary"]')?.hidden,false);
+ saveHiddenAppComponents(APP,WORK,['form','summary'],undefined,storage);
+ for(const attribute of ['data-shared-page','data-connected-app']){
+  const guest=memberFixture();guest.root.setAttribute(attribute,'');const c=presentationFor(guest.root as unknown as HTMLElement);
+  assert.equal(guest.form.hidden,false);assert.equal(guest.root.querySelector('[data-component="summary"]')?.hidden,false);
+  assert.ok(guest.root.querySelector('[data-app-action="create"]'));c.dispose();
+ }
+ a.dispose();b.dispose();assert.equal(first.root.querySelector('[data-component="summary"]')?.hidden,false,'disposing local presentation restores only its own hidden flags before view moves');
+})));

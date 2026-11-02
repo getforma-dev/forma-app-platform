@@ -24,7 +24,7 @@ function SharedCanvas(props: SharedCanvasProps) {
       <div data-connected-initial="">
         {createList(() => props.apps, app => app.id, app => <article class="connected-app composed-app" data-connected-app={app.id} data-presentation={app.presentation.json} data-app-mode={app.presentation.mode} data-app-accent={app.presentation.accent} data-app-density={app.presentation.density} data-app-font={app.presentation.font}>
           <header class="connected-app-head" data-canvas-drag-handle=""><div><p class="share-policy">Connected · View only</p><h2>{app.title}</h2><p class="connected-owner">{app.ownerLabel}</p></div>
-            <a href={app.href} class="share-secondary">Open app</a><button type="button" data-connected-remove={app.id}>Remove from canvas</button></header>
+            <a href={app.href} target="_blank" rel="noopener" class="share-secondary">Open app</a><button type="button" data-connected-remove={app.id}>Remove from canvas</button></header>
           <PresentationHeader presentation={app.presentation} />
           <SharedParts parts={app.parts} views={app.views} recordCards={app.recordCards} recordsTruncated={app.recordsTruncated} />
         </article>)}

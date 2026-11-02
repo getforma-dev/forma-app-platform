@@ -1,118 +1,73 @@
-import { presentationFor } from '../presentation/presentation';
-// APP-106 Unite, and APP-142 the page. An app's cards fly together into one
-// page. The parts stay that page until the member fans them out.
-//
-// - Start: the app card's "Unite", the library pane's app row, `/unite <app>`,
-//   U with a card of the app selected, or the toolbar menu. Cards of the app
-//   that are not on the canvas yet are brought in. A stack is left alone:
-//   selecting the stack does not open a page. A card of the app that sits in
-//   a stack still leaves that stack, because the page is the app, not a pile.
-// - Layout: computed here, with no model, from the app's definition order
-//   (the board keeps the group's cards as the server lists them: the app card,
-//   the views in declared order, then the command forms, records and ledger)
-//   into a fixed arrangement: a KPI row (summary views), the primary visual
-//   (the first chart, else the first table), the detail tables, and a side
-//   panel with the app card, the forms and the records. At phone width the
-//   page is one column.
-// - Identity: every card element is moved, never rebuilt, so receipts, form
-//   drafts, open details, scroll positions and live updates survive (the
-//   board runs and refreshes every card that is not parked, wherever it is).
-// - Motion: a staggered fly-in (FLIP, about 600–800 ms) in world coordinates,
-//   so the camera can move at the same time; with prefers-reduced-motion, a
-//   short cross-fade.
-// - Focus opens one part. Closing it returns that part to the page.
-// - Fan-out is the only action that puts the parts back on the board: the
-//   page's "Fan out", `/fan`, `/split`, or Shift+U. Each part returns to the
-//   spot it had before the page opened.
-// - The corner drag resizes the page, down to the header and one part and up
-//   to the viewport. The size is this browser's layout, with the position.
-// - Share on the page shares the app's saved work. It does not share a card.
-// - A page is one canvas item (it moves as one) and is kept per member in
-//   this browser (DS-06/DS-67).
+// Whole-work placement: Card, Stack and Open are modes of one retained item.
+// Components remain trusted server-owned DOM. This browser stores layout only.
+import { appComponentVisible, applyPresentationTheme, disposePresentation, parsePresentation, presentationFor } from '../presentation/presentation';
 import { createCanvasItem } from '../canvas-vendor/index';
-import { addCards, refreshGroupPresentation, GAP, onLayoutSaved, setUniteHooks, SLOT_WIDTH, stackBoard as board } from './board';
-import { loadUnited, saveUnited } from './layout';
+import { ensureAppGroup, rememberAppPlacement, isStandaloneWork, removeWork, refreshGroupPresentation, runGroup, onLayoutSaved, setUniteHooks, stackBoard as board } from './board';
+import { loadLayout, loadPlaced, loadStacks, loadUnited, saveUnited, migrateAppViews, type StoredUnite, type AppViewMode } from './layout';
 import { findApps } from './library';
 import { pageSize } from './page';
 import { dismissSharing, openSharing } from '../sharing/dialog';
 import { el, originKind } from './render';
 import { registerCommands, registerCompleter, type Completion } from './slash';
-import { collapseAll, releaseCards, stackCardsOf } from './stacks';
+import { releaseCards } from './stacks';
 import { declaredLayout } from './page-layout';
+export type { AppViewMode } from './layout';
 
-type Spot = { x: number; y: number };
+type Spot = {x: number; y: number};
 type Frame = {
-  work: string;
-  app: string;
-  title: string;
-  /** Card ids in the frame's reading order (KPI row, main column, side panel). */
-  cards: string[];
-  item: HTMLElement;
-  root: HTMLElement;
-  previous: Map<string, Spot>;
+  work: string; app: string; title: string; cards: string[];
+  item: HTMLElement; root: HTMLElement; mode: AppViewMode; top: number;
+  openSize: {width: number; height: number}; previous: Map<string, Spot>;
 };
+export type AppView = Pick<Frame, 'app'|'work'|'mode'|'top'|'item'> & {cards: string[]};
+export type AppViewOptions = {at?: Spot; focus?: boolean; preserveMode?: boolean; restore?: StoredUnite};
 type Report = (message: string) => void;
-
 const frames = new Map<string, Frame>();
+const pending = new Map<string, Promise<string>>();
+const generations = new Map<string, number>();
+const removedWorks = new Set<string>();
+const retained = new Map<string, StoredUnite>();
 let documentRef: Document | null = null;
-// Nothing is saved before the kept frames are back (a layout save during the
-// page's first load would otherwise write an empty list over them).
 let restored = false;
-const WIDE = 1240;
-const NARROW = 760;
-const PHONE = 400;
-const DURATION = 620;
-
-const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let restoration: Promise<void> | null = null;
+const WIDE = 1240, NARROW = 760, PHONE = 400;
 const phone = () => matchMedia('(max-width: 760px)').matches;
 
-/** Keeps the scroll offsets of an element and its descendants across a DOM move. */
+/** Preserve form/table scroll positions when their same nodes change hosts. */
 export function keepScroll(root: HTMLElement): () => void {
   const spots: [HTMLElement, number, number][] = [];
-  for (const node of [root, ...root.querySelectorAll<HTMLElement>('*')]) {
+  for (const node of [root, ...root.querySelectorAll<HTMLElement>('*')])
     if (node.scrollTop || node.scrollLeft) spots.push([node, node.scrollTop, node.scrollLeft]);
-  }
-  return () => {
-    for (const [node, top, left] of spots) {
-      node.scrollTop = top;
-      node.scrollLeft = left;
-    }
-  };
+  return () => { for (const [node, top, left] of spots) { node.scrollTop = top; node.scrollLeft = left; } };
 }
-
-export function isUniteItem(item: HTMLElement): boolean {
-  return item.classList.contains('cv-item-unite');
+export function isUniteItem(item: HTMLElement): boolean { return item.classList.contains('cv-item-unite'); }
+export function appViewForWork(work: string): AppView | null {
+  const frame = frames.get(work);
+  return frame ? {app: frame.app, work, mode: frame.mode, top: frame.top, cards: [...frame.cards], item: frame.item} : null;
 }
-
-/** The frame that holds card `id`, as its cards in reading order. */
+export function appViewOf(item: HTMLElement | null): AppView | null {
+  return item ? appViewForWork(item.dataset.unite ?? '') : null;
+}
 export function frameCardsOf(id: string): string[] | null {
-  for (const frame of frames.values()) if (frame.cards.includes(id)) return [...frame.cards];
+  for (const frame of frames.values()) if (frame.cards.includes(id)) return visibleCards(frame).map(card => card.dataset.card ?? '');
   return null;
 }
-
-/** The cards of a frame's canvas item. */
-export function frameCardsOfItem(item: HTMLElement): string[] {
-  return [...(frames.get(item.dataset.unite ?? '')?.cards ?? [])];
+export function frameCardsOfItem(item: HTMLElement): string[] { return appViewOf(item)?.cards ?? []; }
+export function selectedAppCard(item: HTMLElement): HTMLElement | null {
+  const frame = frames.get(item.dataset.unite ?? '');
+  if (!frame) return null;
+  const cards = visibleCards(frame);
+  return frame.mode === 'stack' ? cards.find(card => card.dataset.card === frame.cards[frame.top]) ?? cards[0] ?? null : cards.find(card => card.dataset.kind === 'app') ?? cards[0] ?? null;
 }
-
 function save(): void {
-  const canvas = board.canvas();
-  if (!canvas || !restored) return;
-  saveUnited(board.member(), Array.from(frames.values(), (frame) => {
+  const canvas = board.canvas(); if (!canvas || !restored) return;
+  for (const frame of frames.values()) {
     const state = canvas.getItemState(frame.item);
-    const sized = frame.root.classList.contains('is-sized');
-    const height = Number.parseFloat(frame.item.style.height);
-    return {
-      work: frame.work,
-      app: frame.app,
-      x: state.x,
-      y: state.y,
-      previous: Object.fromEntries(frame.previous),
-      ...(sized && Number.isFinite(height) ? { width: state.width, height } : {}),
-    };
-  }));
+    retained.set(frame.work, {app: frame.app, work: frame.work, x: state.x, y: state.y,
+      previous: Object.fromEntries(frame.previous), mode: frame.mode, top: frame.top, ...frame.openSize});
+  }
+  saveUnited(board.member(), [...retained.values()]);
 }
-
 /** The fixed arrangement, from the definition order (no model). */
 function arrange(cards: HTMLElement[]): { kpi: HTMLElement[]; main: HTMLElement[]; side: HTMLElement[] } {
   const kpi: HTMLElement[] = [];
@@ -135,31 +90,42 @@ function arrange(cards: HTMLElement[]): { kpi: HTMLElement[]; main: HTMLElement[
   return { kpi, main: primary ? [primary, ...views] : views, side };
 }
 
-function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[], canShare: boolean, canEdit: boolean, presentation: string): Frame['root'] {
-  const head = el(document_, 'header', { class: 'cv-unite-head', 'data-canvas-drag-handle': '' },
-    el(document_, 'span', { class: 'cv-unite-mark', 'aria-hidden': 'true' }),
-    el(document_, 'div', { class: 'cv-unite-heading' },
-      el(document_, 'h2', { class: 'cv-unite-title', title }, title),
-      el(document_, 'p', { class: 'cv-origins cv-unite-origins', 'aria-label': 'How this app was assembled' },
-        ...origins.map((text) => el(document_, 'span', { class: 'cv-origin', 'data-origin': originKind(text) }, text)))),
-    el(document_, 'span', { class: 'cv-unite-count', 'data-unite-count': '' }),
-    el(document_, 'div', { class: 'cv-unite-actions', role: 'group', 'aria-label': 'Page' },
-      el(document_, 'a', { class: 'cv-secondary', href: `/w/${app}/${work}`, title: 'Open this app as a page' }, 'Open page'),
-      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-ask': '' }, 'Ask about this app'),
-      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus a part · F' }, 'Focus'),
-      ...(canEdit ? [el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-edit-presentation': '', 'data-app': app, 'data-work': work }, 'Edit app')] : []),
-      ...(canShare ? [el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-share': '', title: 'Share this app' }, 'Share')] : []),
-      el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-unite-split': '', title: 'Fan out · Shift+U' }, 'Fan out')));
-  return el(document_, 'article', { class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'data-presentation': presentation, 'data-app': app, 'data-work': work, 'aria-label': title },
+function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[], canShare: boolean, canEdit: boolean, presentation: string): HTMLElement {
+  const standalone = isStandaloneWork(app, work);
+  const picker = el(document_, 'div', {class: 'cv-app-view-picker', role: 'group', 'aria-label': 'App view'},
+    ...(['face', 'stack', 'open'] as const).map(mode => el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-view-mode': mode, 'aria-pressed': 'false'}, mode === 'face' ? 'App Card' : mode === 'stack' ? 'Stack' : 'Open')));
+  picker.hidden = standalone;
+  const head = el(document_, 'header', {class: 'cv-unite-head', 'data-canvas-drag-handle': ''},
+    el(document_, 'span', {class: 'cv-unite-mark', 'aria-hidden': 'true'}),
+    el(document_, 'div', {class: 'cv-unite-heading'}, el(document_, 'h2', {class: 'cv-unite-title', title}, title),
+      el(document_, 'p', {class: 'cv-origins cv-unite-origins', 'aria-label': 'How this was assembled'},
+        ...origins.map(text => el(document_, 'span', {class: 'cv-origin', 'data-origin': originKind(text)}, text)))),
+    el(document_, 'span', {class: 'cv-unite-count', 'data-unite-count': ''}), picker,
+    el(document_, 'div', {class: 'cv-unite-actions', role: 'group', 'aria-label': standalone ? 'Card' : 'App'},
+      el(document_, 'a', {class: 'cv-secondary', href: `/w/${app}/${work}`, target: '_blank', rel: 'noopener', title: 'Open in a new tab'}, 'Open page ↗'),
+      el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-unite-ask': ''}, standalone ? 'Ask about this card' : 'Ask about this app'),
+      el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus · F'}, 'Focus'),
+      ...(canEdit ? [el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-edit-presentation': '', 'data-app': app, 'data-work': work}, standalone ? 'Edit card' : 'Edit app')] : []),
+      ...(canShare ? [el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-unite-share': ''}, 'Share')] : []),
+      el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-view-remove': ''}, 'Remove from canvas')));
+  const root = el(document_, 'article', {class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'data-presentation': presentation, 'data-app': app, 'data-work': work, 'aria-label': title},
     head,
-    el(document_, 'div', { 'data-app-presentation-header': '' }),
-    el(document_, 'div', { class: 'cv-unite-grid', 'data-presentation-layout': '' },
-      el(document_, 'div', { class: 'cv-unite-kpis', 'data-slot': 'kpi' }),
-      el(document_, 'div', { class: 'cv-unite-main', 'data-slot': 'main' }),
-      el(document_, 'div', { class: 'cv-unite-side', 'data-slot': 'side' })),
-    el(document_, 'button', { type: 'button', class: 'cv-unite-resize', 'data-unite-resize': '', 'aria-label': 'Resize the page', title: 'Drag to resize this page' }));
+    el(document_, 'div', {class: 'cv-app-face', 'data-app-view-face': ''}),
+    el(document_, 'div', {class: 'cv-app-stack', 'data-app-view-stack': ''},
+      el(document_, 'div', {class: 'cv-app-stack-nav', role: 'group', 'aria-label': 'App parts'},
+        el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-stack-step': '-1', 'aria-label': 'Previous part'}, '‹'),
+        el(document_, 'span', {'data-app-stack-position': '', 'aria-live': 'polite'}),
+        el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-stack-step': '1', 'aria-label': 'Next part'}, '›')),
+      el(document_, 'div', {'data-app-stack-holder': ''})),
+    el(document_, 'div', {'data-app-view-open': ''},
+      el(document_, 'div', {'data-app-presentation-header': ''}),
+      el(document_, 'div', {class: 'cv-unite-grid', 'data-presentation-layout': ''})),
+    el(document_, 'div', {'data-app-view-parking': ''}),
+    el(document_, 'button', {type: 'button', class: 'cv-unite-resize', 'data-unite-resize': '', 'aria-label': 'Resize the app', title: 'Drag to resize this app'}));
+  root.dataset.placementKind = standalone ? 'card' : 'app';
+  const parking = root.querySelector<HTMLElement>('[data-app-view-parking]')!; parking.hidden = true; parking.inert = true;
+  return root;
 }
-
 /** Puts the cards in their slots; returns them in reading order and the frame's width. */
 function fill(root: HTMLElement, cards: HTMLElement[], layout = ''): { order: HTMLElement[]; width: number } {
   const slots = declaredLayout(cards.map(card => card.dataset.card ?? ''), layout);
@@ -178,6 +144,8 @@ function fill(root: HTMLElement, cards: HTMLElement[], layout = ''): { order: HT
     if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
     return { order, width };
   }
+  delete root.dataset.declaredLayout;
+  root.querySelector('.cv-unite-grid')!.replaceChildren(...['kpi','main','side'].map(name => el(root.ownerDocument, 'div', {class: `cv-unite-${name === 'kpi' ? 'kpis' : name}`, 'data-slot': name})));
   const { kpi, main, side } = arrange(cards);
   const slot = (name: string) => root.querySelector<HTMLElement>(`[data-slot="${name}"]`)!;
   slot('kpi').replaceChildren(...kpi);
@@ -221,455 +189,283 @@ function layoutPage(root: HTMLElement, width: number): void {
   root.classList.toggle('is-single', single);
 }
 
-/** A card's box in world coordinates, measured through the canvas item that holds it. */
-function worldBox(card: HTMLElement, item: HTMLElement): { x: number; y: number; width: number; height: number } | null {
-  const canvas = board.canvas();
-  if (!canvas || !item.isConnected || !card.isConnected) return null;
-  const state = canvas.getItemState(item);
-  const outer = item.getBoundingClientRect();
-  const inner = card.getBoundingClientRect();
-  const k = item.offsetWidth ? outer.width / item.offsetWidth : 1;
-  if (!k || !inner.width) return null;
-  return { x: state.x + (inner.left - outer.left) / k, y: state.y + (inner.top - outer.top) / k, width: inner.width / k, height: inner.height / k };
-}
-
-/**
- * The fly-in: each card starts where it was (world coordinates) and eases to
- * its new place, staggered so the whole motion stays under 800 ms. Reduced
- * motion: a cross-fade.
- */
-function fly(cards: HTMLElement[], before: Map<HTMLElement, { x: number; y: number; width: number; height: number }>, holderOf: (card: HTMLElement) => HTMLElement | null): void {
-  const step = cards.length > 1 ? Math.min(45, 180 / (cards.length - 1)) : 0;
-  cards.forEach((card, index) => {
-    if (reducedMotion()) {
-      card.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
-      return;
-    }
-    const holder = holderOf(card);
-    const after = holder ? worldBox(card, holder) : null;
-    const start = before.get(card);
-    const keyframes: Keyframe[] = start && after && after.width && after.height
-      ? [
-        { transformOrigin: 'top left', transform: `translate(${start.x - after.x}px, ${start.y - after.y}px) scale(${start.width / after.width}, ${start.height / after.height})` },
-        { transformOrigin: 'top left', transform: 'none' },
-      ]
-      : [
-        { transformOrigin: 'top left', transform: 'translateY(28px) scale(0.94)', opacity: 0 },
-        { transformOrigin: 'top left', transform: 'none', opacity: 1 },
-      ];
-    card.classList.add('is-flying');
-    const motion = card.animate(keyframes, { duration: DURATION, delay: index * step, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
-    void motion.finished.catch(() => undefined).finally(() => {
-      card.classList.remove('is-flying');
-      repaintCharts(card);
-    });
-  });
-}
-
-/**
- * APP-109 fix: a chart whose result landed while its card was flying (a
- * unite right after placement) could keep its axis labels rasterized at the
- * flight's scale, drawn oversized. Once the card has settled, each chart is
- * swapped for an identical copy (same nodes, no listeners on them), so it is
- * painted afresh at its real size; a chart that renders later is new anyway.
- */
-function repaintCharts(card: HTMLElement): void {
-  if (!card.isConnected) return;
-  for (const chart of card.querySelectorAll<SVGSVGElement>('svg.cv-chart-svg')) {
-    chart.replaceWith(chart.cloneNode(true));
-  }
-}
-
-function syncAppButton(cards: HTMLElement[], united: boolean): void {
-  for (const card of cards) {
-    const button = card.querySelector<HTMLElement>('[data-unite-app]');
-    if (!button) continue;
-    button.textContent = united ? 'Fan out' : 'Unite';
-    button.title = united ? 'Fan out · Shift+U: the parts return to the board' : 'Unite · U: open this app as a page';
-  }
-}
-
-function syncLibrary(work: string, united: boolean): void {
-  const button = documentRef?.querySelector<HTMLElement>(`.cv-lib-app[data-work="${CSS.escape(work)}"] [data-lib-unite]`);
-  if (!button) return;
-  button.textContent = united ? 'Fan out' : 'Unite';
-  button.title = united ? 'Fan out: return the parts to the board' : 'Unite: open this app as a page';
-}
-
-function viewportWorld(): { width: number; height: number } {
+function viewportWorld(): {width: number; height: number} {
   const zoom = board.canvas()?.getCamera().zoom || 1;
   const view = documentRef?.querySelector<HTMLElement>('[data-forma-canvas-viewport]');
-  return {
-    width: (view?.clientWidth ?? 0) / zoom,
-    height: (view?.clientHeight ?? 0) / zoom,
-  };
+  return {width: (view?.clientWidth ?? 1000) / zoom, height: (view?.clientHeight ?? 800) / zoom};
 }
-
-/** The page's window. Size is applied after mount: the canvas ignores a restored width until then. */
-function applySize(item: HTMLElement, width: number, height: number): void {
-  const canvas = board.canvas();
-  if (!canvas) return;
-  const size = pageSize({ width, height }, viewportWorld());
-  canvas.resizeItem(item, size.width, size.height);
-  item.style.height = `${Math.round(size.height)}px`;
-  const root = item.querySelector<HTMLElement>('.cv-unite');
-  if (root) {
-    root.classList.add('is-sized');
-    layoutPage(root, size.width);
+function applySize(frame: Frame, width: number, height: number): void {
+  const canvas = board.canvas(); if (!canvas) return;
+  const size = pageSize({width, height}, viewportWorld());
+  canvas.resizeItem(frame.item, size.width, size.height);
+  frame.item.style.height = `${Math.round(size.height)}px`;
+  frame.root.classList.add('is-sized');
+  if (frame.mode === 'open') { frame.openSize = size; layoutPage(frame.root, size.width); }
+}
+function releaseFocus(frame: Frame): void {
+  const card = documentRef?.querySelector<HTMLElement>('#cv-focus .cv-card[data-card]');
+  if (card && frame.cards.includes(card.dataset.card ?? '')) documentRef?.querySelector<HTMLElement>('[data-focus-close]')?.click();
+}
+function cardsOf(frame: Frame): HTMLElement[] { return frame.cards.flatMap(id => board.findCard(id)?.card ?? []); }
+function visibleCards(frame: Frame): HTMLElement[] { return cardsOf(frame).filter(card => appComponentVisible(frame.app, frame.work, card)); }
+function renderMode(frame: Frame, mode: AppViewMode): void {
+  releaseFocus(frame); disposePresentation(frame.root);
+  const cards = cardsOf(frame), scrolls = cards.map(keepScroll);
+  const parking = frame.root.querySelector<HTMLElement>('[data-app-view-parking]')!;
+  parking.append(...cards);
+  frame.mode = isStandaloneWork(frame.app, frame.work) ? 'open' : mode;
+  const standalone = isStandaloneWork(frame.app, frame.work);
+  frame.root.dataset.placementKind = standalone ? 'card' : 'app';
+  frame.root.querySelector<HTMLElement>('.cv-app-view-picker')!.hidden = standalone;
+  frame.root.querySelector('.cv-unite-actions')?.setAttribute('aria-label', standalone ? 'Card' : 'App');
+  const ask = frame.root.querySelector('[data-unite-ask]');
+  if (ask) ask.textContent = standalone ? 'Ask about this card' : 'Ask about this app';
+  const edit = frame.root.querySelector('[data-edit-presentation]');
+  if (edit) edit.textContent = standalone ? 'Edit card' : 'Edit app';
+  frame.root.dataset.appView = frame.mode; frame.item.dataset.appView = frame.mode;
+  for (const name of ['face', 'stack', 'open'] as const) {
+    const host = frame.root.querySelector<HTMLElement>(`[data-app-view-${name}]`)!;
+    host.hidden = name !== frame.mode; host.inert = host.hidden;
   }
+  for (const button of frame.root.querySelectorAll<HTMLElement>('[data-app-view-mode]')) button.setAttribute('aria-pressed', String(button.dataset.appViewMode === frame.mode));
+  const resize = frame.root.querySelector<HTMLElement>('[data-unite-resize]')!;
+  resize.hidden = frame.mode !== 'open';
+  if (frame.mode === 'face') {
+    const host = frame.root.querySelector<HTMLElement>('[data-app-view-face]')!;
+    const face = visibleCards(frame).find(card => card.dataset.kind === 'app');
+    const summary = parsePresentation(board.group(frame.work)?.presentation).description || 'Open this app to use its components.';
+    host.replaceChildren(el(frame.root.ownerDocument, 'p', {class: 'cv-app-face-summary'}, summary), ...(face ? [face] : []));
+    applySize(frame, PHONE, 360);
+  } else if (frame.mode === 'stack') {
+    const visible = visibleCards(frame);
+    const card = visible.find(card => card.dataset.card === frame.cards[frame.top]) ?? visible[0];
+    frame.top = card ? frame.cards.indexOf(card.dataset.card ?? '') : 0;
+    frame.root.querySelector('[data-app-stack-holder]')!.replaceChildren(...(card ? [card] : []));
+    const position = frame.root.querySelector('[data-app-stack-position]');
+    if (position) position.textContent = card ? `${visible.indexOf(card) + 1} / ${visible.length}` : 'No visible parts';
+    for (const button of frame.root.querySelectorAll<HTMLButtonElement>('[data-app-stack-step]')) button.disabled = visible.length < 2;
+    applySize(frame, 460, Math.min(620, viewportWorld().height * 0.8));
+  } else {
+    fill(frame.root, cards, board.group(frame.work)?.partLayout ?? '');
+    presentationFor(frame.root);
+    applySize(frame, frame.openSize.width, frame.openSize.height);
+  }
+  applyPresentationTheme(frame.root, board.group(frame.work)?.presentation ?? '{}');
+  const count = frame.root.querySelector('[data-unite-count]');
+  if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
+  for (const restore of scrolls) restore();
+  runGroup(frame.work);
 }
-
-/** Corner drag. The press stays here so the page header does not start a move. */
+export function shuffleAppView(item: HTMLElement, step: number): boolean {
+  const frame = frames.get(item.dataset.unite ?? '');
+  if (!frame || frame.mode !== 'stack' || !Number.isSafeInteger(step)) return false;
+  const visible = visibleCards(frame);
+  if (!visible.length) return false;
+  const current = Math.max(0, visible.findIndex(card => card.dataset.card === frame.cards[frame.top]));
+  const next = ((current + step) % visible.length + visible.length) % visible.length;
+  frame.top = frame.cards.indexOf(visible[next]!.dataset.card ?? '');
+  renderMode(frame, 'stack'); save(); return true;
+}
+/** One queue per work prevents parallel Add/Stack/Open requests from duplicating it. */
+export function setAppView(app: string, work: string, mode: AppViewMode, options: AppViewOptions = {}): Promise<string> {
+  const generation = generations.get(work) ?? 0;
+  const prior = pending.get(work) ?? Promise.resolve('');
+  const request = prior.catch(() => '').then(() => setAppViewNow(app, work, mode, options, generation));
+  pending.set(work, request);
+  void request.finally(() => { if (pending.get(work) === request) pending.delete(work); }).catch(() => undefined);
+  return request;
+}
+async function setAppViewNow(app: string, work: string, mode: AppViewMode, options: AppViewOptions, generation: number): Promise<string> {
+  const canvas = board.canvas();
+  if (!canvas || !documentRef || !['face','stack','open'].includes(mode)) return 'Nothing was placed.';
+  if ((generations.get(work) ?? 0) !== generation) return 'That placement was cancelled.';
+  if (options.restore && removedWorks.has(work)) return 'That placement was removed.';
+  if (!await ensureAppGroup(app, work)) return 'That app could not be opened. Nothing was placed.';
+  if ((generations.get(work) ?? 0) !== generation) return 'That placement was cancelled.';
+  const group = board.group(work);
+  if (!group || group.app !== app) return 'That app could not be opened.';
+  let frame = frames.get(work);
+  if (frame && frame.app !== app) return 'That app could not be opened.';
+  // Generic live placement resolves the mode here, after earlier explicit requests.
+  // A mode captured before this work's queue runs could overwrite a user's Open.
+  mode = isStandaloneWork(app, work) ? 'open' : options.preserveMode && frame ? frame.mode : mode;
+  if (frame) {
+    if (!options.restore && (frame.mode !== mode || frame.root.dataset.placementKind !== (isStandaloneWork(app, work) ? 'card' : 'app'))) renderMode(frame, mode);
+  } else {
+    const cards = group.cards, first = cards.flatMap(card => board.findCard(card.dataset.card ?? '')?.item ?? [])[0];
+    const fallback = first ? canvas.getItemState(first) : {x: 64, y: 64 + frames.size * 420};
+    const at = options.at ?? (options.restore ? {x: options.restore.x, y: options.restore.y} : fallback);
+    const ids = cards.map(card => card.dataset.card ?? '').filter(Boolean);
+    releaseCards(ids);
+    for (const id of ids) board.lift(id);
+    const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare, group.canEditPresentation, group.presentation);
+    const item = createCanvasItem({instanceId: `unite-${work}`, displayName: group.title, preferredWidth: PHONE, minHeight: 300, content: root});
+    item.classList.add('cv-item', 'cv-item-unite'); item.dataset.unite = work;
+    const viewport = viewportWorld();
+    frame = {app, work, title: group.title, cards: ids, item, root, mode, top: options.restore?.top ?? 0,
+      previous: new Map(Object.entries(options.restore?.previous ?? {})),
+      openSize: {width: options.restore?.width ?? Math.min(WIDE, viewport.width * 0.8), height: options.restore?.height ?? Math.min(680, viewport.height * 0.75)}};
+    frames.set(work, frame);
+    canvas.mountItem(item, at, {focus: false});
+    renderMode(frame, mode);
+    for (const id of ids) board.show(id);
+  }
+  if (!options.restore) removedWorks.delete(work);
+  rememberAppPlacement(work); board.pin(work); board.changed(); save();
+  if (!options.restore && options.focus !== false) { canvas.centerItem(frame.item); board.flash(frame.item); }
+  const message = `${frame.title} is on your canvas in ${frame.mode === 'face' ? 'App Card' : frame.mode === 'stack' ? 'Stack' : 'Open'} view.`;
+  if (!options.restore) board.announce(message);
+  return message;
+}
+/** Arrange whole placements without changing their mode, size or component nodes. */
+export function arrangeAppViews(): number {
+  const canvas = board.canvas(); if (!canvas) return 0;
+  const origin = 64, gap = 48, right = Math.max(origin + PHONE, viewportWorld().width - origin);
+  let x = origin, y = origin, rowHeight = 0;
+  for (const frame of frames.values()) {
+    const state = canvas.getItemState(frame.item);
+    const width = state.width, height = frame.item.offsetHeight;
+    if (x > origin && x + width > right) { x = origin; y += rowHeight + gap; rowHeight = 0; }
+    canvas.moveItemTo(frame.item, x, y);
+    x += width + gap; rowHeight = Math.max(rowHeight, height);
+  }
+  save(); board.changed();
+  return frames.size;
+}
+/** Backward-compatible internal entry: Open is idempotent, never a toggle. */
+export function unite(app: string, work: string): Promise<string> { return setAppView(app, work, 'open'); }
+export function removeAppView(work: string): boolean {
+  generations.set(work, (generations.get(work) ?? 0) + 1);
+  removedWorks.add(work);
+  retained.delete(work);
+  const frame = frames.get(work);
+  if (!frame) { save(); return false; }
+  releaseFocus(frame); disposePresentation(frame.root);
+  for (const card of cardsOf(frame)) board.park(card);
+  frames.delete(work); board.canvas()?.removeItem(frame.item, {selectFallback: false});
+  board.changed(); save(); return true;
+}
+/** Kept only as a safe compatibility response for old controls/commands. */
+export function breakApart(_work: string): string { return 'Apps stay together. Choose App Card, Stack or Open view.'; }
+export function splitFromItem(_item: HTMLElement | null): string { return breakApart(''); }
+export function uniteFromItem(item: HTMLElement | null): Promise<string> | string {
+  const view = appViewOf(item);
+  if (view) return setAppView(view.app, view.work, 'open');
+  const found = item ? board.findCard(item.dataset.instanceId ?? '') : null;
+  return found ? setAppView(found.group.app, found.group.work, 'open') : 'Select an app first, then choose Open.';
+}
+export function dismissPageShare(_document: Document): boolean { return dismissSharing(); }
+/** Restore only prior placements. Unavailable work metadata is not used as authority. */
+export function restoreAppViews(): Promise<void> {
+  if (restoration) return restoration;
+  restoration = (async () => {
+    const united = loadUnited(board.member()).filter(row => !removedWorks.has(row.work));
+    for (const row of united) retained.set(row.work, row);
+    const works = [...loadPlaced(board.member())].flatMap(([work, entry], index) => {
+      if (removedWorks.has(work)) return [];
+      const group = board.group(work);
+      const positions = loadLayout(entry.app, work);
+      const prior = entry.cards.flatMap(id => positions.get(id) ?? [])[0];
+      return group?.app === entry.app ? [{app: entry.app, work, cards: group.cards.map(card => card.dataset.card ?? ''), standalone: isStandaloneWork(entry.app, work), at: prior ? {x: prior.x, y: prior.y} : {x: 64, y: 64 + index * 420}}] : [];
+    });
+    for (const row of united) if (!works.some(work => work.work === row.work)) {
+      const group = board.group(row.work);
+      if (group?.app === row.app) works.push({app: row.app, work: row.work, cards: group.cards.map(card => card.dataset.card ?? ''), standalone: isStandaloneWork(row.app, row.work), at: {x: row.x, y: row.y}});
+    }
+    for (const row of migrateAppViews(united, loadStacks(board.member()), works))
+      if (!removedWorks.has(row.work)) await setAppView(row.app, row.work, row.mode ?? 'open', {restore: row, focus: false});
+    restored = true; save();
+  })();
+  return restoration;
+}
 function bindResize(document_: Document): void {
-  document_.addEventListener('pointerdown', (event) => {
+  document_.addEventListener('pointerdown', event => {
     const handle = (event.target as Element | null)?.closest<HTMLElement>('[data-unite-resize]');
     if (!handle || event.button !== 0) return;
     const frame = frames.get(handle.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
-    const canvas = board.canvas();
-    if (!frame || !canvas) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const pointer = event.pointerId;
-    try {
-      handle.setPointerCapture(pointer);
-    } catch {
-      // The move is still followed on the document when capture is unavailable.
-    }
-    const origin = canvas.getItemState(frame.item);
-    const startHeight = frame.item.offsetHeight;
-    const startX = event.clientX;
-    const startY = event.clientY;
+    const canvas = board.canvas(); if (!frame || !canvas || frame.mode !== 'open') return;
+    event.preventDefault(); event.stopPropagation();
+    const pointer = event.pointerId, origin = canvas.getItemState(frame.item), startX = event.clientX, startY = event.clientY;
+    const originHeight = frame.item.offsetHeight;
     const move = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointer) return;
+      if (ev.pointerId !== pointer || frame.mode !== 'open') return;
       const zoom = canvas.getCamera().zoom || 1;
-      applySize(frame.item, origin.width + (ev.clientX - startX) / zoom, startHeight + (ev.clientY - startY) / zoom);
+      applySize(frame, origin.width + (ev.clientX - startX) / zoom, originHeight + (ev.clientY - startY) / zoom);
     };
     const end = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer) return;
-      document_.removeEventListener('pointermove', move);
-      document_.removeEventListener('pointerup', end);
-      document_.removeEventListener('pointercancel', end);
-      save();
+      document_.removeEventListener('pointermove', move); document_.removeEventListener('pointerup', end); document_.removeEventListener('pointercancel', end); save();
     };
-    document_.addEventListener('pointermove', move);
-    document_.addEventListener('pointerup', end);
-    document_.addEventListener('pointercancel', end);
+    document_.addEventListener('pointermove', move); document_.addEventListener('pointerup', end); document_.addEventListener('pointercancel', end);
   }, true);
 }
-
-/** Escape returns focus to the app that opened the access dialog. */
-export function dismissPageShare(_document: Document): boolean { return dismissSharing(); }
-function toggleShare(button: HTMLElement): void {
-  const frame = frames.get(button.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
-  if (frame && documentRef) openSharing(documentRef, frame.app, frame.work, frame.title);
-}
-
-/** Fan-out while a part is in focus puts that part back on the page first. */
-function releaseFocus(frame: Frame): void {
-  const open = documentRef?.querySelector<HTMLElement>('#cv-focus .cv-card[data-card]');
-  const id = open?.dataset.card ?? '';
-  if (!id || !frame.cards.includes(id)) return;
-  documentRef?.querySelector<HTMLElement>('[data-focus-close]')?.click();
-}
-
-/**
- * Assembles the app's cards into its frame. `restore` rebuilds a kept frame
- * quietly (no fetch, no motion, no camera).
- */
-export async function unite(app: string, work: string, restore?: { at: Spot; previous: Map<string, Spot>; width?: number; height?: number }): Promise<string> {
-  const canvas = board.canvas();
-  if (!canvas || !documentRef) return 'Nothing was opened.';
-  const existing = frames.get(work);
-  if (existing) {
-    canvas.centerItem(existing.item);
-    board.flash(existing.item);
-    return `${existing.title} is already open. Shift+U fans it out.`;
-  }
-  if (!restore) {
-    collapseAll();
-    await addCards(app, work, null, { focus: false });
-    if (frames.has(work)) return 'That app is already open.';
-  }
-  const group = board.group(work);
-  if (!group) return 'That app could not be opened.';
-  // Where each card is now: its own item, or the stack that holds it.
-  const before = new Map<HTMLElement, { x: number; y: number; width: number; height: number }>();
-  const previous = new Map<string, Spot>(restore?.previous ?? []);
-  const members: HTMLElement[] = [];
-  const stacked: string[] = [];
-  const scrolls: (() => void)[] = [];
-  let fromStack = 0;
-  for (const card of group.cards) {
-    const id = card.dataset.card ?? '';
-    const found = id ? board.findCard(id) : null;
-    if (!found) continue;
-    if (found.item) {
-      const box = worldBox(card, found.item);
-      if (box) before.set(card, box);
-      if (!restore) previous.set(id, { x: box?.x ?? 0, y: box?.y ?? 0 });
-    } else {
-      const stack = stackCardsOf(id);
-      if (!stack) continue;
-      const state = canvas.getItemState(stack.item);
-      before.set(card, { x: state.x, y: state.y + 34, width: state.width, height: Math.max(260, state.height - 34) });
-      if (!restore) previous.set(id, { x: state.x + fromStack * (state.width + GAP), y: state.y });
-      fromStack += 1;
-      stacked.push(id);
-    }
-    scrolls.push(keepScroll(card));
-    members.push(card);
-  }
-  if (!members.length) return 'None of that app’s cards are on your canvas.';
-  releaseCards(stacked);
-  const at = restore?.at ?? {
-    x: Math.min(...[...previous.values()].map((spot) => spot.x)),
-    y: Math.min(...[...previous.values()].map((spot) => spot.y)),
-  };
-  for (const card of members) board.lift(card.dataset.card ?? '');
-  const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare, group.canEditPresentation, group.presentation);
-  const { order, width } = fill(root, members, group.partLayout);
-  for (const restoreScroll of scrolls) restoreScroll();
-  const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root });
-  item.classList.add('cv-item', 'cv-item-unite');
-  item.dataset.unite = work;
-  canvas.mountItem(item, at, { focus: false });
-  // A tall app must keep its resize handle reachable; its parts scroll in
-  // the page from the first open, not only after the first corner drag.
-  const viewport = viewportWorld();
-  applySize(item,
-    restore?.width ?? Math.min(width, viewport.width * 0.8),
-    restore?.height ?? Math.min(item.offsetHeight, viewport.height * 0.6));
-  for (const restoreScroll of scrolls) restoreScroll();
-  const frame: Frame = { work, app, title: group.title, cards: order.map((card) => card.dataset.card ?? ''), item, root, previous };
-  frames.set(work, frame);
-  presentationFor(root);
-  syncAppButton(members, true);
-  syncLibrary(work, true);
-  board.pin(work);
-  board.changed();
-  save();
-  if (restore) return `${group.title} is open.`;
-  fly(order, before, () => item);
-  canvas.focusItem(item);
-  const message = `${group.title} is open. ${order.length} ${order.length === 1 ? 'part' : 'parts'}.`;
-  board.announce(message);
-  return message;
-}
-
-/** Returns every card of a frame to the spot it had before the unite. */
-export function breakApart(work: string): string {
-  const canvas = board.canvas();
-  const frame = frames.get(work);
-  if (!canvas || !frame) return 'That app is not open as a page.';
-  presentationFor(frame.root).dispose();
-  releaseFocus(frame);
-  const frameState = canvas.getItemState(frame.item);
-  const before = new Map<HTMLElement, { x: number; y: number; width: number; height: number }>();
-  const cards: HTMLElement[] = [];
-  for (const id of frame.cards) {
-    const card = board.findCard(id)?.card;
-    if (!card) continue;
-    const box = worldBox(card, frame.item);
-    if (box) before.set(card, box);
-    cards.push(card);
-  }
-  frames.delete(work);
-  const items = new Map<HTMLElement, HTMLElement>();
-  cards.forEach((card, index) => {
-    const id = card.dataset.card ?? '';
-    const spot = frame.previous.get(id) ?? { x: frameState.x + index * (SLOT_WIDTH + GAP), y: frameState.y };
-    const restoreScroll = keepScroll(card);
-    const item = board.drop(id, spot, false, true);
-    restoreScroll();
-    if (item) items.set(card, item);
-  });
-  canvas.removeItem(frame.item, { selectFallback: false });
-  syncAppButton(cards, false);
-  syncLibrary(work, false);
-  board.pin(work);
-  board.changed();
-  save();
-  fly(cards, before, (card) => items.get(card) ?? null);
-  const message = `${frame.title} is back on the board.`;
-  board.announce(message);
-  return message;
-}
-
-/** U on a selected card opens that app as a page. A stack is left alone. */
-export function uniteFromItem(item: HTMLElement | null): Promise<string> | string {
-  if (!item) return 'Select a card of an app first, then press U.';
-  if (item.classList.contains('cv-item-stack')) return 'A stack stays a stack. Select a card of the app, then press U.';
-  if (isUniteItem(item)) {
-    const frame = frames.get(item.dataset.unite ?? '');
-    return frame ? `${frame.title} is already open. Shift+U fans it out.` : 'Nothing was opened.';
-  }
-  const id = item.dataset.instanceId ?? '';
-  const found = id ? board.findCard(id) : null;
-  if (!found) return 'Unite works on an app’s cards. Select one first.';
-  return unite(found.group.app, found.group.work);
-}
-
-/** Shift+U on a selected item fans out its page, or the page of its app. */
-export function splitFromItem(item: HTMLElement | null): string {
-  if (!item) return 'Select a page first, then press Shift+U.';
-  if (isUniteItem(item)) return breakApart(item.dataset.unite ?? '');
-  const id = item.dataset.instanceId ?? '';
-  const work = board.findCard(id)?.group.work ?? '';
-  return frames.has(work) ? breakApart(work) : 'That app is not open as a page.';
-}
-
-function clearBar(): void {
-  const input = documentRef?.getElementById('intent-input') as HTMLInputElement | null;
-  if (input) input.value = '';
-}
-
-const UNITE_COMMAND = {
-  slug: 'unite',
-  title: 'Unite an app',
-  purpose: 'Open every part of one app as one page',
+const UNITE_COMMAND = {slug: 'unite', title: 'Open an app', purpose: 'Open one whole app on the canvas',
   run: async (text: string, report: Report = () => undefined) => {
     const [app] = text.trim() ? findApps(text) : [];
-    if (!app) {
-      report(text.trim() ? `No app matches “${text.trim()}”. Open the library (L) to browse.` : 'Name the app: /unite expense, or select one of its cards and press U.');
-      return;
-    }
-    report(await unite(app.app, app.work));
-    clearBar();
-  },
-};
-
-const SPLIT_COMMAND = {
-  slug: 'split',
-  title: 'Fan out',
-  purpose: 'Return each part of the page to where it was',
-  aliases: ['break', 'fan'],
-  usage: '/fan <app>',
-  run: (text: string, report: Report = () => undefined) => {
-    const united = findApps(text).filter((app) => frames.has(app.work));
-    const work = united[0]?.work ?? (text.trim() ? '' : frames.size === 1 ? [...frames.keys()][0] ?? '' : '');
-    report(work ? breakApart(work) : text.trim() ? `${text.trim()} is not open as a page.` : 'Name the page: /fan expense.');
-    clearBar();
-  },
-};
-
-function completions(slug: string, onlyUnited: boolean): (rest: string) => Completion[] {
-  return (rest) => findApps(rest)
-    .filter((app) => !onlyUnited || frames.has(app.work))
-    .slice(0, 10)
-    .map((app) => ({
-      badge: app.number,
-      title: app.title,
-      detail: `${app.cards.length} cards${frames.has(app.work) ? ' · open' : ''}`,
-      value: `/${slug} ${app.slug || app.number}`,
-    }));
+    report(app ? await setAppView(app.app, app.work, 'open') : 'Name an app to open, or choose one from the Library.');
+  }};
+// Reserved historical spellings remain a closed refusal, never an extraction.
+const SPLIT_COMMAND = {slug: 'split', title: 'Apps stay together', purpose: 'Choose App Card, Stack or Open instead', aliasOf: 'unite', aliases: ['break', 'fan'],
+  run: (_text: string, report: Report = () => undefined) => { report(breakApart('')); }};
+function completions(rest: string): Completion[] {
+  return findApps(rest).slice(0, 10).map(app => ({badge: app.number, title: app.title, detail: 'Open app', value: `/unite ${app.slug || app.number}`}));
 }
-
-/** Starts unite once (after the board and the library): hooks, buttons, commands, kept frames. */
 export function startUnite(document_: Document): void {
   if (documentRef) return;
   documentRef = document_;
-  document_.addEventListener('forma:work-renamed', event => {
-    const detail = (event as CustomEvent<{app:string;work:string;name:string}>).detail;
+  setUniteHooks({has: id => [...frames.values()].some(frame => frame.cards.includes(id)),
+    count: () => frames.size, hasWork: work => frames.has(work),
+    remove: ids => {
+      const affected = [...frames.values()].filter(frame => frame.cards.some(id => ids.includes(id)));
+      const handled = affected.flatMap(frame => frame.cards);
+      for (const frame of affected) removeAppView(frame.work);
+      return handled;
+    }, place: (app, work, mode, options) => setAppView(app, work, mode, options),
+    restore: restoreAppViews, arrange: arrangeAppViews, removeWork: work => removeAppView(work), settled: () => undefined});
+  onLayoutSaved(save);
+  document_.addEventListener('forma:app-view-preferences', event => {
+    const detail = (event as CustomEvent<{app: string; work: string}>).detail;
     const frame = detail && frames.get(detail.work);
-    if (!frame || frame.app !== detail.app) return;
+    if (frame?.app === detail.app) { renderMode(frame, frame.mode); save(); }
+  });
+  document_.defaultView?.addEventListener('storage', event => {
+    for (const frame of frames.values()) if (event.key === null || event.key === `forma.app.hidden.v1:${frame.app}/${frame.work}`) { renderMode(frame, frame.mode); save(); }
+  });
+  document_.addEventListener('forma:work-renamed', event => {
+    const detail = (event as CustomEvent<{app: string; work: string; name: string}>).detail;
+    const frame = detail && frames.get(detail.work); if (!frame || frame.app !== detail.app) return;
     frame.title = detail.name;
     const title = frame.root.querySelector<HTMLElement>('.cv-unite-title');
-    if (title) { title.textContent = detail.name; title.title = detail.name; }
-    frame.root.setAttribute('aria-label', detail.name);
-    frame.item.dataset.widgetName = detail.name;
-    frame.item.setAttribute('aria-label', detail.name);
-    frame.item.querySelector('.widget-drag-handle')?.setAttribute('aria-label', `Move ${detail.name}`);
+    if (title) {title.textContent = detail.name; title.title = detail.name;}
+    frame.root.setAttribute('aria-label', detail.name); frame.item.dataset.widgetName = detail.name;
+    frame.item.setAttribute('aria-label', detail.name); frame.item.querySelector('.widget-drag-handle')?.setAttribute('aria-label', `Move ${detail.name}`);
   });
   document_.addEventListener('forma:presentation-saved', event => {
-    const detail = (event as CustomEvent<{app: string; work: string}>).detail;
-    if (!detail) return;
+    const detail = (event as CustomEvent<{app: string; work: string}>).detail; if (!detail) return;
     void refreshGroupPresentation(detail.app, detail.work).then(ok => {
-      const frame = frames.get(detail.work); const group = board.group(detail.work);
-      if (!ok || !frame || !group || frame.app !== detail.app) return;
-      const presentation = presentationFor(frame.root); presentation.beforeRefresh();
-      presentation.afterRefresh(group.presentation);
-      layoutPage(frame.root, frame.item.offsetWidth);
+      const frame = frames.get(detail.work);
+      if (ok && frame?.app === detail.app) renderMode(frame, frame.mode);
     });
   });
-  setUniteHooks({
-    has: (id) => [...frames.values()].some((frame) => frame.cards.includes(id)),
-    count: () => [...frames.values()].reduce((sum, frame) => sum + frame.cards.length, 0),
-    hasWork: (work) => frames.has(work),
-    remove: (ids) => {
-      const handled: string[] = [];
-      for (const frame of [...frames.values()]) {
-        const out = frame.cards.filter((id) => ids.includes(id));
-        if (!out.length) continue;
-        presentationFor(frame.root).dispose();
-        handled.push(...out);
-        for (const id of out) {
-          const card = board.findCard(id)?.card;
-          if (card) {
-            syncAppButton([card], false);
-            const wrapper = card.closest('.cv-unite-part');
-            board.park(card);
-            wrapper?.remove();
-          }
-        }
-        frame.cards = frame.cards.filter((id) => !out.includes(id));
-        if (!frame.cards.length) {
-          syncLibrary(frame.work, false);
-          board.canvas()?.removeItem(frame.item, { selectFallback: false });
-          frames.delete(frame.work);
-        } else {
-          const count = frame.root.querySelector('[data-unite-count]');
-          if (count) count.textContent = `${frame.cards.length} ${frame.cards.length === 1 ? 'part' : 'parts'}`;
-          presentationFor(frame.root);
-        }
-      }
-      if (handled.length) save();
-      return handled;
-    },
-    settled: () => {
-      restored = true;
-      for (const row of loadUnited(board.member())) {
-        if (!board.group(row.work)) continue;
-        void unite(row.app, row.work, {
-          at: { x: row.x, y: row.y },
-          previous: new Map(Object.entries(row.previous)),
-          ...(row.width !== undefined && row.height !== undefined ? { width: row.width, height: row.height } : {}),
-        });
-      }
-      save();
-    },
-  });
-  onLayoutSaved(save);
-  document_.addEventListener('click', (event) => {
-    const target = event.target as Element | null;
-    const share = target?.closest<HTMLElement>('[data-unite-share]');
-    if (share) {
-      void toggleShare(share);
-      return;
-    }
-    const split = target?.closest<HTMLElement>('[data-unite-split]');
-    if (split) {
-      breakApart(split.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
-      return;
-    }
+  document_.addEventListener('click', event => {
+    const target = event.target as Element | null, root = target?.closest<HTMLElement>('.cv-unite');
+    const frame = root && frames.get(root.dataset.unite ?? '');
+    if (frame && target?.closest('[data-app-view-remove]')) { removeWork(frame.work); return; }
+    if (frame && target?.closest('[data-unite-share]')) {openSharing(document_, frame.app, frame.work, frame.title); return;}
+    const choice = target?.closest<HTMLElement>('[data-app-view-mode]');
+    if (frame && choice) {void setAppView(frame.app, frame.work, choice.dataset.appViewMode as AppViewMode, {focus: false}); return;}
+    const step = target?.closest<HTMLElement>('[data-app-stack-step]');
+    if (frame && step) {shuffleAppView(frame.item, Number(step.dataset.appStackStep)); return;}
     const appButton = target?.closest<HTMLElement>('[data-unite-app]');
-    if (appButton) {
-      const card = appButton.closest<HTMLElement>('.cv-card[data-card]');
-      const found = card ? board.findCard(card.dataset.card ?? '') : null;
-      if (!found) return;
-      if (frames.has(found.group.work)) breakApart(found.group.work);
-      else void unite(found.group.app, found.group.work);
-      return;
-    }
-    const row = target?.closest<HTMLElement>('[data-lib-unite]')?.closest<HTMLElement>('.cv-lib-app');
-    if (row?.dataset.app && row.dataset.work) {
-      if (frames.has(row.dataset.work)) breakApart(row.dataset.work);
-      else void unite(row.dataset.app, row.dataset.work);
-      if (phone()) documentRef?.querySelector<HTMLElement>('[data-lib-close]')?.click();
-    }
+    const card = appButton?.closest<HTMLElement>('.cv-card[data-card]');
+    const found = card ? board.findCard(card.dataset.card ?? '') : null;
+    if (found) void setAppView(found.group.app, found.group.work, 'open');
   });
-  bindResize(document_);
-  registerCommands([UNITE_COMMAND, SPLIT_COMMAND]);
-  registerCompleter('unite', completions('unite', false));
-  registerCompleter('split', completions('split', true));
-  registerCompleter('fan', completions('fan', true));
+  document_.addEventListener('dblclick', event => {
+    const target = event.target as Element | null;
+    if (target?.closest('button,a,input,select,textarea,summary')) return;
+    const frame = frames.get(target?.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
+    if (frame?.mode === 'face') void setAppView(frame.app, frame.work, 'open', {focus: false});
+  });
+  bindResize(document_); registerCommands([UNITE_COMMAND, SPLIT_COMMAND]); registerCompleter('unite', completions);
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { editorState, presentationRequest, recoveredPresentation, type EditorState } from '../src/presentation/editor.ts';
+import { saveHiddenAppComponents } from '../src/presentation/presentation.ts';
 
 const state: EditorState = {
   publication_id: '11111111-1111-4111-8111-111111111111', definition_digest: `sha256:${'a'.repeat(64)}`, work_version: 7,
@@ -32,4 +33,17 @@ test('lost acknowledgements recover only an exact current presentation with edit
   assert.equal(recoveredPresentation({ ...saved, presentation: { ...presentation, actions: [{ ...presentation.actions[0], target: 'details' }] } }, presentation), null, 'a raced action target is never reported as saved');
   assert.equal(recoveredPresentation({ ...saved, presentation: { ...presentation, theme: { ...presentation.theme, mode: 'light' } } }, presentation), null);
   assert.equal(recoveredPresentation(null, presentation), null);
+});
+
+test('saving browser visibility emits only a local hint and never changes the published presentation request', () => {
+  const app = '33333333-3333-4333-8333-333333333333', work = '44444444-4444-4444-8444-444444444444';
+  const before = structuredClone(presentationRequest(state, presentation));
+  const writes: [string, string][] = [], events: Event[] = [];
+  const document = { dispatchEvent(event: Event) { events.push(event); return true; } } as Document;
+  assert.equal(saveHiddenAppComponents(app, work, ['details'], document, { setItem(key, value) { writes.push([key, value]); } }), true);
+  assert.deepEqual(writes, [[`forma.app.hidden.v1:${app}/${work}`, '["details"]']]);
+  assert.equal(events[0]?.type, 'forma:app-view-preferences');
+  assert.deepEqual((events[0] as CustomEvent).detail, { app, work });
+  assert.deepEqual(presentationRequest(state, presentation), before);
+  assert.equal('hidden' in before.presentation, false);
 });

@@ -444,7 +444,7 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'label', {}, el(document_, 'span', {}, 'Destination (optional)'), el(document_, 'input', { name: 'destination', type: 'text', value: group.destination })),
     el(document_, 'div', { class: 'cv-window-actions' },
       el(document_, 'button', { type: 'submit' }, 'Refresh cards'),
-      el(document_, 'a', { href: group.href }, 'Open full page')));
+      el(document_, 'a', { href: group.href, target: '_blank', rel: 'noopener' }, 'Open page ↗')));
   // The composer's honest assembly labels when it placed this app; the
   // server's origin chips otherwise.
   const origins = labels.length
@@ -475,7 +475,7 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
   for (const part of group.static_parts ?? []) section.append(el(document_, 'article', {
     class: 'cv-card cv-static-part', 'data-card': part.id, 'data-view': part.view, 'data-component': part.view, 'data-kind': part.kind, 'aria-label': part.title,
   }, el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, part.title), el(document_, 'span', { class: 'badge' }, part.kind)),
-  el(document_, 'div', { class: 'cv-card-body' }, el(document_, 'p', { class: 'cv-static-text' }, part.text), el(document_, 'p', { class: 'cv-message' }, part.message), el(document_, 'a', { href: `/w/${group.app}/${group.work}` }, 'Open app page'))));
+  el(document_, 'div', { class: 'cv-card-body' }, el(document_, 'p', { class: 'cv-static-text' }, part.text), el(document_, 'p', { class: 'cv-message' }, part.message), el(document_, 'a', { href: `/w/${group.app}/${group.work}`, target: '_blank', rel: 'noopener' }, 'Open app page'))));
   for (const card of group.records ?? []) section.append(buildRecordsCard(document_, card));
   for (const card of group.ledger ?? []) section.append(buildLedgerCard(document_, card));
   return section;

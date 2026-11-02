@@ -1,0 +1,18 @@
+{
+  "scope": "Actual owned loopback app data and browser gestures; synthetic seeded works. No cloud/provider action.",
+  "checks": [
+    "Cards includes the authorized saved-card/answer inventory with a working explicit Refresh action.",
+    "The app hover drag handle moves its one whole canvas object.",
+    "Library Add creates one App Card, with no app subcard expander/remove or resize.",
+    "The /focus command preserves Stack mode, selected part and the whole-app frame.",
+    "Open \u2192 Stack \u2192 Open reuses one frame and original component nodes/position; no blank legacy stack.",
+    "Focus from App Card opens the whole app sequence and returns to the same App Card.",
+    "Open page opens the authorized member app in a separate tab.",
+    "Real query cards settle and redundant successful Ready badges are absent.",
+    "Only Open resizes; switching away and back retains the last Open dimensions.",
+    "Personal Apps/Cards categorization is reversible and preserves one atomic multi-part work.",
+    "Reload restores one Open frame, without loose components.",
+    "Whole-app removal persists through reload and leaves the Library entry."
+  ],
+  "errors": []
+}

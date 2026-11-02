@@ -13,7 +13,9 @@
 import { setTalkRouter, submitSentence } from './actions';
 import { askAboutItem, askCompletions, askLine, folderScope, openAsk, placePinnedAnswer, startAsk } from './ask';
 import { setFolderAsk } from './boxes';
-import { listCards } from './cards';
+import { cardInventory, onStoredCardChange, type StoredCard, type StoredCardChange } from './cards';
+import { setSavedCardInventory } from './library';
+import { canvasApi, removeUtilityItem } from './board';
 import { fillBar } from './address-chip';
 import { registerCommands, type CanvasCommand } from './command-registry';
 import { setTalkActions } from './controls';
@@ -64,14 +66,102 @@ export const FORMA_COMMAND: CanvasCommand = {
   },
 };
 
-/** APP-123: places the member's made cards and pinned answers (their own and those added for everyone). */
-export async function placeMemberCards(): Promise<number> {
-  let placed = 0;
-  for (const card of await listCards()) {
-    const shown = card.kind === 'card' ? await placeMadeCard(card) : placePinnedAnswer(card);
-    if (shown) placed += 1;
-  }
-  return placed;
+const savedCards = new Map<string, StoredCard>();
+let inventoryRequest: Promise<boolean> | null = null;
+let initialCards: Promise<number> | null = null;
+let observeCards = false;
+const pendingChanges = new Map<string, StoredCard | null>();
+const showingCards = new Map<string, Promise<string>>();
+type SavedPlacement = {shown: boolean; message: string};
+const savedPlacements = new Map<string, Promise<SavedPlacement>>();
+function savedUtility(card: StoredCard): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-utility="utility-${card.kind === 'card' ? 'made' : 'pin'}-${card.card_id}"]`);
+}
+function hideSavedUtility(card: StoredCard): void {
+  const item = savedUtility(card);
+  if (item) removeUtilityItem(item);
+}
+function publishSavedCards(message = ''): void {
+  setSavedCardInventory([...savedCards.values()].map(card => ({id: card.card_id, title: card.title, kind: card.kind, createdAt: card.created_at})), showSavedCard, message, refreshSavedCardList);
+}
+async function refreshSavedCardList(): Promise<string> {
+  return await refreshSavedCards() ? 'Saved cards refreshed.' : 'Saved cards could not be refreshed. Use Refresh saved cards to retry; listed metadata may be out of date.';
+}
+function acceptSavedChange(change: StoredCardChange): void {
+  const id = 'removed' in change ? change.removed : change.card.card_id;
+  const card = 'card' in change && (change.card.mine || change.card.everyone) ? change.card : null;
+  if (inventoryRequest) pendingChanges.set(id, card);
+  const previous = savedCards.get(id);
+  if (card) savedCards.set(id, card); else savedCards.delete(id);
+  if (!card && previous) hideSavedUtility(previous);
+  publishSavedCards();
+}
+/** Initial load and explicit Show only; canvas movement never polls inventory. */
+async function refreshSavedCards(): Promise<boolean> {
+  if (inventoryRequest) return inventoryRequest;
+  inventoryRequest = (async () => {
+    const result = await cardInventory();
+    if (!result.ok) {publishSavedCards(result.message); return false;}
+    const previous = [...savedCards.values()];
+    savedCards.clear();
+    for (const card of result.cards) savedCards.set(card.card_id, card);
+    // A confirmed mutation during this read wins over its older response.
+    for (const [id, card] of pendingChanges) {if (card) savedCards.set(id, card); else savedCards.delete(id);}
+    // Only a successful authorized inventory can withdraw existing displays.
+    for (const card of previous) if (!savedCards.has(card.card_id)) hideSavedUtility(card);
+    publishSavedCards();
+    return true;
+  })().finally(() => {inventoryRequest = null; pendingChanges.clear();});
+  return inventoryRequest;
+}
+function showSavedCard(id: string): Promise<string> {
+  const pending = showingCards.get(id);
+  if (pending) return pending;
+  const request = showSavedCardNow(id).finally(() => {showingCards.delete(id);});
+  showingCards.set(id, request);
+  return request;
+}
+async function showSavedCardNow(id: string): Promise<string> {
+  // Reauthorize a historical answer before displaying its stored text again.
+  if (!await refreshSavedCards()) return 'Saved cards could not be refreshed. Nothing new was shown.';
+  return (await placeSavedCard(id, true)).message;
+}
+/** Startup restoration and Show share one queue: an older load can never
+ * clean up the newer placement of the same durable card ID. */
+function placeSavedCard(id: string, focus: boolean): Promise<SavedPlacement> {
+  const prior = savedPlacements.get(id) ?? Promise.resolve(null);
+  const request = prior.catch(() => null).then(async (): Promise<SavedPlacement> => {
+    const card = savedCards.get(id);
+    if (!card) return {shown: false, message: 'That saved card is no longer available to you.'};
+    let item = savedUtility(card);
+    if (!item) {
+      const shown = card.kind === 'card' ? await placeMadeCard(card) : placePinnedAnswer(card);
+      if (!shown) return {shown: false, message: 'That saved card could not be shown.'};
+      item = savedUtility(card);
+    }
+    if (savedCards.get(id) !== card) {
+      if (item) removeUtilityItem(item);
+      return {shown: false, message: 'That saved card changed while it was opening. Try Show again.'};
+    }
+    if (item && focus) canvasApi()?.centerItem(item);
+    return {shown: Boolean(item), message: item ? `${card.title} is on your canvas.` : 'That saved card could not be shown.'};
+  });
+  savedPlacements.set(id, request);
+  void request.finally(() => {if (savedPlacements.get(id) === request) savedPlacements.delete(id);}).catch(() => undefined);
+  return request;
+}
+/** APP-123: retain existing one-time restoration and publish its same inventory. */
+export function placeMemberCards(): Promise<number> {
+  if (initialCards) return initialCards;
+  if (!observeCards) {onStoredCardChange(acceptSavedChange); observeCards = true;}
+  publishSavedCards('Loading saved cards and answers…');
+  initialCards = (async () => {
+    if (!await refreshSavedCards()) return 0;
+    let placed = 0;
+    for (const id of [...savedCards.keys()]) if ((await placeSavedCard(id, false)).shown) placed += 1;
+    return placed;
+  })();
+  return initialCards;
 }
 
 /** The bar's Ask and dot lanes (exported for the tests). */

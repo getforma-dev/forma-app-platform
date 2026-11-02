@@ -8,6 +8,32 @@ const densities = ['default', 'compact', 'comfortable', 'spacious'];
 const fonts = ['default', 'mono'];
 const id = (value: unknown): value is string => typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(value);
 const text = (value: unknown, max: number): value is string => typeof value === 'string' && Array.from(value).length <= max;
+const VISIBILITY_PREFIX = 'forma.app.hidden.v1:';
+const uuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+function visibilityKey(app: string, work: string): string | null { return uuid(app) && uuid(work) ? `${VISIBILITY_PREFIX}${app}/${work}` : null; }
+function visibilityStorage(): Storage | undefined { try { return globalThis.localStorage; } catch { return undefined; } }
+/** Appearance only: exact work in this browser. Never an access or publication rule. */
+export function hiddenAppComponents(app: string, work: string, storage: Pick<Storage, 'getItem'> | undefined = visibilityStorage()): Set<string> {
+  const key = visibilityKey(app, work); if (!key || !storage) return new Set();
+  try {
+    const raw = storage.getItem(key); if (!raw || raw.length > 8192) return new Set();
+    const ids: unknown = JSON.parse(raw);
+    return Array.isArray(ids) && ids.length <= 64 && ids.every(id) ? new Set(ids) : new Set();
+  } catch { return new Set(); }
+}
+export function appComponentVisible(app: string, work: string, card: Pick<HTMLElement, 'dataset'>): boolean {
+  const component = card.dataset.component;
+  return !component || !hiddenAppComponents(app, work).has(component);
+}
+/** Stores component IDs only; a storage failure does not pretend the preference was saved. */
+export function saveHiddenAppComponents(app: string, work: string, ids: readonly string[], document_?: Document,
+  storage: Pick<Storage, 'setItem'> | undefined = visibilityStorage()): boolean {
+  const key = visibilityKey(app, work);
+  if (!key || !storage || ids.length > 64 || !ids.every(id)) return false;
+  try { storage.setItem(key, JSON.stringify([...new Set(ids)].sort())); } catch { return false; }
+  document_?.dispatchEvent(new CustomEvent('forma:app-view-preferences', { detail: { app, work } }));
+  return true;
+}
 export function parsePresentation(value: unknown): Presentation {
   try {
     const p = typeof value === 'string' ? JSON.parse(value) : value;
@@ -69,6 +95,25 @@ export function presentationFor(root: HTMLElement): PresentationController {
   let restoreFocus: HTMLElement | null = null;
   let dialog: HTMLDialogElement | null = null;
   let disposed = false;
+  const memberView = () => !root.hasAttribute('data-shared-page') && !root.hasAttribute('data-connected-app')
+    && (root.hasAttribute('data-document') || root.hasAttribute('data-unite'));
+  const hidden = () => memberView() ? hiddenAppComponents(root.dataset.app ?? '', root.dataset.work ?? '') : new Set<string>();
+  const localHidden = new Map<HTMLElement, boolean>();
+  function clearLocalHidden(): void { for (const [component, wasHidden] of localHidden) { component.hidden = wasHidden; delete component.dataset.appLocalHidden; } localHidden.clear(); }
+  function visibility(): void {
+    clearLocalHidden();
+    const excluded = hidden();
+    if (current && excluded.has(current.id)) close();
+    for (const [key, component] of components) if (excluded.has(key)) {
+      localHidden.set(component, component.hidden); component.hidden = true; component.dataset.appLocalHidden = 'true';
+    }
+    for (const section of root.querySelectorAll<HTMLElement>('[data-app-section]')) {
+      const members = [...section.querySelectorAll<HTMLElement>('[data-component]')];
+      if (members.length && members.every(component => excluded.has(component.dataset.component ?? ''))) {
+        localHidden.set(section, section.hidden); section.hidden = true; section.dataset.appLocalHidden = 'true';
+      }
+    }
+  }
   function close(restore = true): void {
     const previous = current; current = null;
     if (previous) { if (previous.anchor.isConnected) previous.anchor.replaceWith(previous.node); else previous.node.remove(); }
@@ -88,7 +133,7 @@ export function presentationFor(root: HTMLElement): PresentationController {
     const buttons = node(document, 'div', 'app-actions'); buttons.setAttribute('data-app-actions', '');
     for (const action of definition.actions ?? []) {
       // Missing/permission-filtered targets are never rebound to another part.
-      if (!components.has(action.target)) continue;
+      if (!components.has(action.target) || hidden().has(action.target)) continue;
       const button = node(document, 'button', 'app-action', action.label) as HTMLButtonElement;
       button.type = 'button'; button.dataset.appAction = action.id;
       if (action.behavior === 'dialog') button.setAttribute('aria-haspopup', 'dialog');
@@ -133,7 +178,7 @@ export function presentationFor(root: HTMLElement): PresentationController {
     const raw = typeof value === 'object' ? value.json : value ?? root.dataset.presentation ?? '{}';
     definition = parsePresentation(raw); root.dataset.presentation = typeof raw === 'string' ? raw : '{}';
     applyPresentationTheme(root, root.dataset.presentation);
-    layout(); actions();
+    layout(); visibility(); actions();
     if (current) current.opener = Array.from(root.querySelectorAll<HTMLElement>('[data-app-action]')).find(button => button.dataset.appAction === current!.action) ?? null;
     if (current && refreshing) {
       const next = components.get(current.id);
@@ -196,10 +241,20 @@ export function presentationFor(root: HTMLElement): PresentationController {
     (firstField(target) ?? dismiss).focus();
   };
   root.addEventListener('click', click);
+  const preferences = (event: Event) => {
+    const detail = (event as CustomEvent<{app?: string; work?: string}>).detail;
+    if (detail && (detail.app !== root.dataset.app || detail.work !== root.dataset.work)) return;
+    if (memberView() && !disposed) { visibility(); actions(); }
+  };
+  const storageChanged = (event: StorageEvent) => {
+    if (event.key === null || event.key === visibilityKey(root.dataset.app ?? '', root.dataset.work ?? '')) preferences(event);
+  };
+  document.addEventListener?.('forma:app-view-preferences', preferences);
+  document.defaultView?.addEventListener('storage', storageChanged);
   const controller: PresentationController = {
     beforeRefresh, afterRefresh,
-    invalidate() { close(false); definition = {}; components.clear(); root.dataset.presentation = '{}'; root.querySelector('[data-app-presentation-header]')?.replaceChildren(); },
-    dispose() { close(false); disposed = true; root.removeEventListener('click', click); controllers.delete(root); },
+    invalidate() { close(false); clearLocalHidden(); definition = {}; components.clear(); root.dataset.presentation = '{}'; root.querySelector('[data-app-presentation-header]')?.replaceChildren(); },
+    dispose() { close(false); clearLocalHidden(); disposed = true; root.removeEventListener('click', click); document.removeEventListener?.('forma:app-view-preferences', preferences); document.defaultView?.removeEventListener('storage', storageChanged); controllers.delete(root); },
   };
   controllers.set(root, controller); afterRefresh(); return controller;
 }

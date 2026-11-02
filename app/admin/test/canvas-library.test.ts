@@ -1,9 +1,4 @@
-// APP-120: one canvas model. The Library has two sections, Apps (categories
-// → apps → cards) and Widgets (Weather, Calculator, Clock, Note, Folder; the
-// Folder row expands to the member's folders). Every row has an on-canvas
-// dot, app rows read "n of m cards", and the pane re-renders from the
-// board's one `canvas:changed` event. Cards are addressed `app.card` or by
-// number. The address chip (`/expenses`) is one component wherever an app
+// Whole-work Library placement, with metadata retained for naming and Ask. The address chip (`/expenses`) is one component wherever an app
 // appears (Library row, app card header, the bar's hint, the confirm card),
 // and clicking it puts "/expenses " in the bar.
 import assert from 'node:assert/strict';
@@ -148,7 +143,7 @@ async function setup() {
   return { document_, doc, input, registry, slash, library, expenses, pto, expensesRow: expensesRow as unknown as FakeNode };
 }
 
-test('/card expense.ledger, /card expenses.ledger and /card 3.2 name the same card; /card lists app.card rows with numbers (APP-120)', async () => {
+test('metadata addresses stay stable for naming and Ask, but Apps expose no /card placement candidates', async () => {
   const { library, expenses } = await setup();
   const ledger = expenses.cards.find((card) => card.kind === 'ledger')!;
   assert.equal(ledger.slug, 'ledger');
@@ -159,18 +154,16 @@ test('/card expense.ledger, /card expenses.ledger and /card 3.2 name the same ca
   }
   assert.equal(library.findCards('time-off.records')[0]?.number, '4.1');
   assert.equal(library.findCards('pto.records')[0]?.number, '4.1');
-  // `/card ` suggestions: the app.card name with its number.
-  const [first] = library.cardCompletions('expenses.l');
-  assert.deepEqual(first, { badge: '3.2', title: 'expenses.ledger', detail: 'Expense ledger · Expenses', value: '/card expenses.ledger' });
-  assert.ok(library.cardCompletions('').every((completion) => /^[a-z0-9-]+\.[a-z0-9-]+$/.test(completion.title)));
-  assert.equal(library.cardCompletions('3.2', 'focus')[0]?.value, '/focus expenses.ledger');
+  assert.deepEqual(library.cardCompletions('expenses.l'), [], 'app components are not placeable');
+  assert.deepEqual(library.findStandaloneWorks('3.2'), []);
+  assert.equal(library.cardCompletions('expenses', 'focus')[0]?.value, '/focus expenses', 'Focus offers a whole app');
   // `/app 3` and `/app expense` find the same app.
   assert.equal(library.findApps('3')[0], expenses);
   assert.equal(library.findApps('expense')[0], expenses);
   assert.equal(library.findApps('pto')[0]?.title, 'Time off');
 });
 
-test('Library → Widgets lists the five widgets; Folder expands to the member\'s folders; dots and "n of m cards" follow canvas:changed (APP-120)', async () => {
+test('Library → Widgets lists the five widgets; Folder expands to the member\'s folders; whole-work view status follows canvas:changed (APP-120)', async () => {
   const { doc, document_, library, expenses, expensesRow } = await setup();
   const board = await import('../src/canvas/board.ts');
   const section = library.buildWidgets(doc) as unknown as FakeNode;
@@ -178,7 +171,7 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   assert.deepEqual(titles, ['Weather', 'Calculator', 'Clock', 'Note', 'Folder']);
   assert.deepEqual(section.querySelectorAll('.cv-addr-chip').map((node) => node.textContent), ['/weather', '/calculator', '/clock', '/note', '/folder']);
   // The canvas, as the board would report it (the Library keeps no canvas state).
-  const placed = new Set<string>();
+  const placed = new Map<string, { mode: 'face' | 'stack' | 'open' }>();
   const snapshot: Parameters<typeof library.renderWidgets>[1] = {
     counts: { weather: 0, calculator: 0, clock: 0 },
     notes: [{ id: 'n1', title: 'Call the auditor', on: false }],
@@ -187,7 +180,7 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   let renders = 0;
   library.watchCanvas(doc, () => {
     renders += 1;
-    library.syncLibrary((card) => placed.has(card.id), () => snapshot);
+    library.syncLibrary((work) => placed.get(work) ?? null, () => snapshot);
     library.renderWidgets(section as unknown as HTMLElement, snapshot);
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -198,7 +191,7 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   board.emitCanvasChanged(doc);
   await settle();
   assert.equal(renders, 1);
-  assert.equal(status(), '0 of 4 cards');
+  assert.equal(status(), '');
   assert.equal(dot(expensesRow), 'false', 'hollow');
   assert.equal(expensesRow.querySelector('[data-lib-all]')?.textContent, 'Add');
   // The Folder row lists the member's folders (and "+ New folder").
@@ -206,18 +199,20 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   assert.deepEqual(folders.querySelectorAll('.cv-lib-card-title').map((node) => node.textContent), ['Q3 board pack', 'Uploads', '+ New folder']);
   assert.equal(row('folder').querySelector('[data-lib-on]')?.textContent, '0 of 2 on canvas');
   assert.equal(row('weather').querySelector('[data-widget-toggle="weather"]')?.textContent, 'Add');
+  assert.equal(row('note').querySelector('[data-lib-on]')?.textContent, '0 of 1 on canvas');
+  assert.equal(library.widgetStatus('note', { ...snapshot, notes: [] }).label, '', 'empty notes need no 0 of 0 count');
 
   // Add a card, a weather widget and a folder: one event re-renders every row.
-  placed.add(expenses.cards[2]!.id);
+  placed.set(expenses.work, { mode: 'face' });
   snapshot.counts.weather = 1;
   snapshot.folders[0]!.on = true;
   board.emitCanvasChanged(doc);
   board.emitCanvasChanged(doc);
   await settle();
   assert.equal(renders, 2, 'events in one turn render once');
-  assert.equal(status(), '1 of 4 cards');
+  assert.equal(status(), 'App Card view');
   assert.equal(dot(expensesRow), 'true', 'filled');
-  assert.equal(expenses.cards[2]!.row.querySelector('[data-lib-action]')?.textContent, 'Remove');
+  assert.equal(expensesRow.querySelector('[data-lib-remove]')?.hidden, false);
   assert.equal(dot(row('weather')), 'true');
   assert.equal(row('weather').querySelector('[data-widget-toggle="weather"]')?.textContent, 'Remove');
   assert.equal(dot(row('clock')), 'false');
@@ -225,21 +220,21 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   assert.equal(row('folder').querySelector('[data-lib-on]')?.textContent, '1 of 2 on canvas');
   assert.equal(folders.querySelector('[data-folder="b1"]')?.querySelector('[data-lib-action]')?.textContent, 'Remove');
 
-  // Every card on: the app row's toggle is Remove. Then remove everything again.
-  for (const card of expenses.cards) placed.add(card.id);
+  // Switching the same work changes its mode, never a partial count.
+  placed.set(expenses.work, { mode: 'stack' });
   board.emitCanvasChanged(doc);
   await settle();
-  assert.equal(status(), '4 of 4 cards');
-  assert.equal(expensesRow.querySelector('[data-lib-all]')?.textContent, 'Remove');
+  assert.equal(status(), 'Stack view');
+  assert.equal(expensesRow.querySelector('[data-lib-all]')?.textContent, 'Add');
   placed.clear();
   snapshot.counts.weather = 0;
   snapshot.folders[0]!.on = false;
   board.emitCanvasChanged(doc);
   await settle();
-  assert.equal(status(), '0 of 4 cards');
+  assert.equal(status(), '');
   assert.equal(dot(row('weather')), 'false');
   assert.equal(dot(row('folder')), 'false');
-  assert.deepEqual(library.appStatus(1, 1), { dot: 'filled', label: '1 of 1 card', action: 'Remove' });
+  assert.deepEqual(library.appStatus('open'), { dot: 'filled', label: 'Open view' });
   assert.equal(document_.listeners.get('canvas:changed')?.length, 1);
 });
 
@@ -522,4 +517,46 @@ test('a library row keeps the canvas size apart from the pane label (APP-104)', 
   assert.equal(indexed.cards[1]?.canvasKind, 'timeline');
   assert.deepEqual(board.cardFootprint(indexed.cards[0]!.canvasKind), { width: 400, height: 250 });
   assert.deepEqual(board.cardFootprint(indexed.cards[1]!.canvasKind), { width: 620, height: 340 });
+});
+
+
+test('App rows expose whole-work actions with inert component metadata and no expander', async () => {
+  const { expensesRow } = await setup();
+  assert.equal(expensesRow.querySelector('[data-lib-expand]'), null);
+  assert.equal(expensesRow.querySelector('[data-lib-metadata]')?.hidden, true);
+  assert.equal(expensesRow.querySelector('[data-lib-metadata]')?.getAttribute('aria-hidden'), 'true');
+  assert.equal(expensesRow.querySelector('[data-lib-all]')?.textContent, 'Add');
+  assert.equal(expensesRow.querySelector('[data-lib-stack]')?.textContent, 'Stack');
+  assert.equal(expensesRow.querySelector('[data-lib-open-view]')?.textContent, 'Open');
+  assert.equal(expensesRow.querySelector('[data-lib-classify]')?.textContent, 'Show in Cards');
+  for (const button of expensesRow.querySelectorAll('[data-lib-toggle]')) assert.equal(button.getAttribute('tabindex'), '-1');
+});
+
+test('explicit standalone classification admits one whole work and is reversible; legacy child commands cannot place App parts', async () => {
+  const { library, expenses, pto } = await setup();
+  const board = await import('../src/canvas/board.ts');
+  const reports: string[] = [];
+  let requests = 0;
+  (globalThis as { fetch?: unknown }).fetch = async () => { requests += 1; throw Error('Unexpected placement request'); };
+  board.setStandaloneWork(expenses.app, expenses.work, false);
+  assert.equal(library.findStandaloneWorks('expenses.ledger').length, 0);
+  await library.CARD_COMMAND.run('expenses.ledger', message => reports.push(message));
+  assert.match(reports.at(-1)!, /No card matches/);
+  assert.equal(requests, 0, 'refusal is before any group load or placement');
+  board.markStandaloneWork(expenses.app, expenses.work);
+  assert.equal(expenses.cards.length, 4, 'multi-component work, not a card-count heuristic');
+  for (const query of ['expenses', 'expense.ledger', '3.2']) {
+    const found = library.findStandaloneWorks(query);
+    assert.equal(found.length, 1, query);
+    assert.equal(found[0]?.work, expenses.work);
+    assert.equal(found[0]?.cards.length, 4, 'every component stays with the work');
+  }
+  assert.equal(library.findStandaloneWorks('pto.records').length, 0);
+  assert.equal(board.isStandaloneWork(pto.app, pto.work), false);
+  const shown = library.findStandaloneWorks('expenses')[0]!;
+  assert.equal(library.cardCompletions('expenses')[0]?.value, `/card ${shown.slug}`);
+  assert.equal(library.cardCompletions('expenses')[0]?.detail, `/${shown.slug} · standalone card`);
+  board.setStandaloneWork(expenses.app, expenses.work, false);
+  assert.deepEqual(library.cardCompletions('expenses'), []);
+  assert.ok(library.findCards('expenses.ledger').length, 'naming and Ask metadata survives category changes');
 });

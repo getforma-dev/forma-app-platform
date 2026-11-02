@@ -1,50 +1,22 @@
-// APP-104: the library pane. Every card the member may bring onto the
-// canvas, numbered (`3` an app, `3.2` its second card, `3.0` its app card).
-// The list is rendered by the server from metadata only
-// (`query::canvas::library`: outlines and records listings, no view runs);
-// this module wires it: search by name or number, Add/Remove, the
-// on-canvas indicators, new works the board places this session under "My
-// apps", and the `/card` and `/app` commands with their autocomplete.
-// APP-118: `/apps [query]` opens it filtered. APP-119: apps are addresses.
-//
-// APP-120: one canvas model. The Library has two sections: Apps (categories
-// → apps → cards) and Widgets (Weather, Calculator, Clock, Note, Folder; the
-// Note and Folder rows expand to the member's notes and folders). Every row
-// has an on-canvas dot (filled or hollow), app rows read "n of m cards",
-// each row has an Add/Remove toggle and its name in grey: an app's address
-// chip (`/expenses`, "also /expense"), a card's `app.card` (`expenses.ledger`),
-// a widget's `/weather`. The pane keeps no canvas state: it re-renders from
-// the board's one `canvas:changed` event (`board.ts` `emitCanvasChanged`).
-// Cards are addressed `app.card` or by number: `/card expenses.ledger` and
-// `/card 3.2` place the same card. A bare `/<address>` places the app
-// (`setAppPlacer`). The pane itself (open, close, tabs) is `pane.ts`.
-// Placing goes through the board (`addCards`), which fetches a work through
-// the group route (re-authorized) and runs its views through the governed
-// query route; nothing here reads data. A desktop drag of one card
-// (`library-drag.ts`) uses that same path and puts the card at the drop.
-//
-// Titles are text nodes; ids are the server's card ids.
-//
-// APP-121: names people give. App and card rows (and the cards on the
-// canvas) show the organization's labels and the member's own card names
-// (`applyLabels`, from the addresses); a ✎ on a library app's row and on its
-// card rows opens the naming editor (`naming.ts`, through `setLabelEditor`).
-// The commands are loaded at start, so labels and the app card's address
-// chip show without opening the pane.
+// Library projects authorized work metadata into Apps, Widgets and Cards.
+// Apps have one face/stack/open view; their components remain inert metadata
+// for naming and Ask. Only an explicit member-local category marks a whole
+// work as a standalone Card. No classification is inferred from its content.
+// Placement always loads the whole work through the authorized board route.
 import { addressChip, aliasNote, decorateAppCard, decorateAppCards } from './address-chip';
-import { activeCanvasItem, addCards, boardWorks, CANVAS_CHANGED, canvasApi, cardFootprint, isOnBoard, removeCards, updateWorkTitle } from './board';
+import { activeCanvasItem, boardWorks, CANVAS_CHANGED, canvasApi, cardFootprint, isStandaloneWork, removeWork, setStandaloneWork, updateWorkTitle } from './board';
 import { bindLibraryDrag } from './library-drag';
 import { addressList, addressText, allAddresses, appForm, cardLabel, onAddressesChange, WIDGET_KINDS, type Address, type WidgetName } from './command-registry';
 import { insertCommand, startCommandSheet } from './command-sheet';
 import { startShortcutTab } from './shortcut-tab';
 import { closePane, isPaneOpen, onPaneTab, openPane, startPane, togglePane } from './pane';
-import { stackCards } from './stacks';
+import { appViewForWork, setAppView, type AppViewMode } from './unite';
 import { ensureCommands, registerCommands, registerCompleter, setAppPlacer, type Completion } from './slash';
 import { announce, el, isUuid } from './render';
 import { removeWidgets, runWidget, widgetCount } from './widgets/index';
 import { newNote, noteEntries, toggleNote } from './notes';
 import { closeFolders, folderEntries, newFolder, toggleFolder } from './boxes';
-import { focusFromItem, openFocus } from './focus';
+import { focusFromItem } from './focus';
 
 type Report = (message: string) => void;
 export type CardRow = {
@@ -55,6 +27,7 @@ export type CardRow = {
 export type AppRow = {
   app: string; work: string; number: string; title: string; slug: string;
   workNameScope?: boolean;
+  category?: string;
   row: HTMLElement; cards: CardRow[];
   /** APP-119: the app's address, once the server's list arrived. */
   address?: Address;
@@ -82,6 +55,48 @@ export function findCardRow(id: string): CardRow | undefined {
 let pane: HTMLElement | null = null;
 let search: HTMLInputElement | null = null;
 const apps: AppRow[] = [];
+export type SavedCardEntry = {id: string; title: string; kind: 'card'|'answer'; createdAt: string};
+let savedEntries: readonly SavedCardEntry[] = [];
+let showSaved: ((id: string) => Promise<string>) | null = null;
+let refreshSaved: (() => Promise<string>) | null = null;
+let savedMessage = 'Loading saved cards and answers…';
+/** Talk owns the authorized inventory and placement; Library keeps metadata only. */
+export function setSavedCardInventory(entries: readonly SavedCardEntry[], show: (id: string) => Promise<string>, message = '', refresh: (() => Promise<string>) | null = null): void {
+  const unchanged = showSaved === show && refreshSaved === refresh && savedMessage === message && entries.length === savedEntries.length
+    && entries.every((entry, index) => {const before = savedEntries[index]; return before?.id === entry.id && before.title === entry.title && before.kind === entry.kind && before.createdAt === entry.createdAt;});
+  savedEntries = entries; showSaved = show; savedMessage = message; refreshSaved = refresh;
+  if (unchanged) return;
+  const section = pane?.querySelector<HTMLElement>('[data-category="saved-cards"]');
+  if (section) renderSavedCards(section, entries, show, message, refresh);
+  filter(search?.value ?? '');
+}
+/** True saved artifacts have their own card_id, never their parent work's ID. */
+export function renderSavedCards(section: HTMLElement, entries: readonly SavedCardEntry[], show: (id: string) => Promise<string>, message = '', refresh: (() => Promise<string>) | null = null): void {
+  const document_ = section.ownerDocument;
+  const status = el(document_, 'p', {class: 'cv-lib-hint', role: 'status'}, message || (entries.length ? 'Saved cards read live data. Pinned answers retain what was answered at the time.' : 'No saved cards or pinned answers yet.'));
+  const list = el(document_, 'ul', {class: 'cv-lib-apps'}, ...entries.map(entry => {
+    const date = new Date(entry.createdAt);
+    const kind = entry.kind === 'answer' ? `Pinned answer · historical${Number.isNaN(date.valueOf()) ? '' : ` · ${date.toISOString().slice(0, 10)}`}` : 'Saved card · live data';
+    const button = el(document_, 'button', {type: 'button', class: 'cv-lib-all', 'data-saved-show': entry.id, 'aria-label': `Show ${entry.title}`}, 'Show') as HTMLButtonElement;
+    button.addEventListener('click', () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      status.textContent = 'Opening saved card…';
+      void show(entry.id).then(message => {status.textContent = message; announce(message);}, () => {status.textContent = 'That saved card could not be shown. Try again.';}).finally(() => {button.disabled = false;});
+    });
+    return el(document_, 'li', {class: 'cv-lib-app cv-lib-saved-card', 'data-saved-card': entry.id, 'data-search': `${entry.title} ${kind}`.toLowerCase()},
+      el(document_, 'div', {class: 'cv-lib-app-head'}, el(document_, 'div', {class: 'cv-lib-title-group'}, el(document_, 'span', {class: 'cv-lib-app-title'}, entry.title)), button),
+      el(document_, 'p', {class: 'cv-lib-hint'}, kind));
+  }));
+  const reload = el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-saved-refresh': ''}, 'Refresh saved cards') as HTMLButtonElement;
+  reload.disabled = refresh === null;
+  reload.addEventListener('click', () => {
+    if (!refresh || reload.disabled) return;
+    reload.disabled = true; status.textContent = 'Refreshing saved cards…';
+    void refresh().then(message => {status.textContent = message; announce(message);}, () => {status.textContent = 'Saved cards could not be refreshed. Try again.';}).finally(() => {reload.disabled = false;});
+  });
+  section.replaceChildren(el(document_, 'h3', {class: 'cv-lib-cat-title'}, 'Saved cards and answers'), reload, status, list);
+}
 
 const phone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
 
@@ -144,13 +159,9 @@ export function cardAddress(card: CardRow): string {
   return `${card.app.slug || card.app.number}.${card.slug}`;
 }
 
-/** "2 of 8 cards", the dot and the toggle of an app row for `on` of `total` cards on the canvas. */
-export function appStatus(on: number, total: number): { dot: 'filled' | 'hollow'; label: string; action: 'Add' | 'Remove' } {
-  return {
-    dot: on > 0 ? 'filled' : 'hollow',
-    label: `${on} of ${total} ${total === 1 ? 'card' : 'cards'}`,
-    action: total > 0 && on === total ? 'Remove' : 'Add',
-  };
+/** One whole-work view, rather than a count of independently placed parts. */
+export function appStatus(mode: AppViewMode | null): { dot: 'filled' | 'hollow'; label: string } {
+  return { dot: mode ? 'filled' : 'hollow', label: mode ? ({ face: 'App Card view', stack: 'Stack view', open: 'Open view' })[mode] : '' };
 }
 
 function setDot(node: Element | null | undefined, on: boolean): void {
@@ -166,6 +177,7 @@ export function indexRow(row: HTMLElement): AppRow | null {
     app: row.dataset.app ?? '',
     work,
     workNameScope: row.dataset.workNameScope === 'true',
+    category: row.dataset.libraryCategory || row.closest?.<HTMLElement>('.cv-lib-cat')?.dataset.category || 'mine',
     number: row.dataset.number ?? '',
     title: row.querySelector('.cv-lib-app-title')?.textContent ?? '',
     slug: (row.querySelector('.cv-lib-slug')?.textContent ?? '').replace(/^\/(app:)?/, ''),
@@ -191,6 +203,7 @@ export function indexRow(row: HTMLElement): AppRow | null {
       app,
     });
   }
+  row.dataset.libraryCategory = app.category;
   apps.push(app);
   nameCards(app);
   return app;
@@ -222,24 +235,28 @@ export function buildAppRow(
   entry: { app: string; work: string; number: string; title: string; slug: string; workNameScope?: boolean; cards: { id: string; number: string; title: string; kind: string; canvasKind?: string }[] },
 ): HTMLElement {
   const head = el(document_, 'div', { class: 'cv-lib-app-head' },
-    el(document_, 'button', { type: 'button', class: 'cv-lib-expand', 'aria-expanded': 'false', 'data-lib-expand': '' },
-      el(document_, 'span', { class: 'cv-lib-chevron', 'aria-hidden': 'true' }),
+    el(document_, 'div', { class: 'cv-lib-title-group' },
       el(document_, 'span', { class: 'cv-lib-dot', 'data-lib-dot': '', 'aria-hidden': 'true' }),
       el(document_, 'span', { class: 'cv-lib-num' }, entry.number),
       el(document_, 'span', { class: 'cv-lib-app-title', title: entry.title }, entry.title),
       el(document_, 'span', { class: 'cv-lib-on', 'data-lib-on': '' })),
     ...(entry.slug ? [el(document_, 'code', { class: 'cv-lib-slug cv-addr-chip' }, `/${entry.slug}`)] : []),
-    el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Add the app as one stack' }, 'Stack'),
-    // APP-106: `unite.ts` handles the click.
-    el(document_, 'button', { type: 'button', class: 'cv-lib-stack cv-lib-unite', 'data-lib-unite': '', title: 'Unite: open this app as a page' }, 'Unite'),
-    el(document_, 'button', { type: 'button', class: 'cv-lib-all', 'data-lib-all': '' }, 'Add'));
-  const list = el(document_, 'ul', { class: 'cv-lib-cards' },
+    el(document_, 'div', { class: 'cv-lib-view-actions' },
+      el(document_, 'button', { type: 'button', class: 'cv-lib-all', 'data-lib-all': '', title: 'Add the whole app as its face card' }, 'Add'),
+      el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Show the whole app in Stack view' }, 'Stack'),
+      el(document_, 'button', { type: 'button', class: 'cv-lib-stack cv-lib-open-view', 'data-lib-open-view': '', title: 'Open the whole app on the canvas' }, 'Open'),
+      el(document_, 'details', { class: 'cv-lib-menu' },
+        el(document_, 'summary', { 'aria-label': `Options for ${entry.title}`, title: 'Library options' }, '⋯'),
+        el(document_, 'div', { class: 'cv-lib-menu-items' },
+          el(document_, 'button', { type: 'button', 'data-lib-classify': '', title: 'Personal category in this browser; the whole saved work stays intact' }, 'Show in Cards'),
+          el(document_, 'button', { type: 'button', 'data-lib-remove': '', hidden: '' }, 'Remove from canvas')))));
+  const list = el(document_, 'ul', { class: 'cv-lib-cards cv-lib-metadata', 'data-lib-metadata': '', hidden: '', 'aria-hidden': 'true' },
     ...entry.cards.map((card) => el(document_, 'li', {
       class: 'cv-lib-card', 'data-card': card.id, 'data-number': card.number,
       ...(card.canvasKind ? { 'data-canvas-kind': card.canvasKind } : {}),
       'data-search': `${card.number} ${card.title.toLowerCase()} ${card.kind}`,
     },
-    el(document_, 'button', { type: 'button', class: 'cv-lib-toggle', 'aria-pressed': 'false', 'data-lib-toggle': '' },
+    el(document_, 'button', { type: 'button', class: 'cv-lib-toggle', 'aria-pressed': 'false', 'data-lib-toggle': '', tabindex: '-1' },
       el(document_, 'span', { class: 'cv-lib-dot', 'data-lib-dot': '', 'aria-hidden': 'true' }),
       el(document_, 'span', { class: 'cv-lib-num' }, card.number),
       el(document_, 'span', { class: 'cv-lib-card-title', title: card.title }, card.title),
@@ -269,7 +286,7 @@ function category(document_: Document, id: string, title: string): HTMLElement {
 function recount(section: HTMLElement): void {
   const count = section.querySelectorAll('.cv-lib-app:not([hidden])').length;
   const label = section.querySelector('.cv-lib-count');
-  if (label) label.textContent = `${count} ${count === 1 ? 'app' : 'apps'}`;
+  if (label) label.textContent = `${count} ${section.dataset.category === 'standalone' ? (count === 1 ? 'card' : 'cards') : (count === 1 ? 'app' : 'apps')}`;
 }
 
 function nextNumber(): number {
@@ -331,7 +348,8 @@ export function widgetStatus(kind: WidgetName, snapshot: WidgetSnapshot): { on: 
   const on = kind === 'note' ? snapshot.notes.filter((note) => note.on).length
     : kind === 'folder' ? snapshot.folders.filter((folder) => folder.on).length
       : snapshot.counts[kind];
-  const of = kind === 'note' ? ` of ${snapshot.notes.length}` : kind === 'folder' ? ` of ${snapshot.folders.length}` : '';
+  const total = kind === 'note' ? snapshot.notes.length : kind === 'folder' ? snapshot.folders.length : 0;
+  const of = total ? ` of ${total}` : '';
   return { on, label: on || of ? `${on}${of} on canvas` : '', action: on > 0 ? 'Remove' : 'Add' };
 }
 
@@ -447,33 +465,47 @@ function widgetClick(target: Element | null): boolean {
 
 // --- The projection: every row's dot, counts and toggles from the board ---
 
-const onBoard = (card: CardRow): boolean => isOnBoard(card.id);
-
-/** Re-renders every row's on-canvas state (`placed` answers whether a card is on the canvas). */
-export function syncLibrary(placed: (card: CardRow) => boolean = onBoard, snapshot: () => WidgetSnapshot = liveSnapshot): void {
-  if (placed === onBoard) adoptNewWorks();
+/** Move only explicit, member-local classifications. Unknown works stay Apps. */
+function classifyRows(): void {
+  const cards = pane?.querySelector<HTMLElement>('[data-category="standalone"] .cv-lib-apps');
+  if (!cards || !documentRef) return;
   for (const app of apps) {
-    let on = 0;
-    for (const card of app.cards) {
-      const here = placed(card);
-      if (here) on += 1;
-      card.button.setAttribute('aria-pressed', String(here));
-      card.row.classList.toggle('is-on', here);
-      setDot(card.row.querySelector('[data-lib-dot]'), here);
-      const action = card.button.querySelector('[data-lib-action]');
-      if (action) action.textContent = here ? 'Remove' : 'Add';
-      card.button.title = here ? 'On your canvas. Click to take it off (no data changes).' : 'Bring onto the canvas';
-    }
-    const status = appStatus(on, app.cards.length);
-    setDot(app.row.querySelector('[data-lib-dot]'), on > 0);
+    const standalone = isStandaloneWork(app.app, app.work);
+    app.row.dataset.standalone = String(standalone);
+    if (standalone) app.row.setAttribute('data-lib-entry-drag', '');
+    else app.row.removeAttribute('data-lib-entry-drag');
+    const home = category(documentRef, app.category || 'mine', app.category === 'mine' ? 'My apps' : app.category || 'Apps');
+    const target = standalone ? cards : home?.querySelector('.cv-lib-apps');
+    if (target && app.row.parentElement !== target) target.append(app.row);
+    const classify = app.row.querySelector('[data-lib-classify]');
+    if (classify) classify.textContent = standalone ? 'Show in Apps' : 'Show in Cards';
+    for (const button of app.row.querySelectorAll<HTMLElement>('[data-lib-stack], [data-lib-open-view]')) button.hidden = standalone;
+    const add = app.row.querySelector<HTMLElement>('[data-lib-all]');
+    if (add) add.title = standalone ? 'Add this whole card work to the canvas' : 'Add the whole app as its face card';
+  }
+  for (const section of pane?.querySelectorAll<HTMLElement>('.cv-lib-cat') ?? []) {
+    if (section.dataset.category !== 'widgets') recount(section);
+  }
+}
+
+/** Library status comes from the single whole-work view controller. */
+export function syncLibrary(view: (work: string) => { mode: AppViewMode } | null = appViewForWork, snapshot: () => WidgetSnapshot = liveSnapshot): void {
+  if (view === appViewForWork) adoptNewWorks();
+  classifyRows();
+  for (const app of apps) {
+    const current = view(app.work);
+    const status = appStatus(current?.mode ?? null);
+    setDot(app.row.querySelector('[data-lib-dot]'), Boolean(current));
     const label = app.row.querySelector('[data-lib-on]');
     if (label) label.textContent = status.label;
-    app.row.classList.toggle('has-on', on > 0);
-    const all = app.row.querySelector<HTMLElement>('[data-lib-all]');
-    if (all) all.textContent = status.action;
+    app.row.classList.toggle('has-on', Boolean(current));
+    const remove = app.row.querySelector<HTMLElement>('[data-lib-remove]');
+    if (remove) remove.hidden = !current;
+    app.row.querySelector('[data-lib-all]')?.setAttribute('aria-pressed', String(current?.mode === (isStandaloneWork(app.app, app.work) ? 'open' : 'face')));
   }
   const widgets = pane?.querySelector<HTMLElement>('[data-category="widgets"]');
   if (widgets) renderWidgets(widgets, snapshot());
+  filter(search?.value ?? '');
 }
 
 /**
@@ -507,19 +539,19 @@ function filter(query: string): void {
       for (const card of row.querySelectorAll<HTMLElement>('.cv-lib-card')) {
         const number = card.dataset.number ?? '';
         const hit = !words || appHit || (card.dataset.search ?? '').includes(words) || (number !== '' && number.startsWith(words));
-        card.hidden = !hit;
+        if (!app) card.hidden = !hit;
         if (hit) cardHits += 1;
       }
       row.hidden = !(appHit || cardHits);
       if (!row.hidden) shown += 1;
-      if (words) expand(row, Boolean(cardHits) && !appHit);
+      if (words && !app) expand(row, Boolean(cardHits) && !appHit);
     }
-    section.hidden = shown === 0;
+    section.hidden = shown === 0 && (Boolean(words) || !['standalone', 'saved-cards'].includes(section.dataset.category ?? ''));
   }
   for (const group of pane?.querySelectorAll<HTMLElement>('[data-lib-group]') ?? []) {
-    group.hidden = !group.querySelector('.cv-lib-cat:not([hidden])');
+    group.hidden = Boolean(words) && !group.querySelector('.cv-lib-cat:not([hidden])');
   }
-  if (!words) for (const row of pane?.querySelectorAll<HTMLElement>('.cv-lib-app') ?? []) expand(row, row.classList.contains('was-expanded'));
+  if (!words) for (const row of pane?.querySelectorAll<HTMLElement>('.cv-lib-widget') ?? []) expand(row, row.classList.contains('was-expanded'));
   // An empty search says so, with a way out (APP-116 polish).
   const list = pane?.querySelector<HTMLElement>('[data-lib-list]');
   const any = Array.from(pane?.querySelectorAll<HTMLElement>('.cv-lib-cat') ?? []).some((section) => !section.hidden);
@@ -533,7 +565,7 @@ function filter(query: string): void {
     });
     none = el(documentRef, 'div', { class: 'cv-lib-none', role: 'status', hidden: '' },
       el(documentRef, 'p', { class: 'cv-lib-none-title' }, ''),
-      el(documentRef, 'p', {}, 'Try an app’s /name, a card like expenses.ledger, or its number, like 3.2. Or describe what you need in the bar below.'),
+      el(documentRef, 'p', {}, 'Try an app, a standalone card or a widget name. Or describe what you need in the bar below.'),
       clear);
     list.before(none);
   }
@@ -544,20 +576,10 @@ function filter(query: string): void {
   }
 }
 
-async function toggleCard(card: CardRow, report?: Report): Promise<void> {
-  const message = onBoard(card)
-    ? (removeCards([card.id]), `${card.title} is back in the library.`)
-    : await addCards(card.app.app, card.app.work, [card.id]);
-  report?.(message);
-  if (onBoard(card) && phone()) closeLibrary();
-}
-
 async function addAll(app: AppRow, report?: Report): Promise<string> {
-  const message = app.cards.length && app.cards.every(onBoard)
-    ? (removeCards(app.cards.map((card) => card.id)), `${app.title} is back in the library.`)
-    : await addCards(app.app, app.work, null);
+  const message = await setAppView(app.app, app.work, isStandaloneWork(app.app, app.work) ? 'open' : 'face');
   report?.(message);
-  if (phone() && app.cards.some(onBoard)) closeLibrary();
+  if (phone()) closeLibrary();
   return message;
 }
 
@@ -618,6 +640,18 @@ export function findApps(query: string): AppRow[] {
     .map((entry) => entry.app);
 }
 
+/** Placement candidates only: exact classified whole works, never app parts. */
+export function findStandaloneWorks(query: string): AppRow[] {
+  const candidates = query.trim() ? [...findApps(query), ...findCards(query).map(card => card.app)] : apps;
+  const seen = new Set<string>();
+  return candidates.filter(app => {
+    const key = `${app.app}/${app.work}`;
+    if (!isStandaloneWork(app.app, app.work) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** A placing command leaves the bar empty for the next one. */
 function clearBar(): void {
   const input = documentRef?.getElementById('intent-input') as HTMLInputElement | null;
@@ -640,33 +674,33 @@ export const APPS_COMMAND = {
 export const CARD_COMMAND = {
   slug: 'card',
   title: 'Place a card',
-  purpose: 'One card of an app, by app.card (expenses.ledger) or number (3.2)',
+  purpose: 'Place a whole standalone card from the Cards section',
   run: async (text: string, report: Report = () => undefined) => {
     if (!text.trim()) {
       openLibrary();
-      report('Pick a card in the library, or type /card and its app.card or number.');
+      report('Pick a whole card in Library → Cards. App sections are opened with their app.');
       return;
     }
-    const [card] = findCards(text);
-    if (!card) {
+    const [app] = findStandaloneWorks(text);
+    if (!app) {
       report(`No card matches “${text.trim()}”. Open the library (L) to browse.`);
       return;
     }
-    report(isOnBoard(card.id) ? `${card.number} ${card.title} is already on your canvas.` : await addCards(card.app.app, card.app.work, [card.id]));
+    report(await setAppView(app.app, app.work, 'open'));
     clearBar();
   },
 };
 
-/** Places every card of `app` (the `/app` path, and a bare `/<address>`). */
+/** Places the whole app view (`/app` and a bare `/<address>`). */
 async function placeApp(app: AppRow, report: Report): Promise<void> {
-  report(await addCards(app.app, app.work, null));
+  report(await setAppView(app.app, app.work, isStandaloneWork(app.app, app.work) ? 'open' : 'face'));
   clearBar();
 }
 
 export const APP_COMMAND = {
   slug: 'app',
   title: 'Place an app',
-  purpose: 'Every card of one app, by its /name or number (/expenses is the same)',
+  purpose: 'Add an app’s face card by its /name or number',
   run: async (text: string, report: Report = () => undefined) => {
     if (!text.trim()) {
       openLibrary();
@@ -685,32 +719,35 @@ export const APP_COMMAND = {
 /** APP-120: `/focus [card]`: the selected card in focus, or the card named (placed first when it is not on the canvas). */
 export const FOCUS_COMMAND = {
   slug: 'focus',
-  title: 'Focus a card',
-  purpose: 'One card full size: the selected one, or one by app.card or number (F)',
+  title: 'Focus an app or card',
+  purpose: 'Focus a whole app or standalone card by name or number (F)',
   run: async (text: string, report: Report = () => undefined) => {
     const words = text.trim();
     clearBar();
     if (!words) {
-      report(focusFromItem(activeCanvasItem()) ? 'In focus. Esc returns to the canvas.' : 'Select a card first, or type /focus and its app.card or number.');
+      report(focusFromItem(activeCanvasItem()) ? 'In focus. Esc returns to the canvas.' : 'Select an app or card first, or type /focus and its name or number.');
       return;
     }
-    const [card] = findCards(words);
-    if (!card) {
-      report(`No card matches “${words}”. Open the library (L) to browse.`);
+    const app = findApps(words)[0] ?? findStandaloneWorks(words)[0];
+    if (!app) {
+      report(`No app or standalone card matches “${words}”. Open the library (L) to browse.`);
       return;
     }
-    if (!isOnBoard(card.id)) await addCards(card.app.app, card.app.work, [card.id], { focus: false });
-    if (!openFocus(card.id)) report(`${card.title} could not be opened in focus.`);
+    const existing = appViewForWork(app.work);
+    if (!existing || existing.app !== app.app) await setAppView(app.app, app.work, isStandaloneWork(app.app, app.work) ? 'open' : 'face', { focus: false });
+    const whole = appViewForWork(app.work);
+    if (!whole || !focusFromItem(whole.item)) report(`${app.title} could not be opened in focus.`);
   },
 };
 
-/** `/card <app.card>` (and `/focus`): the matching cards, each by its `app.card` name and number. */
+/** Commands offer whole works only. Metadata aliases never expose app parts. */
 export function cardCompletions(rest: string, verb = 'card'): Completion[] {
-  return findCards(rest).slice(0, 10).map((card) => ({
-    badge: card.number,
-    title: cardAddress(card),
-    detail: `${card.title} · ${card.app.title}${isOnBoard(card.id) ? ' · on canvas' : ''}`,
-    value: `/${verb} ${cardAddress(card)}`,
+  const candidates = verb === 'focus' ? findApps(rest) : findStandaloneWorks(rest);
+  return candidates.slice(0, 10).map((app) => ({
+    badge: app.number,
+    title: app.title,
+    detail: `${app.slug ? `/${app.slug} · ` : ''}${isStandaloneWork(app.app, app.work) ? 'standalone card' : 'whole app'}${appViewForWork(app.work) ? ' · on canvas' : ''}`,
+    value: `/${verb} ${app.slug || app.number}`,
   }));
 }
 /** `/apps <query>`: open the Library filtered (first), then the matching apps; Enter on one places it. */
@@ -724,7 +761,7 @@ function appsCompletions(rest: string): Completion[] {
     ...findApps(query).slice(0, 9).map((app) => ({
       badge: app.number,
       title: app.title,
-      detail: `${app.slug ? `/${app.slug} · ` : ''}${app.address ? `${app.address.hint} · ` : ''}place it · ${app.cards.length} cards${app.cards.length && app.cards.every(onBoard) ? ' · on canvas' : ''}`,
+      detail: `${app.slug ? `/${app.slug} · ` : ''}${app.address ? `${app.address.hint} · ` : ''}place it ${appViewForWork(app.work) ? ' · on canvas' : ''}`,
       value: `/app ${app.slug || app.number}`,
     })),
   ];
@@ -733,7 +770,7 @@ function appCompletions(rest: string): Completion[] {
   return findApps(rest).slice(0, 10).map((app) => ({
     badge: app.number,
     title: app.title,
-    detail: `${app.slug ? `/${app.slug} · ` : ''}${app.cards.length} cards`,
+    detail: `${app.slug ? `/${app.slug} · ` : ''}${isStandaloneWork(app.app, app.work) ? 'standalone card' : 'whole app'}`,
     value: `/app ${app.slug || app.number}`,
   }));
 }
@@ -756,7 +793,7 @@ export function firstExample(address: Address): string {
 export function decorate(app: AppRow, address: Address | undefined): void {
   const document_ = app.row.ownerDocument;
   if (app.workNameScope && !app.row.querySelector('[data-lib-edit=""]')) {
-    app.row.querySelector('[data-lib-expand]')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${app.title}`, 'aria-label': `Name ${app.title}` }, '✎'));
+    app.row.querySelector('.cv-lib-title-group')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${app.title}`, 'aria-label': `Name ${app.title}` }, '✎'));
   }
   if (app.address === address) return;
   app.address = address;
@@ -769,7 +806,7 @@ export function decorate(app: AppRow, address: Address | undefined): void {
   }
   app.slug = address.slug;
   if (!app.workNameScope && address.kind === 'library' && !app.row.querySelector('[data-lib-edit=""]')) {
-    app.row.querySelector('[data-lib-expand]')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${address.title}`, 'aria-label': `Name ${address.title}` }, '✎'));
+    app.row.querySelector('.cv-lib-title-group')?.after(el(document_, 'button', { type: 'button', class: 'cv-lib-edit', 'data-lib-edit': '', title: `Name ${address.title}`, 'aria-label': `Name ${address.title}` }, '✎'));
   }
   // The plain `/slug` the server rendered becomes the address chip (one component everywhere).
   const head = app.row.querySelector('.cv-lib-app-head');
@@ -778,7 +815,7 @@ export function decorate(app: AppRow, address: Address | undefined): void {
   const chip = addressChip(document_, appForm(address));
   chip.classList.add('cv-lib-slug');
   if (plain) plain.replaceWith(chip);
-  else app.row.querySelector('[data-lib-expand]')?.after(chip);
+  else app.row.querySelector('.cv-lib-title-group')?.after(chip);
   nameCards(app);
   app.row.dataset.search = `${base} ${addressText(address)}`;
   const example = firstExample(address);
@@ -889,7 +926,14 @@ function sections(document_: Document): void {
     el(document_, 'h2', { class: 'cv-lib-group-title' }, 'Apps'), ...categories);
   const widgetsGroup = el(document_, 'div', { class: 'cv-lib-group', 'data-lib-group': 'widgets' },
     el(document_, 'h2', { class: 'cv-lib-group-title' }, 'Widgets'), buildWidgets(document_));
-  list.replaceChildren(appsGroup, widgetsGroup);
+  const cardsGroup = el(document_, 'div', { class: 'cv-lib-group', 'data-lib-group': 'cards' },
+    el(document_, 'h2', { class: 'cv-lib-group-title' }, 'Cards'),
+    el(document_, 'section', { class: 'cv-lib-cat', 'data-category': 'standalone', 'aria-label': 'Standalone cards' },
+      el(document_, 'p', { class: 'cv-lib-hint' }, 'Whole card works. This personal category is saved in this browser.'),
+      el(document_, 'ul', { class: 'cv-lib-apps' })),
+    el(document_, 'section', {class: 'cv-lib-cat', 'data-category': 'saved-cards', 'aria-label': 'Saved cards and answers'}));
+  list.replaceChildren(appsGroup, widgetsGroup, cardsGroup);
+  renderSavedCards(cardsGroup.querySelector<HTMLElement>('[data-category="saved-cards"]')!, savedEntries, showSaved ?? (async () => 'Saved cards are still loading.'), savedMessage, refreshSaved);
 }
 
 /** Wires the pane once (after the board started). */
@@ -923,8 +967,7 @@ export function startLibrary(document_: Document): void {
   // Long names are cut with an ellipsis: the full name shows on hover.
   for (const title of pane.querySelectorAll<HTMLElement>('.cv-lib-app-title, .cv-lib-card-title')) title.title ||= title.textContent ?? '';
   replaceNotesApp();
-  // Small libraries open expanded; a large one shows its apps first.
-  if (apps.length <= 3) for (const app of apps) expand(app.row, true);
+  // App component metadata stays hidden; apps never expand into loose parts.
   document_.getElementById('cv-library-toggle')?.addEventListener('click', () => toggleLibrary());
   document_.addEventListener('click', (event) => {
     const target = event.target as Element | null;
@@ -945,34 +988,35 @@ export function startLibrary(document_: Document): void {
       labelEditor?.(app, app.cards.find((card) => card.id === edit.dataset.libEdit) ?? null);
       return;
     }
-    if (target?.closest('[data-lib-expand]')) {
-      const open = !app.row.classList.contains('is-expanded');
-      expand(app.row, open);
-      app.row.classList.toggle('was-expanded', open);
+    if (target?.closest('[data-lib-classify]')) {
+      const standalone = !isStandaloneWork(app.app, app.work);
+      setStandaloneWork(app.app, app.work, standalone);
+      // A placed work follows the same default as its new category, in place.
+      if (appViewForWork(app.work)) void setAppView(app.app, app.work, standalone ? 'open' : 'face').then(announce);
+      app.row.querySelector('details')?.removeAttribute('open');
+      syncLibrary();
       return;
     }
-    if (target?.closest('[data-lib-stack]')) {
-      void addCards(app.app, app.work, null, { focus: false }).then(() => {
-        stackCards(app.cards.map((card) => card.id), app.title);
-        if (phone()) closeLibrary();
-      });
+    if (target?.closest('[data-lib-remove]')) {
+      removeWork(app.work);
+      syncLibrary();
+      announce(`${app.title} removed from the canvas. Its saved content is unchanged.`);
       return;
     }
-    if (target?.closest('[data-lib-all]')) {
-      void addAll(app);
+    if (target?.closest('[data-lib-stack], [data-lib-open-view]')) {
+      void setAppView(app.app, app.work, target.closest('[data-lib-stack]') ? 'stack' : 'open').then(announce);
+      if (phone()) closeLibrary();
       return;
     }
-    const cardRow = target?.closest<HTMLElement>('.cv-lib-card');
-    const card = cardRow && app.cards.find((candidate) => candidate.row === cardRow);
-    if (card && target?.closest('[data-lib-toggle]')) void toggleCard(card);
+    if (target?.closest('[data-lib-all]')) void addAll(app, announce);
   });
   search?.addEventListener('input', () => filter(search?.value ?? ''));
   search?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
-      // Enter adds the first visible card that is not on the canvas yet.
+      // Search activates the first matching whole work, never a hidden part.
       event.preventDefault();
-      const first = apps.flatMap((app) => app.cards).find((card) => !card.row.hidden && !card.app.row.hidden && card.row.offsetParent !== null && !onBoard(card));
-      if (first) void toggleCard(first);
+      const first = apps.find(app => !app.row.hidden && app.row.offsetParent !== null);
+      if (first) void addAll(first, announce);
     }
   });
   watchCanvas(document_);
@@ -995,18 +1039,12 @@ export function startLibrary(document_: Document): void {
   syncLibrary();
   bindLibraryDrag(document_, {
     cardFrom(row) {
-      if (row.dataset.note || row.dataset.folder || row.classList.contains('cv-lib-new')) return null;
-      for (const app of apps) {
-        const card = app.cards.find((candidate) => candidate.row === row);
-        if (!card) continue;
-        return {
-          id: card.id, title: card.title, number: card.number, kind: card.canvasKind || card.kind, app: app.app, work: app.work,
-        };
-      }
-      return null;
+      const app = apps.find(candidate => candidate.row === row);
+      if (!app || !isStandaloneWork(app.app, app.work)) return null;
+      return { id: `a-${app.work}`, title: app.title, number: app.number, kind: 'app', app: app.app, work: app.work };
     },
-    onBoard: (id) => isOnBoard(id),
-    place: (card, at) => { void addCards(card.app, card.work, [card.id], { focus: false, at }); },
+    onBoard: (id) => Boolean(appViewForWork(id.replace(/^a-/, ''))),
+    place: (card, at) => { void setAppView(card.app, card.work, 'open', { at, focus: false }).then(announce); },
     camera: () => canvasApi()?.getCamera() ?? null,
     viewport: () => document_.querySelector<HTMLElement>('[data-forma-canvas-viewport]'),
     footprint: cardFootprint,

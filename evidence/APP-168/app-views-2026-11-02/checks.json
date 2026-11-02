@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-02",
+  "scope": "Frozen app source; local synthetic loopback qualification only. No AWS action or hosted claim.",
+  "repository_groups": 21,
+  "all_groups_passed_after_relevant_reruns": true,
+  "admin_tests": 164,
+  "rust_library_tests": 376,
+  "rust_binary_ssr_tests": 8,
+  "rust_doc_tests": 3,
+  "browser_checks": 19,
+  "manifest_sha256": "d7c49c2b83bf728e1a8920a4eb8bf4b825e339499f929324c84a5da6f794e796",
+  "build": "6e3c0ff6d1682fe3",
+  "commands": [
+    "just check",
+    "just check admin fmt clippy clippy-dev test http-smoke board",
+    "just check admin",
+    "node app/scripts/app_view_browser.mjs",
+    "node app/scripts/app_view_member_browser.mjs",
+    "python3 Tickets/_tools/board.py check",
+    "git diff --check"
+  ],
+  "rerun_reason": "Full check caught the obsolete SSR internal-card count assertion. The affected rerun caught the obsolete Card view label expectation. Both expectations were updated to the delivered UX; Rust/SSR/smoke and final 164-test admin/native build passed. Unchanged groups were not repeated.",
+  "raw_local_log_sha256": {
+    "app-view-check.log": "bccfa43103b782265561ab04814f04938d8d12b549c966d19b4dd7c24d971e4c",
+    "app-view-final-check.log": "edab77e1874211b4c2fcb491fe1613cca3bb7f8b07fec328377ca2ec3271370d",
+    "app-view-admin-build-final.log": "0e22d0fed3cddc97cb381b174681e2de6bd34a0a039eee12fd8833cacb49edcf"
+  },
+  "review": "Independent cross-review of controller ownership/restoration, Library/commands, board placement/races, exact IDs and authorized routes, hidden component/publication boundaries, Focus and real form nodes, and saved-card lifecycle. Reported findings repaired and focused regressions added."
+}

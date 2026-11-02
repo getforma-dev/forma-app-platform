@@ -36,7 +36,7 @@
 // (`previewNewCard`, the answer's record set); nothing is added without a
 // click on **Add as new card**.
 import { addressFor, fillBar } from './address-chip';
-import { addCards, focusCard, isDemoCanvas, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
+import { addCards, ensureAppGroup, focusCard, isDemoCanvas, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
 import { madeCardRequest, madeLine, madeView, newCardId, removeCard, shareCard, storeCard, type From, type StoredCard } from './cards';
 import { appForm, findAddress, findAppAddress, findCardShortcut, findVerb, type Address, type CanvasCommand } from './command-registry';
 import { isDismissKey, showDockCard } from './dock-card';
@@ -48,7 +48,8 @@ import {
   appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips, themeName,
   type AppTheme, type CardView, type Group, type RecordReceipt, type Shaped, type Table,
 } from './talk-view';
-import { frameCardsOfItem, isUniteItem } from './unite';
+import { frameCardsOfItem, isUniteItem, setAppView } from './unite';
+import { appComponentVisible } from '../presentation/presentation';
 import type { WidgetCard } from './widgets/card';
 import { widgetFor, widgetKind, widgetOfItem } from './widgets/index';
 import { validState, type WidgetKind, type WidgetState } from './widgets/state';
@@ -575,12 +576,18 @@ function confirmDock(title: string, chipList: string[], buttons: { label: string
 
 async function shapeCard(target: Extract<Target, { kind: 'card' }>, words: string, report: Report): Promise<void> {
   const row = target.card;
-  if (!isOnBoard(row.id)) await addCards(row.app.app, row.app.work, [row.id], { focus: false });
-  const card = cardElement(row.id);
+  const group = await ensureAppGroup(row.app.app, row.app.work);
+  const card = group?.cards.find(card => card.dataset.card === row.id);
   if (!card) {
     report(`${target.address} could not be placed to shape it.`);
     return;
   }
+  if (!appComponentVisible(row.app.app, row.app.work, card)) {
+    report('That component is hidden in your views on this browser. Change your view preferences in Edit app to show it.');
+    return;
+  }
+  if (!isOnBoard(row.id) || card.closest('[hidden], [inert]')) await setAppView(row.app.app, row.app.work, 'open', { focus: false });
+  if (!isOnBoard(row.id)) { report(`${target.address} could not be placed to shape it.`); return; }
   report(`Shaping /${target.address}…`);
   const source = sourceOf(card);
   const table = await loadTable(source);
