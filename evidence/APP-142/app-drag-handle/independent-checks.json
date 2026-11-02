@@ -1,0 +1,115 @@
+{
+  "command": "just check",
+  "source_scope": "PR41 original production source plus normal merge of trunk07ea5; evidence-only changes follow",
+  "exit_code": 0,
+  "steps": [
+    {
+      "name": "fmt",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "admin",
+      "seconds": 9,
+      "passed": true
+    },
+    {
+      "name": "clippy",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "clippy-dev",
+      "seconds": 0,
+      "passed": true
+    },
+    {
+      "name": "test",
+      "seconds": 9,
+      "passed": true
+    },
+    {
+      "name": "http-smoke",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "msrv",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "catalog",
+      "seconds": 0,
+      "passed": true
+    },
+    {
+      "name": "infra",
+      "seconds": 10,
+      "passed": true
+    },
+    {
+      "name": "py-scripts",
+      "seconds": 6,
+      "passed": true
+    },
+    {
+      "name": "py-runtime",
+      "seconds": 235,
+      "passed": true
+    },
+    {
+      "name": "shared-broker",
+      "seconds": 11,
+      "passed": true
+    },
+    {
+      "name": "py-qualification",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "py-app-scripts",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "py-ops",
+      "seconds": 11,
+      "passed": true
+    },
+    {
+      "name": "py-promotion",
+      "seconds": 3,
+      "passed": true
+    },
+    {
+      "name": "py-infra",
+      "seconds": 5,
+      "passed": true
+    },
+    {
+      "name": "schema-pins",
+      "seconds": 0,
+      "passed": true
+    },
+    {
+      "name": "contracts",
+      "seconds": 8,
+      "passed": true
+    },
+    {
+      "name": "board",
+      "seconds": 1,
+      "passed": true
+    },
+    {
+      "name": "bash-n",
+      "seconds": 0,
+      "passed": true
+    }
+  ],
+  "failed": 0,
+  "skipped": 0,
+  "private_log_sha256": "e261ff586c63cba178bf3defb12b021f0f127268d199cd7d601fcf388772d2d5"
+}
