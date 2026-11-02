@@ -45,7 +45,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
   ]],
   ['Arrange', [
     ['Select', 'Click a header · Shift + click to add', '—'],
-    ['Move', 'Drag the header', 'Arrow keys · Shift: 10 px'],
+    ['Move', 'Drag an item’s header or background; controls stay interactive', 'Arrow keys · Shift: 10 px'],
     ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
     ['Open an app', 'App → Open, Library → Open, or ⋯ → Open app', 'U · /unite expenses'],
     ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F · /focus'],
@@ -59,7 +59,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['A brief of a folder', 'Folder → Brief me', '/folder 1 formation brief me'],
   ]],
   ['Move around', [
-    ['Pan', 'Scroll, or drag with the hand tool', 'Space + drag'],
+    ['Pan', 'Scroll the canvas, or drag with Hand; scroll inside an app to read it', 'Space + drag (outside text entry)'],
     ['Zoom', 'The zoom menu (100% ▾), or pinch', `${MOD} + = · ${MOD} + −`],
     ['100% · fit · selection', 'The zoom menu', 'Shift + 0 · 1 · 2'],
     ['Move tool · hand tool', 'The arrow · hand in the toolbar', 'V · H'],

@@ -381,7 +381,7 @@ export function restoreAppViews(): Promise<void> {
 function bindResize(document_: Document): void {
   document_.addEventListener('pointerdown', event => {
     const handle = (event.target as Element | null)?.closest<HTMLElement>('[data-unite-resize]');
-    if (!handle || event.button !== 0) return;
+    if (!handle || event.button !== 0 || handle.closest('.is-hand-tool, .is-pan-ready')) return;
     const frame = frames.get(handle.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
     const canvas = board.canvas(); if (!frame || !canvas || frame.mode !== 'open') return;
     event.preventDefault(); event.stopPropagation();

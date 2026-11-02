@@ -26,7 +26,7 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
 }
 
@@ -35,7 +35,8 @@
   outline-offset: -2px;
 }
 
-[data-forma-canvas] .forma-canvas-viewport.is-pan-ready,
+[data-forma-canvas] .forma-canvas-viewport.is-pan-ready { cursor: grab; }
+
 [data-forma-canvas] .forma-canvas-viewport.is-panning,
 [data-forma-canvas] .forma-canvas-viewport.is-navigating {
   cursor: grabbing;
@@ -209,17 +210,11 @@
   transition-duration: 90ms;
 }
 
-[data-forma-canvas] .forma-canvas-viewport.is-pan-ready [data-forma-runtime-host],
-[data-forma-canvas] .forma-canvas-viewport.is-panning [data-forma-runtime-host],
-[data-forma-canvas] .forma-canvas-viewport.is-dragging-widget [data-forma-runtime-host],
-[data-forma-canvas] .forma-canvas-viewport.is-navigating [data-forma-runtime-host] {
-  pointer-events: none;
-}
-
 [data-forma-canvas] .forma-canvas-viewport.is-pan-ready .widget-instance,
+[data-forma-canvas] .forma-canvas-viewport.is-pan-ready .widget-drag-handle { cursor: grab; }
+
 [data-forma-canvas] .forma-canvas-viewport.is-panning .widget-instance,
 [data-forma-canvas] .forma-canvas-viewport.is-navigating .widget-instance,
-[data-forma-canvas] .forma-canvas-viewport.is-pan-ready .widget-drag-handle,
 [data-forma-canvas] .forma-canvas-viewport.is-panning .widget-drag-handle,
 [data-forma-canvas] .forma-canvas-viewport.is-navigating .widget-drag-handle {
   cursor: grabbing;
@@ -275,7 +270,7 @@
   border-radius: 999px;
   background: transparent;
   color: #69738d;
-  cursor: grab;
+  cursor: default;
   pointer-events: auto;
   touch-action: none;
   user-select: none;

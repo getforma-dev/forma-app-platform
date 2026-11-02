@@ -236,6 +236,14 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 - **Add:** the Library's **Add** button, the verbs above, or a sentence. Clicking and typing always do the same thing.
 - **Remove:** the **×** on a card or widget, **Delete** on the selection, or the Library's **Remove** button. Removing only takes something off your canvas; it never deletes data. There is no `/remove`. A card made by you or a pinned answer also has **Remove**, which deletes it for good (it holds no record; APP-123).
 
+## Move and Hand tools
+
+Move (`V`, arrow cursor) drags an item's header or noninteractive background. An app moves as one object in App Card, Stack and Open views. Dragging empty canvas with a mouse leaves it still. Buttons, links, fields, editable text, resize handles and scrollable content keep their normal behavior.
+
+Hand (`H`, open hand cursor) drags the canvas, including when the gesture starts over an item. It does not move the item or activate its controls. Hold Space for temporary Hand; release it to return to the selected tool. Space works immediately after clicking Move/Hand. Text fields and other focused controls keep their native Space behavior. The hand closes during a pan, and opening an app by double-click remains available in Move.
+
+Wheel/two-finger scrolling over the canvas pans it. Over scrollable item content it scrolls that content, including at its edges, in either tool. Ctrl/Cmd + wheel still zooms. Middle-button drag and touch drag on the background also pan.
+
 ## Shortcuts that are not obvious
 
 | Keys | Does |

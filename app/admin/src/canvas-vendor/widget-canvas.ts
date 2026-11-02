@@ -343,6 +343,7 @@ export class WidgetCanvas {
   #spacePressed = false;
   // Local change (APP-104): the hand tool, a persistent Space.
   #panMode = false;
+  #suppressPointerClick = false;
   #changeFrame = 0;
   #cameraFrame = 0;
   #navigatorFrame = 0;
@@ -1039,6 +1040,7 @@ export class WidgetCanvas {
 
   /** Local change (APP-104): the hand tool; a primary drag anywhere pans. */
   setPanMode(on: boolean): void {
+    this.cancelGestures();
     this.#panMode = on;
     this.#viewport.classList.toggle("is-hand-tool", on);
   }
@@ -1680,12 +1682,16 @@ export class WidgetCanvas {
     for (const handle of item.querySelectorAll<HTMLElement>(".widget-drag-handle, [data-canvas-drag-handle]")) {
       this.#bindDragHandle(item, handle, binding.signal);
     }
+    // Delegate body and newly inserted component headers to the whole item.
+    this.#bindDragHandle(item, item, binding.signal);
   }
 
   #bindDragHandle(item: HTMLElement, handle: HTMLElement, signal: AbortSignal): void {
     const extra = !handle.classList.contains("widget-drag-handle");
     handle.addEventListener("pointerdown", (event) => {
       if (extra && eventOriginatesInInteractiveControl(event)) return;
+      const explicitHandle = (event.target as Element | null)?.closest?.('[data-canvas-drag-handle]');
+      if (handle === item && !explicitHandle && scrollsNatively(event.target, item)) return;
       // Local change (APP-106): a card header outlives the item it was first
       // bound for (a unite frame, a break apart or the focus view moves the
       // card); only a mounted item that still holds the handle may drag.
@@ -1693,6 +1699,7 @@ export class WidgetCanvas {
       if (
         this.#spacePressed ||
         this.#panMode ||
+        this.#interactionBlocked() ||
         event.button !== 0 ||
         (event.pointerType !== "" && !event.isPrimary) ||
         this.#widgetDragPointerId !== null ||
@@ -1703,6 +1710,7 @@ export class WidgetCanvas {
       event.stopPropagation();
       this.#stopCameraAnimation();
       this.setActive(item);
+      item.focus({ preventScroll: true });
       const original = this.getItemState(item);
       const pointerId = event.pointerId;
       this.#widgetDragPointerId = pointerId;
@@ -1714,7 +1722,6 @@ export class WidgetCanvas {
       let moveFrame = 0;
       let moved = false;
       let ended = false;
-      let usesWindowFallback = false;
 
       const renderMove = (): void => {
         moveFrame = 0;
@@ -1729,6 +1736,10 @@ export class WidgetCanvas {
         if (!moved && Math.hypot(deltaX, deltaY) <= 5) return;
         if (!moved) {
           moved = true;
+          this.#suppressPointerClick = true;
+          // Capture only an actual drag: stationary clicks/double-clicks
+          // must keep their original component/title target.
+          try { handle.setPointerCapture(pointerId); } catch { /* Window listeners also cover synthetic pointers. */ }
           this.#viewport.classList.add("is-dragging-widget");
           item.classList.add("is-dragging");
           this.#onActiveDragStateChange(item, true, null);
@@ -1752,15 +1763,10 @@ export class WidgetCanvas {
         }
         if (moveFrame) this.#window.cancelAnimationFrame(moveFrame);
         if (moved) renderMove();
-        handle.removeEventListener("pointermove", onMove);
-        handle.removeEventListener("pointerup", onEnd);
-        handle.removeEventListener("pointercancel", onEnd);
         handle.removeEventListener("lostpointercapture", onEnd);
-        if (usesWindowFallback) {
-          this.#window.removeEventListener("pointermove", onMove);
-          this.#window.removeEventListener("pointerup", onEnd);
-          this.#window.removeEventListener("pointercancel", onEnd);
-        }
+        this.#window.removeEventListener("pointermove", onMove);
+        this.#window.removeEventListener("pointerup", onEnd);
+        this.#window.removeEventListener("pointercancel", onEnd);
         if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
         if (moved) {
           // The final coordinates are already rendered. Mark them durable now; only the
@@ -1783,19 +1789,10 @@ export class WidgetCanvas {
       };
       const onEnd = (endEvent: PointerEvent): void => finish(endEvent);
       this.#cancelWidgetDragGesture = () => finish(null);
-      try {
-        handle.setPointerCapture(pointerId);
-        handle.addEventListener("pointermove", onMove);
-        handle.addEventListener("pointerup", onEnd);
-        handle.addEventListener("pointercancel", onEnd);
-        handle.addEventListener("lostpointercapture", onEnd);
-      } catch {
-        // Synthetic events and older pointer implementations need a window fallback.
-        usesWindowFallback = true;
-        this.#window.addEventListener("pointermove", onMove);
-        this.#window.addEventListener("pointerup", onEnd);
-        this.#window.addEventListener("pointercancel", onEnd);
-      }
+      handle.addEventListener("lostpointercapture", onEnd);
+      this.#window.addEventListener("pointermove", onMove);
+      this.#window.addEventListener("pointerup", onEnd);
+      this.#window.addEventListener("pointercancel", onEnd);
     }, { signal });
 
     if (extra) return;
@@ -1847,6 +1844,12 @@ export class WidgetCanvas {
   }
 
   #bindCameraInteractions(): void {
+    // Controls may stop pointerdown at the outer canvas host to preserve
+    // their native focus. Reset before that guard, for every fresh gesture.
+    this.#document.addEventListener("pointerdown", () => {
+      this.#suppressPointerClick = false;
+    }, { capture: true, signal: this.#abort.signal });
+
     this.#viewport.addEventListener("keydown", (event) => {
       if (
         event.composedPath()[0] !== this.#viewport ||
@@ -1885,22 +1888,18 @@ export class WidgetCanvas {
     }, { signal: this.#abort.signal });
 
     this.#document.addEventListener("keydown", (event) => {
-      const activeElement = this.#document.activeElement;
-      const canvasOwnsFocus = activeElement === this.#viewport ||
-        (activeElement !== null && this.#viewport.contains(activeElement));
-      // Local change (APP-104): Space pans when nothing else holds focus too.
-      const nothingFocused = activeElement === null || activeElement === this.#document.body;
+      // The tool buttons keep focus after a click. Space there temporarily
+      // pans too; other controls retain their native keyboard activation.
+      const toolFocused = this.#document.activeElement?.matches('[data-tool="move"], [data-tool="hand"]');
       if (
-        (canvasOwnsFocus || nothingFocused) &&
         event.code === "Space" &&
-        !event.repeat &&
         !event.defaultPrevented &&
         !event.isComposing &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
         !this.#interactionBlocked() &&
-        !eventOriginatesInInteractiveControl(event)
+        (toolFocused || !eventOriginatesInInteractiveControl(event))
       ) {
         event.preventDefault();
         this.#spacePressed = true;
@@ -1920,21 +1919,28 @@ export class WidgetCanvas {
     this.#viewport.addEventListener("pointerdown", (event) => {
       const target = event.target as HTMLElement;
       const onBackground = target === this.#viewport || target === this.#stage;
-      const shouldPan = event.button === 1 || this.#spacePressed ||
-        (event.button === 0 && (onBackground || this.#panMode));
+      const shouldPan = event.button === 1 || (event.button === 0 &&
+        (this.#spacePressed || this.#panMode || (onBackground && event.pointerType === "touch")));
+      if (!shouldPan && onBackground && event.button === 0 && !this.#interactionBlocked()) {
+        this.clearActive();
+        this.#viewport.focus({ preventScroll: true });
+      }
       if (
         !shouldPan ||
+        this.#interactionBlocked() ||
         (event.pointerType !== "" && !event.isPrimary) ||
         this.#cameraGesturePointerId !== null ||
         this.#widgetDragPointerId !== null
       ) return;
       event.preventDefault();
+      event.stopPropagation();
+      this.#suppressPointerClick = true;
+      this.#stopCameraAnimation();
       const pointerId = event.pointerId;
       this.#cameraGesturePointerId = pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
       const origin = { ...this.#camera };
-      const clearsSelection = event.button === 0 && onBackground && !this.#spacePressed && !this.#panMode;
       let moved = false;
 
       const onMove = (moveEvent: PointerEvent): void => {
@@ -1959,9 +1965,7 @@ export class WidgetCanvas {
         this.#window.removeEventListener("pointercancel", onEnd);
         this.#viewport.classList.remove("is-panning");
         if (this.#cameraGesturePointerId === pointerId) this.#cameraGesturePointerId = null;
-        if (clearsSelection && !moved && endEvent?.type === "pointerup") {
-          this.clearActive();
-        } else if (moved) {
+        if (moved) {
           this.#commitChange();
         }
       };
@@ -1970,7 +1974,18 @@ export class WidgetCanvas {
       this.#window.addEventListener("pointermove", onMove);
       this.#window.addEventListener("pointerup", onEnd);
       this.#window.addEventListener("pointercancel", onEnd);
-    }, { signal: this.#abort.signal });
+    }, { capture: true, signal: this.#abort.signal });
+
+    // A pan (including a stationary Hand click) must never fire an app
+    // action. Nor may the click generated after an item drag open it.
+    for (const type of ["click", "dblclick", "auxclick"] as const) {
+      this.#viewport.addEventListener(type, (event) => {
+        if (event.detail > 0 && (this.#panMode || this.#spacePressed || this.#suppressPointerClick)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, { capture: true, signal: this.#abort.signal });
+    }
 
     // Local change (APP-104): Figma's mapping. A plain wheel or two-finger
     // scroll pans (Shift: horizontally); Ctrl/Cmd + wheel and a trackpad
@@ -1992,7 +2007,7 @@ export class WidgetCanvas {
         deltaX = deltaY;
         deltaY = 0;
       }
-      if (scrollsNatively(event.target, this.#viewport, deltaX, deltaY)) return;
+      if (scrollsNatively(event.target, this.#viewport)) return;
       event.preventDefault();
       this.#stopCameraAnimation();
       this.#cameraFramingTarget = null;
@@ -2005,7 +2020,7 @@ export class WidgetCanvas {
 
   #clearSpacePanState(): void {
     this.#spacePressed = false;
-    this.#viewport.classList.remove("is-pan-ready", "is-panning");
+    this.#viewport.classList.remove("is-pan-ready");
   }
 
   #cancelLostInputState(): void {
@@ -2587,20 +2602,18 @@ function compareRuntimeAdmission(
 
 /**
  * Local change (APP-104): whether an element between the wheel's target and
- * the viewport can still scroll in the wheel's direction (a card's table or
- * receipt), so the wheel scrolls it instead of panning.
+ * the viewport owns native scrolling (including its scrollbar and edges).
+ * Keep that surface interactive instead of dragging it or moving the canvas
+ * when the reader reaches the end of a table, receipt or open app.
  */
-function scrollsNatively(target: EventTarget | null, viewport: HTMLElement, deltaX: number, deltaY: number): boolean {
-  let node = target instanceof Element ? target : null;
+function scrollsNatively(target: EventTarget | null, viewport: HTMLElement): boolean {
+  const window = viewport.ownerDocument.defaultView!;
+  let node = target instanceof window.Element ? target : null;
   while (node && node !== viewport) {
-    if (node instanceof HTMLElement) {
-      const style = getComputedStyle(node);
-      if (deltaY !== 0 && /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
-        if (deltaY < 0 ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight - 1) return true;
-      }
-      if (deltaX !== 0 && /(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1) {
-        if (deltaX < 0 ? node.scrollLeft > 0 : node.scrollLeft + node.clientWidth < node.scrollWidth - 1) return true;
-      }
+    if (node instanceof window.HTMLElement) {
+      const style = window.getComputedStyle(node);
+      if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) return true;
+      if (/(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1) return true;
     }
     node = node.parentElement;
   }

@@ -816,12 +816,12 @@ function Canvas(props: CanvasProps) {
       </aside>
       <footer class="cv-dock">
         <div class="cv-tools" role="toolbar" aria-label="Canvas tools" data-tools hidden>
-          <button type="button" class="cv-tool" data-tool="move" aria-pressed="true" aria-label="Move" title="Move (V)">
+          <button type="button" class="cv-tool" data-tool="move" aria-pressed="true" aria-label="Move" title="Move items (V) · Drag an item’s header or background; controls stay interactive">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path d="M3.5 2.2l9.2 5.2-4 1.1-1.9 3.9z" />
             </svg>
           </button>
-          <button type="button" class="cv-tool" data-tool="hand" aria-pressed="false" aria-label="Hand" title="Hand (H)">
+          <button type="button" class="cv-tool" data-tool="hand" aria-pressed="false" aria-label="Hand" title="Pan canvas (H) · Hold Space for temporary Hand">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path d="M5.2 8.4V3.6a1 1 0 012 0v3.6M7.2 7V2.8a1 1 0 012 0V7m0-3.2a1 1 0 012 0V7.6m0-2.4a1 1 0 012 0v4.2c0 2.6-1.8 4.6-4.4 4.6-1.6 0-2.6-.6-3.5-1.8L3 9.6a1 1 0 011.6-1.2l.6.8" />
             </svg>
