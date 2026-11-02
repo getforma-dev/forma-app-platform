@@ -4,6 +4,8 @@ This is the single reference for the canvas model and its grammar. The decisions
 
 **Decision precedence (2026-11-02):** [ADR-018: Whole apps, independent cards and presentation views](../architecture/ADR-018-WHOLE-APP-VIEWS.md) supersedes this page's older instructions for placing, separating or removing individual app components. An app is one canvas object; **App Card**, **Stack** and **Open** are views of that same app, preserving its identity, drafts, actions and permissions. The Library separates **Apps**, **Widgets** and **Cards**; app components stay inside their app. The November 2 file-card decision below extends that model for uploaded spreadsheets. Earlier APP-120–124 descriptions remain historical context where explicitly superseded; they do not override these later decisions. This records the local iteration's product rules, not a hosted release or deployment claim.
 
+**Window follow-through (2026-11-02):** [App windows and file cards](../architecture/CANVAS-WINDOWS.md) refines the shell into a title bar, toolbar, component body and footer. Its view names are **Card**, **Browse** and **Open**; Browse replaces the earlier app label Stack while keeping stored layout compatibility. Summary opens as an attached, closable app panel. The whole-app identity and permissions above are unchanged.
+
 ## The one sentence
 
 **Type `/` and a verb to change the canvas, `/` and a name to tell that thing something, or just type a sentence.**

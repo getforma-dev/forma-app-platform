@@ -7,7 +7,9 @@ import { loadLayout, loadPlaced, loadStacks, loadUnited, saveUnited, migrateAppV
 import { findApps } from './library';
 import { pageSize } from './page';
 import { dismissSharing, openSharing } from '../sharing/dialog';
-import { el, originKind } from './render';
+import { el } from './render';
+import { buildAppWindow, appWindowIcon } from './app-window';
+import { toggleAppSummary, disposeAppSummary } from './explain';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 import { releaseCards } from './stacks';
 import { declaredLayout } from './page-layout';
@@ -17,7 +19,7 @@ type Spot = {x: number; y: number};
 type Frame = {
   work: string; app: string; title: string; cards: string[];
   item: HTMLElement; root: HTMLElement; mode: AppViewMode; top: number;
-  openSize: {width: number; height: number}; previous: Map<string, Spot>;
+  openSize: {width: number; height: number}; baseSize: {width: number; height: number}; previous: Map<string, Spot>;
 };
 export type AppView = Pick<Frame, 'app'|'work'|'mode'|'top'|'item'> & {cards: string[]};
 export type AppViewOptions = {at?: Spot; focus?: boolean; preserveMode?: boolean; restore?: StoredUnite; isCurrent?: () => boolean};
@@ -90,42 +92,6 @@ function arrange(cards: HTMLElement[]): { kpi: HTMLElement[]; main: HTMLElement[
   return { kpi, main: primary ? [primary, ...views] : views, side };
 }
 
-function buildFrame(document_: Document, app: string, work: string, title: string, origins: string[], canShare: boolean, canEdit: boolean, presentation: string): HTMLElement {
-  const standalone = isStandaloneWork(app, work);
-  const picker = el(document_, 'div', {class: 'cv-app-view-picker', role: 'group', 'aria-label': 'App view'},
-    ...(['face', 'stack', 'open'] as const).map(mode => el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-view-mode': mode, 'aria-pressed': 'false'}, mode === 'face' ? 'App Card' : mode === 'stack' ? 'Stack' : 'Open')));
-  picker.hidden = standalone;
-  const head = el(document_, 'header', {class: 'cv-unite-head', 'data-canvas-drag-handle': ''},
-    el(document_, 'span', {class: 'cv-unite-mark', 'aria-hidden': 'true'}),
-    el(document_, 'div', {class: 'cv-unite-heading'}, el(document_, 'h2', {class: 'cv-unite-title', title}, title),
-      el(document_, 'p', {class: 'cv-origins cv-unite-origins', 'aria-label': 'How this was assembled'},
-        ...origins.map(text => el(document_, 'span', {class: 'cv-origin', 'data-origin': originKind(text)}, text)))),
-    el(document_, 'span', {class: 'cv-unite-count', 'data-unite-count': ''}), picker,
-    el(document_, 'div', {class: 'cv-unite-actions', role: 'group', 'aria-label': standalone ? 'Card' : 'App'},
-      el(document_, 'a', {class: 'cv-secondary', href: `/w/${app}/${work}`, target: '_blank', rel: 'noopener', title: 'Open in a new tab'}, 'Open page ↗'),
-      el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-unite-ask': ''}, standalone ? 'Ask about this card' : 'Ask about this app'),
-      el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-unite-focus': '', title: 'Focus · F'}, 'Focus'),
-      ...(canEdit ? [el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-edit-presentation': '', 'data-app': app, 'data-work': work}, standalone ? 'Edit card' : 'Edit app')] : []),
-      ...(canShare ? [el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-unite-share': ''}, 'Share')] : []),
-      el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-view-remove': ''}, 'Remove from canvas')));
-  const root = el(document_, 'article', {class: 'cv-unite', 'data-unite': work, 'data-kind': 'unite', 'data-presentation': presentation, 'data-app': app, 'data-work': work, 'aria-label': title},
-    head,
-    el(document_, 'div', {class: 'cv-app-face', 'data-app-view-face': ''}),
-    el(document_, 'div', {class: 'cv-app-stack', 'data-app-view-stack': ''},
-      el(document_, 'div', {class: 'cv-app-stack-nav', role: 'group', 'aria-label': 'App parts'},
-        el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-stack-step': '-1', 'aria-label': 'Previous part'}, '‹'),
-        el(document_, 'span', {'data-app-stack-position': '', 'aria-live': 'polite'}),
-        el(document_, 'button', {type: 'button', class: 'cv-secondary', 'data-app-stack-step': '1', 'aria-label': 'Next part'}, '›')),
-      el(document_, 'div', {'data-app-stack-holder': ''})),
-    el(document_, 'div', {'data-app-view-open': ''},
-      el(document_, 'div', {'data-app-presentation-header': ''}),
-      el(document_, 'div', {class: 'cv-unite-grid', 'data-presentation-layout': ''})),
-    el(document_, 'div', {'data-app-view-parking': ''}),
-    el(document_, 'button', {type: 'button', class: 'cv-unite-resize', 'data-unite-resize': '', 'aria-label': 'Resize the app', title: 'Drag to resize this app'}));
-  root.dataset.placementKind = standalone ? 'card' : 'app';
-  const parking = root.querySelector<HTMLElement>('[data-app-view-parking]')!; parking.hidden = true; parking.inert = true;
-  return root;
-}
 /** Puts the cards in their slots; returns them in reading order and the frame's width. */
 function fill(root: HTMLElement, cards: HTMLElement[], layout = ''): { order: HTMLElement[]; width: number } {
   const slots = declaredLayout(cards.map(card => card.dataset.card ?? ''), layout);
@@ -196,11 +162,27 @@ function viewportWorld(): {width: number; height: number} {
 }
 function applySize(frame: Frame, width: number, height: number): void {
   const canvas = board.canvas(); if (!canvas) return;
-  const size = pageSize({width, height}, viewportWorld());
-  canvas.resizeItem(frame.item, size.width, size.height);
-  frame.item.style.height = `${Math.round(size.height)}px`;
+  const viewport = viewportWorld(), size = pageSize({width, height}, viewport);
+  frame.baseSize = size;
+  const companion = !frame.root.querySelector<HTMLElement>('[data-app-companion]')!.hidden;
+  const beside = viewport.width >= 720;
+  const total = pageSize({width: size.width + (companion && beside ? 336 : 0), height: companion ? Math.max(size.height, beside ? 420 : 620) : size.height}, viewport);
+  frame.root.classList.toggle('has-companion', companion);
+  frame.root.classList.toggle('is-companion-below', companion && !beside);
+  canvas.resizeItem(frame.item, total.width, total.height);
+  frame.item.style.height = `${Math.round(total.height)}px`;
   frame.root.classList.add('is-sized');
-  if (frame.mode === 'open') { frame.openSize = size; layoutPage(frame.root, size.width); }
+  if (frame.mode === 'open') { frame.openSize = size; layoutPage(frame.root, total.width - (companion && beside ? 336 : 0)); }
+}
+/** Expanding a window should keep its controls reachable without moving its saved position. */
+function revealFrame(frame: Frame): void {
+  const viewport = documentRef?.querySelector<HTMLElement>('[data-forma-canvas-viewport]');
+  if (!viewport || frames.get(frame.work) !== frame || !frame.item.isConnected) return;
+  // Focusing an offscreen control can scroll an overflow-hidden viewport.
+  // This surface is positioned by its camera; native offsets would double-pan it.
+  viewport.scrollLeft = 0; viewport.scrollTop = 0;
+  const bounds = viewport.getBoundingClientRect(), rect = frame.item.getBoundingClientRect();
+  if (rect.left < bounds.left + 16 || rect.right > bounds.right - 16 || rect.top < bounds.top + 16 || rect.bottom > bounds.bottom - 56) board.canvas()?.centerItem(frame.item);
 }
 function releaseFocus(frame: Frame): void {
   const card = documentRef?.querySelector<HTMLElement>('#cv-focus .cv-card[data-card]');
@@ -217,11 +199,13 @@ function renderMode(frame: Frame, mode: AppViewMode): void {
   const standalone = isStandaloneWork(frame.app, frame.work);
   frame.root.dataset.placementKind = standalone ? 'card' : 'app';
   frame.root.querySelector<HTMLElement>('.cv-app-view-picker')!.hidden = standalone;
+  frame.root.querySelector<HTMLElement>('[data-app-summary]')!.hidden = standalone;
+  for (const control of frame.root.querySelectorAll<HTMLElement>('.cv-window-control[data-app-view-mode]')) control.hidden = standalone;
   frame.root.querySelector('.cv-unite-actions')?.setAttribute('aria-label', standalone ? 'Card' : 'App');
   const ask = frame.root.querySelector('[data-unite-ask]');
-  if (ask) ask.textContent = standalone ? 'Ask about this card' : 'Ask about this app';
+  if (ask) { ask.setAttribute('aria-label', standalone ? 'Ask about this card' : 'Ask about this app'); ask.setAttribute('title', standalone ? 'Ask about this card' : 'Ask about this app'); }
   const edit = frame.root.querySelector('[data-edit-presentation]');
-  if (edit) edit.textContent = standalone ? 'Edit card' : 'Edit app';
+  if (edit) { edit.setAttribute('aria-label', standalone ? 'Card settings' : 'App settings'); edit.setAttribute('title', standalone ? 'Card settings' : 'App settings'); }
   frame.root.dataset.appView = frame.mode; frame.item.dataset.appView = frame.mode;
   for (const name of ['face', 'stack', 'open'] as const) {
     const host = frame.root.querySelector<HTMLElement>(`[data-app-view-${name}]`)!;
@@ -232,17 +216,24 @@ function renderMode(frame: Frame, mode: AppViewMode): void {
   resize.hidden = frame.mode !== 'open';
   if (frame.mode === 'face') {
     const host = frame.root.querySelector<HTMLElement>('[data-app-view-face]')!;
-    const face = visibleCards(frame).find(card => card.dataset.kind === 'app');
-    const summary = parsePresentation(board.group(frame.work)?.presentation).description || 'Open this app to use its components.';
-    host.replaceChildren(el(frame.root.ownerDocument, 'p', {class: 'cv-app-face-summary'}, summary), ...(face ? [face] : []));
-    applySize(frame, PHONE, 360);
+    const document_ = frame.root.ownerDocument;
+    const components = visibleCards(frame).filter(card => card.dataset.kind !== 'app');
+    const summary = parsePresentation(board.group(frame.work)?.presentation).description || 'Open your workspace to explore the data and use its tools.';
+    const labels: Record<string, string> = {summary: 'Metrics', chart: 'Charts', table: 'Tables', status: 'Breakdown', timeline: 'Timeline', ledger: 'Ledger', records: 'Records', form: 'Forms'};
+    const kinds = [...new Set(components.map(card => labels[card.dataset.kind ?? ''] ?? 'Data'))];
+    host.replaceChildren(
+      el(document_, 'div', {class: 'cv-app-card-heading'}, el(document_, 'span', {class: 'cv-app-card-mark', 'aria-hidden': 'true'}, appWindowIcon(document_, 'app')), el(document_, 'h3', {'data-app-face-title': ''}, frame.title)),
+      el(document_, 'p', {class: 'cv-app-face-summary'}, summary),
+      el(document_, 'div', {class: 'cv-app-card-bottom'}, el(document_, 'div', {class: 'cv-app-card-kinds'}, ...kinds.slice(0, 3).map(kind => el(document_, 'span', {}, kind))),
+        el(document_, 'button', {type: 'button', class: 'cv-app-open-button', 'data-app-view-mode': 'open'}, 'Open app', appWindowIcon(document_, 'external'))));
+    applySize(frame, PHONE, 300);
   } else if (frame.mode === 'stack') {
     const visible = visibleCards(frame);
     const card = visible.find(card => card.dataset.card === frame.cards[frame.top]) ?? visible[0];
     frame.top = card ? frame.cards.indexOf(card.dataset.card ?? '') : 0;
     frame.root.querySelector('[data-app-stack-holder]')!.replaceChildren(...(card ? [card] : []));
     const position = frame.root.querySelector('[data-app-stack-position]');
-    if (position) position.textContent = card ? `${visible.indexOf(card) + 1} / ${visible.length}` : 'No visible parts';
+    if (position) position.textContent = card ? `View ${visible.indexOf(card) + 1} of ${visible.length}` : 'No visible components';
     for (const button of frame.root.querySelectorAll<HTMLButtonElement>('[data-app-stack-step]')) button.disabled = visible.length < 2;
     applySize(frame, 460, Math.min(620, viewportWorld().height * 0.8));
   } else {
@@ -252,7 +243,8 @@ function renderMode(frame: Frame, mode: AppViewMode): void {
   }
   applyPresentationTheme(frame.root, board.group(frame.work)?.presentation ?? '{}');
   const count = frame.root.querySelector('[data-unite-count]');
-  if (count) count.textContent = `${cards.length} ${cards.length === 1 ? 'part' : 'parts'}`;
+  const componentCount = visibleCards(frame).filter(card => card.dataset.kind !== 'app').length;
+  if (count) count.textContent = `${componentCount} ${componentCount === 1 ? 'component' : 'components'}`;
   for (const restore of scrolls) restore();
   runGroup(frame.work);
 }
@@ -299,12 +291,12 @@ async function setAppViewNow(app: string, work: string, mode: AppViewMode, optio
     const ids = cards.map(card => card.dataset.card ?? '').filter(Boolean);
     releaseCards(ids);
     for (const id of ids) board.lift(id);
-    const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare, group.canEditPresentation, group.presentation);
+    const root = buildAppWindow(documentRef, app, work, group.title, group.origins, group.canShare, group.canEditPresentation, group.presentation, isStandaloneWork(app, work));
     const item = createCanvasItem({instanceId: `unite-${work}`, displayName: group.title, preferredWidth: PHONE, minHeight: 300, content: root});
     item.classList.add('cv-item', 'cv-item-unite'); item.dataset.unite = work;
     const viewport = viewportWorld();
     frame = {app, work, title: group.title, cards: ids, item, root, mode, top: options.restore?.top ?? 0,
-      previous: new Map(Object.entries(options.restore?.previous ?? {})),
+      previous: new Map(Object.entries(options.restore?.previous ?? {})), baseSize: {width: PHONE, height: 300},
       openSize: {width: options.restore?.width ?? Math.min(WIDE, viewport.width * 0.8), height: options.restore?.height ?? Math.min(680, viewport.height * 0.75)}};
     frames.set(work, frame);
     canvas.mountItem(item, at, {focus: false});
@@ -314,7 +306,7 @@ async function setAppViewNow(app: string, work: string, mode: AppViewMode, optio
   if (!options.restore) removedWorks.delete(work);
   rememberAppPlacement(work); board.pin(work); board.changed(); save();
   if (!options.restore && options.focus !== false) { canvas.centerItem(frame.item); board.flash(frame.item); }
-  const message = `${frame.title} is on your canvas in ${frame.mode === 'face' ? 'App Card' : frame.mode === 'stack' ? 'Stack' : 'Open'} view.`;
+  const message = `${frame.title} is on your canvas in ${frame.mode === 'face' ? 'Card' : frame.mode === 'stack' ? 'Browse' : 'Open'} view.`;
   if (!options.restore) board.announce(message);
   return message;
 }
@@ -341,13 +333,13 @@ export function removeAppView(work: string): boolean {
   retained.delete(work);
   const frame = frames.get(work);
   if (!frame) { save(); return false; }
-  releaseFocus(frame); disposePresentation(frame.root);
+  releaseFocus(frame); disposePresentation(frame.root); disposeAppSummary(work);
   for (const card of cardsOf(frame)) board.park(card);
   frames.delete(work); board.canvas()?.removeItem(frame.item, {selectFallback: false});
   board.changed(); save(); return true;
 }
 /** Kept only as a safe compatibility response for old controls/commands. */
-export function breakApart(_work: string): string { return 'Apps stay together. Choose App Card, Stack or Open view.'; }
+export function breakApart(_work: string): string { return 'Apps stay together. Choose Card, Browse or Open view.'; }
 export function splitFromItem(_item: HTMLElement | null): string { return breakApart(''); }
 export function uniteFromItem(item: HTMLElement | null): Promise<string> | string {
   const view = appViewOf(item);
@@ -386,7 +378,9 @@ function bindResize(document_: Document): void {
     const frame = frames.get(handle.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
     const canvas = board.canvas(); if (!frame || !canvas || frame.mode !== 'open') return;
     event.preventDefault(); event.stopPropagation();
-    const pointer = event.pointerId, origin = canvas.getItemState(frame.item), startX = event.clientX, startY = event.clientY;
+    const shown = canvas.getItemState(frame.item);
+    const beside = frame.root.classList.contains('has-companion') && !frame.root.classList.contains('is-companion-below');
+    const pointer = event.pointerId, origin = {width: shown.width - (beside ? 336 : 0)}, startX = event.clientX, startY = event.clientY;
     const originHeight = frame.item.offsetHeight;
     const move = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer || frame.mode !== 'open') return;
@@ -406,7 +400,7 @@ const UNITE_COMMAND = {slug: 'unite', title: 'Open an app', purpose: 'Open one w
     report(app ? await setAppView(app.app, app.work, 'open') : 'Name an app to open, or choose one from the Library.');
   }};
 // Reserved historical spellings remain a closed refusal, never an extraction.
-const SPLIT_COMMAND = {slug: 'split', title: 'Apps stay together', purpose: 'Choose App Card, Stack or Open instead', aliasOf: 'unite', aliases: ['break', 'fan'],
+const SPLIT_COMMAND = {slug: 'split', title: 'Apps stay together', purpose: 'Choose Card, Browse or Open instead', aliasOf: 'unite', aliases: ['break', 'fan'],
   run: (_text: string, report: Report = () => undefined) => { report(breakApart('')); }};
 function completions(rest: string): Completion[] {
   return findApps(rest).slice(0, 10).map(app => ({badge: app.number, title: app.title, detail: 'Open app', value: `/unite ${app.slug || app.number}`}));
@@ -438,8 +432,17 @@ export function startUnite(document_: Document): void {
     frame.title = detail.name;
     const title = frame.root.querySelector<HTMLElement>('.cv-unite-title');
     if (title) {title.textContent = detail.name; title.title = detail.name;}
+    const faceTitle = frame.root.querySelector('[data-app-face-title]');
+    if (faceTitle) faceTitle.textContent = detail.name;
     frame.root.setAttribute('aria-label', detail.name); frame.item.dataset.widgetName = detail.name;
     frame.item.setAttribute('aria-label', detail.name); frame.item.querySelector('.widget-drag-handle')?.setAttribute('aria-label', `Move ${detail.name}`);
+  });
+  document_.addEventListener('forma:app-companion', event => {
+    const detail = (event as CustomEvent<{app: string; work: string; open: boolean}>).detail;
+    const frame = detail && frames.get(detail.work); if (!frame || frame.app !== detail.app) return;
+    frame.root.querySelector('[data-app-summary]')?.setAttribute('aria-expanded', String(detail.open));
+    applySize(frame, frame.baseSize.width, frame.baseSize.height);
+    if (detail.open) revealFrame(frame);
   });
   document_.addEventListener('forma:presentation-saved', event => {
     const detail = (event as CustomEvent<{app: string; work: string}>).detail; if (!detail) return;
@@ -451,10 +454,13 @@ export function startUnite(document_: Document): void {
   document_.addEventListener('click', event => {
     const target = event.target as Element | null, root = target?.closest<HTMLElement>('.cv-unite');
     const frame = root && frames.get(root.dataset.unite ?? '');
+    if (frame && target?.closest('[data-app-summary]')) {
+      toggleAppSummary(frame.app, frame.work, frame.title, frame.root.querySelector<HTMLElement>('[data-app-companion]')!); return;
+    }
     if (frame && target?.closest('[data-app-view-remove]')) { removeWork(frame.work); return; }
     if (frame && target?.closest('[data-unite-share]')) {openSharing(document_, frame.app, frame.work, frame.title); return;}
     const choice = target?.closest<HTMLElement>('[data-app-view-mode]');
-    if (frame && choice) {void setAppView(frame.app, frame.work, choice.dataset.appViewMode as AppViewMode, {focus: false}); return;}
+    if (frame && choice) {void setAppView(frame.app, frame.work, choice.dataset.appViewMode as AppViewMode, {focus: false}).then(() => revealFrame(frame)); return;}
     const step = target?.closest<HTMLElement>('[data-app-stack-step]');
     if (frame && step) {shuffleAppView(frame.item, Number(step.dataset.appStackStep)); return;}
     const appButton = target?.closest<HTMLElement>('[data-unite-app]');
@@ -464,9 +470,9 @@ export function startUnite(document_: Document): void {
   });
   document_.addEventListener('dblclick', event => {
     const target = event.target as Element | null;
-    if (target?.closest('button,a,input,select,textarea,summary')) return;
+    if (target?.closest('button,a,input,select,textarea,summary,[data-app-companion]')) return;
     const frame = frames.get(target?.closest<HTMLElement>('.cv-unite')?.dataset.unite ?? '');
-    if (frame?.mode === 'face') void setAppView(frame.app, frame.work, 'open', {focus: false});
+    if (frame?.mode === 'face') void setAppView(frame.app, frame.work, 'open', {focus: false}).then(() => revealFrame(frame));
   });
   bindResize(document_); registerCommands([UNITE_COMMAND, SPLIT_COMMAND]); registerCompleter('unite', completions);
 }

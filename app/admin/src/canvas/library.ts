@@ -219,7 +219,7 @@ export function cardAddress(card: CardRow): string {
 
 /** One whole-work view, rather than a count of independently placed parts. */
 export function appStatus(mode: AppViewMode | null): { dot: 'filled' | 'hollow'; label: string } {
-  return { dot: mode ? 'filled' : 'hollow', label: mode ? ({ face: 'App Card view', stack: 'Stack view', open: 'Open view' })[mode] : '' };
+  return { dot: mode ? 'filled' : 'hollow', label: mode ? ({ face: 'Card view', stack: 'Browse view', open: 'Open view' })[mode] : '' };
 }
 
 function setDot(node: Element | null | undefined, on: boolean): void {
@@ -301,7 +301,7 @@ export function buildAppRow(
     ...(entry.slug ? [el(document_, 'code', { class: 'cv-lib-slug cv-addr-chip' }, `/${entry.slug}`)] : []),
     el(document_, 'div', { class: 'cv-lib-view-actions' },
       el(document_, 'button', { type: 'button', class: 'cv-lib-all', 'data-lib-all': '', title: 'Add the whole app as its face card' }, 'Add'),
-      el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Show the whole app in Stack view' }, 'Stack'),
+      el(document_, 'button', { type: 'button', class: 'cv-lib-stack', 'data-lib-stack': '', title: 'Browse the app one component at a time' }, 'Browse'),
       el(document_, 'button', { type: 'button', class: 'cv-lib-stack cv-lib-open-view', 'data-lib-open-view': '', title: 'Open the whole app on the canvas' }, 'Open'),
       el(document_, 'details', { class: 'cv-lib-menu' },
         el(document_, 'summary', { 'aria-label': `Options for ${entry.title}`, title: 'Library options' }, '⋯'),

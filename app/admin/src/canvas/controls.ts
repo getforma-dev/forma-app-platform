@@ -19,7 +19,7 @@
 //   an app card or frame, a widget: `/shape <address> ` in the bar), through
 //   hooks the Ask and Shape modules set (`setTalkActions`);
 // - APP-106 / APP-142: F focuses the selected card (`focus.ts`), U opens its
-//   app as a page and the App Card and Stack keep the app whole (`unite.ts`); the toolbar
+//   app as a page and the Card and Browse views keep the app whole (`unite.ts`); the toolbar
 //   menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
 // - touch: one finger on the empty canvas pans (the vendor's), two fingers
@@ -239,7 +239,7 @@ export function onKey(event: KeyboardEvent): void {
   const typing = eventOriginatesInTextEntry(event);
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
-  // Cmd/Ctrl+G changes the whole selected app to Stack; no component extraction.
+  // Cmd/Ctrl+G changes the whole selected app to Browse; no component extraction.
   if (mod && !event.altKey && event.code === 'KeyG' && !typing) {
     event.preventDefault();
     if (!event.shiftKey) stackChosen();

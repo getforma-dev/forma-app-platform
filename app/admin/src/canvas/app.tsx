@@ -380,7 +380,7 @@ function Canvas(props: CanvasProps) {
                   <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg><span class="cv-choice-number" aria-hidden="true">03 / DISCOVER</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                   <span class="cv-choice-title">Open your library</span>
                   <span class="cv-choice-copy">Your apps, cards and tools, ready when you are.</span>
-                  <span class="cv-empty-library-count">Add an app as one card, then Stack or Open it.</span>
+                  <span class="cv-empty-library-count">Add an app as a card, then Browse or Open it.</span>
                 </button>
               ))}
               <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload a spreadsheet or other files" />
@@ -756,7 +756,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-lib-search">
             <input id="cv-lib-search" type="search" placeholder="Search apps, widgets and cards" aria-label="Search the library" autocomplete="off" />
           </div>
-          <p class="cv-lib-hint">Add an app’s face card, Stack it, or Open it on the canvas. Apps stay whole in every view.</p>
+          <p class="cv-lib-hint">Add an app as a card, browse its components, or open its full window. Apps stay whole in every view.</p>
           <div class="cv-lib-list" data-lib-list>
             {createList(() => props.library, category => category.id, category => (
               <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
@@ -779,7 +779,7 @@ function Canvas(props: CanvasProps) {
                         ))}
                         <div class="cv-lib-view-actions">
                           <button type="button" class="cv-lib-all" data-lib-all title="Add the whole app as its face card">Add</button>
-                          <button type="button" class="cv-lib-stack" data-lib-stack title="Show the whole app in Stack view">Stack</button>
+                          <button type="button" class="cv-lib-stack" data-lib-stack title="Browse the app one component at a time">Browse</button>
                           <button type="button" class="cv-lib-stack cv-lib-open-view" data-lib-open-view title="Open the whole app on the canvas">Open</button>
                           <details class="cv-lib-menu">
                             <summary aria-label="Library options" title="Library options">⋯</summary>
@@ -854,7 +854,7 @@ function Canvas(props: CanvasProps) {
               <p class="cv-menu-label" aria-hidden="true">Selected app or card</p>
               <button type="button" role="menuitem" data-tool="focus"><span>Focus</span><span class="cv-kbd-group">F</span></button>
               <button type="button" role="menuitem" data-tool="unite"><span>Open app</span><span class="cv-kbd-group">U</span></button>
-              <button type="button" role="menuitem" data-tool="stack"><span>Stack app</span><span class="cv-kbd-group">⌘ G</span></button>
+              <button type="button" role="menuitem" data-tool="stack"><span>Browse app</span><span class="cv-kbd-group">⌘ G</span></button>
               <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
               <p class="cv-menu-label" aria-hidden="true">Ask and Shape</p>

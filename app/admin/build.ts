@@ -23,7 +23,7 @@ await build({
     { input: 'src/styles/sharing.css', outfile: 'sharing.css' },
     // ADR-011: the vendored GenUI canvas geometry styles and the pitch canvas.
     { input: 'src/canvas-vendor/canvas.css', outfile: 'canvas-vendor.css' },
-    { input: 'src/styles/canvas.css', outfile: 'canvas.css' },
+    { input: ['src/styles/canvas.css', 'src/styles/file-card.css', 'src/styles/app-window.css'], outfile: 'canvas.css' },
     // ADR-011 scenarios: the confirmation card and the records card.
     { input: 'src/styles/actions.css', outfile: 'actions.css' },
     // APP-102: the receipt attachment and the expense ledger.

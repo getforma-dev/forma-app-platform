@@ -211,7 +211,7 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   board.emitCanvasChanged(doc);
   await settle();
   assert.equal(renders, 2, 'events in one turn render once');
-  assert.equal(status(), 'App Card view');
+  assert.equal(status(), 'Card view');
   assert.equal(dot(expensesRow), 'true', 'filled');
   assert.equal(expensesRow.querySelector('[data-lib-remove]')?.hidden, false);
   assert.equal(dot(row('weather')), 'true');
@@ -225,7 +225,7 @@ test('Library → Widgets lists the five widgets; Folder expands to the member\'
   placed.set(expenses.work, { mode: 'stack' });
   board.emitCanvasChanged(doc);
   await settle();
-  assert.equal(status(), 'Stack view');
+  assert.equal(status(), 'Browse view');
   assert.equal(expensesRow.querySelector('[data-lib-all]')?.textContent, 'Add');
   placed.clear();
   snapshot.counts.weather = 0;
@@ -527,7 +527,7 @@ test('App rows expose whole-work actions with inert component metadata and no ex
   assert.equal(expensesRow.querySelector('[data-lib-metadata]')?.hidden, true);
   assert.equal(expensesRow.querySelector('[data-lib-metadata]')?.getAttribute('aria-hidden'), 'true');
   assert.equal(expensesRow.querySelector('[data-lib-all]')?.textContent, 'Add');
-  assert.equal(expensesRow.querySelector('[data-lib-stack]')?.textContent, 'Stack');
+  assert.equal(expensesRow.querySelector('[data-lib-stack]')?.textContent, 'Browse');
   assert.equal(expensesRow.querySelector('[data-lib-open-view]')?.textContent, 'Open');
   assert.equal(expensesRow.querySelector('[data-lib-classify]')?.textContent, 'Show in Cards');
   for (const button of expensesRow.querySelectorAll('[data-lib-toggle]')) assert.equal(button.getAttribute('tabindex'), '-1');

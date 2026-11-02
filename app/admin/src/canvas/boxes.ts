@@ -48,7 +48,7 @@ import { openBrief } from './brief';
 import { activeFolder, folderRenamed, openFolderPicker, setActiveFolder, startFolderBar } from './folder-bar';
 import { openDataSheet, type DataSheetAppAttempt } from './data-sheet';
 import { appViewOf, setAppView } from './unite';
-import { fileCardFooter } from './file-card';
+import { fileCardFooter, fileCardGlyph } from './file-card';
 import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
   boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onCanvasDragEnd, onLayoutSaved,
@@ -856,19 +856,24 @@ function placeSheet(boxId: string, file: BoxFile, at?: { x: number; y: number },
   }
   const document_ = document;
   const label = file.kind === 'xlsx' ? 'Excel' : 'CSV';
-  const mark = file.kind === 'xlsx' ? 'XLS' : 'CSV';
+  const mark = file.kind === 'xlsx' ? 'XLSX' : 'CSV';
   const openIt = () => openViewer(sheetRecord(boxId, file), boxId);
-  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': `Remove ${file.name} from the canvas`, title: 'Remove from the canvas. The file stays.' }, '×');
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close bx-sheet-close', 'aria-label': `Remove ${file.name} from the canvas`, title: 'Remove from canvas. The file stays in Cards.' }, fileCardGlyph(document_, 'close'));
   const card = el(document_, 'article', {
     class: 'cv-card bx-sheet', tabindex: '0', 'data-kind': 'sheet', 'data-file': file.file_id, 'data-box': boxId,
     'data-canvas-drag-handle': '',
     'aria-label': `${file.name}, ${label} spreadsheet. Double-click to open the sheet.`,
   },
-  close,
-  el(document_, 'span', { class: 'bx-icon bx-sheet-icon', 'data-kind': file.kind, 'aria-hidden': 'true' }, mark),
-  el(document_, 'h2', { class: 'bx-sheet-name' }, file.name),
-  el(document_, 'p', { class: 'bx-sheet-meta' }, `${label} · Double-click to open`),
-  fileCardFooter(document_, boxId, file, boxes.find(box => box.box_id === boxId)?.owner === false ? undefined : () => { void makeFileApp(boxId, file); }));
+  el(document_, 'header', { class: 'bx-sheet-head' },
+    el(document_, 'span', { class: 'bx-sheet-type' }, mark),
+    el(document_, 'span', { class: 'bx-sheet-kind' }, 'Spreadsheet'), close),
+  el(document_, 'div', { class: 'bx-sheet-body' },
+    el(document_, 'span', { class: 'bx-sheet-icon', 'data-kind': file.kind, 'aria-hidden': 'true' }, fileCardGlyph(document_, 'sheet')),
+    el(document_, 'div', { class: 'bx-sheet-info' },
+      el(document_, 'h2', { class: 'bx-sheet-name', title: file.name }, file.name),
+      el(document_, 'p', { class: 'bx-sheet-meta' }, `${label}${file.bytes > 0 ? ` · ${formatBytes(file.bytes)}` : ''} · Original file`),
+      el(document_, 'p', { class: 'bx-sheet-hint' }, 'Double-click to explore'))),
+  fileCardFooter(document_, boxId, file, boxes.find(box => box.box_id === boxId)?.owner === false ? undefined : () => { void makeFileApp(boxId, file); }, openIt));
   // The drag handle cancels the click, so a second still pointer-up opens the sheet.
   let pressed: { x: number; y: number } | null = null;
   let firstClick = 0;
@@ -924,7 +929,7 @@ function placeSheet(boxId: string, file: BoxFile, at?: { x: number; y: number },
     event.stopPropagation();
     openIt();
   });
-  const item = mountWidget(card, { id: `sheet-${file.file_id}`, title: file.name, width: 380, minHeight: 300, at, focus: !at });
+  const item = mountWidget(card, { id: `sheet-${file.file_id}`, title: file.name, width: 400, minHeight: 250, at, focus: !at });
   if (!item) return `${file.name} could not be placed.`;
   item.classList.add('cv-item-sheet');
   close.addEventListener('click', (event) => {
@@ -1112,7 +1117,9 @@ async function markFileSources(): Promise<void> {
         open.addEventListener('click', () => openViewer(file, source.box_id));
         details.append(open, fileCardFooter(document, source.box_id, file));
       }
-      root.querySelector('.cv-unite-head')?.after(details);
+      const sourceHost = root.querySelector('[data-app-source-host]');
+      if (sourceHost) sourceHost.append(details);
+      else root.querySelector('.cv-unite-head')?.after(details);
     } finally { sourceLookups.delete(item); }
   }));
 }

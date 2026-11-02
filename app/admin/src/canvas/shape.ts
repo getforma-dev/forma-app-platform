@@ -475,7 +475,7 @@ export async function refreshShaped(work: string | null): Promise<void> {
 }
 
 function head(card: HTMLElement): HTMLElement | null {
-  return card.querySelector<HTMLElement>(':scope > .cv-card-head, :scope > header, :scope > h2');
+  return card.querySelector<HTMLElement>(':scope > .cv-app-window > .cv-unite-head, :scope > .cv-card-head, :scope > header, :scope > h2');
 }
 
 /** Hides the card's own content (it keeps running underneath) and shows `section` instead. */

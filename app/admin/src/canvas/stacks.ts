@@ -3,7 +3,7 @@
 //
 // - Make: drag a card onto another card or stack and hold it there ~400 ms
 //   (the target lights up), then drop; or select cards and press Cmd/Ctrl+G;
-//   or "Stack" on an app in the library pane.
+//   Independent cards keep this behavior; apps use the Browse view in unite.ts.
 // - A stack is one canvas item: the top card in full, two or three offset
 //   edges behind it (plain elements, no content), a title (the first card's
 //   app; double-click to rename), "+N" and the position ("2/5").
@@ -398,13 +398,13 @@ export function stackSelection(items: HTMLElement[]): boolean {
   return createStack(ids) !== null;
 }
 
-/** "Stack" in the library pane: an app's cards as one stack. */
+/** Legacy stack entry point: whole apps use Browse; independent cards form a stack. */
 export function stackCards(ids: string[], title: string): void {
   const groups = ids.flatMap(id => board.findCard(id)?.group ?? []);
   if (groups.length) {
     const first = groups[0]!;
     if (groups.every(group => group.app === first.app && group.work === first.work)) void setAppView(first.app, first.work, 'stack');
-    else board.announce('Apps stay separate. Choose Stack view for one app.');
+    else board.announce('Apps stay separate. Choose Browse view for one app.');
     return;
   }
   const existing = [...stacks.values()].find((stack) => ids.every((id) => stack.cards.includes(id)));
@@ -551,7 +551,7 @@ export function startStacks(document_: Document): void {
     },
     settled: () => {
       for (const row of loadStacks(board.member())) {
-        // unite.ts consumes these legacy memberships as whole-work Stack
+        // unite.ts consumes these legacy memberships as whole-work Browse
         // placements. Never restore their component wrappers first.
         if (row.cards.some(id => board.findCard(id))) continue;
         const ids = row.cards.filter((id) => board.findCard(id)?.item);
