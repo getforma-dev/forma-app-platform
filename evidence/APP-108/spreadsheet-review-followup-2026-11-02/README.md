@@ -13,7 +13,7 @@ This follows the review notes Victor supplied after PR42 merged as `60fd6bd29348
 | 7. Enter on Remove opens the viewer | Already fixed in PR42: the card keyboard handler requires the card itself as the target. |
 | 8. Restored names cross member boundaries | Already fixed in PR42: member-scoped reference-only persistence and fresh authorized metadata before mounting. |
 
-Implementation is on `pivot/sheet-review-fixes`. No schema, parser, grants, API payloads, dependencies or deployment-contract changes are needed. The three-table context cap remains; this change makes the product honest about it rather than increasing the model's data scope.
+Implementation is in [PR47](https://github.com/getforma-dev/forma-app-platform/pull/47) on `pivot/sheet-review-fixes`; product source is commit `1814038` and the reviewed operator/evidence slice is `b629a8e`. No schema, parser, grants, API payloads, dependencies or deployment-contract changes are needed. The three-table context cap remains; this change makes the product honest about it rather than increasing the model's data scope.
 
 ## Qualification and review
 
