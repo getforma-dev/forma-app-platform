@@ -1603,6 +1603,182 @@ async fn campaign() {
     check(&mut checks, "demo (DS-73..DS-75, APP-124): in the demo organization the rehearsed sentence builds the metrics app over the folder's data files by rule, admitted and labeled generated (sent again with its Idempotency-Key: the same work, nothing new published); its explanation, the folder's brief (the fixture PDF cited by page) and Ask on the folder (a row count referencing all 12 rows, the exact revenue total) answer with no model call");
     crate::demo::configure_for_tests(false, &[]);
 
+    // Original file viewing does not register sources or create app content.
+    let viewer_box = stand
+        .post(
+            "/v1/boxes",
+            Some(&maya_cookie),
+            r#"{"name":"Original viewer qualification"}"#,
+        )
+        .await
+        .json()["box"]["box_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let original = format!(
+        "  header  ,text\r\n{}",
+        (1..=104)
+            .map(|n| format!("{n:04},\"line {n}, <img src=x onerror=alert(1)>\"\r\n"))
+            .collect::<String>()
+    );
+    let uploaded = upload(
+        &stand,
+        &maya_cookie,
+        &viewer_box,
+        "original.csv",
+        original.as_bytes(),
+    )
+    .await;
+    assert_eq!(uploaded.status, StatusCode::CREATED);
+    let file = uploaded.json()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let viewer_path = format!("/v1/boxes/{viewer_box}/files/{file}/sheet");
+    let original_path = format!("/v1/boxes/{viewer_box}/files/{file}/content");
+    let before_apps = scalar(
+        &c.fixture,
+        &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    let before_sources = scalar(
+        &c.fixture,
+        &format!("SELECT count(*) FROM genui.box_file_sources WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    let mut collected = Vec::new();
+    for offset in [0, 50, 100] {
+        let answer = stand
+            .post(
+                &viewer_path,
+                Some(&maya_cookie),
+                &json!({"sheet_index":0,"offset":offset}).to_string(),
+            )
+            .await;
+        assert_eq!(answer.status, StatusCode::OK, "{}", answer.text());
+        assert_eq!(answer.headers["cache-control"], "no-store");
+        let page = answer.json();
+        assert_eq!(
+            page["sha256"],
+            format!("sha256:{}", hex(original.as_bytes()))
+        );
+        assert_eq!(page["row_count"], 105);
+        assert_eq!(page["column_count"], 2);
+        collected.extend(page["rows"].as_array().unwrap().iter().cloned());
+    }
+    assert_eq!(collected.len(), 105);
+    assert_eq!(collected[0], json!(["  header  ", "text"]));
+    assert_eq!(
+        collected[104],
+        json!(["0104", "line 104, <img src=x onerror=alert(1)>"])
+    );
+    assert_eq!(
+        stand.get(&original_path, Some(&maya_cookie)).await.body,
+        original.as_bytes()
+    );
+    for body in [
+        json!({"sheet_index":0,"offset":1}),
+        json!({"sheet_index":16,"offset":0}),
+        json!({"sheet_index":0,"offset":0,"extra":true}),
+    ] {
+        assert_eq!(
+            stand
+                .post(&viewer_path, Some(&maya_cookie), &body.to_string())
+                .await
+                .status,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for cookie in [
+        None,
+        Some(mate_cookie.as_str()),
+        Some(outsider_cookie.as_str()),
+    ] {
+        assert!(stand
+            .post(&viewer_path, cookie, r#"{"sheet_index":0,"offset":0}"#)
+            .await
+            .uniform_404());
+    }
+    let xlsx_path = format!("/v1/boxes/{box_id}/files/{}/sheet", files["forecast.xlsx"]);
+    let first = stand
+        .post(
+            &xlsx_path,
+            Some(&maya_cookie),
+            r#"{"sheet_index":0,"offset":0}"#,
+        )
+        .await
+        .json();
+    assert_eq!(first["sheets"], json!(["Inventory", "Other"]));
+    assert_eq!(first["rows"][0][1], "9007199254740993");
+    assert_eq!(first["rows"][1][2], "-1.25e2");
+    let second = stand
+        .post(
+            &xlsx_path,
+            Some(&maya_cookie),
+            r#"{"sheet_index":1,"offset":0}"#,
+        )
+        .await;
+    assert_eq!(second.status, StatusCode::OK, "{}", second.text());
+    assert_eq!(second.json()["sheet_index"], 1);
+    assert_ne!(first["rows"], second.json()["rows"]);
+    assert_eq!(
+        stand
+            .post(
+                &format!("/v1/boxes/{viewer_box}/share"),
+                Some(&maya_cookie),
+                &json!({"grantee_principal_id":mate_id}).to_string()
+            )
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        stand
+            .post(
+                &viewer_path,
+                Some(&mate_cookie),
+                r#"{"sheet_index":0,"offset":0}"#
+            )
+            .await
+            .status,
+        StatusCode::OK
+    );
+    c.fixture.sql(
+        &format!(
+            "DELETE FROM genui.box_shares WHERE organization_id='{ORG}' AND box_id='{viewer_box}'"
+        ),
+        "genui",
+    );
+    assert!(stand
+        .post(
+            &viewer_path,
+            Some(&mate_cookie),
+            r#"{"sheet_index":0,"offset":0}"#
+        )
+        .await
+        .uniform_404());
+    assert!(stand
+        .get(&original_path, Some(&mate_cookie))
+        .await
+        .uniform_404());
+    assert_eq!(
+        before_apps,
+        scalar(
+            &c.fixture,
+            &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'")
+        )
+        .await
+    );
+    assert_eq!(
+        before_sources,
+        scalar(
+            &c.fixture,
+            &format!("SELECT count(*) FROM genui.box_file_sources WHERE organization_id='{ORG}'")
+        )
+        .await
+    );
+    check(&mut checks,"PR42 original viewer: all 105 CSV records across three pages retain headers/leading zeroes/inert markup; original download byte-exact; both workbook sheets and lexical large/exponent numbers; malformed selection refused; anonymous/sibling/foreign/revoked readers denied; no source registration or saved app created by viewing");
+
     // The local stand for a browser walk (scratch only, synthetic sessions).
     if let Some(seconds) = std::env::var("GENUI_BOX_STAND_SECONDS")
         .ok()

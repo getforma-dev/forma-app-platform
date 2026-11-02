@@ -175,7 +175,7 @@ const contents = (owner: boolean, files: number) => ({
   apps: [],
 }) as never;
 
-test('the empty canvas offers "Drop files or upload": a spreadsheet waits, other files make a folder (APP-124)', async () => {
+test('the empty canvas offers "Drop files or upload": a spreadsheet becomes a file, other files make a folder (APP-124)', async () => {
   const document_ = freshDocument();
   const bar = document_.createElement('input');
   bar.setAttribute('id', 'intent-input');
@@ -204,8 +204,8 @@ test('the empty canvas offers "Drop files or upload": a spreadsheet waits, other
   assert.equal(calls.filter((c) => c.method === 'POST' && c.url === '/v1/boxes').length, 0, 'a spreadsheet does not become a folder or an app');
   assert.equal(calls.filter((c) => c.url === '/v1/boxes/uploads').length, 1, 'the file is kept in Uploads until the member chooses');
   const notice = document_.getElementById('bx-notice')!;
-  assert.match(notice.textContent, /Nothing is on the canvas until you choose/);
-  assert.ok(button(notice, 'Place the spreadsheet') && button(notice, 'Make a card') && button(notice, 'Make an app'), 'the three choices');
+  assert.doesNotMatch(notice.textContent, /until you choose/);
+  assert.ok(button(notice, 'Open original file') && button(notice, 'Make a card') && button(notice, 'Make an app'), 'original viewing is separate from optional creation');
   notice.all().find((node) => node.getAttribute('aria-label') === 'Dismiss')!.click();
   assert.equal(notice.hidden, true, 'dismissing the question places nothing');
   assert.equal(calls.filter((c) => c.url.includes('/apps')).length, 0, 'dismiss does not build an app or a card');
@@ -226,7 +226,7 @@ test('the empty canvas offers "Drop files or upload": a spreadsheet waits, other
   assert.equal(input.value, '');
 });
 
-test('a spreadsheet dropped with another file still waits, and the other file makes a folder', async () => {
+test('a spreadsheet dropped with another file stays a file, and the other file makes a folder', async () => {
   const document_ = freshDocument();
   const bar = document_.createElement('input');
   bar.setAttribute('id', 'intent-input');
@@ -252,8 +252,8 @@ test('a spreadsheet dropped with another file still waits, and the other file ma
     'the other file still makes a folder',
   );
   const notice = document_.getElementById('bx-notice')!;
-  assert.ok(button(notice, 'Place the spreadsheet'), 'the spreadsheet still asks before anything is placed');
-  assert.match(notice.textContent, /Nothing is on the canvas until you choose/);
+  assert.ok(button(notice, 'Open original file'), 'file viewing stays available without creation');
+  assert.doesNotMatch(notice.textContent, /until you choose/);
 });
 
 test('several spreadsheets: Make an app includes every file from that upload', async () => {
@@ -276,7 +276,7 @@ test('several spreadsheets: Make an app includes every file from that upload', a
   input.click('change');
   await settle();
   const notice = document_.getElementById('bx-notice')!;
-  assert.ok(button(notice, 'Place the spreadsheets'), 'both files can be placed');
+  assert.ok(button(notice, 'Open Uploads'), 'both originals are retained');
   button(notice, 'Make an app')!.click();
   const sheet = button(document_.body, 'Make an app from this');
   assert.ok(sheet, 'the column sheet opens');

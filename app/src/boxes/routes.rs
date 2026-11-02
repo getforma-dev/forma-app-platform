@@ -95,6 +95,7 @@ pub fn router(state: Arc<Boxes>) -> Router {
         // Long deadline (`long_path`).
         .route("/v1/boxes/{box}/files", post(upload))
         .route("/v1/boxes/{box}/files/{file}/preview", get(preview))
+        .route("/v1/boxes/{box}/files/{file}/sheet", post(sheet))
         .route("/v1/boxes/{box}/files/{file}/data", post(data))
         .route("/v1/boxes/{box}/files/{file}/attach", post(attach))
         .route(APPS_PATH, post(apps))
@@ -118,7 +119,7 @@ pub fn long_path(path: &str) -> bool {
     matches!(
         parts.as_slice(),
         [_, "files" | "apps" | "brief" | "ask"]
-            | [_, "files", _, "preview" | "data" | "attach"]
+            | [_, "files", _, "preview" | "sheet" | "data" | "attach"]
             | ["explain", _, _]
     )
 }
@@ -613,6 +614,15 @@ async fn content(
     else {
         return http::unavailable();
     };
+    // Object IO may outlive the first grant check. Recheck immediately before
+    // releasing immutable original bytes, including current entitlement.
+    if let Err(error) = stores
+        .workspace
+        .read_box_file(&member, &box_id, &file_id)
+        .await
+    {
+        return refusal(error);
+    }
     let media = match file.kind.as_str() {
         "csv" | "text" => "text/plain; charset=utf-8",
         _ => file.media_type.as_str(),
@@ -655,6 +665,101 @@ async fn content(
         "same-origin",
     );
     response
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SheetPage {
+    sheet_index: usize,
+    offset: usize,
+}
+
+/// An authorized read over immutable original bytes, never a generated app
+/// or normalized source. Selection stays in the POST body, not a URL.
+async fn sheet(
+    State(state): State<Arc<Boxes>>,
+    UniformPath((box_id, file_id)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    let (parts, body) = request.into_parts();
+    if !csrf::same_origin(&parts.headers, state.auth.origin()) {
+        return http::cross_site();
+    }
+    if !valid(&box_id) || !valid(&file_id) {
+        return http::not_found();
+    }
+    let Some(member) = session(&state, &parts.headers).await else {
+        return http::not_found();
+    };
+    let Some(stores) = &state.auth.stores else {
+        return http::not_found();
+    };
+    let file = match stores
+        .workspace
+        .read_box_file(&member, &box_id, &file_id)
+        .await
+    {
+        Ok(file) if matches!(file.kind.as_str(), "csv" | "xlsx") => file,
+        Ok(_) => return http::not_found(),
+        Err(error) => return refusal(error),
+    };
+    let Some(body) = http::bounded(body, 512).await else {
+        return http::problem(StatusCode::PAYLOAD_TOO_LARGE, "malformed_request");
+    };
+    let Ok(selection) = serde_json::from_slice::<SheetPage>(&body) else {
+        return http::problem(StatusCode::BAD_REQUEST, "malformed_request");
+    };
+    if selection.sheet_index >= 16
+        || selection.offset >= 100_000
+        || selection.offset % inspect::ORIGINAL_PAGE_ROWS != 0
+    {
+        return http::problem(StatusCode::BAD_REQUEST, "malformed_request");
+    }
+    let key = format!("box-sheet:{}:{}", member.organization(), member.principal());
+    if let Err(retry) = state.auth.limits.admit(&[(&key, &[limits::per(120, 60)])]) {
+        return http::too_many_requests(retry);
+    }
+    let Some(identity) = &state.parser else {
+        return http::unavailable();
+    };
+    let Ok(bytes) = state
+        .store
+        .get(
+            member.organization(),
+            &file.object_key,
+            &file.content_digest,
+        )
+        .await
+    else {
+        return http::unavailable();
+    };
+    let parsed = inspect::original_page(
+        identity,
+        &bytes,
+        &file.kind,
+        selection.sheet_index,
+        selection.offset,
+    )
+    .await;
+    // Parsing runs in a confined process; a revocation during that wait must
+    // not release even a successful page or its workbook metadata.
+    if let Err(error) = stores
+        .workspace
+        .read_box_file(&member, &box_id, &file_id)
+        .await
+    {
+        return refusal(error);
+    }
+    match parsed {
+        Ok(mut page) => {
+            page["sha256"] = json!(file.content_digest);
+            document(StatusCode::OK, &page)
+        }
+        Err(code) => document(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            &json!({"code": "sheet_unavailable", "reason": code}),
+        ),
+    }
 }
 
 async fn preview(

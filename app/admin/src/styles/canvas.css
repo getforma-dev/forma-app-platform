@@ -1563,6 +1563,7 @@ body.is-library-dragging { cursor: grabbing; user-select: none; }
 /* Above a focused card, the dim is lighter: focus mode's own already sits below. */
 body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .bx-modal {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   width: min(560px, 100%);
@@ -2819,3 +2820,10 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 .cv-unite-part { min-width:0; }
 .cv-unite-part > .cv-card { width:100%; max-width:none; min-width:0; box-sizing:border-box; }
 .cv-static-text { white-space:pre-wrap; overflow-wrap:anywhere; }
+
+/* Original file viewer: preserve whitespace and let keyboard users scroll. */
+.bx-original-table td { white-space: pre-wrap; min-width: 8rem; max-width: 30rem; overflow-wrap: anywhere; vertical-align: top; }
+.bx-sheet-navigation { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: .75rem; }
+.bx-sheet-selection { margin-block: .75rem; }
+.bx-sheet-selection select { max-width: 100%; }
+.bx-sheet-limit { font-size: .8rem; color: var(--muted, #596476); }
