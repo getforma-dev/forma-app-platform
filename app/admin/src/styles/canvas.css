@@ -1506,6 +1506,12 @@ body.is-library-dragging { cursor: grabbing; user-select: none; }
 .bx-icon[data-kind="pdf"] { background: rgb(180 35 24 / 10%); color: var(--cv-bad); }
 .bx-icon[data-kind="image"] { background: rgb(124 58 237 / 10%); color: #6d28d9; }
 .bx-icon[data-kind="csv"], .bx-icon[data-kind="xlsx"] { background: var(--cv-seal-soft); color: var(--cv-seal); }
+.cv-card.bx-sheet { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 160px; padding: 18px 14px 14px; text-align: center; cursor: grab; }
+.bx-sheet .bx-close { position: absolute; top: 6px; right: 6px; }
+.bx-sheet-icon { width: 54px; height: 66px; font-size: 0.72rem; }
+.bx-sheet-name { margin: 0; max-width: 100%; overflow: hidden; font-size: 0.9rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.bx-sheet-meta { margin: 0; color: var(--cv-faint); font-size: 0.72rem; }
+.cv-item-sheet.is-dragging .bx-sheet { cursor: grabbing; }
 .bx-name { max-width: 100%; overflow: hidden; font-weight: 600; font-size: 0.8rem; text-overflow: ellipsis; white-space: nowrap; }
 .bx-meta { color: var(--cv-faint); font-size: 0.72rem; }
 .bx-data { align-self: flex-start; }

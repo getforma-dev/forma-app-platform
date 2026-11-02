@@ -148,7 +148,7 @@ const contents = (owner: boolean, files: number) => ({
   apps: [],
 }) as never;
 
-test('the empty canvas offers "Drop files or upload": the picked files make a new folder (APP-124)', async () => {
+test('the empty canvas offers "Drop files or upload": a spreadsheet waits, other files make a folder (APP-124)', async () => {
   const document_ = freshDocument();
   const bar = document_.createElement('input');
   bar.setAttribute('id', 'intent-input');
@@ -173,8 +173,13 @@ test('the empty canvas offers "Drop files or upload": the picked files make a ne
   input.files = [{ name: 'q3_metrics.csv', size: 900 }];
   input.click('change');
   await settle();
+  assert.equal(calls.filter((c) => c.method === 'POST' && c.url === '/v1/boxes').length, 0, 'a spreadsheet does not become a folder or an app');
+  assert.equal(calls.filter((c) => c.url === '/v1/boxes/uploads').length, 1, 'the file is kept in Uploads until the member chooses');
+  input.files = [{ name: 'notes.pdf', size: 900 }];
+  input.click('change');
+  await settle();
   const created = calls.filter((c) => c.method === 'POST' && c.url === '/v1/boxes');
-  assert.deepEqual(created.map((c) => c.body), [{ name: 'Untitled folder' }], 'a new folder holds the files');
+  assert.deepEqual(created.map((c) => c.body), [{ name: 'Untitled folder' }], 'a file that is not a spreadsheet still makes a folder');
   assert.equal(input.value, '');
 });
 

@@ -10,10 +10,11 @@
 // a receipt names the file its source revision came from.
 //
 // Elsewhere on the canvas: a CSV/XLSX dropped on the board or the intent bar
-// goes into the member's implicit "Uploads" box, is registered with the
-// parser's inferred types and placed as a data card (a typed table with its
-// receipt); a small notice offers "Adjust types" and "Make an app from
-// this". Other files dropped on the board land in "Uploads" too.
+// goes into the member's implicit "Uploads" box and is parsed at once. Nothing
+// is placed until the member chooses: place the spreadsheet (a file icon;
+// double-click opens the sheet), make a card, or make an app. Closing that
+// question leaves the file stored and the canvas unchanged. Other files
+// dropped on the board land in "Uploads" too.
 //
 // Members see the noun "Folder" (`box-api.ts` NOUN; code and API keep
 // "box"). Commands: `/folder` (aliases in FOLDER_ALIASES: storage, box,
@@ -40,7 +41,7 @@
 // its button. The empty canvas offers "Drop files or upload" (a file picker
 // and a drop target), which makes a new folder holding the files.
 import {
-  ACCEPT, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, idempotencyKey, listBoxes, makeApp, makeCard, makeData,
+  ACCEPT, contentUrl, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, idempotencyKey, listBoxes, makeApp, makeCard, makeData,
   MAX_BOX_FILES, MAX_FILE_BYTES, refusalText, uploadFile, uploadsBox,
   type Box, type BoxContents, type BoxFile, type Preview,
 } from './box-api';
@@ -51,7 +52,7 @@ import { openDataSheet } from './data-sheet';
 import { startExplain } from './explain';
 import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
-  boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onLayoutSaved,
+  boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onCanvasDragEnd, onLayoutSaved,
   placeWork, unmountWidget, widgetSpot, workCard,
 } from './board';
 import { setFileRouter } from './receipt';
@@ -640,7 +641,7 @@ async function newBox(name: string): Promise<string> {
 
 // --- Ad hoc data: a CSV/XLSX dropped outside a box ---
 
-/** Uploads `file` into "Uploads"; a CSV/XLSX becomes a data card with the inferred types. */
+/** Uploads `file` into "Uploads". A spreadsheet waits for a choice; it is not placed yet. */
 export async function dropAnywhere(file: File): Promise<void> {
   const data = isDataFile(file);
   if (file.size > MAX_FILE_BYTES) {
@@ -673,7 +674,7 @@ export async function dropAnywhere(file: File): Promise<void> {
       [{ label: 'Open Uploads', run: () => void openBox(uploads.box_id).then(announce) }]);
     return;
   }
-  await autoData(uploads.box_id, uploaded.file, found, () => void open.get(uploads.box_id)?.refresh());
+  offerSheet(uploads.box_id, uploaded.file, found);
 }
 
 /** Registers a dropped table with the parser's inferred types, places its data card, offers "Adjust types". */
@@ -696,8 +697,189 @@ async function autoData(boxId: string, file: BoxFile, found: Preview, done: () =
   }
 }
 
+/** Spreadsheets only: store them, then ask. A folder is for anything else. */
+async function uploadAsSheets(files: File[]): Promise<string> {
+  let uploads: Box;
+  try {
+    uploads = await uploadsBox();
+  } catch (error) {
+    return refusalText(error);
+  }
+  const stored: { file: BoxFile; preview: Preview }[] = [];
+  for (const file of files) {
+    if (file.size > MAX_FILE_BYTES) {
+      announce(`${file.name} is over 20 MB. Nothing was stored.`);
+      continue;
+    }
+    try {
+      const uploaded = await uploadFile(uploads.box_id, file, () => undefined);
+      const found = uploaded.preview;
+      if (!found || 'refused' in found) {
+        announce(`${file.name} was stored, but it could not be read as a table.`);
+        continue;
+      }
+      stored.push({ file: uploaded.file, preview: found });
+    } catch (error) {
+      announce(`${file.name}: ${refusalText(error)}`);
+    }
+  }
+  void refreshBoxes();
+  if (!stored.length) return 'Nothing was stored.';
+  const [first] = stored;
+  if (stored.length === 1 && first) {
+    offerSheet(uploads.box_id, first.file, first.preview);
+    return `${first.file.name} is uploaded. Nothing is on the canvas until you choose.`;
+  }
+  notice(`${stored.length} spreadsheets are uploaded. Nothing is on the canvas until you choose.`, [
+    { label: 'Place the spreadsheets', run: () => { for (const row of stored) placeSheet(uploads.box_id, row.file); } },
+    { label: 'Make a card', run: () => { void buildCard(uploads.box_id, idempotencyKey()).then(({ text }) => announce(text)); } },
+    { label: 'Make an app', run: () => { if (first) openDataSheet(uploads.box_id, first.file, first.preview, () => undefined); } },
+  ], 0);
+  return `${stored.length} spreadsheets are uploaded. Nothing is on the canvas until you choose.`;
+}
+
+const SHEET_KEY = 'forma.canvas.sheets.v1';
+type SheetSpot = { boxId: string; file: BoxFile; item: HTMLElement };
+const sheets = new Map<string, SheetSpot>();
+
+function sheetId(boxId: string, fileId: string): string {
+  return `${boxId}/${fileId}`;
+}
+
+function sheetRecord(boxId: string, file: Pick<BoxFile, 'file_id' | 'name' | 'kind' | 'bytes'>): BoxFile {
+  return {
+    file_id: file.file_id, name: file.name, kind: file.kind, media_type: '', bytes: file.bytes,
+    sha256: '', created_at: '', content_url: contentUrl(boxId, file.file_id), data: null,
+  };
+}
+
+/** A spreadsheet as a canvas card: it drags like any card and opens on a double-click. */
+function placeSheet(boxId: string, file: BoxFile, at?: { x: number; y: number }): string {
+  const key = sheetId(boxId, file.file_id);
+  const existing = sheets.get(key);
+  if (existing) {
+    canvasApi()?.centerItem(existing.item);
+    return `${file.name} is already on the canvas.`;
+  }
+  const document_ = document;
+  const label = file.kind === 'xlsx' ? 'Excel' : 'CSV';
+  const mark = file.kind === 'xlsx' ? 'XLS' : 'CSV';
+  const openIt = () => openViewer(sheetRecord(boxId, file), boxId);
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': `Remove ${file.name} from the canvas`, title: 'Remove from the canvas. The file stays.' }, '×');
+  const card = el(document_, 'article', {
+    class: 'cv-card bx-sheet', tabindex: '0', 'data-kind': 'sheet', 'data-file': file.file_id, 'data-box': boxId,
+    'aria-label': `${file.name}, ${label} spreadsheet. Double-click to open the sheet.`,
+  },
+  close,
+  el(document_, 'span', { class: 'bx-icon bx-sheet-icon', 'data-kind': file.kind, 'aria-hidden': 'true' }, mark),
+  el(document_, 'h2', { class: 'bx-sheet-name' }, file.name),
+  el(document_, 'p', { class: 'bx-sheet-meta' }, `${label} · Double-click to open`));
+  card.addEventListener('dblclick', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openIt();
+  });
+  card.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    openIt();
+  });
+  const item = mountWidget(card, { id: `sheet-${file.file_id}`, title: file.name, width: 220, minHeight: 180, at, focus: !at });
+  if (!item) return `${file.name} could not be placed.`;
+  item.classList.add('cv-item-sheet');
+  close.addEventListener('click', (event) => {
+    event.stopPropagation();
+    unmountWidget(item);
+    sheets.delete(key);
+    saveSheets();
+  });
+  sheets.set(key, { boxId, file: sheetRecord(boxId, file), item });
+  saveSheets();
+  return `${file.name} is on the canvas. Double-click it to open the sheet. Drag it onto a folder to let that folder read it.`;
+}
+
+function saveSheets(): void {
+  if (isDemoCanvas()) return;
+  const rows = [];
+  for (const spot of sheets.values()) {
+    const at = widgetSpot(spot.item);
+    if (!at) continue;
+    rows.push({ boxId: spot.boxId, fileId: spot.file.file_id, name: spot.file.name, kind: spot.file.kind, bytes: spot.file.bytes, x: at.x, y: at.y });
+  }
+  try {
+    localStorage.setItem(SHEET_KEY, JSON.stringify(rows));
+  } catch {
+    // The icon stays for this page when storage is blocked.
+  }
+}
+
+function loadSheets(): { boxId: string; fileId: string; name: string; kind: 'csv' | 'xlsx'; bytes: number; x: number; y: number }[] {
+  try {
+    const rows = JSON.parse(localStorage.getItem(SHEET_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(rows)) return [];
+    return rows.slice(0, 24).flatMap((row) => {
+      if (typeof row !== 'object' || row === null) return [];
+      const value = row as Record<string, unknown>;
+      if (!isUuid(value.boxId) || !isUuid(value.fileId) || typeof value.name !== 'string') return [];
+      if (value.kind !== 'csv' && value.kind !== 'xlsx') return [];
+      if (typeof value.x !== 'number' || typeof value.y !== 'number') return [];
+      return [{ boxId: value.boxId, fileId: value.fileId, name: value.name.slice(0, 200), kind: value.kind, bytes: typeof value.bytes === 'number' ? value.bytes : 0, x: value.x, y: value.y }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function folderUnder(item: HTMLElement): string | null {
+  if (typeof document.elementsFromPoint !== 'function') return null;
+  const rect = item.getBoundingClientRect();
+  const hits = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + Math.min(40, rect.height / 2));
+  for (const node of hits) {
+    const folder = node.closest<HTMLElement>('.cv-item-box');
+    if (!folder || folder === item) continue;
+    const id = folder.querySelector('[data-box]')?.getAttribute('data-box') ?? '';
+    if (isUuid(id)) return id;
+  }
+  return null;
+}
+
+/** Dropping a spreadsheet card on a folder copies the file into that folder, which Ask and Make an app read. */
+async function dropSheetOnFolder(item: HTMLElement): Promise<void> {
+  if (!item.classList.contains('cv-item-sheet')) return;
+  const spot = [...sheets.values()].find((entry) => entry.item === item);
+  if (!spot) return;
+  const target = folderUnder(item);
+  if (!target || target === spot.boxId) return;
+  announce(`Adding ${spot.file.name} to the folder…`);
+  try {
+    const response = await fetch(spot.file.content_url, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('refused');
+    const blob = await response.blob();
+    const uploaded = await uploadFile(target, new File([blob], spot.file.name, { type: blob.type || 'application/octet-stream' }), () => undefined);
+    const at = widgetSpot(item) ?? undefined;
+    unmountWidget(item);
+    sheets.delete(sheetId(spot.boxId, spot.file.file_id));
+    placeSheet(target, uploaded.file, at);
+    void open.get(target)?.refresh();
+    announce(`${spot.file.name} is in the folder. Ask and Make an app there can read it.`);
+  } catch (error) {
+    announce(`${spot.file.name} stayed where it was. ${refusalText(error)}`);
+  }
+}
+
+/** The uploaded spreadsheet stays a file until the member chooses. Closing places nothing. */
+function offerSheet(boxId: string, file: BoxFile, found: Preview): void {
+  const kind = file.kind === 'xlsx' ? 'Excel' : 'CSV';
+  notice(`${file.name} is uploaded (${found.rows} rows, ${kind}). Nothing is on the canvas until you choose.`, [
+    { label: 'Place the spreadsheet', run: () => announce(placeSheet(boxId, file)) },
+    { label: 'Make a card', run: () => { void buildCard(boxId, idempotencyKey()).then(({ text }) => announce(text)); } },
+    { label: 'Make an app', run: () => openDataSheet(boxId, file, found, () => undefined) },
+  ], 0);
+}
+
 /** "+ New folder" and a drop on empty canvas: an "Untitled folder", open, its name ready to type. */
 export async function newUntitled(files: File[] = []): Promise<string> {
+  if (files.length > 0 && files.every(isDataFile)) return uploadAsSheets(files);
   let made: Box;
   try {
     made = await createBox(`Untitled ${noun}`);
@@ -1011,9 +1193,13 @@ export function startBoxes(document_: Document): void {
   // Apps built from a box get their "Summary" card (`explain.ts`).
   startExplain();
   markChips();
-  onLayoutSaved(save);
+  onLayoutSaved(() => { save(); saveSheets(); });
+  onCanvasDragEnd((item) => { void dropSheetOnFolder(item); });
   void refreshBoxes().then(() => {
     if (isDemoCanvas()) return;
     for (const row of load()) void openBox(row.id, { x: row.x, y: row.y });
+    for (const row of loadSheets()) {
+      placeSheet(row.boxId, sheetRecord(row.boxId, { file_id: row.fileId, name: row.name, kind: row.kind, bytes: row.bytes }), { x: row.x, y: row.y });
+    }
   });
 }

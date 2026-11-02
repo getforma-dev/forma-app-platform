@@ -193,6 +193,12 @@ export function onLayoutSaved(listener: () => void): void {
   layoutListeners.push(listener);
 }
 
+const dragEndListeners: ((item: HTMLElement) => void)[] = [];
+/** Calls `listener` when a canvas item finishes a drag. */
+export function onCanvasDragEnd(listener: (item: HTMLElement) => void): void {
+  dragEndListeners.push(listener);
+}
+
 /** The canvas item the member selected last, if any. */
 export function activeCanvasItem(): HTMLElement | null {
   return canvas?.activeItem() ?? null;
@@ -1519,6 +1525,7 @@ export function startBoard(document_: Document): void {
     // Moving a card by hand (drag or keyboard) pins its group's layout.
     onActiveDragStateChange: (item, dragging) => {
       if (dragging) return;
+      for (const listener of dragEndListeners) listener(item);
       stackHooks.dragEnd(item);
       if (widgetItems.has(item)) item.dataset.widgetPinned = 'true';
       const group = groups.get(item.dataset.group ?? '');

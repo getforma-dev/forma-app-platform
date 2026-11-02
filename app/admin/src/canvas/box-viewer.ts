@@ -159,9 +159,10 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
       return;
     }
     status.textContent = file.data
-      ? `Data ✓ · ${file.data.row_count} rows registered · ${found.columns.length} columns`
-      : `${found.rows} rows · ${found.columns.length} columns · types inferred, not yet confirmed${found.sheet ? ` · sheet ${found.sheet}` : ''}`;
+      ? `The sheet as stored · ${file.data.row_count} rows registered · ${found.columns.length} columns`
+      : `The sheet as stored · ${found.rows} rows · ${found.columns.length} columns${found.sheet ? ` · ${found.sheet}` : ''}. This is the file, not an app.`;
     modal.body.append(previewTable(document_, found));
+    modal.actions.append(el(document_, 'a', { href: file.content_url, target: '_blank', rel: 'noopener noreferrer', class: 'bx-link' }, 'Open the original file'));
     const make = el(document_, 'button', { type: 'button', class: 'bx-primary' }, file.data ? 'Adjust types' : 'Make data');
     make.addEventListener('click', () => {
       modal.close();
