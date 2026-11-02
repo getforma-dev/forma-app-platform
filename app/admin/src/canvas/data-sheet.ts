@@ -15,7 +15,7 @@ import {
   type BoxFile, type Card, type ConfirmedColumn, type ColumnType, type Preview,
 } from './box-api';
 import { openModal, previewTable } from './box-viewer';
-import { boardWorks, placeWork } from './board';
+import { boardWorks, markStandaloneWork, placeWork } from './board';
 import { announce, el, isUuid } from './render';
 
 export type SheetDone = { kind: 'card' | 'app' | 'attached' | 'data'; card: Card | null };
@@ -97,7 +97,7 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
     status.textContent = 'Registering the data and placing its card…';
     try {
       const made = await makeData(boxId, file.file_id, columns(), true);
-      if (made.card) await placeWork(made.card.app_id, made.card.work_id, []);
+      if (made.card) { markStandaloneWork(made.card.app_id, made.card.work_id); await placeWork(made.card.app_id, made.card.work_id, []); }
       finish({ kind: 'card', card: made.card }, made.card
         ? `${file.name} is data now (${made.data?.row_count ?? preview.rows} rows); its card is on the canvas.`
         : `${file.name} is registered as data. No card could be placed for you.`);
@@ -148,7 +148,7 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
     try {
       await makeData(boxId, file.file_id, columns(), false);
       const attached = await attachFile(boxId, file.file_id, appId, workId);
-      if (attached.card) await placeWork(attached.card.app_id, attached.card.work_id, []);
+      if (attached.card) { markStandaloneWork(attached.card.app_id, attached.card.work_id); await placeWork(attached.card.app_id, attached.card.work_id, []); }
       const title = works.find((work) => work.app === appId && work.work === workId)?.title ?? 'the app';
       finish({ kind: 'attached', card: attached.card }, `${file.name} was added to ${title}’s ${noun}${attached.card ? '; its data card is beside the app' : ''}.`);
     } catch (error) {

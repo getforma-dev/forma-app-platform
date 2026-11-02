@@ -386,7 +386,7 @@ test('a folder with files offers Ask, Make a card and Make an app; Make waits fo
   const form = card.querySelector('form')!;
   assert.equal(form.hidden, false);
   assert.equal(form.dataset.making, 'card');
-  assert.match(card.querySelector('.bx-card-preview')!.textContent, /“Q3 board pack”, with one card: the most useful view of q3_metrics\.csv/);
+  assert.match(card.querySelector('.bx-card-preview')!.textContent, /standalone card, “Q3 board pack”, showing the most useful view of q3_metrics\.csv/);
   assert.equal(calls.filter((c) => c.method === 'POST').length, 0, 'no request before the confirm');
   form.click('submit');
   await settle();

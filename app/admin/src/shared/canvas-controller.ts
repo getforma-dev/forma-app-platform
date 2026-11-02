@@ -34,7 +34,7 @@ function cardFor(document: Document, entry: ConnectedEntry): HTMLElement {
   return node(document, 'article', { class: 'connected-app', 'data-connected-app': entry.id },
     node(document, 'header', { class: 'connected-app-head', 'data-canvas-drag-handle': '' },
       node(document, 'div', {}, node(document, 'p', { class: 'share-policy' }, 'Connected · View only'), node(document, 'h2', {}, entry.title), node(document, 'p', { class: 'connected-owner' }, entry.owner_label)),
-      node(document, 'a', { class: 'share-secondary', href: entry.href }, 'Open app'),
+      node(document, 'a', { class: 'share-secondary', href: entry.href, target: '_blank', rel: 'noopener' }, 'Open app'),
       node(document, 'button', { type: 'button', 'data-connected-remove': entry.id }, 'Remove from canvas')),
     node(document, 'div', { 'data-app-presentation-header': '' }),
     node(document, 'p', { 'data-connected-loading': '', role: 'status' }, 'Checking live data…'));

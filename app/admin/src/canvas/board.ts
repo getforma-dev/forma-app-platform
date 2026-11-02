@@ -15,7 +15,7 @@ import {
 } from '../canvas-vendor/index';
 import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
-import { clearLayouts, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, type ItemLayout, type PlacedWork } from './layout';
+import { clearLayouts, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
 import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { announce, buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
@@ -27,7 +27,7 @@ import { startConnectedApps } from '../shared/canvas-controller';
 
 const recordControllers = new Map<string, ReturnType<typeof recordComponentsFor>>();
 
-type Group = {
+export type Group = {
   app: string;
   work: string;
   title: string;
@@ -80,6 +80,19 @@ const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserve
 // took off the board on purpose (an auto card stays off until reload).
 let member = '';
 let placed = new Map<string, PlacedWork>();
+let standaloneWorks = new Set<string>();
+const loadingGroups = new Map<string, Promise<Group | null>>();
+const placementGeneration = new Map<string, number>();
+/** Personal Library classification; no authority or server definition is inferred. */
+export function isStandaloneWork(app: string, work: string): boolean { return standaloneWorks.has(`${app}/${work}`); }
+export function setStandaloneWork(app: string, work: string, standalone: boolean): void {
+  if (!isUuid(app) || !isUuid(work)) return;
+  const key = `${app}/${work}`;
+  if (standalone) standaloneWorks.add(key); else standaloneWorks.delete(key);
+  saveStandaloneWorks(member, standaloneWorks);
+  emitCanvasChanged();
+}
+export function markStandaloneWork(app: string, work: string): void { setStandaloneWork(app, work, true); }
 const dismissed = new Set<string>();
 const changeListeners: Array<() => void> = [];
 const utilityItems = new Set<HTMLElement>();
@@ -297,15 +310,13 @@ function saveSoon(): void {
 function updateSummary(): void {
   const chip = host?.ownerDocument.getElementById('cv-summary');
   if (chip) {
-    let cards = widgetItems.size + stackHooks.count() + uniteHooks.count();
-    let apps = 0;
-    for (const group of groups.values()) {
-      if (group.items.length || uniteHooks.hasWork(group.work)) apps += 1;
-      cards += group.items.length;
+    let apps = 0, cards = 0;
+    for (const group of groups.values()) if (group.items.length || uniteHooks.hasWork(group.work)) {
+      if (isStandaloneWork(group.app, group.work)) cards++; else apps++;
     }
-    chip.textContent = cards
-      ? `${apps} ${apps === 1 ? 'app' : 'apps'} · ${cards} ${cards === 1 ? 'card' : 'cards'} on canvas`
-      : 'Empty canvas';
+    const tools = widgetItems.size + utilityItems.size;
+    const counts = [apps ? `${apps} ${apps === 1 ? 'app' : 'apps'}` : '', cards ? `${cards} ${cards === 1 ? 'card' : 'cards'}` : '', tools ? `${tools} ${tools === 1 ? 'tool' : 'tools'}` : ''].filter(Boolean);
+    chip.textContent = counts.length ? `${counts.join(' · ')} on canvas` : 'Empty canvas';
   }
   updateEmpty();
   for (const listener of changeListeners) listener();
@@ -433,6 +444,10 @@ const uniteHooks = {
   hasWork: (_work: string): boolean => false,
   remove: (_ids: string[]): string[] => [],
   settled: (): void => undefined,
+  restore: async (): Promise<void> => undefined,
+  arrange: (): void => undefined,
+  place: async (_app: string, _work: string, _mode: 'face' | 'stack' | 'open', _options?: { at?: { x: number; y: number }; focus?: boolean; preserveMode?: boolean }): Promise<string> => 'The canvas is still starting. Try again.',
+  removeWork: (_work: string): boolean => false,
 };
 export function setUniteHooks(hooks: Partial<typeof uniteHooks>): void {
   Object.assign(uniteHooks, hooks);
@@ -449,7 +464,7 @@ export function onBoardSettled(listener: () => void): void {
  * parked in the hidden board. Live updates and runs follow these.
  */
 function shownCards(group: Group): HTMLElement[] {
-  return group.cards.filter((card) => card.isConnected && !group.section.contains(card));
+  return group.cards.filter((card) => card.isConnected && !group.section.contains(card) && !card.closest('[hidden], [inert]'));
 }
 
 /**
@@ -457,31 +472,8 @@ function shownCards(group: Group): HTMLElement[] {
  * "Unite" button; `focus.ts` and `unite.ts` handle their clicks.
  */
 function decorateCard(card: HTMLElement): void {
-  if (card.querySelector(':scope [data-focus-card]')) return;
-  const document_ = card.ownerDocument;
-  const svg = document_.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 16 16');
-  svg.setAttribute('width', '14');
-  svg.setAttribute('height', '14');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document_.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10');
-  svg.append(path);
-  const title = card.getAttribute('aria-label') ?? 'this card';
-  const focus = el(document_, 'button', { type: 'button', class: 'cv-card-focus', 'data-focus-card': '', 'aria-label': `Focus ${title}`, title: 'Focus · F' });
-  focus.append(svg);
-  const remove = el(document_, 'button', { type: 'button', class: 'cv-card-focus cv-card-remove', 'data-card-remove': '', 'aria-label': `Take ${title} off the canvas`, title: 'Take off the canvas · Delete (back to the library; nothing is deleted)' }, '×');
-  const head = card.querySelector<HTMLElement>(':scope > .cv-card-head');
-  if (head) {
-    head.querySelector('h3')?.setAttribute('title', title);
-    head.append(el(document_, 'span', { class: 'cv-card-tools' }, focus, remove));
-    return;
-  }
-  // The app card: its title, then Unite and focus at the top right.
-  const tools = el(document_, 'div', { class: 'cv-app-tools' },
-    el(document_, 'button', { type: 'button', class: 'cv-card-unite', 'data-unite-app': '', title: 'Unite · U: open this app as a page' }, 'Unite'),
-    focus, remove);
-  card.querySelector(':scope > h2')?.after(tools);
+  // Components are owned by one app object. Its toolbar owns Focus and Remove.
+  card.querySelectorAll('.cv-card-tools, .cv-app-tools').forEach(node => node.remove());
 }
 /** Where a card is: its group, its element, and its canvas item when it is on the board on its own. */
 function findCard(id: string): { group: Group; card: HTMLElement; item: HTMLElement | null } | null {
@@ -518,7 +510,7 @@ export const stackBoard = {
     const found = findCard(id);
     if (!found) return null;
     wireCard(found.group, found.card);
-    runCards(found.group, [found.card]);
+    if (!found.card.closest('[hidden], [inert]')) runCards(found.group, [found.card]);
     return found.card;
   },
   /** A card element back into the hidden board. */
@@ -577,6 +569,51 @@ function notePlaced(group: Group, ids: string[]): void {
   placed.delete(group.work);
   placed.set(group.work, entry);
   keepPlaced();
+}
+
+/** Keep the complete work ref for reload; components are never independent placements. */
+export function rememberAppPlacement(work: string): void {
+  const group = groups.get(work);
+  if (group) notePlaced(group, group.cards.map(card => card.dataset.card ?? '').filter(Boolean));
+}
+/** Fetch and wire through the authorized route without briefly mounting loose components. */
+export function ensureAppGroup(app: string, work: string): Promise<Group | null> {
+  if (!canvas || !host || !isUuid(app) || !isUuid(work)) return Promise.resolve(null);
+  const existing = groups.get(work);
+  if (existing) return Promise.resolve(existing.app === app ? existing : null);
+  const key = `${app}/${work}`;
+  const loading = loadingGroups.get(key);
+  if (loading) return loading;
+  const pending = (async () => {
+    const json = await fetchGroup(app, work);
+    if (!json || !canvas || !host) return null;
+    const raced = groups.get(work);
+    if (raced) return raced.app === app ? raced : null;
+    const section = buildGroup(host.ownerDocument, json, []);
+    if (nameable([], json.origins)) section.dataset.nameable = 'true';
+    if (section.dataset.app !== app || section.dataset.work !== work) return null;
+    host.ownerDocument.getElementById('cv-board')?.append(section);
+    const group = adopt(section, nextRow(), false, () => false);
+    if (group) decorate(group);
+    return group;
+  })().finally(() => loadingGroups.delete(key));
+  loadingGroups.set(key, pending);
+  return pending;
+}
+/** Take the whole app off this canvas; its Library entry and data remain. */
+export function removeWork(work: string): number {
+  placementGeneration.set(work, (placementGeneration.get(work) ?? 0) + 1);
+  const removedFrame = uniteHooks.removeWork(work);
+  const group = groups.get(work);
+  const hadPlacement = placed.delete(work);
+  if (group) {
+    const ids = group.cards.map(card => card.dataset.card ?? '').filter(Boolean);
+    stackHooks.remove(ids);
+    for (const id of ids) dismissed.add(id);
+    for (const item of [...group.items]) unmountCard(group, item);
+  }
+  keepPlaced(); scheduleReflow(); updateSummary(); saveSoon();
+  return removedFrame || hadPlacement ? 1 : 0;
 }
 
 function updateZoomLabel(): void {
@@ -750,6 +787,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean, include: (card
     event.preventDefault();
     runGroup(work);
   });
+  decorate(group);
   let x = ORIGIN;
   let index = 0;
   for (const card of cards) {
@@ -853,90 +891,16 @@ export async function addCards(
   ids: string[] | null,
   options: { keep?: boolean; focus?: boolean; at?: { x: number; y: number } } = {},
 ): Promise<string> {
-  if (!canvas || !host || !isUuid(app) || !isUuid(work)) return 'Nothing was placed.';
-  let group = groups.get(work);
-  if (!group) {
-    const json = await fetchGroup(app, work);
-    if (!json) return 'That app could not be opened. Nothing was placed.';
-    if (!groups.has(work)) {
-      const section = buildGroup(host.ownerDocument, json, []);
-      host.ownerDocument.getElementById('cv-board')?.append(section);
-      adopt(section, nextRow(), false, () => false);
-    }
-    group = groups.get(work);
-    if (!group) return 'Nothing was placed.';
-  }
-  const wanted = group.cards.filter((card) => ids === null || ids.includes(card.dataset.card ?? ''));
-  if (!wanted.length) return 'That card is not available to you right now.';
-  const fresh: HTMLElement[] = [];
-  // A card in a stack or a unite frame is on the board already (APP-106).
-  const rowY = group.items.length ? Math.min(...group.items.map((item) => Number(item.dataset.canvasY ?? 0))) : nextRow();
-  let x = group.items.reduce((right, item) => Math.max(right, Number(item.dataset.canvasX ?? 0) + item.offsetWidth + GAP), ORIGIN);
-  // A library drop names the world point. It is an arrangement, so the group
-  // keeps that point (the re-flow would otherwise put the card back in a row)
-  // and the existing layout save writes it.
-  const dropped = options.at && Number.isFinite(options.at.x) && Number.isFinite(options.at.y) ? options.at : null;
-  wanted.forEach((card) => {
-    const id = card.dataset.card ?? '';
-    if (stackHooks.has(id) || uniteHooks.has(id)) return;
-    const exact = Boolean(dropped && fresh.length === 0);
-    const item = mountCard(group!, card, exact && dropped ? dropped : { x, y: rowY }, fresh.length, false, exact);
-    if (!item) return;
-    if (exact) group!.pinned = true;
-    x += (WIDTH[card.dataset.kind ?? ''] ?? 440) + GAP;
-    fresh.push(card);
-  });
-  if (options.keep !== false) notePlaced(group, wanted.map((card) => card.dataset.card ?? '').filter(Boolean));
-  const first = (fresh[0] ?? wanted[0])?.closest<HTMLElement>('.cv-item');
-  if (fresh.length) {
-    runCards(group, fresh);
-    scheduleReflow();
-    updateSummary();
-    saveSoon();
-  }
-  if (first && options.focus !== false && !dropped) {
-    // After the re-flow has placed it.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (!canvas || !first.isConnected) return;
-      canvas.centerItem(first);
-      flash(first);
-    }));
-  }
-  const count = fresh.length;
-  const message = count
-    ? `${count === 1 ? (fresh[0]?.getAttribute('aria-label') ?? 'The card') : `${count} cards`} from ${group.title} ${count === 1 ? 'is' : 'are'} on your canvas.`
-    : `${wanted.length === 1 ? 'That card is' : 'Those cards are'} already on your canvas.`;
-  announce(message);
-  return message;
+  if (ids !== null && !isStandaloneWork(app, work)) return 'App components stay together. Add the app from the Library.';
+  return uniteHooks.place(app, work, isStandaloneWork(app, work) ? 'open' : 'face', options);
 }
 
 /** APP-104: takes cards off the board (back to the library pane; never deletes data). */
 export function removeCards(ids: string[]): number {
+  const works = new Set(ids.flatMap(id => { const found = findCard(id); return found ? [found.group.work] : []; }));
   let removed = 0;
-  // Cards in a stack leave the stack (`stacks.ts`).
-  for (const id of [...stackHooks.remove(ids), ...uniteHooks.remove(ids)]) {
-    removed += 1;
-    dismissed.add(id);
-    for (const entry of placed.values()) entry.cards = entry.cards.filter((card) => card !== id);
-  }
-  for (const group of groups.values()) {
-    for (const item of [...group.items]) {
-      const id = item.dataset.instanceId ?? '';
-      if (!ids.includes(id)) continue;
-      unmountCard(group, item);
-      removed += 1;
-      dismissed.add(id);
-      const entry = placed.get(group.work);
-      if (entry) entry.cards = entry.cards.filter((card) => card !== id);
-    }
-  }
-  if (removed) {
-    keepPlaced();
-    scheduleReflow();
-    updateSummary();
-    saveSoon();
-    announce(`${removed} ${removed === 1 ? 'card' : 'cards'} back in the library.`);
-  }
+  for (const work of works) removed += removeWork(work);
+  if (removed) announce(`${removed} ${removed === 1 ? 'item' : 'items'} back in the Library. Nothing was deleted.`);
   return removed;
 }
 
@@ -951,7 +915,7 @@ async function showWaiting(app: string, work: string): Promise<void> {
   try {
     const json = await fetchGroup(app, work);
     const ids = (json?.records ?? []).filter((card) => Number(card.waiting ?? '0') > 0 && !dismissed.has(card.id)).map((card) => card.id);
-    if (ids.length && !ids.every(isOnBoard)) await addCards(app, work, ids, { keep: false, focus: false });
+    if (ids.length && !uniteHooks.hasWork(work)) await uniteHooks.place(app, work, 'open', { focus: false });
   } finally {
     checking.delete(work);
   }
@@ -1031,82 +995,17 @@ export function placeWork(app: string, work: string, labels: string[] = []): Pro
 }
 
 async function placeWorkNow(app: string, work: string, labels: string[]): Promise<string> {
-  if (!canvas || !host || !isUuid(app) || !isUuid(work)) return 'Nothing was placed.';
-  const existing = groups.get(work);
-  if (existing) {
-    // APP-104: a work the board has seen keeps its unplaced cards in hand;
-    // placing it brings them all.
-    if (existing.items.length < existing.cards.length) return addCards(app, work, null);
-    notePlaced(existing, existing.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
-    const first = existing.items[0];
-    if (first) {
-      canvas.centerItem(first);
-      flash(first);
-    }
-    return 'That app is already on your canvas.';
-  }
-  const document_ = host.ownerDocument;
-  const y = nextRow();
-  const bar = (width: string) => el(document_, 'span', { class: 'cv-skeleton-bar', 'data-width': width });
-  const ghost = createCanvasItem({
-    instanceId: `placing-${work}`,
-    displayName: 'Placing an app',
-    preferredWidth: 760,
-    minHeight: 260,
-    content: el(document_, 'article', { class: 'cv-card cv-ghost', 'aria-busy': 'true' },
-      el(document_, 'p', { class: 'cv-ghost-status' }, el(document_, 'span', { class: 'cv-spinner', 'aria-hidden': 'true' }), 'Placing your app'),
-      el(document_, 'div', { class: 'cv-skeleton', 'aria-hidden': 'true' },
-        el(document_, 'div', { class: 'cv-skeleton-card' }, bar('60'), bar('40'), bar('90'), bar('90'), bar('50')),
-        el(document_, 'div', { class: 'cv-skeleton-card' }, bar('40'), el(document_, 'span', { class: 'cv-skeleton-block' }), bar('70')),
-        el(document_, 'div', { class: 'cv-skeleton-card' }, bar('50'), el(document_, 'span', { class: 'cv-skeleton-chart' },
-          ...['35', '60', '45', '80', '55', '95'].map((height) => el(document_, 'i', { 'data-height': height }))), bar('80'))),
-      el(document_, 'p', { class: 'cv-message' }, 'Loading its cards. Every number arrives with its proof.')),
-    chrome: false,
-  });
-  ghost.classList.add('cv-item', 'cv-item-ghost');
-  canvas.mountItem(ghost, { x: ORIGIN, y }, { focus: false });
-  canvas.centerItem(ghost);
-  const group = await fetchGroup(app, work);
-  canvas.removeItem(ghost, { selectFallback: false });
+  const generation = placementGeneration.get(work) ?? 0;
+  const group = await ensureAppGroup(app, work);
+  if ((placementGeneration.get(work) ?? 0) !== generation) return 'That placement was cancelled.';
   if (!group) return 'The app could not be opened. Nothing was placed.';
-  // APP-113: another path (addCards, a swap) placed it while this one waited.
-  if (groups.has(work)) return placeWorkNow(app, work, labels);
-  const started = performance.now();
-  const section = buildGroup(document_, group, labels);
-  if (nameable(labels, group.origins)) section.dataset.nameable = 'true';
-  document_.getElementById('cv-board')?.append(section);
-  const adopted = adopt(section, y, true);
-  if (!adopted) return 'Nothing was placed.';
-  notePlaced(adopted, adopted.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
-  decorate(adopted);
-  scheduleReflow();
-  const elapsed = Math.round(performance.now() - started);
-  host.dataset.lastPlaceMs = String(elapsed);
-  runGroup(work);
-  // Show the whole canvas with the new app arriving; keep fitting while its
-  // results grow the cards. On a phone, fitting a row of cards makes them
-  // unreadable: the first card is centered at a readable zoom instead.
-  const first = adopted.items[0];
-  if (narrow() && first) {
-    canvas.resetZoom();
-    canvas.zoomBy(0.6);
-    canvas.centerItem(first);
-    refreshZoomLabel();
-  } else {
-    canvas.fitAll();
-    fitPending = true;
-    window.setTimeout(() => { fitPending = false; }, 3000);
-  }
-  updateSummary();
-  saveSoon();
-  announce(`${group.title} placed on the canvas.`);
-  // An adaptation that arrived before this standard work was placed.
+  if (nameable(labels, [])) { group.section.dataset.nameable = 'true'; decorate(group); }
+  const existingMode = host?.querySelector<HTMLElement>(`.cv-item-unite[data-unite="${work}"]`)?.dataset.appView;
+  const mode = existingMode === 'open' || existingMode === 'stack' ? existingMode : 'face';
+  const result = await uniteHooks.place(app, work, isStandaloneWork(app, work) ? 'open' : mode, { preserveMode: true });
   const pending = early.get(work);
-  if (pending) {
-    early.delete(work);
-    void reshape({ app, work }, pending);
-  }
-  return `${group.title} is on your canvas.`;
+  if (pending) { early.delete(work); void reshape({ app, work }, pending); }
+  return result;
 }
 
 // --- APP-101: live transform, back to standard, save as /name ---
@@ -1138,11 +1037,7 @@ function nameable(labels: string[], origins: { kind: string; text: string }[] | 
 }
 
 function appCard(group: Group): HTMLElement | null {
-  for (const item of group.items) {
-    const card = item.querySelector<HTMLElement>('.cv-app');
-    if (card) return card;
-  }
-  return null;
+  return group.cards.find(card => card.dataset.kind === 'app') ?? null;
 }
 
 /** The app card's APP-101 controls: back to standard / adapted view, and save as /name. */
@@ -1236,7 +1131,9 @@ async function nameWork(app: string, work: string, slug: string): Promise<{ app_
  */
 async function swapGroup(fromWork: string, toApp: string, toWork: string, labels: string[] = [], keepPair = true): Promise<boolean> {
   if (!groups.has(fromWork) || !canvas || !host || groups.has(toWork)) return false;
+  const generation = placementGeneration.get(fromWork) ?? 0;
   const json = await fetchGroup(toApp, toWork);
+  if ((placementGeneration.get(fromWork) ?? 0) !== generation) return false;
   // APP-113: re-check after the wait (another swap or placement may have run).
   const old = groups.get(fromWork);
   if (!json || !old || !canvas || !host || groups.has(toWork)) return false;
@@ -1244,6 +1141,8 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
   // The new group takes the old one's row: its first card, else its unite frame or stack.
   const frame = host.querySelector<HTMLElement>(`.cv-item-unite[data-unite="${fromWork}"]`);
   const y = Number(old.items[0]?.dataset.canvasY ?? frame?.dataset.canvasY ?? nextRow());
+  const previousMode = frame?.dataset.appView;
+  const mode = previousMode === 'open' || previousMode === 'stack' ? previousMode : 'face';
   // APP-113: the old cards leave their stacks and unite frames too (a stack
   // left with one card spreads it; an emptied frame is removed and forgotten),
   // so no stale card, frame or count survives the swap.
@@ -1263,7 +1162,7 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
   groups.clear();
   let fresh: Group | null = null;
   for (const [key, group] of entries) {
-    if (key === fromWork) fresh = adopt(section, y, true);
+    if (key === fromWork) fresh = adopt(section, y, true, () => false);
     else groups.set(key, group);
   }
   if (!fresh) return false;
@@ -1277,6 +1176,8 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
   window.clearTimeout(liveRuns.get(fromWork));
   liveRuns.delete(fromWork);
   decorate(fresh);
+  if (isStandaloneWork(old.app, fromWork)) markStandaloneWork(toApp, toWork);
+  await uniteHooks.place(toApp, toWork, isStandaloneWork(toApp, toWork) ? 'open' : mode, { at: { x: Number(frame?.dataset.canvasX ?? ORIGIN), y } });
   scheduleReflow();
   runGroup(toWork);
   updateSummary();
@@ -1453,6 +1354,7 @@ function onLive(event: LiveEvent): void {
 
 /** "Reset layout": every group back to the default rows (view layout only). */
 export function resetLayout(): void {
+  uniteHooks.arrange();
   if (!canvas) return;
   clearLayouts();
   for (const group of groups.values()) {
@@ -1545,16 +1447,16 @@ export function startBoard(document_: Document): void {
   // cookie's restored work, and records waiting for the member's decision.
   member = host.dataset.member ?? '';
   placed = loadPlaced(member);
+  standaloneWorks = loadStandaloneWorks(member);
   const sections = Array.from(document_.querySelectorAll<HTMLElement>('#cv-board > .cv-group'));
   const flush = canvas.deferDerivedUpdates(false);
   let y = ORIGIN;
   for (const section of sections) {
     const work = section.dataset.work ?? '';
     const restored = section.dataset.auto === 'restored';
-    const kept = new Set(placed.get(work)?.cards ?? []);
-    const group = adopt(section, y, false, (card) => restored || kept.has(card.dataset.card ?? '') || waiting(card));
+    const group = adopt(section, y, false, () => false);
     if (!group) continue;
-    if (restored) notePlaced(group, group.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
+    if (restored || group.cards.some(waiting)) notePlaced(group, group.cards.map((card) => card.dataset.card ?? '').filter(Boolean));
     if (group.items.length) {
       y = Math.max(y, ...group.items.map((item) => Number(item.dataset.canvasY ?? 0) + item.offsetHeight)) + ROW_GAP;
     }
@@ -1588,7 +1490,7 @@ export function startBoard(document_: Document): void {
     const button = (event.target as Element | null)?.closest<HTMLElement>('[data-card-remove]');
     const card = button?.closest<HTMLElement>('.cv-card');
     const id = card?.dataset.card;
-    if (!button || !id) return;
+    if (!button || !id || card.closest('.cv-unite')) return;
     event.stopPropagation();
     removeCards([id]);
     announce(`${card.getAttribute('aria-label') ?? 'The card'} is back in the library. Nothing was deleted.`);
@@ -1601,15 +1503,13 @@ export function startBoard(document_: Document): void {
       const restoreFlush = canvas.deferDerivedUpdates(false);
       for (const [work, entry, json] of fetched) {
         if (!json) {
-          // No longer openable for this member: forget it.
-          placed.delete(work);
+          // A failed fetch may be transient. Keep references without rendering cached data.
           continue;
         }
         if (groups.has(work)) continue;
         const section = buildGroup(document_, json, []);
         document_.getElementById('cv-board')?.append(section);
-        const kept = new Set(entry.cards);
-        adopt(section, nextRow(), false, (card) => kept.has(card.dataset.card ?? '') || waiting(card));
+        adopt(section, nextRow(), false, () => false);
       }
       restoreFlush();
       // Forget cards that no longer exist.
@@ -1618,7 +1518,7 @@ export function startBoard(document_: Document): void {
         if (group) entry.cards = entry.cards.filter((id) => group.cards.some((card) => card.dataset.card === id));
       }
       keepPlaced();
-      settle(document_);
+      void settle(document_);
     });
 }
 
@@ -1651,15 +1551,15 @@ export function canvasLinkPlan(hash: string, mounted: boolean, app: string | nul
 }
 
 /** After the board's first contents are in place: camera, summary, runs. */
-function settle(document_: Document): void {
+async function settle(document_: Document): Promise<void> {
   if (!canvas || !host) return;
+  await uniteHooks.restore();
   stackHooks.settled();
-  uniteHooks.settled();
   const camera = demo() ? null : loadCamera();
   const target = requestedWork(location.hash);
-  const mounted = target ? groups.get(target)?.items[0] : undefined;
+  const mounted = target ? host.querySelector<HTMLElement>(`.cv-item-unite[data-unite="${target}"]`) ?? groups.get(target)?.items[0] : undefined;
   const linkedApp = target ? listedWorkApp(document_, target) : null;
-  const items = Array.from(groups.values()).flatMap((group) => group.items);
+  const items = [...Array.from(groups.values()).flatMap((group) => group.items), ...host.querySelectorAll<HTMLElement>('.cv-item-unite')];
   const plan = canvasLinkPlan(location.hash, Boolean(mounted), linkedApp);
   if (plan === 'focus' && mounted) {
     canvas.focusItem(mounted);

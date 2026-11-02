@@ -1,4 +1,5 @@
 import { isUuid } from '../canvas/ids';
+import { hiddenAppComponents, saveHiddenAppComponents } from './presentation';
 
 function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, attributes: Record<string, string> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const node = doc.createElement(tag);
@@ -78,6 +79,7 @@ export async function openPresentationEditor(document_: Document, app: string, w
   let state: EditorState | null = null;
   let sections: Section[] = [];
   let actions: Action[] = [];
+  let hiddenComponents = new Set<string>();
   let nextId = 0;
   const uniqueId = (prefix: string) => {
     let id: string;
@@ -128,6 +130,15 @@ export async function openPresentationEditor(document_: Document, app: string, w
   const actionRows = el(document_, 'div', { class: 'presentation-editor-actions' });
   const addSection = el(document_, 'button', { type: 'button' }, 'Add section');
   const addAction = el(document_, 'button', { type: 'button' }, 'Add button');
+  const saveVisibility = el(document_, 'button', { type: 'button' }, 'Save my view preferences');
+  const visibilityStatus = el(document_, 'p', { role: 'status', 'aria-live': 'polite' });
+  saveVisibility.addEventListener('click', () => {
+    if (!state?.can_edit || saving) return;
+    const ids = state.components.filter(component => hiddenComponents.has(component.id)).map(component => component.id);
+    visibilityStatus.textContent = saveHiddenAppComponents(app, work, ids, document_)
+      ? 'View preferences saved on this browser. The published app and shared links are unchanged.'
+      : 'This browser could not save the view preferences. No preference was changed.';
+  });
 
   const renderComponents = () => {
     componentRows.replaceChildren();
@@ -155,7 +166,12 @@ export async function openPresentationEditor(document_: Document, app: string, w
         componentRows.querySelector<HTMLElement>(`[data-editor-component="${id}"] select`)?.focus();
       };
       up.addEventListener('click', () => move(-1)); down.addEventListener('click', () => move(1));
-      componentRows.append(el(document_, 'div', { class: 'presentation-editor-component', 'data-editor-component': id }, el(document_, 'span', {}, component.title), where, up, down));
+      const hide = el(document_, 'input', { type: 'checkbox', 'aria-label': `Hide ${component.title} in my views on this browser` });
+      hide.checked = hiddenComponents.has(id);
+      hide.addEventListener('change', () => { if (hide.checked) hiddenComponents.add(id); else hiddenComponents.delete(id); });
+      componentRows.append(el(document_, 'div', { class: 'presentation-editor-component', 'data-editor-component': id },
+        el(document_, 'span', {}, component.title), where, up, down,
+        el(document_, 'label', {}, hide, 'Hide in my views on this browser')));
     }
   };
   const renderSections = () => {
@@ -265,6 +281,7 @@ export async function openPresentationEditor(document_: Document, app: string, w
     state = response.ok ? editorState(await response.json()) : null;
     if (!state || !state.can_edit) { status.textContent = 'The app owner can change this app’s design.'; return; }
     const existing = state.presentation;
+    hiddenComponents = hiddenAppComponents(app, work);
     sections = existing?.sections?.length ? structuredClone(existing.sections) : [{ id: 'main', title: '', components: state.components.map(component => component.id) }];
     actions = structuredClone(existing?.actions || []);
     description.value = existing?.description || '';
@@ -274,6 +291,7 @@ export async function openPresentationEditor(document_: Document, app: string, w
       el(document_, 'fieldset', { class: 'presentation-editor-theme' }, el(document_, 'legend', {}, 'Appearance'), group('Appearance', mode), group('Accent', accent), group('Spacing', density), group('Typography', font)),
       el(document_, 'h3', {}, 'Sections'), sectionRows, addSection,
       el(document_, 'h3', {}, 'Components'), componentRows,
+      el(document_, 'p', {}, 'Hidden components stay in the app and remain accessible to others. These preferences apply to this browser’s app views and member page only; they do not change sharing or data access.'), saveVisibility, visibilityStatus,
       el(document_, 'h3', {}, 'App buttons'), actionRows, addAction);
     renderSections(); renderComponents(); renderActions();
     status.textContent = ''; save.disabled = false; description.focus();

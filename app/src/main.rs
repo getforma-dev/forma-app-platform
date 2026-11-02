@@ -1756,7 +1756,8 @@ mod tests {
                 && content.contains(">/traffic<")
         );
         assert!(content.contains("Spend &lt;Review&gt;") && !content.contains("<Review>"));
-        assert!(content.contains("2 apps · 3 cards"));
+        assert!(content.contains("Apps, widgets and standalone cards you can use."));
+        assert!(!content.contains("2 apps · 3 cards"));
         // An empty canvas offers creation intents that require no installed
         // apps, so a new customer is not sent to an absent Expense app.
         let empty = canvas::CanvasProps {

@@ -51,7 +51,7 @@ import { startExplain } from './explain';
 import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
   boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onCanvasDragEnd, onLayoutSaved,
-  placeWork, unmountWidget, widgetSpot, workCard,
+  markStandaloneWork, placeWork, unmountWidget, widgetSpot, workCard,
   type CanvasDragEnd,
 } from './board';
 import { setFileRouter } from './receipt';
@@ -590,7 +590,7 @@ export function cardSummary(contents: BoxContents): string {
   const [first] = data;
   if (!first) return `This ${noun} has no table (CSV or XLSX) to make a card from yet.`;
   const named = contents.box.kind === 'uploads' || /^untitled/i.test(contents.box.name) ? first.name.replace(/\.[^.]+$/, '') : boxLabel(contents.box);
-  return `Forma makes a small app, “${named}”, with one card: the most useful view of ${first.name}. It links back to this ${noun}.`;
+  return `Forma makes a standalone card, “${named}”, showing the most useful view of ${first.name}. It links back to this ${noun}.`;
 }
 
 /** APP-124 **Make a card**: one card from the folder's data, placed with its app's address; says so (`made`: it was made). */
@@ -605,6 +605,7 @@ async function buildCard(boxId: string, key: string, fileIds?: string[]): Promis
     // The new app's `/name` joins the member's addresses before it is placed, so its card shows the chip.
     if (made.address) await refreshCommands();
     const placing = performance.now();
+    markStandaloneWork(made.app_id, made.work_id);
     const placed = await placeWork(made.app_id, made.work_id, []);
     if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') decorateAppCards(document);
     void formationChip(made.timings, performance.now() - placing, made.work_id, workCard(made.work_id, 'app'));
@@ -693,7 +694,7 @@ async function autoData(boxId: string, file: BoxFile, found: Preview, done: () =
   notice(`Read ${file.name}: ${found.rows} rows, ${found.columns.length} columns. Registering with the inferred types…`, [], 0);
   try {
     const made = await makeData(boxId, file.file_id, defaultColumns(found), true);
-    if (made.card) await placeWork(made.card.app_id, made.card.work_id, []);
+    if (made.card) { markStandaloneWork(made.card.app_id, made.card.work_id); await placeWork(made.card.app_id, made.card.work_id, []); }
     done();
     const file_ = { ...file, data: made.data };
     notice(made.card ? `${file.name} is a data card now (${made.data?.row_count ?? found.rows} rows, types inferred).` : `${file.name} is registered as data.`, [
