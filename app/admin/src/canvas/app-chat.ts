@@ -1,6 +1,7 @@
-// An app-owned, read-only conversation. It never enters the canvas builder or
-// action router. Every request has exactly one saved work or one source file.
+// An app-owned conversation and explicit, confirmed data-change mode. Neither
+// enters the builder or global action router; all requests name this saved work.
 import { ASK_REFUSALS, requestAsk, type AskReply, type RecordScope } from '../ask/client';
+import { mountAppDataActions, type AppDataActions } from './app-data-actions';
 import type { RowReference } from './box-api';
 import { isUuid } from './ids';
 import { el } from './render';
@@ -9,6 +10,7 @@ export type AppChatOptions = {
   app: string; work: string; title: string; address?: string;
   onOpenSource?: (fileId: string) => void;
   onOpenActions?: () => void;
+  onDataCommitted?: (recordId: string) => void;
   renderAnswerActions?: (snapshot: AppChatSnapshot) => HTMLElement;
 };
 export type AppChatSnapshot =
@@ -92,10 +94,16 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
   }
   const form = el(doc, 'form', {class: 'cv-app-chat-form'}, input,
     el(doc, 'div', {class: 'cv-app-chat-submit'}, stop, send));
-  const root = el(doc, 'section', {class: 'cv-app-chat'},
+  const askView = el(doc, 'div', {class: 'cv-app-chat-ask-view'},
     el(doc, 'div', {class: 'cv-app-chat-context-row'}, el(doc, 'span', {}, 'Ask about'), selector),
     hint, actions, thread, status, retry, form);
+  const changeView = el(doc, 'div', {class: 'cv-app-chat-change-view'}); changeView.hidden = true;
+  const askMode = el(doc, 'button', {type: 'button', 'aria-pressed': 'true'}, 'Ask');
+  const changeMode = el(doc, 'button', {type: 'button', 'aria-pressed': 'false'}, 'Change data');
+  const modePicker = el(doc, 'div', {class: 'cv-app-chat-mode', role: 'group', 'aria-label': 'Assistant mode'}, askMode, changeMode);
+  const root = el(doc, 'section', {class: 'cv-app-chat'}, modePicker, askView, changeView);
   host.replaceChildren(root);
+  let mode: 'ask' | 'change' = 'ask', changes: AppDataActions | null = null;
   let alive = true, visible = false, authorized = false, loading = false, generation = 0, focusRequested = false;
   let pending: AbortController | null = null, sources: Sources | null = null, selected = CHOOSE;
   let requestedSource: string | null = null, failed: Exchange | null = null, active: Exchange | null = null, queued: string | null = null;
@@ -106,7 +114,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
   let recordScope = scope, recordScopeRefused = false, recordScopeRefusal = '';
   const recordsLabel = () => recordScope.kind === 'card' ? `Component records · ${recordScope.address}` : 'App records';
   const currentSource = () => sources?.files.find(file => file.id === selected);
-  const current = (at: number) => alive && visible && host.isConnected && generation === at;
+  const current = (at: number) => alive && visible && mode === 'ask' && host.isConnected && generation === at;
   const refreshControls = () => {
     selector.disabled = !authorized || !!pending;
     input.disabled = !authorized;
@@ -123,7 +131,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
     thread.replaceChildren();
     if (!exchanges.length) thread.append(el(doc, 'li', {class: 'cv-app-chat-empty'},
       el(doc, 'p', {}, 'Explore your data, ask for an explanation, or find a detail.'),
-      el(doc, 'p', {}, 'Answers don’t change your data. Use the app’s actions to make changes.')));
+      el(doc, 'p', {}, 'To add or update records, choose Change data and review the proposed change.')));
     for (const exchange of exchanges) {
       const item = el(doc, 'li', {class: 'cv-app-chat-exchange'},
         el(doc, 'p', {class: 'cv-app-chat-question'}, exchange.question),
@@ -298,18 +306,30 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
   });
   selector.addEventListener('change', () => {cancel(); selected = selector.value; failed = null; recordScopeRefused = false; refreshControls();});
   open.addEventListener('click', () => {if (authorized && currentSource()) options.onOpenSource?.(selected);});
+  const dataActions = () => changes ??= mountAppDataActions(changeView, {...options, onCommitted: options.onDataCommitted});
+  const selectMode = (next: 'ask' | 'change') => {
+    if (!alive || next === mode) return;
+    if (mode === 'ask') cancel(); else changes?.hide();
+    mode = next; askView.hidden = next !== 'ask'; changeView.hidden = next !== 'change';
+    askMode.setAttribute('aria-pressed', String(next === 'ask')); changeMode.setAttribute('aria-pressed', String(next === 'change'));
+    if (visible) {if (next === 'ask') {focusRequested = true; void load();} else dataActions().show();}
+  };
+  askMode.addEventListener('click', () => selectMode('ask'));
+  changeMode.addEventListener('click', () => selectMode('change'));
   renderThread(); refreshControls(); root.hidden = true;
   return {
-    show() {if (!alive || visible) return; visible = true; root.hidden = false; void load();},
-    hide() {if (!alive) return; visible = false; root.hidden = true; queued = null; focusRequested = false; cancel();},
+    show() {if (!alive || visible) return; visible = true; root.hidden = false; if (mode === 'ask') void load(); else dataActions().show();},
+    hide() {if (!alive) return; visible = false; root.hidden = true; queued = null; focusRequested = false; cancel(); changes?.hide();},
     setSource(fileId) {
       if (!alive || !isUuid(fileId)) return;
+      selectMode('ask');
       recordScope = scope; recordScopeRefused = false;
       requestedSource = fileId;
       if (visible) {cancel(); void load();}
     },
     setRecordScope(next) {
       if (!alive) return;
+      if (next) selectMode('ask');
       if (!recordScopeRefused && ((!next && recordScope === scope) || (next && selected === RECORDS
         && next.kind === recordScope.kind && next.address === recordScope.address && next.works.length === 1
         && next.works[0]?.app_id === recordScope.works[0]?.app_id && next.works[0]?.work_id === recordScope.works[0]?.work_id
@@ -338,6 +358,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
     },
     ask(question) {
       const text = question.trim().slice(0, 500); if (!alive || !text) return;
+      selectMode('ask');
       focusRequested = true;
       if (pending && (!loading || queued)) {
         if (waiting.length >= 8) {if (!input.value) input.value = text; status.textContent = 'Several questions are waiting. Send this question when they finish.';}
@@ -352,7 +373,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
       }
       input.focus();
     },
-    focus() {if (alive && visible) {focusRequested = true; if (authorized) {focusRequested = false; input.focus();}}},
-    dispose() {alive = false; visible = false; cancel(); exchanges.length = 0; input.value = ''; sources = null; root.remove();},
+    focus() {if (alive && visible) {if (mode === 'change') changes?.focus(); else {focusRequested = true; if (authorized) {focusRequested = false; input.focus();}}}},
+    dispose() {alive = false; visible = false; cancel(); changes?.dispose(); exchanges.length = 0; input.value = ''; sources = null; root.remove();},
   };
 }

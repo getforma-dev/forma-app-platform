@@ -9,7 +9,7 @@ import type { RecordScope } from '../ask/client';
 
 export type AppAssistantTab = 'ask' | 'summary' | 'sources' | 'saved';
 type View = {show(): void; hide(): void; dispose(): void};
-type Options = {app: string; work: string; title: string; address?: string; onOpenActions?: () => void; onOpenApp?: () => void};
+type Options = {app: string; work: string; title: string; address?: string; onOpenActions?: () => void; onOpenApp?: () => void; onDataCommitted?: (recordId: string) => void};
 type Companion = {host: HTMLElement; options: Options; open: boolean; tab: AppAssistantTab; select(tab: AppAssistantTab): void; close(): void; dispose(): void; chat: ReturnType<typeof mountAppChat>};
 const companions = new Map<string, Companion>();
 const names: Record<AppAssistantTab, string> = {ask: 'Ask', summary: 'Summary', sources: 'Sources', saved: 'Saved'};
@@ -25,7 +25,7 @@ function mount(host: HTMLElement, options: Options): Companion {
   const emit = () => {
     const root = host.closest('.cv-unite');
     for (const button of root?.querySelectorAll<HTMLElement>('[data-app-assistant]') ?? [])
-      button.setAttribute('aria-expanded', String(entry.open && button.dataset.appAssistant === entry.tab));
+      button.setAttribute('aria-expanded', String(entry.open));
     host.dispatchEvent(new CustomEvent('forma:app-companion', {bubbles: true, detail: {app: options.app, work: options.work, open: entry.open, tab: entry.tab}}));
   };
   const chatHost = el(doc, 'div', {class: 'cv-app-assistant-view cv-app-chat-host'});
@@ -83,7 +83,7 @@ function mount(host: HTMLElement, options: Options): Companion {
       if (!current() || !entry.open) return;
       views[entry.tab]?.hide(); entry.open = false; host.hidden = true; host.inert = true; emit();
       const root = host.closest('.cv-unite');
-      (root?.querySelector<HTMLElement>(`[data-app-assistant="${entry.tab}"]`) ?? root?.querySelector<HTMLElement>('[data-app-assistant="ask"]'))?.focus({preventScroll: true});
+      root?.querySelector<HTMLElement>('[data-app-assistant]')?.focus({preventScroll: true});
     },
     dispose() {
       entry.open = false; for (const view of Object.values(views)) view?.dispose();
@@ -93,16 +93,17 @@ function mount(host: HTMLElement, options: Options): Companion {
   return entry;
 }
 
-export function showAppAssistant(host: HTMLElement, options: Options, tab: AppAssistantTab, request: {toggle?: boolean; question?: string; scope?: RecordScope | null} = {}): void {
-  if (!host.isConnected || !isUuid(options.app) || !isUuid(options.work) || !tabs.includes(tab)) return;
+export function showAppAssistant(host: HTMLElement, options: Options, tab: AppAssistantTab | undefined, request: {toggle?: boolean; question?: string; scope?: RecordScope | null} = {}): void {
+  if (!host.isConnected || !isUuid(options.app) || !isUuid(options.work) || (tab !== undefined && !tabs.includes(tab))) return;
   const key = keyOf(options.app, options.work);
   let entry = companions.get(key);
   if (entry?.host !== host) {entry?.dispose(); companions.delete(key); entry = undefined;}
   if (!entry) {entry = mount(host, options); companions.set(key, entry);}
-  if (request.toggle && entry.open && entry.tab === tab) {entry.close(); return;}
+  if (request.toggle && entry.open) {entry.close(); return;}
   if (tab === 'ask') entry.chat.setRecordScope(request.scope ?? null);
-  entry.select(tab);
-  if (tab === 'ask') {if (request.question?.trim()) entry.chat.ask(request.question); else entry.chat.focus();}
+  const selected = tab ?? entry.tab;
+  entry.select(selected);
+  if (selected === 'ask') {if (request.question?.trim()) entry.chat.ask(request.question); else entry.chat.focus();}
 }
 export function disposeAppAssistant(app: string, work: string): void {
   const key = keyOf(app, work), entry = companions.get(key);

@@ -77,8 +77,8 @@ pub const RECEIPT_MEMBER: &[limits::Window] = &[limits::per(20, 3600)];
 pub const RECEIPT_READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 
 pub struct Act {
-    auth: Arc<Auth>,
-    parser: Parser,
+    pub(super) auth: Arc<Auth>,
+    pub(super) parser: Parser,
 }
 impl Act {
     pub fn new(auth: Arc<Auth>, parser: Parser) -> Self {
@@ -204,7 +204,7 @@ async fn notes_work(State(auth): State<Arc<Auth>>, request: Request) -> Response
     }
 }
 
-async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Response> {
+pub(super) async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Response> {
     let cookie = cookies::read(headers, cookies::SESSION).ok_or_else(http::not_found)?;
     let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
     let live = |reference: &str| auth.vault.contains(reference);
@@ -220,7 +220,7 @@ async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Resp
     }
 }
 
-fn document(status: StatusCode, value: &Value) -> Response {
+pub(super) fn document(status: StatusCode, value: &Value) -> Response {
     let Ok(bytes) = crate::admission::encode(value) else {
         return http::unavailable();
     };

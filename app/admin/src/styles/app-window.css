@@ -46,8 +46,6 @@
 .cv-app-view-picker button[aria-pressed=true] { background: var(--cv-surface); color: var(--cv-text); box-shadow: 0 1px 3px rgb(0 0 0 / 9%); }
 .cv-unite[data-app-view] .cv-unite-actions,
 .cv-unite[data-app-view].is-single .cv-unite-actions { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 3px; margin-left: auto; min-width: 0; }
-.cv-window-summary-toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 7px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--cv-muted); font: inherit; font-size: .72rem; cursor: pointer; }
-.cv-window-summary-toggle:hover, .cv-window-summary-toggle[aria-expanded=true] { color: var(--cv-accent); background: var(--cv-accent-soft); }
 .cv-app-content { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .cv-unite[data-app-view] :is([data-app-view-face], [data-app-view-stack], [data-app-view-open]) { min-height: 0; overflow: auto; flex: 1; padding: 20px; overscroll-behavior: contain; scrollbar-width: thin; }
 .cv-unite[data-app-view] [data-app-view-face] { display: flex; flex-direction: column; gap: 12px; }
@@ -184,3 +182,38 @@
 .cv-app-assistant-body { overflow:auto; scrollbar-width:thin; }
 .cv-app-chat { min-height:370px; }
 .cv-app-chat-thread { min-height:0; }
+
+/* Receipts remain attached to their component for trusted reads and provenance.
+   App users get source access in the assistant; incomplete results remain visible. */
+[data-app-component="true"] :is(.cv-receipt, .cv-shaped-receipts, .cv-records-provenance),
+[data-app-component="true"] .record-component .receipt { display:none; }
+[data-app-component="true"] .cv-shaped-evidence-column { display:none; }
+
+/* Data changes use an explicit mode and a readable review inside the assistant. */
+.cv-app-chat-mode { display:flex; gap:3px; flex:none; padding:8px 12px; border-bottom:1px solid var(--cv-hairline); }
+.cv-app-chat-mode button { flex:1; min-width:0; padding:6px 8px; border:1px solid transparent; border-radius:6px; background:transparent; color:var(--cv-muted); font:inherit; font-size:.68rem; cursor:pointer; }
+.cv-app-chat-mode button[aria-pressed=true] { border-color:var(--cv-line); background:var(--cv-surface); color:var(--cv-text); font-weight:600; }
+.cv-app-chat-ask-view { display:flex; flex-direction:column; flex:1; min-height:0; }
+.cv-app-chat-change-view { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.cv-app-data-actions { box-sizing:border-box; padding:12px; font-size:.72rem; line-height:1.55; }
+.cv-app-action-intro { margin:0 0 12px; color:var(--cv-muted); font-size:.66rem; }
+.cv-app-action-form { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+.cv-app-action-form label { display:flex; flex-direction:column; gap:5px; color:var(--cv-muted); font-size:.66rem; }
+.cv-app-action-form :is(select, textarea) { box-sizing:border-box; width:100%; min-width:0; max-width:100%; padding:8px; border:1px solid var(--cv-line); border-radius:6px; background:var(--cv-surface); color:var(--cv-text); font:inherit; font-size:.72rem; }
+.cv-app-action-description { min-height:92px; max-height:180px; resize:vertical; line-height:1.5; }
+.cv-app-action-prepare, .cv-app-action-confirm { padding:7px 10px; border:1px solid var(--cv-accent); border-radius:6px; background:var(--cv-accent); color:var(--cv-on-accent); font:inherit; font-size:.7rem; font-weight:600; cursor:pointer; }
+.cv-app-action-prepare { align-self:flex-start; }
+.cv-app-action-status, .cv-app-action-result { margin:10px 0; font-size:.67rem; overflow-wrap:anywhere; }
+.cv-app-action-status:empty, .cv-app-action-result:empty, .cv-app-action-review:empty { display:none; }
+.cv-app-action-review { margin-top:16px; padding:12px; border:1px solid var(--cv-line); border-radius:8px; background:var(--cv-sunken); }
+.cv-app-action-review h4 { margin:0 0 5px; font-size:.8rem; }
+.cv-app-action-review p { margin:6px 0; overflow-wrap:anywhere; }
+.cv-app-action-review .cv-confirm-values { margin:12px 0; display:block; }
+.cv-app-action-review .cv-confirm-values > div { padding:8px 0; border-top:1px solid var(--cv-hairline); }
+.cv-app-action-review .cv-confirm-values dt { margin-bottom:4px; color:var(--cv-muted); font-size:.64rem; }
+.cv-app-action-review .cv-confirm-values dd { margin:0; font-size:.73rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+.cv-app-action-before { color:var(--cv-muted); font-weight:400; }
+.cv-app-action-confirm-note { color:var(--cv-muted); font-size:.64rem; line-height:1.55; }
+.cv-app-action-review .cv-app-chat-actions { margin-top:12px; padding:0; }
+.cv-app-action-native { margin-top:12px; }
+.cv-app-data-actions :disabled { opacity:.55; cursor:default; }

@@ -92,6 +92,8 @@ async function fixture(options:{defer?:boolean;standalone?:boolean}={}) {
 test('Card → Stack → Open retains one outer item and exact component/form/receipt nodes',async()=>{
  const f=await fixture();await f.api.setAppView(APP,WORK,'face');const item=f.api.appViewForWork(WORK).item;
  assert.equal(f.mounts(),1);assert.ok(item.querySelector('[data-app-view-parking]').contains(f.face));
+ assert.equal(item.querySelectorAll('[data-app-assistant]').length,1);
+ assert.ok(f.group.cards.every((card:E)=>card.dataset.appComponent==='true'));
  assert.equal(item.querySelector('.cv-app-view-picker').querySelector('[data-app-view-mode="face"]').textContent,'Card');
  assert.equal(item.querySelector('.cv-app-face-summary').textContent,'Track real requests and their progress.');
  const link=item.querySelector('a');assert.equal(link.getAttribute('target'),'_blank');assert.equal(link.getAttribute('rel'),'noopener');
@@ -112,7 +114,7 @@ test('Summary open and close preserve custom Open dimensions, one item and draft
  summary(true);
  assert.equal(f.canvas.getItemState(item).width,1000,'the companion is clamped to the available viewport');
  assert.equal(root.classList.contains('has-companion'),true);
- assert.equal(item.querySelector('[data-app-summary]').getAttribute('aria-expanded'),'true');
+ assert.equal(item.querySelector('[data-app-assistant]').getAttribute('aria-expanded'),'true');
  for(const mode of ['face','stack','open']){
   await f.api.setAppView(APP,WORK,mode,{focus:false});
   assert.equal(f.api.appViewForWork(WORK).item,item);
@@ -124,7 +126,7 @@ test('Summary open and close preserve custom Open dimensions, one item and draft
  summary(false);
  assert.deepEqual(f.canvas.getItemState(item),original,'closing restores the window size instead of persisting companion geometry');
  assert.equal(root.classList.contains('has-companion'),false);
- assert.equal(item.querySelector('[data-app-summary]').getAttribute('aria-expanded'),'false');
+ assert.equal(item.querySelector('[data-app-assistant]').getAttribute('aria-expanded'),'false');
  summary(true);summary(false);
  assert.deepEqual(f.canvas.getItemState(item),original,'repeated opening never accumulates extra width');
  assert.equal(f.mounts(),1);assert.equal(f.removed(),0);
@@ -193,7 +195,7 @@ test('changing an existing Open app to independent Card updates labels and selec
  f.setStandalone(true);await f.api.setAppView(APP,WORK,'open');
  assert.equal(item.querySelector('.cv-unite').dataset.placementKind,'card');
  assert.equal(item.querySelector('.cv-app-view-picker').hidden,true);
- assert.equal(item.querySelector('[data-app-assistant="ask"]').getAttribute('aria-label'),'Ask about this card');
+ assert.equal(item.querySelector('[data-app-assistant]').getAttribute('aria-label'),'Card assistant');
  assert.equal(item.querySelector('[data-edit-presentation]').getAttribute('aria-label'),'Card settings');
  f.setStandalone(false);await f.api.setAppView(APP,WORK,'open');
  assert.equal(item.querySelector('.cv-app-view-picker').hidden,false);assert.equal(item.querySelector('[data-edit-presentation]').getAttribute('aria-label'),'App settings');assert.equal(f.mounts(),1);

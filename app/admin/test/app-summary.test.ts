@@ -179,3 +179,23 @@ test('a pending receipt click stays cancelled after its Summary tab is hidden an
     assert.deepEqual(f.focused,[]);assert.deepEqual(f.placements,[]);
   } finally {f.cleanup();}
 });
+
+test('Summary values focus app components without opening technical evidence', async () => {
+  const f=await fixture();
+  try {
+    f.respond(async()=>response({state:'ready',label:'AI summary · numbers from receipts',findings:[{parts:[{
+      value:'42',exact:'42.00',view_id:'total',view_title:'Total spend',receipt_digest:`sha256:${'a'.repeat(64)}`,
+    }]}]}));
+    const card=f.el({},'article');(card as any).dataset={card:`c-${WORK}-total`,appComponent:'true'};
+    const receipt={open:false};card.querySelector=()=>receipt as any;
+    f.ensure(async()=>({cards:[card]}));f.open();await flush();
+    assert.doesNotMatch(f.host.textContent,/receipts/i);
+    const value=f.host.querySelector('.cv-ex-value')!;
+    assert.equal(value.attrs.get('title'),'Exact 42.00 · Total spend');
+    value.click();await flush();
+    assert.deepEqual(f.focused,[`c-${WORK}-total`]);assert.equal(receipt.open,false);
+    (card as any).dataset.appComponent='false';
+    await f.api.showValue(APP,WORK,'total');
+    assert.equal(receipt.open,true,'standalone evidence remains available');
+  } finally {f.cleanup();}
+});

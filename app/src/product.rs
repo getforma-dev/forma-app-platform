@@ -86,8 +86,9 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
     )));
     // ADR-011 scenarios: the action path (`POST /v1/act`, under the long
     // deadline: it waits on the model) and the records listing.
-    let act_routes =
-        actions::routes::router(Arc::new(actions::routes::Act::new(auth.clone(), parser)));
+    let act = Arc::new(actions::routes::Act::new(auth.clone(), parser));
+    let act_routes = actions::routes::router(act.clone());
+    let assistant_routes = actions::assistant::router(act);
     let records_routes = actions::routes::records_router(auth.clone());
     let slack_routes = slack::router(slack);
     // APP-103: the canvas widgets' weather and customize routes, under the
@@ -111,6 +112,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         .merge(events::routes::router(auth.clone()))
         .merge(canvas_routes.clone())
         .merge(records_routes)
+        .merge(assistant_routes)
         // APP-099: the canvas's "Connect an agent" token routes.
         .merge(mcp::tokens::router(auth.clone()))
         .merge(mcp::governance::router(auth.clone()))

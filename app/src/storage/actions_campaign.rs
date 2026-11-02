@@ -202,7 +202,13 @@ fn stub_receipt_reply(image: &[u8]) -> String {
     json!({"id": "msg", "model": "stub-haiku", "content": [{"type": "text", "text": text}], "usage": {"input_tokens": 1400, "output_tokens": 70}}).to_string()
 }
 fn stub_reply(utterance: &str) -> String {
-    let text = if utterance.contains("HOSTILE-SQL") {
+    let text = if utterance == "ASSISTANT add a note" {
+        json!({"values":{"title":"Assistant campaign note","body":"Synthetic draft"}}).to_string()
+    } else if utterance == "ASSISTANT update body" {
+        json!({"values":{"body":"Updated after confirmation"}}).to_string()
+    } else if utterance == "ASSISTANT hostile field" {
+        json!({"values":{"principal_id":"administrator"}}).to_string()
+    } else if utterance.contains("HOSTILE-SQL") {
         json!({"action": "create", "app_hint": FOREIGN_APP, "values": {"merchant": "'; DROP TABLE genui.apps; --", "amount": "86", "category": "meals", "spent_on": "2026-10-29", "note": "UNION SELECT * FROM genui.principals"}, "approver_name": "GRANT admin_policy TO public", "target_record_hint": null}).to_string()
     } else if utterance.contains("HOSTILE-GRANT") {
         // A member outside the closed shape: refused before any resolution.
@@ -512,6 +518,10 @@ async fn campaign() {
                 page: record_page,
             })))
             .merge(actions::routes::records_router(auth.clone()))
+            .merge(actions::assistant::router(Arc::new(Act::new(
+                auth.clone(),
+                Parser::from_env(),
+            ))))
             .merge(canvas::router(Arc::new(canvas::Canvas {
                 work: work.clone(),
                 pages: canvas_pages,
@@ -1456,6 +1466,243 @@ async fn campaign() {
         &mut checks,
         "APP-135 read guard: \"Review expenses over $200\" answers `place` with no model call (the composer picks and filters the app), and a question the model (stubbed) answered as a create (\"did Sarah approve my Nobu claim?\") answers `place`, not a confirmation card",
     );
+
+    // App assistant: exact-work, explicit target, no record writes before confirmation.
+    let notes_app = "00000000-0000-4000-8000-000000001981";
+    for principal in [EMPLOYEE, REVIEWER] {
+        for permission in ["discover", "run"] {
+            grant(&fixture, principal, permission, &["--app", notes_app]);
+        }
+        grant(
+            &fixture,
+            principal,
+            "source_read",
+            &["--source", "00000000-0000-4000-8000-000000003024"],
+        );
+    }
+    let notes_context = stores.workspace.composer_context(&employee).await.unwrap();
+    let notes = notes_context
+        .library
+        .iter()
+        .find(|a| a.app == notes_app)
+        .unwrap();
+    let bindings =
+        composer_bindings(&notes.inputs, &notes.record_schemas, &notes_context.sources).unwrap();
+    let notes_saved = stores
+        .workspace
+        .create_work(
+            &employee,
+            notes_app,
+            &notes.publication,
+            "Assistant campaign notes",
+            &bindings,
+        )
+        .await
+        .unwrap();
+    let notes_work = notes_saved.work.as_str();
+    for permission in ["record_read", "record_write"] {
+        grant(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", notes_app, "--work", notes_work],
+        );
+    }
+    let listed = records(&sarah, notes_app, notes_work).await;
+    assert_eq!(listed.status, StatusCode::OK, "{}", listed.body);
+    let listed = listed.json();
+    let endpoint = format!("/v1/work/{notes_app}/{notes_work}/assistant/proposals");
+    let create = json!({"command_id":"add","collection_id":listed["collections"][0]["collection_id"],"publication_id":listed["publication_id"],"expected_work_version":listed["work_version"],"utterance":"ASSISTANT add a note"});
+    let frozen = footprint(&fixture).await;
+    for cookie in [None, Some(outsider.as_str())] {
+        let response = send(
+            &app,
+            "POST",
+            &endpoint,
+            cookie,
+            &create.to_string(),
+            &SAME_ORIGIN,
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::NOT_FOUND, "{}", response.body);
+    }
+    let cross_site = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &[
+            ("sec-fetch-site", "cross-site"),
+            ("content-type", "application/json"),
+        ],
+    )
+    .await;
+    assert_eq!(cross_site.status, StatusCode::FORBIDDEN);
+    let wrong_work = send(
+        &app,
+        "POST",
+        &format!("/v1/work/{notes_app}/{work_id}/assistant/proposals"),
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(wrong_work.status, StatusCode::NOT_FOUND);
+    for (field, value, expected) in [
+        (
+            "command_id",
+            json!("delete"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "expected_work_version",
+            json!(999),
+            StatusCode::PRECONDITION_FAILED,
+        ),
+        (
+            "utterance",
+            json!("ASSISTANT hostile field"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "utterance",
+            json!("What is my note?"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+    ] {
+        let mut invalid = create.clone();
+        invalid[field] = value;
+        let response = send(
+            &app,
+            "POST",
+            &endpoint,
+            Some(&sarah),
+            &invalid.to_string(),
+            &SAME_ORIGIN,
+        )
+        .await;
+        assert_eq!(response.status, expected, "{}", response.body);
+    }
+    let prepared = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(prepared.status, StatusCode::OK, "{}", prepared.body);
+    let prepared = prepared.json();
+    assert_eq!(prepared["kind"], "app_action_proposal");
+    assert_eq!(prepared["operation"], "create");
+    assert_eq!(footprint(&fixture).await,frozen,"all drafts, including one abandoned by closing the assistant, write no record, audit, work or permission row");
+    let committed = confirm(&sarah, prepared.clone()).await;
+    assert_eq!(committed.status, StatusCode::OK, "{}", committed.body);
+    let after = footprint(&fixture).await;
+    let replay = confirm(&sarah, prepared.clone()).await;
+    assert_eq!(replay.status, StatusCode::OK, "{}", replay.body);
+    assert_eq!(replay.json(), committed.json());
+    assert_eq!(footprint(&fixture).await, after);
+    let created_id = prepared["record_id"].clone();
+    let current = records(&sarah, notes_app, notes_work).await.json();
+    let record = current["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["record_id"] == created_id)
+        .unwrap();
+    let update = json!({"command_id":"edit","collection_id":record["collection_id"],"publication_id":current["publication_id"],"expected_work_version":current["work_version"],"record_id":record["record_id"],"expected_record_version":record["version"],"utterance":"ASSISTANT update body"});
+    let updated = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &update.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(updated.status, StatusCode::OK, "{}", updated.body);
+    let updated = updated.json();
+    assert_eq!(updated["values"][0]["previous"], "Synthetic draft");
+    assert_eq!(
+        updated["values"][0]["display"],
+        "Updated after confirmation"
+    );
+    assert_eq!(footprint(&fixture).await, after);
+    let competing = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &update.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await
+    .json();
+    let saved = confirm(&sarah, updated.clone()).await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    let stale = confirm(&sarah, competing).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{}", stale.body);
+    let stale_preview = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &update.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(
+        stale_preview.status,
+        StatusCode::CONFLICT,
+        "{}",
+        stale_preview.body
+    );
+    let listed = records(&sarah, notes_app, notes_work).await.json();
+    let record = listed["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["record_id"] == created_id)
+        .unwrap();
+    assert_eq!(record["version"], 2);
+    assert_eq!(
+        value_of(record, "body")["value"],
+        "Updated after confirmation"
+    );
+    let revoked_draft = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await
+    .json();
+    super::definition_qualification::revoke(
+        &fixture,
+        REVIEWER,
+        "record_write",
+        &["--app", notes_app, "--work", notes_work],
+    );
+    let frozen = footprint(&fixture).await;
+    let denied = confirm(&sarah, revoked_draft).await;
+    assert_eq!(denied.status, StatusCode::NOT_FOUND, "{}", denied.body);
+    let denied = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(denied.status, StatusCode::NOT_FOUND, "{}", denied.body);
+    assert_eq!(footprint(&fixture).await, frozen);
+    check(&mut checks,"APP-168 app assistant: selected work/command/record only; anonymous, cross-organization, wrong-work, cross-site, unsupported commands, hostile model fields, read questions and stale premises refuse. Drafts write no records or authority. Explicit create/update confirmation is audited; duplicate confirmation replays; competing record versions conflict; grant revocation denies both fresh draft and previously prepared confirmation.");
 
     // --- The local stand for the two-window screenshots ---
     if let Some(seconds) = stand {

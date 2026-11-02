@@ -178,6 +178,8 @@ export function renderLedger(card: HTMLElement): void {
       table(document_, 'By person', sums.people),
       table(document_, card.dataset.category ? `By ${label(card.dataset.category).toLowerCase()}` : 'By category', sums.categories)));
   }
+  if (listing.truncated) body.append(el(document_, 'p', { class: 'cv-message', role: 'status', 'data-result-notice': '' },
+    'Totals use only the records loaded on this page. More records exist.'));
   const provenance = card.querySelector<HTMLElement>('[data-provenance]');
   provenance?.replaceChildren(
     el(document_, 'span', { class: 'cv-verified' }, 'Records'),

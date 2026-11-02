@@ -704,7 +704,7 @@ function Canvas(props: CanvasProps) {
                   </header>
                   <div class="cv-ledger-controls" data-controls></div>
                   <div class="cv-card-body" data-body>
-                    <p class="cv-ledger-total"><span class="cv-ledger-total-value num">{ledger.total}</span> <span class="cv-muted">across {ledger.count} records · all dates · every status</span></p>
+                    <p class="cv-ledger-total"><span class="cv-ledger-total-value num">{ledger.total}</span> <span class="cv-muted">across {ledger.count} records · all dates · every status · {ledger.scope}</span></p>
                     {createShow(() => ledger.hasNoRows, () => (
                       <p class="cv-message" role="status">No records yet.</p>
                     ))}

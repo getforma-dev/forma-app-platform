@@ -63,7 +63,7 @@ async function fixture() {
   });
   const api = await import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0]!.text).toString('base64'));
   const frame = el(doc, 'article', {class: 'cv-unite'}), host = el(doc, 'aside');
-  for (const tab of ['ask', 'summary', 'sources']) frame.append(el(doc, 'button', {'data-app-assistant': tab}));
+  frame.append(el(doc, 'button', {'data-app-assistant': ''}));
   frame.append(host);
   const options = {app: APP, work: WORK, title: 'Checking', address: '/checking'};
   const open = (tab = 'ask', request: unknown = {}) => api.showAppAssistant(host, options, tab, request);
@@ -83,7 +83,7 @@ test('one app companion lazily mounts views and preserves them across tab change
     f.host.querySelector('[aria-label="Close app panel"]')!.click();
     assert.equal(f.host.hidden, true); assert.equal(f.host.inert, true); assert.equal(f.view('summary').calls.at(-1)?.[0], 'hide');
     f.open('summary'); assert.equal(f.host.querySelector('.cv-app-summary-host'), panel); assert.equal(f.mounts.length, 2);
-    assert.equal(f.frame.querySelector('[data-app-assistant="summary"]')!.attrs.get('aria-expanded'), 'true');
+    assert.equal(f.frame.querySelector('[data-app-assistant]')!.attrs.get('aria-expanded'), 'true');
   } finally {f.cleanup();}
 });
 
@@ -122,7 +122,7 @@ test('keyboard tabs do not move canvas items and Escape closes the panel with la
     assert.equal(arrow.defaultPrevented, true); assert.equal(arrow.stopped, true); assert.equal(canvasKeys, 0);
     assert.equal(f.tab('Summary').attrs.get('aria-selected'), 'true'); assert.equal(f.tab('Summary').focused, true);
     f.host.dispatch('keydown', {key: 'Escape'}); assert.equal(f.host.hidden, true);
-    assert.equal(f.frame.querySelector('[data-app-assistant="summary"]')!.focused, true); assert.equal(canvasKeys, 0);
+    assert.equal(f.frame.querySelector('[data-app-assistant]')!.focused, true); assert.equal(canvasKeys, 0);
   } finally {f.cleanup();}
 });
 
@@ -136,5 +136,21 @@ test('remounting an app disposes the old host and stale source callbacks cannot 
     assert.equal(f.host.children.length, 0); const count = oldChat.calls.length;
     oldSources.options.onAskFile({file: {file_id: FILE}}); assert.equal(oldChat.calls.length, count); assert.equal(f.host.hidden, true);
     f.api.disposeAppAssistant(APP, WORK); assert.equal(replacement.children.length, 0);
+  } finally {f.cleanup();}
+});
+
+
+test('one launcher toggles the whole assistant and resumes the selected tab without clearing its scope', async () => {
+  const f = await fixture();
+  try {
+    f.open('sources');
+    const calls = f.view('ask').calls.length;
+    f.api.showAppAssistant(f.host, f.options, undefined, {toggle: true});
+    assert.equal(f.host.hidden, true);
+    assert.equal(f.frame.querySelector('[data-app-assistant]')!.attrs.get('aria-expanded'), 'false');
+    f.api.showAppAssistant(f.host, f.options, undefined, {toggle: true});
+    assert.equal(f.host.hidden, false);
+    assert.equal(f.tab('Sources').attrs.get('aria-selected'), 'true');
+    assert.equal(f.view('ask').calls.length, calls);
   } finally {f.cleanup();}
 });

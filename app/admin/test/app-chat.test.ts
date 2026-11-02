@@ -44,7 +44,7 @@ async function fixture() {
   const key = `__appChat${serial++}`; (globalThis as any)[key] = {el};
   const built = await build({entryPoints: [entry], bundle: true, platform: 'node', format: 'esm', write: false,
     plugins: [{name: 'app-chat-dom', setup(builder) {
-      builder.onResolve({filter: /^\.\/render$/}, args => args.importer === entry ? {path: args.path, namespace: 'chat-dom'} : undefined);
+      builder.onResolve({filter: /^\.\/render$/}, args => args.importer === entry || args.importer.endsWith('/app-data-actions.ts') ? {path: args.path, namespace: 'chat-dom'} : undefined);
       builder.onLoad({filter: /.*/, namespace: 'chat-dom'}, () => ({contents: `export const el = (...args) => globalThis[${JSON.stringify(key)}].el(...args);`, loader: 'js'}));
     }}],
   });
@@ -77,6 +77,23 @@ test('app Ask keeps transcript/draft through close and routes only its exact sav
     assert.equal(f.field().value, 'An unfinished question'); assert.match(f.host.textContent, /A verified answer/);
     assert.equal(f.host.querySelector('.test-save'), save); assert.equal(f.posts().length, 1);
     assert.equal(f.calls.some(value => /compose|shape|\/v1\/act/.test(value.url)), false);
+  } finally {f.cleanup();}
+});
+
+test('Ask and Change data keep separate drafts, and addressed questions return to the read-only mode', async () => {
+  const f = await fixture();
+  try {
+    f.handle(async url => url.endsWith('/records') ? response({app_id: APP, work_id: WORK, publication_id: REVISION, work_version: 1, can_write: true, truncated: false,
+      collections: [{collection_id: OTHER, schema_id: 'note', schema_version: 1, fields: [{id: 'title', type: 'text'}], commands: [{id: 'add', operation: 'create', writable_fields: ['title']}]}], records: []})
+      : url.includes('/lineage/') ? response({}, 404) : url === '/v1/ask' ? response({text: 'Read-only answer.', references: [], receipts: []}) : response({}));
+    f.chat.show(); await flush(); f.field().value = 'Unsent question';
+    const buttons = f.host.querySelector('.cv-app-chat-mode')!.querySelectorAll('button'); buttons[1]!.click(); await flush();
+    const description = f.host.querySelector('.cv-app-action-description')!; description.value = 'Unsent record change';
+    buttons[0]!.click(); await flush(); assert.equal(f.field().value, 'Unsent question');
+    buttons[1]!.click(); await flush(); assert.equal(description.value, 'Unsent record change');
+    f.chat.ask('Read the current records'); await flush();
+    assert.equal(buttons[0]!.attrs.get('aria-pressed'), 'true'); assert.equal(f.posts().length, 1); assert.equal(f.posts()[0]!.url, '/v1/ask');
+    assert.equal(f.field().value, 'Unsent question'); assert.equal(description.value, 'Unsent record change');
   } finally {f.cleanup();}
 });
 

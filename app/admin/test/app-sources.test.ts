@@ -78,13 +78,11 @@ async function moduleFixture(name: string, boundaries: (el: (...args: any[]) => 
 }
 
 async function sourcesFixture() {
-  const viewed: any[] = [], asked: any[] = [], larger: any[] = [];
-  let disposedViews = 0;
+  const opened: any[] = [], asked: any[] = [];
   const f = await moduleFixture('app-sources', el => ({
     './box-api': { contentUrl: url },
     './box-viewer': {
-      mountFileViewer: (...args: any[]) => { viewed.push(args); return { dispose() { disposedViews++; } }; },
-      openViewer: (...args: any[]) => { larger.push(args); },
+      openViewer: (...args: any[]) => { opened.push(args); },
     },
     './file-card': { fileCardGlyph: () => el(null, 'svg') },
     './ids': { isUuid: (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) },
@@ -94,12 +92,12 @@ async function sourcesFixture() {
   const calls: { url: string; options: RequestInit }[] = [];
   globalThis.fetch = (async (url: string, options: RequestInit) => { calls.push({ url, options }); return respond(); }) as typeof fetch;
   const controller = f.api.mountAppSources(f.host, { app: APP, work: WORK, title: 'Example app', onAskFile: (source: any) => asked.push(source) });
-  return { ...f, controller, calls, viewed, asked, larger, disposedViews: () => disposedViews,
+  return { ...f, controller, calls, opened, asked,
     respond: (fn: typeof respond) => { respond = fn; },
     cleanup: () => { controller.dispose(); globalThis.fetch = oldFetch; f.cleanup(); } };
 }
 
-test('Sources presents the exact original and hands file context to the app assistant', async () => {
+test('Sources opens the full original viewer directly and hands file context to the app assistant', async () => {
   const f = await sourcesFixture();
   try {
     f.controller.show(); await flush();
@@ -112,13 +110,13 @@ test('Sources presents the exact original and hands file context to the app assi
     assert.equal(f.asked[0].boxId, BOX); assert.equal(f.asked[0].file.file_id, FILE);
     assert.equal(f.asked[0].sourceId, SOURCE); assert.equal(f.asked[0].revisionId, REVISION);
     f.host.querySelector('.cv-app-source-open')!.click();
-    assert.equal(f.viewed[0][1].content_url, url(BOX, FILE)); assert.equal(f.viewed[0][2], BOX);
-    assert.match(f.host.textContent, /Open larger/);
-    f.host.querySelector('.cv-app-source-larger')!.click();
-    assert.equal(f.larger[0][0].file_id, FILE); assert.equal(f.larger[0][1], BOX);
+    assert.equal(f.opened.length, 1);
+    assert.equal(f.opened[0][0].content_url, url(BOX, FILE)); assert.equal(f.opened[0][1], BOX);
+    assert.doesNotMatch(f.host.textContent, /Open larger|Back to sources/);
+    assert.ok(f.host.querySelector('.cv-app-source-open'), 'closing the viewer returns to the original source list');
     f.respond(async () => response(lineage(file(FILE, 'Fresh metadata.csv'))));
-    f.host.querySelector('.cv-app-source-back')!.click(); await flush();
-    assert.equal(f.disposedViews(), 1); assert.equal(f.calls.length, 2);
+    f.controller.hide(); f.controller.show(); await flush();
+    assert.equal(f.calls.length, 2);
     assert.match(f.host.textContent, /Fresh metadata.csv/);
   } finally { f.cleanup(); }
 });
@@ -157,13 +155,32 @@ test('reopening reauthorizes metadata and clears revoked or malformed source lis
   const f = await sourcesFixture();
   try {
     f.controller.show(); await flush(); f.host.querySelector('.cv-app-source-open')!.click();
-    f.controller.hide(); assert.equal(f.disposedViews(), 1); assert.equal(f.host.children.length, 0);
+    f.controller.hide(); assert.equal(f.host.children.length, 0);
     f.respond(async () => response({}, 404)); f.controller.show(); await flush();
     assert.match(f.host.textContent, /No source files are available/); assert.doesNotMatch(f.host.textContent, /Original.csv/);
     f.controller.hide(); f.respond(async () => response(lineage(file(), file()))); f.controller.show(); await flush();
     assert.match(f.host.textContent, /could not be loaded/); assert.equal(f.host.querySelector('.cv-app-source-open'), null);
     f.respond(async () => response(lineage(file()))); f.host.querySelector('button')!.click(); await flush();
     assert.match(f.host.textContent, /Original.csv/); assert.equal(f.calls.length, 4);
+  } finally { f.cleanup(); }
+});
+
+test('citation file opening reauthorizes and uses the full viewer without a preview step', async () => {
+  const f = await sourcesFixture();
+  try {
+    f.controller.openFile(FILE); f.controller.show(); await flush();
+    assert.equal(f.opened.length, 1); assert.equal(f.opened[0][0].file_id, FILE);
+    assert.ok(f.host.querySelector('.cv-app-source-open'));
+    f.respond(async () => response(lineage(file(OTHER, 'Different original.csv'))));
+    f.controller.openFile(FILE); await flush();
+    assert.equal(f.calls.length, 2); assert.equal(f.opened.length, 1, 'a file removed from lineage never opens from cached metadata');
+    f.controller.openFile(OTHER); await flush();
+    assert.equal(f.opened.length, 2); assert.equal(f.opened[1][0].file_id, OTHER);
+    let resolve!: (value: unknown) => void;
+    f.respond(() => new Promise(done => { resolve = done; }));
+    f.controller.openFile(OTHER); f.controller.hide();
+    resolve(response(lineage(file(OTHER)))); await flush();
+    assert.equal(f.opened.length, 2, 'a hidden tab cannot open a late file modal');
   } finally { f.cleanup(); }
 });
 

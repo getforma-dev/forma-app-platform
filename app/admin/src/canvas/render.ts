@@ -127,10 +127,11 @@ function seal(document_: Document): SVGElement {
 }
 
 /**
- * The receipt, always on the card (ADR-011): one compact line, "Verified",
+ * The receipt's retained evidence: one compact line, "Verified",
  * the digest's first eight hex digits, the source count and when this page
  * received it; a click opens every receipt field in full, inline, and the
- * receipt document itself.
+ * receipt document itself. App windows hide this technical inspector while
+ * keeping its data and the released-result admission checks intact.
  */
 export function receiptSection(document_: Document, receipt: Record<string, unknown>): HTMLElement {
   const rows = receiptRows(receipt);
@@ -294,12 +295,16 @@ export function renderReleased(card: HTMLElement, result: QueryResponse): void {
   const types = result.columns.map((column, index): ColumnType | undefined =>
     declared[index] ?? (integers.has(column) ? { type: 'integer' } : undefined));
   const children: Node[] = [];
+  const notice = [
+    result.receipt.partial === true ? 'Results are partial.' : '',
+    result.truncated_page ? 'Showing the first page of rows.' : '',
+  ].filter(Boolean).join(' ');
   if (empty) {
     setState(card, 'empty', 'empty');
-    children.push(el(document_, 'p', { class: 'cv-message', role: 'status' }, 'No rows matched this window and filter.'));
+    children.push(el(document_, 'p', { class: 'cv-message', role: 'status' }, ['No rows matched this window and filter.', notice].filter(Boolean).join(' ')));
   } else {
     setState(card, 'ready', 'ready');
-    children.push(el(document_, 'p', { class: 'cv-message', role: 'status' }, result.truncated_page ? 'Showing the first page of rows.' : ''));
+    children.push(el(document_, 'p', { class: 'cv-message', role: 'status' }, notice));
     const format = (value: unknown, index: number) => formatValue(value, types[index], result.columns[index] ?? '');
     if (kind === 'summary' && result.rows.length === 1) {
       const shown = result.columns.map((column, index) => [column, format(result.rows[0]?.[index], index)] as const);

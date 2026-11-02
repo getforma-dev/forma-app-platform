@@ -1,7 +1,7 @@
 // Original files belong to the app's Sources companion. Reopening the panel
 // checks current authority; source names and contents are never kept in a cache.
 import { contentUrl, type BoxFile, type FileKind } from './box-api';
-import { mountFileViewer, openViewer } from './box-viewer';
+import { openViewer } from './box-viewer';
 import { fileCardGlyph } from './file-card';
 import { isUuid } from './ids';
 import { el } from './render';
@@ -59,32 +59,19 @@ export function mountAppSources(host: HTMLElement, options: AppSourcesOptions): 
   let disposed = false;
   let generation = 0;
   let request: AbortController | null = null;
-  let viewer: { dispose(): void } | null = null;
   const current = (ticket: number) => visible && !disposed && ticket === generation && host.isConnected;
-  const stop = () => { generation++; request?.abort(); request = null; viewer?.dispose(); viewer = null; host.replaceChildren(); };
+  const stop = () => { generation++; request?.abort(); request = null; host.replaceChildren(); };
 
   const viewFile = (source: AppSourceContext, ticket: number) => {
     if (!current(ticket)) return;
-    viewer?.dispose();
-    const back = el(document_, 'button', { type: 'button', class: 'cv-app-source-back cv-secondary' }, 'Back to sources');
-    back.addEventListener('click', () => { if (current(ticket)) void load(); });
-    const larger = el(document_, 'button', { type: 'button', class: 'cv-app-source-larger cv-secondary' }, 'Open larger');
-    larger.addEventListener('click', () => { if (current(ticket)) openViewer(source.file, source.boxId); });
-    const ask = el(document_, 'button', { type: 'button', class: 'cv-app-source-ask cv-secondary' }, 'Ask about file');
-    ask.addEventListener('click', () => { if (current(ticket)) options.onAskFile(source); });
-    const content = el(document_, 'div', { class: 'cv-app-source-viewer' });
-    host.replaceChildren(back,
-      el(document_, 'div', { class: 'cv-app-source-view-head' },
-        el(document_, 'h4', { class: 'cv-app-source-name' }, source.file.name),
-        el(document_, 'p', { class: 'cv-app-source-kind' }, `${kindNames[source.file.kind]} · Original file`),
-        el(document_, 'div', { class: 'cv-app-source-actions' }, larger, ask)), content);
-    viewer = mountFileViewer(content, source.file, source.boxId);
-    back.focus({ preventScroll: true });
+    openViewer(source.file, source.boxId);
   };
 
   const load = async () => {
     stop();
     const ticket = generation;
+    const selectedFile = requestedFile;
+    requestedFile = null;
     if (!isUuid(options.app) || !isUuid(options.work)) return;
     const controller = new AbortController(); request = controller;
     host.append(el(document_, 'p', { class: 'cv-app-sources-status', role: 'status' }, 'Loading source files…'));
@@ -105,10 +92,6 @@ export function mountAppSources(host: HTMLElement, options: AppSourcesOptions): 
         host.replaceChildren(el(document_, 'p', { class: 'cv-app-sources-status', role: 'status' }, 'This app has no source files.'));
         return;
       }
-      if (requestedFile) {
-        const file = sources.find(source => source.file.file_id === requestedFile); requestedFile = null;
-        if (file) {viewFile(file, ticket); return;}
-      }
       const list = el(document_, 'ul', { class: 'cv-app-sources-list', 'aria-label': `Source files for ${options.title}` });
       for (const source of sources) {
         const view = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-app-source-open' }, 'View original');
@@ -124,6 +107,8 @@ export function mountAppSources(host: HTMLElement, options: AppSourcesOptions): 
       }
       host.replaceChildren(el(document_, 'p', { class: 'cv-app-sources-intro' },
         sources.length === 1 ? 'The original file behind this app.' : `${sources.length} original files behind this app.`), list);
+      const selected = selectedFile && sources.find(source => source.file.file_id === selectedFile);
+      if (selected) viewFile(selected, ticket);
     } catch {
       if (!current(ticket)) return;
       const retry = el(document_, 'button', { type: 'button', class: 'cv-secondary' }, 'Try again');

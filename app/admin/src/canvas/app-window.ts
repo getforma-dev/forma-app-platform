@@ -40,13 +40,9 @@ export function buildAppWindow(document_: Document, app: string, work: string, t
       iconButton('focus', 'Focus app · F', {'data-unite-focus': ''}),
       ...(canEdit ? [iconButton('settings', standalone ? 'Card settings' : 'App settings', {'data-edit-presentation': '', 'data-app': app, 'data-work': work})] : []),
       el(document_, 'a', {class: 'cv-window-tool', href: `/w/${app}/${work}`, target: '_blank', rel: 'noopener', title: 'Open in a new tab', 'aria-label': 'Open in a new tab'}, appWindowIcon(document_, 'external'))));
-  const summary = el(document_, 'button', {type: 'button', class: 'cv-window-summary-toggle', 'data-app-summary': '', 'data-app-assistant': 'summary', 'aria-expanded': 'false', 'aria-controls': `app-assistant-${work}`, title: 'Show app summary'}, appWindowIcon(document_, 'summary'), el(document_, 'span', {}, 'Summary'));
-  summary.hidden = standalone;
   const toolbar = el(document_, 'div', {class: 'cv-app-toolbar'}, picker,
-    el(document_, 'div', {class: 'cv-unite-actions', role: 'group', 'aria-label': standalone ? 'Card' : 'App'}, summary,
-      iconButton('sources', 'Source files', {'data-app-assistant': 'sources', 'aria-expanded': 'false', 'aria-controls': `app-assistant-${work}`}),
-      iconButton('ask', standalone ? 'Ask about this card' : 'Ask about this app', {'data-app-assistant': 'ask', 'aria-expanded': 'false', 'aria-controls': `app-assistant-${work}`}),
-      iconButton('saved', 'Saved answers', {'data-app-assistant': 'saved', 'aria-expanded': 'false', 'aria-controls': `app-assistant-${work}`}),
+    el(document_, 'div', {class: 'cv-unite-actions', role: 'group', 'aria-label': standalone ? 'Card' : 'App'},
+      iconButton('ask', standalone ? 'Card assistant' : 'App assistant', {'data-app-assistant': '', 'aria-expanded': 'false', 'aria-controls': `app-assistant-${work}`}),
       ...(canShare ? [iconButton('share', 'Share app', {'data-unite-share': ''})] : [])));
   const window = el(document_, 'section', {class: 'cv-app-window', 'aria-label': `${title} window`}, head, toolbar,
     el(document_, 'div', {class: 'cv-app-content'},

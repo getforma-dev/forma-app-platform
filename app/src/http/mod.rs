@@ -218,7 +218,9 @@ pub async fn deadline(request: Request, next: Next) -> Response {
     // APP-108: the folder routes that parse, normalize or call a model run
     // under the composer's deadline (their paths carry ids, so they cannot
     // be `uniform_with_many`'s static long paths).
-    let budget = if crate::boxes::routes::long_path(request.uri().path()) {
+    let budget = if crate::boxes::routes::long_path(request.uri().path())
+        || crate::actions::assistant::long_path(request.uri().path())
+    {
         COMPOSE_DEADLINE
     } else {
         HANDLER_DEADLINE

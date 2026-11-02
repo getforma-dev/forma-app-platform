@@ -8,7 +8,7 @@ import { announce, el, isUuid } from './render';
 import { setAppView } from './unite';
 import { appComponentVisible } from '../presentation/presentation';
 
-const LABEL = 'AI summary · numbers from receipts';
+const LABEL = 'AI summary';
 type Part = { text: string } | { value: string; exact: string; view_id: string; view_title: string; receipt_digest: string };
 type Explanation = { state: 'ready' | 'none'; label: string; generated_at: string | null; findings: Part[][] };
 
@@ -75,7 +75,7 @@ async function call(method: 'GET' | 'POST', app: string, work: string, signal: A
   return explanation;
 }
 
-/** Brings the view card of a value into focus and opens its receipt. */
+/** Brings the value's app component into focus; evidence stays behind the UI. */
 export async function showValue(app: string, work: string, view: string, isCurrent?: () => boolean): Promise<void> {
   if (!isUuid(app) || !isUuid(work) || !/^[a-z][a-z0-9_]{0,63}$/.test(view) || (isCurrent && !isCurrent())) return;
   const id = `c-${work}-${view}`;
@@ -90,8 +90,10 @@ export async function showValue(app: string, work: string, view: string, isCurre
   if (!isOnBoard(id)) await setAppView(app, work, 'open', { focus: false, ...(isCurrent ? {isCurrent} : {}) });
   if (isCurrent && !isCurrent()) return;
   if (!openFocus(id)) { announce('That value’s app component could not be focused.'); return; }
-  const receipt = card.querySelector<HTMLDetailsElement>('details.cv-receipt');
-  if (receipt) receipt.open = true;
+  if (card.dataset.appComponent !== 'true') {
+    const receipt = card.querySelector<HTMLDetailsElement>('details.cv-receipt');
+    if (receipt) receipt.open = true;
+  }
 }
 
 function message(error: unknown): string {
@@ -131,13 +133,12 @@ function hide(entry: Companion): void {
 
 function render(entry: Companion, explanation: Explanation): void {
   const document_ = entry.host.ownerDocument;
-  entry.label.textContent = explanation.label || LABEL;
+  entry.label.textContent = LABEL;
   entry.list.replaceChildren(...explanation.findings.map(parts => el(document_, 'li', {}, ...parts.map(part => {
     if ('text' in part) return part.text;
-    const short = part.receipt_digest.replace(/^sha256:/, '').slice(0, 8);
     const button = el(document_, 'button', {
       type: 'button', class: 'cv-ex-value',
-      title: `${part.exact ? `Exact ${part.exact}` : part.value} · ${part.view_title}${short ? ` · receipt ${short}` : ''}`,
+      title: `${part.exact ? `Exact ${part.exact}` : part.value} · ${part.view_title}`,
     }, part.value);
     button.addEventListener('click', () => {
       const request = entry.request;
@@ -149,7 +150,7 @@ function render(entry: Companion, explanation: Explanation): void {
   const none = explanation.state === 'none' || explanation.findings.length === 0;
   entry.status.textContent = none ? 'No summary is available yet. Generate one from this app’s data.' : '';
   entry.when.textContent = explanation.generated_at
-    ? `Generated ${explanation.generated_at.replace('T', ' ').replace(/:\d\dZ$/, ' UTC')}` : 'Numbers link to their source receipts.';
+    ? `Generated ${explanation.generated_at.replace('T', ' ').replace(/:\d\dZ$/, ' UTC')}` : 'Select a value to see its app component.';
   entry.actionKind = 'generate';
   entry.action.hidden = false;
   entry.action.textContent = none ? 'Generate summary' : 'Regenerate';
@@ -163,7 +164,7 @@ async function read(entry: Companion, method: 'GET' | 'POST'): Promise<void> {
   const current = () => currentEntry(entry) && entry.open && entry.request === request && !controller.signal.aborted;
   entry.action.disabled = true;
   entry.panel.setAttribute('aria-busy', 'true');
-  entry.status.textContent = method === 'GET' ? 'Loading summary…' : 'Summarizing from the receipts…';
+  entry.status.textContent = method === 'GET' ? 'Loading summary…' : 'Summarizing this app’s data…';
   if (method === 'GET') {
     entry.list.replaceChildren();
     entry.when.textContent = '';

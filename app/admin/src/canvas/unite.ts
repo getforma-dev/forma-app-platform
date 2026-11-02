@@ -52,10 +52,11 @@ export function appViewForWork(work: string): AppView | null {
 export function appViewOf(item: HTMLElement | null): AppView | null {
   return item ? appViewForWork(item.dataset.unite ?? '') : null;
 }
-function openFrameAssistant(frame: Frame, tab: AppAssistantTab, request: {toggle?: boolean; question?: string; scope?: RecordScope | null} = {}): void {
+function openFrameAssistant(frame: Frame, tab: AppAssistantTab | undefined, request: {toggle?: boolean; question?: string; scope?: RecordScope | null} = {}): void {
   const actions = parsePresentation(frame.root.dataset.presentation ?? '{}').actions ?? [];
   showAppAssistant(frame.root.querySelector<HTMLElement>('[data-app-companion]')!, {
     app: frame.app, work: frame.work, title: frame.title, address: addressOfWork(frame.app, frame.work) || frame.work,
+    onDataCommitted: () => {if (board.group(frame.work)?.app === frame.app) runGroup(frame.work, true);},
     onOpenApp: () => {if (frames.get(frame.work) === frame) void setAppView(frame.app, frame.work, 'open').then(() => revealFrame(frame));},
     ...(actions.length ? {onOpenActions: () => {
       void setAppView(frame.app, frame.work, 'open', {focus: false, isCurrent: () => frames.get(frame.work) === frame && frame.item.isConnected}).then(() => {
@@ -218,12 +219,12 @@ function renderMode(frame: Frame, mode: AppViewMode): void {
   parking.append(...cards);
   frame.mode = isStandaloneWork(frame.app, frame.work) ? 'open' : mode;
   const standalone = isStandaloneWork(frame.app, frame.work);
+  for (const card of cards) card.dataset.appComponent = String(!standalone);
   frame.root.dataset.placementKind = standalone ? 'card' : 'app';
   frame.root.querySelector<HTMLElement>('.cv-app-view-picker')!.hidden = standalone;
-  frame.root.querySelector<HTMLElement>('[data-app-summary]')!.hidden = standalone;
   frame.root.querySelector('.cv-unite-actions')?.setAttribute('aria-label', standalone ? 'Card' : 'App');
-  const ask = frame.root.querySelector('[data-app-assistant="ask"]');
-  if (ask) { ask.setAttribute('aria-label', standalone ? 'Ask about this card' : 'Ask about this app'); ask.setAttribute('title', standalone ? 'Ask about this card' : 'Ask about this app'); }
+  const ask = frame.root.querySelector('[data-app-assistant]');
+  if (ask) { ask.setAttribute('aria-label', standalone ? 'Card assistant' : 'App assistant'); ask.setAttribute('title', standalone ? 'Card assistant' : 'App assistant'); }
   const edit = frame.root.querySelector('[data-edit-presentation]');
   if (edit) { edit.setAttribute('aria-label', standalone ? 'Card settings' : 'App settings'); edit.setAttribute('title', standalone ? 'Card settings' : 'App settings'); }
   frame.root.dataset.appView = frame.mode; frame.item.dataset.appView = frame.mode;
@@ -460,7 +461,7 @@ export function startUnite(document_: Document): void {
   document_.addEventListener('forma:app-companion', event => {
     const detail = (event as CustomEvent<{app: string; work: string; open: boolean; tab?: AppAssistantTab}>).detail;
     const frame = detail && frames.get(detail.work); if (!frame || frame.app !== detail.app) return;
-    for (const button of frame.root.querySelectorAll<HTMLElement>('[data-app-assistant]')) button.setAttribute('aria-expanded', String(detail.open && button.dataset.appAssistant === (detail.tab ?? 'summary')));
+    for (const button of frame.root.querySelectorAll<HTMLElement>('[data-app-assistant]')) button.setAttribute('aria-expanded', String(detail.open));
     applySize(frame, frame.baseSize.width, frame.baseSize.height);
     if (detail.open) revealFrame(frame);
   });
@@ -475,7 +476,7 @@ export function startUnite(document_: Document): void {
     const target = event.target as Element | null, root = target?.closest<HTMLElement>('.cv-unite');
     const frame = root && frames.get(root.dataset.unite ?? '');
     const assistant = target?.closest<HTMLElement>('[data-app-assistant]');
-    if (frame && assistant) {openFrameAssistant(frame, assistant.dataset.appAssistant as AppAssistantTab, {toggle: true}); return;}
+    if (frame && assistant) {openFrameAssistant(frame, undefined, {toggle: true}); return;}
     if (frame && target?.closest('[data-app-view-remove]')) { removeWork(frame.work); return; }
     if (frame && target?.closest('[data-unite-share]')) {openSharing(document_, frame.app, frame.work, frame.title); return;}
     const choice = target?.closest<HTMLElement>('[data-app-view-mode]');
