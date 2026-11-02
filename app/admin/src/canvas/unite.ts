@@ -312,7 +312,6 @@ function applySize(item: HTMLElement, width: number, height: number): void {
   const size = pageSize({ width, height }, viewportWorld());
   canvas.resizeItem(item, size.width, size.height);
   item.style.height = `${Math.round(size.height)}px`;
-  item.style.overflow = 'hidden';
   const root = item.querySelector<HTMLElement>('.cv-unite');
   if (root) {
     root.classList.add('is-sized');
@@ -430,7 +429,7 @@ export async function unite(app: string, work: string, restore?: { at: Spot; pre
   const root = buildFrame(documentRef, app, work, group.title, group.origins, group.canShare, group.canEditPresentation, group.presentation);
   const { order, width } = fill(root, members, group.partLayout);
   for (const restoreScroll of scrolls) restoreScroll();
-  const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root, chrome: false });
+  const item = createCanvasItem({ instanceId: `unite-${work}`, displayName: group.title, preferredWidth: width, minHeight: 360, content: root });
   item.classList.add('cv-item', 'cv-item-unite');
   item.dataset.unite = work;
   canvas.mountItem(item, at, { focus: false });
@@ -577,6 +576,9 @@ export function startUnite(document_: Document): void {
     const title = frame.root.querySelector<HTMLElement>('.cv-unite-title');
     if (title) { title.textContent = detail.name; title.title = detail.name; }
     frame.root.setAttribute('aria-label', detail.name);
+    frame.item.dataset.widgetName = detail.name;
+    frame.item.setAttribute('aria-label', detail.name);
+    frame.item.querySelector('.widget-drag-handle')?.setAttribute('aria-label', `Move ${detail.name}`);
   });
   document_.addEventListener('forma:presentation-saved', event => {
     const detail = (event as CustomEvent<{app: string; work: string}>).detail;

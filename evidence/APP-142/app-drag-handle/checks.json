@@ -1,0 +1,124 @@
+{
+  "full_check": {
+    "command": "just check",
+    "exit_code": 0,
+    "steps": [
+      {
+        "name": "fmt",
+        "seconds": 2,
+        "passed": true
+      },
+      {
+        "name": "admin",
+        "seconds": 16,
+        "passed": true
+      },
+      {
+        "name": "clippy",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "clippy-dev",
+        "seconds": 0,
+        "passed": true
+      },
+      {
+        "name": "test",
+        "seconds": 9,
+        "passed": true
+      },
+      {
+        "name": "http-smoke",
+        "seconds": 2,
+        "passed": true
+      },
+      {
+        "name": "msrv",
+        "seconds": 0,
+        "passed": true
+      },
+      {
+        "name": "catalog",
+        "seconds": 0,
+        "passed": true
+      },
+      {
+        "name": "infra",
+        "seconds": 10,
+        "passed": true
+      },
+      {
+        "name": "py-scripts",
+        "seconds": 5,
+        "passed": true
+      },
+      {
+        "name": "py-runtime",
+        "seconds": 381,
+        "passed": true
+      },
+      {
+        "name": "shared-broker",
+        "seconds": 11,
+        "passed": true
+      },
+      {
+        "name": "py-qualification",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "py-app-scripts",
+        "seconds": 2,
+        "passed": true
+      },
+      {
+        "name": "py-ops",
+        "seconds": 14,
+        "passed": true
+      },
+      {
+        "name": "py-infra",
+        "seconds": 5,
+        "passed": true
+      },
+      {
+        "name": "schema-pins",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "contracts",
+        "seconds": 6,
+        "passed": true
+      },
+      {
+        "name": "board",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "bash-n",
+        "seconds": 0,
+        "passed": true
+      }
+    ]
+  },
+  "final_source_followup": {
+    "commands": [
+      "just check admin",
+      "just check test http-smoke"
+    ],
+    "exit_codes": [
+      0,
+      0
+    ],
+    "reason": "Final inline-clipping and rename-label repairs landed after the first full check had built frontend assets; affected frontend/native/HTTP steps were rerun on final source."
+  },
+  "log_sha256": {
+    "check.log": "635dffe1b14c86a7e1b18b95012c6ba762def61e14b5e6eef782f5e52898dc10",
+    "final-admin.log": "aeb3089f9d89fcdbc6b7ca453b92e58ecf1531526635d399d60374a15bddc111",
+    "final-native.log": "a9d71487d1c5a9f999a0f62294883f010fd1bdf00e4426f2440a1192598018f7"
+  }
+}
