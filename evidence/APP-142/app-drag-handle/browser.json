@@ -1,0 +1,42 @@
+{
+  "recorded_at_utc": "2026-11-02T03:55:04.835341+00:00",
+  "scope": "Actual local browser interactions through CUA in an isolated in-app browser; synthetic clean-profile member at port 4810. Not hosted acceptance.",
+  "build_id": "b1d6b7510985",
+  "source_sha256": {
+    "app/admin/src/canvas/unite.ts": "71ee7eb717ccba694783a389e1c11916b186e57cf5955500cd2291b56533055a",
+    "app/admin/src/styles/canvas.css": "69316f40fa7cbb49b648e4568f3d87a73758acf227a0f2ee5da70c223be1a80e"
+  },
+  "observations": [
+    {
+      "check": "Create and select united app",
+      "passed": true,
+      "observed": "Ordinary Equipment requests template created one app with four parts. Move Equipment requests is visible and hit-testable above the page. Outer overflow visible, inner page hidden, grid auto."
+    },
+    {
+      "check": "Pointer movement",
+      "passed": true,
+      "observed": "Dragging the rail moved the whole app from world (64,64) to (145,122); all four parts stayed together."
+    },
+    {
+      "check": "Keyboard movement and reload",
+      "passed": true,
+      "observed": "Right arrow on Move changed x145 to146. Reload restored (146,122), existing handle and visible outer overflow."
+    },
+    {
+      "check": "Resize preserves rail and scrolling",
+      "passed": true,
+      "observed": "After moving the corner fully into view, a real corner drag resized 1240x536 to1077.45x478. Rail remained hit-testable, outer overflow visible, grid auto with clientHeight252 and scrollHeight589."
+    },
+    {
+      "check": "Draft retention through movement, fan-out and reunite",
+      "passed": true,
+      "observed": "Entered Unsent drag check in Request equipment without submitting. Closed dialog, nudged app, used Fan out then Unite, reopened Request equipment. Same draft value remained, with zero records and no commits displayed."
+    }
+  ],
+  "test_setup_limits": [
+    "The first attempt to open the local listener preceded startup and returned connection refused; the ready listener subsequently returned200.",
+    "An initial resize attempt missed the off-screen corner and did not resize. The app was fitted/moved into view and the later actual corner drag passed.",
+    "No hosted login or app interaction is claimed. Rename label synchronization was independently source-reviewed, not exercised through a rename UI.",
+    "No commands or real customer data were submitted."
+  ]
+}
