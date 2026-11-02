@@ -1,5 +1,5 @@
 {
-  "deployment_contract_sha256": "09a6495512bea714d927288b7ad45c69d1bdd287424d8498f48c1977f14280b2",
+  "deployment_contract_sha256": "ef8580511349b5f1883979d034be55f5753ea9453ff1e73390c4d2955889c9c0",
   "evidence": "evidence/APP-167/SCAN-DISPOSITION.md",
   "expires_at_utc": "2026-11-09T00:00:00Z",
   "findings": [
