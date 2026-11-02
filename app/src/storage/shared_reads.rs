@@ -119,11 +119,19 @@ impl Data {
             require(admitted == premise.definition_digest)?;
             let (stored, fields) = queries::view_query(&content, view)?;
             let input = stored["inputs"][0].as_str().ok_or(Error::Unavailable)?;
-            let source = queries::bound_source(&tx, org, app, work, input).await?;
-            let dependencies = queries::dependencies(&tx, org, app, work).await?;
-            require(dependencies.contains(&source))?;
-            let rows = tx.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&org,&app,&work]).await?;
-            let snapshot: i64 = rows.first().ok_or(Error::Unavailable)?.try_get(0).map_err(|_| Error::Unavailable)?;
+            let records=if queries::record_input(&content,input)? {
+                let (collection,_,_)=super::record_query::binding(&tx,org,app,work,input).await?;
+                require(access.collections.contains(&collection))?;
+                let record=super::record_query::capture(&tx,org,app,work,input,&fields).await?;
+                Some(record)
+            } else {None};
+            let source=if records.is_none(){Some(queries::bound_source(&tx,org,app,work,input).await?)}else{None};
+            let dependencies=queries::dependencies(&tx,org,app,work).await?;
+            if let Some(source)=&source {require(dependencies.contains(source))?;}
+            let snapshot: i64 = if let Some(records) = &records { records.sequence } else {
+                let rows = tx.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&org,&app,&work]).await?;
+                rows.first().ok_or(Error::Unavailable)?.try_get(0).map_err(|_| Error::Unavailable)?
+            };
             let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
             let plan = QueryRun {
                 actor: QueryActor::Guest { account: access.account_id().into(), share: access.share.clone(), version: access.version },
@@ -136,7 +144,7 @@ impl Data {
                 publication: premise.publication, definition_digest: premise.definition_digest,
                 policy_epoch: premise.policy_epoch, view: view.into(), view_query: stored,
                 query, parameters: parameters.named_values(), filter_epoch: parameters.filter_epoch,
-                record_snapshot_sequence: snapshot, source, dependencies, fields,
+                record_snapshot_sequence: snapshot, source, records, dependencies, fields,
             };
             check_guest(&tx, access).await?;
             Ok(GuestQueryRun { plan, access: access.clone() })
@@ -171,15 +179,28 @@ impl Data {
                     && premise.work_version == plan.work_version
                     && premise.policy_epoch == plan.policy_epoch,
             )?;
-            let source = queries::bound_source(
-                &tx,
-                access.organization(),
-                access.app(),
-                access.work(),
-                plan.source().input(),
-            )
-            .await?;
-            require(&source == plan.source())?;
+            if let Some(expected) = plan.source() {
+                let source = queries::bound_source(
+                    &tx,
+                    access.organization(),
+                    access.app(),
+                    access.work(),
+                    expected.input(),
+                )
+                .await?;
+                require(&source == expected)?;
+            }
+            if let Some(records) = plan.records() {
+                require(access.collections.contains(&records.collection))?;
+                super::record_query::release(
+                    &tx,
+                    access.organization(),
+                    access.app(),
+                    access.work(),
+                    records,
+                )
+                .await?;
+            }
             require(
                 queries::dependencies(&tx, access.organization(), access.app(), access.work())
                     .await?

@@ -96,6 +96,10 @@ pub fn router(state: Arc<Act>) -> Router {
 pub fn records_router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route("/v1/work/{app}/{work}/records", get(records))
+        .route(
+            super::record_search::PATH,
+            get(super::record_search::search),
+        )
         .route(NOTES_PATH, get(notes_work).post(notes_work))
         .with_state(auth)
 }
@@ -762,6 +766,7 @@ pub fn records_document_with(
                 "field_id": item.get("field_id")?,
                 "value": item.get("value")?,
                 "display": resolve::display(item.get("value")?),
+                "assistant_display": super::assistant::display(item.get("value")?),
             }))).collect::<Vec<_>>(),
             });
             // APP-107: the transitions that may fire on this record now (its

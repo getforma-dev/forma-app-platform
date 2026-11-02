@@ -195,10 +195,7 @@ fn response<T: Serialize>(value: &T) -> Response {
     }
 }
 fn refusal(error: storage::Error) -> Response {
-    match error {
-        storage::Error::Denied => http::not_found(),
-        _ => http::unavailable(),
-    }
+    crate::query::routes::storage_refusal(&error)
 }
 fn locator(key: &str) -> bool {
     key.split_once('.')

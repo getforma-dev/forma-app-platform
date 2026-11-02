@@ -9,7 +9,7 @@ import type { RecordScope } from '../ask/client';
 
 export type AppAssistantTab = 'ask' | 'summary' | 'sources' | 'saved';
 type View = {show(): void; hide(): void; dispose(): void};
-type Options = {app: string; work: string; title: string; address?: string; onOpenActions?: () => void; onOpenApp?: () => void; onDataCommitted?: (recordId: string) => void};
+type Options = {app: string; work: string; title: string; address?: string; onOpenActions?: () => void; onOpenApp?: () => void; onDataCommitted?: (recordId: string) => void; onDataEnabled?: () => Promise<boolean>};
 type Companion = {host: HTMLElement; options: Options; open: boolean; tab: AppAssistantTab; select(tab: AppAssistantTab): void; close(): void; dispose(): void; chat: ReturnType<typeof mountAppChat>};
 const companions = new Map<string, Companion>();
 const names: Record<AppAssistantTab, string> = {ask: 'Ask', summary: 'Summary', sources: 'Sources', saved: 'Saved'};

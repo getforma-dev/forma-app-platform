@@ -291,7 +291,7 @@ fn submitted_values(
     (values.len() <= 32).then_some(Value::Array(values))
 }
 
-fn display(value: &Value) -> String {
+pub(crate) fn display(value: &Value) -> String {
     let kind = value["type"].as_str().unwrap_or("");
     if kind == "decimal" || kind == "money" {
         let (raw, scale) = if kind == "decimal" {
@@ -370,6 +370,7 @@ fn problem(code: &'static str) -> Response {
         "stale" => http::problem(StatusCode::PRECONDITION_FAILED, code),
         "conflict" => http::problem(StatusCode::CONFLICT, code),
         "composer_unavailable" => http::problem(StatusCode::SERVICE_UNAVAILABLE, code),
+        "app_data_limit" => http::problem(StatusCode::UNPROCESSABLE_ENTITY, code),
         _ => http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_draft"),
     }
 }
@@ -418,7 +419,15 @@ async fn propose(
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
     };
-    let listing = match stores.data.list_records(&member, &app, &work).await {
+    let listed = if let Some(record) = body.record_id.as_deref() {
+        stores
+            .data
+            .list_record_target(&member, &app, &work, &body.collection_id, record)
+            .await
+    } else {
+        stores.data.list_records(&member, &app, &work).await
+    };
+    let listing = match listed {
         Ok(value) => value,
         Err(storage::Error::Denied) => return http::not_found(),
         Err(_) => return http::unavailable(),
@@ -515,6 +524,7 @@ async fn propose(
         }
         Ok(DryRun::Stale) => return problem("stale"),
         Ok(DryRun::Conflict { .. }) => return problem("conflict"),
+        Err(storage::Error::ProjectionLimit) => return problem("app_data_limit"),
         Err(storage::Error::Denied) => {
             tracing::info!(event = "assistant.proposal_refused", stage = "dry_run");
             return problem("could_not_draft");

@@ -11,6 +11,7 @@ export type AppChatOptions = {
   onOpenSource?: (fileId: string) => void;
   onOpenActions?: () => void;
   onDataCommitted?: (recordId: string) => void;
+  onDataEnabled?: () => Promise<boolean>;
   renderAnswerActions?: (snapshot: AppChatSnapshot) => HTMLElement;
 };
 export type AppChatSnapshot =
@@ -85,7 +86,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
   const send = el(doc, 'button', {type: 'submit', class: 'cv-app-chat-send'}, 'Ask');
   const stop = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-chat-stop'}, 'Stop');
   const retry = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-chat-retry'}, 'Try again');
-  const open = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-chat-open-source'}, 'Open source');
+  const open = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-chat-open-source'}, 'View original');
   const actions = el(doc, 'div', {class: 'cv-app-chat-actions'}, open);
   if (options.onOpenActions) {
     const button = el(doc, 'button', {type: 'button', class: 'cv-secondary'}, 'Use app actions');
@@ -106,13 +107,14 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
   let mode: 'ask' | 'change' = 'ask', changes: AppDataActions | null = null;
   let alive = true, visible = false, authorized = false, loading = false, generation = 0, focusRequested = false;
   let pending: AbortController | null = null, sources: Sources | null = null, selected = CHOOSE;
+  let appDataAvailable = false, contextPicked = false;
   let requestedSource: string | null = null, failed: Exchange | null = null, active: Exchange | null = null, queued: string | null = null;
   const waiting: string[] = [];
   const exchanges: Exchange[] = [];
   const address = options.address || `/${options.work}`;
   const scope: RecordScope = {kind: 'app', address, works: [{app_id: options.app, work_id: options.work, address}]};
   let recordScope = scope, recordScopeRefused = false, recordScopeRefusal = '';
-  const recordsLabel = () => recordScope.kind === 'card' ? `Component records · ${recordScope.address}` : 'App records';
+  const recordsLabel = () => recordScope.kind === 'card' ? `Component data · ${recordScope.address}` : 'App data';
   const currentSource = () => sources?.files.find(file => file.id === selected);
   const current = (at: number) => alive && visible && mode === 'ask' && host.isConnected && generation === at;
   const refreshControls = () => {
@@ -124,8 +126,8 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
     open.hidden = !authorized || !currentSource() || !options.onOpenSource;
     thread.hidden = !authorized;
     const file = currentSource();
-    hint.textContent = file ? 'Only this source file. Answers may use a limited sample; open the file to see all rows.'
-      : selected === RECORDS ? `Only this ${recordScope.kind === 'card' ? 'component’s' : 'app’s'} saved records. Each question uses the selected data.` : 'Choose which source this question should use.';
+    hint.textContent = file ? 'The original upload, unchanged by app edits. Answers may use a sample; view the original to see all rows.'
+      : selected === RECORDS ? `This ${recordScope.kind === 'card' ? 'component’s' : 'app’s'} saved data, including confirmed changes. Original files stay unchanged.` : 'Choose which data this question should use.';
   };
   const renderThread = () => {
     thread.replaceChildren();
@@ -188,17 +190,21 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
     if (old && JSON.stringify(old) !== JSON.stringify(next)) {exchanges.length = 0; failed = null; renderThread();}
     sources = next;
     selector.replaceChildren();
+    if (appDataAvailable) selector.append(el(doc, 'option', {value: RECORDS}, recordsLabel()));
     if (next?.files.length) {
       if (next.files.length > 1) selector.append(el(doc, 'option', {value: CHOOSE}, 'Choose a source…'));
-      for (const file of next.files) selector.append(el(doc, 'option', {value: file.id}, file.name));
+      for (const file of next.files) selector.append(el(doc, 'option', {value: file.id}, `Original · ${file.name}`));
     }
-    selector.append(el(doc, 'option', {value: RECORDS}, recordsLabel()));
+    if (!appDataAvailable) selector.append(el(doc, 'option', {value: RECORDS}, recordsLabel()));
     if (requestedSource) {
       selected = next?.files.some(file => file.id === requestedSource) ? requestedSource : CHOOSE;
       if (!selected) status.textContent = 'That source is no longer part of this app.';
+      contextPicked = true;
       requestedSource = null;
+    } else if (!contextPicked && appDataAvailable) {
+      selected = RECORDS;
     } else if (selected !== RECORDS && !next?.files.some(file => file.id === selected)) {
-      selected = next?.files.length === 1 ? next.files[0]!.id : next?.files.length ? CHOOSE : RECORDS;
+      selected = contextPicked ? CHOOSE : next?.files.length === 1 ? next.files[0]!.id : next?.files.length ? CHOOSE : RECORDS;
     }
     selector.value = selected;
   };
@@ -221,6 +227,12 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
       if (!current(at)) return;
       if (response.status === 404 || response.status === 403 || response.status === 401) {deny(); return;}
       if (!response.ok) throw new Error('unavailable');
+      const work: unknown = await response.json();
+      if (!current(at)) return;
+      // These are authorized collection descriptors, not a count of loaded
+      // rows: an empty editable app still asks about its own data by default.
+      appDataAvailable = object(work) && work.app === options.app && work.work === options.work
+        && Array.isArray(work.records) && work.records.some(record => object(record) && isUuid(record.collection));
       const next = await getSources(controller.signal);
       if (!current(at)) return;
       if (sources && !next) {deny(); return;}
@@ -246,7 +258,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
     if (!authorized || pending || !selected || !question || !visible || !alive || recordScopeRefused) return;
     const file = currentSource(), box = sources?.box;
     if (selected !== RECORDS && (!file || !box)) return;
-    const exchange = previous ?? {question, context: selected, label: file ? file.name : recordsLabel()};
+    const exchange = previous ?? {question, context: selected, label: file ? `Original · ${file.name}` : recordsLabel()};
     if (!previous) {exchanges.push(exchange); if (exchanges.length > MAX_EXCHANGES) exchanges.shift();}
     exchange.error = undefined; active = exchange; failed = null;
     pending = new AbortController(); const controller = pending, at = ++generation;
@@ -304,9 +316,13 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
     if (!authorized) {void load(); return;}
     if (failed && failed.context === selected) void ask(failed.question, failed);
   });
-  selector.addEventListener('change', () => {cancel(); selected = selector.value; failed = null; recordScopeRefused = false; refreshControls();});
+  selector.addEventListener('change', () => {cancel(); selected = selector.value; contextPicked = true; failed = null; recordScopeRefused = false; refreshControls();});
   open.addEventListener('click', () => {if (authorized && currentSource()) options.onOpenSource?.(selected);});
-  const dataActions = () => changes ??= mountAppDataActions(changeView, {...options, onCommitted: options.onDataCommitted});
+  const dataActions = () => changes ??= mountAppDataActions(changeView, {...options, onCommitted: options.onDataCommitted, onDataEnabled: async () => {
+    appDataAvailable = true;
+    if (!contextPicked) selected = RECORDS;
+    return options.onDataEnabled?.() ?? true;
+  }});
   const selectMode = (next: 'ask' | 'change') => {
     if (!alive || next === mode) return;
     if (mode === 'ask') cancel(); else changes?.hide();
@@ -345,12 +361,13 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
         status.textContent = recordScopeRefusal;
         refreshControls(); return;
       }
+      const resetAppContext = recordScopeRefused || recordScope.kind === 'card';
       recordScopeRefused = false;
       if (next && work) {
         recordScope = {...next, address: next.address.slice(0, 120), works: [{...work, address: work.address.slice(0, 120)}]};
-        selected = RECORDS; requestedSource = null;
+        selected = RECORDS; requestedSource = null; contextPicked = true;
       } else {
-        if (recordScope.kind === 'card') selected = CHOOSE;
+        if (resetAppContext) {selected = CHOOSE; contextPicked = false;}
         recordScope = scope;
       }
       if (authorized) updateContexts(sources);

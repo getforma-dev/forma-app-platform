@@ -16,12 +16,14 @@ mod cards;
 mod catalog;
 mod commands;
 mod composer;
+mod data_copy;
 mod definitions;
 mod governance;
 mod labels;
 mod pool;
 mod queries;
 mod record_components;
+mod record_query;
 mod registry;
 pub mod rules;
 mod sessions;
@@ -59,6 +61,10 @@ pub use commands::{
 pub use composer::{
     bindings as composer_bindings, AuthoringApp, ComposerContext, LibraryApp, LibraryView,
     PublishedInput, ReadableSource, CONTEXT_DEADLINE as COMPOSER_CONTEXT_DEADLINE,
+};
+pub use data_copy::{
+    editable_definition, DataCopyInit, DataCopyInput, DataCopyReceipt, DataCopyRows,
+    DATA_COPY_BYTES, DATA_COPY_ROWS, DATA_COPY_TRANSPORT_BYTES,
 };
 pub use definitions::{
     CurrentRevision, DefinitionDetail, DefinitionRevision, InputContract, PublicationDetail,
@@ -110,6 +116,7 @@ pub enum Error {
     Unavailable,
     Deadline,
     ProjectionLimit,
+    Busy,
     UnknownOutcome,
 }
 
@@ -121,6 +128,7 @@ impl fmt::Display for Error {
             Self::Unavailable => "storage unavailable",
             Self::Deadline => "storage deadline exceeded",
             Self::ProjectionLimit => "record projection bound exceeded",
+            Self::Busy => "record snapshot capacity reached",
             Self::UnknownOutcome => "transaction outcome unknown",
         })
     }
@@ -195,6 +203,8 @@ mod query_qualification;
 mod race_qualification;
 #[cfg(test)]
 mod record_components_campaign;
+#[cfg(test)]
+mod record_query_campaign;
 #[cfg(test)]
 mod shared_campaign;
 #[cfg(test)]

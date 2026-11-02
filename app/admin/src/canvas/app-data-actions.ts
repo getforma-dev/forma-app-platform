@@ -1,6 +1,7 @@
 // Prepare a change inside one app, then explicitly confirm its existing
 // audited command. Neither the builder nor the global action router is used.
 import { postCommand, type CommandOutcome } from './commands';
+import {mountAppDataCopy, type AppDataCopy} from './app-data-copy';
 import { isUuid } from './ids';
 import { el } from './render';
 
@@ -11,7 +12,7 @@ type Catalog = {publication: string; version: number; canWrite: boolean; actions
 type Proposal = {action: Action; record: string; recordVersion: number; recordLabel: string; description: string; publication: string; workVersion: number;
   values: {field: string; label: string; display: string; previous?: string}[]; serialized: string; key: string};
 export type AppDataActions = {show(): void; hide(): void; dispose(): void; focus(): void};
-export type AppDataActionsOptions = {app: string; work: string; title: string; onCommitted?: (recordId: string) => void; onOpenActions?: () => void};
+export type AppDataActionsOptions = {app: string; work: string; title: string; onCommitted?: (recordId: string) => void; onOpenActions?: () => void; onDataEnabled?: () => Promise<boolean>};
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const localId = (value: unknown): value is string => typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(value);
 const positive = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
@@ -57,8 +58,9 @@ function readCatalog(value: unknown, app: string, work: string): Catalog | null 
       || !Array.isArray(record.values) || record.values.length > 128 || records.some(known => known.id === record.record_id)) return null;
     const values: RecordItem['values'] = [];
     for (const field of record.values) {
-      if (!object(field) || !localId(field.field_id) || !text(field.display) || values.some(known => known.field === field.field_id)) return null;
-      values.push({field: field.field_id, display: field.display});
+      if (!object(field) || !localId(field.field_id) || !text(field.display)
+        || (field.assistant_display !== undefined && !text(field.assistant_display)) || values.some(known => known.field === field.field_id)) return null;
+      values.push({field: field.field_id, display: typeof field.assistant_display === 'string' ? field.assistant_display : field.display});
     }
     records.push({id: record.record_id, collection: record.collection_id, version: record.version, values});
   }
@@ -100,16 +102,22 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
   const actionInput = el(doc, 'select', {'aria-label': 'App action', class: 'cv-app-action-select'});
   const recordInput = el(doc, 'select', {'aria-label': 'Record to change', class: 'cv-app-action-record'});
   const recordLabel = el(doc, 'label', {}, el(doc, 'span', {}, 'Record to change'), recordInput);
+  const searchInput = el(doc, 'input', {type: 'search', class: 'cv-app-action-search-input', maxlength: '200', placeholder: 'Find by text or record ID…', 'aria-label': 'Find an app record'});
+  const searchButton = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-action-search-button'}, 'Find records');
+  const searchStatus = el(doc, 'p', {class: 'cv-app-action-search-status', role: 'status'});
+  const recordPicker = el(doc, 'div', {class: 'cv-app-action-record-picker'}, recordLabel,
+    el(doc, 'div', {class: 'cv-app-chat-actions cv-app-action-search'}, searchInput, searchButton), searchStatus);
   const description = el(doc, 'textarea', {class: 'cv-app-action-description', rows: '4', maxlength: '2000', placeholder: 'Describe the values to add or change…', 'aria-label': 'Describe the data change'});
   const prepare = el(doc, 'button', {type: 'submit', class: 'cv-app-action-prepare'}, 'Review change');
   const refresh = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-action-refresh'}, 'Refresh actions');
   const status = el(doc, 'p', {class: 'cv-app-action-status', role: 'status', 'aria-live': 'polite'});
   const result = el(doc, 'div', {class: 'cv-app-action-result', 'aria-live': 'polite'});
   const review = el(doc, 'section', {class: 'cv-app-action-review', 'aria-label': 'Review proposed data change', tabindex: '-1'});
-  const form = el(doc, 'form', {class: 'cv-app-action-form'}, el(doc, 'label', {}, el(doc, 'span', {}, 'Action'), actionInput), recordLabel,
+  const copyHost = el(doc, 'div', {class: 'cv-app-data-copy-host'});
+  const form = el(doc, 'form', {class: 'cv-app-action-form'}, el(doc, 'label', {}, el(doc, 'span', {}, 'Action'), actionInput), recordPicker,
     el(doc, 'label', {}, el(doc, 'span', {}, 'What should change?'), description), prepare);
   const root = el(doc, 'section', {class: 'cv-app-data-actions'},
-    el(doc, 'p', {class: 'cv-app-action-intro'}, 'Use this app’s existing actions to add or update data. Review the proposed values before saving.'), status, refresh, form, review, result);
+    el(doc, 'p', {class: 'cv-app-action-intro'}, 'Use this app’s existing actions to add or update data. Review the proposed values before saving.'), status, refresh, copyHost, form, review, result);
   if (options.onOpenActions) {
     const native = el(doc, 'button', {type: 'button', class: 'cv-secondary cv-app-action-native'}, 'Open app forms');
     native.addEventListener('click', () => {if (alive && visible && catalogVerified && catalog) options.onOpenActions?.();}); root.append(native);
@@ -117,25 +125,29 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
   host.replaceChildren(root);
   let alive = true, visible = false, generation = 0, pending: AbortController | null = null;
   let catalog: Catalog | null = null, proposal: Proposal | null = null, saving = false, uncertain = false, catalogVerified = false;
+  let dataCopy: AppDataCopy | null = null;
   const currentAction = () => catalog?.actions.find(action => actionKey(action) === actionInput.value);
   const currentRecord = () => catalog?.records.find(record => record.id === recordInput.value && record.collection === currentAction()?.collection) ?? null;
   const current = (ticket: number) => alive && visible && host.isConnected && generation === ticket;
   const cancelRead = () => {generation++; pending?.abort(); pending = null;};
-  const clearSensitive = () => {catalog = null; catalogVerified = false; proposal = null; uncertain = false; description.value = ''; result.replaceChildren(); actionInput.replaceChildren(); recordInput.replaceChildren();};
+  const clearSensitive = () => {catalog = null; catalogVerified = false; proposal = null; uncertain = false; description.value = ''; searchInput.value = ''; searchStatus.textContent = ''; result.replaceChildren(); actionInput.replaceChildren(); recordInput.replaceChildren(); dataCopy?.hide();};
   const controls = () => {
     form.hidden = !catalogVerified || !catalog?.canWrite || !catalog.actions.length || !!proposal;
+    copyHost.hidden = !catalogVerified || !catalog || !!catalog.actions.length;
     review.hidden = !catalogVerified || !proposal; result.hidden = !catalogVerified;
     actionInput.disabled = saving || uncertain || !catalogVerified; recordInput.disabled = saving || uncertain || !catalogVerified; description.disabled = saving || uncertain || !catalogVerified;
+    searchInput.disabled = saving || uncertain || !catalogVerified || !!pending; searchButton.disabled = searchInput.disabled || !!proposal;
     prepare.disabled = !!pending || saving || !!proposal || !currentAction() || (currentAction()?.operation === 'update' && !currentRecord());
     refresh.hidden = !!pending || saving || (!!proposal && catalogVerified);
   };
   const describeRecord = (record: RecordItem) => `${record.values.map(value => value.display).filter(Boolean).slice(0, 3).join(' · ').slice(0, 160) || record.id.slice(0, 8)} · v${record.version}`;
   const populateRecords = () => {
     const selected = recordInput.value, action = currentAction();
-    recordLabel.hidden = action?.operation !== 'update';
+    recordPicker.hidden = action?.operation !== 'update';
     recordInput.replaceChildren(el(doc, 'option', {value: ''}, 'Choose a record…'));
     for (const record of catalog?.records.filter(value => value.collection === action?.collection) ?? []) recordInput.append(el(doc, 'option', {value: record.id}, describeRecord(record)));
     recordInput.value = catalog?.records.some(record => record.id === selected && record.collection === action?.collection) ? selected : '';
+    if (!searchStatus.textContent && catalog?.truncated) searchStatus.textContent = 'The list shows recent records. Use Find records to select older data.';
   };
   const invalidate = (dismissUncertain = false) => {
     if (saving || (uncertain && !dismissUncertain)) return;
@@ -163,10 +175,24 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
       values, el(doc, 'p', {class: 'cv-app-action-confirm-note'}, saving ? 'Saving your confirmed change…' : uncertain ? 'The previous save could not be confirmed. Retry checks the same submission; it will not create a second change.' : 'Nothing is saved until you confirm.'),
       el(doc, 'div', {class: 'cv-app-chat-actions'}, confirm, cancel));
   };
+  const findRecords = async (before: Catalog, action: Action, query: string, signal: AbortSignal): Promise<Catalog> => {
+    const response = await fetch(`/v1/work/${options.app}/${options.work}/records/search?${new URLSearchParams({collection: action.collection, q: query})}`, {
+      credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+    });
+    if ([401, 403, 404].includes(response.status)) throw new Error('denied');
+    if (!response.ok) throw new Error('search');
+    const found = readCatalog(await response.json(), options.app, options.work);
+    if (!found || found.records.length > 50 || found.records.some(record => record.collection !== action.collection)
+      || found.actions.some(value => value.collection !== action.collection)) throw new Error('search');
+    if (!found.canWrite) throw new Error('denied');
+    if (found.publication !== before.publication || found.version !== before.version) throw new Error('stale');
+    return found;
+  };
   const load = async () => {
     if (!alive || !visible || saving) return;
     if (!isUuid(options.app) || !isUuid(options.work)) {clearSensitive(); status.textContent = unavailable; showReview(); controls(); return;}
     cancelRead(); catalogVerified = false; pending = new AbortController(); const controller = pending, ticket = generation;
+    dataCopy?.hide();
     status.textContent = 'Checking this app’s available actions…'; controls();
     try {
       const response = await fetch(`/v1/work/${options.app}/${options.work}/records`, {credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)])});
@@ -176,23 +202,65 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
       const next = readCatalog(await response.json(), options.app, options.work);
       if (!current(ticket)) return;
       if (!next) throw new Error('catalog');
-      const selected = actionInput.value; catalog = next; catalogVerified = true;
+      if (proposal && !uncertain && proposal.action.operation === 'update'
+        && next.publication === proposal.publication && next.version === proposal.workVersion
+        && next.actions.some(action => actionKey(action) === actionKey(proposal!.action))
+        && !next.records.some(record => record.id === proposal!.record)) {
+        const found = await findRecords(next, proposal.action, proposal.record, controller.signal);
+        if (!current(ticket)) return;
+        next.records.push(...found.records.filter(record => record.id === proposal!.record));
+      }
+      const selected = actionInput.value; catalog = next; catalogVerified = true; searchStatus.textContent = '';
       actionInput.replaceChildren(el(doc, 'option', {value: ''}, 'Choose an action…'));
       for (const action of next.actions) actionInput.append(el(doc, 'option', {value: actionKey(action)}, `${label(action.id)} · ${label(action.schema)} (${action.operation === 'create' ? 'add' : 'update'})`));
       actionInput.value = next.actions.some(action => actionKey(action) === selected) ? selected : next.actions.length === 1 ? actionKey(next.actions[0]!) : '';
       populateRecords();
-      if (!next.canWrite) {proposal = null; uncertain = false; status.textContent = 'You can view this app’s data, but you do not have permission to change it.';}
-      else if (!next.actions.length) {proposal = null; uncertain = false; status.textContent = 'This app has no supported actions for adding or updating data. Its source files can still be viewed and discussed in Ask.';}
+      if (!next.actions.length) {proposal = null; uncertain = false; status.textContent = 'This app has no supported actions for adding or updating data.';}
+      else if (!next.canWrite) {proposal = null; uncertain = false; status.textContent = 'You can view this app’s data, but you do not have permission to change it.';}
       else if (proposal && !uncertain && (proposal.publication !== next.publication || proposal.workVersion !== next.version
         || !next.actions.some(action => actionKey(action) === actionKey(proposal!.action))
         || (proposal.action.operation === 'update' && !next.records.some(record => record.id === proposal!.record && record.version === proposal!.recordVersion)))) {
         proposal = null; status.textContent = 'This app or record changed. Your description is kept; review a new draft.';
-      } else status.textContent = next.truncated ? 'Only the most recently loaded records are listed for updates.' : '';
-    } catch {
-      if (current(ticket)) {catalogVerified = false; status.textContent = 'Actions could not be checked. Refresh to try again.';}
+      } else status.textContent = '';
+    } catch (error) {
+      if (current(ticket)) {
+        if (error instanceof Error && error.message === 'denied') {clearSensitive(); status.textContent = unavailable;}
+        else {catalogVerified = false; status.textContent = 'Actions could not be checked. Refresh to try again.';}
+      }
     } finally {
-      if (current(ticket)) {pending = null; showReview(); controls();}
+      if (current(ticket)) {
+        pending = null; showReview(); controls();
+        if (catalogVerified && catalog && !catalog.actions.length) {
+          dataCopy ??= mountAppDataCopy(copyHost, {...options, onEnabled: async () => {
+            const refreshed = await (options.onDataEnabled?.() ?? Promise.resolve(true));
+            if (alive && visible) await load();
+            if (alive && visible && !refreshed) status.textContent = 'App data is enabled. Refresh the app to load its updated views. The original files are unchanged.';
+            return refreshed;
+          }});
+          dataCopy.show();
+        }
+      }
     }
+  };
+  const search = async () => {
+    const before = catalog, action = currentAction(), query = searchInput.value.trim();
+    if (!alive || !visible || !catalogVerified || !before?.canWrite || action?.operation !== 'update' || saving || pending || proposal) return;
+    if (Array.from(query).length < 2 || Array.from(query).length > 200 || /[\u0000-\u001f\u007f]/.test(query)) {searchStatus.textContent = 'Enter 2 to 200 characters to find a record.'; return;}
+    cancelRead(); pending = new AbortController(); const controller = pending, ticket = generation;
+    recordInput.value = ''; searchStatus.textContent = 'Finding records in this app…'; controls();
+    try {
+      const found = await findRecords(before, action, query, controller.signal);
+      if (!current(ticket) || currentAction() !== action) return;
+      catalog = {...before, records: found.records, truncated: found.truncated}; populateRecords();
+      searchStatus.textContent = found.truncated ? 'Showing 50 matches. Refine your search to find the record you want.'
+        : found.records.length ? `${found.records.length} ${found.records.length === 1 ? 'match' : 'matches'}. Choose the record to update.` : 'No matching records. Try another detail or the full record ID.';
+    } catch (error) {
+      if (current(ticket)) {
+        if (error instanceof Error && error.message === 'denied') {clearSensitive(); status.textContent = unavailable;}
+        else if (error instanceof Error && error.message === 'stale') {catalogVerified = false; status.textContent = 'This app changed. Refresh actions, then search again.';}
+        else searchStatus.textContent = 'Records could not be found. Try again.';
+      }
+    } finally {if (current(ticket)) {pending = null; controls();}}
   };
   const commit = async (prepared: Proposal) => {
     if (!alive || !visible || saving || pending || proposal !== prepared || !catalogVerified || !catalog?.canWrite) return;
@@ -241,6 +309,7 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
       if ([401, 403, 404].includes(response.status)) {clearSensitive(); status.textContent = unavailable; return;}
       if (!response.ok) {
         if (response.status === 409 || response.status === 412) {catalog = null; status.textContent = 'This app or record changed. Refresh actions, then review a new draft.';}
+        else if (object(body) && body.code === 'app_data_limit') status.textContent = 'This change would exceed the app data limit of 100,000 rows or 64 MiB. Nothing was saved. Original files are unchanged.';
         else if (object(body) && body.code === 'composer_unavailable') status.textContent = 'The assistant cannot prepare changes right now. You can use the app’s forms.';
         else if (object(body) && Array.isArray(body.missing_fields) && body.missing_fields.every(field => text(field, 200))) status.textContent = `Add these details to your request: ${body.missing_fields.slice(0, 32).join(', ')}.`;
         else status.textContent = 'That request could not be prepared for this action. Check the details and try again.';
@@ -252,15 +321,17 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
     finally {if (current(ticket)) {pending = null; showReview(); controls(); if (proposal) review.focus({preventScroll: true});}}
   });
   description.addEventListener('input', () => invalidate());
-  actionInput.addEventListener('change', () => {invalidate(); populateRecords(); controls();});
+  actionInput.addEventListener('change', () => {invalidate(); searchStatus.textContent = ''; populateRecords(); controls();});
   recordInput.addEventListener('change', () => invalidate());
   refresh.addEventListener('click', () => {void load();});
+  searchButton.addEventListener('click', () => {void search();});
+  searchInput.addEventListener('keydown', event => {if (event.key === 'Enter') {event.preventDefault(); event.stopPropagation(); void search();}});
   form.addEventListener('keydown', event => {if (event.key !== 'Escape') event.stopPropagation();});
   controls(); root.hidden = true;
   return {
     show() {if (!alive || visible) return; visible = true; root.hidden = false; if (!saving) void load();},
-    hide() {visible = false; root.hidden = true; catalogVerified = false; cancelRead(); controls();},
+    hide() {visible = false; root.hidden = true; catalogVerified = false; cancelRead(); dataCopy?.hide(); controls();},
     focus() {if (alive && visible && catalog?.canWrite) description.focus();},
-    dispose() {alive = false; visible = false; cancelRead(); clearSensitive(); root.remove();},
+    dispose() {alive = false; visible = false; cancelRead(); clearSensitive(); dataCopy?.dispose(); root.remove();},
   };
 }

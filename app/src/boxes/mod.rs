@@ -17,6 +17,7 @@
 //! (`/folder <name|number> formation <instruction>`).
 pub mod ask;
 pub mod brief;
+pub mod data_copy;
 pub mod derive;
 pub mod explain;
 pub mod inspect;

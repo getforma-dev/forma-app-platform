@@ -387,6 +387,8 @@ test('a folder with files offers Ask, Make a card and Make an app; Make waits fo
   assert.deepEqual(builds, [{ one_card: true }, { purpose: 'the key metrics and explain them' }]);
   const { refusalText, BoxError } = await import('../src/canvas/box-api.ts');
   assert.match(refusalText(new BoxError('no_data_files', 422)), /no table \(CSV or XLSX\)/);
+  assert.match(refusalText(new BoxError('data_copy_limit', 422)), /100,000 rows or 64 MiB\. No app was created/);
+  assert.match(refusalText(new BoxError('data_copy_refused', 422)), /No app was created\. The unchanged original is still available to view or download/);
 });
 
 test('Make a card and Make an app send one idempotency key per confirm, reused when it is sent again (ADR-011 I4, APP-124 review)', async () => {

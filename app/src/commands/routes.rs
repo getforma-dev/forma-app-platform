@@ -133,6 +133,9 @@ fn answer(
             ),
             Ok(CommandResult::InFlight) => waiting("in_flight"),
             Ok(CommandResult::Busy) => waiting("busy"),
+            Err(storage::Error::ProjectionLimit) => {
+                http::problem(StatusCode::UNPROCESSABLE_ENTITY, "app_data_limit")
+            }
             Err(storage::Error::Denied) => http::not_found(),
             Err(storage::Error::UnknownOutcome) => {
                 http::problem(StatusCode::SERVICE_UNAVAILABLE, "unknown_outcome")
@@ -149,7 +152,7 @@ fn answer(
                 Ok(CommandResult::Busy) => Notice::Busy,
                 // The session loaded the page it posts from (the token is
                 // bound to it): storage's refusal of a value returns there.
-                Err(storage::Error::Denied) => Notice::Refused,
+                Err(storage::Error::Denied | storage::Error::ProjectionLimit) => Notice::Refused,
                 Err(storage::Error::UnknownOutcome) => Notice::Unknown,
                 Err(_) => return http::unavailable(),
             };

@@ -617,6 +617,37 @@ pub(super) async fn work_fence(
     })
 }
 
+/// Imported apps retain the same complete-data bounds after edits. Commit holds
+/// the organization sequence lock before this check; concurrent adds cannot
+/// both consume the final available row. Dry runs use it without writing.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn copy_capacity(
+    t: &Transaction<'_>,
+    org: &str,
+    app: &str,
+    work: &str,
+    collection: &str,
+    record: &str,
+    creating: bool,
+    new_bytes: usize,
+) -> Result<()> {
+    let manifest=t.query("SELECT 1 FROM genui.work_data_copies WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&org,&app,&work]).await?;
+    if manifest.is_empty() {
+        return Ok(());
+    }
+    let rows=t.query("SELECT count(*)::bigint,coalesce(sum(octet_length(v.canonical_values)),0)::bigint,coalesce(max(CASE WHEN r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid THEN octet_length(v.canonical_values) ELSE 0 END),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid", &[&org,&app,&work,&collection,&record]).await?;
+    let row = rows.first().ok_or(Error::Unavailable)?;
+    let count: i64 = row.try_get(0).map_err(|_| Error::Unavailable)?;
+    let bytes: i64 = row.try_get(1).map_err(|_| Error::Unavailable)?;
+    let replaced: i64 = row.try_get(2).map_err(|_| Error::Unavailable)?;
+    if count + i64::from(creating) > super::DATA_COPY_ROWS as i64
+        || bytes - replaced + new_bytes as i64 > super::DATA_COPY_BYTES as i64
+    {
+        return Err(Error::ProjectionLimit);
+    }
+    Ok(())
+}
+
 // --- value typing (contracts/validate.py `compatible`, edition 1 VALUES) ---
 
 fn integer_text(value: Option<&Value>) -> bool {
@@ -634,7 +665,7 @@ fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
 /// The contract rule: a value's tag matches the field's type, its members are
 /// exactly the tag's, and the typed extras (unit, scale, currency, enum
 /// member, reference target) equal the field's.
-fn compatible(value: &Value, field: &FieldSpec) -> bool {
+pub(super) fn compatible(value: &Value, field: &FieldSpec) -> bool {
     let Some(object) = value.as_object() else {
         return false;
     };
@@ -1216,6 +1247,17 @@ async fn commit<'a>(
         &command.values,
         creator.as_deref() == Some(request.principal.as_str()),
     )?;
+    copy_capacity(
+        transaction,
+        org,
+        app,
+        work,
+        &collection,
+        &command.record,
+        current_version == 0,
+        state.len(),
+    )
+    .await?;
     let version = current_version + 1;
     require_stored(version <= SAFE_MAX)?;
     let creator = creator.unwrap_or_else(|| request.principal.clone());

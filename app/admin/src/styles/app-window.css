@@ -216,4 +216,16 @@
 .cv-app-action-confirm-note { color:var(--cv-muted); font-size:.64rem; line-height:1.55; }
 .cv-app-action-review .cv-app-chat-actions { margin-top:12px; padding:0; }
 .cv-app-action-native { margin-top:12px; }
+.cv-app-action-search { padding:8px 0 0; }
+.cv-app-action-search-input { flex:1 1 160px; min-width:0; width:100%; padding:7px 8px; border:1px solid var(--cv-line); border-radius:6px; background:var(--cv-surface); color:var(--cv-text); font:inherit; font-size:.7rem; }
+.cv-app-action-search-status { margin:6px 0 0; color:var(--cv-muted); font-size:.65rem; overflow-wrap:anywhere; }
+.cv-app-action-search-status:empty { display:none; }
+.cv-app-data-copy { font-size:.7rem; line-height:1.55; }
+.cv-app-data-copy-status { margin:10px 0; color:var(--cv-muted); overflow-wrap:anywhere; }
+.cv-app-data-copy-status:empty { display:none; }
+.cv-app-data-copy-review { padding:12px; border:1px solid var(--cv-line); border-radius:8px; background:var(--cv-sunken); }
+.cv-app-data-copy-review h4 { margin:0 0 8px; font-size:.8rem; }
+.cv-app-data-copy-review ul { margin:8px 0; padding-left:18px; overflow-wrap:anywhere; }
+.cv-app-data-copy-review .cv-app-chat-actions { padding:8px 0 0; }
+.cv-app-data-copy :is(.cv-app-data-copy-enable, .cv-app-data-copy-confirm) { padding:7px 10px; border:1px solid var(--cv-accent); border-radius:6px; background:var(--cv-accent); color:var(--cv-on-accent); font:inherit; font-size:.7rem; font-weight:600; cursor:pointer; }
 .cv-app-data-actions :disabled { opacity:.55; cursor:default; }

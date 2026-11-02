@@ -138,6 +138,8 @@ const REFUSALS: Record<string, string> = {
   data_refused: 'Those column types do not fit the file’s values. Nothing was registered.',
   not_a_folder_request: `That did not read as a request about this ${noun}.`,
   could_not_compose: `An app could not be built from this ${noun} right now. Nothing was placed.`,
+  data_copy_limit: 'This data exceeds the editable app limit of 100,000 rows or 64 MiB. No app was created. The unchanged original is still available to view or download.',
+  data_copy_refused: 'This data could not be copied into an editable app safely. No app was created. The unchanged original is still available to view or download.',
   no_data_files: `This ${noun} has no table (CSV or XLSX) to build from yet. Nothing was placed.`,
   composer_unavailable: 'Building apps is not available on this server right now.',
   cross_site: 'That request was refused.',

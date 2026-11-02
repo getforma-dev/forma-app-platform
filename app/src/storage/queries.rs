@@ -126,7 +126,8 @@ pub struct QueryRun {
     pub(super) parameters: Vec<Value>,
     pub(super) filter_epoch: i64,
     pub(super) record_snapshot_sequence: i64,
-    pub(super) source: RunSource,
+    pub(super) source: Option<RunSource>,
+    pub(super) records: Option<super::record_query::RecordQuerySnapshot>,
     pub(super) dependencies: Vec<RunSource>,
     pub(super) fields: Vec<Value>,
 }
@@ -185,8 +186,11 @@ impl QueryRun {
         self.record_snapshot_sequence
     }
     /// The one source revision the engine reads.
-    pub fn source(&self) -> &RunSource {
-        &self.source
+    pub fn source(&self) -> Option<&RunSource> {
+        self.source.as_ref()
+    }
+    pub fn records(&self) -> Option<&super::record_query::RecordQuerySnapshot> {
+        self.records.as_ref()
     }
     /// Every source dependency of the work (`work_source_dependencies`, in
     /// `input_id` order), the read one included: the receipt's
@@ -246,7 +250,8 @@ impl QueryRun {
             filter_epoch: parsed.filter_epoch,
             record_snapshot_sequence: 0,
             dependencies: vec![source.clone()],
-            source,
+            source: Some(source),
+            records: None,
             fields,
         }
     }
@@ -400,8 +405,7 @@ fn integer(row: &Row, index: usize) -> Result<i64> {
 }
 
 /// The view's typed query in the re-admitted definition content, and the
-/// contract `fields` of its one `source` input (`Denied` for a view whose
-/// input is a records collection: Phase 1 runs source inputs only).
+/// contract `fields` of its one source or committed-record input.
 pub(super) fn view_query(content: &[u8], view: &str) -> Result<(Value, Vec<Value>)> {
     let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
     let views = content
@@ -421,22 +425,33 @@ pub(super) fn view_query(content: &[u8], view: &str) -> Result<(Value, Vec<Value
     // APP-005's qualified subset reads exactly one source input.
     require(inputs.len() == 1)?;
     let input = inputs[0].as_str().ok_or(Error::Unavailable)?;
-    let fields = source_fields(&content, input).ok_or(Error::Denied)?;
+    let fields = input_fields(&content, input).ok_or(Error::Denied)?;
     Ok((query, fields))
 }
 
-/// The `fields` of the content's `source` input `input`; `None` for an
-/// unknown or records input.
-fn source_fields(content: &Value, input: &str) -> Option<Vec<Value>> {
+/// The fields of a source or committed-record input; `None` if unknown.
+fn input_fields(content: &Value, input: &str) -> Option<Vec<Value>> {
     let contract = content
         .get("inputs")?
         .as_array()?
         .iter()
         .find(|i| i.get("id").and_then(Value::as_str) == Some(input))?;
-    if contract.get("kind").and_then(Value::as_str) != Some("source") {
+    if !matches!(
+        contract.get("kind").and_then(Value::as_str),
+        Some("source" | "records")
+    ) {
         return None;
     }
     contract.get("fields")?.as_array().cloned()
+}
+
+pub(super) fn record_input(content: &[u8], input: &str) -> Result<bool> {
+    let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
+    let found = content["inputs"]
+        .as_array()
+        .and_then(|inputs| inputs.iter().find(|item| item["id"] == input))
+        .ok_or(Error::Denied)?;
+    Ok(found["kind"] == "records")
 }
 
 /// The pinned premise a run and its release must both see.
@@ -715,7 +730,7 @@ pub(super) async fn dependencies(
         });
     }
     // The contract bounds a receipt at 8 source revisions.
-    require(!dependencies.is_empty() && dependencies.len() <= 8)?;
+    require(dependencies.len() <= 8)?;
     Ok(dependencies)
 }
 
@@ -752,23 +767,24 @@ impl Data {
             }
             let (stored, fields) = view_query(&content, view)?;
             let input = stored["inputs"][0].as_str().ok_or(Error::Unavailable)?;
-            let source = bound_source(transaction, org, app, work, input).await?;
-            permit
-                .also(Action::SourceRead, Resource::Source(&source.source))
-                .await?;
+            let records = if record_input(&content,input)? {
+                Some(super::record_query::capture(transaction,org,app,work,input,&fields).await?)
+            } else { None };
+            let source = if records.is_none() {
+                let source=bound_source(transaction,org,app,work,input).await?;
+                permit.also(Action::SourceRead,Resource::Source(&source.source)).await?;
+                Some(source)
+            } else {None};
             permit.also(Action::Run, Resource::App(app)).await?;
-            // The work's dependencies must record the binding the view reads.
             let dependencies = dependencies(transaction, org, app, work).await?;
-            require(dependencies.contains(&source))?;
-            // `record_snapshot_sequence`: the largest `commit_sequence` among
-            // the work's record revisions at this snapshot (0 when none). In
-            // Phase 1 no query reads a record input, so this identifies the
-            // same visible revisions as ADR-009 D9.8's organization-wide
-            // `next_commit_sequence - 1` (`organization_sequences`, migration
-            // 0007); the switch to D9.8's S comes with record inputs (APP-020+;
-            // APP-012 review m8).
-            let rows = transaction.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[org,&app,&work]).await?;
-            let record_snapshot_sequence = integer(rows.first().ok_or(Error::Unavailable)?, 0)?;
+            if let Some(source)=&source {require(dependencies.contains(source))?;}
+            // Record views use the organization-wide sequence captured atomically
+            // with their complete current rows (ADR-009 D9.8). Immutable-source
+            // views retain their historical work-local sequence semantics.
+            let record_snapshot_sequence = if let Some(records) = &records { records.sequence } else {
+                let rows = transaction.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[org,&app,&work]).await?;
+                integer(rows.first().ok_or(Error::Unavailable)?, 0)?
+            };
             let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
             Ok(QueryRun {
                 actor: QueryActor::Member,
@@ -788,6 +804,7 @@ impl Data {
                 filter_epoch: parameters.filter_epoch,
                 record_snapshot_sequence,
                 source,
+                records,
                 dependencies,
                 fields,
             })
@@ -828,12 +845,17 @@ impl Data {
                     && premise.definition_digest == run.definition_digest
                     && premise.policy_epoch == run.policy_epoch,
             )?;
-            let source = bound_source(transaction, org, app, work, &run.source.input).await?;
-            require(source == run.source)?;
+            if let Some(expected) = &run.source {
+                let source = bound_source(transaction, org, app, work, &expected.input).await?;
+                require(&source == expected)?;
+                permit
+                    .also(Action::SourceRead, Resource::Source(&source.source))
+                    .await?;
+            }
+            if let Some(records) = &run.records {
+                super::record_query::release(transaction, org, app, work, records).await?;
+            }
             require(dependencies(transaction, org, app, work).await? == run.dependencies)?;
-            permit
-                .also(Action::SourceRead, Resource::Source(&source.source))
-                .await?;
             permit.also(Action::Run, Resource::App(app)).await
         }
         .await;
@@ -857,8 +879,7 @@ pub const QUALIFIED_OPERATORS: [&str; 6] = [
 /// One view of a saved work's pinned definition that the Phase 1 query path
 /// can run: it carries a typed query over exactly one `source` input using
 /// only [`QUALIFIED_OPERATORS`] (APP-005's qualified subset). Forms, notes,
-/// multi-input views, views over a records input and views with an
-/// unqualified operator are not listed.
+/// multi-input views and views with an unqualified operator are not listed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkView {
     pub id: String,
@@ -944,7 +965,7 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
             .and_then(Value::as_array)
             .filter(|inputs| inputs.len() == 1)
             .and_then(|inputs| inputs[0].as_str())
-            .and_then(|input| source_fields(&content, input));
+            .and_then(|input| input_fields(&content, input));
         let qualified = query
             .and_then(|q| q.get("operations"))
             .and_then(Value::as_array)
@@ -976,7 +997,7 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
                     .and_then(|all| all.iter().find(|v| v["id"] == view.id));
                 declared
                     .and_then(|v| v["query"]["inputs"][0].as_str())
-                    .and_then(|id| source_fields(&content, id))
+                    .and_then(|id| input_fields(&content, id))
                     .is_some_and(|fields| {
                         fields
                             .iter()
@@ -1821,7 +1842,7 @@ mod tests {
         let content = json!({"title": "Northstar", "inputs": [
             {"id": "events", "kind": "source", "fields": []}, {"id": "inventory", "kind": "source", "fields": []},
             {"id": "decisions", "kind": "records", "fields": []}], "views": [
-            // A records-input view runs nowhere in Phase 1: not listed (ADR-011 library).
+            // Record inputs use the same qualified single-input query path.
             {"id": "status", "title": "status", "kind": "status", "query": {"inputs": ["decisions"], "operations": [{"type": "project"}]}},
             {"id": "total", "title": "total", "kind": "summary", "query": {"inputs": ["events"], "operations": aggregate}},
             {"id": "destinations", "title": "destinations", "kind": "table", "query": {"inputs": ["events", "inventory"], "operations": [{"type": "lookup"}]}},
@@ -1838,9 +1859,9 @@ mod tests {
                 .iter()
                 .map(|v| v.id.as_str())
                 .collect::<Vec<_>>(),
-            ["total", "timeline"]
+            ["status", "total", "timeline"]
         );
-        assert_eq!(listed.views[1].kind, "timeline");
+        assert_eq!(listed.views[2].kind, "timeline");
         assert_eq!(
             outline(&admission::encode(&json!({"views": []})).unwrap()),
             Err(Error::Unavailable)
@@ -2156,7 +2177,7 @@ mod tests {
                     continue;
                 };
                 let input = query["inputs"][0].as_str().unwrap();
-                let fields = source_fields(&content, input).unwrap();
+                let fields = input_fields(&content, input).unwrap();
                 assert!(!fields.is_empty());
                 let (stored, found) =
                     view_query(&admitted.canonical, view["id"].as_str().unwrap()).unwrap();

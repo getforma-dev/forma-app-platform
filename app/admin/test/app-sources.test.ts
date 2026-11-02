@@ -104,6 +104,8 @@ test('Sources opens the full original viewer directly and hands file context to 
     assert.equal(f.calls[0]!.url, `/v1/boxes/lineage/${APP}/${WORK}`);
     assert.equal(f.calls[0]!.options.cache, 'no-store');
     assert.match(f.host.textContent, /The original file behind this app/);
+    assert.match(f.host.textContent, /Changes to app data do not change this original/);
+    assert.equal(f.host.querySelector('.cv-app-source-ask')!.textContent, 'Ask about original');
     assert.match(f.host.textContent, /Original.csvCSV · Original file/);
     assert.doesNotMatch(f.host.textContent, /0 B|Ask anything|Keep original/);
     f.host.querySelector('.cv-app-source-ask')!.click();

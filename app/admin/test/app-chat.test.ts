@@ -44,7 +44,7 @@ async function fixture() {
   const key = `__appChat${serial++}`; (globalThis as any)[key] = {el};
   const built = await build({entryPoints: [entry], bundle: true, platform: 'node', format: 'esm', write: false,
     plugins: [{name: 'app-chat-dom', setup(builder) {
-      builder.onResolve({filter: /^\.\/render$/}, args => args.importer === entry || args.importer.endsWith('/app-data-actions.ts') ? {path: args.path, namespace: 'chat-dom'} : undefined);
+      builder.onResolve({filter: /^\.\/render$/}, args => args.importer === entry || args.importer.endsWith('/app-data-actions.ts') || args.importer.endsWith('/app-data-copy.ts') ? {path: args.path, namespace: 'chat-dom'} : undefined);
       builder.onLoad({filter: /.*/, namespace: 'chat-dom'}, () => ({contents: `export const el = (...args) => globalThis[${JSON.stringify(key)}].el(...args);`, loader: 'js'}));
     }}],
   });
@@ -102,6 +102,8 @@ test('a sole source is explicit, fresh and file-scoped; save hook receives all v
   try {
     f.handle(async url => url.includes('/lineage/') ? response(lineage()) : url.endsWith('/ask') ? response({text: 'These rows were read.', references: Array.from({length: 60}, (_, i) => ref(FILE, i + 1))}) : response({}));
     f.chat.ask('What rows were read?'); await flush();
+    assert.match(f.host.querySelector('select')!.textContent, /Original · Checking.csv/);
+    assert.match(f.host.querySelector('.cv-app-chat-scope')!.textContent, /original upload, unchanged by app edits/);
     assert.deepEqual(f.posts().map(value => value.url), [`/v1/boxes/${BOX}/ask`]);
     assert.deepEqual(f.posts()[0]!.body, {question: 'What rows were read?', file_id: FILE});
     assert.equal(f.calls.filter(value => value.url.includes('/lineage/')).length, 2);
@@ -128,6 +130,48 @@ test('saving a file answer preserves canonical long filenames and sheet names be
       : url.endsWith('/ask') ? response({text: 'One source row.', references: [reference]}) : response({}));
     f.chat.ask('Find a row'); await flush();
     assert.deepEqual(f.snapshots[0].reply.references, [reference]); assert.equal(f.snapshots[0].source.fileName, name);
+  } finally {f.cleanup();}
+});
+
+test('an editable app defaults to its own data even when empty, while an explicit original remains file-scoped', async () => {
+  const f = await fixture();
+  try {
+    f.handle(async url => url.includes('/lineage/') ? response(lineage())
+      : url === '/v1/ask' ? response({text: 'No saved rows yet.', references: [], receipts: []})
+      : url.endsWith('/ask') ? response({text: 'Original snapshot.', references: [ref()]})
+      : response({app: APP, work: WORK, records: [{collection: OTHER, count: '0'}]}));
+    f.chat.show(); await flush();
+    assert.equal(f.host.querySelector('select')!.value, 'records');
+    assert.equal((f.host.querySelector('select')!.children[0] as Element).textContent, 'App data');
+    f.chat.setRecordScope({kind: 'card', address: '/checking/rows', works: [{app_id: APP, work_id: WORK, address: '/checking', collection: OTHER}]});
+    f.chat.setRecordScope(null); assert.equal(f.host.querySelector('select')!.value, 'records', 'leaving a component restores the live app-data default');
+    await f.submit('What is in the app now?'); assert.equal(f.posts()[0]!.url, '/v1/ask');
+    assert.match(f.host.querySelector('.cv-app-chat-scope')!.textContent, /including confirmed changes/);
+    f.chat.setSource(FILE); await flush(); await f.submit('What was originally uploaded?');
+    assert.equal(f.posts()[1]!.url, `/v1/boxes/${BOX}/ask`); assert.equal(f.posts()[1]!.body.file_id, FILE);
+    f.chat.hide(); f.chat.show(); await flush(); assert.equal(f.host.querySelector('select')!.value, FILE);
+  } finally {f.cleanup();}
+});
+
+test('enabling app records replaces an automatic source default, but a foreign work descriptor cannot do so', async () => {
+  const f = await fixture();
+  try {
+    let work: unknown = {app: APP, work: OTHER, records: [{collection: OTHER}]};
+    f.handle(async url => url.includes('/lineage/') ? response(lineage()) : response(work));
+    f.chat.show(); await flush(); assert.equal(f.host.querySelector('select')!.value, FILE);
+    f.chat.hide(); work = {app: APP, work: WORK, records: [{collection: OTHER}]}; f.chat.show(); await flush();
+    assert.equal(f.host.querySelector('select')!.value, 'records');
+  } finally {f.cleanup();}
+});
+
+test('an explicitly selected original that disappears never silently selects another file', async () => {
+  const f = await fixture();
+  try {
+    let files = [source()];
+    f.handle(async url => url.includes('/lineage/') ? response(lineage(files)) : response({app: APP, work: WORK, records: [{collection: OTHER}]}));
+    f.chat.setSource(FILE); f.chat.show(); await flush(); assert.equal(f.host.querySelector('select')!.value, FILE);
+    f.chat.hide(); files = [source(OTHER)]; f.chat.show(); await flush();
+    assert.equal(f.host.querySelector('select')!.value, ''); await f.submit('What changed?'); assert.equal(f.posts().length, 0);
   } finally {f.cleanup();}
 });
 

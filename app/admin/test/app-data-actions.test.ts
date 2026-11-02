@@ -49,23 +49,24 @@ async function fixture() {
     const node = new Element(tag, doc); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); node.append(...children); return node;
   };
   const commits: any[][] = [], changed: string[] = [], calls: {url: string; init: RequestInit; body?: any}[] = [];
+  let enabled = 0;
   let commitResult = async (..._args: any[]): Promise<any> => ({kind: 'committed', recordVersion: '1', workVersion: '4', commit: '4', audit: NEW});
   const key = `__dataActions${serial++}`;
   (globalThis as any)[key] = {el, postCommand: (...args: any[]) => {commits.push(args); return commitResult(...args);}};
   const bundle = await build({entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false,
     plugins: [{name: 'data-action-boundaries', setup(builder) {
-      builder.onResolve({filter: /^\.\/(render|commands)$/}, args => args.importer === entry ? {path: args.path, namespace: 'data-action-boundary'} : undefined);
+      builder.onResolve({filter: /^\.\/(render|commands)$/}, args => args.importer === entry || args.importer.endsWith('/app-data-copy.ts') ? {path: args.path, namespace: 'data-action-boundary'} : undefined);
       builder.onLoad({filter: /.*/, namespace: 'data-action-boundary'}, args => ({loader: 'js', contents: `export const ${args.path === './render' ? 'el' : 'postCommand'}=(...args)=>globalThis[${JSON.stringify(key)}].${args.path === './render' ? 'el' : 'postCommand'}(...args);`}));
     }}]});
   const api = await import('data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0]!.text).toString('base64'));
   const oldFetch = globalThis.fetch;
   let respond = async (url: string, init: RequestInit): Promise<any> => url.endsWith('/records') ? response(catalog()) : response(proposed(JSON.parse(String(init.body)).command_id === 'edit'));
   globalThis.fetch = (async (url: string, init: RequestInit) => {calls.push({url, init, body: init.body ? JSON.parse(String(init.body)) : undefined}); return respond(url, init);}) as typeof fetch;
-  const host = el(doc, 'div'), controller = api.mountAppDataActions(host, {app: APP, work: WORK, title: 'Notes', onCommitted: (record: string) => changed.push(record)});
+  const host = el(doc, 'div'), controller = api.mountAppDataActions(host, {app: APP, work: WORK, title: 'Notes', onCommitted: (record: string) => changed.push(record), onDataEnabled: async () => {enabled++; return true;}});
   const find = (selector: string) => host.querySelector(selector)!;
   const choose = (command = 'add') => {find('.cv-app-action-select').value = `${COLLECTION}/${command}`; find('.cv-app-action-select').dispatch('change');};
   const prepare = async (words = 'Add a note titled New title') => {find('textarea').value = words; find('form').dispatch('submit'); await flush();};
-  return {controller, host, calls, commits, changed, find, choose, prepare,
+  return {controller, host, calls, commits, changed, find, choose, prepare, enabled: () => enabled,
     respond: (fn: typeof respond) => {respond = fn;}, commitResult: (fn: typeof commitResult) => {commitResult = fn;},
     cleanup: () => {controller.dispose(); globalThis.fetch = oldFetch; delete (globalThis as any)[key];}};
 }
@@ -85,6 +86,25 @@ test('preparing is read-only; explicit confirm sends the reviewed exact-work com
   } finally {f.cleanup();}
 });
 
+test('a source-only app enables a reviewed editable copy then refreshes its native action catalog', async () => {
+  const f = await fixture();
+  try {
+    let editable = false;
+    f.respond(async (url, init) => {
+      if (url.endsWith('/records')) return response(editable ? catalog() : {...catalog(), can_write: false, collections: [], records: []});
+      assert.equal(url, `/v1/work/${APP}/${WORK}/data-copy`);
+      if (init.method === 'POST') editable = true;
+      return response({app_id: APP, work_id: WORK, publication_id: PUBLICATION, work_version: 3, editable, can_enable: !editable,
+        total_rows: 2500, files: [{name: 'Accounts.csv', rows: 2500}], limits: {rows: 100000, bytes: 67108864}});
+    });
+    f.controller.show(); await flush(); assert.equal(f.find('form').hidden, true);
+    f.find('.cv-app-data-copy-enable').click(); assert.equal(editable, false); f.find('.cv-app-data-copy-confirm').click(); await flush();
+    assert.equal(editable, true); assert.equal(f.enabled(), 1); assert.equal(f.find('form').hidden, false);
+    assert.equal(f.find('.cv-app-data-copy-host').hidden, true); assert.match(f.find('.cv-app-action-select').textContent, /Add/);
+    assert.equal(f.calls.filter(call => call.url.endsWith('/records')).length, 2); assert.equal(f.commits.length, 0);
+  } finally {f.cleanup();}
+});
+
 test('updates require an explicit record and review old/new values with pinned versions', async () => {
   const f = await fixture();
   try {
@@ -96,6 +116,74 @@ test('updates require an explicit record and review old/new values with pinned v
     f.find('.cv-app-action-cancel').click(); assert.equal(f.commits.length, 0); assert.match(f.host.textContent, /Draft cancelled/);
     assert.equal(f.find('textarea').value, 'Change title to New title');
     assert.equal(f.find('form').hidden, false); assert.equal(f.find('.cv-app-action-review').hidden, true); assert.equal(f.find('textarea').focused, true);
+  } finally {f.cleanup();}
+});
+
+test('the initial update picker uses scale-aware decimal and currency displays without depending on search', async () => {
+  const f = await fixture();
+  try {
+    const listed = catalog();
+    listed.records[0]!.values = [
+      {field_id: 'title', display: '125', assistant_display: '1.25'},
+      {field_id: 'body', display: '$123.45', assistant_display: 'KWD 12.345'},
+    ] as typeof listed.records[0]['values'];
+    f.respond(async () => response(listed));
+    f.controller.show(); await flush(); f.choose('edit');
+    assert.match(f.find('.cv-app-action-record').textContent, /1\.25 · KWD 12\.345/);
+    assert.doesNotMatch(f.find('.cv-app-action-record').textContent, /\$123\.45/);
+    assert.equal(f.calls.some(call => call.url.includes('/search')), false);
+  } finally {f.cleanup();}
+});
+
+test('an app data limit refuses the proposal without confirmation and keeps the editable draft', async () => {
+  const f = await fixture();
+  try {
+    f.respond(async url => url.endsWith('/records') ? response(catalog()) : response({code: 'app_data_limit'}, 422));
+    f.controller.show(); await flush(); f.choose(); await f.prepare('Add a note titled New title');
+    assert.match(f.host.textContent, /100,000 rows or 64 MiB/); assert.match(f.host.textContent, /Nothing was saved. Original files are unchanged/);
+    assert.equal(f.host.querySelector('.cv-app-action-confirm'), null); assert.equal(f.commits.length, 0);
+    assert.equal(f.find('textarea').value, 'Add a note titled New title'); assert.equal(f.find('form').hidden, false);
+  } finally {f.cleanup();}
+});
+
+test('record search reaches older rows but requires explicit selection and preserves the target through review reopen', async () => {
+  const f = await fixture();
+  try {
+    const old = {...catalog().records[0]!, record_id: NEW, version: 7};
+    const update = proposed(true); update.record_id = NEW; update.command_request.record_id = NEW; update.command_request.expected_record_version = 7;
+    f.respond(async url => url.includes('/records/search?') ? response({...catalog(), records: [old]})
+      : url.endsWith('/records') ? response({...catalog(), truncated: true}) : response(update));
+    f.controller.show(); await flush(); f.choose('edit');
+    assert.match(f.host.textContent, /Find records to select older data/);
+    f.find('.cv-app-action-search-input').value = 'Old title'; f.find('.cv-app-action-search-button').click(); await flush();
+    const search = f.calls.find(call => call.url.includes('/records/search?'))!;
+    const parameters = new URL(search.url, 'http://localhost').searchParams;
+    assert.equal(parameters.get('collection'), COLLECTION); assert.equal(parameters.get('q'), 'Old title');
+    assert.equal(f.find('.cv-app-action-record').value, ''); await f.prepare('Change title to New title');
+    assert.equal(f.calls.filter(call => call.init.method === 'POST').length, 0, 'a single match is never selected automatically');
+    f.find('.cv-app-action-record').value = NEW; f.find('.cv-app-action-record').dispatch('change'); await f.prepare('Change title to New title');
+    const draft = f.calls.find(call => call.url.endsWith('/proposals'))!;
+    assert.equal(draft.body.record_id, NEW); assert.equal(draft.body.expected_record_version, 7);
+    f.controller.hide(); f.controller.show(); await flush();
+    assert.equal(f.find('.cv-app-action-review').hidden, false);
+    assert.equal(f.calls.filter(call => call.url.includes('/records/search?')).length, 2, 'reopen reauthorizes the older selected record');
+    f.find('.cv-app-action-confirm').click(); await flush(); assert.equal(f.commits[0][1].record_id, NEW); assert.equal(f.commits[0][1].expected_record_version, 7);
+  } finally {f.cleanup();}
+});
+
+test('record search rejects changed premises and ignores late results after the selected action changes', async () => {
+  const f = await fixture();
+  try {
+    let resolve!: (value: unknown) => void;
+    f.respond(async url => url.includes('/records/search?') ? new Promise(done => {resolve = done;}) : response(catalog()));
+    f.controller.show(); await flush(); f.choose('edit'); f.find('.cv-app-action-search-input').value = 'Old title';
+    f.find('.cv-app-action-search-button').click(); const request = f.calls.at(-1)!; f.choose('add');
+    assert.equal(request.init.signal!.aborted, true);
+    resolve(response({...catalog(), records: [{...catalog().records[0]!, record_id: NEW}]})); await flush();
+    assert.equal(f.find('.cv-app-action-record').querySelectorAll('option').some(option => option.value === NEW), false);
+    f.respond(async url => url.includes('/records/search?') ? response({...catalog(), work_version: 4}) : response(catalog()));
+    f.choose('edit'); f.find('.cv-app-action-search-button').click(); await flush();
+    assert.equal(f.find('form').hidden, true); assert.match(f.host.textContent, /app changed/); assert.equal(f.commits.length, 0);
   } finally {f.cleanup();}
 });
 

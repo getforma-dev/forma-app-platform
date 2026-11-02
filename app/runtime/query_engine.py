@@ -86,6 +86,8 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 REQUEST_KEYS = {"organization_id", "source", "query", "deadline_ms", "cache_root", "scratch"}
 SOURCE_KEYS = {"source_id", "revision_id", "normalized_digest", "s3_key", "input_id", "fields"}
+RECORD_SOURCE_KEYS = {"kind", "input_id", "fields", "digest"}
+MAX_RECORD_BYTES = 64 * 1024 * 1024
 
 
 class Refused(ValueError):
@@ -163,7 +165,7 @@ def literal_parameter(value, value_type):
     return parameter, ""
 
 
-def compile_query(query, source_path, input_id="events", fields=FIELDS):
+def compile_query(query, source_path, input_id="events", fields=FIELDS, records=False):
     require(isinstance(query, dict) and set(query) <= {"operator_version", "inputs", "operations", "null_policy", "window"}
             and query.get("operator_version") == 1 and query.get("null_policy") == "unknown"
             and isinstance(query.get("operations"), list) and 0 < len(query["operations"]) <= 16, "query_shape_refused")
@@ -172,7 +174,15 @@ def compile_query(query, source_path, input_id="events", fields=FIELDS):
     if query["inputs"] != [input_id]:
         raise Refused("only the request's one source input is qualified")
     params = [str(source_path)]
-    sql = "SELECT * FROM read_parquet(?)"
+    if records:
+        # Only already-admitted field identifiers and fixed engine type names
+        # enter this SQL. Values remain data in the private snapshot file.
+        physical = {"text": "VARCHAR", "enum": "VARCHAR", "boolean": "BOOLEAN", "integer": "HUGEINT",
+                    "money": "HUGEINT", "decimal": "HUGEINT", "date": "DATE", "timestamp": "TIMESTAMP"}
+        columns = ",".join("'%s':'%s'" % (name, physical[value_type["type"]]) for name, value_type in types.items())
+        sql = "SELECT * FROM read_json(?, format='newline_delimited', columns={%s}, maximum_object_size=1048576)" % columns
+    else:
+        sql = "SELECT * FROM read_parquet(?)"
     available = set(types)
     aggregated = False
     if "window" in query:
@@ -358,17 +368,21 @@ def parse_request(raw):
     request = json.loads(raw)
     require(isinstance(request, dict) and set(request) == REQUEST_KEYS, "request_refused")
     source = request["source"]
-    require(isinstance(source, dict) and set(source) == SOURCE_KEYS, "request_refused")
+    require(isinstance(source, dict), "request_refused")
+    records = source.get("kind") == "records"
+    require(set(source) == (RECORD_SOURCE_KEYS if records else SOURCE_KEYS), "request_refused")
     organization = request["organization_id"]
     require(isinstance(organization, str) and UUID.fullmatch(organization) is not None, "request_refused")
-    require(all(isinstance(source[k], str) and UUID.fullmatch(source[k]) for k in ("source_id", "revision_id")), "request_refused")
-    require(isinstance(source["normalized_digest"], str) and DIGEST.fullmatch(source["normalized_digest"]) is not None, "request_refused")
+    digest = source.get("digest") if records else source.get("normalized_digest")
+    require(isinstance(digest, str) and DIGEST.fullmatch(digest) is not None, "request_refused")
     require(isinstance(source["input_id"], str) and LOCAL_ID.fullmatch(source["input_id"]) is not None, "request_refused")
     try:
         parse_fields(source["fields"])
     except Refused:
         raise Refused("request_refused") from None
-    require(source["s3_key"] == f"o/{organization}/s/{source['source_id']}/r/{source['revision_id']}/part.parquet", "request_refused")
+    if not records:
+        require(all(isinstance(source[k], str) and UUID.fullmatch(source[k]) for k in ("source_id", "revision_id")), "request_refused")
+        require(source["s3_key"] == f"o/{organization}/s/{source['source_id']}/r/{source['revision_id']}/part.parquet", "request_refused")
     deadline = request["deadline_ms"]
     require(type(deadline) is int and 1 <= deadline <= int(DEADLINE_SECONDS * 1000), "request_refused")
     for key in ("cache_root", "scratch"):
@@ -378,10 +392,18 @@ def parse_request(raw):
 
 def execute(request, start):
     scratch = Path(request["scratch"])
-    require(scratch.is_dir() and not scratch.is_symlink() and not any(scratch.iterdir()), "scratch_refused")
-    path = cached_source(request["cache_root"], request["organization_id"], request["source"])
+    require(scratch.is_dir() and not scratch.is_symlink(), "scratch_refused")
+    records = request["source"].get("kind") == "records"
+    if records:
+        path = scratch / "records.ndjson"
+        require(set(scratch.iterdir()) == {path} and path.is_file() and not path.is_symlink()
+                and path.stat().st_size <= MAX_RECORD_BYTES and path.stat().st_mode & 0o077 == 0, "scratch_refused")
+        require(file_digest(path) == request["source"]["digest"], "source_digest_mismatch")
+    else:
+        require(not any(scratch.iterdir()), "scratch_refused")
+        path = cached_source(request["cache_root"], request["organization_id"], request["source"])
     query = request["query"]
-    sql, params = compile_query(query, path, request["source"]["input_id"], request["source"]["fields"])
+    sql, params = compile_query(query, path, request["source"]["input_id"], request["source"]["fields"], records=records)
     columns, rows = run_sql(scratch, [path], sql, params, deadline_seconds=request["deadline_ms"] / 1000, start=start)
     last = query["operations"][-1]
     limit = last.get("rows") if last["type"] == "limit" else None

@@ -747,3 +747,23 @@ async fn a_folder_build_key_answers_its_first_result() {
         .await
         .is_none());
 }
+
+#[tokio::test]
+async fn data_copy_refusals_are_distinct_from_generation_failures() {
+    for (internal, public) in [
+        ("data_copy_limit", "data_copy_limit"),
+        ("data_copy_refused", "data_copy_refused"),
+        ("private_model_failure", "could_not_compose"),
+    ] {
+        let response = super::routes::BuildRefusal::CouldNotCompose(internal).response();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value["code"], public);
+    }
+}

@@ -287,6 +287,12 @@ async fn refusal_mapping_matches_design_section_nine() {
             "query_failed",
         ),
         (storage_refusal(&Error::Denied), 404, "not_found"),
+        (storage_refusal(&Error::Busy), 429, "too_many_requests"),
+        (
+            storage_refusal(&Error::ProjectionLimit),
+            422,
+            "narrow_the_query",
+        ),
         (storage_refusal(&Error::Unavailable), 503, "unavailable"),
         (storage_refusal(&Error::Deadline), 503, "unavailable"),
         (storage_refusal(&Error::Configuration), 503, "unavailable"),

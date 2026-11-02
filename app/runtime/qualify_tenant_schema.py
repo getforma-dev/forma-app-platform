@@ -30,6 +30,7 @@ PUB = '00000000-0000-4000-8000-000000000068'
 APP_ROLES = ('genui_workspace','genui_control','genui_data','genui_worker')
 # ADR-007 D7.1: the six genui_admit definer functions, exact identity arguments and results.
 ADMIT_FUNCTIONS = {
+    'import_work_records': ('p_org uuid, p_principal uuid, p_app uuid, p_work uuid, p_rows jsonb', 'bigint'),
     'expire_shared_identity': ('', 'TABLE(refresh_token_ref uuid)'),
     'resolve_code': ('p_code_digest text', 'uuid'),
     'resolve_handle': ('p_handle_digest text', 'uuid'),
@@ -144,6 +145,18 @@ ADMIT_GRANTS = set().union(
 )
 
 
+# Migration 0020: initial import only; no record UPDATE or DELETE authority.
+ADMIT_GRANTS |= set().union(
+    _columns('record_collections','SELECT','organization_id','app_id','work_id','collection_id'),
+    _columns('internal_records','SELECT','organization_id','app_id','work_id'),
+    _columns('work_source_dependencies','SELECT','input_id','source_revision_id','source_digest'),
+    _columns('organization_sequences','SELECT','organization_id','next_commit_sequence'),
+    _columns('organization_sequences','UPDATE','next_commit_sequence'),
+    _columns('internal_records','INSERT','organization_id','app_id','work_id','collection_id','record_id','current_version'),
+    _columns('internal_record_revisions','INSERT','organization_id','app_id','work_id','collection_id','record_id','version','creator_id','updater_id','commit_sequence','committed_at','canonical_values'),
+    _columns('record_source_dependencies','INSERT','organization_id','app_id','work_id','collection_id','record_id','record_version','input_id','source_id','source_revision_id','source_digest'),
+)
+
 # Migration 0004 (ADR-007 D7.3, APP-073 Task 5): the entitlement columns the
 # shared member precheck and fence read, for exactly these three roles.
 ENTITLEMENT_READS = {(role,'entitlements','SELECT',column) for role in ('genui_workspace','genui_control','genui_data')
@@ -196,6 +209,12 @@ DEFINITION_WORK_GRANTS = set().union(
       for role in ('genui_workspace','genui_control')),
     *(_role_columns(role,'audit_heads','UPDATE','chain_sequence','head_hash') for role in ('genui_workspace','genui_control')),
 )
+DEFINITION_WORK_GRANTS |= set().union(
+    _role_columns('genui_workspace','work_data_copies','SELECT','organization_id','app_id','work_id','actor_principal_id','idempotency_key','original_publication_id','original_work_version','publication_id','imported_rows','payload_digest','created_at'),
+    _role_columns('genui_workspace','work_data_copies','INSERT','organization_id','app_id','work_id','actor_principal_id','idempotency_key','original_publication_id','original_work_version','publication_id','imported_rows','payload_digest'),
+    _role_columns('genui_data','work_data_copies','SELECT','organization_id','app_id','work_id'),
+)
+
 # D7.8 closed chains and kinds of the application roles 0005 and 0007 bind.
 
 # 0017 exact new tenant-table grants. Account schema is qualified separately.
@@ -662,7 +681,7 @@ def admission_checks(pg, passed, denied):
         if role!='genui_workspace':
             for name,(arguments,_) in ADMIT_FUNCTIONS.items():
                 # Non-NULL arguments: a STRICT call on NULL constants folds away before the EXECUTE check.
-                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else '1' if kind=='bigint' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ') if a))
+                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else '1' if kind=='bigint' else '[]' if kind=='jsonb' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ') if a))
                 denied(role+' cannot execute '+name,role,'SELECT genui_private.%s(%s)'%(name,values))
 
     # --- resolve_code / resolve_handle before any scope ---

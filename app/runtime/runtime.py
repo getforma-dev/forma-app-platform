@@ -35,7 +35,7 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 19
+DATABASE_SCHEMA_VERSION = 20
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;
@@ -1231,7 +1231,7 @@ if __name__ == "__main__":
     capabilities = take_capability_injection()
     auth_configuration_text = take_auth_configuration_injection()
     shared_broker_text = take_shared_broker_injection()
-    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache", "object", "normalize")); parser.add_argument("--generation"); parser.add_argument("--report")
+    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache", "object", "normalize", "record-import")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
         # D7.13: a harness injection in any mode, serve included, is removed
@@ -1242,6 +1242,12 @@ if __name__ == "__main__":
         # The engine child answers every request with its own one JSON line.
         if args.mode == "query": raise SystemExit(query())
         if args.mode == "normalize": raise SystemExit(normalize())
+        if args.mode == "record-import":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("box_record_import", Path(__file__).resolve().with_name("box_record_import.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            raise SystemExit(module.main())
         if args.mode == "refresh": refresh(path)
         elif args.mode == "cache": print(json.dumps(cache(path)))
         elif args.mode == "object": print(json.dumps(object_operation(path)))

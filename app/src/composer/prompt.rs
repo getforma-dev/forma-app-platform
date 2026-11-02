@@ -11,11 +11,9 @@
 //! composer parses it strictly and admission judges it whole.
 //!
 //! APP-132: a member with no readable sources (a new customer's clean
-//! workspace) still gets a first app from a sentence: the prompt states that
-//! a query reads only a `source` input, that with no sources the app keeps its
-//! own records through a create form (the canvas shows every records
-//! collection as a records card with receipts, so no data view is needed),
-//! and carries both an approval workflow and a plain list example. Lists
+//! workspace) still gets a first app from a sentence: the app keeps its own
+//! records through a create form and may query that committed records input.
+//! The prompt carries an approval workflow and a plain list example. Lists
 //! must not inherit an approval process just because a workflow is nearby.
 use crate::storage::{LibraryApp, QUALIFIED_OPERATORS};
 use serde_json::{json, Map, Value};
@@ -88,7 +86,7 @@ content = {{title, description, inputs, views, record_schemas, commands, links, 
 inputs: 0..8 objects. A `source` input MUST be one of the provided `sources`, copied exactly (same id, contract_id, contract_version, kind, fields). A `records` input is {{id, contract_id, contract_version: 1, kind: \"records\", fields}} and requires a record_schema with identical fields.\n\
 fields: 1..32 of {{id, value_type, nullable}}; value_type is one of {{type: text}}, {{type: boolean}}, {{type: integer, unit}}, {{type: decimal, unit, scale 0..18}}, {{type: date}}, {{type: timestamp}}, {{type: enum, values: [ids]}}, {{type: reference, target_input}}, {{type: money, currency: \"USD\", minor_unit_exponent: 2}}.\n\
 views: 1..24 of {{id, kind, renderer_version: 1, title, query?, command_id?, text?}}. kind is one of summary, table, detail, timeline, chart, filter, form, note, status. A form has command_id (a declared command) and no query. A note has text and no query. Every other kind is a data view and has a query.\n\
-query = {{operator_version: 1, inputs: [exactly ONE `source` input id], operations: 1..8, null_policy: \"unknown\", window?}}; a query never reads a `records` input (the engine runs queries over sources only). window = {{start, end, bounds: \"half_open\"}} with UTC instants YYYY-MM-DDTHH:MM:SSZ, start < end.\n\
+query = {{operator_version: 1, inputs: [exactly ONE `source` or `records` input id], operations: 1..8, null_policy: \"unknown\", window?}}; a records query reads the full authorized committed collection using the same qualified operators; every referenced field must belong to that input. window = {{start, end, bounds: \"half_open\"}} with UTC instants YYYY-MM-DDTHH:MM:SSZ, start < end.\n\
 RUNNABLE OPERATORS (use only these; the engine runs nothing else): {operators}.\n\
  {{type: project, fields: [field_ref, ...]}}\n\
  {{type: filter, field: field_ref, comparison: eq|ne|lt|lte|gt|gte, value: literal}}\n\
@@ -104,7 +102,7 @@ Every command MUST include `transitions`, including create commands and ordinary
 \n\
 FORBIDDEN: keys outside the grammar; markup, script, SQL, URLs or file paths anywhere; anything about permissions, roles, owners, tenants, members, grants or access; operators other than the runnable ones; a query over more than one input; renderer or operator versions other than 1.\n\
 When `sources` is not empty: prefer 3 to 6 focused views that answer the intent from the provided sources; include a form plus a records input and record schema only when the member asks to record decisions or notes.\n\
-When `sources` is EMPTY (a new workspace with no data yet): build an app that keeps its own records, entered by members through its form. Declare 1 or 2 `records` inputs, each with a record_schema of identical fields; a create command writing them (with `initial` for a status enum another command moves); one `form` view per create command members file with; optionally a `note` saying how the app works. Declare NO data view (no summary, table, detail, timeline, chart, filter or status view): there is no source to query, and the canvas already shows every records collection as a records card with each record's receipt.\n\
+When `sources` is EMPTY (a new workspace with no data yet): build an app that keeps its own records, entered by members through its form. Declare 1 or 2 `records` inputs, each with a record_schema of identical fields; a create command writing them (with `initial` for a status enum another command moves); one `form` view per create command members file with; optionally a `note` saying how the app works. You may add focused data views over one declared records input using the qualified query operators. Keep the create form so members can enter data; do not invent source inputs.\n\
 For a simple list, reading list, inventory or tracker, use only the fields and entry form the request needs. Do not add submitted/approved/rejected states, approval commands, reviewers or a manager decision unless the member explicitly asks for an approval workflow. Do not promise editing or completion actions unless the app actually declares the corresponding command and form. The last example is a simple list with no approval or transition commands. The time-off example is only for requests that explicitly need a decision workflow.\n\
 \n\
 EXAMPLES (admitted definitions, their non-runnable views removed; the last two have no sources and keep their own records):\n{}",
@@ -210,10 +208,8 @@ pub(crate) fn records_example(mut content: Value) -> Value {
 
 /// Whether a view is one the engine runs (or a form or note, which run
 /// nothing): `storage::queries::outline`'s rule. A query reads exactly one
-/// input, and that input must be a `source` input of `content` (APP-093
-/// review m2): a view over a `records` input is never listed by `outline`
-/// and `run_query` denies it, so a generated definition carrying one is
-/// refused before it is published.
+/// source or committed-record input declared by `content`, using only the
+/// qualified operators. Admission separately verifies its typed references.
 pub fn runnable_view(content: &Value, view: &Value) -> bool {
     let Some(query) = view.get("query") else {
         return true;
@@ -223,7 +219,7 @@ pub fn runnable_view(content: &Value, view: &Value) -> bool {
         .and_then(Value::as_array)
         .filter(|inputs| inputs.len() == 1)
         .and_then(|inputs| inputs[0].as_str())
-        .is_some_and(|input| source_input(content, input));
+        .is_some_and(|input| query_input(content, input));
     let qualified = query
         .get("operations")
         .and_then(Value::as_array)
@@ -237,8 +233,8 @@ pub fn runnable_view(content: &Value, view: &Value) -> bool {
     single_input && qualified
 }
 
-/// Whether `input` names a `source` input of `content`.
-fn source_input(content: &Value, input: &str) -> bool {
+/// Whether `input` names a source or committed-record input of `content`.
+fn query_input(content: &Value, input: &str) -> bool {
     content
         .get("inputs")
         .and_then(Value::as_array)
@@ -246,7 +242,10 @@ fn source_input(content: &Value, input: &str) -> bool {
         .flatten()
         .any(|item| {
             item.get("id").and_then(Value::as_str) == Some(input)
-                && item.get("kind").and_then(Value::as_str) == Some("source")
+                && matches!(
+                    item.get("kind").and_then(Value::as_str),
+                    Some("source" | "records")
+                )
         })
 }
 
@@ -345,7 +344,7 @@ pub fn hint(code: &str) -> &'static str {
         "encoding" => "Check every required member, type and reference. Every command MUST include transitions (use [] when none), writable_fields, operation, id and record_schema_id; do not omit empty arrays. Content must include inputs, views, record_schemas, commands, links and default_layout even when a list is empty. Every field_ref names the query's one input, each filter literal matches its field type/unit, each view appears once in default_layout, each form names a declared command, and input ids are unique.",
         "not_json" => "Output exactly one JSON object and nothing else.",
         "unknown_source_input" => "Every source input must be one of the provided sources, copied exactly; do not invent inputs.",
-        "not_runnable" => "Every data view's query must read exactly one `source` input, never a `records` input, and use only the runnable operators. With no sources, declare no data view at all: only form and note views (the canvas shows each records collection itself).",
+        "not_runnable" => "Every data view's query must read exactly one declared `source` or `records` input and use only the runnable operators. With no sources, use your declared records input and keep a create form for entering data.",
         "authoring_rule" => "Declare each (field_id, from, to) transition once, and give a create that writes an enum field another command moves by transitions an `initial` value for that field.",
         "no_create_form" => "An app with no data view needs a form view for a create command, so members can add records.",
         _ => "Produce a corrected, complete definition content object.",

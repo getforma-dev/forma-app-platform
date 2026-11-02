@@ -149,6 +149,7 @@ export async function postCommand(path: string, body: unknown, key: string, copy
     }
     if (response.status === 409) return { kind: 'conflict', message: text.conflict };
     if (response.status === 412) return { kind: 'stale', message: text.stale };
+    if (response.status === 422 && code === 'app_data_limit') return {kind: 'refused', message: 'This change would exceed the app data limit of 100,000 rows or 64 MiB. Nothing was saved. Original files are unchanged.'};
     // A gateway/server failure may follow a committed transaction whose
     // response was lost. Recover by the same key; never claim rollback.
     if (response.status >= 500) return lookUp(path, key, text.unconfirmed);

@@ -138,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v19.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v20.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -159,7 +159,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 206] = [
+const SOURCES: [(&str, &[u8]); 211] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -194,6 +194,10 @@ const SOURCES: [(&str, &[u8]); 206] = [
     (
         "app/src/actions/receipt_tests.rs",
         include_bytes!("../actions/receipt_tests.rs"),
+    ),
+    (
+        "app/src/actions/record_search.rs",
+        include_bytes!("../actions/record_search.rs"),
     ),
     (
         "app/src/actions/rehearsed.rs",
@@ -308,6 +312,10 @@ const SOURCES: [(&str, &[u8]); 206] = [
     (
         "app/src/boxes/brief.rs",
         include_bytes!("../boxes/brief.rs"),
+    ),
+    (
+        "app/src/boxes/data_copy.rs",
+        include_bytes!("../boxes/data_copy.rs"),
     ),
     (
         "app/src/boxes/derive.rs",
@@ -593,6 +601,10 @@ const SOURCES: [(&str, &[u8]); 206] = [
         include_bytes!("composer_qualification.rs"),
     ),
     (
+        "app/src/storage/data_copy.rs",
+        include_bytes!("data_copy.rs"),
+    ),
+    (
         "app/src/storage/definition_qualification.rs",
         include_bytes!("definition_qualification.rs"),
     ),
@@ -647,6 +659,14 @@ const SOURCES: [(&str, &[u8]); 206] = [
     (
         "app/src/storage/record_components_campaign.rs",
         include_bytes!("record_components_campaign.rs"),
+    ),
+    (
+        "app/src/storage/record_query.rs",
+        include_bytes!("record_query.rs"),
+    ),
+    (
+        "app/src/storage/record_query_campaign.rs",
+        include_bytes!("record_query_campaign.rs"),
     ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/rules.rs", include_bytes!("rules.rs")),

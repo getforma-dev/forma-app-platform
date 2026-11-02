@@ -30,3 +30,13 @@ test('explicit route refusals preserve their definitive classification',async()=
  const prior=globalThis.fetch;
  try{for(const [status,kind]of [[400,'refused'],[404,'refused'],[409,'conflict'],[412,'stale']] as const){let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({code:'refused'},{status});};assert.equal((await postCommand(path,{},'key')).kind,kind);assert.equal(calls,1);}}finally{globalThis.fetch=prior;}
 });
+
+test('an app data bound is a definitive refusal with clear limits, without retry or outcome lookup',async()=>{
+ const prior=globalThis.fetch;let calls=0;
+ try{
+  globalThis.fetch=async()=>{calls++;return Response.json({code:'app_data_limit'},{status:422});};
+  const result=await postCommand(path,{},'same-key',{refused:'A generic refusal'});
+  assert.equal(result.kind,'refused');assert.match('message'in result?result.message:'',/100,000 rows or 64 MiB/);
+  assert.match('message'in result?result.message:'',/Nothing was saved. Original files are unchanged/);assert.equal(calls,1);
+ }finally{globalThis.fetch=prior;}
+});

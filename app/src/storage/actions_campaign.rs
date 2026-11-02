@@ -388,6 +388,44 @@ pub(super) fn value_of<'a>(record: &'a Value, field: &str) -> &'a Value {
 async fn campaign() {
     let _ = tracing_subscriber::fmt().with_ansi(false).try_init();
     let fixture = Fixture::new();
+    // SQL lookup must match the reviewed human value exactly, including 38
+    // digits: numeric division can round before the display scale is applied.
+    {
+        let operator = fixture.operator().await;
+        let sql = format!(
+            "SELECT {} FROM (SELECT $1::text::jsonb AS field) input",
+            super::actions::SEARCH_VALUE_TEXT
+        );
+        for raw in [
+            "0",
+            "1",
+            "-1",
+            "99999999999999999999999999999999999999",
+            "-99999999999999999999999999999999999999",
+        ] {
+            for scale in [0, 2, 9, 16, 17, 18] {
+                for kind in ["decimal", "money"] {
+                    let value = if kind == "decimal" {
+                        json!({"type":kind,"coefficient":raw,"scale":scale,"unit":"count"})
+                    } else {
+                        json!({"type":kind,"minor_units":raw,"minor_unit_exponent":scale,"currency":"USD"})
+                    };
+                    let encoded = json!({"field_id":"amount","value":value}).to_string();
+                    let actual: String = operator
+                        .client
+                        .query_one(&sql, &[&encoded])
+                        .await
+                        .unwrap()
+                        .get(0);
+                    assert_eq!(
+                        actual,
+                        actions::assistant::display(&value),
+                        "{kind} {raw} scale {scale}"
+                    );
+                }
+            }
+        }
+    }
     fixture.sql(
         "ALTER ROLE genui_migration PASSWORD 'synthetic-migration'",
         "genui",
@@ -713,6 +751,36 @@ async fn campaign() {
             .unwrap()
     };
     assert_eq!(value_display(&rows[0], "amount"), "$86.00");
+    assert_eq!(
+        rows[0]["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|field| field["field_id"] == "amount")
+            .unwrap()["assistant_display"],
+        "USD 86.00",
+        "the assistant receives generic currency formatting while legacy display stays unchanged"
+    );
+    let money_search = send(
+        &app,
+        "GET",
+        &format!(
+            "/v1/work/{app_id}/{work_id}/records/search?collection={}&q=86.00",
+            rows[0]["collection_id"].as_str().unwrap()
+        ),
+        Some(&diego),
+        "",
+        &[],
+    )
+    .await;
+    assert_eq!(money_search.status, StatusCode::OK, "{}", money_search.body);
+    let money_search = money_search.json();
+    assert_eq!(money_search["records"][0]["record_id"], record_id);
+    assert_eq!(
+        value_display(&money_search["records"][0], "amount"),
+        "USD 86.00",
+        "money search respects the exponent and shows the canonical currency"
+    );
     // Sarah cannot read the records yet; the group JSON carries the records card for him.
     assert_eq!(
         records(&sarah, &app_id, &work_id).await.status,
@@ -1671,6 +1739,37 @@ async fn campaign() {
     assert_eq!(
         value_of(record, "body")["value"],
         "Updated after confirmation"
+    );
+    let collection = record["collection_id"].as_str().unwrap();
+    let search = format!(
+        "/v1/work/{notes_app}/{notes_work}/records/search?collection={collection}&q=Updated+after"
+    );
+    let before_search = footprint(&fixture).await;
+    let found = send(&app, "GET", &search, Some(&sarah), "", &[]).await;
+    assert_eq!(found.status, StatusCode::OK, "{}", found.body);
+    assert_eq!(found.json()["records"][0]["record_id"], created_id);
+    assert_eq!(found.json()["records"][0]["version"], 2);
+    for cookie in [None, Some(outsider.as_str())] {
+        assert_eq!(
+            send(&app, "GET", &search, cookie, "", &[]).await.status,
+            StatusCode::NOT_FOUND
+        );
+    }
+    let foreign_collection = search.replace(collection, "00000000-0000-4000-8000-000000009999");
+    assert_eq!(
+        send(&app, "GET", &foreign_collection, Some(&sarah), "", &[])
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let literal = search.replace("Updated+after", "%25_");
+    let literal = send(&app, "GET", &literal, Some(&sarah), "", &[]).await;
+    assert_eq!(literal.status, StatusCode::OK, "{}", literal.body);
+    assert!(literal.json()["records"].as_array().unwrap().is_empty());
+    assert_eq!(
+        footprint(&fixture).await,
+        before_search,
+        "record searches do not write data or authority"
     );
     let revoked_draft = send(
         &app,

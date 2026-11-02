@@ -816,6 +816,18 @@ impl Workspace {
         context: &str,
         bindings: &[WorkBinding],
     ) -> Result<SavedWork> {
+        self.create_work_initialized(request, app, publication, context, bindings, None)
+            .await
+    }
+    pub(crate) async fn create_work_initialized(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        publication: &str,
+        context: &str,
+        bindings: &[WorkBinding],
+        initial: Option<&super::DataCopyInit>,
+    ) -> Result<SavedWork> {
         let mut inputs = BTreeSet::new();
         require(
             valid_id(app)
@@ -833,7 +845,11 @@ impl Workspace {
                         }
                 }),
         )?;
-        let mut transaction = Transaction::begin(&self.inner, request).await?;
+        let mut transaction = if initial.is_some() {
+            Transaction::begin_import(&self.inner, request).await?
+        } else {
+            Transaction::begin(&self.inner, request).await?
+        };
         let result = async {
             confirm_identity(&transaction, request).await?;
             let precheck = transaction
@@ -924,6 +940,7 @@ impl Workspace {
                 };
                 bound.push(digest::digest(digest::SOURCE_BINDING, &encode(&document)?));
             }
+            if let Some(initial)=initial { super::data_copy::initialize(transaction,request,app,&work,publication,initial,&collections).await?; }
             append(transaction, Chain::Workspace, request, Event {
                 kind: "work.saved",
                 id: None,

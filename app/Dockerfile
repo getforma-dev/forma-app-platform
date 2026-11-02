@@ -77,6 +77,7 @@ COPY app/runtime/query_engine.py /app/query_engine.py
 COPY app/runtime/record_engine.py /app/record_engine.py
 # APP-108: the box data normalizer child, `runtime.py normalize`.
 COPY app/runtime/box_normalize.py /app/box_normalize.py
+COPY app/runtime/box_record_import.py /app/box_record_import.py
 COPY app/migrations /app/migrations
 COPY app/certs/rds-global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 RUN mkdir -p /run/genui && chown 65532:65532 /run/genui && chmod 0700 /run/genui

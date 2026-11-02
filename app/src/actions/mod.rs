@@ -36,6 +36,7 @@ pub mod guard;
 pub mod ledger;
 pub mod prompt;
 pub mod receipt;
+mod record_search;
 pub mod rehearsed;
 pub mod resolve;
 pub mod routes;

@@ -2,7 +2,7 @@
 // Components remain trusted server-owned DOM. This browser stores layout only.
 import { appComponentVisible, applyPresentationTheme, disposePresentation, parsePresentation, presentationFor } from '../presentation/presentation';
 import { createCanvasItem } from '../canvas-vendor/index';
-import { ensureAppGroup, rememberAppPlacement, isStandaloneWork, removeWork, refreshGroupPresentation, runGroup, onLayoutSaved, setUniteHooks, stackBoard as board } from './board';
+import { ensureAppGroup, rememberAppPlacement, isStandaloneWork, removeWork, refreshGroupPresentation, refreshGroupCapabilities, runGroup, onLayoutSaved, setUniteHooks, stackBoard as board } from './board';
 import { loadLayout, loadPlaced, loadStacks, loadUnited, saveUnited, migrateAppViews, type StoredUnite, type AppViewMode } from './layout';
 import { findApps } from './library';
 import { pageSize } from './page';
@@ -57,6 +57,14 @@ function openFrameAssistant(frame: Frame, tab: AppAssistantTab | undefined, requ
   showAppAssistant(frame.root.querySelector<HTMLElement>('[data-app-companion]')!, {
     app: frame.app, work: frame.work, title: frame.title, address: addressOfWork(frame.app, frame.work) || frame.work,
     onDataCommitted: () => {if (board.group(frame.work)?.app === frame.app) runGroup(frame.work, true);},
+    onDataEnabled: async () => {
+      const current = () => frames.get(frame.work) === frame && frame.item.isConnected;
+      if (!current() || !await refreshGroupCapabilities(frame.app, frame.work, current) || !current()) return false;
+      frame.cards = board.group(frame.work)?.cards.map(card => card.dataset.card ?? '').filter(Boolean) ?? frame.cards;
+      renderMode(frame, frame.mode);
+      for (const id of frame.cards) board.show(id);
+      rememberAppPlacement(frame.work); save(); return true;
+    },
     onOpenApp: () => {if (frames.get(frame.work) === frame) void setAppView(frame.app, frame.work, 'open').then(() => revealFrame(frame));},
     ...(actions.length ? {onOpenActions: () => {
       void setAppView(frame.app, frame.work, 'open', {focus: false, isCurrent: () => frames.get(frame.work) === frame && frame.item.isConnected}).then(() => {
@@ -214,6 +222,7 @@ function cardsOf(frame: Frame): HTMLElement[] { return frame.cards.flatMap(id =>
 function visibleCards(frame: Frame): HTMLElement[] { return cardsOf(frame).filter(card => appComponentVisible(frame.app, frame.work, card)); }
 function renderMode(frame: Frame, mode: AppViewMode): void {
   releaseFocus(frame); disposePresentation(frame.root);
+  frame.root.dataset.presentation = board.group(frame.work)?.presentation ?? '{}';
   const cards = cardsOf(frame), scrolls = cards.map(keepScroll);
   const parking = frame.root.querySelector<HTMLElement>('[data-app-view-parking]')!;
   parking.append(...cards);

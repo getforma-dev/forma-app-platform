@@ -76,8 +76,8 @@ async function fixture(options:{defer?:boolean;standalone?:boolean}={}) {
  const store=new Map<string,string>();
  Object.assign(globalThis,{HTMLElement:E,document:d,matchMedia:()=>({matches:false}),localStorage:{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v)},__view:{board,ensure:async(_app:string,work:string)=>{loads++;await gate;return groups.get(work)??null;},remember:()=>remembered++,standalone:()=>!!options.standalone,removeWork:()=>0,hooks:null}});
  const stubs:Record<string,string>={
-  './board':`const f=globalThis.__view;export const stackBoard=f.board;export const ensureAppGroup=f.ensure;export const rememberAppPlacement=f.remember;export const isStandaloneWork=f.standalone;export const removeWork=f.removeWork;export const refreshGroupPresentation=async()=>true;export const runGroup=()=>{};export const onLayoutSaved=()=>{};export const setUniteHooks=h=>f.hooks=h;`,
-  './app-assistant':`export const showAppAssistant=()=>{};export const disposeAppAssistant=()=>{};`,
+  './board':`const f=globalThis.__view;export const stackBoard=f.board;export const ensureAppGroup=f.ensure;export const rememberAppPlacement=f.remember;export const isStandaloneWork=f.standalone;export const removeWork=f.removeWork;export const refreshGroupPresentation=async()=>true;export const refreshGroupCapabilities=(...args)=>f.refreshCapabilities?.(...args)??Promise.resolve(true);export const runGroup=()=>{};export const onLayoutSaved=()=>{};export const setUniteHooks=h=>f.hooks=h;`,
+  './app-assistant':`export const showAppAssistant=(_host,options)=>{globalThis.__view.assistant=options;};export const disposeAppAssistant=()=>{};`,
   './library':`export const findApps=()=>[];`, './shape':`export const addressOfWork=()=>"whole-app";`, './slash':`export const registerCommands=()=>{};export const registerCompleter=()=>{};`,
   './stacks':`export const releaseCards=()=>[];`, '../sharing/dialog':`export const dismissSharing=()=>false;export const openSharing=()=>{};`,
   './render':`export const originKind=()=>'';export function el(d,t,a={},...children){const n=d.createElement(t);for(const[k,v]of Object.entries(a))n.setAttribute(k,v);n.append(...children.filter(c=>c!==null&&c!==undefined&&c!==false));return n;}`,
@@ -309,4 +309,33 @@ test('Focus starts a parked component read only after the original node and dial
     assert.equal(api.openFocus('second'), true);
     assert.deepEqual(reads, ['first', 'second']); assert.equal(cards[0]!.parentElement, parked);
   } finally {delete (globalThis as any)[key];}
+});
+
+
+test('enabling data adds components to the same app window without losing drafts or layout',async()=>{
+ const f=await fixture();await f.api.setAppView(APP,WORK,'open',{at:{x:180,y:240}});
+ const original=f.api.appViewForWork(WORK),item=original.item,geometry=f.canvas.getItemState(item);
+ await f.api.openAppAssistant(APP,WORK);
+ const extra=f.d.createElement('article');extra.className='cv-card';extra.dataset.card='new-data-form';extra.dataset.kind='form';
+ f.group.cards.push(extra);f.parked.append(extra);
+ assert.equal(await (globalThis as any).__view.assistant.onDataEnabled(),true);
+ assert.equal(f.api.appViewForWork(WORK).item,item);assert.equal(f.api.appViewForWork(WORK).mode,'open');
+ assert.deepEqual(f.canvas.getItemState(item),geometry);assert.equal(f.input.value,'Unsent draft');assert.equal(f.key.value,'same-command-key');
+ assert.ok(item.contains(extra));assert.ok(item.contains(f.receipt));assert.equal(f.mounts(),1);assert.equal(f.removed(),0);
+});
+
+test('an upgrade finishing after app removal cannot refresh or restore its canvas placement',async()=>{
+ const f=await fixture();await f.api.restoreAppViews();await f.api.setAppView(APP,WORK,'open');await f.api.openAppAssistant(APP,WORK);
+ const state=(globalThis as any).__view,finished=state.assistant.onDataEnabled;
+ let resolve!:(result:boolean)=>void,current!:()=>boolean,reads=0;
+ state.refreshCapabilities=async(app:string,work:string,isCurrent:()=>boolean)=>{
+  assert.equal(app,APP);assert.equal(work,WORK);reads++;current=isCurrent;
+  return new Promise<boolean>(done=>resolve=done);
+ };
+ const pending=finished();assert.equal(reads,1);assert.equal(current(),true);
+ f.api.removeAppView(WORK);const remembered=f.remembered();assert.equal(current(),false);
+ resolve(true);assert.equal(await pending,false);assert.equal(f.api.appViewForWork(WORK),null);
+ assert.equal(f.remembered(),remembered);assert.equal(f.mounts(),1);assert.equal(f.removed(),1);
+ assert.equal(await finished(),false);assert.equal(reads,1,'a late callback does not even start a new capability read');
+ assert.deepEqual(JSON.parse(f.store.get('forma.canvas.united.v1:0123456789abcdef')!),[]);
 });

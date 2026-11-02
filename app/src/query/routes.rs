@@ -212,11 +212,14 @@ fn invalid_parameters() -> Response {
 }
 
 /// Storage refusals: `Denied` is the uniform 404 (a lock wait during session
-/// resolution is already `Denied`, D7.9); every other variant is a store
-/// outage (design §9: 503).
+/// resolution is already `Denied`, D7.9). Snapshot capacity is retryable;
+/// a complete projection over the resource bound must be narrowed. Other
+/// variants are store outages (design §9: 503).
 pub fn storage_refusal(error: &Error) -> Response {
     match error {
         Error::Denied => http::not_found(),
+        Error::Busy => http::too_many_requests(RETRY_AFTER_SECONDS),
+        Error::ProjectionLimit => problem(StatusCode::UNPROCESSABLE_ENTITY, "narrow_the_query"),
         _ => http::unavailable(),
     }
 }
@@ -331,6 +334,8 @@ fn run_result_digest(receipt: &receipt::QueryReceipt) -> &str {
 fn release_code(error: &Error) -> &'static str {
     match error {
         Error::Denied => "denied",
+        Error::Busy => "snapshot_busy",
+        Error::ProjectionLimit => "narrow_the_query",
         _ => "store_unavailable",
     }
 }
@@ -1000,6 +1005,10 @@ async fn compute(
             );
             let card = match error {
                 Error::Denied => page::card(&view, Outcome::Denied),
+                Error::Busy => page::card(&view, Outcome::Loading),
+                Error::ProjectionLimit => {
+                    page::card(&view, Outcome::Failed(Reason::NarrowTheQuery))
+                }
                 _ => page::card(&view, Outcome::Failed(Reason::Store)),
             };
             return (view, Pending::Done(Box::new(card)));

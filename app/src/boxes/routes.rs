@@ -85,6 +85,10 @@ pub struct Boxes {
 /// The short-deadline routes.
 pub fn router(state: Arc<Boxes>) -> Router {
     Router::new()
+        .route(
+            super::data_copy::PATH,
+            get(super::data_copy::get).post(super::data_copy::post),
+        )
         .route("/v1/boxes", get(list).post(create))
         .route("/v1/boxes/uploads", post(uploads))
         .route("/v1/boxes/{box}", get(read))
@@ -1250,6 +1254,9 @@ impl BuildRefusal {
                 http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable")
             }
             Self::NoData => http::problem(StatusCode::UNPROCESSABLE_ENTITY, "no_data_files"),
+            Self::CouldNotCompose(code @ ("data_copy_limit" | "data_copy_refused")) => {
+                http::problem(StatusCode::UNPROCESSABLE_ENTITY, code)
+            }
             Self::CouldNotCompose(_) => {
                 http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_compose")
             }
@@ -1400,6 +1407,19 @@ async fn build_with(
     mut timings: Vec<(&'static str, u64)>,
 ) -> Result<Built, BuildRefusal> {
     let stores = state.auth.stores.as_ref().ok_or(BuildRefusal::NotFound)?;
+    let _import_capacity = super::data_copy::acquire_import().ok_or(BuildRefusal::TooMany(2))?;
+    // Validate every normalized row before publishing anything. A failed import
+    // leaves the original file available and no half-created saved app.
+    let copied = super::data_copy::materialize(
+        state,
+        member,
+        &data.iter().map(|d| d.data.clone()).collect::<Vec<_>>(),
+    )
+    .await
+    .map_err(|e| match e {
+        super::data_copy::Refusal::Limit => BuildRefusal::CouldNotCompose("data_copy_limit"),
+        _ => BuildRefusal::CouldNotCompose("data_copy_refused"),
+    })?;
     let step = Instant::now();
     let refs: Vec<&FileData> = data.iter().map(|d| &d.data).collect();
     let context = context_with(state, member, &refs)
@@ -1418,9 +1438,36 @@ async fn build_with(
     let (placed, source) = if demo && derive::rehearsed(purpose) {
         let step = Instant::now();
         let content = derive::metrics_definition(&view.row.name, purpose, &data);
-        let placed = publish_rule_built(state, member, &context, &content, &intent)
-            .await
-            .map_err(build_refusal)?;
+        let (content, plans) = storage::editable_definition(&content)
+            .map_err(|_| BuildRefusal::CouldNotCompose("data_copy_refused"))?;
+        let authoring = context.authoring.as_ref().ok_or(BuildRefusal::NotFound)?;
+        let admitted = composer::plan::admit(&content, member.organization(), &authoring.app)
+            .map_err(|_| BuildRefusal::CouldNotCompose("admission_refused"))?;
+        let planned = composer::plan::Planned {
+            title: content["title"].as_str().unwrap_or("Data").to_owned(),
+            admitted,
+            origin: composer::Origin::Generated,
+        };
+        let copies = copied
+            .iter()
+            .filter(|copy| {
+                plans
+                    .iter()
+                    .any(|plan| plan.source_input == copy.source_input)
+            })
+            .cloned()
+            .collect();
+        let initial = storage::DataCopyInit { plans, copies };
+        let composed = composer::routes::publish_initialized(
+            stores, member, &context, planned, &intent, &initial,
+        )
+        .await
+        .map_err(build_refusal)?;
+        let placed = Placed {
+            app: composed.app,
+            work: composed.work,
+            title: composed.title,
+        };
         timings.push(("generation_ms", 0));
         timings.push(("admission_publish_ms", ms(step)));
         (placed, "rehearsed")
@@ -1472,10 +1519,27 @@ async fn build_with(
             "box context sent to the model"
         );
         let step = Instant::now();
-        let composed =
-            composer::routes::publish_planned(stores, member, &context, generated.planned, &intent)
-                .await
-                .map_err(build_refusal)?;
+        let original = crate::admission::decode(&generated.planned.admitted.canonical)
+            .map_err(|_| BuildRefusal::CouldNotCompose("admission_refused"))?;
+        let (content, plans) = storage::editable_definition(&original)
+            .map_err(|_| BuildRefusal::CouldNotCompose("data_copy_refused"))?;
+        let mut planned = generated.planned;
+        planned.admitted = composer::plan::admit(&content, member.organization(), &authoring.app)
+            .map_err(|_| BuildRefusal::CouldNotCompose("admission_refused"))?;
+        let copies = copied
+            .into_iter()
+            .filter(|copy| {
+                plans
+                    .iter()
+                    .any(|plan| plan.source_input == copy.source_input)
+            })
+            .collect();
+        let initial = storage::DataCopyInit { plans, copies };
+        let composed = composer::routes::publish_initialized(
+            stores, member, &context, planned, &intent, &initial,
+        )
+        .await
+        .map_err(build_refusal)?;
         timings.push(("admission_publish_ms", ms(step)));
         (
             Placed {
@@ -1495,6 +1559,7 @@ async fn build_with(
         .record_box_derivation(member, box_id, &placed.app, &placed.work, "derived", &used)
         .await
         .map_err(|_| BuildRefusal::Unavailable)?;
+    crate::events::hub().app_placed(member.organization(), &placed.app, &placed.work);
     timings.push(("total_ms", ms(started)));
     tracing::info!(
         event = "box.app_derived",

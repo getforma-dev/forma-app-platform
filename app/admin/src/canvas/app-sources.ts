@@ -96,7 +96,7 @@ export function mountAppSources(host: HTMLElement, options: AppSourcesOptions): 
       for (const source of sources) {
         const view = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-app-source-open' }, 'View original');
         view.addEventListener('click', () => viewFile(source, ticket));
-        const ask = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-app-source-ask' }, 'Ask about file');
+        const ask = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-app-source-ask' }, 'Ask about original');
         ask.addEventListener('click', () => { if (current(ticket)) options.onAskFile(source); });
         list.append(el(document_, 'li', { class: 'cv-app-source', 'data-app-source-file': source.file.file_id },
           el(document_, 'div', { class: 'cv-app-source-identity' },
@@ -106,7 +106,7 @@ export function mountAppSources(host: HTMLElement, options: AppSourcesOptions): 
           el(document_, 'div', { class: 'cv-app-source-actions' }, view, ask)));
       }
       host.replaceChildren(el(document_, 'p', { class: 'cv-app-sources-intro' },
-        sources.length === 1 ? 'The original file behind this app.' : `${sources.length} original files behind this app.`), list);
+        `${sources.length === 1 ? 'The original file behind this app.' : `${sources.length} original files behind this app.`} Changes to app data do not change ${sources.length === 1 ? 'this original' : 'these originals'}.`), list);
       const selected = selectedFile && sources.find(source => source.file.file_id === selectedFile);
       if (selected) viewFile(selected, ticket);
     } catch {

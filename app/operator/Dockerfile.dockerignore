@@ -234,3 +234,7 @@ parser/vendor/zip-9.1.3/src/write/**
 !app/migrations/0019_work_presentation.sql
 !app/migrations/catalog-v19.json
 !contracts/record_components_contract.py
+
+# APP-168: current compiled inputs and editable spreadsheet app data.
+!app/migrations/0020_work_data_copies.sql
+!app/migrations/catalog-v20.json
