@@ -23,6 +23,12 @@ The [qualification report](checks.json) binds final source hashes and actual che
 
 The initial full check exposed a stale SSR wording assertion from the original PR; it was updated to the actual “Bring your files” label. Browser testing exposed and fixed the async restoration camera gap. Earlier browser attempts also retained a stand-restart timing failure and an automation polling incompatibility with strict CSP; the harness now uses ordinary locator waits without weakening CSP. Private intermediate logs remain in this checkout's cache.
 
-Screenshots show the [file icon](file-icon.png), [original table](original-cells.png), [raw CSV](original-csv.png), [second workbook sheet](original-workbook.png), and the [320px viewer](original-cells-320.png). The 320px check caught and fixed mobile padding extending beyond the modal width; page controls wrap and the close button stays reachable. Existing global canvas chrome is outside this bounded mobile qualification.
+Screenshots show the [file icon](file-icon.png), [original table](original-cells.png), [raw CSV](original-csv.png), [second workbook sheet](original-workbook.png), and the [320px viewer](original-cells-320.png). The 320px check caught and fixed mobile padding extending beyond the modal width; page controls wrap and the close button stays reachable. These screenshots predate the merged PR40 theme/header changes. Existing global canvas chrome is outside this bounded mobile qualification.
 
 Formal APP-108/APP-135 predecessor and broader acceptance gates stay open. No AWS resources, owner listeners, real-user files or credentials were changed by this review.
+
+## Combined branch qualification
+
+The combined source merges the reviewed PR40 theme/scan-context changes, PR41 drag affordance, PR44 command qualifications and the promotion cancellation record through normal merges. The [combined browser report](combined-browser.json) records another complete 11-check journey on that source. Final [320px file icons](combined-file-icon-320.png), [320px original viewer](combined-original-cells-320.png), [390px file icons](combined-file-icon-390.png) and [390px original viewer](combined-original-cells-390.png) show the updated header and file viewer together. The four captures were visually inspected; the icon and modal stay within their viewport, the header does not overlap, and paging/close remain reachable.
+
+The [combined check record](combined-checks.json) binds the exact tested source and merged ancestors. The combined deployment contract equals the reviewed PR40 contract; this does not claim it equals the previously deployed contract or authorize a schema/pin bypass. There was no AWS deployment or provider action in this qualification.
