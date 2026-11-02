@@ -13,7 +13,7 @@
     "ops/promotion/bootstrap.py": "56c8509b5ceda0f186c1eb1b2ec472e67eb38fc1f5d777b57692138c68c7e96b",
     "ops/promotion/bootstrap_state.py": "449a044fb52f9daa2641e25f3789727060ab343a7f2f896ddea88bb150a369b6",
     "ops/promotion/build.py": "7e2b8156d7392b889bdf0e32fde714a02277304bf6813e082e355d0c806b284a",
-    "ops/promotion/candidate.py": "e478094a7e152dc8a5e46477156fd0fda195af9561fd3f9ef38b1a61002000e7",
+    "ops/promotion/candidate.py": "34a2667d9bb18807fe3b3307075959b0cf886913bbbc1901accb0cc8158e9577",
     "ops/promotion/github.py": "fcade552fad5500babbda0c0ac68955afa00c00986eb35271b67dc77a648d0b5",
     "ops/promotion/guards.py": "77ca96cf1241bdced253121d655967d074e9280a8c50ae57e5c5ff4e00f5d344",
     "ops/promotion/maintenance.py": "e15b7154451ea2aab6038bf0f6f92899952776bb5ce9c6473ceeba23cc39322c",
@@ -23,7 +23,7 @@
     "ops/promotion/state.py": "5ccd8c87e7705ba1cd0b2885e5d00e0eee1628629cbeab3cc5aa7702d63ac0ac",
     "ops/promotion/test_artifacts.py": "c2ffadcbefebcaeb3395c99a2283fc1c37be73916ae30e28330ccdea90c7e371",
     "ops/promotion/test_bootstrap.py": "8852d0794deddc18b32769bb4be972a654d2e7a5d6bf103c56b3f4b929d04ee8",
-    "ops/promotion/test_candidate.py": "46f37509632e4d757a459fe494ba2c70c511ecb680e7761aec1d9fb34bb5b225",
+    "ops/promotion/test_candidate.py": "5b8921d9b55ded9379555fa276dfc775e2ffb28680d799a6582841797b1d15e0",
     "ops/promotion/test_github.py": "f20ada3ffa31cba5daa1ab7699e619ad9aa396277cdc848fa1b43f3ef0875f02",
     "ops/promotion/test_guards.py": "d0183865e5edd9875cfcef93bedf6a3e5b40d3ef4251a880f6ee2df9a35c9367",
     "ops/promotion/test_maintenance.py": "010cbb7db7cec24e32cd44965fc13696e78f4f7b8633cb214665120664260650",
@@ -69,5 +69,21 @@
     "ambient_pull_request_focused_tests_passed": 14,
     "bash_syntax_passed": true,
     "stat_probes_keep_failed_gnu_or_bsd_output_separate": true
+  },
+  "merge_mode_followup": {
+    "review": "Full verified push range replaces the final-parent diff; both SHA boundaries are validated, the predecessor must be a nonzero existing SHA and an ancestor, and rename detection is disabled so removed runtime paths remain visible.",
+    "independent_command": "GITHUB_EVENT_NAME=pull_request python3 -m unittest ops.promotion.test_candidate -v",
+    "tests_passed": 10,
+    "real_git_regression": "Temporary repository with runtime commit followed by documentation commit; runtime file renamed into a documentation path; reversed ancestry refused.",
+    "disposition": "No review blocker in this two-file fix."
+  },
+  "pending_selection_followup": {
+    "review": "Selection considers both the verified full push range and runtime changes since the latest annotated beta release tag. If no release tag exists, the candidate is selected rather than skipped.",
+    "tag_checks": "Expected ref naming, annotated Git object type, target-commit suffix and ancestor relationship. Annotation text is not a deployment proof; the tag is a selection hint only.",
+    "deployment_authority": "The private canonical AWS state and approved immutable packet remain authoritative.",
+    "independent_command": "GITHUB_EVENT_NAME=pull_request python3 -m unittest ops.promotion.test_candidate -v",
+    "tests_passed": 11,
+    "regression": "A documentation-only push after an unpublished application change still selects runtime work; missing tags never prove a documentation-only release.",
+    "disposition": "No review blocker in this selector follow-up."
   }
 }

@@ -1,4 +1,7 @@
 import copy
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -54,15 +57,46 @@ class CandidateTests(unittest.TestCase):
     def test_event_requires_exact_identity_and_ordinary_trunk_push(self):
         event = {"repository": {"full_name": c.REPOSITORY, "id": c.REPOSITORY_ID,
             "owner": {"id": c.OWNER_ID}}, "ref": "refs/heads/" + c.BRANCH, "after": SHA,
-            "deleted": False, "forced": False}
+            "deleted": False, "forced": False, "before": "b" * 40}
         self.assertEqual(c.context(event, SHA), SHA)
         with patch.dict('os.environ', {'GITHUB_EVENT_NAME': 'pull_request'}):
             with self.assertRaisesRegex(ValueError, 'push event required'):
                 c.context(event, SHA)
-        for field, value in (("ref", "refs/pull/1/merge"), ("forced", True), ("deleted", True), ("after", "b" * 40)):
+        for field, value in (("ref", "refs/pull/1/merge"), ("forced", True), ("deleted", True), ("after", "b" * 40), ("before", "0" * 40)):
             altered = dict(event, **{field: value})
             with self.assertRaises(ValueError):
                 c.context(altered, SHA)
+
+    @unittest.skipUnless(shutil.which('git'), 'actual Git history regression requires git')
+    def test_rebase_merge_with_final_docs_commit_and_runtime_rename(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], text=True, stderr=subprocess.DEVNULL).strip()
+            def commit(message):
+                git('add', '.')
+                git('-c', 'user.name=Promotion Test', '-c', 'user.email=promotion@example.invalid', 'commit', '-m', message)
+                return git('rev-parse', 'HEAD')
+            git('init'); (root/'README.md').write_text('initial\n'); before = commit('base')
+            git('-c', 'user.name=Promotion Test', '-c', 'user.email=promotion@example.invalid',
+                'tag', '-a', 'beta/20261101-' + before[:7], '-m', 'synthetic verified baseline')
+            (root/'app/src').mkdir(parents=True); (root/'app/src/feature.rs').write_text('pub fn feature() {}\n')
+            commit('application change')
+            (root/'README.md').write_text('document application change\n'); after = commit('docs last')
+            with patch.object(c, 'git', side_effect=git):
+                self.assertTrue(any(c.runtime_path(p) for p in c.changed_paths(before, after)))
+                self.assertFalse(any(c.runtime_path(p) for p in c.changed_paths(git('rev-parse', 'HEAD^'), after)))
+                published, pending = c.unpublished_paths(after)
+                self.assertEqual(published, before)
+                self.assertTrue(any(c.runtime_path(p) for p in pending), 'docs must not hide an unpublished app merge')
+                (root/'app/src/feature.rs').rename(root/'example.md'); renamed = commit('move runtime file to docs')
+                self.assertIn('app/src/feature.rs', c.changed_paths(after, renamed))
+                with self.assertRaisesRegex(ValueError, 'not an ancestor'):
+                    c.changed_paths(renamed, before)
+
+    def test_missing_published_reference_never_proves_docs_only(self):
+        with patch.object(c, 'git', return_value=''):
+            self.assertEqual(c.unpublished_paths(SHA), (None, None))
 
     def test_doc_only_merge_does_not_redeploy_but_ui_assets_do(self):
         for path in ("README.md", "docs/pitch/RELEASES.md", "Tickets/APP-167.md", "ops/promotion/README.md", "evidence/chart.png"):

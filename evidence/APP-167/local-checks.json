@@ -40,7 +40,7 @@
       ]
     }
   ],
-  "promotion_tests": 70,
+  "promotion_tests": 72,
   "workflow_validation": {
     "tool": "actionlint",
     "version": "1.7.12",
@@ -64,5 +64,11 @@
     "tests": 14,
     "passed": true,
     "log_sha256": "d8b59af58ac1e071720e3e750f19ac5366ccc6f8c9adafe6c996dd2682279c77"
-  }
+  },
+  "merge_selection_regressions": [
+    "Actual Git multi-commit rebase with final documentation commit",
+    "Runtime file rename into documentation",
+    "Unpublished runtime change followed by documentation push",
+    "Missing published tag never skips a merged candidate"
+  ]
 }

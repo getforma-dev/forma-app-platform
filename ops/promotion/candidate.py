@@ -41,8 +41,34 @@ def context(event, sha):
     require(event.get("ref") == "refs/heads/" + BRANCH and event.get("after") == sha
         and event.get("deleted") is False and event.get("forced") is False,
         "candidate must be an ordinary trusted-branch push")
+    require(SHA.fullmatch(event.get("before", "")) and event["before"] != "0" * 40,
+        "existing trunk predecessor required")
     require(os.environ.get("GITHUB_EVENT_NAME", "push") == "push", "push event required")
     return sha
+
+
+def changed_paths(before, after):
+    require(SHA.fullmatch(before) and SHA.fullmatch(after), "full push range required")
+    require(git("merge-base", before, after) == before, "push predecessor is not an ancestor")
+    # Rebase merges can push several commits whose final commit is docs-only.
+    # Compare the complete push range, including both sides of a renamed file.
+    return git("diff", "--no-renames", "--name-only", before, after, "--").splitlines()
+
+
+def unpublished_paths(candidate):
+    # GitHub concurrency retains only the latest pending run. A docs merge can
+    # replace a pending app merge, so the push delta alone is not enough. Beta
+    # tags are written only after health verification; they are a selection hint,
+    # never deployment authority (the private live state is checked separately).
+    refs = git("for-each-ref", "--sort=-creatordate", "--format=%(refname:short)", "refs/tags/beta/").splitlines()
+    releases = [ref for ref in refs if re.fullmatch(r"beta/[0-9]{8}-[0-9a-f]{7}", ref)]
+    if not releases:
+        return None, None  # Without release evidence, never skip a merged change.
+    ref = releases[0]
+    require(git("cat-file", "-t", ref) == "tag", "published beta reference must be annotated")
+    published = git("rev-parse", ref + "^{commit}")
+    require(ref.endswith(published[:7]), "published beta reference differs from its commit")
+    return published, changed_paths(published, candidate)
 
 
 def runtime_path(path):
@@ -172,9 +198,11 @@ def main():
         context(event, args.candidate)
         require(git("rev-parse", "HEAD") == args.candidate, "checkout differs from candidate")
         pr = merged_pr(api(f"repos/{REPOSITORY}/commits/{args.candidate}/pulls"), args.candidate)
-        changed = git("diff-tree", "--no-commit-id", "--name-only", "-r", args.candidate + "^1", args.candidate).splitlines()
-        selected = any(runtime_path(p) for p in changed)
+        changed = changed_paths(event["before"], args.candidate)
+        published, unpublished = unpublished_paths(args.candidate)
+        selected = unpublished is None or any(runtime_path(p) for p in changed + unpublished)
         args.output.write_text(json.dumps({"candidate_sha": args.candidate, "merged_pr": pr,
+            "push_predecessor_sha": event["before"], "last_published_sha": published,
             "runtime_changed": selected, "source": source_binding()}, indent=2) + "\n")
         with open(os.environ["GITHUB_OUTPUT"], "a") as out:
             out.write("runtime_changed=" + str(selected).lower() + "\n")
