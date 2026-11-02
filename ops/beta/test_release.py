@@ -218,7 +218,7 @@ class DeployFlowTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
         repo, origin, priv, shims = (self.tmp / n for n in ("repo", "origin.git", "priv", "shims"))
         self.repo, self.origin, self.priv = repo, origin, priv
-        for name in ("lib.sh", "deploy.sh", "run-step.sh", "verify.sh", "release.py"):
+        for name in ("lib.sh", "deploy.sh", "run-step.sh", "verify.sh", "release.py", "signin_aliases.py"):
             (repo / "ops/beta").mkdir(parents=True, exist_ok=True)
             shutil.copy2(HERE / name, repo / "ops/beta" / name)
         (repo / "infra/scripts").mkdir(parents=True)

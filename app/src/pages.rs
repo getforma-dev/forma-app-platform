@@ -29,6 +29,7 @@ pub struct SigninProps {
     pub action: String,
     pub has_action: bool,
     pub failed: bool,
+    pub workspace: String,
 }
 #[derive(PageProps)]
 pub struct PendingProps {
@@ -227,6 +228,16 @@ impl auth::Pages for SsrPages {
                     action: view.action.clone().unwrap_or_default(),
                     has_action: view.action.is_some(),
                     failed: view.failed,
+                    workspace: view
+                        .action
+                        .as_deref()
+                        .and_then(|action| action.strip_prefix("/signin/"))
+                        .filter(|segment| {
+                            crate::storage::handle_digest(segment).is_some()
+                                || auth::aliases::alias_shaped(segment)
+                        })
+                        .unwrap_or_default()
+                        .to_owned(),
                 },
                 &self.handoff("Sign in"),
             ),

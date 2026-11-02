@@ -747,6 +747,101 @@ async fn unknown_kid_fails_closed_with_bounded_jwks_refresh() {
         .is_err());
 }
 
+#[test]
+fn workspace_entry_accepts_only_local_signin_selectors() {
+    for value in [
+        NORTHSTAR_HANDLE.to_owned(),
+        "northstar".to_owned(),
+        "  northstar  ".to_owned(),
+        "/signin/northstar".to_owned(),
+        format!("{APP_ORIGIN}/signin/northstar"),
+    ] {
+        assert!(
+            routes::workspace_handle(&value, APP_ORIGIN).is_some(),
+            "{value}"
+        );
+    }
+    for value in [
+        "",
+        " ",
+        "Northstar",
+        "northstar/",
+        "/signin/northstar/",
+        "/signin/",
+        "https://evil.test/signin/northstar",
+        "//evil.test/signin/northstar",
+        "https://beta.getforma.dev.evil.test/signin/northstar",
+        "https://beta.getforma.dev@evil.test/signin/northstar",
+        "https://user@beta.getforma.dev/signin/northstar",
+        "https://beta.getforma.dev:444/signin/northstar",
+        "https://beta.getforma.dev:443/signin/northstar",
+        "http://beta.getforma.dev/signin/northstar",
+        "https://beta.getforma.dev/other/../signin/northstar",
+        "/signin/../northstar",
+        "/signin/%6eorthstar",
+        "/signin/%256eorthstar",
+        "/signin/northstar?return_to=https://evil.test",
+        "/signin/northstar#fragment",
+        "northstar\\evil",
+        "northstar\nevil",
+        "northstar\0",
+        "nоrthstar",
+    ] {
+        assert_eq!(routes::workspace_handle(value, APP_ORIGIN), None, "{value}");
+    }
+    assert_eq!(routes::workspace_handle(&"x".repeat(513), APP_ORIGIN), None);
+}
+
+#[tokio::test]
+async fn workspace_entry_refuses_cross_site_oversize_and_duplicate_fields() {
+    let issuer = Issuer::start(tenants()).await;
+    let auth = Arc::new(Auth::loopback(
+        config(&issuer.origin),
+        None,
+        Arc::new(TestPages),
+    ));
+    let app = app(auth);
+    let log: Log = Arc::default();
+    let mut browser = Browser::new("198.51.100.61:4000", &log);
+    let rejected = browser
+        .send(
+            &app,
+            "POST",
+            "/signin",
+            "workspace=northstar",
+            &[("origin", "https://evil.test")],
+        )
+        .await;
+    assert_eq!(rejected.status, StatusCode::FORBIDDEN);
+    let oversized = browser
+        .post(&app, "/signin", &"x".repeat(http::FORM_BODY_LIMIT + 1))
+        .await;
+    assert_eq!(oversized.status, StatusCode::PAYLOAD_TOO_LARGE);
+    for body in [
+        "",
+        "workspace=northstar&workspace=canary",
+        "workspace=northstar&return_to=/canvas",
+        "tenant=northstar",
+        "workspace=%252Fnorthstar",
+        "workspace=https%3A%2F%2Fevil.test%2Fsignin%2Fnorthstar",
+    ] {
+        assert_eq!(
+            browser.post(&app, "/signin", body).await.status,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    // The form and legacy path share one address-class budget.
+    for _ in 0..3 {
+        let _ = browser.post(&app, "/signin", "workspace=northstar").await;
+    }
+    let limited = browser
+        .post(&app, &format!("/signin/{NORTHSTAR_HANDLE}"), "")
+        .await;
+    assert_eq!(limited.status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(limited.headers.contains_key(header::RETRY_AFTER));
+    assert_eq!(issuer.count(|c| &c.par), 0);
+}
+
 /// Every anonymous refusal without storage or a provider call: fetch
 /// metadata, the body bound, the limits, the uniform 404, the neutral
 /// sign-in failure, and no operator harness route in the product router.
@@ -803,6 +898,9 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
         hinted.body,
         format!("page=signin;action=/signin/{CANARY_HANDLE};failed=false")
     );
+    let switched = browser.get(&app, "/signin?switch=1").await;
+    assert_eq!(switched.body, "page=signin;action=-;failed=false");
+    assert!(switched.sets(cookies::SESSION).is_none());
     browser.jar.clear();
     // Cross-site: fetch metadata (or an exact Origin when absent) first.
     for headers in [
@@ -811,7 +909,12 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
         &[("sec-fetch-site", "same-site")][..],
         &[("origin", "https://evil.example.test")][..],
     ] {
-        for route in ["/auth/signout", "/auth/signout-all", "/auth/pending/resend"] {
+        for route in [
+            "/auth/signout",
+            "/auth/signout-all",
+            "/auth/pending/resend",
+            "/signin",
+        ] {
             let reply = browser.send(&app, "POST", route, "", headers).await;
             assert_eq!(
                 (reply.status, reply.body.as_str()),
@@ -2522,7 +2625,101 @@ async fn campaign() {
     );
     c.record("the expiry sweep deletes idle or expired records in every registry organization and revokes their refresh tokens");
 
-    // --- 16. Nothing from the provider reaches a browser -------------------------
+    // --- 16. Editable workspace entry reuses tenant-bound sign-in ---------------
+    let before_par = c.issuer.count(|x| &x.par);
+    let before_flows = scalar(&c.fixture, "SELECT count(*) FROM genui.prelogin_flows").await;
+    for (index, value) in [
+        UNKNOWN_HANDLE,
+        "unconfigured-workspace",
+        "/signin/%256eorthstar",
+        "https://evil.test/signin/northstar",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut browser = c.browser(&format!("203.0.113.{}:4100", index + 20));
+        let body = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("workspace", value)
+            .finish();
+        let reply = browser.post(&c.app, "/signin", &body).await;
+        assert_eq!(
+            (reply.status, reply.body.as_str()),
+            (StatusCode::BAD_REQUEST, "page=signin;action=-;failed=true")
+        );
+    }
+    // A valid stored handle whose organization is absent from this service's
+    // configuration must fail before PAR, rather than falling back to another tenant.
+    let mut unserved_config = c.auth.provider.as_ref().unwrap().config.clone();
+    unserved_config
+        .routes
+        .retain(|route| route.organization != OTHER);
+    let unserved = app(Arc::new(Auth::loopback(
+        unserved_config,
+        Some(c.stores.clone()),
+        Arc::new(TestPages),
+    )));
+    let mut browser = c.browser("203.0.113.30:4100");
+    let refused = browser
+        .post(&unserved, "/signin", &format!("workspace={CANARY_HANDLE}"))
+        .await;
+    assert_eq!(refused.status, StatusCode::BAD_REQUEST);
+    assert_eq!(c.issuer.count(|x| &x.par), before_par);
+    assert_eq!(
+        scalar(&c.fixture, "SELECT count(*) FROM genui.prelogin_flows").await,
+        before_flows
+    );
+    let mut values = vec![
+        NORTHSTAR_HANDLE.to_owned(),
+        format!("/signin/{NORTHSTAR_HANDLE}"),
+        format!("{APP_ORIGIN}/signin/{NORTHSTAR_HANDLE}"),
+    ];
+    // The optional isolated campaign setting exercises an actually configured
+    // alias without mutating global process environment inside parallel tests.
+    if let Ok(alias) = std::env::var("GENUI_SESSION_TEST_ALIAS") {
+        assert_eq!(
+            aliases::canonical(&alias),
+            NORTHSTAR_HANDLE,
+            "test alias must be configured for this isolated process"
+        );
+        values.push(alias);
+    }
+    let mut previous_cookie = None;
+    for (index, value) in values.iter().enumerate() {
+        let mut browser = c.browser(&format!("203.0.113.{}:4200", index + 40));
+        browser
+            .jar
+            .insert(cookies::ORGANIZATION_HINT.into(), CANARY_HANDLE.into());
+        let body = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("workspace", value)
+            .finish();
+        let reply = browser.post(&c.app, "/signin", &body).await;
+        assert_eq!(reply.status, StatusCode::SEE_OTHER, "{}", reply.body);
+        assert_eq!(
+            url::Url::parse(&reply.location()).unwrap().path(),
+            "/t/northstar/auth/authorize"
+        );
+        let cookie = browser.cookie(cookies::PRELOGIN).unwrap();
+        assert_ne!(previous_cookie.as_ref(), Some(&cookie));
+        previous_cookie = Some(cookie);
+        let query = c
+            .issuer
+            .login(&reply.location(), &lu)
+            .expect("hosted login");
+        let arrived = browser
+            .get(&c.app, &format!("/auth/callback?{query}"))
+            .await;
+        assert_eq!(
+            (arrived.status, arrived.location()),
+            (StatusCode::SEE_OTHER, "/workspace".into())
+        );
+        assert_eq!(
+            browser.get(&c.app, "/workspace").await.status,
+            StatusCode::OK
+        );
+    }
+    c.record(&format!("workspace entry: malformed, unknown and unserved inputs create no flow or provider call; {} valid handle/link/optional configured alias inputs override a stale hint, start distinct PKCE flows and complete ordinary member login", values.len()));
+
+    // --- 17. Nothing from the provider reaches a browser -------------------------
     let issued = c.issuer.state.issued.lock().unwrap().clone();
     let replies = c.log.lock().unwrap().clone();
     for reply in &replies {

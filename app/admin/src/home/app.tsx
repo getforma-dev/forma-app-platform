@@ -13,7 +13,7 @@ function Home() {
         <a href="/invite">Enter an invitation code</a>
         <a href="/signin">Sign in <span aria-hidden="true">↗</span></a>
       </nav>
-      <p class="help">Forma Canvas is in private beta. Use your invitation code or your organization’s sign-in link to get started.</p>
+      <p class="help">Forma Canvas is in private beta. Enter your invitation code, or sign in with your workspace name or sign-in link.</p>
       <div class="home-principles" aria-label="How Forma works">
         <div><span>01 / CREATE</span><h2>Start with an idea.</h2><p>Describe the app you need, then shape it as you work.</p></div>
         <div><span>02 / UNDERSTAND</span><h2>Follow the data.</h2><p>Explore your numbers with receipts you can inspect.</p></div>

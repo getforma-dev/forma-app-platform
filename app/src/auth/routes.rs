@@ -1,4 +1,4 @@
-//! ADR-006 routes, exactly: `GET /signin`, `GET|POST /signin/{handle}`,
+//! ADR-006 routes: `GET|POST /signin`, `GET|POST /signin/{handle}`,
 //! `GET /auth/callback`, `GET /auth/pending`, `POST /auth/pending/resend`,
 //! `POST /auth/signout`, `POST /auth/signout-all`, and the protected
 //! workspace entry `GET /workspace`, and APP-074's `GET /invite` and `POST
@@ -31,7 +31,7 @@ pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route("/invite", get(invite::entry))
         .route("/invite/validate", post(invite::validate))
-        .route("/signin", get(signin_page))
+        .route("/signin", get(signin_page).post(signin_workspace_start))
         .route(
             "/signin/{handle}",
             get(signin_handle_page).post(signin_start),
@@ -160,8 +160,31 @@ pub(crate) fn lookup_failed(auth: &Auth, class: &str) {
 }
 
 async fn signin_page(State(auth): State<Arc<Auth>>, request: Request) -> Response {
-    let hint = cookies::read(request.headers(), cookies::ORGANIZATION_HINT);
+    let hint = if request.uri().query() == Some("switch=1") {
+        None
+    } else {
+        cookies::read(request.headers(), cookies::ORGANIZATION_HINT)
+    };
     signin(&auth, hint.as_deref().and_then(handle_action), false)
+}
+
+/// Treat a workspace address only as a local routing selector. Exact lexical
+/// origin/path matching deliberately refuses URL parser repairs (userinfo,
+/// dot segments, backslashes, percent escapes and alternate ports). No URL
+/// supplied by a visitor is fetched or used as a redirect destination.
+pub(crate) fn workspace_handle<'a>(value: &'a str, origin: &str) -> Option<&'a str> {
+    if value.len() > 512 {
+        return None;
+    }
+    let value = value.trim();
+    let segment = if let Some(path) = value.strip_prefix(origin) {
+        path.strip_prefix("/signin/")?
+    } else if let Some(segment) = value.strip_prefix("/signin/") {
+        segment
+    } else {
+        value
+    };
+    (handle_digest(segment).is_some() || super::aliases::alias_shaped(segment)).then_some(segment)
 }
 /// A path the extractor cannot decode (invalid percent-encoding or UTF-8)
 /// is no handle at all: the same page as a malformed one, never axum's
@@ -239,7 +262,14 @@ async fn signin_start(
     path: Result<Path<String>, PathRejection>,
     request: Request,
 ) -> Response {
-    let handle = handle_of(path);
+    signin_attempt(auth, Some(handle_of(path)), request).await
+}
+
+async fn signin_workspace_start(State(auth): State<Arc<Auth>>, request: Request) -> Response {
+    signin_attempt(auth, None, request).await
+}
+
+async fn signin_attempt(auth: Arc<Auth>, handle: Option<String>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, auth.origin()) {
         return http::cross_site();
@@ -251,9 +281,21 @@ async fn signin_start(
     ]) {
         return http::too_many_requests(retry);
     }
-    if http::form(body).await.is_none() {
+    let Some(fields) = http::form(body).await else {
         return http::payload_too_large();
-    }
+    };
+    let handle = match handle {
+        Some(handle) => handle,
+        None => match fields.as_slice() {
+            [(name, value)] if name == "workspace" => {
+                let Some(handle) = workspace_handle(value, auth.origin()) else {
+                    return neutral_failure(&auth);
+                };
+                handle.to_owned()
+            }
+            _ => return neutral_failure(&auth),
+        },
+    };
     if handle_action(&handle).is_none() {
         return neutral_failure(&auth);
     }

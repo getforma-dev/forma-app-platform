@@ -13,6 +13,7 @@
 # Steps ([read] calls only read APIs; [local] calls no AWS API):
 #   new        [local]    --candidate <sha> --supersedes <live window id> [--input-from <file>]
 #                         [--clean-trial-file <private fresh identifiers JSON>]
+#                         [--signin-aliases-file <reviewed single clean-trial mapping>]
 #                         makes the window id and directory and release.json (0.1, 0.4),
 #                         with the local image record of `just images` (build.json)
 #   observe    [read]     caller identity, read-only snapshot, stack-before.json, template-before.json (1.1-1.3)
@@ -57,7 +58,7 @@ usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
 step=${1:-help}; shift || true
 case $step in help|-h|--help) usage; exit 0 ;; esac
 
-WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" clean_trial_file="" snap_name="" restore=0 record_only=0 origin=$BETA_ORIGIN extra=()
+WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" clean_trial_file="" signin_aliases_file="" snap_name="" restore=0 record_only=0 origin=$BETA_ORIGIN extra=()
 if [[ $step == verify ]]; then
   if [[ $# -gt 0 && $1 != --* ]]; then WINDOW_ID=$1; shift; fi
 elif [[ $step != new ]]; then
@@ -73,6 +74,7 @@ while (( $# )); do
     --supersedes) supersedes=$2; shift 2 ;;
     --input-from) input_from=$2; shift 2 ;;
     --clean-trial-file) clean_trial_file=$2; shift 2 ;;
+    --signin-aliases-file) signin_aliases_file=$2; shift 2 ;;
     --name) snap_name=$2; shift 2 ;;
     --restore) restore=1; shift ;;
     --record-only) record_only=1; shift ;;
@@ -84,6 +86,23 @@ while (( $# )); do
 done
 [[ -n "$APPROVED" && -z "${APPROVED//[[:space:]]/}" ]] && die "--approved is blank"
 export DRY_RUN APPROVED WINDOW_ID
+[[ -z "$signin_aliases_file" || "$step" == new ]] || die "--signin-aliases-file belongs to new; synth/diff use the retained window copy"
+
+# Both operations must consume the same explicit, window-local alias context.
+# No legacy persona aliases enter a clean-trial deployment implicitly.
+window_cdk_context() {
+  if [[ -f "$W/clean-trial.json" ]]; then
+    cdk_context=(-c "cleanTrialFile=$W/clean-trial.json")
+    if [[ -f "$W/signin-aliases.json" ]]; then
+      python3 -I "$REPO/ops/beta/signin_aliases.py" --aliases "$W/signin-aliases.json" \
+        --clean-trial "$W/clean-trial.json" --legacy "$PRIV/signin-aliases.json"
+      cdk_context+=(-c "signinAliasesFile=$W/signin-aliases.json")
+    fi
+  else
+    for f in display-names.json signin-aliases.json; do [[ -f "$PRIV/$f" ]] || (( DRY_RUN )) || die "missing $PRIV/$f (runbook 0.5)"; done
+    cdk_context=(-c "displayNamesFile=$PRIV/display-names.json" -c "signinAliasesFile=$PRIV/signin-aliases.json")
+  fi
+}
 
 # The three images: local name, ECR repository.
 IMAGES="service:genui-synthetic qualification:genui-qualification operator:genui-operator"
@@ -111,9 +130,14 @@ case $step in
     if [[ -n "$clean_trial_file" ]]; then
       python3 "$REPO/infra/scripts/window_requests.py" clean-trial-check --clean-trial "$clean_trial_file" >/dev/null
     fi
+    alias_args=(--predecessor "$PRIV/windows/$supersedes" --legacy "$PRIV/signin-aliases.json")
+    [[ -z "$clean_trial_file" ]] || alias_args+=(--clean-trial "$clean_trial_file")
+    [[ -z "$signin_aliases_file" ]] || alias_args+=(--aliases "$signin_aliases_file")
+    python3 -I "$REPO/ops/beta/signin_aliases.py" "${alias_args[@]}"
     if (( DRY_RUN )); then echo "would create $W and release.json for candidate ${full:0:12} (schema $schema, $branch)"; exit 0; fi
     mkdir -m 700 -p "$W"
     if [[ -n "$clean_trial_file" ]]; then cp "$clean_trial_file" "$W/clean-trial.json"; fi
+    python3 -I "$REPO/ops/beta/signin_aliases.py" "${alias_args[@]}" --output "$W/signin-aliases.json"
     if [[ -n "$input_from" ]]; then
       [[ -f "$input_from" ]] || die "no file $input_from"
       cp "$input_from" "$W/base-input.json"
@@ -204,12 +228,7 @@ jq -c "{status, window_id, superseded_window_id}" "$W/receipt.json"'
 
   synth)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
-    if [[ -f "$W/clean-trial.json" ]]; then
-      cdk_context=(-c "cleanTrialFile=$W/clean-trial.json")
-    else
-      for f in display-names.json signin-aliases.json; do [[ -f "$PRIV/$f" ]] || (( DRY_RUN )) || die "missing $PRIV/$f (runbook 0.5)"; done
-      cdk_context=(-c "displayNamesFile=$PRIV/display-names.json" -c "signinAliasesFile=$PRIV/signin-aliases.json")
-    fi
+    window_cdk_context
     shown '
 (cd "$REPO/infra" && npm run synth -- --quiet "${cdk_context[@]}") > "$W/synth.log" 2>&1
 cp "$REPO/infra/cdk.out/GenuiSyntheticFoundation.template.json" "$W/template.json"
@@ -220,11 +239,7 @@ release_set ".stack.template_sha256 = \$t" --arg t "$(cat "$W/template.sha256")"
   diff)
     load_env; window_dir "$WINDOW_ID"; need_window_dir
     [[ -f "$W/template-before.json" ]] || (( DRY_RUN )) || die "no template-before.json (just deploy observe)"
-    if [[ -f "$W/clean-trial.json" ]]; then
-      cdk_context=(-c "cleanTrialFile=$W/clean-trial.json")
-    else
-      cdk_context=(-c "displayNamesFile=$PRIV/display-names.json" -c "signinAliasesFile=$PRIV/signin-aliases.json")
-    fi
+    window_cdk_context
     shown '
 (cd "$REPO/infra" && npx cdk diff GenuiSyntheticFoundation --no-lookups "${cdk_context[@]}" --template "$W/template-before.json") > "$W/cdk-diff.txt" 2>&1 || true'
     echo "diff in $W/cdk-diff.txt"
