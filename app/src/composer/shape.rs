@@ -536,7 +536,10 @@ pub fn judge_theme_object(object: Map<String, Value>) -> Result<AppTheme, &'stat
         return Err("empty_view");
     }
     let ok = theme.mode.as_deref().is_none_or(|m| closed(MODES, m))
-        && theme.accent.as_deref().is_none_or(|a| closed(APP_ACCENTS, a))
+        && theme
+            .accent
+            .as_deref()
+            .is_none_or(|a| closed(APP_ACCENTS, a))
         && theme
             .density
             .as_deref()
@@ -1003,7 +1006,10 @@ mod tests {
                 .as_deref(),
             Some("harbor")
         );
-        assert_eq!(judge_theme(r#"{"accent": "cupcake"}"#), Err("invalid_theme"));
+        assert_eq!(
+            judge_theme(r#"{"accent": "cupcake"}"#),
+            Err("invalid_theme")
+        );
     }
 
     #[test]
