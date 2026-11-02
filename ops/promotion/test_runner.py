@@ -189,6 +189,42 @@ class LifecycleTests(unittest.TestCase):
         self.aws._call=transport
         with self.assertRaises(Refused):self.run_execute()
         self.assertFalse(any(o=='update_service' for _,o,_ in self.aws.calls))
+    def test_expired_or_changed_disposition_after_approval_cannot_stop(self):
+        self.prepared()
+        with patch('ops.promotion.runner.guard_scan_delta', side_effect=Refused('expired disposition')):
+            with self.assertRaises(Refused): self.run_execute()
+        self.assertFalse(any(o in ['update_service', 'execute_change_set'] for _,o,_ in self.aws.calls))
+        self.assertEqual(self.store.load()['active']['phase'], 'prepared')
+    def test_real_disposition_expiring_during_final_network_checks_cannot_stop(self):
+        from ops.promotion.registry import scan_disposition
+        disposition, _ = scan_disposition()
+        contract = disposition['deployment_contract_sha256']
+        self.manifest['source']['deployment_contract_sha256'] = contract
+        candidate_path = self.directory/'candidate.json'
+        candidate = json.loads(candidate_path.read_bytes())
+        candidate['source'] = self.manifest['source']
+        candidate_path.write_bytes(encoded(candidate))
+        self.manifest['reports']['candidate.json'] = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+        (self.directory/'manifest.json').write_bytes(encoded(self.manifest))
+        self.request['qualified_artifact_manifest_sha256'] = hashlib.sha256((self.directory/'manifest.json').read_bytes()).hexdigest()
+        self.initial['baseline']['deployment_contract_sha256'] = contract
+        self.initial['live']['registry']['operator']['manifest_digest'] = disposition['predecessor_manifest_digest']
+        self.s3.objects['beta/state.json'] = encoded(self.initial)
+        self.aws.state = copy.deepcopy(self.initial); self.aws.original = copy.deepcopy(self.initial)
+        original = self.aws._call
+        def transport(service, operation, args):
+            if operation == 'describe_image_scan_findings' and args['repositoryName'] == guards.REPOS['operator']:
+                return {'imageScanStatus': {'status': 'COMPLETE'}, 'imageScanFindings': {'findings': disposition['findings']}}
+            return original(service, operation, args)
+        self.aws._call = transport
+        result = self.prepared()
+        self.assertEqual(result['review']['scan']['operator']['reviewed_count'], 3)
+        def final_network_read(_):
+            self.runner.clock = lambda: datetime.fromisoformat(disposition['expires_at_utc'].replace('Z', '+00:00'))
+        self.current_mock.side_effect = final_network_read
+        with self.assertRaises(Refused): self.run_execute()
+        self.assertFalse(any(o in ['update_service', 'execute_change_set'] for _,o,_ in self.aws.calls))
+        self.assertEqual(self.store.load()['active']['phase'], 'prepared')
     def test_wrong_packet_and_approval_cannot_stop_services(self):
         self.prepared();self.execute['packet_sha256']='0'*64
         with self.assertRaises(Refused):self.run_execute()
