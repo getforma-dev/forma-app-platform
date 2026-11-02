@@ -142,6 +142,24 @@ export function appTheme(value: unknown): AppTheme | null {
   return theme;
 }
 
+const THEME_ACCENTS = ['green', 'crimson', 'amber', 'cyan', 'violet', 'rose', 'ice', 'slate'] as const;
+
+/**
+ * The `data-theme` name for a judged app theme. Null inherits the platform
+ * theme (site, or site-dark when the operating system is dark). An explicit
+ * mode picks that block. Accent default with a mode picks site / site-dark,
+ * not the professional ink pair. Density does not choose a color theme.
+ */
+export function themeName(theme: AppTheme, scheme: 'light' | 'dark'): string | null {
+  const accent = theme.accent && theme.accent !== 'default' && (THEME_ACCENTS as readonly string[]).includes(theme.accent)
+    ? theme.accent : null;
+  const mode = theme.mode === 'light' || theme.mode === 'dark' ? theme.mode : null;
+  if (!accent && !mode) return null;
+  const resolved = mode ?? scheme;
+  if (!accent) return resolved === 'dark' ? 'site-dark' : 'site';
+  return resolved === 'dark' ? `${accent}-dark` : accent;
+}
+
 // --- The card's data as one table ---
 
 /**

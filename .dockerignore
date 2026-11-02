@@ -320,6 +320,7 @@ app/admin/src/canvas-vendor/**
 !app/admin/src/forma-types.d.ts
 !app/admin/src/styles/
 app/admin/src/styles/**
+!app/admin/src/styles/themes.css
 !app/admin/src/styles/app.css
 !app/admin/src/styles/ask.css
 !app/admin/src/styles/sharing.css

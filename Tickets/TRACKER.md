@@ -170,3 +170,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 163 | [APP-163: Find my workspaces after verified email discovery](0-backlog/APP-163.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162 |
 | 164 | [APP-164: Authenticated workspace chooser and safe session switching](0-backlog/APP-164.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162, APP-163 |
 | 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](0-backlog/APP-165.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |
+| 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](0-backlog/APP-166.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |

@@ -44,7 +44,7 @@ import { recordsJson } from './records';
 import { announce, el, isUuid, receiptSection, released } from './render';
 import { registerCompleter, type Completion } from './slash';
 import {
-  appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips,
+  appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips, themeName,
   type AppTheme, type CardView, type Group, type RecordReceipt, type Shaped, type Table,
 } from './talk-view';
 import { frameCardsOfItem, isUniteItem } from './unite';
@@ -354,6 +354,26 @@ export function shapedSection(document_: Document, state: 'preview' | 'shaped', 
 type Applied = { address: string; view: CardView; table: Table; source: Source; work: string };
 const appliedCards = new Map<string, Applied>();
 const appliedThemes = new Map<string, AppTheme>();
+
+function colorScheme(): 'light' | 'dark' {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/** Cards and the unite frame of one saved work. A published app appearance owns its own element. */
+function themeTargets(work: string): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work], .cv-unite[data-work]'))
+    .filter((node) => node.dataset.work === work && !node.dataset.appMode);
+}
+
+if (typeof matchMedia === 'function') {
+  const query = matchMedia('(prefers-color-scheme: dark)');
+  query.addEventListener?.('change', () => {
+    for (const [work, theme] of appliedThemes) {
+      if (theme.mode === 'light' || theme.mode === 'dark') continue;
+      setTheme(themeTargets(work), theme);
+    }
+  });
+}
 
 /**
  * The preview each item shows now: a newer preview takes the token, so an
@@ -714,14 +734,20 @@ export async function previewNewCard(card: { app: string; work: string; collecti
 function appCards(app: AppRow): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work]')).filter((card) => card.dataset.work === app.work);
 }
-function setTheme(cards: HTMLElement[], theme: AppTheme | null): void {
-  for (const card of cards) {
-    for (const key of ['mode', 'accent', 'density'] as const) {
-      const value = theme?.[key];
-      const name = `theme${key[0]!.toUpperCase()}${key.slice(1)}` as 'themeMode';
-      if (value && value !== 'default') card.dataset[name] = value;
-      else delete card.dataset[name];
+function setTheme(nodes: HTMLElement[], theme: AppTheme | null): void {
+  for (const node of nodes) {
+    delete node.dataset.themeMode;
+    delete node.dataset.themeAccent;
+    if (!theme) {
+      delete node.dataset.theme;
+      delete node.dataset.themeDensity;
+      continue;
     }
+    const name = themeName(theme, colorScheme());
+    if (name) node.dataset.theme = name;
+    else delete node.dataset.theme;
+    if (theme.density && theme.density !== 'default') node.dataset.themeDensity = theme.density;
+    else delete node.dataset.themeDensity;
   }
 }
 function appHeader(app: AppRow): HTMLElement | null {
@@ -745,23 +771,23 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
   }
   const before = appliedThemes.get(app.work) ?? null;
   const current = claimPreview(`theme:${app.work}`);
-  const cards = appCards(app);
-  setTheme(cards, theme);
-  for (const card of cards) card.dataset.themePreview = 'true';
+  const nodes = themeTargets(app.work);
+  setTheme(nodes, theme);
+  for (const node of nodes) node.dataset.themePreview = 'true';
   const revert = () => {
     appliedThemes.delete(app.work);
-    setTheme(appCards(app), null);
+    setTheme(themeTargets(app.work), null);
     unlabel(appHeader(app));
     announce(`/${target.address} has its own look again.`);
   };
-  const settle = () => { for (const card of appCards(app)) delete card.dataset.themePreview; };
+  const settle = () => { for (const node of themeTargets(app.work)) delete node.dataset.themePreview; };
   confirmDock(`Shape /${target.address}: every card`, themeChips(theme), [
     {
       label: 'Apply', primary: true,
       run: () => {
         settle();
         appliedThemes.set(app.work, theme);
-        setTheme(appCards(app), theme);
+        setTheme(themeTargets(app.work), theme);
         labelShaped(appHeader(app), revert);
         report(`Every /${target.address} card is shaped; each keeps its own view. Revert is on the app card.`);
       },
@@ -770,7 +796,7 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
     // A newer theme preview on this app keeps its look.
     if (!current()) return;
     settle();
-    setTheme(appCards(app), before);
+    setTheme(themeTargets(app.work), before);
     report('Nothing changed.');
   });
 }
