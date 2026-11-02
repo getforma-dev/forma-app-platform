@@ -698,7 +698,7 @@ async function autoData(boxId: string, file: BoxFile, found: Preview, done: () =
 }
 
 /** Spreadsheets only: store them, then ask. A folder is for anything else. */
-async function uploadAsSheets(files: File[]): Promise<string> {
+async function uploadAsSheets(files: File[], suffix = ''): Promise<string> {
   let uploads: Box;
   try {
     uploads = await uploadsBox();
@@ -727,11 +727,11 @@ async function uploadAsSheets(files: File[]): Promise<string> {
   if (!stored.length) return 'Nothing was stored.';
   const [first] = stored;
   if (stored.length === 1 && first) {
-    offerSheet(uploads.box_id, first.file, first.preview);
-    return `${first.file.name} is uploaded. Nothing is on the canvas until you choose.`;
+    offerSheet(uploads.box_id, first.file, first.preview, suffix);
+    return `${first.file.name} is uploaded. Nothing is on the canvas until you choose.${suffix}`;
   }
   const ids = stored.map((row) => row.file.file_id);
-  notice(`${stored.length} spreadsheets are uploaded. Nothing is on the canvas until you choose.`, [
+  notice(`${stored.length} spreadsheets are uploaded. Nothing is on the canvas until you choose.${suffix}`, [
     { label: 'Place the spreadsheets', run: () => { for (const row of stored) announce(placeSheet(uploads.box_id, row.file)); } },
     { label: 'Make a card', run: chooseCard(uploads.box_id, ids) },
     { label: 'Make an app', run: () => { if (first) openDataSheet(uploads.box_id, first.file, first.preview, () => undefined, false, ids); } },
@@ -963,31 +963,44 @@ function chooseCard(boxId: string, fileIds: string[]): () => void {
 }
 
 /** The uploaded spreadsheet stays a file until the member chooses. Closing places nothing. */
-function offerSheet(boxId: string, file: BoxFile, found: Preview): void {
+function offerSheet(boxId: string, file: BoxFile, found: Preview, suffix = ''): void {
   const kind = file.kind === 'xlsx' ? 'Excel' : 'CSV';
-  notice(`${file.name} is uploaded (${found.rows} rows, ${kind}). Nothing is on the canvas until you choose.`, [
+  notice(`${file.name} is uploaded (${found.rows} rows, ${kind}). Nothing is on the canvas until you choose.${suffix}`, [
     { label: 'Place the spreadsheet', run: () => announce(placeSheet(boxId, file)) },
     { label: 'Make a card', run: chooseCard(boxId, [file.file_id]) },
     { label: 'Make an app', run: () => openDataSheet(boxId, file, found, () => undefined) },
   ], 0);
 }
 
-/** "+ New folder" and a drop on empty canvas: an "Untitled folder", open, its name ready to type. */
-export async function newUntitled(files: File[] = []): Promise<string> {
-  if (files.length > 0 && files.every(isDataFile)) return uploadAsSheets(files);
+/** An empty folder, or one that holds the files that are not spreadsheets. */
+async function holdInNewFolder(files: File[]): Promise<{ ok: boolean; text: string }> {
   let made: Box;
   try {
     made = await createBox(`Untitled ${noun}`);
   } catch (error) {
-    return refusalText(error);
+    return { ok: false, text: refusalText(error) };
   }
   await refreshBoxes();
   const message = await openBox(made.box_id);
   const entry = open.get(made.box_id);
-  if (!entry) return message;
+  if (!entry) return { ok: false, text: message };
   entry.rename();
   if (files.length) void entry.upload(files, 'land');
-  return files.length ? `A new ${noun} holds your ${files.length === 1 ? 'file' : 'files'}; name it.` : `A new ${noun} is on your canvas; name it.`;
+  const text = files.length
+    ? `A new ${noun} holds your ${files.length === 1 ? 'file' : 'files'}; name it.`
+    : `A new ${noun} is on your canvas; name it.`;
+  return { ok: true, text };
+}
+
+/** "+ New folder" and a drop on empty canvas. Spreadsheets wait for a choice; other files go in the folder. */
+export async function newUntitled(files: File[] = []): Promise<string> {
+  const spreadsheets = files.filter(isDataFile);
+  const others = files.filter((file) => !isDataFile(file));
+  if (spreadsheets.length && !others.length) return uploadAsSheets(spreadsheets);
+  const held = await holdInNewFolder(others);
+  if (!spreadsheets.length) return held.text;
+  const sheetText = await uploadAsSheets(spreadsheets, held.ok ? ' The other files are in a new folder.' : '');
+  return `${sheetText} ${held.text}`.trim();
 }
 
 // --- Provenance on app cards and receipts ---

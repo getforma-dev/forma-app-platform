@@ -226,6 +226,36 @@ test('the empty canvas offers "Drop files or upload": a spreadsheet waits, other
   assert.equal(input.value, '');
 });
 
+test('a spreadsheet dropped with another file still waits, and the other file makes a folder', async () => {
+  const document_ = freshDocument();
+  const bar = document_.createElement('input');
+  bar.setAttribute('id', 'intent-input');
+  const pick = document_.createElement('button');
+  pick.setAttribute('data-empty-upload-pick', '');
+  const input = document_.createElement('input');
+  input.setAttribute('data-empty-upload', '');
+  document_.body.append(bar, pick, input);
+  const calls = fakeFetch(() => ({ status: 201, body: { box: { box_id: BOX, number: 1, name: 'Untitled folder', kind: 'box', owner: true, file_count: 0, created_at: '2026-10-31T00:00:00Z' } } }));
+  (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
+  const boxes = await import('../src/canvas/boxes.ts');
+  boxes.startEmptyChoices(document_ as unknown as Document);
+  input.files = [
+    new File(['amount\n1'], 'q3_metrics.csv', { type: 'text/csv' }),
+    new File(['notes'], 'notes.pdf', { type: 'application/pdf' }),
+  ];
+  input.click('change');
+  await settle();
+  assert.equal(calls.filter((c) => c.url === '/v1/boxes/uploads').length, 1, 'the spreadsheet is kept in Uploads');
+  assert.deepEqual(
+    calls.filter((c) => c.method === 'POST' && c.url === '/v1/boxes').map((c) => c.body),
+    [{ name: 'Untitled folder' }],
+    'the other file still makes a folder',
+  );
+  const notice = document_.getElementById('bx-notice')!;
+  assert.ok(button(notice, 'Place the spreadsheet'), 'the spreadsheet still asks before anything is placed');
+  assert.match(notice.textContent, /Nothing is on the canvas until you choose/);
+});
+
 test('several spreadsheets: Make an app includes every file from that upload', async () => {
   const document_ = freshDocument();
   const bar = document_.createElement('input');
