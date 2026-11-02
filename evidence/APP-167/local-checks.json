@@ -1,0 +1,60 @@
+{
+  "status": "local acceptance passed; live promotion pending",
+  "checks": [
+    {
+      "check": "full repository check",
+      "log_sha256": "82d577761429fd06f50854ce72e3a940f60c8a3ae857ce0e6e89535d887d46f1",
+      "results": [
+        "ok    fmt (2s)",
+        "ok    admin (10s)",
+        "ok    clippy (78s)",
+        "ok    clippy-dev (65s)",
+        "ok    test (144s)",
+        "ok    http-smoke (43s)",
+        "ok    msrv (69s)",
+        "ok    catalog (0s)",
+        "ok    infra (9s)",
+        "ok    py-scripts (6s)",
+        "ok    py-runtime (277s)",
+        "ok    shared-broker (12s)",
+        "ok    py-qualification (4s)",
+        "ok    py-app-scripts (1s)",
+        "ok    py-ops (16s)",
+        "ok    py-promotion (0s)",
+        "ok    py-infra (5s)",
+        "ok    schema-pins (1s)",
+        "ok    contracts (6s)",
+        "ok    board (0s)",
+        "ok    bash-n (0s)"
+      ]
+    },
+    {
+      "check": "final affected suites",
+      "log_sha256": "665106847c6c1a5d559854d3cbcec343ae42d2ba2e1ed8073f16d51a6de6ab62",
+      "results": [
+        "ok    py-ops (13s)",
+        "ok    py-promotion (1s)",
+        "ok    py-infra (5s)",
+        "ok    board (0s)",
+        "ok    bash-n (0s)"
+      ]
+    }
+  ],
+  "promotion_tests": 69,
+  "workflow_validation": {
+    "tool": "actionlint",
+    "version": "1.7.12",
+    "passed": true
+  },
+  "docker_exporter_smoke": {
+    "platform": "linux/arm64",
+    "single_build_dual_export": true,
+    "qualified_local_identity_matches_oci_graph": true,
+    "synthetic_scratch_fixture_only": true,
+    "full_image_qualification": false
+  },
+  "limitations": [
+    "Full repository check completed before final ops-only repairs; all affected Python/legacy/board/shell suites reran after repairs.",
+    "No actual GitHub approval, ARM64 production bundle, canonical cutover or live runtime promotion is proved by this local record."
+  ]
+}

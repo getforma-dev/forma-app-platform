@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "scope": "Independent source review of the GitHub workflow, candidate gate, qualified image artifacts and approval/tag helpers",
+  "disposition": "No remaining blocker in these reviewed files. AWS bootstrap, canonical-state cutover, runtime orchestration qualification and the real approved promotion are separate gates.",
+  "source_sha256": {
+    ".github/workflows/beta-promote.yml": "3cf671a9ed0215986ea01d30f10afe95750900bf6f019ca7514c7eef478c2edd",
+    "ops/promotion/candidate.py": "e478094a7e152dc8a5e46477156fd0fda195af9561fd3f9ef38b1a61002000e7",
+    "ops/promotion/artifacts.py": "c86fe8bd58226cc96c323ebbf0dff841aa66f08e555fffbb65651ccbad314b88",
+    "ops/promotion/build.py": "7e2b8156d7392b889bdf0e32fde714a02277304bf6813e082e355d0c806b284a",
+    "ops/promotion/github.py": "fcade552fad5500babbda0c0ac68955afa00c00986eb35271b67dc77a648d0b5"
+  },
+  "reviewed_controls": [
+    "Only ordinary pushes of an exact merged pull request on the active trunk are eligible; PR events and rerun attempts cannot start deployment.",
+    "The candidate gate requires the complete configured set of successful push workflows at the exact SHA and rechecks current trunk before preparation and execution.",
+    "The native ARM64 build has no AWS or OIDC credentials. Two exporters consume the same build result, and qualifiers are bound to the exported image graph.",
+    "Artifact identity is bound to the same GitHub run, source SHA, artifact ID and actual ZIP digest. OCI paths, every blob digest, the unique ARM64 graph, qualification reports and parser manifests are revalidated.",
+    "Preparation and execution use separate protected environments and exact immutable-repository OIDC claims. Privileged jobs do not upload raw AWS or approval evidence as public artifacts.",
+    "Execution reads actual GitHub environment protection, branch rules and review history for the exact run. A boolean or the run initiator cannot replace the configured human approval.",
+    "The preapproval summary includes candidate, image digests, resource changes, preserved boundaries, scan counts, bounded costs, expiry and the outage sequence.",
+    "Only a separate post-success job can write the annotated release tag; it has no AWS identity. An existing tag must match the exact commit and packet annotation."
+  ],
+  "findings_repaired_and_reread": [
+    "Qualification/operator reports now bind their image identity and candidate context; parser identity and raw manifest hashes are recomputed.",
+    "Indexed OCI archives now require a valid index media type and explicit Linux ARM64 child platform, matching the registry publisher contract.",
+    "The human review projection now contains concrete release scope rather than only a packet hash.",
+    "Current-trunk and exact-CI checks run again after build and after approval."
+  ],
+  "limitations": [
+    "This is a source review, not evidence of an actual approved GitHub-to-AWS run.",
+    "The reviewed code does not itself prove a human clicked approval; the live run must retain the actual protected-environment review evidence.",
+    "Changes to these source hashes require another review of the affected boundary."
+  ]
+}

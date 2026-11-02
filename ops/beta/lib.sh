@@ -42,6 +42,7 @@ priv_ready() {
 
 load_env() {
   priv_ready
+  [[ ! -e "$PRIV/promotion-managed.json" ]] || die "private state moved to promotion S3; legacy operations are fenced"
   [[ -f "$PRIV/env.sh" ]] || die "missing $PRIV/env.sh (copy ops/beta/env.example.sh and fill it in privately)"
   # shellcheck disable=SC1091
   source "$PRIV/env.sh"
