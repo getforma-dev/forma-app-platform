@@ -70,7 +70,8 @@ def inspect_oci(path):
             members[name] = member
 
         def document(name):
-            require(name in members and members[name].isfile() and members[name].size <= 8 * 1024**2,
+            # ECR PutImage accepts at most 4 MiB; reject before cloud publication.
+            require(name in members and members[name].isfile() and members[name].size <= 4 * 1024**2,
                 "missing or oversized OCI document")
             return json_object(archive.extractfile(members[name]).read())
 

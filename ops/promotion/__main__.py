@@ -21,8 +21,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if (args.phase == 'execute') != bool(args.approval):
         parser.error('--approval is required only for execute')
-    aws = AWS(); store = Store(aws.client('s3'), args.state_bucket, args.state_prefix)
     try:
+        aws = AWS(); store = Store(aws.client('s3'), args.state_bucket, args.state_prefix)
         request = json.loads(args.request.read_text(), object_pairs_hook=no_duplicates)
         runner = Runner(aws, store)
         if args.phase == 'prepare':

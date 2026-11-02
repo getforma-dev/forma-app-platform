@@ -50,11 +50,15 @@ class CandidateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 c.ci_status(rows, SHA)
 
+    @patch.dict('os.environ', {'GITHUB_EVENT_NAME': 'push'})
     def test_event_requires_exact_identity_and_ordinary_trunk_push(self):
         event = {"repository": {"full_name": c.REPOSITORY, "id": c.REPOSITORY_ID,
             "owner": {"id": c.OWNER_ID}}, "ref": "refs/heads/" + c.BRANCH, "after": SHA,
             "deleted": False, "forced": False}
         self.assertEqual(c.context(event, SHA), SHA)
+        with patch.dict('os.environ', {'GITHUB_EVENT_NAME': 'pull_request'}):
+            with self.assertRaisesRegex(ValueError, 'push event required'):
+                c.context(event, SHA)
         for field, value in (("ref", "refs/pull/1/merge"), ("forced", True), ("deleted", True), ("after", "b" * 40)):
             altered = dict(event, **{field: value})
             with self.assertRaises(ValueError):

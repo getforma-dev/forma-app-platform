@@ -26,6 +26,8 @@ One private encrypted state store owns the complete budget ledger, active deploy
 
 The deployment lock has no automatic expiry and remains held while approval is pending. Failed or cancelled execution can have an unknown AWS outcome. Do not rerun mutation steps blindly, delete the lock or start a laptop deployment. Reconcile the journal against actual CloudFormation and ECS state, with the previous workflow fenced, before permitting another release. An activation intent cannot be abandoned as though activation never happened.
 
+Whole-workflow reruns intentionally refuse. After safe abandonment, a fresh reviewed application merge creates the next promotion attempt. Interrupted execution needs operator reconciliation. A failed post-health Git tag job can be retried separately; it has no AWS permission and does not repeat deployment.
+
 Recovery uses compatible qualified images through a reviewed release. This pipeline does not roll back the database. Private raw AWS receipts and state stay in private storage; public GitHub summaries contain only the information needed to identify and review the release.
 
 `python -m ops.promotion.maintenance inspect --state-bucket "$PROMOTION_STATE_BUCKET"` reports the state hash, active phase and unresolved operation count without printing private AWS configuration. A fully prepared release that never started execution can be abandoned with `maintenance abandon --expected-state-sha256 <reviewed-hash>` and the same state arguments. That command requires the original GitHub workflow to have been completed for at least 65 minutes, beyond the one-hour role session limit. It proves the existing runtime unchanged and healthy, deletes and confirms absence of the exact unused change set, and preserves the abandoned budget window before releasing the lock. It refuses partial preparation, unknown outcomes and any release that began execution. Those require explicit operator investigation of the private journal; there is no force-unlock command.
@@ -34,7 +36,7 @@ Recovery uses compatible qualified images through a reviewed release. This pipel
 
 The `beta-plan` and `beta` GitHub environments allow only the branch `pivot/pitch-mvp`. `beta` requires one approval from Victor-Villacis, with self-review allowed for the sole human owner and administrator bypass disabled. Both settings and branch-policy lists were read back after configuration.
 
-AWS bootstrap, canonical-state cutover, restricted-role review and the first real promotion remain separate acceptance steps until their evidence is recorded in APP-167. GitHub uses short-lived OIDC credentials; do not add long-lived AWS access keys as repository secrets.
+The reviewed AWS bootstrap is installed and its policies, trust, OIDC issuer/audience and private bucket settings were read back exactly. Canonical-state cutover preserved all 16 windows and the original ledger hash; the local original is read-only and both new and old environment entrypoints refuse mutation. Actual AWS probes confirmed conditional writes and history protection. The first real merged-SHA promotion remains pending in APP-167. GitHub uses short-lived OIDC credentials; do not add long-lived AWS access keys as repository secrets.
 
 ## Budget maintenance
 

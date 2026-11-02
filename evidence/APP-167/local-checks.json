@@ -40,7 +40,7 @@
       ]
     }
   ],
-  "promotion_tests": 69,
+  "promotion_tests": 70,
   "workflow_validation": {
     "tool": "actionlint",
     "version": "1.7.12",
@@ -54,7 +54,15 @@
     "full_image_qualification": false
   },
   "limitations": [
-    "Full repository check completed before final ops-only repairs; all affected Python/legacy/board/shell suites reran after repairs.",
-    "No actual GitHub approval, ARM64 production bundle, canonical cutover or live runtime promotion is proved by this local record."
-  ]
+    "Full repository check completed before final ops-only repairs; all affected suites reran after repairs, including Linux PR-event regressions.",
+    "This local record does not prove actual merged-SHA GitHub CI, production ARM64 qualification, a human approval or live runtime promotion."
+  ],
+  "linux_regression": {
+    "environment": "Linux ARM64 Python 3.11 with GITHUB_EVENT_NAME=pull_request",
+    "network": "disabled",
+    "source_mount": "read-only",
+    "tests": 14,
+    "passed": true,
+    "log_sha256": "d8b59af58ac1e071720e3e750f19ac5366ccc6f8c9adafe6c996dd2682279c77"
+  }
 }

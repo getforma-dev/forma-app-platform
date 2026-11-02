@@ -15,7 +15,7 @@ def encoded(value):
     return json.dumps(value, sort_keys=True).encode()
 
 
-def archive(path, *, architecture="arm64", extra=None, indexed=False, index_platform=True):
+def archive(path, *, architecture="arm64", extra=None, indexed=False, index_platform=True, manifest_padding=0):
     blobs = {}
     def blob(raw, media):
         digest = "sha256:" + hashlib.sha256(raw).hexdigest()
@@ -24,7 +24,7 @@ def archive(path, *, architecture="arm64", extra=None, indexed=False, index_plat
     config = blob(encoded({"os": "linux", "architecture": architecture}), a.CONFIG)
     layer = blob(b"synthetic image-layer bytes", next(iter(a.LAYERS)))
     manifest = blob(encoded({"schemaVersion": 2, "mediaType": a.MANIFEST,
-        "config": config, "layers": [layer]}), a.MANIFEST)
+        "config": config, "layers": [layer], **({"annotations": {"test": "x" * manifest_padding}} if manifest_padding else {})}), a.MANIFEST)
     child = dict(manifest, platform={"os": "linux", "architecture": architecture}) if index_platform else manifest
     root = blob(encoded({"schemaVersion": 2, "mediaType": a.INDEX, "manifests": [child]}), a.INDEX) if indexed else manifest
     files = {"oci-layout": encoded({"imageLayoutVersion": "1.0.0"}),
@@ -84,6 +84,11 @@ class ArtifactTests(unittest.TestCase):
 
     def test_valid_complete_graph_and_qualifiers(self):
         self.assertEqual(a.validate_bundle(self.root, SHA), self.manifest)
+
+    def test_oversized_registry_manifest_refuses_before_publication(self):
+        archive(self.root / "service.oci.tar", manifest_padding=4 * 1024**2)
+        with self.assertRaisesRegex(ValueError, "oversized OCI document"):
+            a.inspect_oci(self.root / "service.oci.tar")
 
     def test_stale_operator_or_qualification_report_refused_even_rehashed(self):
         for name in ("operator", "qualification"):
