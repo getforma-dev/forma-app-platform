@@ -1,6 +1,6 @@
 # APP-168 whole-app view qualification
 
-Implemented on `pivot/app-view-library`. This is actual local browser and repository evidence, not an AWS deployment or hosted sign-in rehearsal.
+Implemented on `pivot/app-view-library` in [PR #48](https://github.com/getforma-dev/forma-app-platform/pull/48), superseding #47. This is actual local browser and repository evidence, not an AWS deployment or hosted sign-in rehearsal.
 
 - [Canvas browser](canvas-browser.json): 12 checks with existing synthetic authorized works, actual query completion and pointer/keyboard gestures. App Card/Open/Stack retain one object; Focus, new-tab page, drag/resize, Library categories/manual saved-card refresh, reload and removal pass.
 - [Member browser](member-browser.json): 7 checks on a Dining tracker created through the ordinary template picker with unchanged description. Later attempts reuse its exact journaled saved work. Authorized Edit/Share opens, actual generic modal form node/value/key survives all view changes, personal hiding skips the form in Stack/Focus/member page, unhide restores its draft, and 375×812 layout fits. No record command, design publication or share mutation was sent in the final run. Earlier creation and harness corrections remain in private local attempt journals.
