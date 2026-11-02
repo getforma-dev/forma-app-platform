@@ -211,10 +211,26 @@ def validate_summary(value, candidate):
                 and change["logical_id"] not in ids, "invalid review change")
             ids.add(change["logical_id"])
         require(set(review["scan"]) == set(NAMES), "missing scan projection")
-        for scan in review["scan"].values():
-            require(set(scan) == {"findings", "introduced"} and type(scan["findings"]) is int
-                and 0 <= scan["findings"] <= 10000 and type(scan["introduced"]) is int
-                and scan["introduced"] == 0, "unreviewed scan change")
+        for role, scan in review["scan"].items():
+            require(set(scan) == {"findings", "introduced", "reviewed", "reviewed_count", "unreviewed", "disposition_sha256", "review_expires_at_utc"}
+                and type(scan["findings"]) is int and 0 <= scan["findings"] <= 10000
+                and type(scan["introduced"]) is int and isinstance(scan["reviewed"], list)
+                and 0 <= scan["introduced"] == len(scan["reviewed"]) <= scan["findings"]
+                and type(scan["reviewed_count"]) is int and scan["reviewed_count"] == scan["introduced"]
+                and type(scan["unreviewed"]) is int and scan["unreviewed"] == 0, "unreviewed scan change")
+            if scan["introduced"]:
+                from .registry import scan_disposition
+                disposition, disposition_sha = scan_disposition()
+                require(role == disposition["role"] and scan["disposition_sha256"] == disposition_sha
+                    and scan["review_expires_at_utc"] == disposition["expires_at_utc"]
+                    and review["deployment_contract_sha256"] == disposition["deployment_contract_sha256"]
+                    and all(isinstance(name, str) for name in scan["reviewed"])
+                    and scan["reviewed"] == sorted(set(scan["reviewed"]))
+                    and set(scan["reviewed"]) <= {f["name"] for f in disposition["findings"]},
+                    "scan review projection changed")
+            else:
+                require(scan["reviewed"] == [] and scan["disposition_sha256"] is None
+                    and scan["review_expires_at_utc"] is None, "unexpected scan disposition")
         require(review["sequence"] == ["stop both services", "execute reviewed change set", "verify stopped boundaries",
             "activate both services", "verify health and images"] and review["outage_required"] is True,
             "operation sequence changed")

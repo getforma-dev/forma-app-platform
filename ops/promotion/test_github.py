@@ -66,7 +66,8 @@ class GithubTests(unittest.TestCase):
                 "source_tree_sha": "e" * 40, "deployment_contract_sha256": "f" * 64, "schema_version": 19,
                 "preserved": {"schema": True, "template": True, "trial": True, "aliases": True, "secrets": True},
                 "changes": [{"logical_id": "ServiceTask", "resource_type": "AWS::ECS::TaskDefinition", "action": "Modify", "replacement": "True"}],
-                "scan": {n: {"findings": 24, "introduced": 0} for n in g.NAMES},
+                "scan": {n: {"findings": 24, "introduced": 0, "reviewed": [], "reviewed_count": 0,
+                    "unreviewed": 0, "disposition_sha256": None, "review_expires_at_utc": None} for n in g.NAMES},
                 "sequence": ["stop both services", "execute reviewed change set", "verify stopped boundaries", "activate both services", "verify health and images"],
                 "outage_required": True}}
         self.assertEqual(g.validate_summary(value, SHA), value)
@@ -78,6 +79,19 @@ class GithubTests(unittest.TestCase):
             mutate(changed)
             with self.assertRaises(ValueError):
                 g.validate_summary(changed, SHA)
+        from ops.promotion.registry import scan_disposition
+        disposition, sha = scan_disposition()
+        value["review"]["deployment_contract_sha256"] = disposition["deployment_contract_sha256"]
+        scan = value["review"]["scan"]["operator"]
+        scan.update(introduced=3, reviewed_count=3, reviewed=sorted(f["name"] for f in disposition["findings"]),
+            disposition_sha256=sha, review_expires_at_utc=disposition["expires_at_utc"])
+        self.assertEqual(g.validate_summary(value, SHA), value)
+        for mutate in (lambda s: s.update(introduced=0), lambda s: s.update(reviewed_count=0),
+                lambda s: s.update(unreviewed=1), lambda s: s.update(disposition_sha256="0" * 64),
+                lambda s: s.update(review_expires_at_utc="2099-01-01T00:00:00Z"),
+                lambda s: s["reviewed"].__setitem__(0, "CVE-2099-12345")):
+            changed = copy.deepcopy(value); mutate(changed["review"]["scan"]["operator"])
+            with self.assertRaises(ValueError): g.validate_summary(changed, SHA)
 
     def test_artifact_requires_same_run_head_id_digest_and_name(self):
         value = {"id": 8, "expired": False, "name": "beta-qualified-" + SHA,

@@ -1,0 +1,32 @@
+{
+  "command": "just check",
+  "failed_groups": 0,
+  "live_acceptance": "pending new approved merge-triggered run",
+  "log_sha256": "8f1c18688af1aa2f798653bf0f9aac03888ac995d1c532121332b3fc90725bb7",
+  "passed_groups": [
+    "fmt",
+    "admin",
+    "clippy",
+    "clippy-dev",
+    "test",
+    "http-smoke",
+    "msrv",
+    "catalog",
+    "infra",
+    "py-scripts",
+    "py-runtime",
+    "shared-broker",
+    "py-qualification",
+    "py-app-scripts",
+    "py-ops",
+    "py-promotion",
+    "py-infra",
+    "schema-pins",
+    "contracts",
+    "board",
+    "bash-n"
+  ],
+  "promotion_tests": 88,
+  "scope": "follow-up scan disposition and confirmed-ECR preparation recovery",
+  "skipped_groups": 0
+}
