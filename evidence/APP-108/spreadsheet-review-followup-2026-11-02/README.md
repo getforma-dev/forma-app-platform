@@ -1,0 +1,35 @@
+# Spreadsheet review follow-up
+
+This follows the review notes Victor supplied after PR42 merged as `60fd6bd29348e7b7cbb84e3a5b818c1e94385933`. The review was compared with that exact merge tree, not the older pending GitHub review. PR42's earlier qualification did not cover all the asynchronous upload/drop cases below.
+
+| Reported finding | Disposition |
+| --- | --- |
+| 1. Stored but unreadable original reported as not stored | Already fixed in PR42: parser refusal does not discard the upload acknowledgment or original-file action. The follow-up also distinguishes an unconfirmed network outcome from proof that nothing was stored. |
+| 2. Companion upload announced complete before it finishes | Await the complete upload batch; count confirmed files and retain per-file refusal details. Mixed spreadsheet/folder notices preserve the actual companion outcome on every exit. |
+| 3. Make an app claims every requested file was used | Explain the existing three-readable-table limit and first-file column confirmation; report the server's actual `files` count. Explicit requested IDs remain unchanged. Contrary to one detail in the earlier note, unrelated folder files do not displace explicitly selected files: filtering happens before selection. |
+| 4. Removing an icon during copy still says it stayed | Distinguish removal/movement before uploading from a completed copy after removal/movement. Never restore the removed icon. A repeated drop while a copy is active reports that pending operation without another upload. |
+| 5. A dropped file is always promised as Ask/app input | Copy confirmation reports storage only. Folder actions retain the existing bounded selection; copying into a folder does not guarantee inclusion in its next answer/app. |
+| 6. Cancelled drag borrows a previous click's release | Pass the actual gesture's completion and coordinates from the canvas engine. Only its matching pointer-up permits a drop. Cancellation still persists geometry and clears styles, without copying files or detaching a card from a stack. |
+| 7. Enter on Remove opens the viewer | Already fixed in PR42: the card keyboard handler requires the card itself as the target. |
+| 8. Restored names cross member boundaries | Already fixed in PR42: member-scoped reference-only persistence and fresh authorized metadata before mounting. |
+
+Implementation is on `pivot/sheet-review-fixes`. No schema, parser, grants, API payloads, dependencies or deployment-contract changes are needed. The three-table context cap remains; this change makes the product honest about it rather than increasing the model's data scope.
+
+## Qualification and review
+
+- `canvas-from-data.test.ts` exercises the actual upload and app-sheet controllers with delayed acknowledgments, partial/refused/unknown uploads, parser refusal, four requested versus three used files, and invalid/no-data results.
+- `canvas-drag-end.test.ts` runs the real vendored canvas gesture handlers with controlled frames: explicit cancellation, pointer cancellation, lost capture, blur/hidden document, foreign pointer release, capture fallback, click threshold and removal before cleanup.
+- Independent source review examined the changed code, callers, backend selection and tests. It found the additional uncertain-upload reporting defect described above; that was corrected and re-reviewed with no remaining blocking finding.
+- `just check`: all **21 groups passed**, including **129 frontend tests**, **376 Rust library tests**, **8 binary tests**, **3 doctests**, native HTTP/security smoke, MSRV, **192 runtime tests** and the then-current **95 promotion tests**. The additional policy-maintenance slice subsequently passed **17 focused tests and all 112 promotion tests**, with a second independent review. [Source hashes and results](checks.json) bind the tested product code.
+- `node app/scripts/sheet_drop_browser.mjs --origin=http://127.0.0.1:4702 --output=.cache/reports/sheet-review-fixes/final`: **8 checks passed**, zero JavaScript errors. [Browser report](browser.json), [pending companion](companion-pending.png), [rejected companion](companion-rejected.png) and [copy results](drop-results.png) retain the evidence. The browser sends real requests; Chrome pauses only the actual responses. The cancellation case combines a real mouse drag with an explicit blur-handler signal. No model, Ask, app-generation or source-registration calls were made.
+- Earlier browser attempts exposed harness transport/header and response-matching errors, a stand restart/temporary 503 during parallel local qualification, and an explicitly interrupted attempt. Those private intermediate reports remain intact. The final run preserves browser request metadata and passed on the quiet owned stand. The stand was stopped afterward, keeping its synthetic data.
+
+This record does not claim an AWS deployment or hosted sign-in rehearsal. Original-file pagination, workbook parsing, tenant denial and member-scoped persistence retain PR42's evidence; those unchanged campaigns were not needlessly rerun.
+
+## Release handoff
+
+The prepared run [41443022905](https://github.com/getforma-dev/forma-app-platform/actions/runs/41443022905) contains the old `60fd6bd` code. At Victor's request it was cancelled, with terminal `updated_at` **2026-11-02 13:22:27 UTC**. It never reached its approval/execution job. The canonical release lock must be safely abandoned before a replacement merge starts preparation; cancellation alone does not clear it.
+
+The supported credential fence ends **2026-11-02 14:27:27 UTC (9:27:27 a.m. Eastern)**. A fresh state inspection and the hash-bound prepared-only abandonment command must prove the old runtime unchanged and healthy, delete only the unused change set and preserve its reservation history. See [the operator steps](../../../docs/pitch/BETA-PROMOTION.md#superseding-a-prepared-release). No force-unlock, bypassed checks or legacy laptop deployment is permitted. The agent owns actionable fixes/PR/merge/start steps under Victor's latest direction; Victor owns waiting for/viewing the pipeline unless explicitly delegated, and can approve the new prepared beta packet. No polling or monitoring automation was installed.
+
+A read-only canonical inspection found the expected prepared candidate, **zero unresolved operations**, all **20 ledger windows**, and the same recorded live candidate (`7c3ab12`). A local projection after hypothetical abandonment showed that the current fourteen-hour expiry-shortening default would refuse another reservation under the original caps. The follow-up operator helper allows a separately reviewed shortening adjustment while idle; it cannot increase caps, refresh billing evidence, remove reservations or change the running schedule. The [hypothetical eighteen-hour projection](expiry-projection.json) stays within the original caps at **16954/20754 cents**, with the next packet's expiry **November 29 at 20:00 UTC**. Actual abandonment, a fresh budget projection and policy application remain distinct actions; none is claimed by this source record.

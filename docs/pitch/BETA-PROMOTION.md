@@ -36,6 +36,60 @@ Recovery uses compatible qualified images through a reviewed release. This pipel
 
 One additional operator-only recovery uses `--reconcile-bootstrap-create-rejection` for the exact CDK bootstrap-version permission rejection observed in APP-167. It requires the same credential fence and reviewed state hash, verifies every upload receipt and actual template bytes, reads a unique matching AWS CloudTrail rejection for the run role/session/time, proves the exact change set absent twice, and checks the complete change-set inventory and healthy unchanged runtime. CloudTrail omitted request parameters in this incident: the record explicitly says the client token comes from the canonical intent, not an independently observed CloudTrail parameter. The original intent is preserved in the immutable reconciliation record and is never labeled a successful call or replayed. Other failures remain refused.
 
+## Superseding a prepared release
+
+If a candidate is awaiting its human approval and a source defect is found, do not approve it or merge a replacement expecting cancellation to clear the release lock. For a fully prepared release that has **never started execution**:
+
+1. Cancel the whole old GitHub run, or reject its pending deployment and confirm the whole run is terminal. Record its actual terminal `updated_at` and candidate SHA.
+2. Allow 65 minutes after that timestamp for the workflow credentials to expire. No agent needs to poll or remain active during this fence.
+3. With the configured state bucket/prefix and an authorized nonworkflow AWS operator identity, use the repository's locked runtime environment:
+
+   ```sh
+   app/runtime/.venv/bin/python -m ops.promotion.maintenance inspect \
+     --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX"
+   ```
+
+   Verify the expected candidate, `prepared` phase and zero unresolved operations. Review the fresh returned state hash, then run:
+
+   ```sh
+   app/runtime/.venv/bin/python -m ops.promotion.maintenance abandon \
+     --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<fresh-reviewed-state-hash>"
+   ```
+
+4. Inspect again and require `active: null`. The command preserves the reservation history and proves the prior runtime healthy and unchanged; it deletes only the unused reviewed change set. A failed check needs investigation, never a forced unlock or blind rerun.
+5. Confirm a new reservation fits the retained budget. If another cancelled attempt exhausted the available allowance, use the separately reviewed [future-expiry policy procedure](#future-expiry-policy) while idle; do not delete reservation history or raise the caps. Then merge the reviewed, qualified fix PR. Its fresh run must pass its own preparation and present a new packet for approval. Approval of an older run never includes later fixes.
+
+There is currently no GitHub-only abandonment workflow. Any started execution or unknown AWS outcome requires operator reconciliation instead of this prepared-only procedure. Required checks and time fences may remain pending at an agent handoff; record the next action rather than monitoring them continuously.
+
+The November 2 spreadsheet follow-up records cancelled candidate `60fd6bd`, run [41443022905](https://github.com/getforma-dev/forma-app-platform/actions/runs/41443022905), and its **14:27:27 UTC** fence in [APP-108's handoff](../../evidence/APP-108/spreadsheet-review-followup-2026-11-02/README.md). It supersedes the older in-progress PR40–42 batch narrative below; it does not claim that abandonment or the replacement deployment has occurred.
+
+## Future-expiry policy
+
+`ops.promotion.expiry_policy` replaces the earlier incident-specific scripts for increasing the persistent number of hours subtracted from the live expiry when preparing a future release. It changes no current AWS schedule and creates no reservation. The next real packet displays its actual shutdown time for approval. The helper only allows a stricter default, bounded at 72 hours, with the proposed expiry still more than 24 hours away; extension/renewal requires separate review.
+
+After safe abandonment, inspect the fresh idle state and use an authorized nonworkflow operator identity. Plan first, retaining a new private output file:
+
+```sh
+app/runtime/.venv/bin/python -m ops.promotion.expiry_policy \
+  --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+  --expected-state-sha256 "<fresh-reviewed-idle-state-hash>" --hours 18 \
+  --output "$PRIVATE_RECONCILIATION/expiry-policy-plan.json"
+```
+
+The eighteen-hour value is the November 2 follow-up proposal, not a universal default. Review its proposed expiry and budget projection. Planning proves a healthy unchanged runtime, no pending change sets and a fresh canonical budget basis. It cannot refresh a stale assessment, reduce reservations, change either original cap (17000/20800 cents), alter authority, or run while a deployment holds the lock. If the plan refuses, investigate its cause rather than increasing hours automatically.
+
+Apply that reviewed value against the same idle hash using another new output path:
+
+```sh
+app/runtime/.venv/bin/python -m ops.promotion.expiry_policy \
+  --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+  --expected-state-sha256 "<same-reviewed-idle-state-hash>" --hours 18 \
+  --output "$PRIVATE_RECONCILIATION/expiry-policy-result.json" --apply
+```
+
+Apply redoes the boundary/projection checks, writes immutable source-bound intent, performs one conditional policy-only update, and verifies exact readback. The ledger, live configuration, authority, schema and every reservation must remain identical; only shortening hours and state revision change. Unknown receipt, write or readback results stop without replay. Inspect private intent and canonical state before any recovery. The CLI reserves a private `0600` output before AWS work and never overwrites an earlier plan/result.
+
 ## Setup record
 
 The `beta-plan` and `beta` GitHub environments allow only the branch `pivot/pitch-mvp`. `beta` requires one approval from Victor-Villacis, with self-review allowed for the sole human owner and administrator bypass disabled. Both settings and branch-policy lists were read back after configuration.

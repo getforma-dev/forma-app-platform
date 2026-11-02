@@ -1,0 +1,46 @@
+{
+  "base_commit": "60fd6bd29348e7b7cbb84e3a5b818c1e94385933",
+  "source_sha256": {
+    "app/admin/src/canvas-vendor/widget-canvas.ts": "75008a64ad806be38a96234289a530bd4fea95c6c78d0b832124cacd004a9f7b",
+    "app/admin/src/canvas/board.ts": "b6287f208a1393912eabb743d5f2ebb4c71a2e53159f0d0ea809d96478b157d1",
+    "app/admin/src/canvas/boxes.ts": "fe123b2e57ca22e012a5604e1aeff932734d9efd46a3a7f8f79ff3c45490ad29",
+    "app/admin/src/canvas/data-sheet.ts": "6350e1cb1984125862d1411d3d0f657537e210861358114e0e0c716a5121a8d6",
+    "app/admin/test/canvas-drag-end.test.ts": "e85542eacc1baaef9578ee501f3a0801ca45c7bc4f8a68f5c9e087ef26c272b8",
+    "app/admin/test/canvas-from-data.test.ts": "eba3dd0ed9b32c259ffac7888f05e3ea4fda985b13efe225feafac713e165049",
+    "app/scripts/sheet_drop_browser.mjs": "fa4a625f6809cf2f6d3a5764102d0c439d2e6664bfa97bb009d32601830d204a"
+  },
+  "just_check": {
+    "passed": true,
+    "groups": 21,
+    "admin_tests": 129,
+    "rust_library_tests": 376,
+    "rust_binary_tests": 8,
+    "rust_doctests": 3,
+    "runtime_tests": 192,
+    "promotion_tests_before_policy_followup": 95,
+    "log_sha256": "3bf516e4d74d58870c8e669fbcdfc0e6f1712a9bc314c3d3e9fd403d0b0e0c20"
+  },
+  "focused_controller_tests": 13,
+  "drag_handler_tests": 9,
+  "browser_checks": 8,
+  "review": {
+    "independent": true,
+    "verdict": "no blocking findings",
+    "additional_finding": "Unconfirmed/partial spreadsheet uploads must not claim nothing was stored or lose companion outcome; fixed and regression-tested."
+  },
+  "deployment_contract_unchanged": "ef8580511349b5f1883979d034be55f5753ea9453ff1e73390c4d2955889c9c0",
+  "aws_deployed": false,
+  "product_commit": "1814038",
+  "policy_helper": {
+    "focused_tests": 17,
+    "full_promotion_tests": 112,
+    "passed": true,
+    "independent_review": "no blocking findings; independently repeated17tests",
+    "source_sha256": {
+      "ops/promotion/expiry_policy.py": "b0967cf77ea20c4525898b8097574e466eded26aa70444077e1e9c88191acdb1",
+      "ops/promotion/test_expiry_policy.py": "b71594c990bb70753f1361db208d38d24e01a324a8d46a8171e2a6a226d57e2a"
+    },
+    "log_sha256": "1a88f7777ac7a999b737f1d4835a470bd79544def78059f21ba0f5e1763d8007",
+    "actual_aws_apply": false
+  }
+}
