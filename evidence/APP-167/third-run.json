@@ -1,0 +1,128 @@
+{
+  "arm64_qualification": "passed; same-run immutable bundle published",
+  "aws_preparation": "passed: OIDC, exact artifacts, ECR publication/scans, actual change set and immutable packet",
+  "candidate_sha": "07ea5aac85b69ad90d7bfb2274fb50395705e26f",
+  "change_set_execution_status": "AVAILABLE",
+  "change_set_status": "CREATE_COMPLETE",
+  "change_types": {
+    "AWS::ECS::Service": 2,
+    "AWS::ECS::TaskDefinition": 6,
+    "AWS::Scheduler::Schedule": 2
+  },
+  "cost_by_month": {
+    "2026-11": {
+      "genui_total_cents": 16967,
+      "project_total_cents": 20767
+    }
+  },
+  "existing_runtime_unchanged": true,
+  "expires_at_utc": "2026-11-30T04:00:00Z",
+  "images": {
+    "operator": "sha256:769719916a18dbbe640d589550c38c7f42eee5226589a94abfb06c8c6479cd99",
+    "qualification": "sha256:13665e74b585f232a579ff958ae2a3cd7742af63a4865643feb43c4f50d77f56",
+    "service": "sha256:5cc8c73afbf03b85d968eb5bc51b72dd42e557ae75db358b859bd1fc62e672f9"
+  },
+  "live_promotion_completed": false,
+  "merged_pr": "https://github.com/getforma-dev/forma-app-platform/pull/46",
+  "migration_task_execution": false,
+  "packet_sha256": "dd7efc2ca6e91b2f9bdb4a58bf777c0e08caeed6c4c46a1232794a69a6f31422",
+  "promotion_id": "46f4f101-c434-4c02-b01a-6ebfee7d9418",
+  "required_push_workflows": [
+    {
+      "conclusion": "success",
+      "name": "Auth consumer qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932993"
+    },
+    {
+      "conclusion": "success",
+      "name": "Bounded query qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932724"
+    },
+    {
+      "conclusion": "success",
+      "name": "Contract qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932839"
+    },
+    {
+      "conclusion": "success",
+      "name": "Foundation preparation",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932891"
+    },
+    {
+      "conclusion": "success",
+      "name": "Parser qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932831"
+    },
+    {
+      "conclusion": "success",
+      "name": "Parser release qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932948"
+    },
+    {
+      "conclusion": "success",
+      "name": "Pitch campaigns",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420933084"
+    },
+    {
+      "conclusion": "success",
+      "name": "Planning integrity",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932736"
+    },
+    {
+      "conclusion": "success",
+      "name": "Published canvas consumer",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932871"
+    },
+    {
+      "conclusion": "success",
+      "name": "Released baseline",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932727"
+    },
+    {
+      "conclusion": "success",
+      "name": "Synthetic fixture qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932799"
+    },
+    {
+      "conclusion": "success",
+      "name": "Tenant foundation qualification",
+      "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932913"
+    }
+  ],
+  "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932781",
+  "scan": {
+    "operator": {
+      "disposition_sha256": "a79596f31e62f5d03084fb476f5c39e928de4bf4810637e1f0914caae66b2f29",
+      "findings": 24,
+      "introduced": 3,
+      "review_expires_at_utc": "2026-11-09T00:00:00Z",
+      "reviewed": [
+        "CVE-2026-114690",
+        "CVE-2026-114691",
+        "CVE-2026-115455"
+      ],
+      "reviewed_count": 3,
+      "unreviewed": 0
+    },
+    "qualification": {
+      "disposition_sha256": null,
+      "findings": 24,
+      "introduced": 0,
+      "review_expires_at_utc": null,
+      "reviewed": [],
+      "reviewed_count": 0,
+      "unreviewed": 0
+    },
+    "service": {
+      "disposition_sha256": null,
+      "findings": 24,
+      "introduced": 0,
+      "review_expires_at_utc": null,
+      "reviewed": [],
+      "reviewed_count": 0,
+      "unreviewed": 0
+    }
+  },
+  "schema_version": 19,
+  "status": "prepared; waiting for the requested human beta approval"
+}
