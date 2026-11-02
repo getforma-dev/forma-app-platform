@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "date_utc": "2026-11-02",
+  "scope": "PR44 independent local qualification and test-only timeout repair",
+  "merged_base_sha": "a8d5b096adcc246253de894ff176c18aef478165",
+  "trunk_merged_sha": "07ea5aac85b69ad90d7bfb2274fb50395705e26f",
+  "sources": {
+    "app/src/storage/command_qualification.rs": "0b884e33083d6b2f7c626a7ba8344999346fe85908fa359d0d46a53f61d1fe9d",
+    "app/src/storage/race_qualification.rs": "91beceed061e11410ebe1eb276b65f7f298ce16ecd8964bb0d15617574e734c2"
+  },
+  "production_commands_and_pool_unchanged_from_merged_base": true,
+  "checks": [
+    {
+      "command": "just check",
+      "passed": true,
+      "steps": 21,
+      "scope": "Reviewed merged base before the final test-only fixture repair; retained parent run"
+    },
+    {
+      "command": "just campaign command",
+      "passed": true,
+      "checks": 21,
+      "commits": 8,
+      "native_test_seconds": 30.38
+    },
+    {
+      "command": "just campaign race",
+      "passed": true,
+      "checks": 26,
+      "commits": 17,
+      "native_test_seconds": 37.33
+    },
+    {
+      "command": "just check fmt clippy",
+      "passed": true,
+      "steps": 2
+    }
+  ],
+  "prior_failed_attempts": [
+    {
+      "log": "command.log",
+      "finding": "Serial same-key and distinct-key waits held one command past its idle transaction limit; the distinct-key contender committed instead of returning InFlight."
+    },
+    {
+      "log": "command-fixed.log",
+      "finding": "Concurrent contenders could not both reach SQL behind the holder; observed two-waiter barrier timed out."
+    },
+    {
+      "log": "command-fixed-pools.log",
+      "finding": "Separate Stores still share the process-wide two-Data-connection cap; observed two-waiter barrier timed out."
+    }
+  ],
+  "private_log_hashes": {
+    "just-check.log": "9d6ceb632ee71de11ebf350aee87a083ec435b0a40f1722a4103c79611996b57",
+    "race.log": "d7862354c4f188b21ecdad8677e7a2bbe3eaf91b0a56ba02cb05d8915cc3b579",
+    "command.log": "2e3f18e5992a04d3c2ebd5b34db414afa19b024ca0dfb9d4f37df1e64c969358",
+    "command-fixed.log": "08df97106ee88b5f530b1d4f814673b654251014b7992c6c0e885bed7c4eb1e9",
+    "command-fixed-pools.log": "7ed231448d9bc4250ee9e4ae5d82e0761e27b4b8c7dffd0d79f8b8a68ae10738",
+    "command-bounded-holders.log": "8bfc7aa374d8251eaae0f6732d19a9272bd46a55f3e3866a912bca96ea379493",
+    "race-bounded-holders.log": "40b0b56f2889b31a6975b642b7f5b18763ec527aedb1b76f692f640f4cb7d2b8",
+    "focused-check.log": "2455222ebc40a00011a5dffb0d03fa71791b5a318311011ac3e48d6ae5a86924"
+  },
+  "retained_report_hashes": {
+    "command-campaign.json": "95662a86628a8df8524e8d730445b0538e2ee8aa609f4741026711afdff3ae1d",
+    "race-campaign.json": "398a9906fb7f4853bd4790dc91595e6a0cbe836f9ca5287b26efb3451c368f1c"
+  },
+  "remaining": [
+    "APP-014 m2: enrich every command report check with actual observed statuses, versions, epochs, counts and applicable lock observation; existing 21-check entries remain name/passed only.",
+    "Exact final pushed-head CI and source landing are not asserted by these local receipts.",
+    "No managed/RDS or hosted qualification; APP-080 owns the managed lock-observation repeat."
+  ],
+  "production_timeout_ms": {
+    "lock": 1000,
+    "idle_transaction": 3000
+  },
+  "process_wide_data_connections": 2
+}

@@ -158,7 +158,7 @@ async fn quiet(fixture: &Fixture) {
     );
 }
 
-/// The waiting backend, its ungranted tuple relation when it has one, and its blocker.
+/// The waiting backend, its granted tuple relation when PostgreSQL exposes one, and its blocker.
 async fn observe_lock(fixture: &Fixture) -> LockObservation {
     let operator = fixture.operator().await;
     timeout(Duration::from_secs(10), async {

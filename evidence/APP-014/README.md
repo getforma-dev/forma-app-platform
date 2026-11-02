@@ -1,5 +1,7 @@
 # APP-014 — command retries, conflicts and both authorization race orders (plan Task 11)
 
+**Current incremental review (2026-11-02):** [PR 44 review and fixture repair](pr44-review/README.md) retains the final passing 21-check command and 26-check race runs, the failed timing attempts and remaining command-report m2 work. APP-014 remains In progress; no complete-ticket acceptance is claimed. The dated sections below preserve earlier runs and their original limits.
+
 Date 2026-10-29. Base `ea8ba23` (APP-013 merged). Status: implemented and qualified **locally** on disposable PostgreSQL 16.13 in Docker with verified TLS. No hosted run, no managed (RDS) run, no CI run, no independent review yet (ADR-010 §4.1 Tier B); ticket not moved (no `Tickets/` or `docs/` edits). The RDS lock-observation repeat of these race orders is APP-080's (ADR-008, ADR-010 §5).
 
 ## Re-run after the APP-013 M1 rule (2026-10-30)
@@ -20,7 +22,7 @@ Check wording changed (group `same_key_and_different_key_races_commit_exactly_on
 
 ## Lock identity and observed values (2026-11-02)
 
-The Tier B review's m1 and m2 are applied in `race_qualification.rs`. Before the second actor starts, the campaign asserts zero lock waiters. Each waited race then records the waiting backend, `wait_event`, granted tuple relations, blocking pids and the blocker's state. A same-key claim and a lock held past `lock_timeout` are a `transactionid` wait with one `idle in transaction` blocker. A different-key race records `genui.organization_sequences`. Adoption records `genui.saved_work`. Revocation records `genui.memberships`. Each group check now keeps those values beside `name` and `passed`.
+The Tier B review's m1 and the race-report portion of m2 are applied in `race_qualification.rs`; the command-report portion of m2 remains open. Before the second actor starts, the campaign asserts zero lock waiters. Each waited race then records the waiting backend, `wait_event`, granted tuple relations, blocking pids and the blocker's state. A same-key claim and a lock held past `lock_timeout` are a `transactionid` wait with one `idle in transaction` blocker. A different-key race records `genui.organization_sequences`. Adoption records `genui.saved_work`. Revocation records `genui.memberships`. Each group check now keeps those values beside `name` and `passed`.
 
 Local run on this worktree, Docker PostgreSQL, `GENUI_NATIVE_FIXTURE_PYTHON` this checkout's `app/runtime/.venv`: `storage::race_qualification::native_race_campaign` passed, 26 checks, 17 commits, 37,720 ms. Report: [race-campaign-observed.json](race-campaign-observed.json) (`passed: true`). This is not an independent review and not a hosted or RDS run.
 
