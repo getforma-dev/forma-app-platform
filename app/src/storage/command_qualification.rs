@@ -732,13 +732,12 @@ async fn campaign() {
     );
 
     // --- in flight: the same key while the first command holds its claim ---
-    hooks.arm("record_lock");
-    let paused_stores = stores.clone();
     let paused_command = on(
         IN_FLIGHT_RECORD,
         command(&s05, IK[5], 0, 1, values("needs_context", "A")),
     );
-    let a = {
+    let spawn_holder = || {
+        let paused_stores = stores.clone();
         let request_command = paused_command.clone();
         tokio::spawn(async move {
             let author = request(&paused_stores, ORG, AUTHOR, 1);
@@ -748,7 +747,16 @@ async fn campaign() {
                 .await
         })
     };
+    hooks.arm("record_lock");
+    let a = spawn_holder();
     paused(&hooks).await;
+    let observer = fixture.operator().await;
+    let holder_pid: i32 = observer
+        .client
+        .query_one("SELECT pid FROM pg_stat_activity WHERE datname='genui' AND state='idle in transaction'", &[])
+        .await
+        .unwrap()
+        .get(0);
     let b_stores = stores.clone();
     let b_command = paused_command.clone();
     let b = tokio::spawn(async move {
@@ -757,7 +765,37 @@ async fn campaign() {
     });
     lock_wait(&fixture, 1).await;
     assert_eq!(b.await.unwrap(), Ok(CommandResult::InFlight));
-    // A different key behind the paused command waits on the sequence row.
+    assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
+    // Two serial one-second waits can exhaust the holder's three-second idle
+    // deadline under load. A third concurrent data connection is forbidden by
+    // the process-wide two-slot bound, even with independent Stores. Cancel
+    // this uncommitted holder and observe its connection leave PostgreSQL
+    // before repeating the same command for the distinct-key timeout case.
+    a.abort();
+    assert!(a.await.unwrap_err().is_cancelled());
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let present: bool = observer
+                .client
+                .query_one(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$1)",
+                    &[&holder_pid],
+                )
+                .await
+                .unwrap()
+                .get(0);
+            if !present {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("cancelled holder connection removed");
+    assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
+    hooks.arm("record_lock");
+    let a = spawn_holder();
+    paused(&hooks).await;
     let c_stores = stores.clone();
     let c_command = on(
         IN_FLIGHT_RECORD,
@@ -796,7 +834,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
     check(
         &mut checks,
-        "while a command holds its claim, sequence and record locks, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the released command commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
+        "in two bounded holder cycles, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the first holder is cancelled and its PostgreSQL connection disappears without a write before the second starts; the released second holder commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
     );
 
     // --- busy: a lock wait on the authorization fence ---

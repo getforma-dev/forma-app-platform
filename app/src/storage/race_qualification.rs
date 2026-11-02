@@ -16,7 +16,7 @@
 //! command route with a minted workspace session, and every write (or its
 //! absence) on the database itself.
 use super::{
-    admission_qualification::{accepted, cli_command, lock_wait, operator, wait},
+    admission_qualification::{accepted, cli_command, operator, wait},
     command_qualification::{
         committed, conflict, json_headers, paused, scalar, send, values, vault_token, Reply,
         TestPages,
@@ -125,6 +125,107 @@ async fn lock_waiters(fixture: &Fixture) -> i64 {
         "SELECT count(*) FROM pg_stat_activity WHERE datname='genui' AND wait_event_type='Lock'",
     )
     .await
+}
+
+/// One backend of this database waiting on a heavyweight lock: who, what, and who blocks it.
+#[derive(Clone, Debug)]
+struct LockObservation {
+    pid: i32,
+    wait_event: String,
+    relations: Vec<String>,
+    blockers: Vec<i32>,
+    blocker_state: Option<String>,
+}
+
+impl LockObservation {
+    fn json(&self) -> Value {
+        json!({
+            "pid": self.pid,
+            "wait_event": self.wait_event,
+            "relations": self.relations,
+            "blockers": self.blockers,
+            "blocker_state": self.blocker_state,
+        })
+    }
+}
+
+/// No lock waiter yet. Called after the first actor is paused and before the second starts.
+async fn quiet(fixture: &Fixture) {
+    assert_eq!(
+        lock_waiters(fixture).await,
+        0,
+        "a lock waiter was already present"
+    );
+}
+
+/// The waiting backend, its granted tuple relation when PostgreSQL exposes one, and its blocker.
+async fn observe_lock(fixture: &Fixture) -> LockObservation {
+    let operator = fixture.operator().await;
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let rows = operator
+                .client
+                .query(
+                    "SELECT a.pid, a.wait_event, \
+                     COALESCE(array_agg(DISTINCT l.relation::regclass::text) \
+                       FILTER (WHERE l.relation IS NOT NULL), '{}'), \
+                     pg_blocking_pids(a.pid), \
+                     (SELECT b.state FROM pg_stat_activity b \
+                      WHERE b.pid = (pg_blocking_pids(a.pid))[1]) \
+                     FROM pg_stat_activity a \
+                     LEFT JOIN pg_locks l ON l.pid = a.pid AND l.locktype = 'tuple' AND l.granted \
+                     WHERE a.datname = 'genui' AND a.wait_event_type = 'Lock' \
+                     GROUP BY a.pid, a.wait_event",
+                    &[],
+                )
+                .await
+                .unwrap();
+            if let Some(row) = rows
+                .iter()
+                .find(|row| !row.get::<_, Vec<i32>>(3).is_empty())
+            {
+                return LockObservation {
+                    pid: row.get(0),
+                    wait_event: row.get(1),
+                    relations: row.get(2),
+                    blockers: row.get(3),
+                    blocker_state: row.get(4),
+                };
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("observed lock wait")
+}
+
+fn names(wait: &LockObservation, table: &str) -> bool {
+    wait.relations
+        .iter()
+        .any(|relation| relation == table || relation.ends_with(&format!(".{table}")))
+}
+
+fn on_relation(wait: &LockObservation, table: &str) {
+    assert!(
+        names(wait, table),
+        "waited on {:?} ({}) for {table}; blockers {:?} state {:?}",
+        wait.relations,
+        wait.wait_event,
+        wait.blockers,
+        wait.blocker_state
+    );
+    assert!(!wait.blockers.is_empty(), "lock wait had no blocker");
+}
+
+/// A same-key claim waits on the in-flight transaction, not on a tuple.
+fn on_claim(wait: &LockObservation) {
+    assert_eq!(wait.wait_event, "transactionid", "{wait:?}");
+    assert_eq!(wait.blockers.len(), 1, "{wait:?}");
+    assert_eq!(
+        wait.blocker_state.as_deref(),
+        Some("idle in transaction"),
+        "{wait:?}"
+    );
 }
 
 /// A command of `principal` at `epoch` through the storage module, in its own task.
@@ -335,8 +436,13 @@ impl Group {
             checks: Vec::new(),
         }
     }
-    fn check(&mut self, name: &str) {
-        check(&mut self.checks, &format!("{}: {name}", self.name));
+    fn check(&mut self, name: &str, observed: Value) {
+        self.checks.push(json!({
+            "name": format!("{}: {name}", self.name),
+            "passed": true,
+            "observed": observed,
+        }));
+        println!("APP014 check: {name}");
     }
     fn close(self, report: &mut Vec<Value>) {
         report.push(json!({
@@ -455,7 +561,7 @@ async fn campaign() {
     assert_eq!(tally(&fixture, &r1).await, [2, 2, 2]);
     assert_eq!(claims(&fixture).await, claims_before);
     assert_eq!(current_version(&fixture, &r1).await, 2);
-    group.check("a committed command whose response is lost, retried with the same scoped key and payload and its now-stale expected version 0 after another edit reached version 2, returns the original outcome (record version 1) byte-identically on the route (200) and as Replayed in storage; the lookup by key returns the same; one revision, one outcome and one command.committed event per command, no new claim");
+    group.check("a committed command whose response is lost, retried with the same scoped key and payload and its now-stale expected version 0 after another edit reached version 2, returns the original outcome (record version 1) byte-identically on the route (200) and as Replayed in storage; the lookup by key returns the same; one revision, one outcome and one command.committed event per command, no new claim", json!({"status": 200, "record_version": 2, "tally": [2, 2, 2], "claims": claims_before}));
 
     let mut edited = k1.clone();
     edited.values = values("needs_context", "lost response — edited");
@@ -470,7 +576,7 @@ async fn campaign() {
         values("reviewed", "moved on — synthetic")
     );
     assert_eq!(tally(&fixture, &r1).await, [2, 2, 2]);
-    group.check("the lost key reused with a changed payload conflicts (409 conflict) with the authorized recovery view naming the original outcome and the record's current version 2 and values; nothing is written");
+    group.check("the lost key reused with a changed payload conflicts (409 conflict) with the authorized recovery view naming the original outcome and the record's current version 2 and values; nothing is written", json!({"status": 409, "reason": "payload_mismatch", "record_version": 2, "tally": [2, 2, 2]}));
 
     // Current authorization precedes disclosure: without `run` on the app the
     // creator holds no record_write, and the stored outcome is not delivered.
@@ -511,7 +617,7 @@ async fn campaign() {
         Ok(CommandResult::Replayed(o1.clone()))
     );
     assert_eq!(tally(&fixture, &r1).await, [2, 2, 2]);
-    group.check("current authorization precedes outcome disclosure: after the operator revokes the author's app run grant (epoch advanced) the retry and the lookup are the uniform 404 and Denied at the old and the new epoch; once run is granted again the same retry returns the original outcome; nothing is written either way");
+    group.check("current authorization precedes outcome disclosure: after the operator revokes the author's app run grant (epoch advanced) the retry and the lookup are the uniform 404 and Denied at the old and the new epoch; once run is granted again the same retry returns the original outcome; nothing is written either way", json!({"revoked_epoch": revoked_epoch, "tally": [2, 2, 2]}));
 
     // Restart every pool and store, then retry the lost key again.
     drop(app);
@@ -544,7 +650,7 @@ async fn campaign() {
         Ok(CommandResult::Replayed(o1.clone()))
     );
     assert_eq!(tally(&fixture, &r1).await, [2, 2, 2]);
-    group.check("after every pool and store is replaced (the old session ended with its vault), the lost key retried on a fresh session still returns the original outcome byte-identically and replays in storage; still exactly two revisions, outcomes and events for the record");
+    group.check("after every pool and store is replaced (the old session ended with its vault), the lost key retried on a fresh session still returns the original outcome byte-identically and replays in storage; still exactly two revisions, outcomes and events for the record", json!({"status": 200, "tally": [2, 2, 2]}));
     group.close(&mut groups);
 
     // ===================================================================
@@ -564,8 +670,10 @@ async fn campaign() {
     hooks.arm("record_lock");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &a);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let second = spawn_command(&stores, AUTHOR, author_epoch, &a);
-    lock_wait(&fixture, 1).await;
+    let waited_claim = observe_lock(&fixture).await;
+    on_claim(&waited_claim);
     hooks.release.notify_one();
     let oa = committed(first.await.unwrap());
     assert_eq!(oa.record_version, 1);
@@ -574,7 +682,7 @@ async fn campaign() {
         Ok(CommandResult::Replayed(oa.clone()))
     );
     assert_eq!(tally(&fixture, &r2).await, [1, 1, 1]);
-    group.check("two submissions of the same key and payload race: the second waits on the first's in-flight claim (observed in pg_stat_activity), and when the first commits version 1 the second returns that outcome as Replayed; exactly one revision, outcome and event");
+    group.check("two submissions of the same key and payload race: the second waits on the first's in-flight claim (observed in pg_stat_activity), and when the first commits version 1 the second returns that outcome as Replayed; exactly one revision, outcome and event", json!({"lock": waited_claim.json(), "record_version": oa.record_version, "tally": [1, 1, 1]}));
 
     // Same key, changed payload, racing.
     let b = command(
@@ -590,8 +698,10 @@ async fn campaign() {
     hooks.arm("record_lock");
     let first = spawn_command(&stores, REVIEWER, reviewer_epoch, &b);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let second = spawn_command(&stores, REVIEWER, reviewer_epoch, &b_changed);
-    lock_wait(&fixture, 1).await;
+    let waited_payload = observe_lock(&fixture).await;
+    on_claim(&waited_payload);
     hooks.release.notify_one();
     let ob = committed(first.await.unwrap());
     assert_eq!(ob.record_version, 2);
@@ -603,7 +713,7 @@ async fn campaign() {
         (2, Some(values("reviewed", "B — synthetic")))
     );
     assert_eq!(tally(&fixture, &r2).await, [2, 2, 2]);
-    group.check("the same key with a changed payload racing an in-flight command waits on its claim, then conflicts (payload_mismatch) with the recovery view naming the committed outcome and the current values; exactly one write");
+    group.check("the same key with a changed payload racing an in-flight command waits on its claim, then conflicts (payload_mismatch) with the recovery view naming the committed outcome and the current values; exactly one write", json!({"lock": waited_payload.json(), "record_version": ob.record_version, "reason": "payload_mismatch", "tally": [2, 2, 2]}));
 
     // APP-013 M1 under race: the record has taken its only declared
     // transition (needs_context → reviewed), so a third commit on version 2
@@ -631,8 +741,10 @@ async fn campaign() {
     hooks.arm("record_lock");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &note_only);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let second = spawn_command(&stores, AUTHOR, author_epoch, &reverse);
-    lock_wait(&fixture, 1).await;
+    let waited_third = observe_lock(&fixture).await;
+    on_relation(&waited_third, "organization_sequences");
     hooks.release.notify_one();
     assert_eq!(first.await.unwrap(), Err(Error::Denied));
     assert_eq!(second.await.unwrap(), Err(Error::Denied));
@@ -655,7 +767,7 @@ async fn campaign() {
     assert_eq!(current_version(&fixture, &r2).await, 2);
     assert_eq!(claims(&fixture).await, claims_before);
     assert_eq!(next_sequence(&fixture).await, sequence_before);
-    group.check("APP-013 M1 under race: on a record that has taken its only declared transition (version 2, reviewed), two different keys racing a third commit on version 2 (a note-only edit and the undeclared reverse transition) serialize, the second waiting on the organization sequence row (observed) while the first holds the record row, and both are refused (Denied); on the route both and a resubmission of the current values are the uniform 404; the record keeps two revisions, outcomes and events, no claim remains and the organization sequence does not advance");
+    group.check("APP-013 M1 under race: on a record that has taken its only declared transition (version 2, reviewed), two different keys racing a third commit on version 2 (a note-only edit and the undeclared reverse transition) serialize, the second waiting on the organization sequence row (observed) while the first holds the record row, and both are refused (Denied); on the route both and a resubmission of the current values are the uniform 404; the record keeps two revisions, outcomes and events, no claim remains and the organization sequence does not advance", json!({"lock": waited_third.json(), "tally": [2, 2, 2], "version": 2, "claims": claims_before, "sequence": sequence_before}));
 
     // Different keys on the same expected version: the second waits on the
     // organization sequence, then conflicts on the moved version. A fresh
@@ -698,8 +810,10 @@ async fn campaign() {
     hooks.arm("record_lock");
     let first = spawn_command(&stores, REVIEWER, reviewer_epoch, &c);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let second = spawn_command(&stores, REVIEWER, reviewer_epoch, &d);
-    lock_wait(&fixture, 1).await;
+    let waited_cd = observe_lock(&fixture).await;
+    on_relation(&waited_cd, "organization_sequences");
     hooks.release.notify_one();
     let oc = committed(first.await.unwrap());
     assert_eq!(oc.record_version, 2);
@@ -739,7 +853,7 @@ async fn campaign() {
     );
     assert_eq!(tally(&fixture, &r6).await, [2, 2, 2]);
     assert_eq!(claims(&fixture).await, claims_before);
-    group.check("two different keys expecting version 1 (needs_context) race to fire the record's transition: the second waits on the organization sequence row (observed), then conflicts (expected 1, current 2, the winner's values, no stored outcome) without writing; the recovery view shows the transition taken, so a recovery on version 2 under a new key is refused (Denied in storage, the uniform 404 on the route; no declared transition is left to fire) and the stale edit stays a conflict; the record keeps two revisions, outcomes and events");
+    group.check("two different keys expecting version 1 (needs_context) race to fire the record's transition: the second waits on the organization sequence row (observed), then conflicts (expected 1, current 2, the winner's values, no stored outcome) without writing; the recovery view shows the transition taken, so a recovery on version 2 under a new key is refused (Denied in storage, the uniform 404 on the route; no declared transition is left to fire) and the stale edit stays a conflict; the record keeps two revisions, outcomes and events", json!({"lock": waited_cd.json(), "expected": 1, "current": 2, "tally": [2, 2, 2]}));
 
     // The same races through the route while the first command holds its
     // locks past lock_timeout: 409 in_flight with Retry-After, never 503.
@@ -821,7 +935,7 @@ async fn campaign() {
     assert_eq!(tally(&fixture, &r6).await, [2, 2, 2]);
     assert_eq!(tally(&fixture, &r7).await, [1, 1, 1]);
     assert_eq!(tally(&fixture, &r8).await, [2, 2, 2]);
-    group.check("on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version, current version 1 with the winner's values) until its authorized recovery on version 1 commits the record's transition (version 2); seven intended writes in the group, matched by exactly seven revisions, outcomes and events (two, two, one and two on its four records)");
+    group.check("on the route, the same key behind a command holding its claim and a different key behind its sequence lock each wait past lock_timeout and answer 409 in_flight with Retry-After: 2 (never 503) with nothing written; after the holder commits, the same key returns its outcome (200) and the different key conflicts (409 expected_version, current version 1 with the winner's values) until its authorized recovery on version 1 commits the record's transition (version 2); seven intended writes in the group, matched by exactly seven revisions, outcomes and events (two, two, one and two on its four records)", json!({"tallies": [[2, 2, 2], [2, 2, 2], [1, 1, 1], [2, 2, 2]]}));
     group.close(&mut groups);
 
     // ===================================================================
@@ -872,7 +986,7 @@ async fn campaign() {
         author_document
     );
     assert_eq!(tally(&fixture, &r3).await, [1, 1, 1]);
-    group.check("while the author's identical retry holds its fences, another principal with record_write submitting the author's key and payload gets its own fresh claim judged on its own premise (409 conflict expected_version, no stored outcome, no lock wait) and its lookup by that key finds nothing (404 on the route); the author's retry replays and the author's lookup returns the outcome");
+    group.check("while the author's identical retry holds its fences, another principal with record_write submitting the author's key and payload gets its own fresh claim judged on its own premise (409 conflict expected_version, no stored outcome, no lock wait) and its lookup by that key finds nothing (404 on the route); the author's retry replays and the author's lookup returns the outcome", json!({"reason": "expected_version", "lock_waiters": 0, "tally": [1, 1, 1]}));
 
     let bystander_cookie = mint(&stores, &auth, PRINCIPAL).await;
     problem(
@@ -920,7 +1034,7 @@ async fn campaign() {
             operator.client.batch_execute("ROLLBACK").await.unwrap();
         }
     }
-    group.check("a member without record_write gets the uniform 404 for the key's lookup and submission, the canary organization's member is Denied, and at the row level the data role under the reviewer's scope sees none of the author's claims or outcomes under the key (one under the author's)");
+    group.check("a member without record_write gets the uniform 404 for the key's lookup and submission, the canary organization's member is Denied, and at the row level the data role under the reviewer's scope sees none of the author's claims or outcomes under the key (one under the author's)", json!({"reviewer_rows": 0, "author_rows": 1}));
 
     // Both principals hold their own outcomes under the same key string.
     let reviewer_own = command(
@@ -1002,7 +1116,7 @@ async fn campaign() {
     );
     assert_eq!(tally(&fixture, &r3).await, [2, 2, 2]);
     assert_eq!(tally(&fixture, &r9).await, [1, 1, 1]);
-    group.check("the scope includes the principal: the reviewer's own command under the author's key string commits its own outcome and each principal's lookup returns only its own; while the author's fresh claim is in flight the reviewer's same-key command neither waits nor replays it and commits, and the author's command then conflicts on the moved version with its claim released");
+    group.check("the scope includes the principal: the reviewer's own command under the author's key string commits its own outcome and each principal's lookup returns only its own; while the author's fresh claim is in flight the reviewer's same-key command neither waits nor replays it and commits, and the author's command then conflicts on the moved version with its claim released", json!({"r3": [2, 2, 2], "r9": [1, 1, 1], "claims_key_20": 2, "claims_key_21": 1}));
     group.close(&mut groups);
 
     // ===================================================================
@@ -1032,7 +1146,7 @@ async fn campaign() {
     );
     assert_eq!(tally(&fixture, &r4).await, [0, 0, 0]);
     assert_eq!(claims(&fixture).await, claims_before);
-    group.check("adoption first: a command paused after its precheck resumes after the D7.4 test-only adoption (saved work FOR UPDATE, version 1 → 2) committed, and its work fence answers Stale naming the current publication and version 2; no revision, outcome, event or claim remains");
+    group.check("adoption first: a command paused after its precheck resumes after the D7.4 test-only adoption (saved work FOR UPDATE, version 1 → 2) committed, and its work fence answers Stale naming the current publication and version 2; no revision, outcome, event or claim remains", json!({"work_version": 2, "tally": [0, 0, 0], "claims": claims_before}));
 
     // Adoption first holding its lock; it commits while the command waits.
     let k31 = command(
@@ -1047,14 +1161,16 @@ async fn campaign() {
     let reply = spawn_post(&app, &s05, &author_cookie, &k31);
     paused(&hooks).await;
     let writer = hold(&fixture, &adopt(&work)).await;
+    quiet(&fixture).await;
     hooks.release.notify_one();
-    lock_wait(&fixture, 1).await;
+    let waited_adopt = observe_lock(&fixture).await;
+    on_relation(&waited_adopt, "saved_work");
     finish(writer, "COMMIT").await;
     let reply = reply.await.unwrap();
     problem(&reply, StatusCode::PRECONDITION_FAILED, "stale");
     assert_eq!(reply.json()["current_revision"]["work_version"], 3);
     assert_eq!(tally(&fixture, &r4).await, [0, 0, 0]);
-    group.check("adoption first with its lock held: the resumed route command's claim waits on the adoption writer's saved-work lock (observed), the writer commits version 3 during the wait, and the route answers 412 stale naming version 3; nothing is written");
+    group.check("adoption first with its lock held: the resumed route command's claim waits on the adoption writer's saved-work lock (observed), the writer commits version 3 during the wait, and the route answers 412 stale naming version 3; nothing is written", json!({"lock": waited_adopt.json(), "work_version": 3, "status": 412, "tally": [0, 0, 0]}));
 
     // The adoption writer holds past lock_timeout: in_flight (its FOR UPDATE
     // blocks the claim's reference) or busy (a FOR NO KEY UPDATE lets the
@@ -1067,20 +1183,24 @@ async fn campaign() {
         3,
         values("needs_context", "held past timeout — synthetic"),
     );
+    let mut held_timeouts = Vec::new();
     for (statements, code) in [(adopt(&work), "in_flight"), (touch_work(&work), "busy")] {
         hooks.arm("precheck");
         let reply = spawn_post(&app, &s05, &author_cookie, &k32);
         paused(&hooks).await;
         let writer = hold(&fixture, &statements).await;
+        quiet(&fixture).await;
         hooks.release.notify_one();
-        lock_wait(&fixture, 1).await;
+        let waited = observe_lock(&fixture).await;
+        on_claim(&waited);
+        held_timeouts.push(json!({"code": code, "lock": waited.json()}));
         problem(&reply.await.unwrap(), StatusCode::CONFLICT, code);
         finish(writer, "ROLLBACK").await;
     }
     assert_eq!(work_version(&fixture, &work).await, 3);
     assert_eq!(tally(&fixture, &r4).await, [0, 0, 0]);
     assert_eq!(claims(&fixture).await, claims_before);
-    group.check("an adoption writer holding the saved work past lock_timeout: FOR UPDATE blocks the claim's reference and the route answers 409 in_flight; a FOR NO KEY UPDATE holder passes the claim and blocks the work fence, answering 409 busy; both with Retry-After: 2, never 503, nothing written, and the writer's rollback leaves version 3");
+    group.check("an adoption writer holding the saved work past lock_timeout: FOR UPDATE blocks the claim's reference and the route answers 409 in_flight; a FOR NO KEY UPDATE holder passes the claim and blocks the work fence, answering 409 busy; both with Retry-After: 2, never 503, nothing written, and the writer's rollback leaves version 3", json!({"locks": held_timeouts, "work_version": 3, "tally": [0, 0, 0]}));
 
     // Command first: the command holds the work FOR SHARE; adoption waits.
     let k34 = command(
@@ -1094,8 +1214,10 @@ async fn campaign() {
     hooks.arm("record_lock");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &k34);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let adoption = spawn_writer(fixture.operator().await, adopt(&work));
-    lock_wait(&fixture, 1).await;
+    let waited_command_first = observe_lock(&fixture).await;
+    on_relation(&waited_command_first, "saved_work");
     assert_eq!(work_version(&fixture, &work).await, 3);
     hooks.release.notify_one();
     let o34 = committed(first.await.unwrap());
@@ -1133,7 +1255,7 @@ async fn campaign() {
     let o36 = committed(commit(&stores, REVIEWER, reviewer_epoch, &k35_recovered).await);
     assert_eq!((o36.record_version, o36.work_version), (2, 4));
     assert_eq!(tally(&fixture, &r4).await, [2, 2, 2]);
-    group.check("command first: while the command holds the work FOR SHARE (paused at its record lock) the adoption writer waits (observed); the command commits version 1 on work version 3, then the adoption commits version 4; the committed outcome stays recorded and its identical retry replays it (200, work_version 3), a new edit on work version 3 is 412 stale naming 4, and its recovery on version 4 commits record version 2");
+    group.check("command first: while the command holds the work FOR SHARE (paused at its record lock) the adoption writer waits (observed); the command commits version 1 on work version 3, then the adoption commits version 4; the committed outcome stays recorded and its identical retry replays it (200, work_version 3), a new edit on work version 3 is 412 stale naming 4, and its recovery on version 4 commits record version 2", json!({"lock": waited_command_first.json(), "record_version": o36.record_version, "work_version": o36.work_version, "tally": [2, 2, 2]}));
 
     // The claim is the earliest fence: a command that has only claimed its key
     // already holds the saved work's key share, so the adoption waits for it
@@ -1150,8 +1272,10 @@ async fn campaign() {
     hooks.arm("outcome");
     let first = spawn_command(&stores, AUTHOR, author_epoch, &k37);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let adoption = spawn_writer(fixture.operator().await, adopt(&work));
-    lock_wait(&fixture, 1).await;
+    let waited_claim_share = observe_lock(&fixture).await;
+    on_relation(&waited_claim_share, "saved_work");
     hooks.release.notify_one();
     let o37 = committed(first.await.unwrap());
     assert_eq!((o37.record_version, o37.work_version), (1, 4));
@@ -1162,7 +1286,7 @@ async fn campaign() {
     assert_eq!(work_version(&fixture, &work).await, 5);
     assert_eq!(tally(&fixture, &r4).await, [2, 2, 2]);
     assert_eq!(tally(&fixture, &r10).await, [1, 1, 1]);
-    group.check("a command paused right after its claim already holds the saved work's key share: the adoption writer's FOR UPDATE waits on it (observed), the command's work fence then takes FOR SHARE ahead of the queued writer without deadlock and commits on work version 4, and the adoption commits version 5 afterwards");
+    group.check("a command paused right after its claim already holds the saved work's key share: the adoption writer's FOR UPDATE waits on it (observed), the command's work fence then takes FOR SHARE ahead of the queued writer without deadlock and commits on work version 4, and the adoption commits version 5 afterwards", json!({"lock": waited_claim_share.json(), "record_version": o37.record_version, "work_version": 5, "tally_r10": [1, 1, 1]}));
     group.close(&mut groups);
     let work_now = work_version(&fixture, &work).await;
 
@@ -1216,7 +1340,7 @@ async fn campaign() {
     );
     assert_eq!(tally(&fixture, &r5).await, [0, 0, 0]);
     assert_eq!(claims(&fixture).await, claims_before);
-    group.check("revocation first: a command paused after its precheck resumes after the operator's revoke-membership committed (epoch advanced); the fence refuses it (Denied), nothing is written and its claim is released; the next request at either epoch is Denied and the route answers the uniform 404");
+    group.check("revocation first: a command paused after its precheck resumes after the operator's revoke-membership committed (epoch advanced); the fence refuses it (Denied), nothing is written and its claim is released; the next request at either epoch is Denied and the route answers the uniform 404", json!({"epoch": reviewer_epoch + 1, "tally": [0, 0, 0], "claims": claims_before}));
 
     // Revocation first with its locks held; it commits while the command waits.
     restore_member(&fixture, REVIEWER).await;
@@ -1233,13 +1357,15 @@ async fn campaign() {
     let reply = spawn_post(&app, &s05, &reviewer_cookie, &k41);
     paused(&hooks).await;
     let writer = hold(&fixture, &revoke_member(REVIEWER)).await;
+    quiet(&fixture).await;
     hooks.release.notify_one();
-    lock_wait(&fixture, 1).await;
+    let waited_member = observe_lock(&fixture).await;
+    on_relation(&waited_member, "memberships");
     finish(writer, "COMMIT").await;
     problem(&reply.await.unwrap(), StatusCode::NOT_FOUND, "not_found");
     assert_eq!(tally(&fixture, &r5).await, [0, 0, 0]);
     assert_eq!(claims(&fixture).await, claims_before);
-    group.check("revocation first with its locks held (D7.1 order in the operator channel): the resumed route command's claim waits on the member row (observed), the revocation commits during the wait, and the fence refuses the command: the uniform 404, nothing written");
+    group.check("revocation first with its locks held (D7.1 order in the operator channel): the resumed route command's claim waits on the member row (observed), the revocation commits during the wait, and the fence refuses the command: the uniform 404, nothing written", json!({"lock": waited_member.json(), "status": 404, "tally": [0, 0, 0]}));
 
     // Held past lock_timeout: in_flight on the claim (member FOR UPDATE) or
     // busy on the authorization fence (FOR NO KEY UPDATE). Never 503.
@@ -1253,6 +1379,7 @@ async fn campaign() {
         work_now,
         values("needs_context", "held past timeout — synthetic"),
     );
+    let mut member_timeouts = Vec::new();
     for (statements, code) in [
         (revoke_member(REVIEWER), "in_flight"),
         (touch_member(REVIEWER), "busy"),
@@ -1261,21 +1388,26 @@ async fn campaign() {
         let reply = spawn_post(&app, &s05, &reviewer_cookie, &k42);
         paused(&hooks).await;
         let writer = hold(&fixture, &statements).await;
+        quiet(&fixture).await;
         hooks.release.notify_one();
-        lock_wait(&fixture, 1).await;
+        let waited = observe_lock(&fixture).await;
+        on_claim(&waited);
+        member_timeouts.push(json!({"code": code, "lock": waited.json()}));
         problem(&reply.await.unwrap(), StatusCode::CONFLICT, code);
         finish(writer, "ROLLBACK").await;
     }
     assert_eq!(epoch_of(&fixture, REVIEWER).await, reviewer_epoch);
     assert_eq!(tally(&fixture, &r5).await, [0, 0, 0]);
     assert_eq!(claims(&fixture).await, claims_before);
-    group.check("a member writer holding the row past lock_timeout after the command's precheck: a revocation in progress (FOR UPDATE) blocks the claim's reference and the route answers 409 in_flight; a FOR NO KEY UPDATE holder passes the claim and blocks the authorization fence, answering 409 busy; both with Retry-After: 2, never 503, nothing written");
+    group.check("a member writer holding the row past lock_timeout after the command's precheck: a revocation in progress (FOR UPDATE) blocks the claim's reference and the route answers 409 in_flight; a FOR NO KEY UPDATE holder passes the claim and blocks the authorization fence, answering 409 busy; both with Retry-After: 2, never 503, nothing written", json!({"locks": member_timeouts, "epoch": reviewer_epoch, "tally": [0, 0, 0]}));
 
     // A request that arrives while the writer already holds the member row
     // waits in session resolution (the session's own member fence).
     let writer = hold(&fixture, &revoke_member(REVIEWER)).await;
+    quiet(&fixture).await;
     let reply = spawn_post(&app, &s05, &reviewer_cookie, &k42);
-    lock_wait(&fixture, 1).await;
+    let waited_session = observe_lock(&fixture).await;
+    on_relation(&waited_session, "memberships");
     let reply = reply.await.unwrap();
     finish(writer, "ROLLBACK").await;
     let session_wait = (
@@ -1284,7 +1416,7 @@ async fn campaign() {
     );
     assert_ne!(reply.status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(tally(&fixture, &r5).await, [0, 0, 0]);
-    group.check(&format!("a route request arriving while a revocation already holds the member row waits in session resolution past lock_timeout and answers {} {} (recorded as found; not 503), nothing written", session_wait.0.as_u16(), session_wait.1.clone().unwrap_or_default()));
+    group.check(&format!("a route request arriving while a revocation already holds the member row waits in session resolution past lock_timeout and answers {} {} (recorded as found; not 503), nothing written", session_wait.0.as_u16(), session_wait.1.clone().unwrap_or_default()), json!({"status": session_wait.0.as_u16(), "code": session_wait.1, "lock": waited_session.json()}));
 
     // Command first, through the operator command: the command holds the
     // member FOR SHARE (paused at its record lock); revoke-membership waits.
@@ -1311,6 +1443,7 @@ async fn campaign() {
     hooks.arm("record_lock");
     let first = spawn_command(&stores, PRINCIPAL, principal_epoch, &k44);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let revocation = spawn_operator(
         &fixture,
         &[
@@ -1321,7 +1454,8 @@ async fn campaign() {
             PRINCIPAL,
         ],
     );
-    lock_wait(&fixture, 1).await;
+    let waited_revoke = observe_lock(&fixture).await;
+    on_relation(&waited_revoke, "memberships");
     hooks.release.notify_one();
     let o44 = committed(first.await.unwrap());
     assert_eq!(o44.record_version, 1);
@@ -1370,7 +1504,7 @@ async fn campaign() {
         "not_found",
     );
     assert_eq!(tally(&fixture, &r5).await, [1, 1, 1]);
-    group.check("command first: while the command holds its fences (paused at its record lock) the operator's revoke-membership waits on the member row (observed); the command commits version 1, then the revocation commits; the committed revision, outcome and event remain recorded (the author reads version 1), but the revoked principal's identical retry and lookup are Denied at both epochs and the uniform 404 on the route");
+    group.check("command first: while the command holds its fences (paused at its record lock) the operator's revoke-membership waits on the member row (observed); the command commits version 1, then the revocation commits; the committed revision, outcome and event remain recorded (the author reads version 1), but the revoked principal's identical retry and lookup are Denied at both epochs and the uniform 404 on the route", json!({"lock": waited_revoke.json(), "record_version": o44.record_version, "epoch": principal_epoch, "tally": [1, 1, 1]}));
 
     // The claim is the earliest fence: a command that has only claimed its
     // key already holds the member's key share, so the revocation waits.
@@ -1385,6 +1519,7 @@ async fn campaign() {
     hooks.arm("outcome");
     let first = spawn_command(&stores, REVIEWER, reviewer_epoch, &k45);
     paused(&hooks).await;
+    quiet(&fixture).await;
     let revocation = spawn_operator(
         &fixture,
         &[
@@ -1395,7 +1530,8 @@ async fn campaign() {
             REVIEWER,
         ],
     );
-    lock_wait(&fixture, 1).await;
+    let waited_revoke_reviewer = observe_lock(&fixture).await;
+    on_relation(&waited_revoke_reviewer, "memberships");
     hooks.release.notify_one();
     let o45 = committed(first.await.unwrap());
     assert_eq!(o45.record_version, 2);
@@ -1414,7 +1550,7 @@ async fn campaign() {
         "not_found",
     );
     assert_eq!(tally(&fixture, &r5).await, [2, 2, 2]);
-    group.check("a command paused right after its claim already holds the member row's key share: revoke-membership's FOR UPDATE waits on it (observed), the command's member fence takes FOR SHARE ahead of the queued revocation without deadlock and commits version 2, the revocation then commits, and the revoked principal's retry and lookup are refused");
+    group.check("a command paused right after its claim already holds the member row's key share: revoke-membership's FOR UPDATE waits on it (observed), the command's member fence takes FOR SHARE ahead of the queued revocation without deadlock and commits version 2, the revocation then commits, and the revoked principal's retry and lookup are refused", json!({"lock": waited_revoke_reviewer.json(), "record_version": o45.record_version, "epoch": reviewer_epoch, "tally": [2, 2, 2]}));
 
     // Delivery after the fence: a replay whose key is taken inserts no claim
     // and so holds no member lock before its fence; a revocation committing
@@ -1450,7 +1586,7 @@ async fn campaign() {
     hooks.release.notify_one();
     assert_eq!(replay.await.unwrap(), Err(Error::Denied));
     assert_eq!(tally(&fixture, &r5).await, [2, 2, 2]);
-    group.check("a replay of a committed key (the restored reviewer's identical retry replays it) paused after its precheck holds no member lock, so revoke-membership commits without waiting; the resumed replay's fence then refuses delivery of the stored outcome (Denied): current visibility, not the stored outcome, governs the response");
+    group.check("a replay of a committed key (the restored reviewer's identical retry replays it) paused after its precheck holds no member lock, so revoke-membership commits without waiting; the resumed replay's fence then refuses delivery of the stored outcome (Denied): current visibility, not the stored outcome, governs the response", json!({"changed": true, "epoch": reviewer_epoch + 1}));
     group.close(&mut groups);
 
     // ===================================================================
