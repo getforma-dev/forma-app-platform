@@ -307,9 +307,10 @@
         "APP-162",
         "APP-163",
         "APP-164",
-        "APP-165"
+        "APP-165",
+        "APP-167"
       ],
-      "ticket_count": 67,
+      "ticket_count": 68,
       "done_count": 2,
       "blocked_count": 0
     },
@@ -5191,6 +5192,32 @@
         "APP-162",
         "APP-154"
       ]
+    },
+    {
+      "id": "APP-167",
+      "title": "Promote merged beta releases through GitHub Actions",
+      "path": "2-in-progress/APP-167.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "In progress",
+      "Priority": "P0",
+      "Type": "Feature",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "167",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "[ADR-017](../../docs/architecture/ADR-017-BETA-PROMOTION.md); Victor explicitly authorized implementation, testing, independent review and working GitHub-to-AWS promotion with one approval.",
+      "Requirements": "C15, SR1, SR8, SR10",
+      "Depends on": "None",
+      "External dependencies": "GitHub protected environments and AWS OIDC/bootstrap qualification.",
+      "Assignee": "Codex \u2014 GenUI",
+      "Branch / PR": "[PR #43](https://github.com/getforma-dev/forma-app-platform/pull/43), merged as `365c88344b9367990d55e668e90a5dcf217dfe77`",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 implementation underway",
+      "Unblock evidence": "Current explicit user authorization supersedes the older manual-only sequencing.",
+      "dependencies": []
     }
   ]
 }

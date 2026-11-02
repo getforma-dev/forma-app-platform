@@ -1,0 +1,17 @@
+# ADR-017: One-approval GitHub-to-beta promotion
+
+Status: accepted direction; implementation and live acceptance tracked by [APP-167](../../Tickets/2-in-progress/APP-167.md).
+
+Victor authorized implementing, testing, reviewing and operating a merge-triggered Promote to beta stage. This supersedes ADR-013's local-build/manual-only sequencing for the bounded promotion path. It does not unfreeze product `main`, create production, broaden application authority or waive qualification.
+
+The active trunk remains `pivot/pitch-mvp`. Its push event starts the pipeline, so no default-branch workflow-dispatch bootstrap is required. It verifies the exact merged commit's required successful push workflows, builds and qualifies the three ARM64 images without AWS authority, then binds their immutable artifacts to that source. Preparation may publish those exact bytes and create a closed runtime-only CloudFormation change set. The protected `beta` environment requires one reviewer approval of the concrete immutable packet before execution. Self-approval remains available to the sole authorized human owner; automation must not fabricate a human approval record.
+
+The initial automatic path permits only qualified image replacement and the existing bounded expiry adjustment. It refuses schema, infrastructure, identity, secret and tenant-configuration changes. The original trial, aliases and existing data remain intact. Other changes retain a separately reviewed operator release path.
+
+Dedicated OIDC preparation/execution roles use the actual immutable repository subject format and environment branch restrictions. Preparation cannot execute a change set or update ECS services. Execution cannot supply arbitrary templates or reuse the administrator CloudFormation execution role. A dedicated restricted CloudFormation role is required. AWS authority stays out of PR builds and public artifacts; workflow actions are pinned.
+
+One private, encrypted durable state store holds the canonical ledger and write-ahead release journal. A whole-deployment lease serializes automation and manual operations. Do not duplicate the workstation ledger into independent runner ledgers. Import preserves all history and money and retains the original as evidence. The lease remains held while approval is pending; cancellation/rejection may abandon only an unactivated release with proved outcomes. An unknown mutation outcome holds the lease for reconciliation rather than expiring into another deployment.
+
+Execution revalidates the packet, predecessor, ledger and observed stack; proves both services stopped; executes the exact reviewed change-set ARN; checks the stopped updated boundary; persists activation intent before the AWS call; and verifies running images, health and HTTPS probes. The release becomes successful only after actual live verification. No automatic database rollback is implied. Public summaries exclude private state and bind to private receipts through hashes.
+
+Implementation must prove the denial, concurrency, cancellation and recovery paths with tests and independent review before bootstrap enables cloud authority. End-to-end completion requires a real GitHub run through the approval gate; merely installing YAML or preparing roles is insufficient.

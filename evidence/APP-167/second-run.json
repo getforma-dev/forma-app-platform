@@ -1,0 +1,39 @@
+{
+  "application_stack_executed": false,
+  "arm64_qualification_passed": true,
+  "aws_oidc_and_artifact_verification_passed": true,
+  "bootstrap_fix": {
+    "allowed": 1,
+    "denied": 7,
+    "installed_policy_exact": true,
+    "only_resource_changed": "RuntimeExecution",
+    "permission_cases": 8,
+    "replacement": false,
+    "status": "UPDATE_COMPLETE",
+    "template_sha256": "23c6e05762cc9664d84fbc4b078f7a2d385c1efebb2bafe5af58cd7ae5aa6071"
+  },
+  "candidate_sha": "2a01bff9d01e86cfb4f02eb64a0784347f2522b3",
+  "earliest_recovery_utc": "2026-11-02T09:25:36Z",
+  "failure": {
+    "aws_error": "ValidationException",
+    "change_set_absent": true,
+    "client_token_independently_observed_in_cloudtrail": false,
+    "cloudtrail_request_parameters_present": false,
+    "operation": "CreateChangeSet",
+    "parameter": "/cdk-bootstrap/hnb659fds/version",
+    "required_permission": "ssm:GetParameters"
+  },
+  "live_acceptance_complete": false,
+  "original_intent_preserved": true,
+  "published_images": {
+    "operator": "sha256:3b55fb0c6fd5540ee3d5a506b2fb3c1e4782ec937f60d36818c0fb9c40eb7be9",
+    "qualification": "sha256:882a703966bcb580ce31a2c4f059765998409da552e7a5bc299e7756049eb0f7",
+    "service": "sha256:ea2688d9c906b9b3b6368904afa723cbeb2eb776f0f9c801869cdce7c5742b01"
+  },
+  "qualified_artifact_manifest_sha256": "4a3a5b7336ecb7f3ef961c13e34458d15b31c1f63150ce95b6b4326c52ffe5fe",
+  "read_only_recovery_proof_sha256": "a03cc6ce54d88dcf95c094016e77e54d4a1f5ce88eae0dbbcce78030a390e5bf",
+  "recovery_applied": false,
+  "required_push_workflows_passed": 12,
+  "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41407521407",
+  "scan_disposition_passed": true
+}

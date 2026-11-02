@@ -37,11 +37,16 @@ umask 077
 
 priv_ready() {
   [[ -d "$PRIV" ]] || die "no private directory at $PRIV (DEPLOY-RUNBOOK.md, 'The private directory'; ops/beta/import-legacy-priv.sh)"
-  [[ "$(stat -f %Lp "$PRIV" 2>/dev/null || stat -c %a "$PRIV")" == 700 ]] || die "$PRIV must be mode 0700"
+  local mode
+  # GNU stat -f may print filesystem data before failing. Keep each probe's
+  # output separate so a failed probe cannot contaminate the valid mode.
+  mode=$(stat -c %a "$PRIV" 2>/dev/null) || mode=$(stat -f %Lp "$PRIV" 2>/dev/null) || die "cannot inspect private directory permissions"
+  [[ "$mode" == 700 ]] || die "$PRIV must be mode 0700"
 }
 
 load_env() {
   priv_ready
+  [[ ! -e "$PRIV/promotion-managed.json" ]] || die "private state moved to promotion S3; legacy operations are fenced"
   [[ -f "$PRIV/env.sh" ]] || die "missing $PRIV/env.sh (copy ops/beta/env.example.sh and fill it in privately)"
   # shellcheck disable=SC1091
   source "$PRIV/env.sh"

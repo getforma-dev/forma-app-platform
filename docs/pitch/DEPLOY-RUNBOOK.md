@@ -1,5 +1,7 @@
 # Pitch deploy runbook (APP-096, APP-105, APP-113)
 
+For the one-approval GitHub application-release path, use [BETA-PROMOTION.md](BETA-PROMOTION.md) and its live acceptance record. After the APP-167 canonical-state cutover, the local mutation recipes below are historical/operator references and refuse against the migrated private directory. Do not remove that guard or create a second ledger to reuse them. Schema and infrastructure changes require a separately reviewed delivery coordinated with the canonical deployment state.
+
 This runbook redeploys the existing `GenuiSyntheticFoundation` stack on beta.getforma.dev with a new pitch build from `pivot/pitch-mvp`. It is the APP-078 window runbook (`evidence/APP-078/prep/RUNBOOK.md`) cut down to a redeploy, and it reuses that runbook's names and helpers (`$PRIV`, `$WR`, `$STACK`, `$CLUSTER`, `$SERVICE`, `$ASSETS`, the operator-task run pattern, `infra/scripts/preflight.py`).
 
 For the current clean beta, use [CLEAN-TRIAL-DEPLOY.md](CLEAN-TRIAL-DEPLOY.md) with these shared operator procedures. Its current status and linked receipts supersede the historical seeded-demo baseline below. Preserve the existing trial identifiers, data, accounts and invitations; do not replay initial provisioning or the sandbox seed/library/grant steps.
