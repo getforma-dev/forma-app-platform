@@ -34,6 +34,15 @@ export function parsePresentation(value: unknown): Presentation {
 }
 export function applyPresentationTheme(root: HTMLElement, raw: string): void {
   const definition = parsePresentation(raw);
+  // Legacy apps receive default rendering tokens too. Only an admitted v1
+  // presentation owns an authored design that browser-local Shape must preserve.
+  root.dataset.appPresentation = definition.version === 1 ? 'authored' : 'default';
+  if (definition.version === 1) {
+    delete root.dataset.theme;
+    delete root.dataset.themeDensity;
+    delete root.dataset.themePreview;
+    root.querySelector(':scope > .cv-unite-head > .cv-shaped-label[data-app-theme], :scope > h2 > .cv-shaped-label[data-app-theme], :scope > .cv-card-head > .cv-shaped-label[data-app-theme]')?.remove();
+  }
   root.dataset.appMode = definition.theme?.mode ?? 'default'; root.dataset.appAccent = definition.theme?.accent ?? 'default';
   root.dataset.appDensity = definition.theme?.density ?? 'default'; root.dataset.appFont = definition.theme?.font ?? 'default';
   root.classList.add('composed-app');

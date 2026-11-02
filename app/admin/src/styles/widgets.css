@@ -726,11 +726,45 @@
 .cv-card.cv-widget[data-accent="violet"] { --accent: #a78bfa; --accent-ink: #1a1033; }
 .cv-card.cv-widget[data-accent="rose"] { --accent: #fb7185; --accent-ink: #2d0710; }
 .cv-card.cv-widget[data-accent="ice"] { --accent: #93c5fd; --accent-ink: #0b1a2e; }
-/* On paper, bright accents become inks that read on white. */
-.cv-card.cv-widget[data-skin="paper"][data-accent="matrix"] { --accent: #13803c; }
-.cv-card.cv-widget[data-skin="paper"][data-accent="amber"] { --accent: #a35d00; }
-.cv-card.cv-widget[data-skin="paper"][data-accent="cyan"] { --accent: #0e7490; }
-.cv-card.cv-widget[data-skin="paper"][data-accent="ice"] { --accent: #1d4ed8; }
+/* On paper and retro, bright accents become the shared mark inks. */
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="matrix"] { --accent: var(--ink-green); --accent-ink: #fff; }
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="amber"] { --accent: var(--ink-amber); --accent-ink: #fff; }
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="cyan"] { --accent: var(--ink-cyan); --accent-ink: #fff; }
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="crimson"] { --accent: var(--ink-crimson); --accent-ink: #fff; }
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="violet"] { --accent: var(--ink-violet); --accent-ink: #fff; }
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="rose"] { --accent: var(--ink-rose); --accent-ink: #fff; }
+.cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="ice"] { --accent: var(--ink-ice); --accent-ink: #fff; }
+
+/* A shaped app theme recolors a widget that has not picked its own accent.
+   Dark faces use the glow. Paper and retro use the mark. Skin still owns
+   the face, radius and decoration. site and ink set no glow, so a widget
+   there keeps its own kind color. */
+:is(
+  [data-theme="green"], [data-theme="green-dark"],
+  [data-theme="crimson"], [data-theme="crimson-dark"],
+  [data-theme="amber"], [data-theme="amber-dark"],
+  [data-theme="cyan"], [data-theme="cyan-dark"],
+  [data-theme="violet"], [data-theme="violet-dark"],
+  [data-theme="rose"], [data-theme="rose-dark"],
+  [data-theme="ice"], [data-theme="ice-dark"],
+  [data-theme="slate"], [data-theme="slate-dark"]
+) .cv-card.cv-widget[data-accent="default"] {
+  --accent: var(--widget-glow);
+  --accent-ink: var(--widget-glow-ink);
+}
+:is(
+  [data-theme="green"], [data-theme="green-dark"],
+  [data-theme="crimson"], [data-theme="crimson-dark"],
+  [data-theme="amber"], [data-theme="amber-dark"],
+  [data-theme="cyan"], [data-theme="cyan-dark"],
+  [data-theme="violet"], [data-theme="violet-dark"],
+  [data-theme="rose"], [data-theme="rose-dark"],
+  [data-theme="ice"], [data-theme="ice-dark"],
+  [data-theme="slate"], [data-theme="slate-dark"]
+) .cv-card.cv-widget:is([data-skin="paper"], [data-skin="retro"])[data-accent="default"] {
+  --accent: var(--widget-ink);
+  --accent-ink: #fff;
+}
 
 /* ===================== Fonts ===================== */
 .cv-card.cv-widget[data-font="mono"] { --wg-font: var(--cv-mono); --wg-digits: var(--cv-mono); }

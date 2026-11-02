@@ -332,9 +332,10 @@
         "APP-158",
         "APP-159",
         "APP-160",
-        "APP-161"
+        "APP-161",
+        "APP-166"
       ],
-      "ticket_count": 7,
+      "ticket_count": 8,
       "done_count": 0,
       "blocked_count": 0
     }
@@ -351,7 +352,8 @@
     "APP-087",
     "APP-088",
     "APP-125",
-    "APP-163"
+    "APP-163",
+    "APP-166"
   ],
   "tickets": [
     {
@@ -5191,6 +5193,36 @@
       "dependencies": [
         "APP-162",
         "APP-154"
+      ]
+    },
+    {
+      "id": "APP-166",
+      "title": "Theme roles so the canvas, an app, a card and a widget can share or split an identity",
+      "path": "0-backlog/APP-166.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "166",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-01: the canvas needs a token layer that can swap the way DaisyUI themes swap, without adopting DaisyUI. An app, a card and a widget can match the canvas or keep their own identity. The paper and lime look stays until a new platform default is chosen. See [THEME-ROLES.md](../../docs/architecture/THEME-ROLES.md).",
+      "Requirements": "C11, SR1",
+      "Depends on": "APP-138",
+      "External dependencies": "None",
+      "Assignee": "GenUI",
+      "Implementation": "Implemented and locally reviewed in PR #40. Actual Shape/apply/reload/Revert and published-design refusal passed; browser-local palettes do not change published app authority.",
+      "Deployment": "Not deployed by this change; merge and qualified beta approval remain separate gates.",
+      "Branch / PR": "`pivot/app-166-themes` \u2014 [PR #40](https://github.com/getforma-dev/forma-app-platform/pull/40)",
+      "Team": "GenUI",
+      "Blocked by": "None",
+      "Unblock evidence": "APP-138 is Done. APP-157 keeps published appearance and is not a predecessor of this browser-local layer.",
+      "dependencies": [
+        "APP-138"
       ]
     },
     {

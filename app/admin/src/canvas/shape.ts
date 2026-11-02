@@ -9,7 +9,8 @@
 // server, `composer::shape`, and again here, `talk-view.ts`). Nothing changes
 // until the member clicks: the spec shows as a *preview* on the item with a
 // dock card (Apply, Add as new card for a card, Cancel); Apply labels the
-// item *shaped* with Revert. Applied views and themes are session-only; a
+// item *shaped* with Revert. Applied views are session-only; app themes stay
+// per member in this browser. A
 // card added as new is stored for the member (APP-123, below). A card's view is evaluated over the card's
 // own data in this browser (`talk-view.ts`), never records: a view may
 // filter or hide records, and every number it computes keeps the receipts
@@ -35,7 +36,7 @@
 // (`previewNewCard`, the answer's record set); nothing is added without a
 // click on **Add as new card**.
 import { addressFor, fillBar } from './address-chip';
-import { addCards, focusCard, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
+import { addCards, focusCard, isDemoCanvas, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
 import { madeCardRequest, madeLine, madeView, newCardId, removeCard, shareCard, storeCard, type From, type StoredCard } from './cards';
 import { appForm, findAddress, findAppAddress, findCardShortcut, findVerb, type Address, type CanvasCommand } from './command-registry';
 import { isDismissKey, showDockCard } from './dock-card';
@@ -44,7 +45,7 @@ import { recordsJson } from './records';
 import { announce, el, isUuid, receiptSection, released } from './render';
 import { registerCompleter, type Completion } from './slash';
 import {
-  appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips,
+  appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips, themeName,
   type AppTheme, type CardView, type Group, type RecordReceipt, type Shaped, type Table,
 } from './talk-view';
 import { frameCardsOfItem, isUniteItem } from './unite';
@@ -354,6 +355,96 @@ export function shapedSection(document_: Document, state: 'preview' | 'shaped', 
 type Applied = { address: string; view: CardView; table: Table; source: Source; work: string };
 const appliedCards = new Map<string, Applied>();
 const appliedThemes = new Map<string, AppTheme>();
+const WORK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Closed app themes read back from this browser. Unknown names are dropped. */
+export function appThemesFromStorage(value: unknown): [string, AppTheme][] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+  const out: [string, AppTheme][] = [];
+  for (const [work, theme] of Object.entries(value)) {
+    if (!WORK_ID.test(work)) continue;
+    const judged = appTheme(theme);
+    if (judged) out.push([work, judged]);
+    if (out.length === 40) break;
+  }
+  return out;
+}
+
+function themeKey(): string | null {
+  if (typeof document === 'undefined' || isDemoCanvas()) return null;
+  const member = document.getElementById('cv-canvas')?.getAttribute('data-member') ?? '';
+  return /^[0-9a-f]{16}$/.test(member) ? `forma.canvas.app-theme.v1:${member}` : null;
+}
+
+function writeAppThemes(): void {
+  const key = themeKey();
+  if (!key) return;
+  const body: Record<string, AppTheme> = {};
+  for (const [work, theme] of appliedThemes) body[work] = theme;
+  try {
+    localStorage.setItem(key, JSON.stringify(body));
+  } catch {
+    // The look remains on this page when storage is blocked.
+  }
+}
+
+function restoreAppThemes(): void {
+  const key = themeKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(localStorage.getItem(key) ?? '{}');
+  } catch {
+    return;
+  }
+  for (const [work, theme] of appThemesFromStorage(parsed)) {
+    if (document.querySelector(`[data-theme-preview="true"][data-work="${CSS.escape(work)}"]`)) continue;
+    appliedThemes.set(work, theme);
+    setTheme(themeTargets(work), theme);
+    labelAppTheme(work);
+  }
+}
+
+function colorScheme(): 'light' | 'dark' {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/** Default presentation tokens are not an authored, published app design. */
+export function acceptsAppTheme(node: Pick<HTMLElement, 'dataset'>): boolean {
+  return node.dataset.appPresentation === 'default' || (node.dataset.appPresentation !== 'authored' && !node.dataset.appMode);
+}
+
+/** Cards and the unite frame of one saved work; authored presentation wins. */
+function themeTargets(work: string): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work], .cv-unite[data-work]'))
+    .filter((node) => node.dataset.work === work && acceptsAppTheme(node));
+}
+
+function labelAppTheme(work: string): void {
+  for (const node of themeTargets(work)) {
+    if (node.dataset.kind !== 'app' && node.dataset.kind !== 'unite') continue;
+    const host = head(node);
+    if (!host || host.querySelector(':scope > .cv-shaped-label[data-app-theme]')) continue;
+    labelShaped(host, () => {
+      appliedThemes.delete(work);
+      writeAppThemes();
+      for (const target of themeTargets(work)) unlabel(head(target));
+      setTheme(themeTargets(work), null);
+      announce('App appearance restored.');
+    });
+    host.querySelector<HTMLElement>(':scope > .cv-shaped-label')?.setAttribute('data-app-theme', '');
+  }
+}
+
+if (typeof matchMedia === 'function') {
+  const query = matchMedia('(prefers-color-scheme: dark)');
+  query.addEventListener?.('change', () => {
+    for (const [work, theme] of appliedThemes) {
+      if (theme.mode === 'light' || theme.mode === 'dark') continue;
+      setTheme(themeTargets(work), theme);
+    }
+  });
+}
 
 /**
  * The preview each item shows now: a newer preview takes the token, so an
@@ -714,24 +805,29 @@ export async function previewNewCard(card: { app: string; work: string; collecti
 function appCards(app: AppRow): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work]')).filter((card) => card.dataset.work === app.work);
 }
-function setTheme(cards: HTMLElement[], theme: AppTheme | null): void {
-  for (const card of cards) {
-    for (const key of ['mode', 'accent', 'density'] as const) {
-      const value = theme?.[key];
-      const name = `theme${key[0]!.toUpperCase()}${key.slice(1)}` as 'themeMode';
-      if (value && value !== 'default') card.dataset[name] = value;
-      else delete card.dataset[name];
+function setTheme(nodes: HTMLElement[], theme: AppTheme | null): void {
+  for (const node of nodes) {
+    delete node.dataset.themeMode;
+    delete node.dataset.themeAccent;
+    if (!theme) {
+      delete node.dataset.theme;
+      delete node.dataset.themeDensity;
+      continue;
     }
+    const name = themeName(theme, colorScheme());
+    if (name) node.dataset.theme = name;
+    else delete node.dataset.theme;
+    if (theme.density && theme.density !== 'default') node.dataset.themeDensity = theme.density;
+    else delete node.dataset.themeDensity;
   }
 }
-function appHeader(app: AppRow): HTMLElement | null {
-  const card = appCards(app).find((c) => c.dataset.kind === 'app');
-  return card ? head(card) : null;
-}
-
 async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string, report: Report): Promise<void> {
   const { app } = target;
   if (!appCards(app).length) await addCards(app.app, app.work, null);
+  if (!themeTargets(app.work).length) {
+    report('This app uses its published design. Use Edit app to change that design when you have permission.');
+    return;
+  }
   report(`Shaping /${target.address}…`);
   const answer = await requestShape({ address: target.address, words, target: { kind: 'app', app_id: app.app, work_id: app.work } });
   if (typeof answer === 'string') {
@@ -745,32 +841,35 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
   }
   const before = appliedThemes.get(app.work) ?? null;
   const current = claimPreview(`theme:${app.work}`);
-  const cards = appCards(app);
-  setTheme(cards, theme);
-  for (const card of cards) card.dataset.themePreview = 'true';
-  const revert = () => {
-    appliedThemes.delete(app.work);
-    setTheme(appCards(app), null);
-    unlabel(appHeader(app));
-    announce(`/${target.address} has its own look again.`);
-  };
-  const settle = () => { for (const card of appCards(app)) delete card.dataset.themePreview; };
+  const nodes = themeTargets(app.work);
+  if (!nodes.length) {
+    report('The app design changed while Shape was running. Its published appearance is unchanged.');
+    return;
+  }
+  setTheme(nodes, theme);
+  for (const node of nodes) node.dataset.themePreview = 'true';
+  const settle = () => { for (const node of themeTargets(app.work)) delete node.dataset.themePreview; };
   confirmDock(`Shape /${target.address}: every card`, themeChips(theme), [
     {
       label: 'Apply', primary: true,
       run: () => {
         settle();
+        if (!themeTargets(app.work).length) {
+          report('The app now uses its published design. No browser appearance was saved.');
+          return;
+        }
         appliedThemes.set(app.work, theme);
-        setTheme(appCards(app), theme);
-        labelShaped(appHeader(app), revert);
-        report(`Every /${target.address} card is shaped; each keeps its own view. Revert is on the app card.`);
+        writeAppThemes();
+        setTheme(themeTargets(app.work), theme);
+        labelAppTheme(app.work);
+        report(`Every /${target.address} card is shaped; each keeps its own view. It stays on this browser. Revert is on the app card.`);
       },
     },
   ], () => {
     // A newer theme preview on this app keeps its look.
     if (!current()) return;
     settle();
-    setTheme(appCards(app), before);
+    setTheme(themeTargets(app.work), before);
     report('Nothing changed.');
   });
 }
@@ -908,4 +1007,8 @@ export function startShape(): void {
   });
   registerCompleter('shape', shapeCompletions);
   registerCompleter('.', dotCompletions, { select: false });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('canvas:changed', () => restoreAppThemes());
+    restoreAppThemes();
+  }
 }

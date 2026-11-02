@@ -7,6 +7,7 @@ import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
 import { startCreateApp } from './create-app';
+import { startPalette } from './palette';
 import { startLibrary } from './library';
 import { startSharing } from '../sharing/dialog';
 import { startNaming } from './naming';
@@ -860,13 +861,33 @@ function Canvas(props: CanvasProps) {
         </div>
         <span class="cv-dock-brand" aria-hidden="true">YOUR NEXT MOVE <span>↗</span></span>
         <IntentBar placeholder="Describe an app, ask a question, or type /" />
-        <p class="cv-layout-note"><span class="cv-save-dot" aria-hidden="true"></span> Layout saved locally</p>
+        <div class="cv-dock-end">
+          <div class="cv-look" role="group" aria-label="Canvas look">
+            <div class="cv-look-scheme" role="group" aria-label="Day or dark">
+              <button type="button" data-look-scheme="light" aria-pressed="false">Day</button>
+              <button type="button" data-look-scheme="dark" aria-pressed="false">Dark</button>
+            </div>
+            <div class="cv-look-palettes" role="group" aria-label="Palette">
+              <button type="button" data-look-palette="ink" aria-pressed="false" title="Ink. Press again for Forma." aria-label="Ink">
+                <span class="cv-look-swatch" data-swatch="ink" aria-hidden="true"></span>
+              </button>
+              <button type="button" data-look-palette="harbor" aria-pressed="false" title="Harbor. Press again for Forma." aria-label="Harbor">
+                <span class="cv-look-swatch" data-swatch="harbor" aria-hidden="true"></span>
+              </button>
+              <button type="button" data-look-palette="stone" aria-pressed="false" title="Stone. Press again for Forma." aria-label="Stone">
+                <span class="cv-look-swatch" data-swatch="stone" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+          <p class="cv-layout-note"><span class="cv-save-dot" aria-hidden="true"></span> Layout saved locally</p>
+        </div>
       </footer>
     </div>
   );
 }
 
 await activateIslands({ IntentBar });
+startPalette(document);
 startBoard(document);
 startSharing(document);
 // APP-116: timing chips (off by default; the More menu or ?timing=1).

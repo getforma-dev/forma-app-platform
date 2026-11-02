@@ -114,31 +114,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 :root {
   --forma-font: "Space Grotesk", "Segoe UI", Arial, sans-serif;
-  --forma-lime: #c5f953;
-  --forma-line: #daddd0;
-  --forma-surface: #fff;
-  color-scheme: light dark;
-  --bg: #f4f4ed;
-  --fg: #1a1d18;
-  --muted: #62685b;
-  --accent: #416609;
-  /* Design brief §3: UI edges at least 3:1 (was #dcdcdc, 1.37:1). */
-  --border: #7c8473;
-  --bad: #b3261e;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --forma-line: #354134;
-    --forma-surface: #1c231c;
-    --bg: #141914;
-    --fg: #edf0e4;
-    --muted: #b3bea9;
-    --accent: #c5f953;
-    /* At least 3:1 on --bg (was #2c3038, 1.34:1); red at 7.8:1 (was 2.72:1). */
-    --border: #75836d;
-    --bad: #ff8a80;
-  }
 }
 
 body {
@@ -284,7 +259,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .openable .canvas-link { margin-left: 0.75rem; font-size: 0.875rem; }
 
 /* APP-138: native entry, workspace and work pages share the Forma identity. */
-::selection { background: var(--forma-lime); color: #1a1d18; }
+::selection { background: var(--forma-lime); color: var(--role-on-mark); }
 a { color: var(--accent); text-underline-offset: 4px; }
 button, input, select, textarea { font: inherit; }
 .page { max-width: 48rem; padding: 40px 32px 80px; }
@@ -305,7 +280,7 @@ button, input, select, textarea { font: inherit; }
 .entry label { font-size: 13px; }
 .entry-links { flex-wrap: wrap; gap: 12px; }
 .entry-links a, .canvas-entry { display: inline-flex; align-items: center; padding: 12px 18px; border: 1px solid var(--border); border-radius: 4px; text-decoration: none; font-size: 14px; font-weight: 500; }
-.entry-links a:first-child, .canvas-entry { background: var(--forma-lime); border-color: #6d8a32; color: #1a1d18; }
+.entry-links a:first-child, .canvas-entry { background: var(--forma-lime); border-color: var(--role-mark-edge); color: var(--role-on-mark); }
 .entry-links a:hover, .canvas-entry:hover { box-shadow: 0 0 0 2px var(--accent); }
 .view, .openable > li { background: var(--forma-surface); border-color: var(--forma-line); border-radius: 6px; padding: 24px; }
 .view { overflow-x: auto; }
@@ -324,7 +299,7 @@ button, input, select, textarea { font: inherit; }
   .view { padding: 18px; }
   .run { align-items: stretch; }
 }
-.forma-mark-tile { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 4px; background: var(--forma-lime); color: #1a1d18; }
+.forma-mark-tile { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 4px; background: var(--forma-lime); color: var(--role-on-mark); }
 .forma-mark-tile .forma-mark { width: 20px; height: 21px; }
 .page-eyebrow { margin-bottom: 22px; color: var(--muted); font: 10px/1.6 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .12em; }
 .home-page { max-width: 64rem; }

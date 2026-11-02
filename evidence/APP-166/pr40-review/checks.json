@@ -1,0 +1,155 @@
+{
+  "passed": true,
+  "full_check": {
+    "command": "just check",
+    "exit_code": 0,
+    "steps": [
+      {
+        "name": "fmt",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "admin",
+        "seconds": 13,
+        "passed": true
+      },
+      {
+        "name": "clippy",
+        "seconds": 98,
+        "passed": true
+      },
+      {
+        "name": "clippy-dev",
+        "seconds": 90,
+        "passed": true
+      },
+      {
+        "name": "test",
+        "seconds": 94,
+        "passed": true
+      },
+      {
+        "name": "http-smoke",
+        "seconds": 57,
+        "passed": true
+      },
+      {
+        "name": "msrv",
+        "seconds": 106,
+        "passed": true
+      },
+      {
+        "name": "catalog",
+        "seconds": 0,
+        "passed": true
+      },
+      {
+        "name": "infra",
+        "seconds": 11,
+        "passed": true
+      },
+      {
+        "name": "py-scripts",
+        "seconds": 6,
+        "passed": true
+      },
+      {
+        "name": "py-runtime",
+        "seconds": 267,
+        "passed": true
+      },
+      {
+        "name": "shared-broker",
+        "seconds": 12,
+        "passed": true
+      },
+      {
+        "name": "py-qualification",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "py-app-scripts",
+        "seconds": 1,
+        "passed": true
+      },
+      {
+        "name": "py-ops",
+        "seconds": 11,
+        "passed": true
+      },
+      {
+        "name": "py-promotion",
+        "seconds": 3,
+        "passed": true
+      },
+      {
+        "name": "py-infra",
+        "seconds": 5,
+        "passed": true
+      },
+      {
+        "name": "schema-pins",
+        "seconds": 0,
+        "passed": true
+      },
+      {
+        "name": "contracts",
+        "seconds": 6,
+        "passed": true
+      },
+      {
+        "name": "board",
+        "seconds": 0,
+        "passed": true
+      },
+      {
+        "name": "bash-n",
+        "seconds": 0,
+        "passed": true
+      }
+    ]
+  },
+  "final_affected_reruns": [
+    {
+      "command": "just check admin",
+      "passed": true,
+      "seconds": 13,
+      "typescript_tests": 110,
+      "strict_native_build": true
+    },
+    {
+      "command": "just check test http-smoke",
+      "passed": true,
+      "seconds": 13,
+      "rust_library_tests": 375,
+      "rust_binary_tests": 8,
+      "doctests": 3,
+      "ignored_operator_campaigns": 34
+    }
+  ],
+  "review": {
+    "independent_source_review": "review_create; no remaining blocker in scoped ownership, storage isolation, preview/Revert, mobile controls; did not duplicate browser or full check",
+    "browser_checks": 5,
+    "manual_screen_reader": false,
+    "hosted_or_cloud_operations": false
+  },
+  "logs": [
+    {
+      "logical_name": "full-check.log",
+      "bytes": 97147,
+      "sha256": "7d90b0b421c4823d83d6ecd8273745f322e618fc116f094d31ff4744b137bf22"
+    },
+    {
+      "logical_name": "admin-final2.log",
+      "bytes": 30293,
+      "sha256": "4bae3692b8df36342a0bb77e7a880aaec2f5ee25d7c543c772b183ba52f32d65"
+    },
+    {
+      "logical_name": "embedded-final.log",
+      "bytes": 38487,
+      "sha256": "34d8ce9dd2e1351bf757d3b3e11835d78116755d76133aa28690d2ac321eae99"
+    }
+  ]
+}

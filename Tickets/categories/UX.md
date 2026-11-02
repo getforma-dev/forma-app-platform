@@ -45,3 +45,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 157 | [APP-157: Persisted bounded app appearance across all presentations](../0-backlog/APP-157.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-155, APP-122 |
 | 158 | [APP-158: Place an admitted records list with authoritative scoped filters](../0-backlog/APP-158.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-144, APP-155, APP-020, APP-025 |
 | 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](../0-backlog/APP-160.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
+| 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](../0-backlog/APP-166.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |

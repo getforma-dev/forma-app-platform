@@ -55,6 +55,27 @@ preparation. Once a successful release records its actual scan inventory, later
 unchanged findings are ordinary baseline findings; this disposition grants no
 continuing permission for another new finding.
 
+## PR40 source-context review
+
+The reviewed PR40 source at `447bb2cde1a4a00924899d3e054741294d8260b7`
+adds exactly two regular frontend files to the service Docker context:
+`app/admin/src/canvas/palette.ts` and `app/admin/src/styles/themes.css`.
+The `.dockerignore` change consists only of their two explicit allowlist lines.
+Every other protected deployment-contract path and file mode remains identical
+to the live `7c3ab123f524c4e9a7b855be0a2f582c626341ae` predecessor and reviewed
+`07ea5aac85b69ad90d7bfb2274fb50395705e26f` trunk. Dockerfiles, runtime, infrastructure,
+migrations and the operator image's inputs are unchanged.
+
+This review rebinds this exact disposition to contract
+`ef8580511349b5f1883979d034be55f5753ea9453ff1e73390c4d2955889c9c0`.
+The predecessor image, three finding fingerprints, severities, package versions
+and November 9 expiry are unchanged. This is not permission for another context
+change or finding. The automatic deployment-contract guard remains unchanged;
+preparation requires a separately reviewed, receipted operator admission of these
+exact two source entries after the cancelled candidate is safely abandoned.
+The normal image qualification, unsuppressed scans and human beta approval still
+apply. This source review does not claim that admission or deployment occurred.
+
 The failed preparation must be reconciled through the independently reviewed,
 confirmed-ECR-only abandonment path after its workflow credentials expire. Its
 ledger window, receipts and failure evidence are retained. It cannot be resumed
