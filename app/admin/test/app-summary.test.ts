@@ -63,8 +63,13 @@ async function fixture(options: {lineage?: boolean} = {}) {
   const host = el(document_, 'aside', {id: `app-summary-${WORK}`, 'data-app-companion': ''});host.hidden = true;
   frame.append(button, host);
   let listener = () => {};
+  let ensureGroup = async (): Promise<any> => null;
+  const focused: string[] = [], placements: unknown[][] = [];
   const mocks = {
-    './board': {onBoardChange: (fn: () => void) => {listener = fn;}},
+    './board': {onBoardChange: (fn: () => void) => {listener = fn;}, ensureAppGroup: () => ensureGroup(), isOnBoard: () => false},
+    './focus': {openFocus: (id: string) => {focused.push(id); return true;}},
+    './unite': {setAppView: async (...args: unknown[]) => {placements.push(args);}},
+    '../presentation/presentation': {appComponentVisible: () => true},
     './box-api': {lineage: async () => options.lineage === false ? null : {}},
     './render': {el, isUuid: (value: string) => /^[0-9a-f-]{36}$/.test(value)},
   };
@@ -81,26 +86,29 @@ async function fixture(options: {lineage?: boolean} = {}) {
   const calls: {method:string;signal:AbortSignal}[] = [];
   let respond = async (_method: string): Promise<any> => response(empty);
   globalThis.fetch = (async (_url: string, options: RequestInit) => {calls.push({method:String(options.method),signal:options.signal as AbortSignal});return respond(String(options.method));}) as typeof fetch;
-  return {api,host,frame,button,calls,el,changed:()=>listener(),respond:(fn:typeof respond)=>{respond=fn;},
-    open:()=>api.toggleAppSummary(APP,WORK,'Example app',host),
-    cleanup:()=>{api.closeAppSummary(WORK);globalThis.fetch=oldFetch;delete (globalThis as any)[key];}};
+  const controller=api.mountAppSummary(host,{app:APP,work:WORK,title:'Example app'});
+  return {api,host,frame,button,calls,el,controller,focused,placements,changed:()=>listener(),respond:(fn:typeof respond)=>{respond=fn;},
+    ensure:(fn:typeof ensureGroup)=>{ensureGroup=fn;}, open:()=>controller.show(), hide:()=>controller.hide(),
+    cleanup:()=>{controller.dispose();globalThis.fetch=oldFetch;delete (globalThis as any)[key];}};
 }
 
-test('Summary stays app-owned and generates only from an explicit action', async () => {
+test('Summary content leaves shared companion controls alone and generates only from an explicit action', async () => {
   const f=await fixture();
   try {
-    f.api.startExplain();f.changed();await flush();assert.equal(f.calls.length,0);
+    f.changed();await flush();assert.equal(f.calls.length,0,'mounting performs no read or generation');
     f.open();await flush();assert.deepEqual(f.calls.map(c=>c.method),['GET']);
     const panel=f.host.children[0];
-    assert.notEqual(f.host.querySelector('h3')!.attrs.get('id'), f.host.attrs.get('id'));
-    assert.equal((panel as Element).attrs.get('aria-labelledby'), f.host.querySelector('h3')!.attrs.get('id'));
-    assert.equal(f.host.hidden,false);assert.equal(f.host.inert,false);assert.equal(f.button.attrs.get('aria-expanded'),'true');
+    assert.equal((panel as Element).attrs.get('aria-label'),'Summary of Example app');
+    assert.equal(f.host.querySelector('header'),null);assert.equal(f.host.querySelector('.cv-app-summary-close'),null);
+    assert.equal(f.host.hidden,true,'the coordinator owns host visibility');
+    assert.equal(f.button.attrs.has('aria-expanded'),false);assert.deepEqual(f.host.events,[]);
     const action=f.host.querySelector('.cv-ex-regen')!;assert.equal(action.textContent,'Generate summary');
     f.respond(async()=>response(ready));action.click();await flush();
     assert.deepEqual(f.calls.map(c=>c.method),['GET','POST']);assert.match(f.host.textContent,/A saved finding/);
-    f.host.querySelector('.cv-app-summary-close')!.click();
-    assert.equal(f.host.hidden,true);assert.equal(f.button.focused,true);
+    f.hide();assert.doesNotMatch(f.host.textContent,/A saved finding/);
+    assert.equal(f.host.hidden,true);assert.equal(f.button.focused,false);assert.deepEqual(f.host.events,[]);
     f.open();await flush();assert.equal(f.host.children[0],panel);assert.deepEqual(f.calls.map(c=>c.method),['GET','POST','GET']);
+    f.open();await flush();assert.equal(f.calls.length,3,'showing an already active tab does not repeat a read');
   } finally {f.cleanup();}
 });
 
@@ -109,7 +117,7 @@ test('closing or removing an app prevents late Summary responses from reviving i
   try {
     let resolve!: (value: unknown)=>void;
     f.respond(()=>new Promise(done=>{resolve=done;}));f.open();await flush();
-    f.api.closeAppSummary(WORK);assert.equal(f.calls[0]!.signal.aborted,true);
+    f.hide();assert.equal(f.calls[0]!.signal.aborted,true);
     resolve(response(ready));await flush();assert.equal(f.host.hidden,true);assert.doesNotMatch(f.host.textContent,/A saved finding/);
     f.open();await flush();f.host.attached=false;f.changed();
     assert.equal(f.calls[1]!.signal.aborted,true);resolve(response(ready));await flush();assert.equal(f.host.children.length,0);
@@ -137,5 +145,37 @@ test('retrying a failed summary read remains a GET', async () => {
     f.respond(async()=>response({code:'unavailable'},503));f.open();await flush();
     const action=f.host.querySelector('.cv-ex-regen')!;assert.equal(action.textContent,'Try again');
     f.respond(async()=>response(empty));action.click();await flush();assert.deepEqual(f.calls.map(c=>c.method),['GET','GET']);
+  } finally {f.cleanup();}
+});
+
+
+test('disposing or replacing a mounted Summary cancels requests without clearing the replacement host', async () => {
+  const f=await fixture();
+  let replacement: {show(): void; hide(): void; dispose(): void}|undefined;
+  try {
+    let resolve!: (value: unknown)=>void;
+    f.respond(()=>new Promise(done=>{resolve=done;}));f.open();await flush();
+    replacement=f.api.mountAppSummary(f.host,{app:APP,work:WORK,title:'Replacement app'});
+    assert.equal(f.calls[0]!.signal.aborted,true);
+    const panel=f.host.children[0];
+    f.controller.dispose();f.open();
+    assert.equal(f.host.children[0],panel);assert.equal(f.calls.length,1);
+    resolve(response(ready));await flush();assert.doesNotMatch(f.host.textContent,/A saved finding/);
+    f.respond(async()=>response(empty));replacement!.show();await flush();
+    assert.equal(f.calls.length,2);assert.equal((panel as Element).attrs.get('aria-label'),'Summary of Replacement app');
+  } finally {replacement?.dispose();f.cleanup();}
+});
+
+test('a pending receipt click stays cancelled after its Summary tab is hidden and reopened', async () => {
+  const f=await fixture();
+  try {
+    f.respond(async()=>response({state:'ready',findings:[{parts:[{value:'42',view_id:'total'}]}]}));
+    f.open();await flush();
+    let resolve!: (value: unknown)=>void;
+    f.ensure(()=>new Promise(done=>{resolve=done;}));
+    f.host.querySelector('.cv-ex-value')!.click();f.hide();f.open();await flush();
+    const card=f.el({},'article');(card as any).dataset={card:`c-${WORK}-total`};
+    resolve({cards:[card]});await flush();
+    assert.deepEqual(f.focused,[]);assert.deepEqual(f.placements,[]);
   } finally {f.cleanup();}
 });

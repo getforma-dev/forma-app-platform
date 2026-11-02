@@ -9,7 +9,9 @@ import { pageSize } from './page';
 import { dismissSharing, openSharing } from '../sharing/dialog';
 import { el } from './render';
 import { buildAppWindow, appWindowIcon } from './app-window';
-import { toggleAppSummary, disposeAppSummary } from './explain';
+import { showAppAssistant, disposeAppAssistant, type AppAssistantTab } from './app-assistant';
+import type { RecordScope } from '../ask/client';
+import { addressOfWork } from './shape';
 import { registerCommands, registerCompleter, type Completion } from './slash';
 import { releaseCards } from './stacks';
 import { declaredLayout } from './page-layout';
@@ -49,6 +51,25 @@ export function appViewForWork(work: string): AppView | null {
 }
 export function appViewOf(item: HTMLElement | null): AppView | null {
   return item ? appViewForWork(item.dataset.unite ?? '') : null;
+}
+function openFrameAssistant(frame: Frame, tab: AppAssistantTab, request: {toggle?: boolean; question?: string; scope?: RecordScope | null} = {}): void {
+  const actions = parsePresentation(frame.root.dataset.presentation ?? '{}').actions ?? [];
+  showAppAssistant(frame.root.querySelector<HTMLElement>('[data-app-companion]')!, {
+    app: frame.app, work: frame.work, title: frame.title, address: addressOfWork(frame.app, frame.work) || frame.work,
+    onOpenApp: () => {if (frames.get(frame.work) === frame) void setAppView(frame.app, frame.work, 'open').then(() => revealFrame(frame));},
+    ...(actions.length ? {onOpenActions: () => {
+      void setAppView(frame.app, frame.work, 'open', {focus: false, isCurrent: () => frames.get(frame.work) === frame && frame.item.isConnected}).then(() => {
+        if (frames.get(frame.work) !== frame) return;
+        revealFrame(frame); frame.root.querySelector<HTMLElement>('[data-app-action]')?.focus({preventScroll: true});
+      });
+    }} : {}),
+  }, tab, request);
+}
+/** Addressed questions belong to this app, even when it first needs a canvas placement. */
+export async function openAppAssistant(app: string, work: string, tab: AppAssistantTab = 'ask', question = '', scope: RecordScope | null = null): Promise<boolean> {
+  await setAppView(app, work, 'face', {preserveMode: true, focus: false});
+  const frame = frames.get(work); if (!frame || frame.app !== app) return false;
+  openFrameAssistant(frame, tab, {question, scope}); return true;
 }
 export function frameCardsOf(id: string): string[] | null {
   for (const frame of frames.values()) if (frame.cards.includes(id)) return visibleCards(frame).map(card => card.dataset.card ?? '');
@@ -166,7 +187,7 @@ function applySize(frame: Frame, width: number, height: number): void {
   frame.baseSize = size;
   const companion = !frame.root.querySelector<HTMLElement>('[data-app-companion]')!.hidden;
   const beside = viewport.width >= 720;
-  const total = pageSize({width: size.width + (companion && beside ? 336 : 0), height: companion ? Math.max(size.height, beside ? 420 : 620) : size.height}, viewport);
+  const total = pageSize({width: size.width + (companion && beside ? 336 : 0), height: companion ? Math.max(size.height, beside ? 540 : 620) : size.height}, viewport);
   frame.root.classList.toggle('has-companion', companion);
   frame.root.classList.toggle('is-companion-below', companion && !beside);
   canvas.resizeItem(frame.item, total.width, total.height);
@@ -200,9 +221,8 @@ function renderMode(frame: Frame, mode: AppViewMode): void {
   frame.root.dataset.placementKind = standalone ? 'card' : 'app';
   frame.root.querySelector<HTMLElement>('.cv-app-view-picker')!.hidden = standalone;
   frame.root.querySelector<HTMLElement>('[data-app-summary]')!.hidden = standalone;
-  for (const control of frame.root.querySelectorAll<HTMLElement>('.cv-window-control[data-app-view-mode]')) control.hidden = standalone;
   frame.root.querySelector('.cv-unite-actions')?.setAttribute('aria-label', standalone ? 'Card' : 'App');
-  const ask = frame.root.querySelector('[data-unite-ask]');
+  const ask = frame.root.querySelector('[data-app-assistant="ask"]');
   if (ask) { ask.setAttribute('aria-label', standalone ? 'Ask about this card' : 'Ask about this app'); ask.setAttribute('title', standalone ? 'Ask about this card' : 'Ask about this app'); }
   const edit = frame.root.querySelector('[data-edit-presentation]');
   if (edit) { edit.setAttribute('aria-label', standalone ? 'Card settings' : 'App settings'); edit.setAttribute('title', standalone ? 'Card settings' : 'App settings'); }
@@ -333,7 +353,7 @@ export function removeAppView(work: string): boolean {
   retained.delete(work);
   const frame = frames.get(work);
   if (!frame) { save(); return false; }
-  releaseFocus(frame); disposePresentation(frame.root); disposeAppSummary(work);
+  releaseFocus(frame); disposePresentation(frame.root); disposeAppAssistant(frame.app, work);
   for (const card of cardsOf(frame)) board.park(card);
   frames.delete(work); board.canvas()?.removeItem(frame.item, {selectFallback: false});
   board.changed(); save(); return true;
@@ -438,9 +458,9 @@ export function startUnite(document_: Document): void {
     frame.item.setAttribute('aria-label', detail.name); frame.item.querySelector('.widget-drag-handle')?.setAttribute('aria-label', `Move ${detail.name}`);
   });
   document_.addEventListener('forma:app-companion', event => {
-    const detail = (event as CustomEvent<{app: string; work: string; open: boolean}>).detail;
+    const detail = (event as CustomEvent<{app: string; work: string; open: boolean; tab?: AppAssistantTab}>).detail;
     const frame = detail && frames.get(detail.work); if (!frame || frame.app !== detail.app) return;
-    frame.root.querySelector('[data-app-summary]')?.setAttribute('aria-expanded', String(detail.open));
+    for (const button of frame.root.querySelectorAll<HTMLElement>('[data-app-assistant]')) button.setAttribute('aria-expanded', String(detail.open && button.dataset.appAssistant === (detail.tab ?? 'summary')));
     applySize(frame, frame.baseSize.width, frame.baseSize.height);
     if (detail.open) revealFrame(frame);
   });
@@ -454,9 +474,8 @@ export function startUnite(document_: Document): void {
   document_.addEventListener('click', event => {
     const target = event.target as Element | null, root = target?.closest<HTMLElement>('.cv-unite');
     const frame = root && frames.get(root.dataset.unite ?? '');
-    if (frame && target?.closest('[data-app-summary]')) {
-      toggleAppSummary(frame.app, frame.work, frame.title, frame.root.querySelector<HTMLElement>('[data-app-companion]')!); return;
-    }
+    const assistant = target?.closest<HTMLElement>('[data-app-assistant]');
+    if (frame && assistant) {openFrameAssistant(frame, assistant.dataset.appAssistant as AppAssistantTab, {toggle: true}); return;}
     if (frame && target?.closest('[data-app-view-remove]')) { removeWork(frame.work); return; }
     if (frame && target?.closest('[data-unite-share]')) {openSharing(document_, frame.app, frame.work, frame.title); return;}
     const choice = target?.closest<HTMLElement>('[data-app-view-mode]');

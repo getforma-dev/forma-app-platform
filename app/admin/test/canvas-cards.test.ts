@@ -262,6 +262,7 @@ test('a pinned answer is read-only: its text and receipts, labeled with the ques
     title: ANSWER.question, spec: { question: ANSWER.question, text: ANSWER.text, scope: ANSWER.scope, references: ANSWER.references, receipts: ANSWER.receipts },
     everyone: false, mine: true, can_share: false, created_at: '2026-10-31T12:00:00Z' })!;
   // No canvas host here: placing it renders nothing and calls nothing.
+  assert.equal(ask.placePinnedAnswer({...pin, spec: {...pin.spec as object, file_source: {file_id: 'invalid'}, file_references: []}}), false, 'malformed file provenance cannot render as a source-less answer');
   assert.equal(ask.placePinnedAnswer(pin), true);
   assert.equal(calls.length, 0, 'a pinned answer never asks again');
   assert.equal(document_.ids.size, 1);

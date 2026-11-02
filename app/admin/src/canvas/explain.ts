@@ -1,6 +1,6 @@
-// An app-owned, on-demand Summary companion. Opening it reads the existing
-// authorized summary; only Generate/Regenerate asks the server to make one.
-// The panel stays inside the app's canvas item and never becomes a loose card.
+// Summary content for an app-owned companion. The coordinator owns the shared
+// header, tabs and visibility; showing this panel reads an authorized summary.
+// Only Generate/Regenerate asks the server to make one.
 import { ensureAppGroup, isOnBoard, onBoardChange } from './board';
 import { lineage } from './box-api';
 import { openFocus } from './focus';
@@ -18,13 +18,16 @@ class ExplainError extends Error {
   }
 }
 
+export type AppSummaryOptions = {app: string; work: string; title: string};
+export type AppSummaryController = {show(): void; hide(): void; dispose(): void};
+
 type Companion = {
   app: string; work: string; host: HTMLElement; panel: HTMLElement;
   list: HTMLOListElement; status: HTMLParagraphElement; when: HTMLParagraphElement;
   action: HTMLButtonElement; label: HTMLElement; open: boolean; request: number;
   controller: AbortController | null; actionKind: 'load' | 'generate';
 };
-const companions = new Map<string, Companion>();
+const companions = new Map<HTMLElement, Companion>();
 let watching = false;
 
 function parse(value: unknown): Explanation | null {
@@ -97,17 +100,8 @@ function message(error: unknown): string {
   return 'The summary could not be made right now.';
 }
 
-/** Open/close changes are layout events, not independently persisted canvas objects. */
-function setOpen(entry: Companion, open: boolean): void {
-  entry.open = open;
-  entry.host.hidden = !open;
-  entry.host.inert = !open;
-  const frame = entry.host.closest<HTMLElement>('.cv-item-unite');
-  const button = frame?.querySelector<HTMLElement>('[data-app-summary]');
-  button?.setAttribute('aria-expanded', String(open));
-  entry.host.dispatchEvent(new CustomEvent('forma:app-companion', {
-    bubbles: true, detail: {app: entry.app, work: entry.work, open},
-  }));
+function currentEntry(entry: Companion): boolean {
+  return companions.get(entry.host) === entry && entry.host.isConnected;
 }
 
 function cancel(entry: Companion): void {
@@ -119,27 +113,20 @@ function cancel(entry: Companion): void {
 
 function dispose(entry: Companion): void {
   cancel(entry);
-  companions.delete(entry.work);
-  setOpen(entry, false);
+  entry.open = false;
+  if (companions.get(entry.host) !== entry) return;
+  companions.delete(entry.host);
   entry.host.replaceChildren();
 }
 
-/** Called when the owning app leaves the canvas. */
-export function disposeAppSummary(work: string): void {
-  const entry = companions.get(work);
-  if (entry) dispose(entry);
-}
-
-/** Hides the attached panel, preserving the app, its size history and data. */
-export function closeAppSummary(work: string): void {
-  const entry = companions.get(work);
-  if (!entry || !entry.open) return;
+function hide(entry: Companion): void {
   cancel(entry);
-  // Reopening reauthorizes through GET; do not retain findings behind a hidden panel.
+  entry.open = false;
+  // A later show reauthorizes through GET; no findings remain in hidden tabs.
   entry.list.replaceChildren();
   entry.when.textContent = '';
-  setOpen(entry, false);
-  entry.host.closest('.cv-item-unite')?.querySelector<HTMLElement>('[data-app-summary]')?.focus();
+  entry.status.textContent = '';
+  entry.action.hidden = true;
 }
 
 function render(entry: Companion, explanation: Explanation): void {
@@ -152,8 +139,11 @@ function render(entry: Companion, explanation: Explanation): void {
       type: 'button', class: 'cv-ex-value',
       title: `${part.exact ? `Exact ${part.exact}` : part.value} · ${part.view_title}${short ? ` · receipt ${short}` : ''}`,
     }, part.value);
-    button.addEventListener('click', () => void showValue(entry.app, entry.work, part.view_id,
-      () => companions.get(entry.work) === entry && entry.open && entry.host.isConnected));
+    button.addEventListener('click', () => {
+      const request = entry.request;
+      void showValue(entry.app, entry.work, part.view_id,
+        () => currentEntry(entry) && entry.open && entry.request === request);
+    });
     return button;
   }))));
   const none = explanation.state === 'none' || explanation.findings.length === 0;
@@ -170,8 +160,7 @@ async function read(entry: Companion, method: 'GET' | 'POST'): Promise<void> {
   const request = entry.request;
   const controller = new AbortController();
   entry.controller = controller;
-  const current = () => companions.get(entry.work) === entry && entry.host.isConnected
-    && entry.open && entry.request === request && !controller.signal.aborted;
+  const current = () => currentEntry(entry) && entry.open && entry.request === request && !controller.signal.aborted;
   entry.action.disabled = true;
   entry.panel.setAttribute('aria-busy', 'true');
   entry.status.textContent = method === 'GET' ? 'Loading summary…' : 'Summarizing from the receipts…';
@@ -215,52 +204,46 @@ async function read(entry: Companion, method: 'GET' | 'POST'): Promise<void> {
   }
 }
 
-function mountCompanion(app: string, work: string, title: string, host: HTMLElement): Companion {
+/** Mounts content only. The owning companion controls its header and visibility. */
+export function mountAppSummary(host: HTMLElement, {app, work, title}: AppSummaryOptions): AppSummaryController {
+  const previous = companions.get(host);
+  if (previous) dispose(previous);
   const document_ = host.ownerDocument;
   const list = el(document_, 'ol', {class: 'cv-ex-findings'});
   const status = el(document_, 'p', {class: 'cv-ex-status', role: 'status'});
   const when = el(document_, 'p', {class: 'cv-ex-when'});
   const label = el(document_, 'p', {class: 'cv-app-summary-label'}, LABEL);
   const action = el(document_, 'button', {type: 'button', class: 'cv-ex-regen'}, 'Generate summary');
-  const close = el(document_, 'button', {
-    type: 'button', class: 'cv-app-summary-close', 'aria-label': 'Close summary', title: 'Close summary',
-  }, '×');
-  const headingId = `app-summary-heading-${work}`;
-  const panel = el(document_, 'section', {class: 'cv-app-summary', 'aria-labelledby': headingId},
-    el(document_, 'header', {class: 'cv-app-summary-head'},
-      el(document_, 'div', {}, el(document_, 'h3', {id: headingId}, 'Summary'),
-        el(document_, 'p', {class: 'cv-app-summary-of', title}, title)), close),
+  action.hidden = true;
+  const panel = el(document_, 'section', {class: 'cv-app-summary', 'aria-label': `Summary of ${title}`},
     el(document_, 'div', {class: 'cv-app-summary-body'}, label, list, status),
     el(document_, 'footer', {class: 'cv-app-summary-foot'}, when, action));
   const entry: Companion = {app, work, host, panel, list, status, when, action, label,
     open: false, request: 0, controller: null, actionKind: 'load'};
-  close.addEventListener('click', () => closeAppSummary(work));
   action.addEventListener('click', () => {
-    if (entry.action.disabled || !entry.open || !entry.host.isConnected) return;
+    if (entry.action.disabled || !entry.open || !currentEntry(entry)) return;
     void read(entry, entry.actionKind === 'load' ? 'GET' : 'POST');
   });
   host.replaceChildren(panel);
-  companions.set(work, entry);
-  return entry;
+  companions.set(host, entry);
+  watchSummaries();
+  return {
+    show() {
+      if (!currentEntry(entry) || entry.open) return;
+      if (!isUuid(app) || !isUuid(work)) {
+        entry.status.textContent = 'This summary is not available.';
+        return;
+      }
+      entry.open = true;
+      void read(entry, 'GET');
+    },
+    hide: () => hide(entry),
+    dispose: () => dispose(entry),
+  };
 }
 
-/** Called by the app's Summary control; never starts an automatic model request. */
-export function toggleAppSummary(app: string, work: string, title: string, host: HTMLElement): void {
-  if (!isUuid(app) || !isUuid(work) || !host.isConnected) return;
-  startExplain();
-  let entry = companions.get(work);
-  if (entry && (entry.app !== app || entry.host !== host)) {
-    dispose(entry);
-    entry = undefined;
-  }
-  if (entry?.open) { closeAppSummary(work); return; }
-  entry ??= mountCompanion(app, work, title, host);
-  setOpen(entry, true);
-  void read(entry, 'GET');
-}
-
-/** Cleanup only: placing an app does not fetch or generate a summary. */
-export function startExplain(): void {
+/** Defensive removal cleanup; mounting an app never fetches or generates data. */
+function watchSummaries(): void {
   if (watching) return;
   watching = true;
   onBoardChange(() => {

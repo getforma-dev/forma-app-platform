@@ -737,12 +737,11 @@ function Canvas(props: CanvasProps) {
         </div>
         <p id="cv-activity" class="sr-only" role="status" aria-live="polite"></p>
       </main>
-      <aside id="cv-library" class="cv-library" aria-label="Library, commands, Ask and shortcuts" data-open="false" data-tab="library">
+      <aside id="cv-library" class="cv-library" aria-label="Library, commands and shortcuts" data-open="false" data-tab="library">
         <header class="cv-lib-head">
-          <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands, Ask and shortcuts">
+          <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands and shortcuts">
             <button type="button" role="tab" id="cv-tab-library" class="cv-pane-tab" aria-selected="true" aria-controls="cv-panel-library" data-pane-tab="library">Library</button>
             <button type="button" role="tab" id="cv-tab-commands" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-commands" data-pane-tab="commands">Commands</button>
-            <button type="button" role="tab" id="cv-tab-ask" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-ask" data-pane-tab="ask">Ask</button>
             <button type="button" role="tab" id="cv-tab-shortcuts" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-shortcuts" data-pane-tab="shortcuts">Shortcuts</button>
           </div>
           <button type="button" class="cv-lib-close" data-lib-close aria-label="Close the pane" title="Close (Esc)">
@@ -811,7 +810,6 @@ function Canvas(props: CanvasProps) {
           </div>
         </div>
         <div id="cv-panel-commands" class="cv-pane-panel cv-commands" role="tabpanel" aria-labelledby="cv-tab-commands" hidden></div>
-        <div id="cv-panel-ask" class="cv-pane-panel cv-ask" role="tabpanel" aria-labelledby="cv-tab-ask" hidden></div>
         <div id="cv-panel-shortcuts" class="cv-pane-panel cv-shortcuts" role="tabpanel" aria-labelledby="cv-tab-shortcuts" hidden></div>
       </aside>
       <footer class="cv-dock">

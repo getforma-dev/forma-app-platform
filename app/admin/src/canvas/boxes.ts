@@ -825,7 +825,6 @@ async function makeFileApp(boxId: string, file: BoxFile): Promise<void> {
         if (!view || view.app !== built.app_id) throw new Error('app_placement_failed');
         removeSheet(key);
         fileAppAttempts.delete(key);
-        void markFileSources();
         void refreshBoxes();
       },
     });
@@ -1096,34 +1095,6 @@ function markChips(): void {
   }
 }
 
-const sourceLookups = new WeakSet<HTMLElement>();
-/** Authoritative lineage keeps the original file reachable after an upgrade/reload. */
-async function markFileSources(): Promise<void> {
-  const frames = document.querySelectorAll<HTMLElement>('.cv-item-unite');
-  await Promise.all([...frames].map(async item => {
-    const view = appViewOf(item);
-    if (!view || sourceLookups.has(item) || item.querySelector('[data-app-file-sources]')) return;
-    sourceLookups.add(item);
-    try {
-      const source = await lineage(view.app, view.work);
-      if (!source?.files.length || !item.isConnected || appViewOf(item)?.work !== view.work) return;
-      const root = item.querySelector<HTMLElement>('.cv-unite');
-      if (!root) return;
-      const details = el(document, 'details', { class: 'bx-app-sources', 'data-app-file-sources': '' },
-        el(document, 'summary', {}, source.files.length === 1 ? `Source file · ${source.files[0]!.name}` : `Source files (${source.files.length})`));
-      for (const entry of source.files) {
-        const file = sheetRecord(source.box_id, { ...entry, bytes: 0 });
-        const open = el(document, 'button', { type: 'button', class: 'cv-secondary' }, `Open ${entry.name}`);
-        open.addEventListener('click', () => openViewer(file, source.box_id));
-        details.append(open, fileCardFooter(document, source.box_id, file));
-      }
-      const sourceHost = root.querySelector('[data-app-source-host]');
-      if (sourceHost) sourceHost.append(details);
-      else root.querySelector('.cv-unite-head')?.after(details);
-    } finally { sourceLookups.delete(item); }
-  }));
-}
-
 async function receiptLineage(details: HTMLDetailsElement): Promise<void> {
   if (details.dataset.lineage) return;
   const owner = workOf(details);
@@ -1391,8 +1362,6 @@ export function startBoxes(document_: Document): void {
   }, true);
   onBoardChange(markChips);
   // Whole apps retain their source inside the app instead of spawning a loose summary.
-  onBoardChange(() => { void markFileSources(); });
-  void markFileSources();
   markChips();
   onLayoutSaved(() => { save(); saveSheets(); });
   onCanvasDragEnd((item, completion) => { void dropSheetOnFolder(item, completion); });

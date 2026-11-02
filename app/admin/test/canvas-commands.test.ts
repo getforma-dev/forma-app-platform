@@ -2,7 +2,7 @@
 // the Commands tab list the same commands, and the argument parsing and hints read each command's typed arguments.
 // APP-119: commands are verbs, apps are addresses, from the server with a
 // derived hint and examples; `/slug …` still runs them. The right pane has
-// three tabs, Library, Commands and Shortcuts: `?` is Shortcuts.
+// three tabs, Library, Commands and Shortcuts. Ask lives with its app.
 // APP-120: one grammar (APP-121 adds /rename and /alias: fourteen). `/` lists the verbs in four groups (Place,
 // Arrange, Make, Help) and no address; the first letter adds the Apps
 // section; the old widget verbs and `/help` are hidden aliases; a bare
@@ -178,6 +178,39 @@ test('aliases resolve: /weather and /widget weather, /note, /help, /expense bare
   assert.equal(slash.parseCommands(SERVER).find((entry) => entry.slug === 'notes')?.hint, '');
 });
 
+test('addressed saved-app questions open that app’s assistant and never fall through to build or action routing', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const {fileURLToPath} = await import('node:url');
+  const {build} = await import('esbuild');
+  const entry = fileURLToPath(new URL('../src/canvas/slash.ts', import.meta.url));
+  const source = await readFile(entry, 'utf8'), imports = new Map<string, string[]>();
+  for (const [, names, path] of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/gs))
+    imports.set(path!, names!.split(',').map(name => name.trim()).filter(name => name && !name.startsWith('type ')));
+  const calls: unknown[][] = [];
+  const key = '__savedAddressRouting';
+  const mocks: Record<string, Record<string, (...args: any[]) => any>> = {
+    './board': {placeWork: async (...args) => {calls.push(['place', ...args]); return 'Placed.';}},
+    './ask': {openAsk: (...args) => calls.push(['ask', ...args])},
+    './compose': {submitIntent: async (...args) => calls.push(['build', ...args])},
+    './actions': {submitAction: async (...args) => calls.push(['action', ...args])},
+  };
+  (globalThis as any)[key] = mocks;
+  try {
+    const bundled = await build({entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false,
+      plugins: [{name: 'address-routing', setup(builder) {
+        builder.onResolve({filter: /.*/}, args => args.importer === entry && imports.has(args.path) ? {path: args.path, namespace: 'address-boundary'} : undefined);
+        builder.onLoad({filter: /.*/, namespace: 'address-boundary'}, args => ({loader: 'js', contents: imports.get(args.path)!.map(name => `export const ${name}=(...args)=>globalThis[${JSON.stringify(key)}][${JSON.stringify(args.path)}]?.[${JSON.stringify(name)}]?.(...args);`).join('\n')}));
+      }}]});
+    const api = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0]!.text).toString('base64'));
+    const command = api.serverAddress({...SERVER.commands.find(value => value.slug === 'big-claims')!, aliases: ['checking'], examples: []});
+    await command.run('Which claims are overdue?');
+    assert.deepEqual(calls, [['place', SAVED_APP, SAVED_WORK], ['ask', 'Which claims are overdue?', {kind: 'app', address: 'big-claims', works: [{app_id: SAVED_APP, work_id: SAVED_WORK, address: 'big-claims'}]}]]);
+    calls.length = 0; await command.run(''); assert.deepEqual(calls, [['place', SAVED_APP, SAVED_WORK]]);
+    calls.length = 0; await command.run('add $20 coffee');
+    assert.equal(calls[1]?.[0], 'action'); assert.equal(calls[1]?.[3], SAVED_APP); assert.equal(calls.some(value => value[0] === 'build'), false);
+  } finally {delete (globalThis as any)[key];}
+});
+
 test('the Library row shows the address, its aliases, hint and example; /apps searches slug, alias and hint (APP-119)', async () => {
   const { registry } = await seeded();
   const { rowAddress, firstExample } = await import('../src/canvas/library.ts');
@@ -279,25 +312,23 @@ function page() {
   };
   const libraryTab = node('button', { role: 'tab', id: 'cv-tab-library', 'aria-selected': 'true', 'aria-controls': 'cv-panel-library', 'data-pane-tab': 'library' });
   const commandsTab = node('button', { role: 'tab', id: 'cv-tab-commands', 'aria-selected': 'false', 'aria-controls': 'cv-panel-commands', 'data-pane-tab': 'commands' });
-  const askTab = node('button', { role: 'tab', id: 'cv-tab-ask', 'aria-selected': 'false', 'aria-controls': 'cv-panel-ask', 'data-pane-tab': 'ask' });
   const shortcutsTab = node('button', { role: 'tab', id: 'cv-tab-shortcuts', 'aria-selected': 'false', 'aria-controls': 'cv-panel-shortcuts', 'data-pane-tab': 'shortcuts' });
-  const tablist = node('div', { role: 'tablist' }, libraryTab, commandsTab, askTab, shortcutsTab);
+  const tablist = node('div', { role: 'tablist' }, libraryTab, commandsTab, shortcutsTab);
   const close = node('button', { 'data-lib-close': '' });
   const search = node('input', { id: 'cv-lib-search' });
   const libraryPanel = node('div', { id: 'cv-panel-library', role: 'tabpanel' }, search);
   const commandsPanel = node('div', { id: 'cv-panel-commands', role: 'tabpanel', hidden: '' });
-  const askPanel = node('div', { id: 'cv-panel-ask', role: 'tabpanel', hidden: '' });
   const shortcutsPanel = node('div', { id: 'cv-panel-shortcuts', role: 'tabpanel', hidden: '' });
-  const pane = node('aside', { id: 'cv-library', 'data-open': 'false', 'data-tab': 'library' }, node('header', {}, tablist, close), libraryPanel, commandsPanel, askPanel, shortcutsPanel);
+  const pane = node('aside', { id: 'cv-library', 'data-open': 'false', 'data-tab': 'library' }, node('header', {}, tablist, close), libraryPanel, commandsPanel, shortcutsPanel);
   const toggle = node('button', { id: 'cv-library-toggle', 'aria-expanded': 'false' });
   const input = node('input', { id: 'intent-input' });
   const board = node('div', { class: 'forma-canvas-viewport' });
   node('div', { id: 'cv-shell' }, toggle, pane, board, input);
-  return { document_, pane, libraryTab, commandsTab, askTab, shortcutsTab, tablist, libraryPanel, commandsPanel, askPanel, shortcutsPanel, toggle, input, board };
+  return { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, shortcutsPanel, toggle, input, board };
 }
 
 test('the right pane opens on the right tab from each entry point (APP-119)', async () => {
-  const { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, askPanel, shortcutsPanel, toggle, input, board } = page();
+  const { document_, pane, libraryTab, commandsTab, shortcutsTab, tablist, libraryPanel, commandsPanel, shortcutsPanel, toggle, input, board } = page();
   (globalThis as { document?: unknown }).document = document_;
   (globalThis as { matchMedia?: unknown }).matchMedia = () => ({ matches: false });
   (globalThis as { fetch?: unknown }).fetch = async () => ({ ok: true, json: async () => SERVER });
@@ -308,12 +339,15 @@ test('the right pane opens on the right tab from each entry point (APP-119)', as
   const controls = await import('../src/canvas/controls.ts');
   const { slash } = await seeded();
   panes.startPane(document_ as unknown as Document);
+  assert.deepEqual(panes.PANE_TABS, ['library', 'commands', 'shortcuts']);
+  assert.equal(document_.getElementById('cv-tab-ask'), null);
+  assert.equal(document_.getElementById('cv-panel-ask'), null);
   sheet.startCommandSheet(document_ as unknown as Document);
   shortcuts.startShortcutTab(document_ as unknown as Document);
   // The canvas keys (no canvas in the fake page: only the key handler is wired).
   controls.startControls(document_ as unknown as Document);
-  const state = () => ({ open: pane.dataset.open, tab: pane.dataset.tab, library: !libraryPanel.hidden, commands: !commandsPanel.hidden, ask: !askPanel.hidden, shortcuts: !shortcutsPanel.hidden });
-  const on = (tab: string) => ({ open: 'true', tab, library: tab === 'library', commands: tab === 'commands', ask: tab === 'ask', shortcuts: tab === 'shortcuts' });
+  const state = () => ({ open: pane.dataset.open, tab: pane.dataset.tab, library: !libraryPanel.hidden, commands: !commandsPanel.hidden, shortcuts: !shortcutsPanel.hidden });
+  const on = (tab: string) => ({ open: 'true', tab, library: tab === 'library', commands: tab === 'commands', shortcuts: tab === 'shortcuts' });
   const closed = (tab: string) => ({ ...on(tab), open: 'false' });
   const onLibrary = on('library');
   const onCommands = on('commands');

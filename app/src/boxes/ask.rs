@@ -149,6 +149,24 @@ fn label(row: &[String]) -> String {
         .join(" · ")
 }
 
+/// Rebuild one exact-file citation from immutable parsed cells when saving an
+/// answer. Sheet names, row existence and labels are server facts as in Ask.
+pub(crate) fn original_reference(
+    file: &BoxFile,
+    table: &inspect::Table,
+    row: usize,
+) -> Option<Value> {
+    if row == 0 || row > MAX_ROWS {
+        return None;
+    }
+    let values = table.rows.get(row - 1)?;
+    Some(
+        json!({"ref": reference(0, row - 1), "file_id": file.file_id,
+        "file": file.name, "sha256": file.content_digest, "sheet": table.sheet,
+        "row": row, "label": label(values)}),
+    )
+}
+
 /// The route's answer document: exactly `{text, references}`, each
 /// reference the file and row it names (server provenance only).
 pub fn document(answer: &Answer, tables: &[FolderTable]) -> Value {

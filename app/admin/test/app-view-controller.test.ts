@@ -77,8 +77,8 @@ async function fixture(options:{defer?:boolean;standalone?:boolean}={}) {
  Object.assign(globalThis,{HTMLElement:E,document:d,matchMedia:()=>({matches:false}),localStorage:{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v)},__view:{board,ensure:async(_app:string,work:string)=>{loads++;await gate;return groups.get(work)??null;},remember:()=>remembered++,standalone:()=>!!options.standalone,removeWork:()=>0,hooks:null}});
  const stubs:Record<string,string>={
   './board':`const f=globalThis.__view;export const stackBoard=f.board;export const ensureAppGroup=f.ensure;export const rememberAppPlacement=f.remember;export const isStandaloneWork=f.standalone;export const removeWork=f.removeWork;export const refreshGroupPresentation=async()=>true;export const runGroup=()=>{};export const onLayoutSaved=()=>{};export const setUniteHooks=h=>f.hooks=h;`,
-  './explain':`export const toggleAppSummary=()=>{};export const disposeAppSummary=()=>{};`,
-  './library':`export const findApps=()=>[];`, './slash':`export const registerCommands=()=>{};export const registerCompleter=()=>{};`,
+  './app-assistant':`export const showAppAssistant=()=>{};export const disposeAppAssistant=()=>{};`,
+  './library':`export const findApps=()=>[];`, './shape':`export const addressOfWork=()=>"whole-app";`, './slash':`export const registerCommands=()=>{};export const registerCompleter=()=>{};`,
   './stacks':`export const releaseCards=()=>[];`, '../sharing/dialog':`export const dismissSharing=()=>false;export const openSharing=()=>{};`,
   './render':`export const originKind=()=>'';export function el(d,t,a={},...children){const n=d.createElement(t);for(const[k,v]of Object.entries(a))n.setAttribute(k,v);n.append(...children.filter(c=>c!==null&&c!==undefined&&c!==false));return n;}`,
   '../canvas-vendor/index':`export function createCanvasItem(o){const item=o.content.ownerDocument.createElement('article');item.dataset.instanceId=o.instanceId;item.className='widget-instance';item.append(o.content);return item;}`,
@@ -193,7 +193,7 @@ test('changing an existing Open app to independent Card updates labels and selec
  f.setStandalone(true);await f.api.setAppView(APP,WORK,'open');
  assert.equal(item.querySelector('.cv-unite').dataset.placementKind,'card');
  assert.equal(item.querySelector('.cv-app-view-picker').hidden,true);
- assert.equal(item.querySelector('[data-unite-ask]').getAttribute('aria-label'),'Ask about this card');
+ assert.equal(item.querySelector('[data-app-assistant="ask"]').getAttribute('aria-label'),'Ask about this card');
  assert.equal(item.querySelector('[data-edit-presentation]').getAttribute('aria-label'),'Card settings');
  f.setStandalone(false);await f.api.setAppView(APP,WORK,'open');
  assert.equal(item.querySelector('.cv-app-view-picker').hidden,false);assert.equal(item.querySelector('[data-edit-presentation]').getAttribute('aria-label'),'App settings');assert.equal(f.mounts(),1);

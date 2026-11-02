@@ -140,29 +140,50 @@ export function previewTable(document_: Document, preview: Preview): HTMLElement
 
 /** Opens `file` of box `boxId` in the viewer. */
 export function openViewer(file: BoxFile, boxId: string, page: number | null = null): void {
-  const document_ = document;
-  const modal = openModal(file.name, `${KIND_LABEL[file.kind]}${file.bytes ? ` · ${formatBytes(file.bytes)}` : ''}${page ? ` · page ${page}` : ''}`, undefined, file.kind !== 'image');
+  let dispose = () => {};
+  const modal = openModal(file.name, `${KIND_LABEL[file.kind]}${file.bytes ? ` · ${formatBytes(file.bytes)}` : ''}${page ? ` · page ${page}` : ''}`, () => dispose(), file.kind !== 'image');
+  dispose = renderFileViewer(modal, file, boxId, page);
+}
+
+/** The same original-file reader, owned by an app companion instead of a modal. */
+export function mountFileViewer(host: HTMLElement, file: BoxFile, boxId: string): { dispose(): void } {
+  const document_ = host.ownerDocument;
+  const body = el(document_, 'div', { class: 'bx-inline-viewer-body' });
+  const actions = el(document_, 'div', { class: 'bx-inline-viewer-actions' });
+  const root = el(document_, 'section', { class: 'bx-inline-viewer', 'aria-label': `Original file: ${file.name}` }, body, actions);
+  host.append(root);
+  const dispose = renderFileViewer({ root, body, actions }, file, boxId, null);
+  return { dispose() { dispose(); root.remove(); } };
+}
+
+function renderFileViewer(modal: Pick<Modal, 'root' | 'body' | 'actions'>, file: BoxFile, boxId: string, page: number | null): () => void {
+  const document_ = modal.root.ownerDocument;
+  const request = new AbortController();
+  let generation = 0;
+  let disposed = false;
+  const live = () => !disposed && modal.root.isConnected;
+  const dispose = () => { disposed = true; generation++; request.abort(); modal.body.replaceChildren(); modal.actions.replaceChildren(); };
   const newTab = el(document_, 'a', { href: file.content_url, target: '_blank', rel: 'noopener noreferrer', class: 'bx-link' }, 'Open in a new tab');
   if (file.kind === 'pdf') {
     // A cited page opens there (the browser viewer's `#page=N`).
     const src = page && Number.isInteger(page) && page > 0 ? `${file.content_url}#page=${page}` : file.content_url;
     modal.body.append(el(document_, 'iframe', { class: 'bx-pdf', src, title: page ? `${file.name}, page ${page}` : file.name }));
     modal.actions.append(newTab);
-    return;
+    return dispose;
   }
   if (file.kind === 'image') {
     modal.body.append(el(document_, 'img', { class: 'bx-image', src: file.content_url, alt: file.name }));
     modal.actions.append(newTab);
-    return;
+    return dispose;
   }
   if (file.kind === 'text') {
     const pre = el(document_, 'pre', { class: 'bx-text' }, 'Loading…');
     modal.body.append(pre);
-    void fetch(file.content_url, { credentials: 'same-origin', cache: 'no-store' })
+    void fetch(file.content_url, { credentials: 'same-origin', cache: 'no-store', signal: request.signal })
       .then((response) => (response.ok ? response.text() : Promise.reject(new Error('refused'))))
-      .then((text) => { pre.textContent = text.slice(0, 200000); })
-      .catch(() => { pre.textContent = 'This file could not be read now.'; });
-    return;
+      .then((text) => { if (live()) pre.textContent = text.slice(0, 200000); })
+      .catch(() => { if (live()) pre.textContent = 'This file could not be read now.'; });
+    return dispose;
   }
   // Read immutable original cells, independently from the Make data preview.
   const status = el(document_, 'p', { class: 'bx-status', role: 'status', tabindex: '-1' }, 'Reading the original file…');
@@ -174,20 +195,20 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
   modal.body.append(el(document_, 'p', { class: 'bx-sheet-limit' },
     'Original values, 50 rows × 32 columns per page. Jump to any row or column; no data is dropped between pages. Excel shows stored values and saved formula results without recalculation or styles. Date serials remain as stored. CSV shows logical records; Raw CSV includes original quoting and blank lines.'));
   modal.actions.append(el(document_, 'a', { href: file.content_url, download: file.name, class: 'bx-link' }, 'Download original file'));
-  let generation = 0;
   let digest = '';
   if (file.kind === 'csv') {
     const raw = el(document_, 'button', { type: 'button', class: 'bx-link' }, 'Raw CSV');
     raw.addEventListener('click', () => {
+      if (!live()) return;
       const current = ++generation;
       table.replaceChildren(); navigation.replaceChildren(); selection.replaceChildren(); formulaNote.hidden = true;
       status.textContent = 'Reading original CSV bytes…';
-      void fetch(file.content_url, { credentials: 'same-origin', cache: 'no-store' }).then(async (response) => {
+      void fetch(file.content_url, { credentials: 'same-origin', cache: 'no-store', signal: request.signal }).then(async (response) => {
         if (!response.ok) throw new Error('refused');
         const bytes = await response.arrayBuffer();
         if (bytes.byteLength > 20 * 1024 * 1024) throw new Error('too large');
         const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        if (current !== generation || !modal.root.isConnected) return;
+        if (current !== generation || !live()) return;
         const starts = [0];
         while (starts[starts.length - 1]! < text.length) {
           let end = Math.min(text.length, starts[starts.length - 1]! + 65536);
@@ -195,7 +216,7 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
           starts.push(end);
         }
         const renderRaw = (pageIndex: number) => {
-          if (current !== generation || !modal.root.isConnected) return;
+          if (current !== generation || !live()) return;
           table.replaceChildren(); navigation.replaceChildren();
           status.textContent = `Original CSV text · page ${pageIndex + 1} of ${Math.max(1, starts.length - 1)} · quoting and blank lines preserved`;
           table.append(el(document_, 'pre', { class: 'bx-text', tabindex: '0', 'aria-label': 'Original CSV text' }, text.slice(starts[pageIndex], starts[pageIndex + 1])));
@@ -208,7 +229,7 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
         };
         renderRaw(0);
       }).catch(() => {
-        if (current === generation && modal.root.isConnected) status.textContent = 'The original CSV is unavailable. No cached content is shown.';
+        if (current === generation && live()) status.textContent = 'The original CSV is unavailable. No cached content is shown.';
       });
     });
     const cells = el(document_, 'button', { type: 'button', class: 'bx-link' }, 'Table');
@@ -216,6 +237,7 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
     modal.actions.append(raw, cells);
   }
   const load = async (sheetIndex: number, offset: number, columnOffset = 0): Promise<void> => {
+    if (!live()) return;
     const current = ++generation;
     if (modal.root.contains(document_.activeElement)) status.focus({ preventScroll: true });
     // Clear previous contents before each authority check, including failures.
@@ -223,7 +245,7 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
     status.textContent = 'Reading the original file…';
     try {
       const page = await fetchOriginalPage(boxId, file.file_id, sheetIndex, offset, columnOffset);
-      if (current !== generation || !modal.root.isConnected) return;
+      if (current !== generation || !live()) return;
       if (digest && digest !== page.sha256) throw new Error('original changed');
       digest = page.sha256;
       if (page.format === 'xlsx') {
@@ -287,10 +309,11 @@ export function openViewer(file: BoxFile, boxId: string, page: number | null = n
       });
       navigation.append(el(document_, 'div', { class: 'bx-sheet-page-buttons' }, previous, next, left, right), jump);
     } catch (error) {
-      if (current !== generation || !modal.root.isConnected) return;
+      if (current !== generation || !live()) return;
       status.textContent = refusalText(error);
       if (error instanceof Error && error.message === 'not_found') modal.actions.replaceChildren();
     }
   };
   void load(0, 0);
+  return dispose;
 }

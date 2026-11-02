@@ -379,7 +379,9 @@ async fn campaign() {
             .unwrap(),
     });
     pages.finalize().unwrap();
+    let card_routes = crate::composer::cards::router_with_boxes(state.clone());
     let long = vec![
+        (crate::composer::cards::CARDS_PATH, card_routes.clone()),
         (
             composer::routes::PATH,
             composer::routes::router(Arc::new(Compose::new(auth.clone(), composer.clone()))),
@@ -404,6 +406,7 @@ async fn campaign() {
             .merge(crate::events::routes::router(auth.clone()))
             .merge(crate::actions::routes::records_router(auth.clone()))
             .merge(crate::composer::commands::router(auth.clone()))
+            .merge(card_routes)
             .merge(boxes::routes::router(state.clone()))
             .merge(crate::query::canvas::router(Arc::new(
                 crate::query::canvas::Canvas {
@@ -1319,6 +1322,119 @@ async fn campaign() {
         assert!(stand.get(&path, Some(&outsider_cookie)).await.uniform_404());
     }
     check(&mut checks, "sharing: sharing the derived app gives the teammate the app, its explanation with the same governed values, and read access to exactly the folder files it was built from (the CSV opens; the PDF and the image stay the uniform 404, no other file is listed, no derived apps are listed); a foreign member gets the uniform 404 for the lineage and the explanation");
+
+    // App-owned saved answers: the same immutable original provenance on
+    // refresh, with file access checked independently from work access.
+    auth.limits.clear();
+    let cards_path = crate::composer::cards::CARDS_PATH;
+    let file_pin_id = "00000000-0000-4000-8000-0000000c4f01";
+    let pin = json!({"card_id": file_pin_id, "kind": "answer", "app_id": app, "work_id": derived,
+        "question": "Which region led July?", "text": scoped_answer["text"], "scope": {"kind": "app", "address": ""},
+        "references": [], "receipts": [], "file_source": {"box_id": box_id, "file_id": files["q3_metrics.csv"]},
+        "file_references": scoped_answer["references"]});
+    let saved = stand
+        .post(cards_path, Some(&mate_cookie), &pin.to_string())
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    assert_eq!(saved.json()["card"]["app_id"], app);
+    assert_eq!(saved.json()["card"]["work_id"], derived);
+    assert_eq!(
+        saved.json()["card"]["spec"]["file_references"],
+        scoped_answer["references"]
+    );
+    assert_eq!(
+        saved.json()["card"]["spec"]["file_source"]["sha256"],
+        scoped_answer["references"][0]["sha256"]
+    );
+    let again = stand
+        .post(cards_path, Some(&mate_cookie), &pin.to_string())
+        .await;
+    assert_eq!(again.json()["saved"], false);
+    let has_pin = |value: &Value| {
+        value["cards"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|card| card["card_id"] == file_pin_id)
+    };
+    assert!(has_pin(
+        &stand.get(cards_path, Some(&mate_cookie)).await.json()
+    ));
+    assert!(
+        !has_pin(&stand.get(cards_path, Some(&maya_cookie)).await.json()),
+        "saved answers stay private to their maker"
+    );
+    assert!(stand
+        .post(cards_path, Some(&outsider_cookie), &pin.to_string())
+        .await
+        .uniform_404());
+    let mut wrong = pin.clone();
+    wrong["card_id"] = json!("00000000-0000-4000-8000-0000000c4f02");
+    wrong["file_references"][0]["sha256"] = json!(format!("sha256:{}", "f".repeat(64)));
+    let refused = stand
+        .post(cards_path, Some(&mate_cookie), &wrong.to_string())
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(refused.json()["code"], "unknown_receipt");
+    let mut forged_label = pin.clone();
+    forged_label["card_id"] = json!("00000000-0000-4000-8000-0000000c4f05");
+    forged_label["file_references"][0]["label"] = json!("A value absent from the original");
+    let refused = stand
+        .post(cards_path, Some(&mate_cookie), &forged_label.to_string())
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(refused.json()["code"], "unknown_receipt");
+    let mut unrelated = pin.clone();
+    unrelated["card_id"] = json!("00000000-0000-4000-8000-0000000c4f03");
+    unrelated["file_source"]["file_id"] = json!(files["q3_metrics_brief.pdf"]);
+    unrelated["file_references"] = json!([]);
+    assert!(
+        stand
+            .post(cards_path, Some(&maya_cookie), &unrelated.to_string())
+            .await
+            .uniform_404(),
+        "a readable file outside this app's lineage cannot be attached to its answer"
+    );
+    let pin_operator = c.fixture.operator().await;
+    let removed = pin_operator.client.query("DELETE FROM genui.box_file_grants WHERE organization_id=$1::text::uuid AND box_id=$2::text::uuid AND file_id=$3::text::uuid AND principal_id=$4::text::uuid AND app_id=$5::text::uuid AND work_id=$6::text::uuid RETURNING granted_by::text", &[&ORG,&box_id,&files["q3_metrics.csv"],&mate_id,&app,&derived]).await.unwrap();
+    let grantor: String = removed.first().expect("one exact file grant").get(0);
+    assert_eq!(
+        stand
+            .get(
+                &format!("/v1/canvas/works/{app}/{derived}"),
+                Some(&mate_cookie)
+            )
+            .await
+            .status,
+        StatusCode::OK,
+        "the app remains readable after only the file grant is revoked"
+    );
+    assert!(
+        !has_pin(&stand.get(cards_path, Some(&mate_cookie)).await.json()),
+        "revoked originals hide saved file text"
+    );
+    assert!(
+        stand
+            .post(cards_path, Some(&mate_cookie), &pin.to_string())
+            .await
+            .uniform_404(),
+        "idempotent pin retries also reauthorize the original"
+    );
+    pin_operator.client.execute("INSERT INTO genui.box_file_grants(organization_id,box_id,file_id,principal_id,app_id,work_id,granted_by,created_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::uuid,now())", &[&ORG,&box_id,&files["q3_metrics.csv"],&mate_id,&app,&derived,&grantor]).await.unwrap();
+    assert!(has_pin(
+        &stand.get(cards_path, Some(&mate_cookie)).await.json()
+    ));
+    let mut plain = pin.clone();
+    plain["card_id"] = json!("00000000-0000-4000-8000-0000000c4f04");
+    plain.as_object_mut().unwrap().remove("file_source");
+    plain.as_object_mut().unwrap().remove("file_references");
+    let saved = stand
+        .post(cards_path, Some(&mate_cookie), &plain.to_string())
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    assert_eq!(saved.json()["card"]["app_id"], app);
+    assert_eq!(saved.json()["card"]["work_id"], derived);
+    check(&mut checks, "saved app answers: no-record answers retain their authorized app/work; file answers persist exact original row references and digest, remain maker-private and idempotent, reject wrong digests and files outside lineage, disappear when only their original file grant is revoked while app access remains, and reappear only after that exact grant returns");
 
     // --- The brief: PDF statements cited by page, uncited numbers dropped ---
     stub.script("summary", json!({"overview": "The folder holds the Q3 board pack: metrics, pipeline and a brief.", "data": [], "key_points": ["Revenue and signups come from the confirmed metrics file."]}).to_string());

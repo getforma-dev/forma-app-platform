@@ -42,6 +42,7 @@
 // Nothing from the server is rendered as markup: titles and purposes are
 // text nodes; ids are checked UUIDs.
 import { submitAction } from './actions';
+import { openAsk } from './ask';
 import { addressLine } from './address-chip';
 import { boardWorks, placeWork } from './board';
 import { openCommandSheet } from './command-sheet';
@@ -171,6 +172,10 @@ export function serverAddress(entry: ServerCommand): Address {
       if (entry.kind === 'saved' && entry.work_id) {
         report(await placeWork(entry.app_id, entry.work_id));
         if (rest && entry.record && isEntry(rest)) await submitAction(rest, report, entry.app_id);
+        else if (rest) {
+          openAsk(rest, {kind: 'app', address: entry.slug, works: [{app_id: entry.app_id, work_id: entry.work_id, address: entry.slug}]});
+          report('Asked in this app’s assistant.');
+        }
         return;
       }
       // APP-120: a bare address places the app (`/expenses` = `/app expenses`).

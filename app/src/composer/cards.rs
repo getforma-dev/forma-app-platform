@@ -20,6 +20,11 @@
 //!     revision of a record of its work and a publication of its app,
 //!     `Data::receipts_known`, under `record_read`): one storage never issued
 //!     is 422 `unknown_receipt`. It never runs again.
+//!     Optional `app_id`/`work_id` retain the owning app even without records.
+//!     A file answer additionally supplies `file_source: {box_id,file_id}` and
+//!     `file_references` (row references), with empty record references/receipts.
+//!     Fresh lineage supplies the canonical file identity and original digest;
+//!     the write and later listings recheck exact file and app access.
 //! - `GET /v1/cards` lists a card only while the member holds `record_read`
 //!   on its work and on every work a pinned answer's receipts cite, and a
 //!   card added for everyone only while its maker is a member.
@@ -51,7 +56,7 @@ use axum::{
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
+    Extension, Router,
 };
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -70,6 +75,12 @@ pub fn router(auth: Arc<Auth>) -> Router {
         .route(EVERYONE_PATH, post(everyone))
         .route(REMOVE_PATH, post(remove))
         .with_state(auth)
+}
+
+/// The product supplies the parser/object store belonging to this instance;
+/// record-only consumers can keep using `router` without a file dependency.
+pub fn router_with_boxes(boxes: Arc<crate::boxes::routes::Boxes>) -> Router {
+    router(boxes.auth.clone()).layer(Extension(boxes))
 }
 
 fn document(value: &Value) -> Response {
@@ -203,6 +214,16 @@ pub(crate) struct AnswerBody {
     /// The stored spec: question, text, scope, references, receipts.
     pub spec: Value,
     pub receipts: Vec<ReceiptKey>,
+    /// An explicit app owner survives answers that read no records.
+    pub owner: Option<(String, String)>,
+    pub file: Option<FileAnswer>,
+}
+
+#[derive(Debug)]
+pub(crate) struct FileAnswer {
+    box_id: String,
+    file_id: String,
+    references: Vec<Value>,
 }
 
 fn timestamp(value: &str) -> bool {
@@ -244,7 +265,7 @@ pub(crate) fn answer_body(object: &Map<String, Value>) -> Option<AnswerBody> {
             "references",
             "receipts",
         ],
-        &[],
+        &["app_id", "work_id", "file_source", "file_references"],
     ) {
         return None;
     }
@@ -267,6 +288,20 @@ pub(crate) fn answer_body(object: &Map<String, Value>) -> Option<AnswerBody> {
         return None;
     }
     let address = talk::address(scope.get("address"))?;
+    let owner = match (object.get("app_id"), object.get("work_id")) {
+        (None, None) => None,
+        (Some(app), Some(work)) => {
+            let (app, work) = (app.as_str()?, work.as_str()?);
+            if !storage::valid_identifier(app)
+                || !storage::valid_identifier(work)
+                || scope.get("kind")?.as_str()? == "canvas"
+            {
+                return None;
+            }
+            Some((app.to_owned(), work.to_owned()))
+        }
+        _ => return None,
+    };
     let references = object.get("references")?.as_array()?;
     let receipts = object.get("receipts")?.as_array()?;
     if references.len() > ask::MAX_REFERENCES || receipts.len() != references.len() {
@@ -338,6 +373,76 @@ pub(crate) fn answer_body(object: &Map<String, Value>) -> Option<AnswerBody> {
             definition_digest: string(receipt, "definition_digest")?,
         });
     }
+    // An app-owned answer may not smuggle another app's records under its
+    // parent. Global canvas answers retain their existing multi-work form.
+    if owner
+        .as_ref()
+        .is_some_and(|(app, work)| keys.iter().any(|key| &key.app != app || &key.work != work))
+    {
+        return None;
+    }
+    let file = match (object.get("file_source"), object.get("file_references")) {
+        (None, None) => None,
+        (Some(source), Some(references)) => {
+            if owner.is_none() || !keys.is_empty() || scope.get("kind")?.as_str()? != "app" {
+                return None;
+            }
+            let source = source.as_object()?;
+            if !talk::exactly(source, &["box_id", "file_id"], &[]) {
+                return None;
+            }
+            let box_id = source.get("box_id")?.as_str()?;
+            let file_id = source.get("file_id")?.as_str()?;
+            if !storage::valid_identifier(box_id) || !storage::valid_identifier(file_id) {
+                return None;
+            }
+            let references = references.as_array()?;
+            if references.len() > crate::boxes::ask::MAX_ROWS {
+                return None;
+            }
+            let mut rows = Vec::new();
+            for reference in references {
+                let reference = reference.as_object()?;
+                if !talk::exactly(
+                    reference,
+                    &["ref", "file_id", "file", "sha256", "sheet", "row", "label"],
+                    &[],
+                ) {
+                    return None;
+                }
+                let row = reference.get("row")?.as_u64()?;
+                let name = reference.get("file")?.as_str()?;
+                let label = reference.get("label")?.as_str()?;
+                let sheet = reference.get("sheet")?;
+                if row == 0
+                    || row > crate::boxes::ask::MAX_ROWS as u64
+                    || rows.contains(&row)
+                    || reference.get("ref")?.as_str()? != format!("f1r{row}")
+                    || reference.get("file_id")?.as_str()? != file_id
+                    || !digest(reference.get("sha256")?.as_str()?)
+                    || !(1..=200).contains(&name.chars().count())
+                    || name.chars().any(char::is_control)
+                    || label.chars().count() > LABEL_CHARS
+                    || label.chars().any(char::is_control)
+                    || !(sheet.is_null()
+                        || sheet.as_str().is_some_and(|s| {
+                            !s.is_empty()
+                                && s.chars().count() <= 8192
+                                && !s.chars().any(char::is_control)
+                        }))
+                {
+                    return None;
+                }
+                rows.push(row);
+            }
+            Some(FileAnswer {
+                box_id: box_id.to_owned(),
+                file_id: file_id.to_owned(),
+                references: references.clone(),
+            })
+        }
+        _ => return None,
+    };
     let title: String = question.chars().take(TITLE_CHARS).collect();
     Some(AnswerBody {
         card,
@@ -351,6 +456,48 @@ pub(crate) fn answer_body(object: &Map<String, Value>) -> Option<AnswerBody> {
         }),
         address,
         receipts: keys,
+        owner,
+        file,
+    })
+}
+
+/// File provenance comes from a freshly authorized lineage, never a client URL
+/// or asserted file name. Text/labels remain the saved answer, not a new model run.
+fn file_answer_spec(body: &FileAnswer, file: &storage::BoxFile) -> Option<Value> {
+    if body.box_id != file.box_id || body.file_id != file.file_id {
+        return None;
+    }
+    for reference in &body.references {
+        if reference["file"] != file.name
+            || reference["sha256"] != file.content_digest
+            || (file.kind == "csv" && !reference["sheet"].is_null())
+            || !matches!(file.kind.as_str(), "csv" | "xlsx")
+            || file.data.as_ref().is_some_and(|data| {
+                reference["row"]
+                    .as_i64()
+                    .is_none_or(|row| row > data.row_count)
+            })
+        {
+            return None;
+        }
+    }
+    Some(
+        json!({"box_id": file.box_id, "file_id": file.file_id, "name": file.name,
+        "kind": file.kind, "sha256": file.content_digest}),
+    )
+}
+
+fn file_answer_rows_match(
+    body: &FileAnswer,
+    file: &storage::BoxFile,
+    table: &crate::boxes::inspect::Table,
+) -> bool {
+    body.references.iter().all(|reference| {
+        reference["row"]
+            .as_u64()
+            .and_then(|row| usize::try_from(row).ok())
+            .and_then(|row| crate::boxes::ask::original_reference(file, table, row))
+            .is_some_and(|original| &original == reference)
     })
 }
 
@@ -412,7 +559,11 @@ async fn list(State(auth): State<Arc<Auth>>, request: Request) -> Response {
 }
 
 /// `POST /v1/cards`.
-async fn make(State(auth): State<Arc<Auth>>, request: Request) -> Response {
+async fn make(
+    State(auth): State<Arc<Auth>>,
+    boxes: Option<Extension<Arc<crate::boxes::routes::Boxes>>>,
+    request: Request,
+) -> Response {
     let (member, bytes) = match front(&auth, request).await {
         Ok(front) => front,
         Err(refusal) => return refusal,
@@ -471,10 +622,13 @@ async fn make(State(auth): State<Arc<Auth>>, request: Request) -> Response {
             }
         }
         Some("answer") => {
-            let Some(body) = answer_body(object) else {
+            let Some(mut body) = answer_body(object) else {
                 return invalid();
             };
             let mut works: Vec<(&str, &str)> = Vec::new();
+            if let Some((app, work)) = &body.owner {
+                works.push((app.as_str(), work.as_str()));
+            }
             for key in &body.receipts {
                 if !works.contains(&(key.app.as_str(), key.work.as_str())) {
                     works.push((key.app.as_str(), key.work.as_str()));
@@ -496,6 +650,48 @@ async fn make(State(auth): State<Arc<Auth>>, request: Request) -> Response {
                     Err(Error::Denied) => return http::not_found(),
                     Err(_) => return http::unavailable(),
                 }
+            }
+            if let Some(source) = &body.file {
+                let Some((app, work)) = &body.owner else {
+                    return invalid();
+                };
+                let lineage = match stores.workspace.box_lineage(&member, app, work).await {
+                    Ok(Some(lineage)) if lineage.box_id == source.box_id => lineage,
+                    Ok(_) | Err(Error::Denied) => return http::not_found(),
+                    Err(_) => return http::unavailable(),
+                };
+                let Some((file, _)) = lineage
+                    .files
+                    .iter()
+                    .find(|(file, _)| file.file_id == source.file_id)
+                else {
+                    return http::not_found();
+                };
+                let Some(canonical) = file_answer_spec(source, file) else {
+                    return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "unknown_receipt");
+                };
+                if !source.references.is_empty() {
+                    // Ask and this pin use the same sealed original parser.
+                    // A digest alone cannot certify a sheet name or row label.
+                    let Some(Extension(state)) = &boxes else {
+                        return http::unavailable();
+                    };
+                    let table = match crate::boxes::routes::inspect_file(state, &member, file).await
+                    {
+                        Ok((_, table, _)) => table,
+                        Err(_) => {
+                            return http::problem(
+                                StatusCode::SERVICE_UNAVAILABLE,
+                                "source_unavailable",
+                            )
+                        }
+                    };
+                    if !file_answer_rows_match(source, file, &table) {
+                        return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "unknown_receipt");
+                    }
+                }
+                body.spec["file_source"] = canonical;
+                body.spec["file_references"] = json!(source.references);
             }
             let single = (works.len() == 1).then(|| works[0]);
             let Ok(spec) = crate::admission::encode(&body.spec) else {
@@ -681,6 +877,179 @@ mod tests {
         plain["references"] = json!([]);
         plain["receipts"] = json!([]);
         assert!(answer_body(&object(plain)).unwrap().receipts.is_empty());
+    }
+
+    fn file_answer() -> Value {
+        json!({"card_id": CARD, "kind": "answer", "app_id": APP, "work_id": WORK,
+            "question": "Which row leads?", "text": "The first row.", "scope": {"kind": "app", "address": ""},
+            "references": [], "receipts": [], "file_source": {"box_id": COLLECTION, "file_id": RECORD},
+            "file_references": [{"ref": "f1r1", "file_id": RECORD, "file": "source.csv", "sha256": format!("sha256:{}", "a".repeat(64)), "sheet": null, "row": 1, "label": "A row"}]})
+    }
+
+    #[test]
+    fn app_answer_ownership_is_explicit_and_cannot_mix_foreign_receipts() {
+        let mut plain = file_answer();
+        plain.as_object_mut().unwrap().remove("file_source");
+        plain.as_object_mut().unwrap().remove("file_references");
+        let body = answer_body(&object(plain.clone())).unwrap();
+        assert_eq!(body.owner, Some((APP.into(), WORK.into())));
+        assert!(body.receipts.is_empty());
+        for key in ["app_id", "work_id"] {
+            let mut missing = plain.clone();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(answer_body(&object(missing)).is_none());
+        }
+        let mut global = plain.clone();
+        global["scope"]["kind"] = json!("canvas");
+        assert!(answer_body(&object(global)).is_none());
+        plain["references"] = json!([{"ref": "r1", "app_id": APP, "work_id": WORK, "record_id": RECORD, "address": "", "label": "A row"}]);
+        plain["receipts"] = json!([receipt("r1")]);
+        assert!(answer_body(&object(plain.clone())).is_some());
+        plain["work_id"] = json!(CARD);
+        assert!(answer_body(&object(plain)).is_none());
+    }
+
+    #[test]
+    fn file_answer_rows_are_closed_bounded_and_exactly_scoped() {
+        let good = file_answer();
+        assert_eq!(
+            answer_body(&object(good.clone()))
+                .unwrap()
+                .file
+                .unwrap()
+                .references
+                .len(),
+            1
+        );
+        for (key, value) in [
+            ("row", json!(0)),
+            ("row", json!(201)),
+            ("row", json!(1.5)),
+            ("ref", json!("f2r1")),
+            ("ref", json!("f1r2")),
+            ("file_id", json!(APP)),
+            ("sha256", json!("sha256:bogus")),
+            ("label", json!("x".repeat(201))),
+            ("label", json!("hidden\u{0007}control")),
+            ("url", json!("https://untrusted.example")),
+            ("sheet", json!("x".repeat(8193))),
+            ("sheet", json!(4)),
+        ] {
+            let mut bad = good.clone();
+            bad["file_references"][0][key] = value;
+            assert!(answer_body(&object(bad)).is_none(), "{key}");
+        }
+        let mut duplicate = good.clone();
+        duplicate["file_references"] =
+            json!([good["file_references"][0], good["file_references"][0]]);
+        assert!(answer_body(&object(duplicate)).is_none());
+        let mut source = good.clone();
+        source["file_source"]["sha256"] = json!("client-digest");
+        assert!(answer_body(&object(source)).is_none());
+        let mut owner = good.clone();
+        owner.as_object_mut().unwrap().remove("app_id");
+        owner.as_object_mut().unwrap().remove("work_id");
+        assert!(answer_body(&object(owner)).is_none());
+        let mut empty = good;
+        empty["file_references"] = json!([]);
+        assert!(
+            answer_body(&object(empty)).is_some(),
+            "a no-row answer still belongs to its original file"
+        );
+    }
+
+    #[test]
+    fn file_answer_provenance_uses_authorized_original_metadata() {
+        let body = answer_body(&object(file_answer())).unwrap().file.unwrap();
+        let file = storage::BoxFile {
+            box_id: COLLECTION.into(),
+            file_id: RECORD.into(),
+            name: "source.csv".into(),
+            kind: "csv".into(),
+            media_type: "text/csv".into(),
+            bytes: 42,
+            content_digest: format!("sha256:{}", "a".repeat(64)),
+            object_key: "private-original".into(),
+            created_at: String::new(),
+            data: None,
+        };
+        let spec = file_answer_spec(&body, &file).unwrap();
+        assert_eq!(
+            spec.as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["box_id", "file_id", "kind", "name", "sha256"]
+        );
+        assert_eq!(spec["sha256"], file.content_digest);
+        let mut wrong = file.clone();
+        wrong.content_digest = format!("sha256:{}", "b".repeat(64));
+        assert!(file_answer_spec(&body, &wrong).is_none());
+        wrong = file.clone();
+        wrong.box_id = APP.into();
+        assert!(file_answer_spec(&body, &wrong).is_none());
+        wrong = file.clone();
+        wrong.name = "other.csv".into();
+        assert!(file_answer_spec(&body, &wrong).is_none());
+        wrong = file;
+        wrong.data = Some(storage::FileData {
+            source_id: APP.into(),
+            revision_id: WORK.into(),
+            normalized_digest: String::new(),
+            row_count: 0,
+            contract: json!({}),
+            contract_digest: String::new(),
+            created_at: String::new(),
+        });
+        assert!(
+            file_answer_spec(&body, &wrong).is_none(),
+            "a row beyond a registered table is refused"
+        );
+    }
+
+    #[test]
+    fn file_answer_citations_match_the_real_sheet_row_and_label_without_registration() {
+        let mut answer = file_answer();
+        answer["file_references"][0]["file"] = json!("source.xlsx");
+        answer["file_references"][0]["sheet"] = json!("Actual sheet");
+        let file = storage::BoxFile {
+            box_id: COLLECTION.into(),
+            file_id: RECORD.into(),
+            name: "source.xlsx".into(),
+            kind: "xlsx".into(),
+            media_type: String::new(),
+            bytes: 42,
+            content_digest: format!("sha256:{}", "a".repeat(64)),
+            object_key: String::new(),
+            created_at: String::new(),
+            data: None,
+        };
+        let table = crate::boxes::inspect::Table {
+            format: "xlsx",
+            sheet: Some("Actual sheet".into()),
+            header: vec!["Name".into()],
+            rows: vec![vec!["A row".into()]],
+        };
+        let body = answer_body(&object(answer.clone())).unwrap().file.unwrap();
+        assert!(file_answer_rows_match(&body, &file, &table));
+        for (key, value) in [
+            ("sheet", json!("Invented sheet")),
+            ("sheet", Value::Null),
+            ("label", json!("Forged source value")),
+        ] {
+            let mut forged = answer.clone();
+            forged["file_references"][0][key] = value;
+            let body = answer_body(&object(forged)).unwrap().file.unwrap();
+            assert!(!file_answer_rows_match(&body, &file, &table), "{key}");
+        }
+        answer["file_references"][0]["row"] = json!(2);
+        answer["file_references"][0]["ref"] = json!("f1r2");
+        let body = answer_body(&object(answer)).unwrap().file.unwrap();
+        assert!(
+            !file_answer_rows_match(&body, &file, &table),
+            "a nonexistent row cannot be saved even for an unregistered source"
+        );
     }
 
     #[test]

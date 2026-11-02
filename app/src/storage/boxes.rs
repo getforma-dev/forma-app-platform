@@ -232,7 +232,7 @@ fn granted(file: &str) -> String {
 const WHOLE: &str = "(b.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.box_shares s WHERE s.organization_id=b.organization_id AND s.box_id=b.box_id AND s.principal_id=$2::text::uuid))";
 /// Whether file `f` of box `b` is visible to `$2`: the whole box, or a live
 /// grant on that file.
-fn file_visible() -> String {
+pub(super) fn file_visible() -> String {
     format!("({WHOLE} OR {})", granted(" AND g.file_id=f.file_id"))
 }
 

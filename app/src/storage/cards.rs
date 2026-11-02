@@ -19,8 +19,11 @@
 //! creator, `run`, live `source_read` on every dependency), and a pinned
 //! answer only while the reader holds the same on every (app, work) its
 //! receipts cite (`read_apps`/`read_works`); a card added for everyone
-//! lists only while its maker is still a member. Removing is a soft delete
-//! by its maker ([`Workspace::remove_card`]); the app's owner or an
+//! lists only while its maker is still a member.
+//! App-owned answers also retain their owner when no records were read. File
+//! answers retain original identity in their spec; listings and writes check
+//! that exact original's current access and app lineage in the same transaction.
+//! Removing is a soft delete by its maker ([`Workspace::remove_card`]); the app's owner or an
 //! `admin_policy` holder may also take a card added for everyone back to its
 //! maker or remove it, also when its maker left (the steward path: the
 //! genui_admit definer `genui_private.steward_card`, since the RESTRICTIVE
@@ -42,7 +45,7 @@
 //! card's client-generated UUIDv4, and it discloses nothing else.
 use super::{
     authorization::Transaction,
-    boxes::serialize_member,
+    boxes::{file_visible, serialize_member},
     definitions::{append, confirm_identity, Chain, Event},
     labels::{DISCOVER, OWNER_OR_ADMIN},
     pool::{Data, Workspace},
@@ -101,8 +104,8 @@ pub struct NewCard {
     pub title: String,
     /// The spec's forma-json-v1 bytes.
     pub spec: Vec<u8>,
-    /// A pinned answer's (app, work) pairs, those its receipts cite (empty
-    /// for a made card); the listing re-checks `record_read` on each.
+    /// A pinned answer's (app, work) pairs: its explicit owner and those its
+    /// receipts cite (empty for a made card). Listings recheck every pair.
     pub reads: Vec<(String, String)>,
 }
 
@@ -194,6 +197,72 @@ fn card_row(row: &Row, steward: bool) -> Result<MemberCard> {
     })
 }
 
+/// Immutable original identity carried by a file answer. It remains app-owned;
+/// reading the app alone must not revive a revoked grant on the original file.
+#[derive(Clone, Debug, PartialEq)]
+struct FilePin {
+    box_id: String,
+    file_id: String,
+    digest: String,
+    app: String,
+    work: String,
+}
+
+fn file_pin(spec: &Value, app: Option<&str>, work: Option<&str>) -> Result<Option<FilePin>> {
+    let Some(source) = spec.get("file_source") else {
+        return Ok(None);
+    };
+    let string = |key: &str| source.get(key).and_then(Value::as_str).ok_or(Error::Denied);
+    let box_id = string("box_id")?;
+    let file_id = string("file_id")?;
+    let digest = string("sha256")?;
+    let (app, work) = (app.ok_or(Error::Denied)?, work.ok_or(Error::Denied)?);
+    require(
+        [box_id, file_id, app, work].into_iter().all(valid_id)
+            && digest.strip_prefix("sha256:").is_some_and(|hex| {
+                hex.len() == 64
+                    && hex
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            }),
+    )?;
+    Ok(Some(FilePin {
+        box_id: box_id.to_owned(),
+        file_id: file_id.to_owned(),
+        digest: digest.to_owned(),
+        app: app.to_owned(),
+        work: work.to_owned(),
+    }))
+}
+
+/// One batched authority read, in the same member-fenced transaction as the
+/// listing/write. The source must still belong to this exact app/work lineage.
+async fn readable_file_pins(
+    transaction: &Transaction<'_>,
+    request: &TrustedRequest,
+    pins: &[FilePin],
+) -> Result<Vec<bool>> {
+    if pins.is_empty() {
+        return Ok(Vec::new());
+    }
+    let column = |f: fn(&FilePin) -> &str| pins.iter().map(f).collect::<Vec<_>>();
+    let (boxes, files, digests, apps, works) = (
+        column(|p| &p.box_id),
+        column(|p| &p.file_id),
+        column(|p| &p.digest),
+        column(|p| &p.app),
+        column(|p| &p.work),
+    );
+    let rows = transaction.query(&format!("SELECT k.ordinal FROM unnest($3::text[],$4::text[],$5::text[],$6::text[],$7::text[]) WITH ORDINALITY AS k(box_id,file_id,digest,app_id,work_id,ordinal) JOIN genui.box_files f ON f.organization_id=$1::text::uuid AND f.box_id=k.box_id::uuid AND f.file_id=k.file_id::uuid AND f.content_digest::text=k.digest JOIN genui.boxes b ON b.organization_id=f.organization_id AND b.box_id=f.box_id WHERE {} AND EXISTS(SELECT 1 FROM genui.box_derivations d WHERE d.organization_id=f.organization_id AND d.app_id=k.app_id::uuid AND d.work_id=k.work_id::uuid AND d.box_id=f.box_id AND f.file_id=ANY(d.file_ids)) AND EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=f.organization_id AND w.app_id=k.app_id::uuid AND w.work_id=k.work_id::uuid AND {})", file_visible(), listable("$2::text::uuid")), &[&request.organization,&request.principal,&boxes,&files,&digests,&apps,&works]).await?;
+    let mut readable = vec![false; pins.len()];
+    for row in rows {
+        let ordinal: i64 = row.try_get(0).map_err(|_| Error::Unavailable)?;
+        let index = usize::try_from(ordinal - 1).map_err(|_| Error::Unavailable)?;
+        *readable.get_mut(index).ok_or(Error::Unavailable)? = true;
+    }
+    Ok(readable)
+}
+
 impl Workspace {
     async fn cards_transaction<'a, T, F>(
         &'a self,
@@ -226,7 +295,17 @@ impl Workspace {
                 let t = permit.transaction();
                 let readable = listable("$2::text::uuid");
                 let rows = t.query(&format!("SELECT {CARD_COLUMNS},(c.app_id IS NOT NULL AND EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=c.organization_id AND a.app_id=c.app_id AND {OWNER_OR_ADMIN})) FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.removed_at IS NULL AND (c.principal_id=$2::text::uuid OR (c.everyone AND EXISTS(SELECT 1 FROM genui.memberships m WHERE m.organization_id=c.organization_id AND m.principal_id=c.principal_id AND m.status='active'))) AND (c.app_id IS NULL OR EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=c.app_id AND w.work_id=c.work_id AND {readable})) AND NOT EXISTS(SELECT 1 FROM unnest(c.read_apps,c.read_works) AS k(app_id,work_id) WHERE NOT EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id AND {readable})) ORDER BY c.created_at,c.card_id LIMIT $3"), &[&request.organization,&request.principal,&LIST_LIMIT]).await?;
-                rows.iter().map(|row| card_row(row, flag(row, 11)?)).collect()
+                let cards = rows.iter().map(|row| card_row(row, flag(row, 11)?)).collect::<Result<Vec<_>>>()?;
+                let mut pins = Vec::new();
+                let mut indices = Vec::new();
+                for (index, card) in cards.iter().enumerate() {
+                    if let Some(pin) = file_pin(&card.spec, card.app.as_deref(), card.work.as_deref())? {
+                        pins.push(pin); indices.push(index);
+                    }
+                }
+                let readable = readable_file_pins(t, request, &pins).await?;
+                let hidden: Vec<usize> = indices.into_iter().zip(readable).filter_map(|(index, visible)| (!visible).then_some(index)).collect();
+                Ok(cards.into_iter().enumerate().filter_map(|(index, card)| (!hidden.contains(&index)).then_some(card)).collect())
             })
         })
         .await
@@ -263,6 +342,17 @@ impl Workspace {
         )?;
         let read_apps: Vec<&str> = card.reads.iter().map(|(app, _)| app.as_str()).collect();
         let read_works: Vec<&str> = card.reads.iter().map(|(_, work)| work.as_str()).collect();
+        let spec = crate::admission::decode(&card.spec).map_err(|_| Error::Denied)?;
+        let file = file_pin(&spec, card.app.as_deref(), card.work.as_deref())?;
+        let mut required = card.reads.clone();
+        if let (Some(app), Some(work)) = (&card.app, &card.work) {
+            if !required.contains(&(app.clone(), work.clone())) {
+                required.push((app.clone(), work.clone()));
+            }
+        }
+        let required_apps: Vec<&str> = required.iter().map(|(app, _)| app.as_str()).collect();
+        let required_works: Vec<&str> = required.iter().map(|(_, work)| work.as_str()).collect();
+        let required_count = required.len();
         self.cards_transaction(request, |transaction| {
             Box::pin(async move {
                 confirm_identity(transaction, request).await?;
@@ -271,6 +361,14 @@ impl Workspace {
                 // Review finding 3: one member's card writes are serialized
                 // before the count, so two cannot both pass 99.
                 serialize_member(t, request, "cards").await?;
+                // Recheck after route validation, under the write fence. In
+                // particular, a no-record answer cannot use discover alone.
+                if required_count != 0 {
+                    let rows = t.query(&format!("SELECT count(*) FROM unnest($3::text[],$4::text[]) AS k(app_id,work_id) WHERE EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=k.app_id::uuid AND w.work_id=k.work_id::uuid AND {})", listable("$2::text::uuid")), &[&request.organization,&request.principal,&required_apps,&required_works]).await?;
+                    let count: i64 = rows.first().ok_or(Error::Unavailable)?.try_get(0).map_err(|_| Error::Unavailable)?;
+                    require(usize::try_from(count).is_ok_and(|count| count == required_count))?;
+                }
+                if let Some(file) = &file { require(readable_file_pins(t, request, std::slice::from_ref(file)).await? == [true])?; }
                 let mut steward = false;
                 if let Some(app) = &card.app {
                     let allowed = t.query(&format!("SELECT {OWNER_OR_ADMIN} FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {DISCOVER}"), &[&request.organization,&request.principal,app]).await?;
@@ -487,5 +585,23 @@ mod tests {
         );
         assert!(outcome("removed", &["a"]).starts_with("sha256:"));
         assert_eq!(spec_digest(b"{}").len(), 64);
+    }
+
+    #[test]
+    fn file_pin_authority_requires_an_app_and_canonical_original_identity() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        let spec = serde_json::json!({"file_source": {"box_id": id, "file_id": id, "sha256": format!("sha256:{}", "a".repeat(64))}});
+        assert!(file_pin(&spec, Some(id), Some(id)).unwrap().is_some());
+        assert!(file_pin(&spec, None, Some(id)).is_err());
+        assert!(file_pin(&spec, Some(id), None).is_err());
+        let mut bad = spec.clone();
+        bad["file_source"]["box_id"] = serde_json::json!("foreign-url");
+        assert!(file_pin(&bad, Some(id), Some(id)).is_err());
+        bad = spec;
+        bad["file_source"]["sha256"] = serde_json::json!("sha256:bogus");
+        assert!(file_pin(&bad, Some(id), Some(id)).is_err());
+        assert!(file_pin(&serde_json::json!({}), None, None)
+            .unwrap()
+            .is_none());
     }
 }

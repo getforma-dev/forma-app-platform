@@ -134,7 +134,7 @@ const fakeDocument = {
   querySelectorAll: () => [],
 };
 
-test('Ask sends only the question and its scope, and shows only text with receipts; the canvas is untouched (APP-122)', async () => {
+test('the read-only Ask transport sends only the question and its explicit scope (APP-122)', async () => {
   (globalThis as { document?: unknown }).document = fakeDocument;
   const calls: { url: string; init: { method?: string; body?: string } }[] = [];
   const answer = {
@@ -147,10 +147,9 @@ test('Ask sends only the question and its scope, and shows only text with receip
     return { ok: true, status: 200, json: async () => answer };
   };
   const ask = await import('../src/canvas/ask.ts');
-  const scope = { kind: 'card' as const, address: 'expenses.ledger', works: [{ app_id: APP, work_id: WORK, address: 'expenses' }] };
+  const scope = { kind: 'card' as const, address: 'expenses.ledger', works: [{ app_id: APP, work_id: WORK, address: 'expenses', collection: COLLECTION }] };
   assert.equal(ask.scopeText(scope), 'Asking about /expenses.ledger');
-  ask.openAsk('', scope);
-  await ask.ask('? where are all the red invoices?');
+  await ask.ask('? where are all the red invoices?', scope);
   assert.equal(calls.length, 1, 'one request, and only to Ask');
   assert.equal(calls[0]!.url, ask.ASK_URL);
   assert.equal(calls[0]!.init.method, 'POST');
@@ -158,9 +157,51 @@ test('Ask sends only the question and its scope, and shows only text with receip
   // A reply carrying anything but the three keys is not shown.
   answer.text = 'Made them red';
   (answer as Record<string, unknown>).highlight = [{ field: 'status', op: 'eq', value: 'submitted', color: 'crimson' }];
-  await ask.ask('make them red');
+  await ask.ask('make them red', scope);
   assert.equal(calls.length, 2);
   assert.equal(ask.scopeText({ kind: 'canvas', address: '', works: [scope.works[0]!, { ...scope.works[0]!, work_id: APP }] }), 'Asking about your canvas (2 apps)');
+});
+
+test('app and component Ask entry points route into the owning app; mentions retain that exact scope', async () => {
+  const {readFile} = await import('node:fs/promises');
+  const {fileURLToPath} = await import('node:url');
+  const {build} = await import('esbuild');
+  const parsing = await import('../src/canvas/talk-view.ts');
+  const entry = fileURLToPath(new URL('../src/canvas/ask.ts', import.meta.url));
+  const source = await readFile(entry, 'utf8'), imports = new Map<string, string[]>();
+  for (const [, names, path] of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/gs))
+    imports.set(path!, names!.split(',').map(name => name.trim()).filter(name => name && !name.startsWith('type ')));
+  const calls: any[][] = [], key = '__appAskRouting';
+  const app = {app: APP, work: WORK, slug: 'checking'}, card = {id: `l-${WORK}-${COLLECTION}`, slug: 'transactions', app};
+  const mocks: Record<string, Record<string, (...args: any[]) => any>> = {
+    './board': {boardWorks: () => [], placeUtilityCard: (...args) => calls.push(['workspace', ...args])},
+    './controls': {selectedCanvasItem: () => null}, './widgets/index': {widgetOfItem: () => null},
+    './unite': {openAppAssistant: async (...args) => {calls.push(['app', ...args]); return true;}},
+    './pane': {closePane: (...args) => calls.push(['close-library', ...args])},
+    './shape': {addressOfWork: () => 'checking', resolveTarget: address => address === 'checking' ? {kind: 'app', app, address}
+      : address === 'checking.transactions' ? {kind: 'card', card, address} : {kind: 'none', message: 'Unknown app'}},
+    './talk-view': {mentionsOf: parsing.mentionsOf, firstWord: parsing.firstWord, splitAddress: parsing.splitAddress},
+    './render': {isUuid: value => /^[a-f0-9-]{36}$/.test(value), el: (doc, tag, attrs = {}, ...children) => {
+      const node = doc.createElement(tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); node.append(...children); return node;
+    }},
+  };
+  (globalThis as any)[key] = mocks;
+  const oldDocument = (globalThis as any).document; (globalThis as any).document = fakeDocument;
+  try {
+    const bundled = await build({entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false,
+      plugins: [{name: 'app-ask-routing', setup(builder) {
+        builder.onResolve({filter: /.*/}, args => args.importer === entry && imports.has(args.path) ? {path: args.path, namespace: 'ask-route-boundary'} : undefined);
+        builder.onLoad({filter: /.*/, namespace: 'ask-route-boundary'}, args => ({loader: 'js', contents: imports.get(args.path)!.map(name => `export const ${name}=(...args)=>globalThis[${JSON.stringify(key)}][${JSON.stringify(args.path)}]?.[${JSON.stringify(name)}]?.(...args);`).join('\n')}));
+      }}]});
+    const api = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0]!.text).toString('base64'));
+    const line = api.askLine('checking.transactions Which transactions?');
+    api.openAsk(line.question, line.scope);
+    assert.deepEqual(calls, [['close-library', false], ['app', APP, WORK, 'ask', 'Which transactions?', {kind: 'card', address: 'checking.transactions', works: [{app_id: APP, work_id: WORK, address: 'checking', collection: COLLECTION}]}]]);
+    calls.length = 0; api.openAsk('@checking What changed?');
+    assert.deepEqual(calls, [['close-library', false], ['app', APP, WORK, 'ask', 'What changed?', null]]);
+    calls.length = 0; api.openAsk('@missing Why?', line.scope);
+    assert.equal(calls.some(value => value[0] === 'app'), false, 'an unresolved mention never silently uses the previous app');
+  } finally {(globalThis as any).document = oldDocument; delete (globalThis as any)[key];}
 });
 
 // --- APP-122 review: the merge with APP-121 naming, and the review's findings ---
