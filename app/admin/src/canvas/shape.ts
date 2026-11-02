@@ -9,7 +9,8 @@
 // server, `composer::shape`, and again here, `talk-view.ts`). Nothing changes
 // until the member clicks: the spec shows as a *preview* on the item with a
 // dock card (Apply, Add as new card for a card, Cancel); Apply labels the
-// item *shaped* with Revert. Applied views and themes are session-only; a
+// item *shaped* with Revert. Applied views are session-only; app themes stay
+// per member in this browser. A
 // card added as new is stored for the member (APP-123, below). A card's view is evaluated over the card's
 // own data in this browser (`talk-view.ts`), never records: a view may
 // filter or hide records, and every number it computes keeps the receipts
@@ -400,6 +401,7 @@ function restoreAppThemes(): void {
     if (document.querySelector(`[data-theme-preview="true"][data-work="${CSS.escape(work)}"]`)) continue;
     appliedThemes.set(work, theme);
     setTheme(themeTargets(work), theme);
+    labelAppTheme(work);
   }
 }
 
@@ -407,10 +409,31 @@ function colorScheme(): 'light' | 'dark' {
   return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-/** Cards and the unite frame of one saved work. A published app appearance owns its own element. */
+/** Default presentation tokens are not an authored, published app design. */
+export function acceptsAppTheme(node: Pick<HTMLElement, 'dataset'>): boolean {
+  return node.dataset.appPresentation === 'default' || (node.dataset.appPresentation !== 'authored' && !node.dataset.appMode);
+}
+
+/** Cards and the unite frame of one saved work; authored presentation wins. */
 function themeTargets(work: string): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work], .cv-unite[data-work]'))
-    .filter((node) => node.dataset.work === work && !node.dataset.appMode);
+    .filter((node) => node.dataset.work === work && acceptsAppTheme(node));
+}
+
+function labelAppTheme(work: string): void {
+  for (const node of themeTargets(work)) {
+    if (node.dataset.kind !== 'app' && node.dataset.kind !== 'unite') continue;
+    const host = head(node);
+    if (!host || host.querySelector(':scope > .cv-shaped-label[data-app-theme]')) continue;
+    labelShaped(host, () => {
+      appliedThemes.delete(work);
+      writeAppThemes();
+      for (const target of themeTargets(work)) unlabel(head(target));
+      setTheme(themeTargets(work), null);
+      announce('App appearance restored.');
+    });
+    host.querySelector<HTMLElement>(':scope > .cv-shaped-label')?.setAttribute('data-app-theme', '');
+  }
 }
 
 if (typeof matchMedia === 'function') {
@@ -798,14 +821,13 @@ function setTheme(nodes: HTMLElement[], theme: AppTheme | null): void {
     else delete node.dataset.themeDensity;
   }
 }
-function appHeader(app: AppRow): HTMLElement | null {
-  const card = appCards(app).find((c) => c.dataset.kind === 'app');
-  return card ? head(card) : null;
-}
-
 async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string, report: Report): Promise<void> {
   const { app } = target;
   if (!appCards(app).length) await addCards(app.app, app.work, null);
+  if (!themeTargets(app.work).length) {
+    report('This app uses its published design. Use Edit app to change that design when you have permission.');
+    return;
+  }
   report(`Shaping /${target.address}…`);
   const answer = await requestShape({ address: target.address, words, target: { kind: 'app', app_id: app.app, work_id: app.work } });
   if (typeof answer === 'string') {
@@ -820,25 +842,26 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
   const before = appliedThemes.get(app.work) ?? null;
   const current = claimPreview(`theme:${app.work}`);
   const nodes = themeTargets(app.work);
+  if (!nodes.length) {
+    report('The app design changed while Shape was running. Its published appearance is unchanged.');
+    return;
+  }
   setTheme(nodes, theme);
   for (const node of nodes) node.dataset.themePreview = 'true';
-  const revert = () => {
-    appliedThemes.delete(app.work);
-    writeAppThemes();
-    setTheme(themeTargets(app.work), null);
-    unlabel(appHeader(app));
-    announce(`/${target.address} has its own look again.`);
-  };
   const settle = () => { for (const node of themeTargets(app.work)) delete node.dataset.themePreview; };
   confirmDock(`Shape /${target.address}: every card`, themeChips(theme), [
     {
       label: 'Apply', primary: true,
       run: () => {
         settle();
+        if (!themeTargets(app.work).length) {
+          report('The app now uses its published design. No browser appearance was saved.');
+          return;
+        }
         appliedThemes.set(app.work, theme);
         writeAppThemes();
         setTheme(themeTargets(app.work), theme);
-        labelShaped(appHeader(app), revert);
+        labelAppTheme(app.work);
         report(`Every /${target.address} card is shaped; each keeps its own view. It stays on this browser. Revert is on the app card.`);
       },
     },

@@ -108,6 +108,10 @@ test('every theme block assigns the full role set, and text clears 4.5:1', () =>
     assert.ok(contrast(decl(dark, '--role-text'), decl(dark, '--role-canvas')) >= 4.5, `${name}-dark`);
     assert.ok(contrast(decl(dark, '--role-on-accent'), decl(dark, '--role-accent')) >= 4.5, `${name}-dark`);
     assert.ok(contrast(decl(dark, '--role-edge'), decl(dark, '--role-canvas')) >= 3, `${name}-dark`);
+    for (const role of ['--role-busy', '--role-bad']) {
+      assert.ok(contrast(decl(dark, role), decl(dark, '--role-sunken')) >= 4.5, `${name}-dark ${role}`);
+      assert.ok(contrast(decl(light, role), decl(light, '--role-sunken')) >= 4.5, `${name} ${role}`);
+    }
   }
 });
 
@@ -135,4 +139,52 @@ test('a stored app theme keeps only closed names', async () => {
   const work = '00000000-0000-4000-8000-000000000001';
   assert.deepEqual(appThemesFromStorage({ [work]: { accent: 'harbor', mode: 'dark' } }), [[work, { accent: 'harbor', mode: 'dark' }]]);
   assert.deepEqual(appThemesFromStorage({ [work]: { accent: 'cupcake' }, bad: { accent: 'ink' } }), []);
+});
+
+test('Shape distinguishes default renderer tokens from an admitted presentation', async () => {
+  const { acceptsAppTheme } = await import('../src/canvas/shape.ts');
+  assert.equal(acceptsAppTheme({ dataset: { appMode: 'default', appPresentation: 'default' } }), true);
+  assert.equal(acceptsAppTheme({ dataset: { appMode: 'dark', appPresentation: 'authored' } }), false);
+  assert.equal(acceptsAppTheme({ dataset: { appMode: 'default', appPresentation: 'authored' } }), false);
+  assert.equal(acceptsAppTheme({ dataset: { appMode: 'dark' } }), false);
+  assert.equal(acceptsAppTheme({ dataset: {} }), true);
+});
+
+test('canvas palette persists ordinary choices but demo mode neither reads nor writes them', async () => {
+  const { startPalette } = await import('../src/canvas/palette.ts');
+  const prior = ['localStorage', 'HTMLButtonElement', 'matchMedia'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
+  class Button {
+    attrs: Record<string, string> = {};
+    constructor(public dataset: Record<string, string>) {}
+    closest() { return this; }
+    setAttribute(key: string, value: string) { this.attrs[key] = value; }
+  }
+  try {
+    Object.defineProperty(globalThis, 'HTMLButtonElement', { configurable: true, value: Button });
+    Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => ({matches: false, addEventListener() {}}) });
+    for (const demo of [false, true]) {
+      const storage = new Map([['forma.canvas.palette.v1', 'harbor'], ['forma.canvas.scheme.v1', 'dark']]);
+      let reads = 0, writes = 0, click: (event: { target: Button }) => void = () => {};
+      Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+        getItem(key: string) { reads++; return storage.get(key) ?? null; },
+        setItem(key: string, value: string) { writes++; storage.set(key, value); },
+      }});
+      const day = new Button({lookScheme:'light'}), dark = new Button({lookScheme:'dark'}), ink = new Button({lookPalette:'ink'});
+      const document_ = {
+        documentElement: {dataset: {} as Record<string, string>},
+        getElementById() { return {dataset:{demo: demo ? 'on' : 'off'}}; },
+        querySelector() { return {addEventListener(_name: string, handler: typeof click) {click=handler;}}; },
+        querySelectorAll(selector: string) {return selector==='[data-look-scheme]' ? [day,dark] : [ink];},
+      };
+      startPalette(document_ as unknown as Document);
+      assert.equal(document_.documentElement.dataset.theme, demo ? 'site' : 'harbor-dark');
+      click({target:ink});click({target:day});
+      assert.equal(document_.documentElement.dataset.theme,'ink');
+      assert.equal(ink.attrs['aria-pressed'],'true');assert.equal(day.attrs['aria-pressed'],'true');
+      assert.equal(reads,demo?0:2);assert.equal(writes,demo?0:2);
+      if (demo) assert.equal(storage.get('forma.canvas.palette.v1'),'harbor');
+    }
+  } finally {
+    for (const [name, descriptor] of prior) if (descriptor) Object.defineProperty(globalThis,name,descriptor); else Reflect.deleteProperty(globalThis,name);
+  }
 });

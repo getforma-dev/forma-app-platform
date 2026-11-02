@@ -5214,11 +5214,13 @@
       "Requirements": "C11, SR1",
       "Depends on": "APP-138",
       "External dependencies": "None",
-      "Assignee": "Grok \u2014 GenUI",
+      "Assignee": "GenUI",
+      "Implementation": "Implemented and locally reviewed in PR #40. Actual Shape/apply/reload/Revert and published-design refusal passed; browser-local palettes do not change published app authority.",
+      "Deployment": "Not deployed by this change; merge and qualified beta approval remain separate gates.",
       "Branch / PR": "`pivot/app-166-themes` \u2014 [PR #40](https://github.com/getforma-dev/forma-app-platform/pull/40)",
       "Team": "GenUI",
       "Blocked by": "None",
-      "Unblock evidence": "APP-138 is Done. APP-157 keeps published appearance and is not a predecessor of this session layer.",
+      "Unblock evidence": "APP-138 is Done. APP-157 keeps published appearance and is not a predecessor of this browser-local layer.",
       "dependencies": [
         "APP-138"
       ]

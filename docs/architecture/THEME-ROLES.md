@@ -18,7 +18,7 @@ The bottom bar, beside “Layout saved locally,” offers Day and Dark plus thre
 | --- | --- | --- | --- |
 | Platform | none, until a default is chosen | Shell, board, native pages, through the role aliases | Grants, geometry, vendor hit-testing |
 | App | `data-theme` from Shape's `accent` and `mode`, on the unite frame and that work's cards | Surface, accent, chart and the mark | Other apps, the shell, a card's view and receipts |
-| Published app | `data-app-mode` and `data-app-accent` | The admitted appearance (APP-157) | Session Shape does not paint over an element that already has `data-app-mode` |
+| Published app | `data-app-presentation="authored"`, plus `data-app-mode` and `data-app-accent` | The admitted version-1 appearance (APP-157) | Browser Shape does not paint over an authored design. Default renderer tokens (`data-app-presentation="default"`) can receive a local theme. |
 | Card highlight | `data-palette` and `data-highlight` | `--shape-accent` / `--mark-*` on a row or a bar | The card chrome |
 | Widget | `data-skin`, `data-accent`, `data-font` | Skin owns the face. An accent theme can recolor a widget that still says `default` | An explicit widget accent, and the skin's geometry |
 
@@ -41,4 +41,4 @@ Dark widget faces keep a luminous glow for the same accent name. Paper and retro
 
 Shape can select those same names. `ink`, `harbor`, `stone`, and `grove` are whole palettes. The older color names still recolor an app. Card highlights stay on the color names, so a row mark does not become a second chrome.
 
-An applied app look is stored in this browser under `forma.canvas.app-theme.v1` for the signed-in member. Refresh, sign-out, and sign-in on this browser bring it back. Sign-out does not clear it. A different browser does not have it. The published app design, saved from Edit app, is the copy that follows the member to another browser. A widget's skin, accent, and font are already stored the same way, in `forma.widgets.v1`. The canvas palette is `forma.canvas.palette.v1`. Demo mode does not keep these browser choices.
+An applied app look is stored in this browser under `forma.canvas.app-theme.v1` for the signed-in member. Refresh, sign-out, and sign-in on this browser bring it back. Sign-out does not clear it. A different browser does not have it. The published app design, saved from Edit app, is the copy that follows the member to another browser. A widget's skin, accent, and font are already stored the same way, in `forma.widgets.v1`. The canvas palette is `forma.canvas.palette.v1`. Demo mode neither restores nor writes these browser choices. Revert is restored with each applied app theme and removes that member’s stored override. If an admitted design is adopted while a local preview is open, the design clears the local attributes and controls; a late Shape response cannot replace it.

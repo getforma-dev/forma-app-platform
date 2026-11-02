@@ -1,0 +1,422 @@
+{
+  "sanitization": "Positive selection removes localStorage, member keys and exact synthetic work locators. No cookies or provider data were captured. Private source hashes bind original reports.",
+  "final": {
+    "started_at": "2026-11-02T10:42:23.288Z",
+    "scope": "Actual owned clean dev stand; synthetic member and installed library. No hosted or provider actions.",
+    "manifest_sha256": "9ffdb00e691895807fa74f92c3ffb915953b55f1d5e543bb43d343abe0c9a827",
+    "checks": [
+      "Real dock palette + keyboard scheme selection persist after reload; selecting the active palette returns to Forma and aria-pressed follows state.",
+      "One real model Shape response was admitted and applied to default app presentation; reload restores actual colors plus Revert, and Revert stays reverted after another reload.",
+      "A newly created admitted Dining app retains its published design; Shape refuses before any model POST instead of claiming a no-op applied change.",
+      "At320/390px brand and navigation do not overlap; Workspace/Connected apps remain visible controls and keyboard focus scrolls Sign out into the header viewport.",
+      "At 320px the dock stays inside the page and all five controls are at least44x44; native create dialog inherits the selected dark palette."
+    ],
+    "errors": [],
+    "shape_responses": [
+      {
+        "status": 200,
+        "body": {
+          "spec": {
+            "accent": "harbor",
+            "density": "comfortable",
+            "mode": "dark"
+          },
+          "target": "app"
+        }
+      }
+    ],
+    "http_failures": [
+      {
+        "status": 404,
+        "path": "/v1/boxes/lineage/{app}/{work}"
+      },
+      {
+        "status": 404,
+        "path": "/v1/boxes/lineage/{app}/{work}"
+      },
+      {
+        "status": 404,
+        "path": "/v1/boxes/lineage/{app}/{work}"
+      },
+      {
+        "status": 404,
+        "path": "/v1/boxes/lineage/{app}/{work}"
+      }
+    ],
+    "applied": {
+      "background": "rgb(21, 32, 51)",
+      "text": "rgb(232, 238, 247)",
+      "accent": "#a9c8ef",
+      "app_background": "#152033",
+      "theme": "harbor-dark",
+      "presentation": "default",
+      "busy": "#fdb022",
+      "bad": "#ff8a80"
+    },
+    "restored": {
+      "background": "rgb(21, 32, 51)",
+      "text": "rgb(232, 238, 247)",
+      "accent": "#a9c8ef",
+      "app_background": "#152033",
+      "theme": "harbor-dark",
+      "presentation": "default",
+      "busy": "#fdb022",
+      "bad": "#ff8a80"
+    },
+    "mobile": {
+      "width": 320,
+      "pageWidth": 320,
+      "box": {
+        "x": 64,
+        "y": 740,
+        "width": 244,
+        "height": 50,
+        "top": 740,
+        "right": 308,
+        "bottom": 790,
+        "left": 64
+      },
+      "targets": [
+        {
+          "label": "Day",
+          "rect": {
+            "x": 67,
+            "y": 743,
+            "width": 44,
+            "height": 44,
+            "top": 743,
+            "right": 111,
+            "bottom": 787,
+            "left": 67
+          }
+        },
+        {
+          "label": "Dark",
+          "rect": {
+            "x": 113,
+            "y": 743,
+            "width": 44,
+            "height": 44,
+            "top": 743,
+            "right": 157,
+            "bottom": 787,
+            "left": 113
+          }
+        },
+        {
+          "label": "Ink",
+          "rect": {
+            "x": 169,
+            "y": 743,
+            "width": 44,
+            "height": 44,
+            "top": 743,
+            "right": 213,
+            "bottom": 787,
+            "left": 169
+          }
+        },
+        {
+          "label": "Harbor",
+          "rect": {
+            "x": 215,
+            "y": 743,
+            "width": 44,
+            "height": 44,
+            "top": 743,
+            "right": 259,
+            "bottom": 787,
+            "left": 215
+          }
+        },
+        {
+          "label": "Stone",
+          "rect": {
+            "x": 261,
+            "y": 743,
+            "width": 44,
+            "height": 44,
+            "top": 743,
+            "right": 305,
+            "bottom": 787,
+            "left": 261
+          }
+        }
+      ]
+    },
+    "header": {
+      "320": {
+        "brand": {
+          "x": 14,
+          "y": 10,
+          "width": 102.203125,
+          "height": 28
+        },
+        "create": {
+          "x": 18,
+          "y": 52,
+          "width": 93.140625,
+          "height": 44
+        },
+        "signout": {
+          "x": 244.9375,
+          "y": 52,
+          "width": 56.609375,
+          "height": 44
+        }
+      },
+      "390": {
+        "brand": {
+          "x": 14,
+          "y": 10,
+          "width": 157.578125,
+          "height": 28
+        },
+        "create": {
+          "x": 18,
+          "y": 52,
+          "width": 93.140625,
+          "height": 44
+        },
+        "signout": {
+          "x": 314.9375,
+          "y": 52,
+          "width": 56.609375,
+          "height": 44
+        }
+      }
+    },
+    "dialog": {
+      "background": "rgb(16, 23, 29)",
+      "text": "rgb(241, 245, 249)",
+      "accent": "#a5f3fc",
+      "app_background": "",
+      "busy": "#fdb022",
+      "bad": "#ff8a80"
+    },
+    "passed": true,
+    "finished_at": "2026-11-02T10:42:49.965Z",
+    "source_artifact": {
+      "logical_name": "browser-final/report.json",
+      "bytes": 8913,
+      "sha256": "fbd3b66bc996c7c30ae3888e9f5204683f9072ab3c1e3b0c009eabfee7160cec"
+    }
+  },
+  "prior": [
+    {
+      "started_at": "2026-11-02T10:36:35.151Z",
+      "scope": "Actual owned clean dev stand; synthetic member and installed library. No hosted or provider actions.",
+      "manifest_sha256": "31270b4ad7728fe093f93d6c802e188123c2d07d2ac693bb6a0b17fe6612fb79",
+      "checks": [
+        "Real dock palette + keyboard scheme selection persist after reload; selecting the active palette returns to Forma and aria-pressed follows state."
+      ],
+      "errors": [],
+      "shape_responses": [
+        {
+          "status": 200,
+          "body": {
+            "spec": {
+              "accent": "harbor",
+              "density": "comfortable",
+              "mode": "dark"
+            },
+            "target": "app"
+          }
+        }
+      ],
+      "applied": {
+        "background": "rgb(21, 32, 51)",
+        "text": "rgb(232, 238, 247)",
+        "accent": "#a9c8ef",
+        "app_background": "#152033",
+        "theme": "harbor-dark",
+        "presentation": "default"
+      },
+      "passed": false,
+      "failure": "TimeoutError: locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.cv-unite[data-work=\"{synthetic-work}\"]') to be visible\u001b[22m\n",
+      "finished_at": "2026-11-02T10:37:15.063Z",
+      "source_artifact": {
+        "logical_name": "browser-1/report.json",
+        "bytes": 1146,
+        "sha256": "59135ee1ebd650e5eea2555c877962580293d6dad5496b3087f486e028bcdd3f"
+      }
+    },
+    {
+      "started_at": "2026-11-02T10:38:13.053Z",
+      "scope": "Actual owned clean dev stand; synthetic member and installed library. No hosted or provider actions.",
+      "manifest_sha256": "31270b4ad7728fe093f93d6c802e188123c2d07d2ac693bb6a0b17fe6612fb79",
+      "checks": [
+        "Real dock palette + keyboard scheme selection persist after reload; selecting the active palette returns to Forma and aria-pressed follows state.",
+        "One real model Shape response was admitted and applied to default app presentation; reload restores actual colors plus Revert, and Revert stays reverted after another reload.",
+        "A newly created admitted Dining app retains its published design; Shape refuses before any model POST instead of claiming a no-op applied change.",
+        "At 320px the dock stays inside the page and all five controls are at least44x44; native create dialog inherits the selected dark palette."
+      ],
+      "errors": [],
+      "shape_responses": [
+        {
+          "status": 200,
+          "body": {
+            "spec": {
+              "accent": "harbor",
+              "density": "comfortable",
+              "mode": "dark"
+            },
+            "target": "app"
+          }
+        }
+      ],
+      "http_failures": [
+        {
+          "status": 503,
+          "path": "/v1/commands"
+        },
+        {
+          "status": 503,
+          "path": "/v1/notes"
+        },
+        {
+          "status": 503,
+          "path": "/v1/notes"
+        },
+        {
+          "status": 503,
+          "path": "/v1/commands"
+        },
+        {
+          "status": 503,
+          "path": "/v1/boxes"
+        },
+        {
+          "status": 503,
+          "path": "/v1/cards"
+        },
+        {
+          "status": 404,
+          "path": "/v1/boxes/lineage/{app}/{work}"
+        },
+        {
+          "status": 404,
+          "path": "/v1/boxes/lineage/{app}/{work}"
+        },
+        {
+          "status": 404,
+          "path": "/v1/boxes/lineage/{app}/{work}"
+        },
+        {
+          "status": 404,
+          "path": "/v1/boxes/lineage/{app}/{work}"
+        }
+      ],
+      "applied": {
+        "background": "rgb(21, 32, 51)",
+        "text": "rgb(232, 238, 247)",
+        "accent": "#a9c8ef",
+        "app_background": "#152033",
+        "theme": "harbor-dark",
+        "presentation": "default"
+      },
+      "restored": {
+        "background": "rgb(21, 32, 51)",
+        "text": "rgb(232, 238, 247)",
+        "accent": "#a9c8ef",
+        "app_background": "#152033",
+        "theme": "harbor-dark",
+        "presentation": "default"
+      },
+      "mobile": {
+        "width": 320,
+        "pageWidth": 320,
+        "box": {
+          "x": 64,
+          "y": 740,
+          "width": 244,
+          "height": 50,
+          "top": 740,
+          "right": 308,
+          "bottom": 790,
+          "left": 64
+        },
+        "targets": [
+          {
+            "label": "Day",
+            "rect": {
+              "x": 67,
+              "y": 743,
+              "width": 44,
+              "height": 44,
+              "top": 743,
+              "right": 111,
+              "bottom": 787,
+              "left": 67
+            }
+          },
+          {
+            "label": "Dark",
+            "rect": {
+              "x": 113,
+              "y": 743,
+              "width": 44,
+              "height": 44,
+              "top": 743,
+              "right": 157,
+              "bottom": 787,
+              "left": 113
+            }
+          },
+          {
+            "label": "Ink",
+            "rect": {
+              "x": 169,
+              "y": 743,
+              "width": 44,
+              "height": 44,
+              "top": 743,
+              "right": 213,
+              "bottom": 787,
+              "left": 169
+            }
+          },
+          {
+            "label": "Harbor",
+            "rect": {
+              "x": 215,
+              "y": 743,
+              "width": 44,
+              "height": 44,
+              "top": 743,
+              "right": 259,
+              "bottom": 787,
+              "left": 215
+            }
+          },
+          {
+            "label": "Stone",
+            "rect": {
+              "x": 261,
+              "y": 743,
+              "width": 44,
+              "height": 44,
+              "top": 743,
+              "right": 305,
+              "bottom": 787,
+              "left": 261
+            }
+          }
+        ]
+      },
+      "dialog": {
+        "background": "rgb(16, 23, 29)",
+        "text": "rgb(241, 245, 249)",
+        "accent": "#a5f3fc",
+        "app_background": ""
+      },
+      "passed": true,
+      "finished_at": "2026-11-02T10:38:49.122Z",
+      "source_artifact": {
+        "logical_name": "browser-2/report.json",
+        "bytes": 8247,
+        "sha256": "91ea351df29ad4b839ad3ed410a7dd3f2990dde754e21dc087349128306017c8"
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+assert.ok(process.env.PLAYWRIGHT_MODULE, 'Set PLAYWRIGHT_MODULE to the existing qualified Playwright module');
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE);
+const origin=process.env.THEME_ORIGIN||'http://127.0.0.1:5210';
+assert.match(origin,/^http:\/\/127\.0\.0\.1:(?!400[1-9]$|4010$)\d+$/,'Owned loopback stand only');
+const out=process.argv[2];assert.ok(out);await mkdir(out,{recursive:true});
+const hash=async path=>createHash('sha256').update(await readFile(path)).digest('hex');
+const report={started_at:new Date().toISOString(),scope:'Actual owned clean dev stand; synthetic member and installed library. No hosted or provider actions.',manifest_sha256:await hash('app/admin/dist/manifest.json'),checks:[],errors:[],shape_responses:[],http_failures:[]};
+const browser=await chromium.launch({channel:'chrome',headless:true});
+const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce',colorScheme:'light'});
+const page=await context.newPage();page.setDefaultTimeout(20000);
+page.on('pageerror',error=>report.errors.push(error.message));
+page.on('response',r=>{if(r.status()>=400)report.http_failures.push({status:r.status(),path:new URL(r.url()).pathname});});
+const until=async fn=>{for(let i=0;i<200;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('Condition timed out');};
+const theme=()=>page.locator('html').getAttribute('data-theme');
+const cmd=async words=>{await page.locator('#intent-input').fill(words);await page.locator('#intent-submit').click();};
+const shot=async name=>page.screenshot({path:`${out}/${name}.png`});
+const colors=async node=>node.evaluate(n=>{const s=getComputedStyle(n);return{background:s.backgroundColor,text:s.color,accent:s.getPropertyValue('--cv-accent').trim(),app_background:s.getPropertyValue('--app-bg').trim(),theme:n.dataset.theme,presentation:n.dataset.appPresentation,busy:s.getPropertyValue('--cv-busy').trim(),bad:s.getPropertyValue('--cv-bad').trim()};});
+try{
+ await page.goto(origin+'/canvas');await until(async()=>await theme()==='site');
+ await page.locator('[data-look-palette="harbor"]').click();await until(async()=>await theme()==='harbor');
+ await page.locator('[data-look-scheme="dark"]').focus();await page.keyboard.press('Enter');await until(async()=>await theme()==='harbor-dark');
+ await page.reload();await until(async()=>await theme()==='harbor-dark');assert.equal(await page.locator('[data-look-scheme="dark"]').getAttribute('aria-pressed'),'true');
+ await page.locator('[data-look-palette="harbor"]').click();await until(async()=>await theme()==='site-dark');
+ await page.locator('[data-look-scheme="light"]').click();await until(async()=>await theme()==='site');
+ report.checks.push('Real dock palette + keyboard scheme selection persist after reload; selecting the active palette returns to Forma and aria-pressed follows state.');
+ const row=page.locator('.cv-lib-app').filter({has:page.locator('.cv-lib-app-title',{hasText:'Expense review'})}).first();const number=await row.getAttribute('data-number');const work=await row.getAttribute('data-work');
+ await cmd(`/app ${number}`);const card=page.locator(`.cv-card[data-kind="app"][data-work="${work}"]`);await card.waitFor();
+ await card.locator('[data-unite-app]').click();let united=page.locator(`.cv-unite[data-work="${work}"]`);await united.waitFor();assert.equal(await united.getAttribute('data-app-presentation'),'default');
+ const answer=page.waitForResponse(r=>new URL(r.url()).pathname==='/v1/shape'&&r.request().method()==='POST',{timeout:90000});
+ await cmd(`/shape ${number} Use the Harbor palette in dark mode with comfortable spacing.`);const response=await answer;report.shape_responses.push({status:response.status(),body:await response.json()});assert.equal(response.status(),200);
+ await page.getByRole('button',{name:'Apply',exact:true}).click();await until(async()=>await united.getAttribute('data-theme')==='harbor-dark');
+ report.applied=await colors(united);assert.notEqual(report.applied.background,'rgb(255, 255, 255)');
+ await shot('app-harbor-dark');report.beforeReload=await page.evaluate(()=>({member:document.querySelector('#cv-canvas').dataset.member,storage:Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith('forma.canvas')))}));await page.reload();report.afterReload=await page.evaluate(()=>({member:document.querySelector('#cv-canvas').dataset.member,storage:Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith('forma.canvas')))}));united=page.locator(`.cv-unite[data-work="${work}"]`);await united.waitFor();await until(async()=>await united.getAttribute('data-theme')==='harbor-dark');
+ await united.locator('.cv-shaped-label[data-app-theme] .cv-shaped-revert').waitFor();report.restored=await colors(united);assert.equal(report.restored.background,report.applied.background);
+ await shot('restored-revert');await united.locator('.cv-shaped-label[data-app-theme] .cv-shaped-revert').click();await until(async()=>!(await united.getAttribute('data-theme')));
+ await page.reload();united=page.locator(`.cv-unite[data-work="${work}"]`);await united.waitFor();assert.equal(await united.getAttribute('data-theme'),null);assert.equal(await united.locator('.cv-shaped-label[data-app-theme]').count(),0);
+ report.checks.push('One real model Shape response was admitted and applied to default app presentation; reload restores actual colors plus Revert, and Revert stays reverted after another reload.');
+ await page.locator('[data-create-app]').click();await page.locator('[data-template="dining-tracker"]').click();
+ const createResponse=page.waitForResponse(r=>new URL(r.url()).pathname==='/v1/compose'&&r.request().method()==='POST');
+ await page.getByRole('dialog').getByRole('button',{name:'Create',exact:true}).click();const result=await createResponse;assert.equal(result.status(),200);const created=await result.json();await writeFile(`${out}/fixture-private.json`,JSON.stringify(created,null,2));
+ await page.locator(`.cv-unite[data-work="${created.work_id}"]`).waitFor();
+ const createdRow=page.locator(`.cv-lib-app[data-work="${created.work_id}"]`);const createdNumber=await createdRow.getAttribute('data-number');
+ let shapeCalls=0;page.on('request',r=>{if(new URL(r.url()).pathname==='/v1/shape'&&r.method()==='POST')shapeCalls++;});
+ await cmd(`/shape ${createdNumber} Use Harbor dark.`);await until(async()=>(await page.locator('#intent-status').textContent()).includes('published design'));
+ assert.equal(shapeCalls,0);assert.equal(await page.locator(`.cv-unite[data-work="${created.work_id}"]`).getAttribute('data-theme'),null);
+ report.checks.push('A newly created admitted Dining app retains its published design; Shape refuses before any model POST instead of claiming a no-op applied change.');
+ await page.setViewportSize({width:320,height:800});await page.locator('[data-look-palette="ink"]').click();await page.locator('[data-look-scheme="dark"]').click();
+ report.mobile=await page.locator('.cv-look').evaluate(n=>({width:innerWidth,pageWidth:document.documentElement.scrollWidth,box:n.getBoundingClientRect().toJSON(),targets:[...n.querySelectorAll('button')].map(b=>({label:b.getAttribute('aria-label')||b.textContent,rect:b.getBoundingClientRect().toJSON()}))}));
+ assert.ok(report.mobile.pageWidth<=320);assert.ok(report.mobile.box.x>=0&&report.mobile.box.right<=320);for(const t of report.mobile.targets){assert.ok(t.rect.width>=44);assert.ok(t.rect.height>=44);}
+ report.header={};for(const width of [320,390]){await page.setViewportSize({width,height:800});const brand=await page.locator('.cv-brand').boundingBox(),create=await page.locator('.cv-top [data-create-app]').boundingBox();assert.ok(brand.y+brand.height<=create.y);await page.locator('.cv-signout button').focus();const signout=await page.locator('.cv-signout button').boundingBox();assert.ok(signout.x>=0&&signout.x+signout.width<=width);assert.equal(await page.locator('.cv-top a[href="/workspace"]').isVisible(),true);assert.equal(await page.locator('.cv-top a[href="/shared"]').isVisible(),true);report.header[width]={brand,create,signout};await page.locator('.cv-top [data-create-app]').focus();await shot(`mobile-${width}`);}await page.setViewportSize({width:320,height:800});report.checks.push('At320/390px brand and navigation do not overlap; Workspace/Connected apps remain visible controls and keyboard focus scrolls Sign out into the header viewport.');await page.locator('[data-create-app]').click();await page.getByRole('dialog').waitFor();report.dialog=await colors(page.getByRole('dialog'));await shot('mobile-create');
+ report.checks.push('At 320px the dock stays inside the page and all five controls are at least44x44; native create dialog inherits the selected dark palette.');
+ assert.deepEqual(report.errors,[]);assert.equal(await hash('app/admin/dist/manifest.json'),report.manifest_sha256);report.passed=true;
+}catch(error){report.passed=false;report.failure=String(error);await shot('failure').catch(()=>{});process.exitCode=1;}
+finally{await browser.close();report.finished_at=new Date().toISOString();await writeFile(`${out}/report.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));}

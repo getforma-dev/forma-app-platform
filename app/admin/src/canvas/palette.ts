@@ -63,11 +63,14 @@ function remember(key: string, value: string): void {
 }
 
 export function startPalette(document_: Document): void {
+  const persistent = document_.getElementById('cv-canvas')?.dataset.demo !== 'on';
   let palette = 'site';
   let locked: 'light' | 'dark' | null = null;
   try {
-    palette = paletteName(localStorage.getItem(KEY));
-    locked = schemeChoice(localStorage.getItem(SCHEME_KEY));
+    if (persistent) {
+      palette = paletteName(localStorage.getItem(KEY));
+      locked = schemeChoice(localStorage.getItem(SCHEME_KEY));
+    }
   } catch {
     palette = 'site';
     locked = null;
@@ -84,12 +87,12 @@ export function startPalette(document_: Document): void {
     if (!(button instanceof HTMLButtonElement)) return;
     if (button.dataset.lookScheme === 'light' || button.dataset.lookScheme === 'dark') {
       locked = button.dataset.lookScheme;
-      remember(SCHEME_KEY, locked);
+      if (persistent) remember(SCHEME_KEY, locked);
     }
     const next = button.dataset.lookPalette;
     if (next) {
       palette = nextPalette(palette, next);
-      remember(KEY, palette);
+      if (persistent) remember(KEY, palette);
     }
     apply();
   });
