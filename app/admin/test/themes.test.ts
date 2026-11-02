@@ -85,6 +85,11 @@ test('every theme block assigns the full role set, and text clears 4.5:1', () =>
     assert.ok(contrast(decl(dark, '--role-on-accent'), decl(dark, '--role-accent')) >= 4.5, `${name}-dark`);
   }
   assert.match(canvas, /data-theme-density="comfortable"/);
+  assert.match(css, /--space-1:\s*0\.25rem/);
+  assert.match(css, /--radius-1:\s*4px/);
+  assert.match(css, /--control:\s*2\.5rem/);
+  assert.match(canvas, /\.cv-create-form[\s\S]*background:\s*var\(--role-shell\)|\.cv-create \{[\s\S]*background:\s*var\(--role-shell\)/);
+  assert.doesNotMatch(canvas, /--cv-paper|--cv-ink|#f7f4ee|#1c1915/);
   assert.doesNotMatch(canvas, /#18a974|#12805c|#d0343b/);
   assert.doesNotMatch(css, /data-theme="cupcake"|data-theme="cyberpunk"/);
 });

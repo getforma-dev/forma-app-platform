@@ -15,7 +15,27 @@
 
    Shape's closed accent and mode names select green, crimson, amber, cyan,
    violet, rose, ice, slate, and the -dark block of each. Published composed
-   apps keep data-app-mode and their own --app-* values (APP-157). */
+   apps keep data-app-mode and their own --app-* values (APP-157).
+
+   Measure is one scale for every color theme. A theme may change color,
+   not the rhythm: 4px steps, 4/6/8px corners, 40px controls, 13px UI type.
+   Card density still adjusts padding on a card. It does not replace this scale. */
+
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+  --control: 2.5rem;
+  --font-ui: 0.8125rem;
+  --font-meta: 0.6875rem;
+  --leading-ui: 1.45;
+}
 
 :root,
 [data-theme="site"] {

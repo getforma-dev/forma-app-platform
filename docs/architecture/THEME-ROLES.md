@@ -24,6 +24,10 @@ A custom property inherits its computed color. The `--cv-*` and native aliases a
 
 `comfortable` is a spacing step between compact and spacious. It is not a color.
 
+## Measure
+
+Color themes share one layout scale: `--space-1` through `--space-6` (4px steps), `--radius-1` through `--radius-3` (4, 6 and 8px), `--control` (40px), and `--font-ui` / `--font-meta`. A theme does not change that rhythm. The create-app dialog is mounted on the document, outside the shell, and uses this scale plus the color roles. Older canvas rules still carry their own pixel values. New overlay UI should use the scale.
+
 Dark widget faces keep a luminous glow for the same accent name. Paper and retro use the dark ink of that name, so the light face stays readable when the app theme is dark. Those are two surfaces of one name, not a second palette the model can invent.
 
 ## Applying an app theme
