@@ -121,6 +121,13 @@ test('a canvas palette is a closed name and follows the color scheme', async () 
   assert.equal(themeForPalette('stone', 'light'), 'stone');
   assert.equal(themeForPalette('grove', 'dark'), 'grove-dark');
   assert.equal(themeForPalette('nope', 'dark'), 'site-dark');
+  const { schemeChoice, nextPalette } = await import('../src/canvas/palette.ts');
+  assert.equal(nextPalette('site', 'ink'), 'ink');
+  assert.equal(nextPalette('ink', 'ink'), 'site');
+  assert.equal(nextPalette('harbor', 'grove'), 'harbor');
+  assert.equal(schemeChoice('dark'), 'dark');
+  assert.equal(schemeChoice('light'), 'light');
+  assert.equal(schemeChoice('system'), null);
 });
 
 test('a stored app theme keeps only closed names', async () => {

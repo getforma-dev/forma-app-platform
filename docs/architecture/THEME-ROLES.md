@@ -10,7 +10,7 @@ A custom property inherits its computed color. The `--cv-*` and native aliases a
 
 `site` and `site-dark` are the paper, charcoal and lime identity from [FORMA-BRAND.md](FORMA-BRAND.md). `:root` is `site`. When the operating system is dark and no element has set `data-theme`, `:root` uses `site-dark`. That is the platform default.
 
-The canvas header offers five palettes. Forma (`site`) is the default. Ink is slate and teal, Harbor is blue-gray and navy, Stone is warm stone and umber, and Grove is mist and forest. The choice is stored in this browser and applied to the canvas document, including the create-app dialog. It follows the operating system's light or dark block. Sign-in and the other native pages stay Forma, because they ship no script. Making one of these the platform default is still a separate decision.
+The bottom bar, beside “Layout saved locally,” offers Day and Dark plus three palettes: Ink (slate and teal), Harbor (blue-gray and navy), and Stone (warm stone and umber). None pressed is Forma, the default. Pressing the active palette returns to Forma. Day and Dark are explicit; until one is pressed, the bar follows the operating system. The choice stays in this browser and covers the canvas, including the create-app dialog. Grove remains available to Shape. Sign-in and the other native pages stay Forma, because they ship no script.
 
 ## Who sets a theme
 
