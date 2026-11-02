@@ -1,0 +1,26 @@
+{
+  "base_trunk": "07ea5aac85b69ad90d7bfb2274fb50395705e26f",
+  "merge_commit": "c9bf4819e1cfc05a9ab8d8b0ac026a0ae5550208",
+  "source_sha256": {
+    "app/admin/src/canvas/palette.ts": "3170e4af8a90b3eb6219a6327e51350069e5b6b27a75065c084462ced7905148",
+    "app/admin/src/canvas/shape.ts": "f2e9cea8fa0db1d8cff0402f490c5491147c36ce62a7a1cb56eab2e8326ef400",
+    "app/admin/src/presentation/presentation.ts": "6f2c1485ccc12beec8fbc0b1e97d94b7bd004f47a9aed3717a9264c8a2a6803d",
+    "app/admin/src/styles/canvas.css": "2467b6dab97e06c7170a90c4c8494b5364cf0c9f1fa325805505b8cac70d11dd",
+    "app/admin/src/styles/presentation.css": "8ff29077c733274ac4254d6ff25ab6c48a4cdac74214fd5977de200c5f6b92ba",
+    "app/admin/src/styles/themes.css": "33df8371af9ae4fcfbb1cdadfe458d886004f8fd4355719136710a9c9e94169e",
+    "app/admin/test/themes.test.ts": "873148263be87dec5c6764658ca5adc61dc934a4727d28c409aaa7d4068912f5",
+    "app/admin/test/presentation.test.ts": "5eedbb2b1d1fc1f6dadfb366b8f27779d79ba1e694d044be12717252f53e0adc"
+  },
+  "browser_artifacts_sha256": {
+    "initial-reload-timeout.png": "63f625655f2f75666eb8767dca13c6028cb87f903c625b65c6ad230346736b61",
+    "mobile-390.png": "fc62d0def4af5527cc73c0ba2eca6f8ed0dc9144c6a4f352f3ab9d98ff2500b4",
+    "mobile-320.png": "ddca5ab35bb62ec013059184db150cc79b703820950a058548996fd3e25e40ed",
+    "restored-revert.png": "9908e46863af13049fdcdaffd04a0d55135f872c2608c438d0ddbc4e5679b5f7",
+    "mobile-create.png": "3e9c1c86054134b4027a3fe8ccb91715be85bff6036a847e6f17c7f79567e72e",
+    "app-harbor-dark.png": "d99dfdefec383b93d8743adc15f90ad123b2dec317e8b7be70fb1cd38bdfb9c0",
+    "before-mobile-header-fix.png": "67ab48c7d236fcb3694bde38d3d0887da2532a1a73ab5ae1b7c7dd6e834f7e07"
+  },
+  "executed_harness_sha256": "f6966df65611fd60c38da92774d5afe2f503a3d38d972d297c4f2bbad2f459a0",
+  "reproduction_harness_sha256": "2d112f906ef648f4c4015b5ce7830f5507d0b6e914e489af3197e63c65413f5b",
+  "reproduction_changes": "Only module path and loopback-origin configuration; test actions/assertions match the executed final harness."
+}

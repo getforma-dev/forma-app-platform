@@ -7,6 +7,7 @@ import { submitUtterance } from './actions';
 import { startAgents } from './agents';
 import { startBoard } from './board';
 import { startCreateApp } from './create-app';
+import { startPalette } from './palette';
 import { startLibrary } from './library';
 import { startSharing } from '../sharing/dialog';
 import { startNaming } from './naming';
@@ -369,10 +370,10 @@ function Canvas(props: CanvasProps) {
                 <span class="cv-choice-title">Create an app</span>
                 <span class="cv-choice-copy">Choose a template, then describe your app. Nothing is placed until you confirm.</span>
               </button>
-              <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A new folder holds your files: CSV, XLSX, PDF, images or text">
+              <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A spreadsheet can stay a file on the canvas. Other files go in a new folder">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                 <span class="cv-choice-title">Bring your files</span>
-                <span class="cv-choice-copy">Drop files or upload. Give your next app a starting point.</span>
+                <span class="cv-choice-copy">A spreadsheet can stay the file itself. Double-click it to open the sheet, or make a card or an app from it.</span>
               </button>
               {createShow(() => props.hasLibrary, () => (
                 <button type="button" class="cv-empty-choice cv-empty-library" data-lib-open>
@@ -382,7 +383,7 @@ function Canvas(props: CanvasProps) {
                   <span class="cv-empty-library-count">{props.librarySummary}</span>
                 </button>
               ))}
-              <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload files into a new folder" />
+              <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload a spreadsheet or other files" />
             </div>
             <div class="cv-suggestions" aria-label="Suggestions">
               <span class="cv-suggestions-label">Or try</span>
@@ -860,13 +861,33 @@ function Canvas(props: CanvasProps) {
         </div>
         <span class="cv-dock-brand" aria-hidden="true">YOUR NEXT MOVE <span>↗</span></span>
         <IntentBar placeholder="Describe an app, ask a question, or type /" />
-        <p class="cv-layout-note"><span class="cv-save-dot" aria-hidden="true"></span> Layout saved locally</p>
+        <div class="cv-dock-end">
+          <div class="cv-look" role="group" aria-label="Canvas look">
+            <div class="cv-look-scheme" role="group" aria-label="Day or dark">
+              <button type="button" data-look-scheme="light" aria-pressed="false">Day</button>
+              <button type="button" data-look-scheme="dark" aria-pressed="false">Dark</button>
+            </div>
+            <div class="cv-look-palettes" role="group" aria-label="Palette">
+              <button type="button" data-look-palette="ink" aria-pressed="false" title="Ink. Press again for Forma." aria-label="Ink">
+                <span class="cv-look-swatch" data-swatch="ink" aria-hidden="true"></span>
+              </button>
+              <button type="button" data-look-palette="harbor" aria-pressed="false" title="Harbor. Press again for Forma." aria-label="Harbor">
+                <span class="cv-look-swatch" data-swatch="harbor" aria-hidden="true"></span>
+              </button>
+              <button type="button" data-look-palette="stone" aria-pressed="false" title="Stone. Press again for Forma." aria-label="Stone">
+                <span class="cv-look-swatch" data-swatch="stone" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+          <p class="cv-layout-note"><span class="cv-save-dot" aria-hidden="true"></span> Layout saved locally</p>
+        </div>
       </footer>
     </div>
   );
 }
 
 await activateIslands({ IntentBar });
+startPalette(document);
 startBoard(document);
 startSharing(document);
 // APP-116: timing chips (off by default; the More menu or ?timing=1).

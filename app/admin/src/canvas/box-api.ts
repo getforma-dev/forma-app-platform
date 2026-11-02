@@ -5,7 +5,7 @@
 // beyond the ids. Refusals come back as the server's neutral code, shown
 // through `refusalText`.
 import { amount } from './display';
-import { isUuid } from './render';
+import { isUuid } from './ids';
 
 /**
  * The member-facing noun (Victor, 2026-10-30): "Folder" everywhere on the
@@ -49,6 +49,50 @@ export type BoxFile = {
 export type BoxApp = { app_id: string; work_id: string; title: string; kind: 'derived' | 'data'; file_ids: string[]; created_at: string };
 export type PreviewColumn = { id: string; header: string; type: ColumnType; nullable: boolean; scale: number | null };
 export type Preview = { format: 'csv' | 'xlsx'; sheet: string | null; rows: number; columns: PreviewColumn[]; sample: string[][] };
+export type SheetPlacement = { boxId: string; fileId: string; x: number; y: number };
+export const sheetPlacementId = (row: Pick<SheetPlacement, 'boxId' | 'fileId'>): string => `${row.boxId}/${row.fileId}`;
+/** Saving a newly mounted file must retain references whose authorized
+ * metadata is still loading (or temporarily unavailable). Only explicit
+ * removal discards a reference. Persist no filenames or cell contents. */
+export function mergeSheetPlacements(stored: unknown, mounted: SheetPlacement[], removed: ReadonlySet<string>): SheetPlacement[] {
+  const rows = new Map<string, SheetPlacement>();
+  for (const row of [...(Array.isArray(stored) ? stored : []), ...mounted]) {
+    if (typeof row !== 'object' || row === null) continue;
+    const v = row as Record<string, unknown>;
+    if (!isUuid(v.boxId) || !isUuid(v.fileId) || !num(v.x) || !num(v.y)) continue;
+    const value = { boxId: v.boxId, fileId: v.fileId, x: v.x, y: v.y };
+    if (!removed.has(sheetPlacementId(value))) rows.set(sheetPlacementId(value), value);
+  }
+  return [...rows.values()].slice(-1000); // 50 owned folders × 20 files.
+}
+export type OriginalPage = {
+  format: 'csv' | 'xlsx'; sheets: string[]; sheet_index: number;
+  row_count: number; column_count: number; offset: number; page_size: number;
+  rows: string[][]; sha256: string;
+};
+
+/** Reject malformed/truncated pages; original cells are never shortened. */
+export function originalPage(value: unknown): OriginalPage | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  const integer = (n: unknown, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max;
+  if (v.format !== 'csv' && v.format !== 'xlsx') return null;
+  if (!Array.isArray(v.sheets) || v.sheets.length > 16 || !v.sheets.every((s) => typeof s === 'string' && s.length <= 8192)) return null;
+  if (!integer(v.sheet_index, 15) || (v.format === 'xlsx' && v.sheet_index >= v.sheets.length) || (v.format === 'csv' && (v.sheet_index !== 0 || v.sheets.length !== 0))) return null;
+  if (!integer(v.row_count, 100000) || !integer(v.column_count, 32) || !integer(v.offset, 99999) || v.offset % 50 !== 0 || v.page_size !== 50 || (v.offset !== 0 && v.offset >= v.row_count)) return null;
+  if (typeof v.sha256 !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(v.sha256)) return null;
+  if (!Array.isArray(v.rows) || v.rows.length !== Math.min(50, v.row_count - v.offset)) return null;
+  const width = v.column_count;
+  if (!v.rows.every((row) => Array.isArray(row) && row.length === width && row.every((cell) => typeof cell === 'string' && cell.length <= 8192))) return null;
+  return v as OriginalPage;
+}
+
+export async function fetchOriginalPage(boxId: string, fileId: string, sheetIndex: number, offset: number): Promise<OriginalPage> {
+  const value = await call('POST', `/v1/boxes/${boxId}/files/${fileId}/sheet`, { sheet_index: sheetIndex, offset });
+  const page = originalPage(value);
+  if (!page || page.sheet_index !== sheetIndex || page.offset !== offset) throw new BoxError('malformed', 502);
+  return page;
+}
 export type Card = { app_id: string; work_id: string; title: string };
 export type Lineage = { box_id: string; box_name: string; files: { file_id: string; name: string; kind: FileKind; source_id: string; revision_id: string; content_url: string }[] };
 
@@ -302,9 +346,10 @@ export async function makeApp(boxId: string, purpose: string, fileIds?: string[]
  * card, the most useful view of its data, linked back to the folder, and
  * names it (`address`, the app's `/name`) when a name is free.
  */
-export async function makeCard(boxId: string, key?: string): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
+export async function makeCard(boxId: string, key?: string, fileIds?: string[]): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
   if (!isUuid(boxId)) throw new BoxError('not_found', 404);
-  const json = await call('POST', `/v1/boxes/${boxId}/apps`, { one_card: true }, key);
+  const ids = fileIds?.filter(isUuid).slice(0, 20);
+  const json = await call('POST', `/v1/boxes/${boxId}/apps`, ids?.length ? { one_card: true, file_ids: ids } : { one_card: true }, key);
   if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
   const address = str(json.address) && /^[a-z][a-z0-9-]{1,31}$/.test(json.address) ? json.address : null;
   return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title.slice(0, 120) : 'Card', address, timings: json.timings };

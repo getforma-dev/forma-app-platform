@@ -1,5 +1,8 @@
 /* Finite, publication-owned app appearance. Values never come from authored CSS. */
 .composed-app,[data-presentation] { --app-bg:#fff;--app-panel:#f8fafc;--app-ink:#162033;--app-muted:#49576b;--app-line:#cbd5e1;--app-control-line:#64748b;--app-accent:#155e75;--app-on-accent:#fff;--app-gap:1.25rem;--app-padding:1.25rem; color:var(--app-ink);background:var(--app-bg); }
+/* Shape is browser-local and only overrides the renderer's legacy/default
+   presentation. An admitted v1 design never enters this selector. */
+[data-app-presentation="default"][data-theme] { --app-bg:var(--role-surface);--app-panel:var(--role-sunken);--app-ink:var(--role-text);--app-muted:var(--role-muted);--app-line:var(--role-rule);--app-control-line:var(--role-edge);--app-accent:var(--role-accent);--app-on-accent:var(--role-on-accent); }
 [data-app-mode=dark] { --app-bg:#10171d;--app-panel:#19232c;--app-ink:#f1f5f9;--app-muted:#b4c2d0;--app-line:#536171;--app-control-line:#94a3b8;--app-accent:#a5f3fc;--app-on-accent:#102a31;color-scheme:dark; }
 [data-app-mode=light] { color-scheme:light; }
 [data-app-accent=green] { --app-accent:#166534; } [data-app-accent=crimson] { --app-accent:#9f1239; } [data-app-accent=amber] { --app-accent:#92400e; } [data-app-accent=cyan] { --app-accent:#155e75; } [data-app-accent=violet] { --app-accent:#5b21b6; } [data-app-accent=rose] { --app-accent:#9d174d; } [data-app-accent=ice] { --app-accent:#075985; } [data-app-accent=slate] { --app-accent:#334155; }
@@ -104,6 +107,9 @@ rect.record-bar { fill:var(--app-accent); }
 }
 .cv-unite.composed-app[data-app-mode] { background:var(--app-bg); }
 .cv-card.composed-app[data-app-mode=dark],.cv-unite.composed-app[data-app-mode=dark] { --cv-bad:#fda4af;--cv-busy:#fcd34d; }
+/* Local dark themes retain a default publication mode; status colors must
+   follow their selected roles rather than the light publication fallback. */
+.cv-card[data-app-presentation=default][data-theme],.cv-unite[data-app-presentation=default][data-theme] { --cv-bad:var(--role-bad);--cv-busy:var(--role-busy); }
 .cv-card.composed-app[data-app-mode] :is(input,select,textarea) { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-control-line); }
 .cv-unite.composed-app[data-app-mode] .cv-secondary { background:var(--app-panel);color:var(--app-ink);border-color:var(--app-control-line); }
 .cv-unite.composed-app[data-app-mode] .cv-secondary:hover { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-accent); }

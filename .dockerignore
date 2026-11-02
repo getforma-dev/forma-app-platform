@@ -241,6 +241,7 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/commands.ts
 !app/admin/src/canvas/compose.ts
 !app/admin/src/canvas/create-app.ts
+!app/admin/src/canvas/palette.ts
 !app/admin/src/canvas/page-layout.ts
 !app/admin/src/canvas/work-name.ts
 !app/admin/src/canvas/display.ts
@@ -320,6 +321,7 @@ app/admin/src/canvas-vendor/**
 !app/admin/src/forma-types.d.ts
 !app/admin/src/styles/
 app/admin/src/styles/**
+!app/admin/src/styles/themes.css
 !app/admin/src/styles/app.css
 !app/admin/src/styles/ask.css
 !app/admin/src/styles/sharing.css

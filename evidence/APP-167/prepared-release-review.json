@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-02T10:19:15Z",
+  "disposition": "No remaining blocker in the independently reviewed concrete prepared release. Human beta approval is still required; this is not an approval or deployment result.",
+  "candidate_sha": "07ea5aac85b69ad90d7bfb2274fb50395705e26f",
+  "workflow_run_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932781",
+  "pull_request": 46,
+  "packet_sha256": "dd7efc2ca6e91b2f9bdb4a58bf777c0e08caeed6c4c46a1232794a69a6f31422",
+  "artifact_manifest_sha256": "5cd84c6e4b68aff74267206351f336259a69adad4e12fddf78307b7798d9c559",
+  "reviewed_local_source_commit": "8682169f93182af36e6b8f909ea0b3c836faed5c",
+  "source_tree_sha": "e767c4aa0ad8350f6711988325aa26d7a2ea6d94",
+  "local_source_tree_and_bindings_equal_merged_candidate": true,
+  "source_sha256": {
+    ".github/workflows/beta-promote.yml": "3cf671a9ed0215986ea01d30f10afe95750900bf6f019ca7514c7eef478c2edd",
+    "ops/promotion/bootstrap.py": "fed2ad33fc755383f1c20f3388e6039d6f4f57d4a991efd3e6e05b46c13ecec4",
+    "ops/promotion/candidate.py": "34a2667d9bb18807fe3b3307075959b0cf886913bbbc1901accb0cc8158e9577",
+    "ops/promotion/guards.py": "77ca96cf1241bdced253121d655967d074e9280a8c50ae57e5c5ff4e00f5d344",
+    "ops/promotion/runner.py": "3adca41ceaa1f3b4cde862420b909c386a5613f3d8a8e1c3dd413cca21b0fcf4",
+    "ops/promotion/registry.py": "93220b9602468181c6c1368d63b5562b81135f8869a061ae0a39e6eae688ce32",
+    "ops/promotion/github.py": "251e6dd44a7681b40aa358379b75ab9a39eaabcc6584110174f7f89be207c691",
+    "ops/promotion/scan-disposition.json": "a79596f31e62f5d03084fb476f5c39e928de4bf4810637e1f0914caae66b2f29",
+    "infra/scripts/preflight.py": "374ca1904602ed62a1fec6fe5a2f62b94748409b23232ee7b7901ef356723d14"
+  },
+  "private_receipt_hashes": {
+    "third-prepared-state.json": {
+      "bytes": 997870,
+      "sha256": "150089a213046049e5d5030a21f97399922466f79e617da94707d96cb4589bfd"
+    },
+    "third-actual-change-set.json": {
+      "bytes": 13962,
+      "sha256": "16a9a1b12c05027760975c53865fbc0dcbc3a76eaedb8ea7de47f3a8c0776691"
+    },
+    "third-actual-template.json": {
+      "bytes": 257253,
+      "sha256": "2c1f7c7024b5b06f700149d52624aea48e6ec2be5fd7b66ddd0686b836bbc4b3"
+    },
+    "third-before-approval-boundary.json": {
+      "bytes": 120473,
+      "sha256": "d6ab3b224678798a837b1a06b93b5ee4022bf87ff0b7b86f30bc8bf3d158d95e"
+    },
+    "third-pending-deployments.json": {
+      "bytes": 1826,
+      "sha256": "5da61507bbe9e925d4f76636cd4343a8b58c112e3f661d41ca0c969dfb0a9fe6"
+    },
+    "third-approval-history.json": {
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    "third-merged-ci.json": {
+      "bytes": 185603,
+      "sha256": "fbff75032b5bcc10743ee6232e849f86c1c061c209e78f5d549fa40294b19cf2"
+    },
+    "third-run.json": {
+      "bytes": 15007,
+      "sha256": "d9b94ea8a65142b2d9594abc4386e60b8b1bf581e5dbd26cb518c244b73c3884"
+    },
+    "third-activation-budget-readiness.json": {
+      "bytes": 657,
+      "sha256": "1da5c0c6786f23542f60f6f03c1c5f87624c56e4541aaa3953ecd4de1d0cff3b"
+    },
+    "third-beta-environment.json": {
+      "bytes": 1710,
+      "sha256": "46a5fcbc6eb082796e1ad3fd9305f00a6ab83e89fe79366befca9aadfeb0bbb8"
+    },
+    "third-beta-branches.json": {
+      "bytes": 147,
+      "sha256": "a5bc7bd7f923d0c0ffe3802f15ad1a9447546886d78fbb51b724a319e74a53e2"
+    },
+    "third-run-jobs.json": {
+      "bytes": 10166,
+      "sha256": "32279c8c3c865c468ed04e86198d68a57f6806014a33b477cbf09e542e727933"
+    },
+    "ssm-bootstrap-installed.json": {
+      "bytes": 11397,
+      "sha256": "a730da159129eab7b3e9881f8298904fc7062365a1bb0f6ee7a4e830c6abe64e"
+    }
+  },
+  "packet_validation": {
+    "canonical_packet_hash_matches": true,
+    "reconstructed_manifest_uses_exact_builder_serialization_and_matches_hash": true,
+    "candidate_run_attempt_and_workflow_bindings_match": true,
+    "all_180_journal_operations_confirmed": true,
+    "stop_execute_or_activate_intents_present": false
+  },
+  "qualification": {
+    "exact_merged_push_ci_workflows": 12,
+    "all_required_success": true,
+    "promotion_jobs": [
+      {
+        "name": "candidate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "qualify",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "prepare",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Promote to beta",
+        "status": "waiting",
+        "conclusion": null
+      }
+    ],
+    "arm64_qualification_job_succeeded": true,
+    "source_schema_manifest_matches_retained_baseline": true,
+    "deployment_contract_matches_retained_baseline": true,
+    "schema_version": 19
+  },
+  "images": {
+    "operator": {
+      "index_digest": "sha256:769719916a18dbbe640d589550c38c7f42eee5226589a94abfb06c8c6479cd99",
+      "manifest_digest": "sha256:769719916a18dbbe640d589550c38c7f42eee5226589a94abfb06c8c6479cd99",
+      "config_digest": "sha256:4fb3097bc6c5ab63f08d02deecc8965c7ee38c68cbf1853b9f3dac5b5cbdd9b8",
+      "qualified_id": "sha256:4fb3097bc6c5ab63f08d02deecc8965c7ee38c68cbf1853b9f3dac5b5cbdd9b8",
+      "id_kind": "config",
+      "platform": "linux/arm64"
+    },
+    "qualification": {
+      "index_digest": "sha256:13665e74b585f232a579ff958ae2a3cd7742af63a4865643feb43c4f50d77f56",
+      "manifest_digest": "sha256:13665e74b585f232a579ff958ae2a3cd7742af63a4865643feb43c4f50d77f56",
+      "config_digest": "sha256:a80f0f34f5c4561dba9d49ea928aecc81010c13620317dc86c645db8199e053f",
+      "qualified_id": "sha256:a80f0f34f5c4561dba9d49ea928aecc81010c13620317dc86c645db8199e053f",
+      "id_kind": "config",
+      "platform": "linux/arm64"
+    },
+    "service": {
+      "index_digest": "sha256:5cc8c73afbf03b85d968eb5bc51b72dd42e557ae75db358b859bd1fc62e672f9",
+      "manifest_digest": "sha256:5cc8c73afbf03b85d968eb5bc51b72dd42e557ae75db358b859bd1fc62e672f9",
+      "config_digest": "sha256:b6715a4d518ab151bf8e5fd4b956e020f72559bd79abf28834bae882ff0d6770",
+      "qualified_id": "sha256:b6715a4d518ab151bf8e5fd4b956e020f72559bd79abf28834bae882ff0d6770",
+      "id_kind": "config",
+      "platform": "linux/arm64"
+    }
+  },
+  "image_validation": {
+    "qualified_identity_registry_and_parameters_match": true,
+    "all_arm64_child_scans_complete": true,
+    "all_critical_counts_zero": true,
+    "scan_delta_recomputed_with_current_source_disposition": true,
+    "scan": {
+      "operator": {
+        "disposition_sha256": "a79596f31e62f5d03084fb476f5c39e928de4bf4810637e1f0914caae66b2f29",
+        "findings": 24,
+        "introduced": 3,
+        "review_expires_at_utc": "2026-11-09T00:00:00Z",
+        "reviewed": [
+          "CVE-2026-114690",
+          "CVE-2026-114691",
+          "CVE-2026-115455"
+        ],
+        "reviewed_count": 3,
+        "unreviewed": 0
+      },
+      "qualification": {
+        "disposition_sha256": null,
+        "findings": 24,
+        "introduced": 0,
+        "review_expires_at_utc": null,
+        "reviewed": [],
+        "reviewed_count": 0,
+        "unreviewed": 0
+      },
+      "service": {
+        "disposition_sha256": null,
+        "findings": 24,
+        "introduced": 0,
+        "review_expires_at_utc": null,
+        "reviewed": [],
+        "reviewed_count": 0,
+        "unreviewed": 0
+      }
+    }
+  },
+  "actual_change_set": {
+    "status": "CREATE_COMPLETE",
+    "execution_status": "AVAILABLE",
+    "matches_prepared_exact_change_set": true,
+    "changes": [
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "DeploymentExpiry",
+        "ResourceType": "AWS::Scheduler::Schedule",
+        "Replacement": "False"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "MigrationTask69EAEF9D",
+        "ResourceType": "AWS::ECS::TaskDefinition",
+        "Replacement": "True"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "OperatorTask534EBA45",
+        "ResourceType": "AWS::ECS::TaskDefinition",
+        "Replacement": "True"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "QualificationTask4466B6E0",
+        "ResourceType": "AWS::ECS::TaskDefinition",
+        "Replacement": "True"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "RollbackTask61F9D6F3",
+        "ResourceType": "AWS::ECS::TaskDefinition",
+        "Replacement": "True"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "ServiceD69D759B",
+        "ResourceType": "AWS::ECS::Service",
+        "Replacement": "False"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "SharedBrokerExpiryA72A7DBC",
+        "ResourceType": "AWS::Scheduler::Schedule",
+        "Replacement": "False"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "SharedBrokerService019117DA",
+        "ResourceType": "AWS::ECS::Service",
+        "Replacement": "False"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "SharedBrokerTaskBF1F905C",
+        "ResourceType": "AWS::ECS::TaskDefinition",
+        "Replacement": "True"
+      },
+      {
+        "Action": "Modify",
+        "LogicalResourceId": "Task79114B6B",
+        "ResourceType": "AWS::ECS::TaskDefinition",
+        "Replacement": "True"
+      }
+    ],
+    "scope": "Six existing task-definition families receive new revisions; two existing services and two existing expiry schedules are modified. Migration and rollback definitions are registered only; this workflow does not run their tasks.",
+    "changed_parameters": [
+      "DeploymentExpiresAtUtc",
+      "ImageDigest",
+      "OperatorImageDigest",
+      "QualificationImageDigest"
+    ],
+    "template_equal_to_original_retained_baseline": true,
+    "template_desired_count_remains_zero": true,
+    "no_database_bucket_key_role_or_load_balancer_resource_changes": true
+  },
+  "installed_execution_authority": {
+    "exact_reviewed_role_used": true,
+    "registration_scoped_to_all_six_existing_families": true,
+    "service_updates_scoped_to_two_existing_services": true,
+    "schedule_updates_scoped_to_two_existing_schedules": true,
+    "pass_role_scoped_to_existing_task_and_schedule_roles_with_service_conditions": true,
+    "run_task_permission_present": false
+  },
+  "retained_runtime_snapshot": {
+    "predecessor_candidate_sha": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+    "both_services_desired_running_pending": [
+      1,
+      1,
+      0
+    ],
+    "both_rollouts_complete": true,
+    "running_task_images_and_health_match": true,
+    "load_balancer_targets_healthy": true,
+    "task_configuration_alias_secret_role_and_schedule_boundaries_match": true,
+    "application_deployment_executed": false
+  },
+  "budget": {
+    "validation": "Independent pure invocation of the production reserve validator for the existing reservation and prospective activation; no ledger write.",
+    "genui_cents": 16967,
+    "project_total_cents": 20767,
+    "genui_cap_cents": 17000,
+    "project_cap_cents": 20800,
+    "headroom_cents": 33,
+    "prospective_expiry_utc": "2026-11-30T04:00:00Z",
+    "shorten_expiry_hours": 10,
+    "windows_retained": 19,
+    "prior_failed_promotions_retained_as_abandoned": 2,
+    "reservation_recheck_leaves_ledger_unchanged": true,
+    "fresh_activation_projection_passed": true
+  },
+  "approval_protection": {
+    "fresh_authenticated_github_reads": true,
+    "environment": "beta",
+    "required_human_reviewers": 1,
+    "expected_configured_reviewer_matches": true,
+    "admin_bypass_allowed": false,
+    "self_review_allowed_for_configured_owner": true,
+    "allowed_branch": "pivot/pitch-mvp",
+    "branch_policy_type": "branch",
+    "pending_environment_matches": true,
+    "retained_approval_history_empty": true,
+    "approval_performed_by_reviewer": false
+  },
+  "review_checks": [
+    "Recomputed packet and manifest bindings; compared current source tree, runtime hash, schema manifest and deployment contract with the candidate.",
+    "Validated actual change-set identity, status, parameters, ten exact changes and baseline template equality with production guards.",
+    "Matched all six task-family mappings and image parameter roles to current definitions and the installed CloudFormation role; migration and rollback are definitions, not task executions.",
+    "Validated the retained healthy predecessor services, running images, task configuration and schedule boundaries.",
+    "Compared all three qualified image identities with prepared registry observations and exact complete scans; recomputed the three reviewed operator findings with no unreviewed additions.",
+    "Replayed the canonical budget reservation and activation checks without modifying state.",
+    "Read current beta protection, exact branch policy and run job results through authenticated GitHub GETs only."
+  ],
+  "limitations": [
+    "The reviewer did not approve the GitHub environment, execute a change set, activate services or make any AWS API call.",
+    "Actual AWS observations were independently inspected from retained private receipts. They are point-in-time evidence; execution must repeat its current-CI, exact-state, expiry, budget, change-set and runtime checks.",
+    "The three full OCI archives were not downloaded or rebuilt again by this reviewer. Qualified artifact identity and image receipts were checked against the successful trusted qualification/preparation jobs and the immutable packet.",
+    "The reviewed operator MEDIUM findings remain present; this is a scoped disposition, not a vulnerability fix or unreachability claim.",
+    "Human approval, outage, actual runtime activation, health readback and release tagging have not occurred in this review. The protected workflow remains waiting.",
+    "Only source hashes, image digests, resource logical IDs, counts and bounded review facts are published; raw identifiers, credentials, capabilities, user data and AWS responses remain private."
+  ]
+}

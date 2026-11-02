@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePresentation, presentationFor, invalidatePresentation } from '../src/presentation/presentation.ts';
+import { applyPresentationTheme, parsePresentation, presentationFor, invalidatePresentation } from '../src/presentation/presentation.ts';
 // Move-aware DOM spy, with no HTML parser or executable markup sink.
 class N {
   parentElement: E | null = null;
@@ -67,6 +67,17 @@ test('presentation text bounds count Unicode characters like admission', () => {
   assert.deepEqual(parsePresentation(text), text);
   assert.deepEqual(parsePresentation({...text,description:'😀'.repeat(1001)}), {});
 });
+
+test('default renderer tokens allow local Shape but a published design clears that preview', () => dom(() => {
+ const {root,input,key}=fixture();
+ applyPresentationTheme(root as unknown as HTMLElement, '{}');
+ assert.equal(root.dataset.appPresentation,'default');
+ root.dataset.theme='harbor-dark';root.dataset.themeDensity='compact';root.dataset.themePreview='true';
+ applyPresentationTheme(root as unknown as HTMLElement, JSON.stringify(source));
+ assert.equal(root.dataset.appPresentation,'authored');assert.equal(root.dataset.appMode,'dark');assert.equal(root.dataset.appAccent,'green');
+ assert.equal(root.dataset.theme,undefined);assert.equal(root.dataset.themeDensity,undefined);assert.equal(root.dataset.themePreview,undefined);
+ assert.equal(input.value,'Unsent draft');assert.equal(key.value,'original-key');
+}));
 test('all finite themes keep readable text, action labels, focus and input boundaries', () => {
   const css = readFileSync(new URL('../src/styles/presentation.css', import.meta.url), 'utf8');
   const lum = (hex:string) => {const c=hex.slice(1).match(/../g)!.map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return c[0]!*.2126+c[1]!*.7152+c[2]!*.0722;};

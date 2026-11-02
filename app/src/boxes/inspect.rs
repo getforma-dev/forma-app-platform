@@ -165,6 +165,115 @@ pub async fn parse(identity: &ParserIdentity, bytes: &[u8], kind: &str) -> Resul
     table_of(&document, format, sheet).ok_or_else(|| "parser_output_invalid".into())
 }
 
+/// Original-cell viewer, independent of inference/normalization. The sealed
+/// parser remains unchanged: a refusal never becomes a partial spreadsheet.
+/// Rows are one-based source coordinates, including the first/header row.
+pub async fn original_page(
+    identity: &ParserIdentity,
+    bytes: &[u8],
+    kind: &str,
+    sheet_index: usize,
+    offset: usize,
+) -> Result<Value, String> {
+    let (document, sheets) = match kind {
+        "csv" if sheet_index == 0 => (
+            run(identity, bytes, Format::Csv, None)
+                .await
+                .map_err(|r| refusal_code(&r))?,
+            Vec::new(),
+        ),
+        "xlsx" => {
+            let sheets = match run(identity, bytes, Format::Xlsx, None).await {
+                Err(ParseRefusal::Refused {
+                    available_sheets: Some(sheets),
+                    ..
+                }) => sheets,
+                Err(refusal) => return Err(refusal_code(&refusal)),
+                Ok(_) => return Err("parser_output_invalid".into()),
+            };
+            let sheet = sheets.get(sheet_index).ok_or("sheet_not_found")?.clone();
+            (
+                run(identity, bytes, Format::Xlsx, Some(sheet))
+                    .await
+                    .map_err(|r| refusal_code(&r))?,
+                sheets,
+            )
+        }
+        _ => return Err("not_data".into()),
+    };
+    original_page_of(&document, kind, sheets, sheet_index, offset)
+        .ok_or_else(|| "page_unavailable".into())
+}
+
+pub const ORIGINAL_PAGE_ROWS: usize = 50;
+
+/// Preserve the parser's original lexical cell values, not its inferred
+/// numbers. Never trim headers, drop empty edge rows, or shorten cell text.
+fn original_page_of(
+    document: &Value,
+    kind: &str,
+    sheets: Vec<String>,
+    sheet_index: usize,
+    offset: usize,
+) -> Option<Value> {
+    let result = document.get("result")?;
+    let cells = result.get("cells")?.as_array()?;
+    let mut row_count = if kind == "csv" {
+        usize::try_from(result.get("rows")?.as_u64()?).ok()?
+    } else {
+        0
+    };
+    let mut column_count = 0usize;
+    let mut page = std::collections::BTreeMap::new();
+    for cell in cells {
+        let coordinate = cell.get("coordinate")?;
+        let (row, column) = if kind == "csv" {
+            (
+                coordinate.get("logical_record")?.as_u64()?,
+                cell.get("column")?.as_u64()?,
+            )
+        } else {
+            (
+                coordinate.get("row")?.as_u64()?,
+                coordinate.get("column")?.as_u64()?,
+            )
+        };
+        let (row, column) = (usize::try_from(row).ok()?, usize::try_from(column).ok()?);
+        if row == 0 || row > 100_000 || column == 0 || column > MAX_COLUMNS {
+            return None;
+        }
+        row_count = row_count.max(row);
+        column_count = column_count.max(column);
+        if row > offset && row <= offset.checked_add(ORIGINAL_PAGE_ROWS)? {
+            let value = match cell.get("original")? {
+                Value::String(value) => value.clone(),
+                Value::Bool(value) => value.to_string(),
+                Value::Null => String::new(),
+                _ => return None,
+            };
+            if page.insert((row, column), value).is_some() {
+                return None;
+            }
+        }
+    }
+    if offset != 0 && offset >= row_count {
+        return None;
+    }
+    let end = offset.saturating_add(ORIGINAL_PAGE_ROWS).min(row_count);
+    let rows: Vec<Vec<String>> = (offset + 1..=end)
+        .map(|row| {
+            (1..=column_count)
+                .map(|column| page.remove(&(row, column)).unwrap_or_default())
+                .collect()
+        })
+        .collect();
+    Some(
+        json!({"format": kind, "sheets": sheets, "sheet_index": sheet_index,
+        "row_count": row_count, "column_count": column_count, "offset": offset,
+        "page_size": ORIGINAL_PAGE_ROWS, "rows": rows}),
+    )
+}
+
 /// A typed cell value of the parser as display text.
 fn cell_text(value: &Value) -> Option<String> {
     Some(match value.get("type")?.as_str()? {
@@ -597,6 +706,37 @@ mod tests {
                 .map(|r| r.iter().map(|s| s.to_string()).collect())
                 .collect(),
         }
+    }
+
+    #[test]
+    fn original_pages_preserve_coordinates_lexical_values_and_whole_cells() {
+        let cells: Vec<Value> = (1..=104).map(|row| json!({
+            "coordinate": {"type":"csv", "logical_record": row}, "column": 1,
+            "original": if row == 1 { "  Header  ".to_owned() } else if row == 52 { "<script>inert</script>\n001.2300".to_owned() } else { format!("row{row}") },
+            "value": {"type":"integer", "value":"999"}
+        })).collect();
+        let doc = json!({"result":{"cells":cells,"rows":104}});
+        let page = original_page_of(&doc, "csv", vec![], 0, 50).unwrap();
+        assert_eq!(page["row_count"], 104);
+        assert_eq!(page["rows"].as_array().unwrap().len(), 50);
+        assert_eq!(page["rows"][1][0], "<script>inert</script>\n001.2300");
+        assert_eq!(
+            original_page_of(&doc, "csv", vec![], 0, 0).unwrap()["rows"][0][0],
+            "  Header  "
+        );
+        assert_eq!(
+            original_page_of(&doc, "csv", vec![], 0, 100).unwrap()["rows"]
+                .as_array()
+                .unwrap()
+                .len(),
+            4
+        );
+        assert!(original_page_of(&doc, "csv", vec![], 0, 150).is_none());
+        let doc = json!({"result":{"cells":[{"coordinate":{"type":"xlsx","row":3,"column":2},"original":"-1.25e2","value":{"type":"integer","value":"-125"}}]}});
+        let page =
+            original_page_of(&doc, "xlsx", vec!["First".into(), "Other".into()], 1, 0).unwrap();
+        assert_eq!(page["rows"], json!([["", ""], ["", ""], ["", "-1.25e2"]]));
+        assert_eq!(page["sheet_index"], 1);
     }
 
     #[test]

@@ -9,3 +9,5 @@ The app is presented as **forma. / canvas**. The common F sits in a small lime t
 The welcome screen presents three real paths: describe an app, bring files, or open the library. The canvas remains a working surface with pan/zoom, persistent geometry, explicit confirmation, receipts, Ask and Shape. Controls, dialogs and native forms share the same styling; no decorative control implies a capability that does not exist.
 
 The unmodified Space Grotesk Latin variable font is copied from the local site's `@fontsource-variable/space-grotesk` 5.3.0 asset and licensed under SIL OFL 1.1 (notice beside the font). Forma's existing `fontDir` pipeline serves it from the same origin under the unchanged CSP. No remote font service, runtime dependency or new permission is added.
+
+APP-166 keeps this identity as the named themes `site` and `site-dark`, which are still what `:root` uses. Role names and the unused `ink` pair are recorded in [THEME-ROLES.md](THEME-ROLES.md). This note stays the brand decision. It is not replaced by a different platform default.

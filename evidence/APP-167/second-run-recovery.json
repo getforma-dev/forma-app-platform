@@ -1,0 +1,19 @@
+{
+  "after_abandonment_state_sha256": "3b7f7f33ce3d2a6d4ca66ae89ae7930091b709e756c94d6b1c12eac6d8da6e75",
+  "after_policy_state_sha256": "8ab9919501e02babf2b210f9764d43e12e0d30fb5679f3c25b8f9fd0976187a3",
+  "before_state_sha256": "ef552e706d05df6d0382bfa848a3216f0755a2190e48eed33e0b5f16f32361d2",
+  "both_failed_windows_preserved": true,
+  "caps_unchanged": true,
+  "failed_run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41407521407",
+  "live_promotion_completed": false,
+  "next_candidate_sha": "07ea5aac85b69ad90d7bfb2274fb50395705e26f",
+  "next_prospective_expiry": "2026-11-30T04:00:00Z",
+  "next_run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932781",
+  "original_windows_exactly_restored": 16,
+  "policy_hours_after": 10,
+  "policy_hours_before": 6,
+  "policy_source_sha256": "2488dc31f58e45e812621a5af1d91b44bf2da9388c316ed342766b3277cf6cf5",
+  "recovery": "completed after original workflow was terminal for 65 minutes",
+  "runtime_unchanged": true,
+  "total_windows": 18
+}

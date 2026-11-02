@@ -1,0 +1,74 @@
+{
+  "status": "passed",
+  "observed_at_utc": "2026-11-02T10:54:37.382479+00:00",
+  "source_sha256": {
+    "app/src/boxes/inspect.rs": "14e7705c24c5bbed90e5963c9dc040bb7ae5784922a86a79fb84b23549a87805",
+    "app/src/boxes/routes.rs": "772a3950104a068adbb8a4c2771e6cefd690ff924f09985b4b5ddcbfc9aeeec2",
+    "app/src/boxes/tests.rs": "31e0e28b361b0099625db1c50e6a20bf4cadaaf3a56cac63eeedb0992f8a3aee",
+    "app/src/storage/box_campaign.rs": "79e6f0d7e0b386520bdef9d57e68395f043afdb6bb9fc6f6b31d51b412bff008",
+    "app/src/main.rs": "4c092477726edfe4452d3532b1c43e36f7e4a0fdb108cfe3993d5384bbb6e0be",
+    "app/admin/src/canvas/app.tsx": "171faad1765f34eb05df200f29aebf17a29a3afeb240cb04aa7dfe084060c54f",
+    "app/admin/src/canvas/board.ts": "aeb4a82aa26750880ea8cfb2efeccfb78eb110934ab9b895b0cfc8c1f1312197",
+    "app/admin/src/canvas/data-sheet.ts": "e22efd50fe112172eb3c15e922ec18f87ef329bf94b8374748d10f718e2f7ce7",
+    "app/admin/src/canvas/box-api.ts": "2ec2950593404b528aca2611ab839e99c79a4dcb0c8a6c654e21a63dcb38b1d2",
+    "app/admin/src/canvas/box-viewer.ts": "0baba818c117fbfd16195473c6d9b69d6a2c697d81c08a53a85f943ee3f05332",
+    "app/admin/src/canvas/boxes.ts": "eca9112c73b81bb397217c745cf7c36aa63e9b1767005c1212d059e8ff1a2f10",
+    "app/admin/src/styles/canvas.css": "60217fbdb16181aba2a771888966ca8abeef9c13e527c0e06a8a435ce6cd227e",
+    "app/admin/test/canvas-from-data.test.ts": "8dc801ca77fdc0244d70bf1ccad6490c095a01d4b417d6c86a6c8073b0a7d8ec",
+    "app/admin/test/original-sheet.test.ts": "58e4babb5a64c298f5026f180003b48c1a8a31f1d58a3dcfb0d461811c2c539d",
+    "app/scripts/original_sheet_browser.mjs": "236959aae8eb8cc757d221cb6ab7ba12e6c3ee21251824445f4a514077e20aae"
+  },
+  "checks": {
+    "repository_groups_passed": [
+      "fmt",
+      "admin",
+      "clippy",
+      "clippy-dev",
+      "test",
+      "http-smoke",
+      "msrv",
+      "catalog",
+      "infra",
+      "py-scripts",
+      "py-runtime",
+      "shared-broker",
+      "py-qualification",
+      "py-app-scripts",
+      "py-ops",
+      "py-promotion",
+      "py-infra",
+      "schema-pins",
+      "contracts",
+      "board",
+      "bash-n"
+    ],
+    "qualification_runs": "Final whole just check passed20groups; its only failure was formatting of the corrected SSR test assertion. cargo fmt plus focused fmt/board passed. Latest mobile border-box CSS also passed admin/test/http-smoke rerun. All21groups are satisfied across these retained runs; no claim of one all-green invocation.",
+    "focused_rust_box_tests": 35,
+    "native_box_campaign_checks": 15,
+    "native_box_campaign_seconds": 254.68,
+    "admin_tests": 108,
+    "browser_checks": 11,
+    "browser_widths": [
+      1440,
+      390,
+      320
+    ],
+    "browser_errors": 0,
+    "board": "165tickets/9phases/15sprints/80requirements",
+    "restoration_removal": "Late metadata cannot override explicit removal; final108frontend tests and typecheck passed."
+  },
+  "private_log_sha256": {
+    "sheet-final-check.log": "03e863d6b95ede12823982699cd5abf40cc7dba3991fd94b9c94550aa30580ec",
+    "sheet-final-affected-check.log": "82b3b0564fb5e3d32a51b9842d9791b55cf8b7b1798df59902254464b1db2b16",
+    "sheet-final-fmt-board.log": "0061c1534e7f5d582f6eb5f2ab4b6b5d641c701d2b9c932d1147e7a645869e05",
+    "sheet-box-campaign.log": "d19dc8bd80b2041a70ae7a86934140c5b7aec6726e2d34fb0a5adaba55dc232e",
+    "sheet-browser-mobile-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "limits": [
+    "Original XLSX values, not styles/date formatting/formula evaluation. Unsupported parser features refuse, never silently truncate.",
+    "Placement is scoped to this browser/member, not cross-device server layout.",
+    "Native campaign checks a previously revoked grant; no deterministic mid-object-IO or mid-parser revocation campaign is claimed. Source performs the final authority recheck after both waits.",
+    "Mobile measurements cover file icons/modal/pagination/close; they do not certify all existing canvas chrome.",
+    "No schema/parser/contract/permission/deployment change or hosted/provider acceptance."
+  ]
+}

@@ -1738,9 +1738,7 @@ mod tests {
         // APP-124: the empty canvas's three ways to start; the third is a
         // file picker (and a drop target) that makes a folder of the files.
         assert!(content.contains("data-empty-describe") && content.contains("Describe an app"));
-        assert!(
-            content.contains("Drop files or upload") && content.contains("data-empty-upload-pick")
-        );
+        assert!(content.contains("Bring your files") && content.contains("data-empty-upload-pick"));
         assert!(content.contains("type=\"file\"") && content.contains("data-empty-upload"));
         // The library pane: categories in order, numbers, the card ids the
         // island toggles, the command slug, and titles escaped.

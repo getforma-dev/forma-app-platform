@@ -1,0 +1,20 @@
+{
+  "scope": "Owned loopback stand, synthetic member identity; actual upload/parser/read/UI. No provider or hosted claim.",
+  "started_at": "2026-11-02T10:51:59.474Z",
+  "checks": [
+    "Upload directly places one file icon with no app/source-registration request.",
+    "A single click selects the file without opening it.",
+    "All105 logical rows/all32 columns and whitespace/multiline/leading-zero cells are available; markup stays text; raw CSV and download preserve original bytes.",
+    "Enter and Space open the original; Escape closes and returns focus.",
+    "Dragging away and back to the starting point does not open the viewer.",
+    "Reload restores the file from authorized metadata; browser storage contains scoped references/positions, no filenames or cells.",
+    "Late actual table responses cannot overwrite a newer raw view or remount a closed dialog.",
+    "Workbook selection exposes both original worksheets and exact large/exponent lexical values.",
+    "A formula-bearing workbook stays a file; refusal explains limits and retains original download, without fabricated/sample cells.",
+    "390px and320px: restored file icon and modal remain in viewport; pagination and close are reachable.",
+    "Keyboard removal removes only the placement and does not open a viewer or delete the original."
+  ],
+  "errors": [],
+  "passed": true,
+  "completed_at": "2026-11-02T10:52:33.966Z"
+}
