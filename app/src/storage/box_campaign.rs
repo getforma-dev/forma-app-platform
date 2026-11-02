@@ -1069,7 +1069,7 @@ async fn campaign() {
     assert!(not_a_table.json()["text"]
         .as_str()
         .unwrap()
-        .contains("This file could not be read as a table"));
+        .contains("Ask could not analyze this file"));
     assert_eq!(
         stub.calls("folder_ask").len(),
         scoped_count,
@@ -1739,6 +1739,10 @@ async fn campaign() {
     );
     for body in [
         json!({"sheet_index":0,"offset":1}),
+        json!({"sheet_index":0,"offset":1_048_600}),
+        json!({"sheet_index":0,"offset":0,"column_offset":1}),
+        json!({"sheet_index":0,"offset":0,"column_offset":16_384}),
+        json!({"sheet_index":0,"offset":0,"column_offset":null}),
         json!({"sheet_index":16,"offset":0}),
         json!({"sheet_index":0,"offset":0,"extra":true}),
     ] {
@@ -1782,6 +1786,55 @@ async fn campaign() {
     assert_eq!(second.status, StatusCode::OK, "{}", second.text());
     assert_eq!(second.json()["sheet_index"], 1);
     assert_ne!(first["rows"], second.json()["rows"]);
+    // Wide files remain intact even though typed app sources have fewer fields.
+    // A viewport carries only its requested cells and the complete dimensions.
+    let wide = (0..81)
+        .map(|row| {
+            (0..153)
+                .map(|column| format!("r{row}c{column}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let wide_upload = upload(
+        &stand,
+        &maya_cookie,
+        &viewer_box,
+        "wide-original.csv",
+        wide.as_bytes(),
+    )
+    .await;
+    assert_eq!(wide_upload.status, StatusCode::CREATED);
+    assert_eq!(wide_upload.json()["preview"]["refused"], "column_limit");
+    let wide_id = wide_upload.json()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let wide_path = format!("/v1/boxes/{viewer_box}/files/{wide_id}/sheet");
+    let wide_page = stand
+        .post(
+            &wide_path,
+            Some(&maya_cookie),
+            r#"{"sheet_index":0,"offset":50,"column_offset":128}"#,
+        )
+        .await;
+    assert_eq!(wide_page.status, StatusCode::OK, "{}", wide_page.text());
+    let wide_page = wide_page.json();
+    assert_eq!(wide_page["row_count"], 81);
+    assert_eq!(wide_page["column_count"], 153);
+    assert_eq!(wide_page["column_offset"], 128);
+    assert_eq!(wide_page["column_page_size"], 32);
+    assert_eq!(wide_page["rows"].as_array().unwrap().len(), 31);
+    assert_eq!(wide_page["rows"][0].as_array().unwrap().len(), 25);
+    assert_eq!(wide_page["rows"][0][0], "r50c128");
+    assert_eq!(wide_page["rows"][30][24], "r80c152");
+    assert_eq!(
+        wide_page["sha256"],
+        format!("sha256:{}", hex(wide.as_bytes()))
+    );
+    assert_eq!(wide_page["formula_count"], 0);
+    assert_eq!(wide_page["formula_cells"], json!([]));
     assert_eq!(
         stand
             .post(

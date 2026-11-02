@@ -82,7 +82,7 @@ impl Sandbox {
         &self,
         input: &[u8],
         config: &Value,
-        limits: Limits,
+        mut limits: Limits,
         decode: impl FnOnce(&[u8]) -> Result<Value>,
     ) -> Result<RunReport> {
         // One engine's epochs affect every store; serialize this spike's instances.
@@ -100,6 +100,7 @@ impl Sandbox {
             (Some("demo"), Some("xlsx")) => 5 * 1024 * 1024,
             (Some("platform"), Some("csv")) => 100 * 1024 * 1024,
             (Some("platform"), Some("xlsx")) => 10 * 1024 * 1024,
+            (Some("view"), Some("csv" | "xlsx")) => 20 * 1024 * 1024,
             _ => bail!("profile_or_format_invalid"),
         };
         if input.len() > limits.max_input_bytes.min(cap) {
@@ -113,6 +114,13 @@ impl Sandbox {
             || limits.max_output_bytes > ceiling.max_output_bytes
         {
             bail!("runtime_limit_may_not_increase");
+        }
+        // Read-only windows have a smaller envelope than full normalization.
+        // Caller-supplied reductions remain reductions; profiles never raise them.
+        if config["profile"] == "view" {
+            limits.memory_bytes = limits.memory_bytes.min(512 * 1024 * 1024);
+            limits.max_input_bytes = limits.max_input_bytes.min(20 * 1024 * 1024);
+            limits.max_output_bytes = limits.max_output_bytes.min(8 * 1024 * 1024);
         }
         // Include native setup and decoding in the acceptance deadline. Epochs
         // interrupt WASM; the final fence rejects late native completion too.

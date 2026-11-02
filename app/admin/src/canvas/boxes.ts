@@ -796,7 +796,13 @@ async function makeFileApp(boxId: string, file: BoxFile): Promise<void> {
   const release = () => { fileAppInFlight.delete(key); delete original.item.dataset.building; };
   try {
     const preview = await fetchPreview(boxId, file.file_id);
-    if (!preview || 'refused' in preview) { announce('This file cannot be used to build an app right now. The original is still available.'); return; }
+    if (!preview || 'refused' in preview) {
+      const reason = preview && 'refused' in preview ? preview.refused : '';
+      announce(reason === 'column_limit' || reason === 'dimension_limit'
+        ? 'This file can be viewed with row and column paging. App creation currently needs a table with at most 32 columns; export the columns you want in the app as a separate file.'
+        : 'The original viewer supports more spreadsheet formats than app creation currently does. Double-click to view this file. To build an app, use a table of up to 32 columns with values instead of formulas.');
+      return;
+    }
     if (sheets.get(key) !== original) return;
     let attempt = fileAppAttempts.get(key);
     if (!attempt) { attempt = { key: idempotencyKey(), registered: false }; fileAppAttempts.set(key, attempt); }

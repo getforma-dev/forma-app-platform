@@ -672,6 +672,29 @@ async fn content(
 struct SheetPage {
     sheet_index: usize,
     offset: usize,
+    #[serde(default)]
+    column_offset: usize,
+}
+
+// Limit heavy original-file inspection across all sessions in this server.
+// Do not queue a backlog of memory-bearing parser children behind the UI.
+static SHEET_READERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+
+#[cfg(test)]
+mod original_view_tests {
+    use super::SHEET_READERS;
+
+    #[test]
+    fn original_view_has_two_slots_and_releases_them() {
+        let first = SHEET_READERS.try_acquire().unwrap();
+        let second = SHEET_READERS.try_acquire().unwrap();
+        assert!(SHEET_READERS.try_acquire().is_err());
+        drop(first);
+        let replacement = SHEET_READERS.try_acquire().unwrap();
+        assert!(SHEET_READERS.try_acquire().is_err());
+        drop((second, replacement));
+        assert_eq!(SHEET_READERS.available_permits(), 2);
+    }
 }
 
 /// An authorized read over immutable original bytes, never a generated app
@@ -710,8 +733,10 @@ async fn sheet(
         return http::problem(StatusCode::BAD_REQUEST, "malformed_request");
     };
     if selection.sheet_index >= 16
-        || selection.offset >= 100_000
+        || selection.offset >= inspect::ORIGINAL_MAX_ROWS
         || selection.offset % inspect::ORIGINAL_PAGE_ROWS != 0
+        || selection.column_offset >= inspect::ORIGINAL_MAX_COLUMNS
+        || selection.column_offset % inspect::ORIGINAL_PAGE_COLUMNS != 0
     {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_request");
     }
@@ -719,6 +744,9 @@ async fn sheet(
     if let Err(retry) = state.auth.limits.admit(&[(&key, &[limits::per(120, 60)])]) {
         return http::too_many_requests(retry);
     }
+    let Ok(_permit) = SHEET_READERS.try_acquire() else {
+        return http::too_many_requests(2);
+    };
     let Some(identity) = &state.parser else {
         return http::unavailable();
     };
@@ -739,6 +767,7 @@ async fn sheet(
         &file.kind,
         selection.sheet_index,
         selection.offset,
+        selection.column_offset,
     )
     .await;
     // Parsing runs in a confined process; a revocation during that wait must

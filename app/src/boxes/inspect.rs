@@ -165,8 +165,8 @@ pub async fn parse(identity: &ParserIdentity, bytes: &[u8], kind: &str) -> Resul
     table_of(&document, format, sheet).ok_or_else(|| "parser_output_invalid".into())
 }
 
-/// Original-cell viewer, independent of inference/normalization. The sealed
-/// parser remains unchanged: a refusal never becomes a partial spreadsheet.
+/// Original-cell viewer, independent of inference/normalization. A fixed
+/// read-only profile emits one row/column window, never the entire workbook.
 /// Rows are one-based source coordinates, including the first/header row.
 pub async fn original_page(
     identity: &ParserIdentity,
@@ -174,26 +174,53 @@ pub async fn original_page(
     kind: &str,
     sheet_index: usize,
     offset: usize,
+    column_offset: usize,
 ) -> Result<Value, String> {
+    let window = sandbox::ViewWindow {
+        row_offset: offset,
+        column_offset,
+    };
+    if !window.valid() || sheet_index >= 16 {
+        return Err("page_unavailable".into());
+    }
+    let run = |format, sheet| async move {
+        let expected = ExpectedInput {
+            sha256: super::store::sha256_hex(bytes),
+            bytes: bytes.len() as u64,
+        };
+        sandbox::parse_view_with(
+            identity,
+            std::io::Cursor::new(bytes.to_vec()),
+            &expected,
+            &ParseConfig { format, sheet },
+            window,
+            PARSE_DEADLINE,
+        )
+        .await
+        .map(|output| output.document)
+    };
     let (document, sheets) = match kind {
         "csv" if sheet_index == 0 => (
-            run(identity, bytes, Format::Csv, None)
-                .await
-                .map_err(|r| refusal_code(&r))?,
+            run(Format::Csv, None).await.map_err(|r| refusal_code(&r))?,
             Vec::new(),
         ),
         "xlsx" => {
-            let sheets = match run(identity, bytes, Format::Xlsx, None).await {
+            let sheets = match run(Format::Xlsx, None).await {
                 Err(ParseRefusal::Refused {
+                    reason,
                     available_sheets: Some(sheets),
-                    ..
-                }) => sheets,
+                }) if reason == "sheet_selection_required"
+                    && !sheets.is_empty()
+                    && sheets.len() <= 16 =>
+                {
+                    sheets
+                }
                 Err(refusal) => return Err(refusal_code(&refusal)),
                 Ok(_) => return Err("parser_output_invalid".into()),
             };
             let sheet = sheets.get(sheet_index).ok_or("sheet_not_found")?.clone();
             (
-                run(identity, bytes, Format::Xlsx, Some(sheet))
+                run(Format::Xlsx, Some(sheet))
                     .await
                     .map_err(|r| refusal_code(&r))?,
                 sheets,
@@ -201,76 +228,176 @@ pub async fn original_page(
         }
         _ => return Err("not_data".into()),
     };
-    original_page_of(&document, kind, sheets, sheet_index, offset)
+    original_page_of(&document, kind, sheets, sheet_index, offset, column_offset)
         .ok_or_else(|| "page_unavailable".into())
 }
 
 pub const ORIGINAL_PAGE_ROWS: usize = 50;
+pub const ORIGINAL_PAGE_COLUMNS: usize = 32;
+pub const ORIGINAL_MAX_ROWS: usize = 1_048_576;
+pub const ORIGINAL_MAX_COLUMNS: usize = 16_384;
+const ORIGINAL_MAX_CELL_BYTES: usize = 256 * 1024;
+const ORIGINAL_MAX_CELL_CHARS: usize = 65_536;
+const ORIGINAL_MAX_CELLS: usize = 4_000_000;
+const ORIGINAL_PAGE_BYTES: usize = 8 * 1024 * 1024;
 
-/// Preserve the parser's original lexical cell values, not its inferred
-/// numbers. Never trim headers, drop empty edge rows, or shorten cell text.
+/// Preserve lexical values and sparse coordinates. Verify global metadata and
+/// every emitted coordinate against the requested page before filling blanks.
 fn original_page_of(
     document: &Value,
     kind: &str,
     sheets: Vec<String>,
     sheet_index: usize,
     offset: usize,
+    column_offset: usize,
 ) -> Option<Value> {
-    let result = document.get("result")?;
-    let cells = result.get("cells")?.as_array()?;
-    let mut row_count = if kind == "csv" {
-        usize::try_from(result.get("rows")?.as_u64()?).ok()?
-    } else {
-        0
+    let window = sandbox::ViewWindow {
+        row_offset: offset,
+        column_offset,
     };
-    let mut column_count = 0usize;
+    if !window.valid() || document.get("status")? != "parsed" || document.get("profile")? != "view"
+    {
+        return None;
+    }
+    let result = document.get("result")?;
+    if result.get("format")? != kind
+        || result.get("row_offset")? != offset
+        || result.get("column_offset")? != column_offset
+        || result.get("page_rows")? != ORIGINAL_PAGE_ROWS
+        || result.get("page_columns")? != ORIGINAL_PAGE_COLUMNS
+    {
+        return None;
+    }
+    if kind == "xlsx" {
+        if sheets.len() > 16
+            || sheets
+                .iter()
+                .any(|name| name.is_empty() || name.len() > 8192)
+            || sheets
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != sheets.len()
+            || result.get("selected_sheet")?.as_str()? != sheets.get(sheet_index)?
+        {
+            return None;
+        }
+    } else if kind != "csv" || !sheets.is_empty() || sheet_index != 0 {
+        return None;
+    }
+    let row_count = usize::try_from(result.get("row_count")?.as_u64()?).ok()?;
+    let column_count = usize::try_from(result.get("column_count")?.as_u64()?).ok()?;
+    if row_count > ORIGINAL_MAX_ROWS
+        || column_count > ORIGINAL_MAX_COLUMNS
+        || (offset != 0 && offset >= row_count)
+        || (column_offset != 0 && column_offset >= column_count)
+        || ((row_count == 0) != (column_count == 0))
+    {
+        return None;
+    }
+    let row_end = offset.checked_add(ORIGINAL_PAGE_ROWS)?.min(row_count);
+    let column_end = column_offset
+        .checked_add(ORIGINAL_PAGE_COLUMNS)?
+        .min(column_count);
+    let contains = |row: usize, column: usize| {
+        row > offset && row <= row_end && column > column_offset && column <= column_end
+    };
+    let cells = result.get("cells")?.as_array()?;
+    if cells.len() > ORIGINAL_PAGE_ROWS * ORIGINAL_PAGE_COLUMNS {
+        return None;
+    }
     let mut page = std::collections::BTreeMap::new();
+    let mut bytes = 0usize;
     for cell in cells {
         let coordinate = cell.get("coordinate")?;
+        if coordinate.get("type")?.as_str()? != kind {
+            return None;
+        }
         let (row, column) = if kind == "csv" {
             (
                 coordinate.get("logical_record")?.as_u64()?,
                 cell.get("column")?.as_u64()?,
             )
         } else {
+            if coordinate.get("sheet")?.as_str()? != sheets.get(sheet_index)? {
+                return None;
+            }
             (
                 coordinate.get("row")?.as_u64()?,
                 coordinate.get("column")?.as_u64()?,
             )
         };
         let (row, column) = (usize::try_from(row).ok()?, usize::try_from(column).ok()?);
-        if row == 0 || row > 100_000 || column == 0 || column > MAX_COLUMNS {
+        if !contains(row, column) {
             return None;
         }
-        row_count = row_count.max(row);
-        column_count = column_count.max(column);
-        if row > offset && row <= offset.checked_add(ORIGINAL_PAGE_ROWS)? {
-            let value = match cell.get("original")? {
-                Value::String(value) => value.clone(),
-                Value::Bool(value) => value.to_string(),
-                Value::Null => String::new(),
-                _ => return None,
-            };
-            if page.insert((row, column), value).is_some() {
+        let value = match cell.get("original")? {
+            Value::String(value)
+                if value.len() <= ORIGINAL_MAX_CELL_BYTES
+                    && value.chars().count() <= ORIGINAL_MAX_CELL_CHARS =>
+            {
+                value.clone()
+            }
+            Value::Bool(value) => value.to_string(),
+            Value::Null => String::new(),
+            _ => return None,
+        };
+        bytes = bytes.checked_add(value.len())?;
+        if bytes > ORIGINAL_PAGE_BYTES || page.insert((row, column), value).is_some() {
+            return None;
+        }
+    }
+    let formula_count = usize::try_from(result.get("formula_count")?.as_u64()?).ok()?;
+    let missing_formula_results =
+        usize::try_from(result.get("missing_formula_results")?.as_u64()?).ok()?;
+    if formula_count > ORIGINAL_MAX_CELLS
+        || formula_count > row_count.checked_mul(column_count)?
+        || missing_formula_results > formula_count
+        || (kind == "csv" && formula_count != 0)
+    {
+        return None;
+    }
+    let formulas = result.get("formula_cells")?.as_array()?;
+    if formulas.len() > formula_count || formulas.len() > ORIGINAL_PAGE_ROWS * ORIGINAL_PAGE_COLUMNS
+    {
+        return None;
+    }
+    let mut formula_cells = Vec::new();
+    let mut coordinates = std::collections::BTreeSet::new();
+    let mut missing_on_page = 0usize;
+    for formula in formulas {
+        let row = usize::try_from(formula.get("row")?.as_u64()?).ok()?;
+        let column = usize::try_from(formula.get("column")?.as_u64()?).ok()?;
+        let cached = formula.get("cached")?.as_bool()?;
+        if !contains(row, column)
+            || !coordinates.insert((row, column))
+            || !page.contains_key(&(row, column))
+        {
+            return None;
+        }
+        if !cached {
+            missing_on_page += 1;
+            if page.get(&(row, column))?.as_str() != "" {
                 return None;
             }
         }
+        formula_cells.push(json!({"row":row,"column":column,"cached":cached}));
     }
-    if offset != 0 && offset >= row_count {
+    if missing_on_page > missing_formula_results {
         return None;
     }
-    let end = offset.saturating_add(ORIGINAL_PAGE_ROWS).min(row_count);
-    let rows: Vec<Vec<String>> = (offset + 1..=end)
+    let rows: Vec<Vec<String>> = (offset + 1..=row_end)
         .map(|row| {
-            (1..=column_count)
+            (column_offset + 1..=column_end)
                 .map(|column| page.remove(&(row, column)).unwrap_or_default())
                 .collect()
         })
         .collect();
     Some(
-        json!({"format": kind, "sheets": sheets, "sheet_index": sheet_index,
-        "row_count": row_count, "column_count": column_count, "offset": offset,
-        "page_size": ORIGINAL_PAGE_ROWS, "rows": rows}),
+        json!({"format":kind,"sheets":sheets,"sheet_index":sheet_index,
+        "row_count":row_count,"column_count":column_count,"offset":offset,"column_offset":column_offset,
+        "page_size":ORIGINAL_PAGE_ROWS,"column_page_size":ORIGINAL_PAGE_COLUMNS,"rows":rows,
+        "formula_count":formula_count,"missing_formula_results":missing_formula_results,"formula_cells":formula_cells}),
     )
 }
 
@@ -708,35 +835,176 @@ mod tests {
         }
     }
 
+    fn view_document(
+        kind: &str,
+        rows: usize,
+        columns: usize,
+        offset: usize,
+        column_offset: usize,
+        cells: Value,
+    ) -> Value {
+        json!({"status":"parsed","profile":"view","result":{
+            "format":kind,"selected_sheet":"Other","row_count":rows,"column_count":columns,
+            "row_offset":offset,"column_offset":column_offset,"page_rows":50,"page_columns":32,
+            "formula_count":0,"missing_formula_results":0,"formula_cells":[],"cells":cells}})
+    }
+
     #[test]
     fn original_pages_preserve_coordinates_lexical_values_and_whole_cells() {
-        let cells: Vec<Value> = (1..=104).map(|row| json!({
-            "coordinate": {"type":"csv", "logical_record": row}, "column": 1,
-            "original": if row == 1 { "  Header  ".to_owned() } else if row == 52 { "<script>inert</script>\n001.2300".to_owned() } else { format!("row{row}") },
-            "value": {"type":"integer", "value":"999"}
-        })).collect();
-        let doc = json!({"result":{"cells":cells,"rows":104}});
-        let page = original_page_of(&doc, "csv", vec![], 0, 50).unwrap();
-        assert_eq!(page["row_count"], 104);
-        assert_eq!(page["rows"].as_array().unwrap().len(), 50);
-        assert_eq!(page["rows"][1][0], "<script>inert</script>\n001.2300");
-        assert_eq!(
-            original_page_of(&doc, "csv", vec![], 0, 0).unwrap()["rows"][0][0],
-            "  Header  "
+        let doc = view_document(
+            "csv",
+            104,
+            153,
+            50,
+            128,
+            json!([
+                {"coordinate":{"type":"csv","logical_record":52},"column":130,
+                 "original":"<script>inert</script>\n001.2300","value":{"type":"integer","value":"999"}}
+            ]),
         );
+        let page = original_page_of(&doc, "csv", vec![], 0, 50, 128).unwrap();
+        assert_eq!(page["row_count"], 104);
+        assert_eq!(page["column_count"], 153);
+        assert_eq!(page["column_offset"], 128);
+        assert_eq!(page["column_page_size"], 32);
+        assert_eq!(page["rows"].as_array().unwrap().len(), 50);
+        assert_eq!(page["rows"][1].as_array().unwrap().len(), 25);
+        assert_eq!(page["rows"][1][1], "<script>inert</script>\n001.2300");
+        assert_eq!(page["rows"][0][0], "");
+        let doc = view_document("csv", 104, 153, 100, 128, json!([]));
         assert_eq!(
-            original_page_of(&doc, "csv", vec![], 0, 100).unwrap()["rows"]
+            original_page_of(&doc, "csv", vec![], 0, 100, 128).unwrap()["rows"]
                 .as_array()
                 .unwrap()
                 .len(),
             4
         );
-        assert!(original_page_of(&doc, "csv", vec![], 0, 150).is_none());
-        let doc = json!({"result":{"cells":[{"coordinate":{"type":"xlsx","row":3,"column":2},"original":"-1.25e2","value":{"type":"integer","value":"-125"}}]}});
+        let doc = view_document(
+            "csv",
+            1,
+            1,
+            0,
+            0,
+            json!([{"coordinate":{"type":"csv","logical_record":1},"column":1,"original":"  Header  "}]),
+        );
+        assert_eq!(
+            original_page_of(&doc, "csv", vec![], 0, 0, 0).unwrap()["rows"][0][0],
+            "  Header  "
+        );
+        let doc = view_document(
+            "xlsx",
+            3,
+            2,
+            0,
+            0,
+            json!([{"coordinate":{"type":"xlsx","sheet":"Other","row":3,"column":2},"original":"-1.25e2"}]),
+        );
         let page =
-            original_page_of(&doc, "xlsx", vec!["First".into(), "Other".into()], 1, 0).unwrap();
+            original_page_of(&doc, "xlsx", vec!["First".into(), "Other".into()], 1, 0, 0).unwrap();
         assert_eq!(page["rows"], json!([["", ""], ["", ""], ["", "-1.25e2"]]));
-        assert_eq!(page["sheet_index"], 1);
+    }
+
+    #[test]
+    fn original_pages_reject_wrong_windows_coordinates_and_unbounded_metadata() {
+        let base = view_document(
+            "csv",
+            100,
+            153,
+            50,
+            128,
+            json!([{"coordinate":{"type":"csv","logical_record":51},"column":129,"original":"ok"}]),
+        );
+        assert!(original_page_of(&base, "csv", vec![], 0, 50, 128).is_some());
+        assert!(original_page_of(&base, "csv", vec![], 0, 0, 128).is_none());
+        assert!(original_page_of(&base, "csv", vec![], 0, 50, 0).is_none());
+        for (field, value) in [
+            ("row_count", json!(1_048_577)),
+            ("column_count", json!(16_385)),
+            ("row_count", json!(99.5)),
+            ("page_rows", json!(51)),
+            ("page_columns", json!(33)),
+            ("row_offset", json!(0)),
+            ("column_offset", json!(0)),
+            ("formula_count", json!(1)),
+        ] {
+            let mut doc = base.clone();
+            doc["result"][field] = value;
+            assert!(
+                original_page_of(&doc, "csv", vec![], 0, 50, 128).is_none(),
+                "{field}"
+            );
+        }
+        for (row, column) in [(50, 129), (101, 129), (51, 128), (51, 154), (0, 129)] {
+            let mut doc = base.clone();
+            doc["result"]["cells"][0]["coordinate"]["logical_record"] = json!(row);
+            doc["result"]["cells"][0]["column"] = json!(column);
+            assert!(original_page_of(&doc, "csv", vec![], 0, 50, 128).is_none());
+        }
+        let mut doc = base.clone();
+        let duplicate = doc["result"]["cells"][0].clone();
+        doc["result"]["cells"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
+        assert!(original_page_of(&doc, "csv", vec![], 0, 50, 128).is_none());
+        let mut doc = base.clone();
+        doc["profile"] = json!("demo");
+        assert!(original_page_of(&doc, "csv", vec![], 0, 50, 128).is_none());
+        let mut doc = base.clone();
+        doc["result"]["cells"][0]["original"] = json!("x".repeat(ORIGINAL_MAX_CELL_BYTES + 1));
+        assert!(original_page_of(&doc, "csv", vec![], 0, 50, 128).is_none());
+        let mut doc = base.clone();
+        doc["result"]["cells"][0]["original"] = json!("x".repeat(ORIGINAL_MAX_CELL_CHARS + 1));
+        assert!(original_page_of(&doc, "csv", vec![], 0, 50, 128).is_none());
+        doc["result"]["cells"][0]["original"] = json!("🗂".repeat(ORIGINAL_MAX_CELL_CHARS));
+        assert!(original_page_of(&doc, "csv", vec![], 0, 50, 128).is_some());
+        let empty = view_document("csv", 0, 0, 0, 0, json!([]));
+        assert_eq!(
+            original_page_of(&empty, "csv", vec![], 0, 0, 0).unwrap()["rows"],
+            json!([])
+        );
+    }
+
+    #[test]
+    fn original_pages_identify_missing_formula_results_without_inventing_values() {
+        let mut doc = view_document(
+            "xlsx",
+            3,
+            2,
+            0,
+            0,
+            json!([
+                {"coordinate":{"type":"xlsx","sheet":"Other","row":2,"column":1},"original":"10.00"},
+                {"coordinate":{"type":"xlsx","sheet":"Other","row":3,"column":2},"original":null}
+            ]),
+        );
+        doc["result"]["formula_count"] = json!(2);
+        doc["result"]["missing_formula_results"] = json!(1);
+        doc["result"]["formula_cells"] =
+            json!([{"row":2,"column":1,"cached":true},{"row":3,"column":2,"cached":false}]);
+        let render = |d: &Value| original_page_of(d, "xlsx", vec!["Other".into()], 0, 0, 0);
+        let page = render(&doc).unwrap();
+        assert_eq!(page["rows"][1][0], "10.00");
+        assert_eq!(page["rows"][2][1], "");
+        assert_eq!(page["formula_count"], 2);
+        assert_eq!(page["missing_formula_results"], 1);
+        for value in [json!(-1), json!(3), json!(1.5)] {
+            let mut bad = doc.clone();
+            bad["result"]["missing_formula_results"] = value;
+            assert!(render(&bad).is_none());
+        }
+        let mut bad = doc.clone();
+        bad["result"]["cells"][1]["original"] = json!("invented");
+        assert!(render(&bad).is_none());
+        let mut bad = doc.clone();
+        bad["result"]["formula_cells"][1] = bad["result"]["formula_cells"][0].clone();
+        assert!(render(&bad).is_none());
+        let mut bad = doc.clone();
+        bad["result"]["formula_cells"][1]["row"] = json!(4);
+        assert!(render(&bad).is_none());
+        let mut bad = doc.clone();
+        bad["result"]["cells"][0]["coordinate"]["sheet"] = json!("wrong");
+        assert!(render(&bad).is_none());
     }
 
     #[test]

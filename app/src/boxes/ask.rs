@@ -595,7 +595,7 @@ pub async fn ask_post(
         log("none", "no_tables", 0);
         let answer = if file_id.is_some() {
             Answer {
-                text: "This file could not be read as a table. Ask can read CSV and XLSX files; the original file is still available.".into(),
+                text: "Ask could not analyze this file. Analysis currently supports simple CSV/XLSX tables with up to 32 columns and values instead of formulas. The original viewer supports wider files and saved Excel formula results; double-click the file card to view it.".into(),
                 references: Vec::new(),
             }
         } else {

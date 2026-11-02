@@ -50,6 +50,8 @@ The following table retains APP-120's component vocabulary: its “card” means
 
 The upgrade changes the canvas representation; it does not overwrite the uploaded bytes or discard their provenance. App-card visual design can evolve without changing that relationship.
 
+**Large original files (November 2 follow-up):** the viewer pages both rows and columns, with direct position jumps. Wider CSVs and ordinary XLSX workbooks with saved formula results use a separate read-only inspection profile; they are no longer restricted by the app's 32-field schema. Missing formula results are marked, and nothing is recalculated. Uploads remain capped at 20 MiB with bounded expansion, cell count, memory, concurrency and processing time. [Spreadsheet viewing](../architecture/SPREADSHEET-VIEWING.md) records the limits and rejection rules. Ask and app creation retain their separate current data contracts; viewing a file does not imply that every column can already be used to build an app.
+
 ### Existing folder behavior and historical APP-124 flow
 
 Folders continue to offer **Ask**, **Make a card**, **✨ Make an app** and **Brief me** under their existing permissions. A folder's **Make a card** still creates a minimal saved app/work; it is distinct from the automatically created File Card above. Uploading into a folder and copying a File Card onto a folder keep their existing storage behavior. The earlier folder-first sequence below is retained as APP-124 history: its blanket claim that every empty-canvas upload creates a folder, and its separate card-creation step, are superseded for direct CSV/XLSX uploads by the November 2 decision.

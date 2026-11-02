@@ -2939,6 +2939,17 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 /* Original file viewer: preserve whitespace and let keyboard users scroll. */
 .bx-original-table td { white-space: pre-wrap; min-width: 8rem; max-width: 30rem; overflow-wrap: anywhere; vertical-align: top; }
 .bx-sheet-navigation { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: .75rem; }
+.bx-sheet-page-buttons, .bx-sheet-jump { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.bx-sheet-jump { margin-left: auto; }
+.bx-sheet-jump label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; }
+.bx-sheet-jump input { width: 6.5rem; min-width: 0; padding: .4rem .5rem; }
+.bx-sheet-jump label:last-of-type input { width: 4.5rem; }
+.bx-original-table { max-height: min(58vh, 42rem); }
+.bx-original-table thead th { position: sticky; top: 0; z-index: 2; background: var(--cv-surface); }
+.bx-original-table th:first-child { position: sticky; left: 0; z-index: 1; background: var(--cv-surface); }
+.bx-original-table thead th:first-child { z-index: 3; }
+.bx-formula-missing { font-style: italic; color: var(--muted); font-size: .85em; }
+.bx-original-table td[data-formula-result="saved"]::after { content: ' ƒ'; color: var(--muted); font-size: .75em; }
 .bx-sheet-selection { margin-block: .75rem; }
 .bx-sheet-selection select { max-width: 100%; }
 .bx-sheet-limit { font-size: .8rem; color: var(--muted, #596476); }

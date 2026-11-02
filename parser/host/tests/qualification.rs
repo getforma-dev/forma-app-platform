@@ -550,3 +550,337 @@ fn qualified_guest_bytes_are_named_in_the_log() {
         )
         .is_ok());
 }
+
+fn replace_entry(base: &[u8], wanted: &str, replacement: &[u8]) -> Vec<u8> {
+    let mut src = ZipArchive::new(Cursor::new(base)).unwrap();
+    let mut out = ZipWriter::new(Cursor::new(Vec::new()));
+    for i in 0..src.len() {
+        let mut f = src.by_index(i).unwrap();
+        let name = f.name().unwrap().to_string();
+        let mut bytes = Vec::new();
+        f.read_to_end(&mut bytes).unwrap();
+        out.start_file(
+            &name,
+            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+        )
+        .unwrap();
+        out.write_all(if name == wanted { replacement } else { &bytes })
+            .unwrap();
+    }
+    out.finish().unwrap().into_inner()
+}
+
+/// Produce ordinary streaming ZIP descriptors from a validated fixture without
+/// changing compressed payloads. The CRC and both sizes come from its directory.
+fn with_descriptors(base: &[u8], signed: bool) -> (Vec<u8>, Vec<usize>) {
+    let u16at = |p| u16::from_le_bytes(base[p..p + 2].try_into().unwrap()) as usize;
+    let u32at = |p| u32::from_le_bytes(base[p..p + 4].try_into().unwrap()) as usize;
+    let end = base.len() - 22;
+    let mut at = u32at(end + 16);
+    let mut out = Vec::new();
+    let mut directory = Vec::new();
+    let mut descriptors = Vec::new();
+    for _ in 0..u16at(end + 10) {
+        let local = u32at(at + 42);
+        let n = u16at(at + 28);
+        assert_eq!(u16at(at + 30), 0);
+        assert_eq!(u16at(at + 32), 0);
+        let mut header = base[local..local + 30 + n].to_vec();
+        let flags = (u16at(at + 8) as u16 | 8).to_le_bytes();
+        header[6..8].copy_from_slice(&flags);
+        header[14..26].fill(0);
+        let offset = out.len() as u32;
+        out.extend_from_slice(&header);
+        let size = u32at(at + 20);
+        out.extend_from_slice(&base[local + 30 + n..local + 30 + n + size]);
+        descriptors.push(out.len());
+        if signed {
+            out.extend_from_slice(&0x08074b50u32.to_le_bytes());
+        }
+        out.extend_from_slice(&base[at + 16..at + 28]);
+        let mut central = base[at..at + 46 + n].to_vec();
+        central[8..10].copy_from_slice(&flags);
+        central[42..46].copy_from_slice(&offset.to_le_bytes());
+        directory.extend_from_slice(&central);
+        at += 46 + n;
+    }
+    let central = out.len() as u32;
+    let size = directory.len() as u32;
+    out.extend_from_slice(&directory);
+    let mut footer = base[end..].to_vec();
+    footer[12..16].copy_from_slice(&size.to_le_bytes());
+    footer[16..20].copy_from_slice(&central.to_le_bytes());
+    out.extend_from_slice(&footer);
+    (out, descriptors)
+}
+
+#[test]
+fn view_pages_wide_ragged_csv_and_keeps_source_coordinates_without_truncation() {
+    let full = (1..=153)
+        .map(|n| format!("column{n}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let input = format!("{full}\r\nshort,row\r\n{full}\r\n");
+    let c = json!({"profile":"view","format":"csv","window":{"row_offset":1,"column_offset":128}});
+    let value = run(input.as_bytes(), &c);
+    assert_eq!(value["status"], "parsed", "{value}");
+    let result = &value["result"];
+    assert_eq!(result["row_count"], 3);
+    assert_eq!(result["column_count"], 153);
+    assert_eq!(result["row_offset"], 1);
+    assert_eq!(result["column_offset"], 128);
+    assert_eq!(result["page_rows"], 50);
+    assert_eq!(result["page_columns"], 32);
+    let cells = result["cells"].as_array().unwrap();
+    assert_eq!(cells.len(), 25);
+    assert_eq!(cells[0]["column"], 129);
+    assert_eq!(cells[0]["coordinate"]["logical_record"], 3);
+    assert_eq!(cells[0]["coordinate"]["physical_line_start"], 3);
+    assert_eq!(cells[0]["original"], "column129");
+    assert_eq!(cells.last().unwrap()["original"], "column153");
+    assert_eq!(result["formula_count"], 0);
+    assert_eq!(result["formula_cells"], json!([]));
+    refused(
+        input.as_bytes(),
+        &json!({"profile":"demo","format":"csv"}),
+        "column_limit",
+    );
+    refused(
+        b"a,b",
+        &json!({"profile":"demo","format":"csv","window":{"row_offset":0,"column_offset":0}}),
+        "window_requires_view",
+    );
+    refused(
+        b"a,b",
+        &json!({"profile":"platform","format":"csv","window":{"row_offset":0,"column_offset":0}}),
+        "window_requires_view",
+    );
+    refused(
+        b"a,b",
+        &json!({"profile":"view","format":"csv","window":{"row_offset":1048576,"column_offset":0}}),
+        "window_invalid",
+    );
+    refused(
+        b"a,b",
+        &json!({"profile":"view","format":"csv","limits":{"cells":1}}),
+        "cell_limit",
+    );
+    refused(
+        &vec![b'a'; 65_537],
+        &json!({"profile":"view","format":"csv"}),
+        "text_limit",
+    );
+    assert_eq!(
+        run(
+            &vec![b'a'; 65_536],
+            &json!({"profile":"view","format":"csv"})
+        )["status"],
+        "parsed"
+    );
+    let unicode = "😀".repeat(65_536) + ",last\n";
+    let exact = run(
+        unicode.as_bytes(),
+        &json!({"profile":"view","format":"csv"}),
+    );
+    assert_eq!(exact["status"], "parsed");
+    assert_eq!(
+        exact["result"]["cells"][0]["original"]
+            .as_str()
+            .unwrap()
+            .chars()
+            .count(),
+        65_536
+    );
+    assert_eq!(exact["result"]["cells"][1]["original"], "last");
+}
+
+#[test]
+fn view_streams_more_than_a_hundred_thousand_csv_cells_with_bounded_page_output() {
+    let row = (0..153).map(|_| "001").collect::<Vec<_>>().join(",") + "\n";
+    let input = row.repeat(1000);
+    let report=sandbox().run(input.as_bytes(), &json!({"profile":"view","format":"csv","window":{"row_offset":950,"column_offset":128}}), Limits::default()).unwrap();
+    assert_eq!(report.result["status"], "parsed", "{}", report.result);
+    assert_eq!(report.result["result"]["row_count"], 1000);
+    assert_eq!(report.result["result"]["column_count"], 153);
+    assert_eq!(
+        report.result["result"]["cells"].as_array().unwrap().len(),
+        1250
+    );
+    let bytes = serde_json::to_vec(&report.result).unwrap().len();
+    assert!(bytes < 512 * 1024);
+    assert_eq!(
+        report.resource_limits["guest_linear_memory_bytes"],
+        512 * 1024 * 1024
+    );
+    assert_eq!(report.resource_limits["output_bytes"], 8 * 1024 * 1024);
+    println!("VIEW_CSV cells=153000 input_bytes={} output_bytes={bytes} elapsed_ms={} memory_bytes={} fuel={}",input.len(),report.elapsed_ms,report.memory_bytes,report.fuel_consumed);
+}
+
+#[test]
+fn view_reads_cached_formulas_and_marks_missing_results_without_evaluation() {
+    let sheet=br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:AZ52"/><sheetData><row r="1"><c r="A1"><f>1+1</f><v>2.00</v></c><c r="B1" t="str"><f>"cached"</f><v>A &amp; B</v></c><c r="C1" t="b"><f>TRUE()</f><v>1</v></c><c r="D1"><f>NOW()</f><v/></c><c r="E1" t="str"><f>""</f><v/></c></row><row r="52"><c r="AZ52"><f>1+2</f></c></row></sheetData></worksheet>"#;
+    let bytes = replace_entry(&fixture("valid.xlsx"), "xl/worksheets/sheet1.xml", sheet);
+    let c = json!({"profile":"view","format":"xlsx","sheet":"Inventory"});
+    let value = run(&bytes, &c);
+    assert_eq!(value["status"], "parsed", "{value}");
+    let result = &value["result"];
+    assert_eq!(result["row_count"], 52);
+    assert_eq!(result["column_count"], 52);
+    assert_eq!(result["formula_count"], 6);
+    assert_eq!(result["missing_formula_results"], 2);
+    assert_eq!(
+        result["formula_cells"],
+        json!([{"row":1,"column":1,"cached":true},{"row":1,"column":2,"cached":true},{"row":1,"column":3,"cached":true},{"row":1,"column":4,"cached":false},{"row":1,"column":5,"cached":true}])
+    );
+    let cells = result["cells"].as_array().unwrap();
+    assert_eq!(cells[0]["original"], "2.00");
+    assert_eq!(cells[1]["original"], "A & B");
+    assert_eq!(cells[2]["original"], true);
+    assert!(cells
+        .iter()
+        .any(|cell| cell["coordinate"]["column"] == 5 && cell["original"] == ""));
+    assert!(cells
+        .iter()
+        .any(|cell| cell["coordinate"]["column"] == 4 && cell["original"].is_null()));
+    let page = run(
+        &bytes,
+        &json!({"profile":"view","format":"xlsx","sheet":"Inventory","window":{"row_offset":50,"column_offset":32}}),
+    );
+    assert_eq!(page["status"], "parsed", "{page}");
+    assert_eq!(page["result"]["cells"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        page["result"]["formula_cells"],
+        json!([{"row":52,"column":52,"cached":false}])
+    );
+    assert_eq!(
+        page["result"]["cells"][0]["coordinate"],
+        json!({"type":"xlsx","sheet":"Inventory","row":52,"column":52})
+    );
+    let discovery = run(&bytes, &json!({"profile":"view","format":"xlsx"}));
+    assert_eq!(discovery["reason"], "sheet_selection_required");
+    assert_eq!(discovery["available_sheets"], json!(["Inventory", "Other"]));
+    refused(&fixture("formula.xlsx"), &config(), "formula_refused");
+}
+
+#[test]
+fn view_accepts_only_validated_signed_or_unsigned_zip_descriptors() {
+    let c = json!({"profile":"view","format":"xlsx","sheet":"Inventory"});
+    for signed in [false, true] {
+        let (bytes, positions) = with_descriptors(&fixture("valid.xlsx"), signed);
+        assert_eq!(run(&bytes, &c)["status"], "parsed");
+        refused(&bytes, &config(), "archive_method_or_encryption");
+        for delta in [0, 4, 8] {
+            let mut bad = bytes.clone();
+            bad[positions[0] + if signed { 4 } else { 0 } + delta] ^= 1;
+            refused(&bad, &c, "archive_descriptor_mismatch");
+        }
+        let mut encrypted = bytes.clone();
+        let central = u32::from_le_bytes(
+            encrypted[encrypted.len() - 6..encrypted.len() - 2]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        encrypted[6] |= 1;
+        encrypted[central + 8] |= 1;
+        refused(&encrypted, &c, "archive_method_or_encryption");
+        let mut truncated = bytes.clone();
+        truncated.truncate(positions[0] + 5);
+        assert_eq!(run(&truncated, &c)["status"], "refused");
+        let mut span = bytes.clone();
+        let expanded = u32::from_le_bytes(span[central + 24..central + 28].try_into().unwrap());
+        let compressed = u32::from_le_bytes(span[central + 20..central + 24].try_into().unwrap());
+        span[central + 20..central + 24].copy_from_slice(&(compressed + 1).to_le_bytes());
+        let descriptor = positions[0] + usize::from(signed) * 4;
+        span[descriptor + 4..descriptor + 8].copy_from_slice(&(compressed + 1).to_le_bytes());
+        span[descriptor + 8..descriptor + 12].copy_from_slice(&expanded.to_le_bytes());
+        assert_eq!(run(&span, &c)["status"], "refused");
+        let mut flags = bytes.clone();
+        flags[6] ^= 1;
+        refused(&flags, &c, "archive_header_mismatch");
+        let mut name = bytes.clone();
+        name[30] ^= 1;
+        refused(&name, &c, "archive_name_mismatch");
+    }
+    for (name, reason) in [
+        ("macro.xlsx", "macro_or_binary_refused"),
+        ("content-type-macro.xlsx", "macro_refused"),
+        ("external.xlsx", "external_link_refused"),
+        ("doctype.xlsx", "doctype_refused"),
+        ("duplicate-cell.xlsx", "cell_duplicate"),
+        ("duplicate-values.xlsx", "cell_value_duplicate"),
+    ] {
+        refused(&fixture(name), &c, reason);
+        refused(
+            &fixture(name),
+            &json!({"profile":"view","format":"xlsx","sheet":"Other","window":{"row_offset":1000,"column_offset":128}}),
+            reason,
+        );
+    }
+}
+
+#[test]
+fn view_streams_more_than_a_hundred_thousand_xlsx_cells_with_bounded_page_output() {
+    let columns = (1..=153)
+        .map(|mut column| {
+            let mut name = String::new();
+            while column > 0 {
+                column -= 1;
+                name.insert(0, (b'A' + (column % 26) as u8) as char);
+                column /= 26;
+            }
+            name
+        })
+        .collect::<Vec<_>>();
+    let mut xml=String::from("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+    for row in 1..=1000 {
+        xml.push_str(&format!("<row r=\"{row}\">"));
+        for column in &columns {
+            xml.push_str(&format!("<c r=\"{column}{row}\"><v>1.00</v></c>"));
+        }
+        xml.push_str("</row>");
+    }
+    xml.push_str("</sheetData></worksheet>");
+    let input = replace_entry(
+        &fixture("valid.xlsx"),
+        "xl/worksheets/sheet1.xml",
+        xml.as_bytes(),
+    );
+    let report=sandbox().run(&input, &json!({"profile":"view","format":"xlsx","sheet":"Inventory","window":{"row_offset":950,"column_offset":128}}), Limits::default()).unwrap();
+    assert_eq!(report.result["status"], "parsed", "{}", report.result);
+    assert_eq!(report.result["result"]["row_count"], 1000);
+    assert_eq!(report.result["result"]["column_count"], 153);
+    assert_eq!(
+        report.result["result"]["cells"].as_array().unwrap().len(),
+        1250
+    );
+    assert_eq!(report.result["result"]["cells"][0]["original"], "1.00");
+    let bytes = serde_json::to_vec(&report.result).unwrap().len();
+    assert!(bytes < 512 * 1024);
+    println!("VIEW_XLSX cells=153000 input_bytes={} output_bytes={bytes} elapsed_ms={} memory_bytes={} fuel={}",input.len(),report.elapsed_ms,report.memory_bytes,report.fuel_consumed);
+}
+
+#[test]
+fn view_refuses_cached_string_cdata_and_reordered_formula_before_dependency_loss() {
+    let c = json!({"profile":"view","format":"xlsx","sheet":"Inventory"});
+    for (cell, reason) in [
+        (
+            "<c r=\"A1\" t=\"str\"><f>\"hello\"</f><v><![CDATA[hello]]></v></c>",
+            "numeric_cdata_refused",
+        ),
+        (
+            "<c r=\"A1\"><v>2</v><f>1+1</f></c>",
+            "cell_formula_structure",
+        ),
+    ] {
+        let xml=format!("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\">{cell}</row></sheetData></worksheet>");
+        refused(
+            &replace_entry(
+                &fixture("valid.xlsx"),
+                "xl/worksheets/sheet1.xml",
+                xml.as_bytes(),
+            ),
+            &c,
+            reason,
+        );
+    }
+}

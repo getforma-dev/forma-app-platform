@@ -8,6 +8,27 @@ use std::io::{Cursor, Read};
 
 type Result<T> = std::result::Result<T, String>;
 const MIB: usize = 1024 * 1024;
+const PAGE_ROWS: usize = 50;
+const PAGE_COLUMNS: usize = 32;
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Window {
+    row_offset: usize,
+    column_offset: usize,
+}
+fn read_window<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Window>, D::Error> {
+    Window::deserialize(deserializer).map(Some)
+}
+impl Window {
+    fn contains(self, row: usize, column: usize) -> bool {
+        row > self.row_offset
+            && row - self.row_offset <= PAGE_ROWS
+            && column > self.column_offset
+            && column - self.column_offset <= PAGE_COLUMNS
+    }
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -15,12 +36,16 @@ pub struct Config {
     format: String,
     #[serde(default)]
     sheet: Option<String>,
+    #[serde(default, deserialize_with = "read_window")]
+    window: Option<Window>,
     /// Lower-only limits make exact boundary/failure controls inexpensive.
     #[serde(default)]
     limits: BTreeMap<String, usize>,
 }
 #[derive(Clone)]
 struct Limits {
+    view: bool,
+    window: Window,
     input: usize,
     expanded: usize,
     rows: usize,
@@ -34,12 +59,21 @@ struct Limits {
 }
 impl Limits {
     fn new(c: &Config) -> Result<Self> {
+        let view = c.profile == "view";
         let demo = match c.profile.as_str() {
             "demo" => true,
-            "platform" => false,
+            "platform" | "view" => false,
             _ => return Err("profile_unknown".into()),
         };
+        ensure(view || c.window.is_none(), "window_requires_view")?;
+        let window = c.window.unwrap_or_default();
+        ensure(
+            window.row_offset < 1_048_576 && window.column_offset < 16_384,
+            "window_invalid",
+        )?;
         let mut l = Self {
+            view,
+            window,
             input: match c.format.as_str() {
                 "csv" => {
                     if demo {
@@ -73,6 +107,15 @@ impl Limits {
             text: 8192,
             output: 128 * MIB,
         };
+        if view {
+            l.input = 20 * MIB;
+            l.expanded = 100 * MIB;
+            l.rows = 1_048_576;
+            l.columns = 16_384;
+            l.cells = 4_000_000;
+            l.text = 256 * 1024;
+            l.output = 8 * MIB;
+        }
         for (k, v) in &c.limits {
             let target = match k.as_str() {
                 "input" => &mut l.input,
@@ -103,7 +146,10 @@ fn ensure(ok: bool, code: &str) -> Result<()> {
     }
 }
 fn bounded_text(s: &str, l: &Limits) -> Result<()> {
-    ensure(s.len() <= l.text && s.chars().count() <= 2000, "text_limit")
+    ensure(
+        s.len() <= l.text && s.chars().count() <= if l.view { 65_536 } else { 2000 },
+        "text_limit",
+    )
 }
 fn attr(e: &quick_xml::events::BytesStart<'_>, name: &str) -> Result<Option<String>> {
     for a in e.attributes() {
@@ -194,9 +240,10 @@ fn archive_directory(b: &[u8], l: &Limits) -> Result<()> {
         ensure(b.get(p..p + 4) == Some(b"PK\x01\x02"), "archive_directory")?;
         let flags = le16(b, p + 8)?;
         let method = le16(b, p + 10)?;
-        // UTF-8 and deflate option bits only: encryption and data descriptors refused.
+        // Inspection accepts only descriptors verified below against the central
+        // directory. Strict normalization keeps its original ZIP subset.
         ensure(
-            flags & !0x0806 == 0 && (method == 0 || method == 8),
+            flags & !(if l.view { 0x080e } else { 0x0806 }) == 0 && (method == 0 || method == 8),
             "archive_method_or_encryption",
         )?;
         let mode = le32(b, p + 38)? >> 16;
@@ -233,19 +280,37 @@ fn archive_directory(b: &[u8], l: &Limits) -> Result<()> {
             "archive_name_mismatch",
         )?;
         ensure(le16(b, local + 28)? == 0, "archive_extra_unsupported")?;
+        let crc = le32(b, p + 16)?;
+        let local_values = (
+            le32(b, local + 14)?,
+            le32(b, local + 18)?,
+            le32(b, local + 22)?,
+        );
+        let descriptor = flags & 8 != 0;
         ensure(
             le16(b, local + 6)? == flags
                 && le16(b, local + 8)? == method
-                && le32(b, local + 14)? == le32(b, p + 16)?
-                && le32(b, local + 18)? == compressed
-                && le32(b, local + 22)? == expanded,
+                && (local_values == (crc, compressed, expanded)
+                    || (descriptor && local_values == (0, 0, 0))),
             "archive_header_mismatch",
         )?;
-        let data_end = local
+        let mut data_end = local
             .checked_add(30 + n)
             .and_then(|v| v.checked_add(compressed))
             .ok_or("archive_header")?;
         ensure(data_end <= central, "archive_payload_bounds")?;
+        if descriptor {
+            let matches = |at: usize| -> bool {
+                at.checked_add(12).is_some_and(|end| end <= central)
+                    && le32(b, at).ok() == Some(crc)
+                    && le32(b, at + 4).ok() == Some(compressed)
+                    && le32(b, at + 8).ok() == Some(expanded)
+            };
+            let signed = le32(b, data_end).ok() == Some(0x08074b50) && matches(data_end + 4);
+            let unsigned = matches(data_end);
+            ensure(signed != unsigned, "archive_descriptor_mismatch")?;
+            data_end += if signed { 16 } else { 12 };
+        }
         spans.push((local, data_end));
         p = p.checked_add(46 + n).ok_or("archive_header")?;
         ensure(p <= end, "archive_header")?;
@@ -260,8 +325,17 @@ fn archive_directory(b: &[u8], l: &Limits) -> Result<()> {
     ensure(previous == central, "archive_overlap_or_gap")
 }
 #[derive(Default)]
+struct SheetInspection {
+    rows: usize,
+    columns: usize,
+    formulas: usize,
+    missing: usize,
+    page_formulas: BTreeMap<(u32, u32), bool>,
+}
+#[derive(Default)]
 struct Preflight {
     raw_numbers: BTreeMap<String, BTreeMap<(u32, u32), String>>,
+    inspection: BTreeMap<String, SheetInspection>,
     sheets: BTreeMap<String, String>,
     /// Sheet names in workbook order, for `sheet_selection_required`.
     sheet_order: Vec<String>,
@@ -276,6 +350,9 @@ fn scan_xml(name: &str, bytes: &[u8], l: &Limits, p: &mut Preflight) -> Result<(
     let mut depth = 0usize;
     let mut coords = BTreeSet::new();
     let mut current = None;
+    let mut cell_coordinate = None;
+    let mut cell_type = None;
+    let mut formula = false;
     let mut in_value = false;
     let mut cell_open = false;
     let mut value_seen = false;
@@ -296,7 +373,12 @@ fn scan_xml(name: &str, bytes: &[u8], l: &Limits, p: &mut Preflight) -> Result<(
                     ensure(depth <= 32, "xml_depth_limit")?;
                 }
                 if tag == "f" {
-                    return Err("formula_refused".into());
+                    ensure(l.view, "formula_refused")?;
+                    ensure(
+                        worksheet && cell_open && !formula && !value_seen,
+                        "cell_formula_structure",
+                    )?;
+                    formula = true;
                 }
                 if tag == "Relationship" {
                     ensure(
@@ -374,11 +456,22 @@ fn scan_xml(name: &str, bytes: &[u8], l: &Limits, p: &mut Preflight) -> Result<(
                     p.cells += 1;
                     worksheet_cells += 1;
                     ensure(
-                        p.cells <= l.cells && worksheet_cells <= l.rows * l.columns,
+                        p.cells <= l.cells && worksheet_cells <= l.rows.saturating_mul(l.columns),
                         "cell_limit",
                     )?;
                     let t = attr(&e, "t")?;
-                    current = if t.as_deref().is_none() || t.as_deref() == Some("n") {
+                    cell_coordinate = Some(c);
+                    cell_type = t.clone();
+                    formula = false;
+                    value.clear();
+                    if l.view {
+                        let stats = p.inspection.entry(name.to_owned()).or_default();
+                        stats.rows = stats.rows.max(c.0 as usize);
+                        stats.columns = stats.columns.max(c.1 as usize);
+                    }
+                    current = if (l.view || t.as_deref().is_none() || t.as_deref() == Some("n"))
+                        && (!l.view || l.window.contains(c.0 as usize, c.1 as usize))
+                    {
                         Some(c)
                     } else {
                         None
@@ -405,7 +498,26 @@ fn scan_xml(name: &str, bytes: &[u8], l: &Limits, p: &mut Preflight) -> Result<(
                     in_value = false;
                 }
                 if e.local_name().as_ref() == "c" {
+                    if l.view {
+                        bounded_text(&value, l)?;
+                    }
+                    if formula {
+                        let c = cell_coordinate.ok_or("cell_formula_structure")?;
+                        let cached = value_seen
+                            && (!value.is_empty() || cell_type.as_deref() == Some("str"));
+                        let stats = p.inspection.entry(name.to_owned()).or_default();
+                        stats.formulas += 1;
+                        if !cached {
+                            stats.missing += 1;
+                        }
+                        if l.window.contains(c.0 as usize, c.1 as usize) {
+                            stats.page_formulas.insert(c, cached);
+                        }
+                    }
                     current = None;
+                    cell_coordinate = None;
+                    cell_type = None;
+                    formula = false;
                     cell_open = false;
                 }
             }
@@ -434,8 +546,11 @@ fn scan_xml(name: &str, bytes: &[u8], l: &Limits, p: &mut Preflight) -> Result<(
             }
             Event::GeneralRef(e) => {
                 ensure(e.len() <= 32, "xml_entity_limit")?;
-                if in_value {
+                if in_value && !(l.view && cell_type.as_deref() == Some("str")) {
                     return Err("numeric_entity_refused".into());
+                }
+                if in_value {
+                    value.push('&');
                 }
             }
             Event::Eof => break,
@@ -555,6 +670,7 @@ fn parse_xlsx(bytes: &[u8], c: &Config, l: &Limits) -> Result<Value> {
     let mut cells = Vec::new();
     let mut budget = 1024usize;
     let mut rows = BTreeSet::new();
+    let mut page_coordinates = BTreeSet::new();
     while let Some(cell) = reader.next_cell().map_err(|_| "xlsx_cell_invalid")? {
         let row = cell.get_position().0 + 1;
         let column = cell.get_position().1 + 1;
@@ -562,7 +678,22 @@ fn parse_xlsx(bytes: &[u8], c: &Config, l: &Limits) -> Result<Value> {
             row as usize <= l.rows && column as usize <= l.columns,
             "dimension_limit",
         )?;
-        rows.insert(row);
+        if !l.view {
+            rows.insert(row);
+        }
+        if l.view {
+            match cell.get_value() {
+                DataRef::String(text) | DataRef::DateTimeIso(text) | DataRef::DurationIso(text) => {
+                    bounded_text(text, l)?
+                }
+                DataRef::SharedString(text) => bounded_text(text, l)?,
+                _ => {}
+            }
+        }
+        if l.view && !l.window.contains(row as usize, column as usize) {
+            continue;
+        }
+        page_coordinates.insert((row, column));
         let (value, raw, interpretation) = match cell.get_value() {
             DataRef::Empty => (json!({"type":"null"}), Value::Null, "literal"),
             DataRef::String(s) => {
@@ -582,7 +713,11 @@ fn parse_xlsx(bytes: &[u8], c: &Config, l: &Limits) -> Result<Value> {
                     .ok_or("number_original_missing")?;
                 let date = matches!(cell.get_value(), DataRef::DateTime(_));
                 (
-                    exact_number(raw)?,
+                    if l.view {
+                        json!({"type":"text","value":raw})
+                    } else {
+                        exact_number(raw)?
+                    },
                     json!(raw),
                     if date {
                         "excel_serial_unconfirmed"
@@ -599,6 +734,11 @@ fn parse_xlsx(bytes: &[u8], c: &Config, l: &Limits) -> Result<Value> {
                     "time_mapping_unconfirmed",
                 )
             }
+            DataRef::Error(error) if l.view => (
+                json!({"type":"text","value":error.to_string()}),
+                json!(error.to_string()),
+                "cached_error",
+            ),
             DataRef::Error(_) => return Err("cell_error_refused".into()),
         };
         push_cell(
@@ -608,15 +748,65 @@ fn parse_xlsx(bytes: &[u8], c: &Config, l: &Limits) -> Result<Value> {
             l,
         )?;
     }
-    Ok(
-        json!({"format":"xlsx","selected_sheet":selected,"available_sheets":names,"date_epoch_1904":epoch_1904,"rows":rows.len(),"cells":cells,"expanded_bytes":p.expanded,"formula_policy":"reject","mapping_status":"inspection_required"}),
-    )
+    let mut result = json!({"format":"xlsx","selected_sheet":selected,"available_sheets":names,"date_epoch_1904":epoch_1904,"rows":rows.len(),"cells":cells,"expanded_bytes":p.expanded,"formula_policy":"reject","mapping_status":"inspection_required"});
+    if l.view {
+        let empty = SheetInspection::default();
+        let stats = p.inspection.get(path).unwrap_or(&empty);
+        let cells = result["cells"].as_array_mut().ok_or("output_encoding")?;
+        for (&(row, column), &cached) in &stats.page_formulas {
+            if !page_coordinates.contains(&(row, column)) {
+                push_cell(
+                    cells,
+                    json!({"coordinate":{"type":"xlsx","sheet":selected,"row":row,"column":column},"value":if cached {json!({"type":"text","value":""})} else {json!({"type":"null"})},"original":if cached {json!("")} else {Value::Null},"interpretation":if cached {"cached_formula"} else {"formula_cache_missing"}}),
+                    &mut budget,
+                    l,
+                )?;
+            }
+        }
+        result["formula_policy"] = json!("cached_values_only");
+        result["formula_cells"] = json!(stats
+            .page_formulas
+            .iter()
+            .map(|(&(row, column), &cached)| json!({"row":row,"column":column,"cached":cached}))
+            .collect::<Vec<_>>());
+        view_metadata(
+            &mut result,
+            l,
+            stats.rows,
+            stats.columns,
+            stats.formulas,
+            stats.missing,
+        );
+    }
+    Ok(result)
+}
+
+fn view_metadata(
+    result: &mut Value,
+    l: &Limits,
+    rows: usize,
+    columns: usize,
+    formulas: usize,
+    missing: usize,
+) {
+    result["rows"] = json!(rows);
+    result["row_count"] = json!(rows);
+    result["column_count"] = json!(columns);
+    result["row_offset"] = json!(l.window.row_offset);
+    result["column_offset"] = json!(l.window.column_offset);
+    result["page_rows"] = json!(PAGE_ROWS);
+    result["page_columns"] = json!(PAGE_COLUMNS);
+    result["formula_count"] = json!(formulas);
+    result["missing_formula_results"] = json!(missing);
+    if result.get("formula_cells").is_none() {
+        result["formula_cells"] = json!([]);
+    }
 }
 fn parse_csv(bytes: &[u8], l: &Limits) -> Result<Value> {
     std::str::from_utf8(bytes).map_err(|_| "csv_utf8_required")?;
     let mut reader = csv_core::Reader::new();
     let mut offset = 0usize;
-    let mut field = vec![0u8; l.text];
+    let mut field = vec![0u8; l.text + usize::from(l.view)];
     let mut used = 0usize;
     let mut row = 1usize;
     let mut col = 1usize;
@@ -627,6 +817,8 @@ fn parse_csv(bytes: &[u8], l: &Limits) -> Result<Value> {
     let mut cells = Vec::new();
     let mut record = Vec::new();
     let mut budget = 1024usize;
+    let mut column_count = 0usize;
+    let mut scanned_cells = 0usize;
     loop {
         let (state, consumed, written) = reader.read_field(&bytes[offset..], &mut field[used..]);
         // csv-core reports CRLF record boundaries before consuming the LF. Track
@@ -651,7 +843,12 @@ fn parse_csv(bytes: &[u8], l: &Limits) -> Result<Value> {
                 ensure(col <= l.columns, "column_limit")?;
                 let text = std::str::from_utf8(&field[..used]).map_err(|_| "csv_utf8_required")?;
                 bounded_text(text, l)?;
-                record.push((col, text.to_owned()));
+                scanned_cells += 1;
+                ensure(scanned_cells <= l.cells, "cell_limit")?;
+                column_count = column_count.max(col);
+                if !l.view || l.window.contains(row, col) {
+                    record.push((col, text.to_owned()));
+                }
                 used = 0;
                 col += 1;
                 if record_end {
@@ -679,9 +876,11 @@ fn parse_csv(bytes: &[u8], l: &Limits) -> Result<Value> {
             csv_core::ReadFieldResult::End => break,
         }
     }
-    Ok(
-        json!({"format":"csv","rows":row-1,"cells":cells,"formula_policy":"reject","mapping_status":"inspection_required","csv_dialect":"csv-core-0.1.13-permissive-utf8"}),
-    )
+    let mut result = json!({"format":"csv","rows":row-1,"cells":cells,"formula_policy":"reject","mapping_status":"inspection_required","csv_dialect":"csv-core-0.1.13-permissive-utf8"});
+    if l.view {
+        view_metadata(&mut result, l, row - 1, column_count, 0, 0);
+    }
+    Ok(result)
 }
 pub fn parse_bytes(input: &[u8], config: &[u8]) -> Value {
     let run = || -> Result<Value> {
