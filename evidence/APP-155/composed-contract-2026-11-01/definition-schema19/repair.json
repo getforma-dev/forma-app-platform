@@ -1,0 +1,29 @@
+{
+  "scope": "Definition campaign fixture aligned with the already reviewed schema19 Workspace adoption column grants; no production or migration change.",
+  "ci_failures": [
+    {
+      "run_id": 41362433954,
+      "step": "Qualify typed definition admission and re-admission (APP-010)",
+      "private_log_sha256": "8a533606eb54ff905e03a49806de967849c200fb51f0a45cfc305dd6f2ae5a5b"
+    },
+    {
+      "run_id": 41362439167,
+      "step": "Qualify typed definition admission and re-admission (APP-010)",
+      "private_log_sha256": "72852a3d0d2490c4a413cb89512f2ad6a71b25b7a85f0432d5041aa44419e204"
+    }
+  ],
+  "cause": "The existing role-separation probe expected Workspace UPDATE(saved_work.version) to fail, but migration19 intentionally grants that column for fenced presentation adoption. The test transaction was rolled back.",
+  "repair": "Retain the refusal boundary with the still-forbidden context column and explicit Control/Data version denials. Positively update publication_id/version on one exact local work, observe version+1, require zero foreign rows, then roll back and compare the original version and complete footprint.",
+  "limits": "The SQL role grants are tenant-scoped. Current owner and immutable-presentation authorization are application/storage adoption checks qualified separately by the composer campaign; this receipt does not claim creator RLS for UPDATE.",
+  "command": "just campaign definition",
+  "passed": true,
+  "checks": 19,
+  "runtime_seconds": 22.32,
+  "report_sha256": "179214b729b41a8ecaa01529c510b41f5cebbeaf5b9136a22e05132859b904da",
+  "private_local_log_sha256": "59330614cda45611be748130ea2d3026f01450dba3d7bb0322c9e27acae6926e",
+  "source_sha256": {
+    "app/src/storage/definition_qualification.rs": "def27308f5561f8800d535cbcdf65926b090991028d6049e9acce8f177a6bd25",
+    "app/migrations/0019_work_presentation.sql": "4639659bbc6542f428a723004a5c35a4d6540795eb73682e6faf73e087536cd9"
+  },
+  "independent_review": "Peer reviewed test delta; no production/schema change or weakened owner/adoption predicate."
+}

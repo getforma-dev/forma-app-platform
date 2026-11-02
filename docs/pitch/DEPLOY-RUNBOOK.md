@@ -2,15 +2,17 @@
 
 This runbook redeploys the existing `GenuiSyntheticFoundation` stack on beta.getforma.dev with a new pitch build from `pivot/pitch-mvp`. It is the APP-078 window runbook (`evidence/APP-078/prep/RUNBOOK.md`) cut down to a redeploy, and it reuses that runbook's names and helpers (`$PRIV`, `$WR`, `$STACK`, `$CLUSTER`, `$SERVICE`, `$ASSETS`, the operator-task run pattern, `infra/scripts/preflight.py`).
 
-It follows the sequence used by the pitch redeploys of October 30–31. [RELEASES.md](RELEASES.md) records eight pitch activations, TD:5 through TD:12, after the Phase 1 go-live at TD:4:
+For the current clean beta, use [CLEAN-TRIAL-DEPLOY.md](CLEAN-TRIAL-DEPLOY.md) with these shared operator procedures. Its current status and linked receipts supersede the historical seeded-demo baseline below. Preserve the existing trial identifiers, data, accounts and invitations; do not replay initial provisioning or the sandbox seed/library/grant steps.
+
+[RELEASES.md](RELEASES.md) preserves the October 30–31 pitch activations, TD:5 through TD:12, after the Phase 1 go-live at TD:4, and the later clean deployments. The current redeploy sequence is:
 
 1. preflight with `service_desired_count: 0`;
 2. change set;
-3. execute (the service goes to 0 here);
-4. snapshot;
-5. migrate;
-6. seed and grants;
-7. `preflight.py --activate`.
+3. explicitly stop every existing application/broker service and prove desired/running/pending `0/0/0`; prove prior absence for a service being introduced;
+4. execute and recheck stopped state;
+5. snapshot and migrate only when the schema changes;
+6. seed/library/grants only for a separately reviewed sandbox fixture, never the clean trial;
+7. `preflight.py --activate`, then verify application health and broker health when present.
 
 Every step marked **[MUTATION]** needs Victor's word, recorded verbatim in `$PRIV/approvals.md`. **[read]** steps and local steps need none.
 
@@ -32,13 +34,13 @@ The operator venv is `app/operator/.venv` (`just setup`), not `opvenv`.
 
 Some steps involve secrets: the Anthropic key, the Slack bot token and signing secret, and a member's agent token. Victor runs those steps himself. Values are read from the clone's `.env` by `app/scripts/read_env.py` and piped, so they never appear in chat, in argv, in shell history or in a log.
 
-## Latest recorded deploy (2026-10-31; re-observe before use)
+## Historical seeded-demo baseline (2026-10-31)
 
-This is the tracked history in [RELEASES.md](RELEASES.md) and the October 31 handoff, not a new AWS observation. The local trunk has subsequent, undeployed work. Step 1 must establish the actual live revision, window, health and schema before preparing another deploy.
+This table preserves the October 31 handoff, not the current deployment or a new AWS observation. Use the [clean-beta status](CLEAN-TRIAL-DEPLOY.md) and [RELEASES.md](RELEASES.md) for subsequent recorded deployments. Step 1 must still establish the actual live revision, window, health and schema before preparing another deploy.
 
 | Item | Value |
 | --- | --- |
-| Last recorded build | `3901992` (APP-117 alias-leak fix), TaskDefinition:12 |
+| Build at that handoff | `3901992` (APP-117 alias-leak fix), TaskDefinition:12 |
 | Window | TD:12's full window ID is not recorded in Git; resolve it from the private ledger/input and confirm it against the live stack. Do not reuse the TD:8 window ID. |
 | Database | Schema 13 is inferred from that candidate's migration manifest in RELEASES.md; verify the live catalog before choosing migrations. The current source manifest is not the live database. |
 | Library | 20 apps recorded in Northstar; inspect current grants when performing the operator steps |
@@ -51,23 +53,26 @@ Determine the current ledger state before changing it. Activated windows cannot 
 
 ## Downtime
 
-The service template pins `ServiceDesiredCount` to `0` (the only allowed value). Every change set that modifies the `Service` resource therefore sets the desired count to 0 when it executes. A new image always does this, because the task definition is replaced. ECS then stops the running task straight away: the service is configured stop-then-start (minimum 0 %, maximum 100 %), so one task at most ever runs. This is what happened on 2026-10-30: after each execute the service sat on the new revision at count 0.
+The service template pins `ServiceDesiredCount` to `0`, but activation changes the running services to count one outside CloudFormation. A later change set can modify a service without reapplying an unchanged desired-count property. Neither a task-definition replacement nor the service deployment percentages prove that running tasks will stop. The October 30 observations of count zero after execution remain historical outcomes, not a safe precondition for another deployment.
 
-So no separate scale-to-zero is needed before the change set. Keep the site up while the change set is created and reviewed (steps 3.1–3.5). The outage starts at **3.6 (execute)** and lasts until **6.1** reports a healthy target. That covers:
+Keep the site up while the change set is created and reviewed (steps 3.1–3.5). Before executing it, explicitly stop every existing application/broker service **[MUTATION]** and observe desired/running/pending `0/0/0`. For an initial deployment that introduces a service, establish its prior absence instead. Later clean redeploys must stop **both** services even when both appear in the change set. Never replace a stop schedule while its tasks run. The outage begins with this explicit stop and lasts until **6.1** establishes application health and, for the clean profile, broker health. That covers:
 
 - the stack update;
 - the snapshot and migrations, when the schema changes;
-- the library steps;
+- any separately reviewed sandbox library steps (excluded from the clean trial);
 - the task start: up to 60 s of container start period, a 90 s grace period, and two ALB checks 30 s apart.
 
 Plan for about 10–15 minutes with a migration (decision P4), and less without one. Every signed-in member is signed out by the restart.
 
-If the change set does **not** modify `Service`, the old task keeps running at count 1. This happens when only the operator or qualification image changed, or only the expiry. In that case, scale it to zero explicitly **[MUTATION]** before 3.6. The stop schedule must never be replaced while compute runs (`infra/README.md`, "Updating an existing stack"):
+Record the scoped authorization and stop receipt using the reviewed operator channel. For each existing service, use its exact identity from the observed stack (`infra/README.md`, "Updating an existing stack"). The application calls are:
 
 ```bash
-aws ecs update-service --cluster $CLUSTER --service $SERVICE --desired-count 0
-aws ecs wait services-stable --cluster $CLUSTER --services $SERVICE
+aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --desired-count 0
+aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE"
 ```
+
+For an existing clean-trial broker, repeat for the exact `SharedBrokerServiceName` from the observed stack and require both services to be `0/0/0`; an introduced broker instead needs the prior-absence observation above. A stable-service waiter alone is insufficient. The execute wrapper does not perform this stop or enforce its precondition; its post-execution output is an observation, not a gate. The clean migration helper checks stopped state separately before migration.
 
 ## 0. Local (no AWS)
 
@@ -144,7 +149,7 @@ Steps 2.1–2.2: **`just deploy push <window-id> --approved "…"`** (digests in
   | Change | Resources |
   | --- | --- |
   | Replace (a new revision; task definitions are immutable) | `Task…`, `RollbackTask…`, `MigrationTask…` (service digest); `OperatorTask…` (if the operator digest changed); `QualificationTask…` (if the qualification digest changed) |
-  | Modify, `Replacement: False` | `Service…` (new task definition; `DesiredCount` from the parameter, 0) |
+  | Modify, `Replacement: False` | `Service…` (new task definition; the template's `DesiredCount: 0` is not proof of stopped runtime state) |
   | Modify, only if the expiry changed | `DeploymentExpiry` (new `at(...)`) |
   | May appear as Modify | `ExecutionRoleDefaultPolicy…`, `MigrationExecutionRoleDefaultPolicy…`, `QualificationExecutionRoleDefaultPolicy…`, `OperatorImagePull`. They name the repository derived from a digest parameter. On 2026-10-30, same-repository redeploys listed none of them. |
 
@@ -161,10 +166,10 @@ Steps 2.1–2.2: **`just deploy push <window-id> --approved "…"`** (digests in
   - any Modify of an existing secret (`ProviderCapabilities`, `AuthConfiguration`, `ComposerModel`, `SlackApp`, `OperatorInvitationInput`, `MigrationSecret`). A changed secret resource can rewrite its live value with the template's placeholder.
   - a DNS change;
   - anything in the change set that `cdk-diff.txt` does not explain.
-- [ ] 3.6 Execute **[MUTATION]** → **`just deploy execute <window-id> --approved "…"`** (refuses without the 3.4.4 review file). **The outage starts here.**
+- [ ] 3.6 Execute **[MUTATION]** → **`just deploy execute <window-id> --approved "…"`** (refuses without the 3.4.4 review file). First retain the explicit stop/absence observations required under **Downtime**; the outage has already begun for existing services. The wrapper does not enforce that pre-execution boundary.
   1. Wait for `UPDATE_COMPLETE`.
   2. Save `aws cloudformation describe-stacks --stack-name $STACK > $W/stack-after.json`, and copy it to `$PRIV/stack-after.json` for the APP-078 operator-task run pattern.
-  3. Observe the stop rather than inferring it from the parameter: `aws ecs describe-services --cluster $CLUSTER --services $SERVICE` [read] shows desired 0, running 0, pending 0 and the new `TaskDefinition` output. Wait with `aws ecs wait services-stable` if a task is still draining. A desired count other than 0 is a stop; see "Downtime" above.
+  3. Recheck the application and, when present, broker services **[read]**: each must show desired 0, running 0, pending 0 and its expected new task definition. Preserve the observations. Do not continue to migration or activation with nonzero counts or an unresolved outcome; reconcile under **Downtime** rather than inferring a stop from the template or printed wrapper output.
 
 ## 4. Secrets: Victor runs these [MUTATION] (no recipe, by design)
 
@@ -201,6 +206,8 @@ A new value reaches the service at its next task start. Here that is the activat
 
 Skip 5.1–5.2 if 0.6 found no schema change.
 
+**Clean-trial boundary:** skip 5.3–5.5. The clean window wrappers refuse sandbox seeding, library upload and library grants. Follow [CLEAN-TRIAL-DEPLOY.md](CLEAN-TRIAL-DEPLOY.md) for initial empty-organization provisioning; on a redeploy preserve the existing organization, accounts, data and invitations without repeating those initial steps.
+
 - [ ] 5.1 → **`just deploy snapshot <window-id> --name genui-pitch-pre-migration-schema<N>-<yyyymmdd> --approved "…"`**. Take an RDS snapshot named `genui-pitch-pre-migration-schema<live version>-<date>` and wait for `available`.
 - [ ] 5.2 → **`just deploy migrate <window-id> --approved "…"`** (migrate, then verify-catalog; run it twice; each run keeps `run-<label>-<n>.*`). Run the operator task `migrate` twice. Both runs report `database_version` equal to the candidate's manifest (12 if `0012` lands), and the second output is identical. Then run `verify-catalog`: the same `catalog_version`, read-only.
 - [ ] 5.3 → **`just deploy seed <window-id> --approved "…" -- --set=--organization=<org>`**. Run `seed-library --organization 00000000-0000-4000-8000-000000000001` (Northstar) twice. The repeat reports `changed: false`. The library holds 20 apps at `422d332`; the first run reports the candidate catalog's count.
@@ -222,11 +229,11 @@ If the original `RunTask` response was lost, stop and reconcile the original req
 
   The window now records its activation request, so it can no longer be abandoned. Activation checks that each of these matches the reservation:
   - the stack parameters;
-  - the stop schedule;
-  - the live revision's image and its exact five injected secrets;
+  - the stop schedules required by the selected profile;
+  - the live revision's image and exact configured secret set, including the broker client configuration for a clean trial;
   - the deny-all rollback revision.
 
-  It refuses the Anthropic key, the Slack token or the Slack signing secret as a plain environment variable. Wait until the service is stable with one healthy target. **The outage ends here.**
+  It refuses the Anthropic key, the Slack token or the Slack signing secret as a plain environment variable. Wait until the application is stable with one healthy target and, for a clean trial, the broker health check also passes. **The outage ends here.**
 
   `just deploy activate` then waits (up to 10 minutes) for `/health/live` to answer 200, records the activation in `release.json`, appends the window's row to [RELEASES.md](RELEASES.md) and creates the annotated tag `beta/<yyyymmdd>-<sha7>` on the candidate and pushes it to `origin` (ADR-013 D13.2, D13.5; a Git mutation inside this approved step). Commit the RELEASES.md row on `pivot/pitch-mvp` with the command it prints. If the target is not healthy in time, no row and no tag are written; once it is, `just deploy activate <window-id> --record-only --approved "…"` does only that part.
 
@@ -272,7 +279,8 @@ Each build checks the database against the catalog it embeds (`storage/catalog.r
 
 | Where it fails | What to do |
 | --- | --- |
-| Before 3.6 (execute) | Nothing live changed. Delete the change set if wanted (**[MUTATION]**, harmless). Run `preflight.py --ledger $PRIV/budget-ledger.json --abandon <new window id>`: the live window's input is then live in the ledger again. The service never stopped. |
+| Before the explicit stop and 3.6 (execute) | If no live mutation occurred, the services remain as observed. Delete the change set if wanted (**[MUTATION]**). Abandon only a reserved, never-activated successor under `preflight.py --ledger $PRIV/budget-ledger.json --abandon <new window id>`; this restores the previous window's ledger binding, not runtime state. |
+| After the explicit stop, before 3.6 | The services have stopped even though the stack update has not run. Reconcile any unknown stop or execution outcome first. If abandoning a never-activated successor, verify that the prior template, task definitions, reservation and unexpired stop schedules still match before an authorized restart under the previous window. Preserve both-service observations; local abandonment does not restart either service. |
 | 3.6 rolls back (`UPDATE_ROLLBACK_COMPLETE`) | CloudFormation restored the previous template and parameters, and the stack policy forbids replacing or deleting the database. The service may sit at count 0. Run `--abandon <new window id>`, then `preflight.py --activate` with the **live window's own input** at count 1. Its parameters match the restored stack. |
 | After 3.6, before 5.2 (no migration ran), never activated | Fix forward, or put the stack back on the previous template **[MUTATION]**. To put it back:<br>1. Run `--abandon <new window id>`.<br>2. Re-run `preflight.py --input <the previous window's input>` at count 0. It reuses that window's reservation and prints its receipt.<br>3. Compose a change set with `$WR change-set` from that receipt and the previous template: `$W/template-before.json` from 1.3, or `$PRIV/windows/<previous>/template.json`. Change `ChangeSetName` and `ClientToken` to fresh values first; they only identify the request.<br>4. Review it as in 3.5: task definitions replaced back and the service modified.<br>5. Execute it, then run `preflight.py --activate` with the previous window's input at count 1.<br>This only works while that window's `deployment_expires_at_utc` is still more than 10 minutes away. Otherwise make a new window with the previous digests and template, superseding the live window. |
 | After 6.1 (activated), no migration ran | `--abandon` refuses: the window may have run. Make a rollback **window**: a new `window_id`, the previous build's three digests and the previous `template.json`, with `supersedes_window_id` set to the failing window. Then run 3–6, skipping 5.1–5.2. |

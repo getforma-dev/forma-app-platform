@@ -1,0 +1,27 @@
+# Composed app implementation — November 1
+
+Victor explicitly prioritized this implementation and AWS delivery after the initial planning-only pass. The current branch is `codex/composed-app-implementation`, based on trunk `0fd3968`. This record separates implemented behavior, observed qualification and release status.
+
+## Implemented behavior
+
+- APP-155: one semantic document with an app header, introduction, ordered sections and responsive components across the member page, united canvas and authorized shared view. Existing definitions retain their default layout.
+- APP-156: generic named actions target an admitted component, either navigating to it or opening it in a dialog. The action label and target are independent of app domain. Modal-only forms retain their original nodes, drafts and command identity. Guests receive only read-authorized targets.
+- APP-157: persisted, bounded appearance/accent/density/typography tokens. The owner’s **Design app** editor changes sections, component order/placement, actions and theme through admission, immutable publication and a fenced adoption of the exact saved work. Records and sibling works are preserved.
+- APP-158/159: admitted record lists, count/money summaries, monthly trends, rankings and honestly labeled preset budgets. Declared restaurant/date/enum filters operate on the whole bounded snapshot before list pagination or ranking. Exact money arithmetic, receipts, current authority and no-partial-total refusals are shared across member and guest routes.
+- APP-160: an empty Dining tracker template uses those general components. The reproducible browser scenario creates it through normal product controls and submits real audited records; no seeded metrics, private source or special tenant branch supplies its numbers.
+
+The extension is contract edition `impl-2026-11-01.2` and additive schema 19. Existing published definitions remain valid. Schema 19 adds only the narrow update privileges needed to adopt a presentation-only publication; admission forbids changing data contracts through that endpoint. Rollback requires a schema-compatible runtime or the reviewed database recovery path, not blindly restarting a catalog-18 executable.
+
+## Qualification and delivery
+
+Source implementation and final local browser integration are complete; exact-commit CI and AWS delivery remain in progress. The [contract and adoption evidence](../../evidence/APP-155/composed-contract-2026-11-01/README.md) records real PostgreSQL concurrency, stale/policy/deadline refusal, saved-record preservation and schema qualification. The [member journey](../../evidence/APP-160/member-browser-2026-11-01/README.md) passes 12 checks on strict build `e4f3f4839e09`, including real commands, exact totals, stale design refusal, unknown-outcome retry and canvas component identity. The [guest journey](../../evidence/APP-160/guest-browser-2026-11-01/README.md) records ordinary local acceptance, connected placement, already-open live updates and actual revocation. [Keyboard/canvas evidence](../../evidence/APP-160/keyboard-canvas-2026-11-01/README.md) adds 7 focused checks. Manual screen-reader and genuine hosted signup acceptance are not inferred from these synthetic local identities.
+
+All 20 local check steps passed across retained runs; the final full Rust check passes 373 library tests, 8 native binary tests and 3 doctests, and the final strict frontend check passes all 103 tests. Composer and record-component campaigns use real disposable PostgreSQL databases, and schema 19 qualification passes 385 checks. The definition campaign passes all 19 checks after replacing an obsolete pre-schema-19 version-denial assertion with explicit allowed-column, forbidden-column, role, foreign-tenant and rollback probes; no production privilege was relaxed to satisfy it. An existing action campaign exposed double conversion between normalized action money and human form text; the repaired boundary passes all 14 original campaign checks without changing the expected $86.00 result. [Operator and CI preflight evidence](../../evidence/APP-140/composed-app-preflight/README.md) records the packaged receipt-validator correction and a bounded runtime-suite timeout with preserved failure diagnostics. Exact candidate, image qualification and actual deployment evidence will be recorded after those stages pass.
+
+Review found and repaired a competing-save adoption race, unsafe fresh-key behavior after an ambiguous command failure, filter-scope retention on query failure, nullable ranking-group collisions, native transport binding mismatches, dialog focus escape, canvas pointer retargeting and theme inheritance on moved cards. These are actual implementation findings, not planning tasks.
+
+## Explicit boundaries
+
+Actions currently support same-app navigation and component dialogs. Arbitrary script execution, arbitrary URLs, workflow automation, receipt-photo verification and CSV export are not implied. Budget values are admitted presets, not a fake editable budget record. Bounded record projections refuse workloads above 2,000 rows or 512 KiB rather than calculating misleading totals from a prefix.
+
+APP-161 sleep/wake remains future work as originally requested. The real hosted recipient’s product email verification, full signup/share acceptance and three-minute recording remain distinct APP-139/140 obligations. Existing owner data and invitations must be preserved during this release. Older phase/board gates are not closed merely because these capabilities now have code.

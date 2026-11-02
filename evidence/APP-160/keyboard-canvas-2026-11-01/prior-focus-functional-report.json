@@ -1,0 +1,14 @@
+{
+  "scope": "Read-only local synthetic UI: no injected event behavior or sessions; existing app; no command/design mutations",
+  "checks": [
+    "The first ordinary pointer click on the newly placed app card Unite button opens the app frame.",
+    "After Fan out, the real navigator reveals the parked form; ordinary pointer clicks focus its field and Focus opens the exact original node with the unsent draft.",
+    "Return, app-card navigation and re-Unite restore the same form node, unsent draft and original idempotency key."
+  ],
+  "errors": [],
+  "mutation_posts": 0,
+  "started": "2026-11-01T23:31:40.155Z",
+  "manifest_sha256": "0be07e344f820ef3ae28c7b0de66eecb9800f23e89e26fd2818c74a1aaad3952",
+  "passed": true,
+  "completed": "2026-11-01T23:31:51.886Z"
+}

@@ -107,10 +107,26 @@ pub type Execution<'a> =
 /// counting and race-injecting wrappers in tests (the dispatch counter).
 pub trait Executor: Send + Sync {
     fn execute<'a>(&'a self, run: &'a QueryRun, deadline: Duration) -> Execution<'a>;
+    fn execute_records<'a>(
+        &'a self,
+        _run: &'a crate::storage::RecordComponentsRun,
+        _parameters: &'a Value,
+        _deadline: Duration,
+    ) -> super::record_components::RecordExecution<'a> {
+        Box::pin(async { Err(QueryError::Refused("record_engine_unavailable".into())) })
+    }
 }
 impl Executor for Engine {
     fn execute<'a>(&'a self, run: &'a QueryRun, deadline: Duration) -> Execution<'a> {
         Box::pin(Engine::execute(self, run, deadline))
+    }
+    fn execute_records<'a>(
+        &'a self,
+        run: &'a crate::storage::RecordComponentsRun,
+        parameters: &'a Value,
+        deadline: Duration,
+    ) -> super::record_components::RecordExecution<'a> {
+        Box::pin(Engine::execute_records(self, run, parameters, deadline))
     }
 }
 
@@ -150,6 +166,10 @@ impl Work {
 
 pub fn router(work: Arc<Work>) -> Router {
     Router::new()
+        .route(
+            "/v1/work/{app}/{work}/record-components",
+            get(super::record_routes::member_route).post(super::record_routes::member_route),
+        )
         .route("/v1/work/{app}/{work}/queries/{view}", post(query))
         .route("/v1/library", get(library))
         .route("/w/{app}/{work}", get(work_page).post(run_page))
@@ -667,6 +687,7 @@ pub(crate) async fn document_forms(
             );
             if let Some(mut form) = super::canvas::form_card(saved, &view) {
                 form.id = part.id.clone();
+                form.component = part.id.clone();
                 form.title = part.title.clone();
                 forms.push(form);
             }
@@ -703,10 +724,44 @@ async fn document(
         .map_err(|e| storage_refusal(&e))?;
     let prepared =
         document_forms(&work.auth, member, cookie, &outline, &listing, selections).await?;
+    let (record_components, record_run) = if outline
+        .parts
+        .iter()
+        .any(|part| super::record_routes::is_record_kind(&part.kind))
+    {
+        match super::record_routes::member_components(
+            work,
+            member,
+            app,
+            saved,
+            &super::record_components::default_parameters(),
+        )
+        .await
+        {
+            Ok(batch) => (batch.components, batch.run),
+            Err(response) if response.status() == StatusCode::NOT_FOUND => return Err(response),
+            Err(_) => (super::record_routes::unavailable_outline(&outline), None),
+        }
+    } else {
+        (Vec::new(), None)
+    };
+    let record_cards = page::automatic_records(
+        &outline,
+        super::canvas::records_cards(app, saved, &listing, member.principal()),
+    );
+    let records_truncated = listing.truncated && !record_cards.is_empty();
     let chrome = page::WorkChrome {
+        record_components,
+        record_run,
         publication: listing.publication.clone(),
         work_version: listing.work_version,
         can_write: listing.can_write,
+        can_edit_presentation: !crate::composer::matcher::seeded_work(saved)
+            && stores
+                .workspace
+                .can_edit_presentation(member, app, saved)
+                .await
+                .map_err(|e| storage_refusal(&e))?,
         can_share: stores
             .workspace
             .can_share_live_work(member, app, saved)
@@ -716,8 +771,8 @@ async fn document(
         work: saved.into(),
         forms: prepared.forms,
         form_choices: prepared.choices,
-        record_cards: super::canvas::records_cards(app, saved, &listing, member.principal()),
-        records_truncated: listing.truncated,
+        record_cards,
+        records_truncated,
         canvas: page::canvas_href(saved),
         ..Default::default()
     };
@@ -750,6 +805,13 @@ async fn release_document(
         || listing.can_write != chrome.can_write
     {
         return Err(http::unavailable());
+    }
+    if let Some(run) = &chrome.record_run {
+        stores
+            .data
+            .release_record_components(member, run)
+            .await
+            .map_err(|error| storage_refusal(&error))?;
     }
     Ok(())
 }

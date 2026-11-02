@@ -1,3 +1,5 @@
+import { applyPresentationTheme } from '../presentation/presentation';
+import { recordComponentsFor } from '../record-components/controller';
 // The canvas island (ADR-011; design D10: one canvas island, geometry and
 // keyboard from genui-runtime, vendored in `../canvas-vendor`). It adopts the
 // server-rendered cards onto the pan/zoom surface, runs every view through
@@ -21,6 +23,8 @@ import { refreshCommands } from './slash';
 import { refreshLedger, wireLedgerCard } from './ledger';
 import { wireReceiptAttach } from './receipt';
 import { startConnectedApps } from '../shared/canvas-controller';
+
+const recordControllers = new Map<string, ReturnType<typeof recordComponentsFor>>();
 
 type Group = {
   app: string;
@@ -531,14 +535,14 @@ export const stackBoard = {
   announce,
   flash,
   /** APP-106: a work's group as the frames need it (cards in definition order). */
-  group(work: string): { app: string; work: string; title: string; cards: HTMLElement[]; origins: string[]; pinned: boolean; canShare: boolean; partLayout: string } | null {
+  group(work: string): { app: string; work: string; title: string; cards: HTMLElement[]; origins: string[]; pinned: boolean; canShare: boolean; canEditPresentation: boolean; presentation: string; partLayout: string } | null {
     const group = groups.get(work);
     if (!group) return null;
     const origins = Array.from(group.section.ownerDocument.querySelectorAll<HTMLElement>('.cv-origin'))
       .filter((chip) => group.cards.some((card) => card.contains(chip)))
       .map((chip) => chip.textContent ?? '')
       .filter(Boolean);
-    return { app: group.app, work: group.work, title: group.title, cards: [...group.cards], origins, pinned: group.pinned, canShare: group.section.dataset.canShare === 'true', partLayout: group.section.dataset.partLayout ?? '' };
+    return { app: group.app, work: group.work, title: group.title, cards: [...group.cards], origins, pinned: group.pinned, canShare: group.section.dataset.canShare === 'true', canEditPresentation: group.section.dataset.canEditPresentation === 'true', presentation: group.section.dataset.presentation ?? '{}', partLayout: group.section.dataset.partLayout ?? '' };
   },
   /** APP-106: keeps a group's hand arrangement (a unite or a break apart moved it). */
   pin(work: string): void {
@@ -588,6 +592,7 @@ const liveRuns = new Map<string, number>();
  * `live` marks a re-run a live event asked for (the cards pulse on arrival).
  */
 export function runGroup(work: string, live = false): void {
+  void recordControllers.get(work)?.refresh();
   // APP-113: a burst of live events for one work runs its cards once.
   window.clearTimeout(liveRuns.get(work));
   liveRuns.delete(work);
@@ -625,14 +630,20 @@ function runGroupNow(work: string, live: boolean): void {
 }
 
 function wireCommand(form: HTMLFormElement, group: Group, card: HTMLElement): void {
+  let pending = false;
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    if (pending || form.dataset.commandInvalidated) return;
+    pending = true; form.dataset.commandPending = 'true';
+    const controls = Array.from(form.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input,select'));
+    for (const control of controls) control.disabled = true;
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     const outcome = card.querySelector<HTMLElement>('[data-outcome]');
     if (button) button.disabled = true;
     card.dataset.state = 'loading';
     if (outcome) outcome.textContent = 'Committing…';
     void submitCommand(form, group.app, group.work).then((result) => {
+      pending = false;
       if (!outcome) return;
       outcome.replaceChildren();
       if (result.kind === 'committed') {
@@ -654,8 +665,9 @@ function wireCommand(form: HTMLFormElement, group: Group, card: HTMLElement): vo
         outcome.setAttribute('role', 'alert');
         outcome.append(result.message);
         if (result.kind === 'unconfirmed' || result.kind === 'busy') {
-          if (button) button.disabled = false;
+          if (button && !form.dataset.commandInvalidated) button.disabled = false;
         } else {
+          delete form.dataset.commandPending;
           const again = el(card.ownerDocument, 'button', { type: 'button', class: 'cv-secondary' }, 'New record');
           again.addEventListener('click', () => void freshForm(group, card));
           outcome.append(' ', again);
@@ -716,6 +728,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean, include: (card
     // APP-120 gap / APP-121: every card knows its app and work once it
     // leaves the section, so the app card gets its address chip and every
     // card its label on whichever path placed it.
+    applyPresentationTheme(card, section.dataset.presentation ?? '{}');
     card.dataset.app = app;
     card.dataset.work = work;
     decorateCard(card);
@@ -723,6 +736,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean, include: (card
   const title = section.getAttribute('aria-label') ?? 'App';
   const group: Group = { app, work, title, section, cards, items: [], pinned: saved.size > 0, saved };
   groups.set(work, group);
+  if (host && cards.some(card => card.querySelector('[data-record-component]'))) recordControllers.set(work, recordComponentsFor(host.ownerDocument.body, { app, work }));
   const window_ = section.querySelector<HTMLFormElement>('form[data-window]');
   window_?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -937,6 +951,7 @@ async function showWaiting(app: string, work: string): Promise<void> {
 
 /** ADR-011 scenarios: re-reads a work's records cards (after a command this browser confirmed). */
 export async function refreshGroupRecords(work: string, live = false): Promise<void> {
+  void recordControllers.get(work)?.refresh();
   const group = groups.get(work);
   if (!group) return;
   const shown = shownCards(group);
@@ -952,6 +967,29 @@ export function focusCard(card: HTMLElement): void {
   if (!canvas || !item) return;
   canvas.centerItem(item);
   flash(item);
+}
+
+/** A presentation publish changes the pin, never a draft's command identity. */
+export async function refreshGroupPresentation(app: string, work: string): Promise<boolean> {
+  const group = groups.get(work); if (!group || group.app !== app) return false;
+  const fresh = await fetchGroup(app, work); if (!fresh || groups.get(work) !== group) return false;
+  group.section.dataset.presentation = fresh.presentation?.json ?? '{}';
+  group.section.dataset.canEditPresentation = String(fresh.can_edit_presentation === true);
+  group.section.dataset.partLayout = fresh.part_layout ?? '';
+  for (const card of group.cards) {
+    applyPresentationTheme(card, fresh.presentation?.json ?? '{}');
+    const form = card.querySelector<HTMLFormElement>('form.cv-command'); if (!form) continue;
+    const next = fresh.forms.find(value => value.id === card.dataset.card);
+    const publication = form.querySelector<HTMLInputElement>('input[name="publication_id"]')?.value;
+    if (!next || publication !== next.publication) {
+      form.dataset.commandInvalidated = 'true';
+      for (const control of form.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('input,button,select')) control.disabled = true;
+      let notice = card.querySelector<HTMLElement>('[data-presentation-stale]');
+      if (!notice) { notice = el(card.ownerDocument, 'p', { role: 'status', 'data-presentation-stale': '' }); form.append(notice); }
+      notice.textContent = 'This app changed. Your draft is kept; reload the app before saving.';
+    }
+  }
+  return true;
 }
 
 async function fetchGroup(app: string, work: string) {
@@ -1211,6 +1249,7 @@ async function swapGroup(fromWork: string, toApp: string, toWork: string, labels
     resized?.unobserve(item);
     canvas.removeItem(item, { selectFallback: false });
   }
+  recordControllers.get(fromWork)?.dispose(); recordControllers.delete(fromWork);
   old.section.remove();
   const entries = Array.from(groups.entries());
   groups.clear();

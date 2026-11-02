@@ -1,0 +1,38 @@
+{
+  "qualification": "local PostgreSQL with real command commits and confined Python child; synthetic provider identity only",
+  "native_campaign": {
+    "command": "just campaign record-components",
+    "passed": true,
+    "checks": 8,
+    "duration_seconds": "30.76",
+    "report_sha256": "57486f911ad489778764dd2a2a4e92acc972b86c9cca7a2494b4560803b24b32"
+  },
+  "rust_units": {
+    "command": "cargo test --locked -p forma-app-platform --lib query::record_components::tests",
+    "passed": 3
+  },
+  "python_units": {
+    "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -p test_record_engine.py -v",
+    "passed": 7
+  },
+  "source_sha256": {
+    "app/src/storage/record_components.rs": "2e92bc2adb3b2a0e3e0a127a595edca5ec07cd78473af3c2dcc136c03f73aecd",
+    "app/src/storage/record_components_campaign.rs": "1a5bb89b0d8f7ee4874f4b811516f4658a893cd8aec343b9b310e570efbf3470",
+    "app/src/query/record_components.rs": "398d5d53bf721e293475454d8ac51b416be81eb1cd2271b270aa8cee6cbb80cb",
+    "app/src/admission/record_receipt.rs": "1eb859d1d2cb5cc650e0cca479833247b100764a1e1943aa4b28ce48f1579869",
+    "app/runtime/record_engine.py": "5a35561a9f9d4fc2683fc46dced585ed83f176dec26b1b49c272f370c9feefe3",
+    "app/runtime/test_record_engine.py": "903f9639ddfe1264bb3493c23da05bc28d9681b22faf7ca307a53b2bca02ea4d",
+    "app/runtime/query_engine.py": "da3badd299effefe8911c8d0ef872a0e03ead6dc55c641f58db5543fe3cba7c5",
+    "contracts/record_components_contract.py": "480365204d09538778b9a687c35e2a27f19169a96608dc8c15d3eacda3cadcee"
+  },
+  "limits": [
+    "This is local qualification, not a hosted deployment.",
+    "Browser and full integration gates are recorded separately.",
+    "The 2001-row overflow fixture was inserted by the isolated test operator to test the bound; displayed fixture records and the 202 newer rows were saved by ordinary commands.",
+    "The budget is an admitted preset. No budget Set action or saved budget-record claim is made."
+  ],
+  "clippy": {
+    "command": "cargo clippy --locked -p forma-app-platform --all-targets --features dev-stand -- -D warnings",
+    "passed": true
+  }
+}

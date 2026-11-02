@@ -114,6 +114,80 @@ pub trait RecordPage: Send + Sync {
     fn record(&self, view: &RecordView) -> Response;
 }
 
+/// Exact human decimal -> canonical minor units. This is a form boundary;
+/// the JSON command API continues to accept integer minor_units unchanged.
+/// The admitted money type currently uses USD exponent2; bounded exponent
+/// handling prevents a forged form spec from creating an oversized value.
+pub(crate) fn money_minor_units(raw: &str, exponent: u64) -> Option<String> {
+    if exponent > 6 || raw.len() > 64 {
+        return None;
+    }
+    let raw = raw.trim();
+    let (negative, raw) = raw.strip_prefix('-').map_or((false, raw), |v| (true, v));
+    let (whole, fraction) = raw.split_once('.').unwrap_or((raw, ""));
+    if whole.is_empty() && fraction.is_empty()
+        || !whole.bytes().all(|b| b.is_ascii_digit())
+        || !fraction.bytes().all(|b| b.is_ascii_digit())
+        || fraction.len() > exponent as usize
+        || exponent == 0 && raw.contains('.')
+    {
+        return None;
+    }
+    let mut digits = format!(
+        "{whole}{fraction}{}",
+        "0".repeat(exponent as usize - fraction.len())
+    );
+    digits = digits.trim_start_matches('0').to_owned();
+    if digits.is_empty() {
+        digits.push('0');
+    }
+    if digits.len() > 38 {
+        return None;
+    }
+    Some(format!(
+        "{}{digits}",
+        if negative && digits != "0" { "-" } else { "" }
+    ))
+}
+fn money_major_units(minor: &str, exponent: u64) -> Option<String> {
+    if exponent > 6 {
+        return None;
+    }
+    let (negative, digits) = minor
+        .strip_prefix('-')
+        .map_or((false, minor), |v| (true, v));
+    if digits.is_empty()
+        || digits.len() > 38
+        || !digits.bytes().all(|b| b.is_ascii_digit())
+        || digits.len() > 1 && digits.starts_with('0')
+        || negative && digits == "0"
+    {
+        return None;
+    }
+    if exponent == 0 {
+        return Some(minor.to_owned());
+    }
+    let padded = format!("{digits:0>width$}", width = exponent as usize + 1);
+    let split = padded.len() - exponent as usize;
+    Some(format!(
+        "{}{}.{}",
+        if negative { "-" } else { "" },
+        &padded[..split],
+        &padded[split..]
+    ))
+}
+/// A human label, separate from the stable schema field ID.
+pub fn field_label(field: &FieldRow) -> String {
+    let label = field.id.replace('_', " ");
+    if field.kind == "money" {
+        let spec: serde_json::Value = serde_json::from_str(&field.spec).unwrap_or_default();
+        if let Some(currency) = spec.get("currency").and_then(serde_json::Value::as_str) {
+            return format!("{label} ({currency})");
+        }
+    }
+    label
+}
+
 /// The text a form input carries for a stored value, and the text back.
 fn value_text(value: &serde_json::Value) -> String {
     let get = |key: &str| {
@@ -128,7 +202,14 @@ fn value_text(value: &serde_json::Value) -> String {
     match value.get("type").and_then(serde_json::Value::as_str) {
         Some("null") => String::new(),
         Some("decimal") => get("coefficient"),
-        Some("money") => get("minor_units"),
+        Some("money") => money_major_units(
+            &get("minor_units"),
+            value
+                .get("minor_unit_exponent")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(99),
+        )
+        .unwrap_or_default(),
         Some("reference") => get("record_id"),
         _ => get("value"),
     }

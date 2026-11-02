@@ -118,7 +118,7 @@ async fn rows(fixture: &Fixture, sql: &str) -> Vec<String> {
         .collect()
 }
 /// The contract validator's verdict on one document (contracts/validate.py).
-fn contract_valid(document: &Value) -> bool {
+pub(super) fn contract_valid(document: &Value) -> bool {
     let mut child = Command::new(fixture_python())
         .current_dir(repository().join("contracts"))
         .args([

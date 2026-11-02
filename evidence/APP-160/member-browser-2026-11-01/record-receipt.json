@@ -1,0 +1,109 @@
+{
+  "actor": {
+    "kind": "member",
+    "membership_epoch": 1,
+    "principal_id": "00000000-0000-4000-8000-00000000006f"
+  },
+  "app_id": "00000000-0000-4000-8000-00000000d0a1",
+  "components": [
+    {
+      "budget": null,
+      "kind": "records_list",
+      "population": 3,
+      "truncated_page": false,
+      "view_id": "ledger"
+    },
+    {
+      "budget": null,
+      "kind": "record_summary",
+      "population": 3,
+      "truncated_page": false,
+      "view_id": "total"
+    },
+    {
+      "budget": null,
+      "kind": "record_trend",
+      "population": 3,
+      "truncated_page": false,
+      "view_id": "monthly"
+    },
+    {
+      "budget": null,
+      "kind": "record_ranking",
+      "population": 3,
+      "truncated_page": false,
+      "view_id": "restaurants"
+    },
+    {
+      "budget": {
+        "currency": "USD",
+        "minor_unit_exponent": 2,
+        "minor_units": "10000",
+        "origin": "preset"
+      },
+      "kind": "record_budget",
+      "population": 3,
+      "truncated_page": false,
+      "view_id": "budget"
+    }
+  ],
+  "definition_digest": "sha256:34c4bbd495781015802bb62f1308d2884343b2ba6c76c79cab095a09e2573c80",
+  "digest": "sha256:b56e2ba7401c29f8fe6d6ca70836e0355a6bb6c6cd84dfab748c76de6b7d5e32",
+  "kind": "record_components_receipt",
+  "operator_version": 1,
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "parameters": {
+    "filter_epoch": 1,
+    "filters": [
+      {
+        "end": "2026-12-01",
+        "id": "date_filter",
+        "start": "2026-11-01"
+      }
+    ]
+  },
+  "partial": false,
+  "policy_epoch": 1,
+  "publication_id": "b08f4d80-50d2-4e65-b3b5-1f4f430cd174",
+  "result_digest": "sha256:1aa65b713bd67a6f262d6aaa229564f9d114b6d2325ddb28c77c130773b5541a",
+  "schema_version": 1,
+  "snapshot": [
+    {
+      "collection_id": "934b4ff0-536e-43b3-972d-fbb38f4c14e1",
+      "input_id": "meals",
+      "records": [
+        {
+          "commit_sequence": 23,
+          "record_id": "ad8b3c95-d1cc-47c1-9819-c6a674950ce4",
+          "version": 1
+        },
+        {
+          "commit_sequence": 22,
+          "record_id": "a4a4967f-708e-4b25-bb9c-45559438c584",
+          "version": 1
+        },
+        {
+          "commit_sequence": 21,
+          "record_id": "df87c452-7d99-481e-aa24-775090848278",
+          "version": 1
+        },
+        {
+          "commit_sequence": 20,
+          "record_id": "b458fb69-69c0-40e0-8ffa-5f7a1bf03bf3",
+          "version": 1
+        },
+        {
+          "commit_sequence": 19,
+          "record_id": "40f5e6db-cb85-4643-af9c-6bed2d3bbb9e",
+          "version": 1
+        }
+      ],
+      "schema_id": "meal",
+      "schema_version": 1
+    }
+  ],
+  "snapshot_digest": "sha256:2964c3be24d647974c8b23320a4a8209bf3250bd030075a94f6113245ea4065a",
+  "total_scope": "full_authorized_filtered_collection",
+  "work_id": "49e07c8a-33b1-4f14-98d3-fa1871c137ce",
+  "work_version": 2
+}

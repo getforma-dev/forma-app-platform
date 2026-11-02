@@ -88,6 +88,45 @@ print(json.dumps({"parsed": result, "admission_subcommands": sorted(admission_op
 """
 
 
+def record_receipts_probe(contracts_directory="/operator/contracts"):
+    """Exercise the packaged validator and its lazy semantic dependency."""
+    return "import sys\nsys.path.insert(0, %r)\n" % contracts_directory + r'''
+import copy, json
+import validate
+uid = "00000000-0000-4000-8000-000000000001"
+digest = "sha256:" + "0" * 64
+receipt = {
+    "kind": "record_components_receipt", "schema_version": 1,
+    "organization_id": uid, "app_id": uid, "work_id": uid, "publication_id": uid,
+    "definition_digest": digest, "work_version": 1, "policy_epoch": 1,
+    "actor": {"kind": "member", "principal_id": uid, "membership_epoch": 1},
+    "operator_version": 1, "parameters": {"filter_epoch": 0, "filters": []},
+    "components": [{"view_id": "budget", "kind": "record_budget", "population": 0,
+        "truncated_page": False, "budget": {"origin": "preset", "minor_units": "10000",
+            "currency": "USD", "minor_unit_exponent": 2}}],
+    "snapshot": [], "snapshot_digest": digest, "result_digest": digest,
+    "partial": False, "total_scope": "full_authorized_filtered_collection"
+}
+def seal(value):
+    value["digest"] = validate.digest("record-components-receipt", {k: v for k, v in value.items() if k != "digest"})
+    return value
+validate.validate(seal(receipt))
+guest = copy.deepcopy(receipt)
+guest["actor"] = {"kind": "guest", "account_id": uid, "share_id": uid, "share_version": 1}
+validate.validate(seal(guest))
+invalid = copy.deepcopy(receipt)
+# Schema-valid and re-digested: this refusal requires the separately packaged helper.
+invalid["components"][0]["budget"] = None
+try:
+    validate.validate(seal(invalid))
+except validate.ContractError as error:
+    assert str(error) == "record budget provenance mismatch"
+else:
+    raise AssertionError("semantic record receipt violation accepted")
+print(json.dumps({"member": "valid", "guest": "valid", "invalid_budget": "refused"}))
+'''
+
+
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -275,6 +314,15 @@ class Checks:
         installed = [p for p in facts.get("packages", []) if p.split("==")[0] not in ("pip", "setuptools", "wheel")]
         self.expect("installed packages are exactly the hash-locked set", installed == locked,
                     {"installed": installed, "locked": locked})
+
+    def record_receipts(self):
+        result = self.docker_run("record-receipts", entrypoint=["python3", "-I", "-c", record_receipts_probe()])
+        facts = json.loads(result["stdout"].strip()) if result["exit_code"] == 0 else {}
+        self.report["record_receipts"] = facts
+        self.expect("packaged record receipts validate both actors and refuse semantic tampering",
+                    result["exit_code"] == 0 and facts == {
+                        "member": "valid", "guest": "valid", "invalid_budget": "refused"},
+                    result["stderr"][-400:] if result["exit_code"] else None)
 
     @staticmethod
     def directories(modes):
@@ -557,6 +605,7 @@ def main():
             checks.contexts(scratch, args.base_revision)
             checks.configuration()
             checks.probe()
+            checks.record_receipts()
             checks.static()
             checks.overrides()
             checks.refusals()

@@ -1,0 +1,38 @@
+{
+  "recorded_at": "2026-11-01T23:25:29.586502+00:00",
+  "base_commit": "0fd3968a187b5a740d3e2ce3c8df7579a8ea6489",
+  "candidate": "Uncommitted codex/composed-app-implementation; these byte hashes, not the base commit, identify the tested UI source.",
+  "manifest_sha256": "4f593c7328b5fed8a954f0ffe5e9324855f7569e3fb491f02fde4efdec224104",
+  "build": "d708e8042295",
+  "source_sha256": {
+    "app/admin/src/presentation/presentation.ts": "9a470462ec30402d4fe652fe5b002efc4f0808d052c6b42c3cd7eabd21b906b6",
+    "app/admin/src/presentation/header.tsx": "565cdec1914a826876b9359629d70afbbbe8b51110d8746e5e20578789786fbe",
+    "app/admin/src/styles/presentation.css": "222da8f64fe7920d18dd2c8f54db7d698d42df05d8b00f3b8f0887efb5caa049",
+    "app/admin/src/work/app.tsx": "897956e2697e88a1d747a867b7050ba83b396bde79d8c4b983f64914ecbafcd5",
+    "app/admin/src/work/document.ts": "89ddff3df937ba71fd075f8b5566569e11abeb5c17b6957ee34d323a64fe9ba7",
+    "app/admin/src/work/render.ts": "8d7907a6af51fef1b4a4513a1d2309c65851b12e32ad085fa7e8dba37960572f",
+    "app/admin/src/shared/app.tsx": "e0d37b0fe9997711fce07aeb77657e0a0d68cde336e3a91a52949845fb4ed6fb",
+    "app/admin/src/shared/canvas.tsx": "4c73ff0c3181f4654f14ad9b3793a1e14b209c036d83c531a081ec759669fb93",
+    "app/admin/src/shared/canvas-controller.ts": "8c1e5da9ba9daf2b2d92c37bc3ff525588a7d7901b713615999aa66ca563b24e",
+    "app/admin/src/shared/document.ts": "13e5c7107d1b2e838ed43841e365b3a05c261d70257a7dec9ba2fd40c26931b1",
+    "app/admin/src/shared/parts.tsx": "2594a0d4ae725327eede03cfa57df7c973dc51e92f5024a629c9a42d561c8f9b",
+    "app/admin/src/shared/types.ts": "de39dcb0a3e547507109fd66e0a2dcc7906b1232968a5270723c161a781569ac",
+    "app/admin/test/presentation.test.ts": "4944bcc073a63f239382cc6fbc1286b2d2f932ecc5177272809490e2689f0feb",
+    "app/scripts/composed_guest_browser.mjs": "27e64eb80ef2b9dc5d5d89c9ba11bbc20b7c95c119a97e1161acc6eb7cc0a2b9"
+  },
+  "artifact_sha256": {
+    "connected-revoked.png": "98d33340ea9f7ec1b55f2013009ea7f46839a475065228ee4d982b9ace40de15",
+    "report.json": "9fc33490ade57576f58eaa54cf7ff583cf46e11a0ca0f4a133b00ed55fc27aa2",
+    "initial-native-inventory-oracle.json": "99efc471de9444c308005d99515ef850efbedb3d5a6f1b8a01aa69f111e5603c",
+    "guest-live-dialog.png": "65515e61fb1faaaa06369456a35fff526718a54d0c43794cd5dbd04886be9dd3",
+    "guest-mobile-dialog.png": "2f50ad0d554cca63da4acb62e89bd0a1850f91856a9c0e33bd788d4e5e8dde7d",
+    "connected-live-dialog.png": "bec362ec839dd626724a046f939995ca0e4641686117359a173c7732f8e85892",
+    "guest-revoked.png": "7800697bcf4d8c69f6d29df453c1ee72ddc2a7fb2bceb60b5024e6c7361edcb5"
+  },
+  "focused_tests": {
+    "command": "cd app/admin && npx tsx --test test/presentation.test.ts",
+    "passed": 7,
+    "failed": 0
+  },
+  "browser_exit_code": 0
+}

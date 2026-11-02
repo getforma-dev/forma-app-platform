@@ -1,3 +1,6 @@
+import { renderRecordComponents } from '../record-components/render';
+import type { WireRecordComponent } from '../record-components/types';
+import type { PresentationProps } from '../presentation/presentation';
 // APP-144: trusted presentation props become a closed DOM vocabulary. The
 // JSON comes from the same authorized native document route; no HTML is parsed.
 type Cell = { text: string; raw: string };
@@ -14,6 +17,7 @@ type View = {
   has_receipt: boolean; receipt_digest: string; receipt: Pair[]; receipt_json: string;
 };
 type Field = {
+  input_mode: string;
   label: string; input: string; value: string; spec: string; spec_input: string;
   writable: boolean; read_only: boolean; has_text: boolean; has_choices: boolean;
   choices: { value: string }[];
@@ -29,7 +33,7 @@ type Records = {
   rows: { record_id?: string; version: string; committed_at: string; commit_sequence: string; cells: Cell[] }[];
 };
 export type DocumentProps = {
-  title?: string; app: string; work: string; action: string; forms: Form[]; record_cards: Records[];
+  presentation?: PresentationProps; title?: string; app: string; work: string; action: string; forms: Form[]; record_cards: Records[];
   records_truncated: boolean; views: View[]; parts?: Part[]; csrf?: string;
 };
 
@@ -37,7 +41,7 @@ type Part = {
   id: string; title: string; kind: string; class: string; text: string; collection: string;
   is_note: boolean; is_form: boolean; has_selector: boolean; selection_name: string; selected: string;
   choices: { id: string; label: string; selected: boolean }[];
-  message: string; forms: Form[]; views: View[];
+  message: string; forms: Form[]; views: View[]; record_components?: WireRecordComponent[];
 };
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -68,7 +72,7 @@ function formSection(document: Document, props: DocumentProps, form: Form): HTML
   for (const [name, value] of Object.entries(hidden)) node.append(input(document, name, value));
   for (const field of form.fields) {
     const label = element(document, 'label', { class: 'document-field' }, element(document, 'span', {}, field.label));
-    if (field.has_text) label.append(input(document, field.input, field.value, 'text'));
+    if (field.has_text) { const control = input(document, field.input, field.value, 'text'); control.setAttribute('inputmode', field.input_mode || 'text'); label.append(control); }
     if (field.has_choices) {
       const select = element(document, 'select', { name: field.input });
       for (const choice of field.choices) select.append(element(document, 'option', { value: choice.value }, choice.value));
@@ -118,16 +122,17 @@ function recordSection(document: Document, props: DocumentProps | null, card: Re
   return section;
 }
 
-export type ReadOnlyPart = Pick<Part, 'id' | 'title' | 'class' | 'text' | 'is_note' | 'is_form' | 'message' | 'views'>;
-export type ReadOnlyProps = Pick<DocumentProps, 'record_cards' | 'records_truncated' | 'views'> & { parts?: ReadOnlyPart[] };
+export type ReadOnlyPart = Pick<Part, 'id' | 'title' | 'class' | 'text' | 'is_note' | 'is_form' | 'message' | 'views' | 'record_components'>;
+export type ReadOnlyProps = Pick<DocumentProps, 'presentation' | 'record_cards' | 'records_truncated' | 'views'> & { parts?: ReadOnlyPart[] };
 /** Shared recipients receive no ordinary record links, form controls or write actions. */
 export function renderReadOnlyRegions(document: Document, props: ReadOnlyProps): HTMLElement {
   const root = element(document, 'div', { class: 'shared-parts', 'data-shared-parts': '' });
   const views = element(document, 'div', { class: 'document-parts', 'data-document-parts': '' });
   if (props.parts) for (const part of props.parts) {
-    const section = element(document, 'article', { class: layoutClass(part), 'data-document-part': part.id });
+    const section = element(document, 'article', { class: layoutClass(part), 'data-document-part': part.id, 'data-component': part.id });
     if (part.is_note) section.append(element(document, 'section', { class: 'view document-note' }, element(document, 'h2', {}, part.title), element(document, 'p', {}, part.text)));
     if (part.is_form) section.append(element(document, 'section', { class: 'view' }, element(document, 'h2', {}, part.title), element(document, 'p', { class: 'document-form-message' }, part.message)));
+    if (part.record_components?.length) section.append(renderRecordComponents(part.record_components, document));
     for (const card of part.views) section.append(viewSection(document, card));
     views.append(section);
   } else for (const card of props.views) views.append(viewSection(document, card));
@@ -198,7 +203,7 @@ function layoutClass(part: { class: string }): string {
 
 function partSection(document: Document, props: DocumentProps, part: Part): HTMLElement {
   const section = element(document, 'article', { id: `part-${part.id}`, class: layoutClass(part),
-    'data-document-part': part.id, 'data-view': part.id, 'data-kind': part.kind, 'data-collection': part.collection });
+    'data-document-part': part.id, 'data-component': part.id, 'data-view': part.id, 'data-kind': part.kind, 'data-collection': part.collection });
   if (part.is_note) section.append(element(document, 'section', { class: 'view document-note' },
     element(document, 'h2', {}, part.title), element(document, 'p', {}, part.text)));
   if (part.has_selector) {
@@ -213,6 +218,7 @@ function partSection(document: Document, props: DocumentProps, part: Part): HTML
     section.append(form);
   }
   if (part.is_form && part.message) section.append(element(document, 'p', { class: 'document-form-message' }, part.message));
+  if (part.record_components?.length) section.append(renderRecordComponents(part.record_components, document));
   for (const form of part.forms) section.append(formSection(document, props, form));
   for (const view of part.views) section.append(viewSection(document, view));
   section.append(element(document, 'button', { type: 'button', class: 'document-ask-part', 'data-ask-card': '' }, 'Ask about this part'));

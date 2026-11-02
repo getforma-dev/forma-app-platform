@@ -1,0 +1,40 @@
+{
+  "observed_at_utc": "2026-11-01T23:44:34.070132Z",
+  "original_failure": {
+    "run_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41362433962",
+    "job_id": 125015469508,
+    "event": "push",
+    "candidate_sha": "e67968088028a857fbe9920a352afa758ddbc342",
+    "failed_at_utc": "2026-11-01T23:36:17Z",
+    "command": "app/runtime/.venv/bin/python -m unittest discover -s app/runtime -v",
+    "failure": "subprocess.TimeoutExpired after 300 seconds",
+    "failed_log_sha256": "f17c093046d242e7c24217fc3f5e98a777be344fcca600eb55dd978bc7bbfeb8",
+    "limitation": "Old wrapper did not retain the suite output on timeout; last test and presence of any underlying assertion failure are unknown."
+  },
+  "correction": {
+    "runtime_suite_timeout_seconds": 600,
+    "other_command_timeout_seconds": 300,
+    "tests_unchanged": true,
+    "timeout_exit": 124,
+    "diagnostics": "Persist buffered output and terminal status before stopping dependent commands; print failed-step output."
+  },
+  "qualification": {
+    "python_regressions": 3,
+    "passed": true,
+    "command": "python3 -m unittest discover -s infra/test -p foundation_check_test.py -v",
+    "log_sha256": "23000355e999a6d23af3f6ced8506144bec99fd234387a082b533feb656b130f",
+    "typescript_wrapper": "passed",
+    "infra_typecheck": "passed",
+    "new_exact_head_ci": "pending"
+  },
+  "source_sha256": {
+    "scripts/check-foundation.py": "5f79f1205353973a07452993fdf26d7bd211f42f39e015ceca033be6ce4d7b74",
+    "infra/test/foundation_check_test.py": "730876a984220a5596f2b3bb0d4b453c8398617da92e489866842b55833bc57a",
+    "infra/test/foundation.test.ts": "be9df498783749c1aa2fcfbd104de4fc8d004ae5b1fa3fbc5532245d364a7a4a"
+  },
+  "aws_mutations": false,
+  "independent_review": {
+    "scope": "Command-specific timeout, failure receipts, dependent-step stop and three focused regression paths",
+    "disposition": "No blocker found; runtime assertions and cloud behavior unchanged."
+  }
+}

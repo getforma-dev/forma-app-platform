@@ -238,3 +238,15 @@ contracts/fixtures/stored/**
 !contracts/fixtures/shared-v1/
 contracts/fixtures/shared-v1/**
 !contracts/fixtures/shared-v1/query-receipt.json
+!app/src/admission/record_receipt.rs
+!app/src/composer/presentation.rs
+!app/src/query/record_components.rs
+!app/src/query/record_routes.rs
+!app/src/storage/record_components.rs
+!app/src/storage/work_presentation.rs
+!app/src/storage/record_components_campaign.rs
+!app/runtime/record_engine.py
+!app/migrations/0019_work_presentation.sql
+!app/migrations/catalog-v19.json
+!app/src/storage/work_presentation_checks.rs
+!contracts/record_components_contract.py

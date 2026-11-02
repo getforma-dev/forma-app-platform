@@ -1,3 +1,6 @@
+import { renderRecordComponents } from '../record-components/render';
+import type { WireRecordComponent } from '../record-components/types';
+import type { PresentationProps } from '../presentation/presentation';
 // Card DOM for the canvas island: the same structure the server renders in
 // `canvas/app.tsx`, built with createElement and textContent only (the page
 // runs under Trusted Types; nothing here assigns markup). A card shows a
@@ -340,11 +343,13 @@ export type CardJson = {
   message: string; query: string; integer_columns: string;
 };
 export type FieldJson = {
+  input_mode: string;
   id: string; kind: string; label: string; input: string; value: string; spec: string;
   spec_input: string; writable: boolean; read_only: boolean; has_text: boolean;
   has_choices: boolean; choices: { id: string; value: string }[];
 };
 export type FormJson = {
+  component?: string;
   id: string; title: string; command: string; action: string; csrf: string;
   idempotency_key: string; collection: string; publication: string; schema: string;
   schema_version: string; record: string; record_version: string; work_version: string;
@@ -352,6 +357,8 @@ export type FormJson = {
 };
 export type OriginJson = { id: string; kind: string; text: string };
 export type GroupJson = {
+  record_components?: WireRecordComponent[];
+  presentation?: PresentationProps; can_edit_presentation?: boolean;
   can_share?: boolean;
   can_label_work?: boolean; work_name_version?: number; work_name_scope?: boolean; part_order?: string; part_layout?: string;
   static_parts?: { id: string; view: string; title: string; kind: string; text: string; message: string; href: string }[];
@@ -387,12 +394,13 @@ export function buildForm(document_: Document, form: FormJson): HTMLFormElement 
     const row = el(document_, 'div', { class: 'cv-field', 'data-field': field.id }, el(document_, 'span', { class: 'cv-field-label' }, field.label));
     if (field.has_choices) {
       const select = el(document_, 'select', { name: field.input, 'aria-label': field.label });
-      for (const choice of field.choices) select.append(el(document_, 'option', { value: choice.value }, choice.value));
+      for (const choice of field.choices) { const option = el(document_, 'option', { value: choice.value }, choice.value); option.selected = choice.value === field.value; select.append(option); }
       row.append(select);
     }
     if (field.has_text) {
       const text_ = input(document_, field.input, field.value, 'text');
       text_.setAttribute('aria-label', field.label);
+      text_.setAttribute('inputmode', field.input_mode || 'text');
       row.append(text_);
     }
     if (field.writable) row.append(input(document_, field.spec_input, field.spec));
@@ -411,7 +419,7 @@ export function formTitle(title: string): string {
 
 export function buildFormCard(document_: Document, form: FormJson): HTMLElement {
   const title = formTitle(form.title);
-  return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-kind': 'form', 'data-collection': form.collection, 'aria-label': title },
+  return el(document_, 'article', { class: 'cv-card cv-form', 'data-card': form.id, 'data-component': form.component ?? '', 'data-kind': 'form', 'data-collection': form.collection, 'aria-label': title },
     el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, title), el(document_, 'span', { class: 'badge' }, 'form')),
     buildForm(document_, form),
     el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }),
@@ -450,19 +458,22 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'p', { class: 'sr-only' }, group.label),
     el(document_, 'details', { class: 'cv-window-wrap' }, el(document_, 'summary', {}, 'Time range and filters'), window_));
   if (group.can_share) app.append(el(document_, 'button', { type: 'button', class: 'cv-secondary', 'data-manage-share': '', 'data-app': group.app, 'data-work': group.work, 'data-title': group.title }, 'Share app'));
-  const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'data-can-share': String(group.can_share === true), 'data-can-label-work': String(group.can_label_work === true), 'data-work-name-version': String(group.work_name_version ?? 0), 'data-part-order': group.part_order ?? '', 'data-part-layout': group.part_layout ?? '', 'aria-label': group.title }, app);
+  const section = el(document_, 'section', { class: 'cv-group', id: group.id, 'data-app': group.app, 'data-work': group.work, 'data-can-share': String(group.can_share === true), 'data-presentation': group.presentation?.json ?? '{}', 'data-can-edit-presentation': String(group.can_edit_presentation === true), 'data-can-label-work': String(group.can_label_work === true), 'data-work-name-version': String(group.work_name_version ?? 0), 'data-part-order': group.part_order ?? '', 'data-part-layout': group.part_layout ?? '', 'aria-label': group.title }, app);
   section.dataset.workNameScope = String(group.work_name_scope === true);
   for (const card of group.cards) {
     section.append(el(document_, 'article', {
-      class: 'cv-card cv-view', id: card.id, 'data-card': card.id, 'data-view': card.view, 'data-kind': card.kind,
+      class: 'cv-card cv-view', id: card.id, 'data-card': card.id, 'data-view': card.view, 'data-component': card.view, 'data-kind': card.kind,
       'data-state': card.state, 'data-query': card.query, 'data-integers': card.integer_columns, 'aria-label': card.title,
     },
     el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, card.title), el(document_, 'span', { class: 'badge' }, card.badge)),
     el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, el(document_, 'p', { class: 'cv-message', role: 'status' }, card.message))));
   }
+  for (const component of group.record_components ?? []) section.append(el(document_, 'article', {
+    class: 'cv-card cv-record-component', 'data-card': component.card_id, 'data-component': component.id, 'data-kind': component.kind, 'aria-label': component.title,
+  }, renderRecordComponents([component], document_)));
   for (const form of group.forms) section.append(buildFormCard(document_, form));
   for (const part of group.static_parts ?? []) section.append(el(document_, 'article', {
-    class: 'cv-card cv-static-part', 'data-card': part.id, 'data-view': part.view, 'data-kind': part.kind, 'aria-label': part.title,
+    class: 'cv-card cv-static-part', 'data-card': part.id, 'data-view': part.view, 'data-component': part.view, 'data-kind': part.kind, 'aria-label': part.title,
   }, el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, part.title), el(document_, 'span', { class: 'badge' }, part.kind)),
   el(document_, 'div', { class: 'cv-card-body' }, el(document_, 'p', { class: 'cv-static-text' }, part.text), el(document_, 'p', { class: 'cv-message' }, part.message), el(document_, 'a', { href: `/w/${group.app}/${group.work}` }, 'Open app page'))));
   for (const card of group.records ?? []) section.append(buildRecordsCard(document_, card));

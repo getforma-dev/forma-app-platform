@@ -274,9 +274,9 @@ fn from_value(
     })
 }
 
-/// A form text under the published field's `value_type` (echoed by the form
-/// as `spec.<field>`); an empty text is the null value. Storage judges the
-/// result against the published schema, so the echo confers nothing.
+/// An already-normalized scalar under the published field's `value_type`.
+/// Money is an integer minor-unit string here: action resolution has already
+/// converted its human input. Storage still judges the published schema.
 pub(crate) fn typed_value(spec: &Value, raw: &str) -> Option<Value> {
     if raw.is_empty() {
         return Some(json!({"type": "null"}));
@@ -297,6 +297,18 @@ pub(crate) fn typed_value(spec: &Value, raw: &str) -> Option<Value> {
         }
         _ => return None,
     })
+}
+
+/// HTML form money is human major-unit text. Convert it exactly once at this
+/// boundary, before the shared scalar constructor. An echoed spec grants no
+/// authority; storage checks the resulting value against the published schema.
+pub(crate) fn form_typed_value(spec: &Value, raw: &str) -> Option<Value> {
+    if !raw.is_empty() && spec.get("type").and_then(Value::as_str) == Some("money") {
+        let minor = super::money_minor_units(raw, spec.get("minor_unit_exponent")?.as_u64()?)?;
+        typed_value(spec, &minor)
+    } else {
+        typed_value(spec, raw)
+    }
 }
 
 /// The record page's form (D7.16): hidden premise fields, `value.<field>`
@@ -328,7 +340,7 @@ fn from_form(
         .into_iter()
         .map(|(field, raw)| {
             let spec = specs.get(&field)?;
-            Some(json!({"field_id": field, "value": typed_value(spec, &raw)?}))
+            Some(json!({"field_id": field, "value": form_typed_value(spec, &raw)?}))
         })
         .collect::<Option<Vec<_>>>()?;
     let request = CommandRequest {

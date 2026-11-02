@@ -171,8 +171,10 @@ DEFINITION_WORK_GRANTS = set().union(
     # ADR-007 amendment (review M2): the creator is recorded, never creator_revoked_at.
     _role_columns('genui_workspace','saved_work','INSERT','organization_id','app_id','work_id','publication_id','version','context',
                   'created_by'),
-    # 0018: display-only work naming; no revision or binding mutation grant.
-    _role_columns('genui_workspace','saved_work','UPDATE','display_name','name_version'),
+    # 0018: display names; 0019 adds only the three adoption publication pins and work version.
+    _role_columns('genui_workspace','saved_work','UPDATE','display_name','name_version','publication_id','version'),
+    _role_columns('genui_workspace','record_collections','UPDATE','publication_id'),
+    _role_columns('genui_workspace','work_bindings','UPDATE','publication_id'),
     _role_columns('genui_workspace','record_collections','INSERT','organization_id','app_id','work_id','publication_id','collection_id',
                   'schema_id','schema_version'),
     _role_columns('genui_workspace','work_bindings','INSERT','organization_id','app_id','work_id','publication_id','input_id','kind',
@@ -1084,6 +1086,10 @@ def definition_work_checks(pg, passed, denied):
             # ADR-007 amendment: a saved work names its creator, and only as the scoped principal.
             ('workspace cannot save work for another creator','genui_workspace',("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,'x','00000000-0000-4000-8000-0000000000ca')",(org0,APP,str(uuid.uuid4()),PUB))),
             ('workspace cannot save work without a creator','genui_workspace',work_row),
+            ('workspace cannot rewrite work context','genui_workspace',('UPDATE genui.saved_work SET context=context',())),
+            ('workspace cannot move a collection','genui_workspace',('UPDATE genui.record_collections SET collection_id=collection_id',())),
+            ('workspace cannot change binding contracts','genui_workspace',('UPDATE genui.work_bindings SET contract_digest=contract_digest',())),
+            ('workspace cannot change bound sources','genui_workspace',('UPDATE genui.work_bindings SET source_revision_id=source_revision_id',())),
             ('workspace cannot revoke creator authority','genui_workspace',("UPDATE genui.saved_work SET creator_revoked_at=now()",())),
             ('control cannot rewrite a publication sequence','genui_control',("UPDATE genui.publications SET publication_sequence=publication_sequence",())),
             ('control cannot write saved work','genui_control',work_row),
@@ -1111,7 +1117,7 @@ def definition_work_checks(pg, passed, denied):
             ('control cannot rewrite a publication','genui_control',('UPDATE genui.publications SET admission_digest=admission_digest',())),
             ('workspace cannot delete saved work','genui_workspace',('DELETE FROM genui.saved_work',()))):
         denied('0005 '+name,role,statement,params)
-    passed('0005 role separation: workspace never publishes, control never saves work, data/worker write neither, no role writes permission rows, rewrites or deletes drafts, publications, saved work or audit events, or appends to another chain or kind')
+    passed('0005 role separation: workspace never publishes, control never saves work, data/worker write neither, no role writes permission rows or rewrites drafts, publications or audit events; workspace updates only saved-work name/adoption columns and cannot delete work, or appends to another chain or kind')
 
 
 def session_checks(pg, passed, denied):

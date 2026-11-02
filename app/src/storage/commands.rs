@@ -628,13 +628,6 @@ fn integer_text(value: Option<&Value>) -> bool {
             && (digits == "0" && !s.starts_with('-') || !digits.starts_with('0'))
     })
 }
-fn fixed_digits(value: &str, pattern: &str) -> bool {
-    value.len() == pattern.len()
-        && value.bytes().zip(pattern.bytes()).all(|(v, p)| match p {
-            b'9' => v.is_ascii_digit(),
-            _ => v == p,
-        })
-}
 fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
     object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k))
 }
@@ -684,14 +677,17 @@ fn compatible(value: &Value, field: &FieldSpec) -> bool {
                 && object
                     .get("value")
                     .and_then(Value::as_str)
-                    .is_some_and(|s| fixed_digits(s, "9999-99-99"))
+                    .is_some_and(|s| {
+                        s.len() == 10
+                            && crate::admission::contract_timestamp(&format!("{s}T00:00:00Z"))
+                    })
         }
         "timestamp" => {
             keys_are(object, &["type", "value"])
                 && object
                     .get("value")
                     .and_then(Value::as_str)
-                    .is_some_and(|s| fixed_digits(s, "9999-99-99T99:99:99Z"))
+                    .is_some_and(crate::admission::contract_timestamp)
         }
         "enum" => {
             keys_are(object, &["type", "value"])
@@ -1364,6 +1360,10 @@ mod tests {
             &json!({"type": "money", "minor_units": "045", "currency": "USD", "minor_unit_exponent": 2}),
             &money
         ));
+        assert!(!compatible(
+            &json!({"type": "money", "minor_units": "12.50", "currency": "USD", "minor_unit_exponent": 2}),
+            &money
+        ));
         let bytes = field("bytes", json!({"type": "integer", "unit": "byte"}), false);
         assert!(compatible(
             &json!({"type": "integer", "value": "-12", "unit": "byte"}),
@@ -1379,11 +1379,60 @@ mod tests {
         ));
         assert!(integer_text(Some(&json!("0"))) && !integer_text(Some(&json!("-0"))));
         assert!(!integer_text(Some(&json!(&"9".repeat(39)))));
-        assert!(fixed_digits("2026-10-29T12:00:00Z", "9999-99-99T99:99:99Z"));
-        assert!(!fixed_digits(
-            "2026-10-29 12:00:00Z",
-            "9999-99-99T99:99:99Z"
-        ));
+    }
+
+    #[test]
+    fn date_and_timestamp_values_require_real_calendar_days_and_utc_clock_times() {
+        let date = field("date", json!({"type":"date"}), false);
+        for valid in [
+            "0001-01-01",
+            "2024-02-29",
+            "2000-02-29",
+            "2026-11-02",
+            "9999-12-31",
+        ] {
+            assert!(
+                compatible(&json!({"type":"date","value":valid}), &date),
+                "refused {valid}"
+            );
+        }
+        for invalid in [
+            "2026-02-30",
+            "2026-02-29",
+            "1900-02-29",
+            "2026-04-31",
+            "0000-01-01",
+            "2026-13-01",
+            "2026-01-00",
+            "2026-1-01",
+            " 2026-11-02",
+            "2026-11-02T00:00:00Z",
+        ] {
+            assert!(
+                !compatible(&json!({"type":"date","value":invalid}), &date),
+                "accepted {invalid}"
+            );
+        }
+        let timestamp = field("at", json!({"type":"timestamp"}), false);
+        for valid in ["2024-02-29T23:59:59Z", "2026-11-02T00:00:00Z"] {
+            assert!(
+                compatible(&json!({"type":"timestamp","value":valid}), &timestamp),
+                "refused {valid}"
+            );
+        }
+        for invalid in [
+            "2026-02-30T12:00:00Z",
+            "2026-11-02T24:00:00Z",
+            "2026-11-02T12:60:00Z",
+            "2026-11-02T12:00:60Z",
+            "2026-11-02 12:00:00Z",
+            "2026-11-02T12:00:00+00:00",
+        ] {
+            assert!(
+                !compatible(&json!({"type":"timestamp","value":invalid}), &timestamp),
+                "accepted {invalid}"
+            );
+        }
     }
 
     #[test]

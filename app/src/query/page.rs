@@ -36,6 +36,8 @@ use serde_json::Value;
 pub struct WorkProps {
     pub title: String,
     pub can_share: bool,
+    pub can_edit_presentation: bool,
+    pub presentation: crate::composer::presentation::PresentationProps,
     pub app: String,
     pub work: String,
     pub forms: Vec<super::canvas::FormCardProps>,
@@ -84,6 +86,8 @@ pub struct PartProps {
     pub message: String,
     pub forms: Vec<super::canvas::FormCardProps>,
     pub views: Vec<CardProps>,
+    pub has_record_components: bool,
+    pub record_components: Vec<super::record_components::RecordComponentProps>,
 }
 
 #[derive(PageProps, serde::Serialize, Clone, Debug, Default, Eq, PartialEq)]
@@ -635,11 +639,13 @@ pub fn canvas_href(work: &str) -> String {
 /// Record links and the canvas address for one work page.
 #[derive(Default)]
 pub struct WorkChrome {
+    pub record_run: Option<crate::storage::RecordComponentsRun>,
     /// Kept server-side for the final authorization/pin check before release.
     pub publication: String,
     pub work_version: i64,
     pub can_write: bool,
     pub can_share: bool,
+    pub can_edit_presentation: bool,
     pub app: String,
     pub work: String,
     pub forms: Vec<super::canvas::FormCardProps>,
@@ -647,6 +653,7 @@ pub struct WorkChrome {
     pub record_cards: Vec<super::canvas::RecordsCardProps>,
     pub records_truncated: bool,
     pub records: Vec<RecordLinkProps>,
+    pub record_components: Vec<super::record_components::RecordComponentProps>,
     pub canvas: String,
 }
 
@@ -674,7 +681,7 @@ pub(crate) fn document_parts(
         let forms: Vec<_> = chrome.forms.iter().filter(|form| form.id == part.id).cloned().collect();
         let choices = chrome.form_choices.get(&part.id).cloned().unwrap_or_default();
         let view = views.iter().find(|view| view.id == part.id).cloned().or_else(|| {
-            (!matches!(part.kind.as_str(), "form" | "note")).then(|| card(&WorkView {
+            (!matches!(part.kind.as_str(), "form" | "note") && !super::record_routes::is_record_kind(&part.kind)).then(|| card(&WorkView {
                 id: part.id.clone(), title: part.title.clone(), kind: part.kind.clone(),
                 integer_columns: Vec::new(), column_types: Default::default(),
             }, Outcome::Failed(Reason::NotQualified)))
@@ -693,8 +700,27 @@ pub(crate) fn document_parts(
                 else { "Choose a record that this command can change. No applicable record is available yet." }
             } else { "" }.into(),
             choices, forms, views: view.into_iter().collect(),
+            has_record_components: super::record_routes::is_record_kind(&part.kind),
+            record_components: chrome.record_components.iter().filter(|component| component.id == part.id).cloned().collect(),
         }
     }).collect()
+}
+
+/// Old definitions retain their automatic collection list. An explicitly
+/// placed records list owns that collection's presentation in composed apps.
+pub(crate) fn automatic_records(
+    outline: &WorkOutline,
+    records: Vec<super::canvas::RecordsCardProps>,
+) -> Vec<super::canvas::RecordsCardProps> {
+    records
+        .into_iter()
+        .filter(|record| {
+            !outline
+                .parts
+                .iter()
+                .any(|part| part.kind == "records_list" && part.schema == record.schema)
+        })
+        .collect()
 }
 
 /// The whole page.
@@ -711,6 +737,16 @@ pub fn props(
     let parts = document_parts(outline, &views, &chrome);
     WorkProps {
         title: outline.title.clone(),
+        presentation: crate::composer::presentation::project(
+            outline.presentation.as_ref(),
+            &outline
+                .parts
+                .iter()
+                .filter(|part| part.kind != "form" || outline.can_write)
+                .map(|part| part.id.clone())
+                .collect(),
+        ),
+        can_edit_presentation: chrome.can_edit_presentation,
         app: chrome.app,
         work: chrome.work,
         forms: chrome.forms,

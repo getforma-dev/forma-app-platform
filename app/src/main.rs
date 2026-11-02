@@ -1039,6 +1039,7 @@ mod tests {
         ];
         let outline = genui::storage::WorkOutline {
             title: "Northstar egress".into(),
+            presentation: None,
             description: String::new(),
             views: vec![],
             parts: cards

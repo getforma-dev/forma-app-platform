@@ -1,0 +1,112 @@
+/* Finite, publication-owned app appearance. Values never come from authored CSS. */
+.composed-app,[data-presentation] { --app-bg:#fff;--app-panel:#f8fafc;--app-ink:#162033;--app-muted:#49576b;--app-line:#cbd5e1;--app-control-line:#64748b;--app-accent:#155e75;--app-on-accent:#fff;--app-gap:1.25rem;--app-padding:1.25rem; color:var(--app-ink);background:var(--app-bg); }
+[data-app-mode=dark] { --app-bg:#10171d;--app-panel:#19232c;--app-ink:#f1f5f9;--app-muted:#b4c2d0;--app-line:#536171;--app-control-line:#94a3b8;--app-accent:#a5f3fc;--app-on-accent:#102a31;color-scheme:dark; }
+[data-app-mode=light] { color-scheme:light; }
+[data-app-accent=green] { --app-accent:#166534; } [data-app-accent=crimson] { --app-accent:#9f1239; } [data-app-accent=amber] { --app-accent:#92400e; } [data-app-accent=cyan] { --app-accent:#155e75; } [data-app-accent=violet] { --app-accent:#5b21b6; } [data-app-accent=rose] { --app-accent:#9d174d; } [data-app-accent=ice] { --app-accent:#075985; } [data-app-accent=slate] { --app-accent:#334155; }
+[data-app-mode=dark][data-app-accent=green] { --app-accent:#86efac; } [data-app-mode=dark][data-app-accent=crimson] { --app-accent:#fda4af; } [data-app-mode=dark][data-app-accent=amber] { --app-accent:#fcd34d; } [data-app-mode=dark][data-app-accent=cyan] { --app-accent:#67e8f9; } [data-app-mode=dark][data-app-accent=violet] { --app-accent:#c4b5fd; } [data-app-mode=dark][data-app-accent=rose] { --app-accent:#f9a8d4; } [data-app-mode=dark][data-app-accent=ice] { --app-accent:#bae6fd; } [data-app-mode=dark][data-app-accent=slate] { --app-accent:#cbd5e1; }
+[data-app-density=compact] { --app-gap:.75rem;--app-padding:.75rem; } [data-app-density=comfortable] { --app-gap:1.25rem;--app-padding:1.5rem; } [data-app-density=spacious] { --app-gap:2rem;--app-padding:2rem; }
+[data-app-font=mono], [data-app-font=mono] input,[data-app-font=mono] select,[data-app-font=mono] button { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+.composed-app .view,.composed-app .cv-card,.app-component-dialog .view,.app-component-dialog .cv-card { color:var(--app-ink);background:var(--app-panel);border-color:var(--app-line);box-shadow:none; }
+.composed-app h1,.composed-app h2,.composed-app h3,.composed-app .value,.composed-app .cv-field-label,.composed-app .cv-card-head { color:var(--app-ink); }
+.composed-app p,.composed-app label,.composed-app dt,.composed-app .cv-message,.composed-app .receipt,.composed-app .state { color:var(--app-muted); }
+.composed-app a { color:var(--app-accent); }
+.composed-app input,.composed-app select,.composed-app textarea,.app-component-dialog input,.app-component-dialog select,.app-component-dialog textarea { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-control-line); }
+.app-description { max-width:70ch;line-height:1.6;white-space:pre-wrap;margin:.75rem 0; }
+.app-actions { display:flex;flex-wrap:wrap;gap:.65rem;margin:1rem 0; }
+.app-actions:empty { display:none; }
+.app-action { appearance:none;min-height:44px;padding:.65rem 1.1rem;border:1px solid var(--app-accent);border-radius:.6rem;background:var(--app-accent);color:var(--app-on-accent);font:inherit;font-weight:650;cursor:pointer; }
+.composed-app :focus-visible,.app-component-dialog :focus-visible { outline:3px solid var(--app-accent);outline-offset:3px; }
+.app-section { grid-column:1/-1;min-width:0;margin:0; }
+.app-section-title { margin:0 0 .8rem;font-size:1rem;font-weight:650; }
+.app-section-grid { display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--app-gap); }
+.app-section-grid>.document-part,.app-section-grid>.cv-unite-part { grid-row:auto!important;min-width:0; }
+.composed-app .document-parts { gap:var(--app-gap); }
+.composed-app .view { padding:var(--app-padding); }
+.composed-app .cv-unite-grid>[data-app-section] { grid-column:1/-1; }
+.composed-app .cv-unite-head { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-line); }
+.cv-unite>[data-app-presentation-header] { padding:0 var(--app-padding);flex:none; }
+.app-component-dialog { width:min(760px,calc(100vw - 2rem));max-height:calc(100dvh - 2rem);margin:auto;padding:0;border:1px solid var(--app-line);border-radius:1rem;box-shadow:0 24px 100px #0006;background:var(--app-bg);color:var(--app-ink);overflow:auto; }
+.app-component-dialog::backdrop { background:rgb(7 15 25 / .65); }
+.app-dialog-head { position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem;background:var(--app-bg);border-bottom:1px solid var(--app-line); }
+.app-dialog-head h2 { margin:0;font-size:1.1rem; }
+.app-dialog-close { min-height:44px;padding:.5rem 1rem;background:var(--app-panel);color:var(--app-ink);border:1px solid var(--app-line);border-radius:.5rem;cursor:pointer; }
+.app-dialog-body { padding:var(--app-padding); }
+.app-dialog-body>[data-component] { width:100%;margin:0;grid-column:auto!important;grid-row:auto!important; }
+.app-dialog-body .cv-card { height:auto;max-height:none; }
+.app-dialog-body .cv-card-body { max-height:none; }
+@media(max-width:640px) { .app-section-grid { grid-template-columns:minmax(0,1fr); }.app-section-grid>[data-component] { grid-column:1!important; }.app-component-dialog { width:calc(100vw - 1rem);max-height:calc(100dvh - 1rem); }.app-actions .app-action { flex:1 1 auto; } }
+@media(prefers-reduced-motion:reduce) { .composed-app *,.app-component-dialog * { scroll-behavior:auto;transition:none!important;animation:none!important; } }
+
+.cv-unite.is-single .app-section-grid { grid-template-columns:minmax(0,1fr); }
+.cv-unite.is-single .app-section-grid>[data-component] { grid-column:1!important; }
+.record-components { min-width:0; }
+.record-component { margin:0;min-width:0; }
+.record-metric { font-size:clamp(1.8rem,5vw,3.25rem);font-weight:700;letter-spacing:-.035em;font-variant-numeric:tabular-nums;line-height:1.15;margin:1.25rem 0;color:var(--app-ink)!important; }
+.record-filter-form { display:flex;flex-wrap:wrap;gap:.75rem;align-items:end;padding:.75rem 0;border-bottom:1px solid var(--app-line);margin:0 0 1rem; }
+.record-filter { min-width:0;border:0;padding:0;margin:0;flex:1 1 140px; }
+.record-filter legend { font-weight:600;font-size:.85rem;margin:0 0 .35rem;color:var(--app-ink); }
+.record-filter label { display:flex;gap:.35rem;flex-direction:column;font-size:.8rem; }
+.record-filter input,.record-filter select { box-sizing:border-box;width:100%;min-height:40px;border:1px solid var(--app-control-line);border-radius:.4rem;padding:.5rem; }
+.record-filter-form button { min-height:40px;padding:.5rem .75rem;border-radius:.4rem;border:1px solid var(--app-control-line);background:var(--app-bg);color:var(--app-ink);font:inherit;font-size:.85rem;cursor:pointer; }
+.record-groups { margin:1rem 0; }
+.record-groups ol { list-style:none;margin:0;padding:0;display:grid;gap:.9rem; }
+.record-groups li { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .75rem; }
+.record-groups strong { font-variant-numeric:tabular-nums;color:var(--app-ink); }
+.record-bar-track { grid-column:1/-1;display:block;height:.45rem;overflow:hidden;background:var(--app-line);border-radius:10px; }
+.record-bar { display:block;height:100%;background:var(--app-accent);border-radius:10px; }
+.record-groups figcaption { font-size:.75rem;color:var(--app-muted);margin-top:.75rem; }
+.record-budget { padding:1rem;border:1px solid var(--app-line);border-radius:.6rem;background:var(--app-bg); }
+.record-budget p { margin:.3rem 0; }
+.record-component table { width:100%;min-width:28rem;border-collapse:collapse;overflow-wrap:normal; }
+.record-component th,.record-component td { padding:.6rem .75rem;border-bottom:1px solid var(--app-line);text-align:left; }
+.record-component th { color:var(--app-muted);font-size:.8rem; }
+.record-component .shared-table { overflow:auto;max-height:32rem; }
+.record-component .receipt pre { max-height:20rem;overflow:auto;font-size:.7rem; }
+
+svg.record-bar-track { width:100%;height:.5rem; }
+rect.record-bar { fill:var(--app-accent); }
+
+.app-dialog-body .cv-card-tools,.app-dialog-body .cv-app-tools { display:none; }
+/* App actions outrank the platform's .page button defaults, including hover. */
+.composed-app .app-action,.composed-app form[data-command] button[type=submit] { background:var(--app-accent);border-color:var(--app-accent);color:var(--app-on-accent); }
+.composed-app .app-action:hover,.composed-app form[data-command] button[type=submit]:hover { background:var(--app-accent);border-color:var(--app-accent);color:var(--app-on-accent);filter:brightness(.96); }
+.composed-app .app-dialog-close,.composed-app .document-actions button,.composed-app .document-status button,.composed-app .document-selection button { background:var(--app-panel);color:var(--app-ink);border-color:var(--app-control-line); }
+.composed-app .app-dialog-close:hover,.composed-app .document-actions button:hover,.composed-app .document-status button:hover,.composed-app .document-selection button:hover { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-accent); }
+.composed-app .document-ask-part { min-height:44px;padding:.35rem .15rem;margin-top:.3rem;border-color:transparent;background:transparent;color:var(--app-muted);font-size:.8rem;font-weight:400;text-decoration:underline;text-underline-offset:.2em; }
+.composed-app .document-ask-part:hover { background:transparent;color:var(--app-accent);border-color:transparent; }
+
+.app-dialog-body .document-ask-part { display:none; }
+
+/* Publication themes outrank surface defaults before and after island adoption. */
+.composed-app[data-presentation] { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-line); }
+.composed-app[data-presentation] .view,.composed-app[data-presentation] .cv-card { background:var(--app-panel);color:var(--app-ink);border-color:var(--app-line); }
+.composed-app[data-presentation] .shared-parts th,.composed-app[data-presentation] .shared-parts td,.composed-app[data-presentation] .receipt,.composed-app[data-presentation] .connected-app-head { border-color:var(--app-line); }
+.composed-app[data-presentation] .shared-parts th,.composed-app[data-presentation] .shared-parts td small,.composed-app[data-presentation] .shared-parts .summary dt,.composed-app[data-presentation] .shared-parts .state,.composed-app[data-presentation] .connected-app-head p,.composed-app[data-presentation] .shared-actions [role=status] { color:var(--app-muted); }
+.composed-app[data-presentation] .receipt summary { color:var(--app-accent); }
+.composed-app[data-presentation] .share-secondary,.composed-app[data-presentation] .connected-app-head button { background:var(--app-panel);color:var(--app-ink);border-color:var(--app-control-line); }
+.composed-app[data-presentation] :focus-visible { outline-color:var(--app-accent); }
+
+/* Keep record values intact; the named, keyboard-focusable region owns scrolling. */
+.composed-app .record-component th,.composed-app .record-component td { white-space:nowrap; }
+
+/* A card keeps its published palette when moved out of its app frame into Focus.
+   Adapt the canvas vocabulary locally; platform chrome outside the app is unchanged. */
+.cv-card.composed-app[data-app-mode],.cv-unite.composed-app[data-app-mode] {
+  --cv-surface:var(--app-panel);--cv-canvas:var(--app-bg);--cv-sunken:var(--app-bg);
+  --cv-text:var(--app-ink);--cv-muted:var(--app-muted);--cv-faint:var(--app-muted);
+  --cv-line:var(--app-line);--cv-hairline:var(--app-line);--cv-edge:var(--app-control-line);
+  --cv-accent:var(--app-accent);--cv-on-accent:var(--app-on-accent);
+  --cv-accent-soft:color-mix(in srgb,var(--app-accent) 12%,var(--app-bg));
+  --cv-seal:var(--app-accent);--cv-seal-soft:var(--cv-accent-soft);
+  --cv-chart:var(--app-accent);--cv-chart-peak:var(--app-accent);--cv-chart-fill:var(--cv-accent-soft);
+  --cv-bad:#9f1239;--cv-busy:#92400e;
+  color:var(--app-ink);background:var(--app-panel);border-color:var(--app-line);
+}
+.cv-unite.composed-app[data-app-mode] { background:var(--app-bg); }
+.cv-card.composed-app[data-app-mode=dark],.cv-unite.composed-app[data-app-mode=dark] { --cv-bad:#fda4af;--cv-busy:#fcd34d; }
+.cv-card.composed-app[data-app-mode] :is(input,select,textarea) { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-control-line); }
+.cv-unite.composed-app[data-app-mode] .cv-secondary { background:var(--app-panel);color:var(--app-ink);border-color:var(--app-control-line); }
+.cv-unite.composed-app[data-app-mode] .cv-secondary:hover { background:var(--app-bg);color:var(--app-ink);border-color:var(--app-accent); }
+.cv-card.composed-app[data-app-mode] .cv-origin,.cv-unite.composed-app[data-app-mode] .cv-origin { color:var(--app-accent);background:var(--cv-accent-soft); }
+
+.cv-card.composed-app[data-app-mode] .receipt summary { color:var(--app-accent); }

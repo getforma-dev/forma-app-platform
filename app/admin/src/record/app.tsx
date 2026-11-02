@@ -7,6 +7,8 @@ import { h, mount, createList } from '@getforma/core';
 // fields; every value is typed and authorized by the server. It reads nothing
 // from the request and runs no JavaScript.
 type FieldRow = {
+  label: string;
+  inputMode: string;
   id: string;
   kind: string;
   value: string;
@@ -102,7 +104,7 @@ function Record(props: RecordProps) {
               h(
                 'tr',
                 null,
-                h('th', { scope: 'row' }, row.id),
+                h('th', { scope: 'row' }, row.label),
                 h('td', null, row.value),
                 h('td', { class: 'muted' }, row.kind),
               ),
@@ -129,9 +131,9 @@ function Record(props: RecordProps) {
               h(
                 'p',
                 { class: 'field' },
-                h('label', null, row.id, ' ', h('span', { class: 'muted' }, row.options)),
+                h('label', { for: row.input }, row.label, ' ', h('span', { class: 'muted' }, row.options)),
                 row.writable
-                  ? h('input', { type: 'text', name: row.input, value: row.value })
+                  ? h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })
                   : h('span', { class: 'muted' }, 'not changed by this command'),
                 row.writable ? h('input', { type: 'hidden', name: row.specInput, value: row.spec }) : null,
               ),

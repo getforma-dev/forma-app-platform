@@ -1,0 +1,30 @@
+{
+  "scope": "Synthetic local identities; real admission, immutable publication, PostgreSQL, commands and confined record queries",
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "started": "2026-11-01T23:42:11.275Z",
+  "checks": [
+    "Created Dining tracker through the ordinary template picker; no seed records or model output.",
+    "Replaying stale design premises returns409 and leaves the published design and work version unchanged.",
+    "Normal Design app controls persisted theme, introduction and independent action labels/behaviors/targets through immutable publication and reload.",
+    "Opening/closing/reopening a modal sends no command, retains the same form node/idempotency key and restores focus.",
+    "Generic actions also open a read-only note dialog and navigate to the exact admitted list component without submitting a form.",
+    "An injected lost acknowledgement plus failed outcome lookup retains frozen form values; retry sends identical bytes/key and returns the same real audit/commit.",
+    "Five real audited commands persist the half-open date fixture: November total45.00, count3, budget45percent/55.00remaining and inspectable snapshot receipt.",
+    "Shared restaurant/date filters update all declared metrics and survive an ordinary live document refresh.",
+    "Injected read failure masks metrics while retaining the filter; retry recovers exact values, empty matches are genuine zero, and reset restores all five records.",
+    "320px and390px pages and modal remain within the viewport; Escape restores the same trigger.",
+    "The same app/theme opens on canvas; modal draft and key survive Fan out, Focus, return and Unite without submitting.",
+    "An unrelated Equipment requests app uses the same action dispatcher and its own exact form component."
+  ],
+  "errors": [],
+  "artifacts": [
+    "member-desktop.png",
+    "modal-390.png",
+    "member-390.png",
+    "modal-320.png",
+    "member-320.png",
+    "canvas-modal.png",
+    "canvas-united.png"
+  ],
+  "completed": "2026-11-01T23:42:41.865Z"
+}

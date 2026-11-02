@@ -412,8 +412,22 @@ def main(stdin=None, stdout=None):
     stdin = stdin or sys.stdin.buffer
     stdout = stdout or sys.stdout
     try:
-        request = parse_request(stdin.read(MAX_REQUEST_BYTES + 1))
-        result = execute(request, start)
+        # The closed records protocol carries a bounded committed snapshot;
+        # the original source protocol retains its 64 KiB parser bound.
+        raw = stdin.read(1048576 + 1)
+        decoded = json.loads(raw) if len(raw) <= 1048576 else None
+        if isinstance(decoded, dict) and decoded.get("kind") == "record_components_v1":
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("record_engine", Path(__file__).with_name("record_engine.py"))
+            record_engine = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(record_engine)
+            try:
+                result = record_engine.execute(decoded, start)
+            except record_engine.Refused as refusal:
+                raise Refused(str(refusal)) from None
+        else:
+            request = parse_request(raw)
+            result = execute(request, start)
     except Deadline:
         result = {"outcome": "failed", "reason": "deadline"}
     except Refused as refusal:

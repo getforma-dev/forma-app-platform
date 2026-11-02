@@ -73,6 +73,8 @@ pub struct WorkspaceProps {
 // token are minted per render by the route, never read from the request.
 #[derive(PageProps)]
 pub struct FieldRowProps {
+    pub label: String,
+    pub input_mode: String,
     pub id: String,
     pub kind: String,
     pub value: String,
@@ -146,6 +148,13 @@ impl RecordPage for SsrPages {
                         .fields
                         .iter()
                         .map(|row| FieldRowProps {
+                            label: crate::commands::field_label(row),
+                            input_mode: if row.kind == "money" {
+                                "decimal"
+                            } else {
+                                "text"
+                            }
+                            .into(),
                             id: row.id.clone(),
                             kind: row.kind.clone(),
                             value: row.value.clone(),

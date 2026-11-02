@@ -1,3 +1,4 @@
+import { PresentationHeader } from '../presentation/header';
 import { h, mount, createShow, createList, activateIslands } from '@getforma/core';
 import type { SharedCanvasProps } from './types';
 import { SharedParts } from './parts';
@@ -21,9 +22,10 @@ function SharedCanvas(props: SharedCanvasProps) {
     <p class="shared-canvas-empty" data-connected-empty="" hidden={props.hasApps}>Apps you add from a private share appear here, connected to their owner’s live data.</p>
     <div class="shared-canvas-surface" data-connected-surface="">
       <div data-connected-initial="">
-        {createList(() => props.apps, app => app.id, app => <article class="connected-app" data-connected-app={app.id}>
+        {createList(() => props.apps, app => app.id, app => <article class="connected-app composed-app" data-connected-app={app.id} data-presentation={app.presentation.json} data-app-mode={app.presentation.mode} data-app-accent={app.presentation.accent} data-app-density={app.presentation.density} data-app-font={app.presentation.font}>
           <header class="connected-app-head" data-canvas-drag-handle=""><div><p class="share-policy">Connected · View only</p><h2>{app.title}</h2><p class="connected-owner">{app.ownerLabel}</p></div>
             <a href={app.href} class="share-secondary">Open app</a><button type="button" data-connected-remove={app.id}>Remove from canvas</button></header>
+          <PresentationHeader presentation={app.presentation} />
           <SharedParts parts={app.parts} views={app.views} recordCards={app.recordCards} recordsTruncated={app.recordsTruncated} />
         </article>)}
       </div>

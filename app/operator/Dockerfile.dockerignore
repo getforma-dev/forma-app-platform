@@ -231,3 +231,6 @@ parser/vendor/zip-9.1.3/src/read/**
 !parser/vendor/zip-9.1.3/src/write/
 parser/vendor/zip-9.1.3/src/write/**
 !parser/vendor/zip-9.1.3/src/write/options.rs
+!app/migrations/0019_work_presentation.sql
+!app/migrations/catalog-v19.json
+!contracts/record_components_contract.py

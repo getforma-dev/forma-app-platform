@@ -56,29 +56,45 @@ pub struct SharedPartProps {
     pub is_form: bool,
     pub message: String,
     pub views: Vec<CardProps>,
+    pub has_record_components: bool,
+    pub record_components: Vec<crate::query::record_components::RecordComponentProps>,
 }
-fn shared_parts(outline: &storage::WorkOutline, views: &[CardProps]) -> Vec<SharedPartProps> {
-    page::document_parts(outline, views, &page::WorkChrome::default())
-        .into_iter()
-        .map(|part| SharedPartProps {
-            id: part.id,
-            title: part.title,
-            class: part.class,
-            text: part.text,
-            is_note: part.is_note,
-            is_form: part.is_form,
-            message: if part.is_form {
-                "This form is view only in a shared app.".into()
-            } else {
-                String::new()
-            },
-            views: part.views,
-        })
-        .collect()
+fn shared_parts(
+    outline: &storage::WorkOutline,
+    views: &[CardProps],
+    record_components: Vec<crate::query::record_components::RecordComponentProps>,
+) -> Vec<SharedPartProps> {
+    page::document_parts(
+        outline,
+        views,
+        &page::WorkChrome {
+            record_components,
+            ..Default::default()
+        },
+    )
+    .into_iter()
+    .map(|part| SharedPartProps {
+        id: part.id,
+        title: part.title,
+        class: part.class,
+        text: part.text,
+        is_note: part.is_note,
+        is_form: part.is_form,
+        message: if part.is_form {
+            "This form is view only in a shared app.".into()
+        } else {
+            String::new()
+        },
+        views: part.views,
+        has_record_components: part.has_record_components,
+        record_components: part.record_components,
+    })
+    .collect()
 }
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct SharedPageProps {
     pub title: String,
+    pub presentation: crate::composer::presentation::PresentationProps,
     pub share_id: String,
     pub status: String,
     pub owner_label: String,
@@ -103,6 +119,7 @@ pub struct SharedPageProps {
 pub struct SharedAppProps {
     pub id: String,
     pub title: String,
+    pub presentation: crate::composer::presentation::PresentationProps,
     pub href: String,
     pub owner_label: String,
     pub can_add_to_canvas: bool,
@@ -163,6 +180,10 @@ pub fn router(work: Arc<Work>) -> Router {
         .route("/shared", get(shared_canvas))
         .route("/v1/shared", get(linked))
         .route("/v1/shared/{share}/authority", get(authority))
+        .route(
+            "/v1/shared/{share}/record-components",
+            get(record_components).post(record_components),
+        )
         .route("/v1/shared/{share}/accept", post(accept))
         .route("/v1/shared/{share}/canvas", post(link).delete(unlink))
         .with_state(work)
@@ -643,30 +664,51 @@ async fn guest_document(
         let (i, card) = result.map_err(|_| http::unavailable())?;
         views[i] = Some(card?);
     }
-    let record_cards =
-        canvas::records_cards(access.app(), access.work(), &listing, access.account_id())
+    let record_cards: Vec<SharedRecordsCardProps> = page::automatic_records(
+        &outline,
+        canvas::records_cards(access.app(), access.work(), &listing, access.account_id()),
+    )
+    .into_iter()
+    .map(|c| SharedRecordsCardProps {
+        id: c.id,
+        title: c.title,
+        summary: c.summary,
+        collection: c.collection,
+        has_rows: c.has_rows,
+        has_no_rows: c.has_no_rows,
+        columns: c.columns,
+        rows: c
+            .rows
             .into_iter()
-            .map(|c| SharedRecordsCardProps {
-                id: c.id,
-                title: c.title,
-                summary: c.summary,
-                collection: c.collection,
-                has_rows: c.has_rows,
-                has_no_rows: c.has_no_rows,
-                columns: c.columns,
-                rows: c
-                    .rows
-                    .into_iter()
-                    .map(|r| SharedRecordRowProps {
-                        id: r.id,
-                        version: r.version,
-                        committed_at: r.committed_at,
-                        commit_sequence: r.commit_sequence,
-                        cells: r.cells,
-                    })
-                    .collect(),
+            .map(|r| SharedRecordRowProps {
+                id: r.id,
+                version: r.version,
+                committed_at: r.committed_at,
+                commit_sequence: r.commit_sequence,
+                cells: r.cells,
             })
-            .collect();
+            .collect(),
+    })
+    .collect();
+    let record_components = if outline
+        .parts
+        .iter()
+        .any(|part| crate::query::record_routes::is_record_kind(&part.kind))
+    {
+        match crate::query::record_routes::guest_components(
+            &work,
+            access,
+            &crate::query::record_components::default_parameters(),
+        )
+        .await
+        {
+            Ok(batch) => batch.components,
+            Err(response) if response.status() == StatusCode::NOT_FOUND => return Err(response),
+            Err(_) => crate::query::record_routes::unavailable_outline(&outline),
+        }
+    } else {
+        Vec::new()
+    };
     stores
         .data
         .release_guest_access(access)
@@ -676,8 +718,17 @@ async fn guest_document(
         .into_iter()
         .map(|v| v.ok_or_else(http::unavailable))
         .collect::<Result<Vec<_>, _>>()?;
-    let parts = shared_parts(&outline, &views);
+    let parts = shared_parts(&outline, &views, record_components);
     Ok(SharedPageProps {
+        presentation: crate::composer::presentation::project(
+            outline.presentation.as_ref(),
+            &outline
+                .parts
+                .iter()
+                .filter(|part| part.kind != "form" && access.view_ids().contains(&part.id))
+                .map(|part| part.id.clone())
+                .collect(),
+        ),
         title: outline.title,
         share_id: access.key(),
         status: "active".into(),
@@ -687,8 +738,8 @@ async fn guest_document(
         available: true,
         parts,
         views,
+        records_truncated: listing.truncated && !record_cards.is_empty(),
         record_cards,
-        records_truncated: listing.truncated,
         ..Default::default()
     })
 }
@@ -734,6 +785,42 @@ async fn guest_view(
         ),
     };
     Ok(card)
+}
+
+/// Record filters never turn an account-only guest into a workspace member.
+async fn record_components(
+    State(work): State<Arc<Work>>,
+    UniformPath(key): UniformPath<String>,
+    request: Request,
+) -> Response {
+    if request.uri().query().is_some() || !locator(&key) {
+        return http::not_found();
+    }
+    if request.method() == axum::http::Method::POST
+        && !csrf::same_origin(request.headers(), work.auth().origin())
+    {
+        return http::cross_site();
+    }
+    let account = match account(work.auth(), request.headers()).await {
+        Ok(account) => account,
+        Err(response) => return response,
+    };
+    let Some(stores) = &work.auth().stores else {
+        return http::not_found();
+    };
+    let access = match stores.workspace.resolve_guest_access(&account, &key).await {
+        Ok(access) => access,
+        Err(error) => return refusal(error),
+    };
+    let parameters =
+        match crate::query::record_routes::parameters(request, work.auth().origin()).await {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
+    match crate::query::record_routes::guest_components(&work, &access, &parameters).await {
+        Ok(batch) => crate::query::record_routes::response(&batch),
+        Err(response) => response,
+    }
 }
 
 /// Lightweight authorization lease; it never dispatches a data query. The

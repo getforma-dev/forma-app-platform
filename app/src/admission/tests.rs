@@ -628,7 +628,7 @@ fn sized_definition(target: usize) -> Value {
 fn canonical_vectors_match_contracts_lock() {
     // The embedded vectors and specimens are exactly the locked edition's set.
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-11-01.1");
+    assert_eq!(lock["edition"], "impl-2026-11-01.2");
     assert_eq!(lock["canonical_encoding"], "forma-json-v1");
     let locked_fixtures: BTreeSet<&str> = lock["artifacts"]
         .as_object()
@@ -1427,7 +1427,7 @@ fn retained(name: &str) -> Value {
 #[test]
 fn edition_two_vectors_match_contracts_lock() {
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-11-01.1");
+    assert_eq!(lock["edition"], "impl-2026-11-01.2");
     let retained_lock = &lock["retained_editions"]["impl-2026-10-28.1"]["artifacts"];
     for (path, identity) in EDITION_ONE {
         assert_eq!(retained_lock[path], identity, "{path}");

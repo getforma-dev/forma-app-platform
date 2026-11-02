@@ -1,7 +1,12 @@
+import { RecordComponents } from '../record-components/parts';
+import type { RecordComponent } from '../record-components/types';
 import { h, mount, createShow, createList, activateIslands } from '@getforma/core';
 import { startDocument } from './document';
 import { initDocumentAsk } from '../ask/document';
 import { startSharing } from '../sharing/dialog';
+import { PresentationHeader } from '../presentation/header';
+import type { PresentationProps } from '../presentation/presentation';
+import { startPresentationEditor } from '../presentation/editor';
 
 // APP-144 app document: native SSR with one registered enhancement island. Every value, state and
 // receipt row is resolved by the Rust handler; this page only lays them out.
@@ -46,6 +51,7 @@ type Card = {
 };
 type Choice = { id: string; value: string; selected: boolean };
 type Field = {
+  inputMode: string;
   id: string;
   kind: string;
   label: string;
@@ -116,11 +122,12 @@ type Part = {
   id: string; anchor: string; title: string; kind: string; class: string; text: string; collection: string;
   isNote: boolean; isForm: boolean; hasSelector: boolean; selectionName: string; selected: string;
   choices: { id: string; label: string; selected: boolean }[];
-  message: string; forms: FormCard[]; views: Card[];
+  message: string; forms: FormCard[]; views: Card[]; recordComponents: RecordComponent[]; hasRecordComponents: boolean;
 };
 
 type RecordLink = { id: string; label: string; href: string };
 type WorkProps = {
+  presentation: PresentationProps; canEditPresentation: boolean;
   title: string;
   app: string;
   work: string;
@@ -157,15 +164,17 @@ function DocumentStatus(props: { path: string }) {
 
 function Work(props: WorkProps) {
   return (
-    <main class="page work" data-document="" data-app={props.app} data-work={props.work} data-path={props.action} data-csrf={props.csrf}>
+    <main class="page work composed-app" data-document="" data-presentation={props.presentation.json} data-app-mode={props.presentation.mode} data-app-accent={props.presentation.accent} data-app-density={props.presentation.density} data-app-font={props.presentation.font} data-app={props.app} data-work={props.work} data-path={props.action} data-csrf={props.csrf}>
       <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
       <h1 data-document-title="">{props.title}</h1>
+      <PresentationHeader presentation={props.presentation} />
       <p class="lede">
         Your app, connected to your canvas.
       </p>
       <p><a href={props.canvas}>Open on the canvas</a></p>
       <div class="document-actions">
       {createShow(() => props.canShare, () => <button type="button" class="share-primary" data-manage-share="" data-app={props.app} data-work={props.work} data-title={props.title}>Share app</button>)}
+      {createShow(() => props.canEditPresentation, () => <button type="button" data-edit-presentation="" data-app={props.app} data-work={props.work}>Edit app</button>)}
       <button type="button" data-ask-app="">Ask about this app</button>
       </div>
       <div data-document-ask="" hidden></div>
@@ -208,7 +217,8 @@ function Work(props: WorkProps) {
       ))}
       <div class="document-parts" data-document-parts="">
         {createList(() => props.parts, part => part.id, part => (
-          <article id={part.anchor} class={part.class} data-document-part={part.id} data-view={part.id} data-kind={part.kind} data-collection={part.collection}>
+          <article id={part.anchor} class={part.class} data-document-part={part.id} data-component={part.id} data-view={part.id} data-kind={part.kind} data-collection={part.collection}>
+            {createShow(() => part.hasRecordComponents, () => <RecordComponents components={part.recordComponents} />)}
             {createShow(() => part.isNote, () => <section class="view document-note"><h2>{part.title}</h2><p>{part.text}</p></section>)}
             {createShow(() => part.hasSelector, () => <form method="post" action={props.action} class="document-selection" data-document-selection="">
               <input type="hidden" name="csrf" value={props.csrf} />
@@ -235,7 +245,7 @@ function Work(props: WorkProps) {
               {createList(() => form.fields, field => field.id, field => (
                 <div class="document-field">
                   {createShow(() => field.hasText, () => <label>
-                    <span>{field.label}</span><input name={field.input} type="text" value={field.value} />
+                    <span>{field.label}</span>{h('input', { name: field.input, type: 'text', inputmode: field.inputMode, value: field.value })}
                   </label>)}
                   {createShow(() => field.hasChoices, () => <label>
                     <span>{field.label}</span><select name={field.input} value={field.value}>
@@ -370,10 +380,12 @@ await activateIslands({ DocumentStatus });
 startDocument();
 initDocumentAsk(document);
 startSharing(document);
+startPresentationEditor(document);
 
 mount(
   () =>
     Work({
+      presentation: { hasDescription: false, description: '', mode: 'default', accent: 'default', density: 'default', font: 'default', actions: [], json: '{}' }, canEditPresentation: false,
       title: '',
       app: '',
       work: '',
