@@ -1,0 +1,19 @@
+{
+  "cloud_recovery_applied": false,
+  "files": {
+    "ops/promotion/maintenance.py": "994d9f63d0111bba8e8a5b16a92f004352e6049b83fe55a4dfddbb6bdda378ab",
+    "ops/promotion/test_maintenance.py": "7cccb3552c4003b7752a85b84b450e9876ea17277da56183be21a4debf5e9ea0"
+  },
+  "live_read_only_proof_sha256": "a03cc6ce54d88dcf95c094016e77e54d4a1f5ce88eae0dbbcce78030a390e5bf",
+  "proof_limits": [
+    "CloudTrail request parameters are null; token is canonical intent only, never independently claimed as remotely observed",
+    "No general unknown-result override or replay; exact error/session/time, actual template and receipts, exact absence, complete inventory, healthy boundary and 65-minute fence required"
+  ],
+  "result": "pass",
+  "reviewer": "root, independent of maintenance author review_shell",
+  "scope": "Explicit operator recovery for the exact bootstrap-SSM change-set rejection",
+  "tests": {
+    "maintenance": 21,
+    "promotion_suite": 95
+  }
+}

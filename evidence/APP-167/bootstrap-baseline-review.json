@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "scope": "Independent read-only review of the private bootstrap capture; not approval to enable or execute promotion",
+  "capture_sha256": "4b3e240dd06ef50fc23c4e0881cced8a34f8c523d4f3b753fa1777e05ef994d2",
+  "retained_ledger_sha256": "8e23f982ed98a644cb195379e04f672c07148cd9a5fe0a2aae58c60bb7d5368b",
+  "checks": {
+    "all_16_existing_ledger_windows_equal": true,
+    "original_ledger_raw_bytes_equal": true,
+    "initial_state_revision_zero_and_no_active_lease": true,
+    "retained_runtime_candidate": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+    "schema_version": 19,
+    "retained_trial_configuration_equal": true,
+    "retained_signin_alias_configuration_equal": true,
+    "deployment_contract_recomputed_from_retained_candidate": true,
+    "all_three_full_scan_finding_sets_equal_previous_reviewed_release": true
+  },
+  "scan_baseline": {
+    "service": { "critical": 0, "high": 8, "medium": 13, "low": 3 },
+    "qualification": { "critical": 0, "high": 8, "medium": 13, "low": 3 },
+    "operator": { "critical": 0, "high": 9, "medium": 10, "low": 3 }
+  },
+  "scan_comparison": "Compared CVE name, severity and all sorted finding attributes against the retained raw scan pages from the previous reviewed release; zero introduced or removed findings in each role.",
+  "limitations": [
+    "Raw AWS inventory, ledger, tenant configuration and scan receipts remain private.",
+    "Existing vulnerability findings remain present; this review does not claim they were fixed or unreachable.",
+    "The capture must be revalidated at cutover. This receipt does not establish installed IAM authority, remote canonical state, a completed GitHub promotion, or a real user login."
+  ]
+}

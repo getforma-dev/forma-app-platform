@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "scope": "Independent source review of the GitHub workflow, candidate gate, qualified image artifacts and approval/tag helpers",
+  "disposition": "No remaining blocker in these reviewed files. AWS bootstrap, canonical-state cutover, runtime orchestration qualification and the real approved promotion are separate gates.",
+  "source_sha256": {
+    ".github/workflows/beta-promote.yml": "3cf671a9ed0215986ea01d30f10afe95750900bf6f019ca7514c7eef478c2edd",
+    "ops/promotion/candidate.py": "34a2667d9bb18807fe3b3307075959b0cf886913bbbc1901accb0cc8158e9577",
+    "ops/promotion/artifacts.py": "32ef13fe7cb82b44853678107f0c930ef49396a7e4a8ac19159b388e8afa1926",
+    "ops/promotion/build.py": "7e2b8156d7392b889bdf0e32fde714a02277304bf6813e082e355d0c806b284a",
+    "ops/promotion/github.py": "fcade552fad5500babbda0c0ac68955afa00c00986eb35271b67dc77a648d0b5"
+  },
+  "reviewed_controls": [
+    "Only ordinary pushes of an exact merged pull request on the active trunk are eligible; PR events and rerun attempts cannot start deployment.",
+    "The candidate gate requires the complete configured set of successful push workflows at the exact SHA and rechecks current trunk before preparation and execution.",
+    "The native ARM64 build has no AWS or OIDC credentials. Two exporters consume the same build result, and qualifiers are bound to the exported image graph.",
+    "Artifact identity is bound to the same GitHub run, source SHA, artifact ID and actual ZIP digest. OCI paths, every blob digest, the unique ARM64 graph, qualification reports and parser manifests are revalidated.",
+    "Preparation and execution use separate protected environments and exact immutable-repository OIDC claims. Privileged jobs do not upload raw AWS or approval evidence as public artifacts.",
+    "Execution reads actual GitHub environment protection, branch rules and review history for the exact run. A boolean or the run initiator cannot replace the configured human approval.",
+    "The preapproval summary includes candidate, image digests, resource changes, preserved boundaries, scan counts, bounded costs, expiry and the outage sequence.",
+    "Only a separate post-success job can write the annotated release tag; it has no AWS identity. An existing tag must match the exact commit and packet annotation."
+  ],
+  "findings_repaired_and_reread": [
+    "Qualification/operator reports now bind their image identity and candidate context; parser identity and raw manifest hashes are recomputed.",
+    "Indexed OCI archives now require a valid index media type and explicit Linux ARM64 child platform, matching the registry publisher contract.",
+    "The human review projection now contains concrete release scope rather than only a packet hash.",
+    "Current-trunk and exact-CI checks run again after build and after approval.",
+    "OCI JSON documents are limited to 4 MiB before publication; the oversized manifest regression test passes."
+  ],
+  "limitations": [
+    "This is a source review, not evidence of an actual approved GitHub-to-AWS run.",
+    "The reviewed code does not itself prove a human clicked approval; the live run must retain the actual protected-environment review evidence.",
+    "Changes to these source hashes require another review of the affected boundary."
+  ],
+  "merge_mode_followup": {
+    "review": "Full verified push range replaces the final-parent diff; both SHA boundaries are validated, the predecessor must be a nonzero existing SHA and an ancestor, and rename detection is disabled so removed runtime paths remain visible.",
+    "independent_command": "GITHUB_EVENT_NAME=pull_request python3 -m unittest ops.promotion.test_candidate -v",
+    "tests_passed": 10,
+    "real_git_regression": "Temporary repository with runtime commit followed by documentation commit; runtime file renamed into a documentation path; reversed ancestry refused.",
+    "disposition": "No review blocker in this two-file fix."
+  },
+  "pending_selection_followup": {
+    "review": "Selection considers both the verified full push range and runtime changes since the latest annotated beta release tag. If no release tag exists, the candidate is selected rather than skipped.",
+    "tag_checks": "Expected ref naming, annotated Git object type, target-commit suffix and ancestor relationship. Annotation text is not a deployment proof; the tag is a selection hint only.",
+    "deployment_authority": "The private canonical AWS state and approved immutable packet remain authoritative.",
+    "independent_command": "GITHUB_EVENT_NAME=pull_request python3 -m unittest ops.promotion.test_candidate -v",
+    "tests_passed": 11,
+    "regression": "A documentation-only push after an unpublished application change still selects runtime work; missing tags never prove a documentation-only release.",
+    "disposition": "No review blocker in this selector follow-up."
+  }
+}

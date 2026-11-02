@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "disposition": "Cleared to install only the exact reviewed bootstrap IAM roles, OIDC provider and private state bucket",
+  "scope_excludes": [
+    "Canonical-state cutover",
+    "Enabling the promotion workflow",
+    "Runtime change-set execution",
+    "Substituting for the required human deployment approval"
+  ],
+  "template_sha256": "13ea4069be41d2d35e9507b201f5002a979ce14063cf7ba7c29e5f9e710c3c6c",
+  "generator_sha256": "56c8509b5ceda0f186c1eb1b2ec472e67eb38fc1f5d777b57692138c68c7e96b",
+  "capture_sha256": "4b3e240dd06ef50fc23c4e0881cced8a34f8c523d4f3b753fa1777e05ef994d2",
+  "actual_policy_simulation_receipt_sha256": "0dbba6342af9e8a527bc6a7b9aacfbf46c9759c51500b596a7c8145140634fd5",
+  "independent_verification": {
+    "template_equals_current_generator_of_actual_inventory": true,
+    "actual_iam_simulation_cases": 25,
+    "all_actual_decisions_match_expected": true,
+    "each_simulated_policy_equals_its_exact_template_policy": true,
+    "all_simulation_results_untruncated": true,
+    "identity_policies_with_empty_access_analyzer_findings": 3,
+    "cloudformation_validate_template_http_status": 200
+  },
+  "controls_reviewed": [
+    "Exact immutable repository-and-environment OIDC subjects and STS audience; separate prepare and execute identities.",
+    "Preparation cannot update services or execute change sets; execution cannot prepare change sets, pass roles or publish images.",
+    "Change-set permissions bind the exact stack and supported ChangeSetName conditions. Preparation also binds the restricted execution role and private template URL.",
+    "The separate CloudFormation role has fixed task-family, service, service-deployment, schedule and PassRole boundaries, with required wildcard permissions only where the AWS API has no resource-level support.",
+    "No role receives secret mutation, database mutation, IAM administration or object/version deletion authority.",
+    "The state bucket is versioned, encrypted, owner-enforced, publicly blocked and TLS-only. State writes require conditional headers; immutable promotion writes require If-None-Match. Object and version deletion are explicitly denied."
+  ],
+  "findings_repaired_and_reread": [
+    "CloudFormation authorizes change-set operations against the stack, so a changeset ARN in the Resource list alone did not restrict execution. Supported name conditions now enforce the intended prefix.",
+    "ECS task-definition description/deregistration and ELB target-health reads now use the resource model supported by AWS; an unsupported UpdateService cluster condition was removed.",
+    "RegisterTaskDefinition is restricted to existing task families. Current CloudFormation resource-handler dependencies for deployment inspection, stopping and tag reads were added with the supported fixed scopes."
+  ],
+  "sources": [
+    "https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudformation.html",
+    "https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html",
+    "https://docs.aws.amazon.com/service-authorization/latest/reference/list_elbv2.html",
+    "https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecr.html",
+    "https://docs.aws.amazon.com/service-authorization/latest/reference/list_scheduler.html",
+    "https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html"
+  ],
+  "limitations": [
+    "IAM simulation and static validation do not prove a live deployment succeeds. Actual installed policy readback, OIDC assumption and the real approved promotion remain required.",
+    "Private resource identifiers, complete policies, raw AWS responses and tenant state remain outside public evidence."
+  ]
+}

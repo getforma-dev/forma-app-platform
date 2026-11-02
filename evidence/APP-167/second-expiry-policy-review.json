@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-02T08:39:57Z",
+  "review_type": "Independent source and static write-surface review; policy script not executed.",
+  "reviewed_script_sha256": "2488dc31f58e45e812621a5af1d91b44bf2da9388c316ed342766b3277cf6cf5",
+  "previous_reviewed_script_sha256": "4e503b28052b58fdbf4af92719d5eddb2ea6680f0266400238a19156e67041fe",
+  "supporting_source_sha256": {
+    "ops/promotion/aws.py": "e96ad85e25bbbeb919e79e84038c908e0f9892c7205dc34de213b285049ac0ec",
+    "ops/promotion/state.py": "5ccd8c87e7705ba1cd0b2885e5d00e0eee1628629cbeab3cc5aa7702d63ac0ac",
+    "ops/promotion/runner.py": "3adca41ceaa1f3b4cde862420b909c386a5613f3d8a8e1c3dd413cca21b0fcf4",
+    "infra/scripts/preflight.py": "374ca1904602ed62a1fec6fe5a2f62b94748409b23232ee7b7901ef356723d14"
+  },
+  "disposition": "Clear for the separately authorized operator action after the exact second failed promotion is abandoned and the idle state hash is freshly reviewed.",
+  "scope": {
+    "policy_field": "policy.shorten_expiry_hours",
+    "previous": 6,
+    "proposed": 10,
+    "revision_delta": 1,
+    "persistent_default": true
+  },
+  "verified_guards": [
+    "Exact reviewed canonical state hash, no active lease and the original six-hour policy are required.",
+    "The exact second failed candidate must be recorded as abandoned; the existing live predecessor must remain unchanged.",
+    "The AWS identity is checked against the fixed account; preparation and execution workflow roles are refused.",
+    "The existing healthy runtime boundary is checked read-only before the proposed policy write.",
+    "The prospective ten-hour-shortened successor with two task-hours must pass the existing canonical budget validator at execution time; this prospective reservation is not written to the ledger.",
+    "The private receipt binds source, identity, before/after state hashes, policy and prospective budget proof, and is written create-only under the enforced immutable promotions prefix before the state CAS.",
+    "The CAS changes only policy.shorten_expiry_hours and one revision increment. Full readback must match the expected state, preserving the ledger, allowances, caps, live configuration, aliases and identities.",
+    "An unknown write outcome is not retried automatically. A successful prior write fails the original-policy guard on a later invocation."
+  ],
+  "offline_checks": {
+    "python_syntax": "passed",
+    "store_calls": [
+      "load",
+      "immutable",
+      "change",
+      "load"
+    ],
+    "direct_runtime_mutation_api_calls_present": false
+  },
+  "rejected_create_recovery_source_review": {
+    "disposition": "No remaining blocker in the explicitly opted-in recovery for the exact missing bootstrap-version permission rejection.",
+    "source_sha256": {
+      "ops/promotion/maintenance.py": "994d9f63d0111bba8e8a5b16a92f004352e6049b83fe55a4dfddbb6bdda378ab",
+      "ops/promotion/test_maintenance.py": "7cccb3552c4003b7752a85b84b450e9876ea17277da56183be21a4debf5e9ea0"
+    },
+    "verified_behavior": [
+      "The exact canonical request and token remain journal evidence. A unique bounded run-session CloudTrail event must identify the exact bootstrap-SSM ValidationException; missing CloudTrail parameters are explicitly recorded, not treated as an observed token match.",
+      "All prior ECR and template operations require matching immutable receipt bytes, hashes and closed envelopes; uploaded template bytes and canonical create intent must match.",
+      "The original run must be terminal past the 65-minute credential fence. Operator identity, reviewed state hash, complete change-set inventories, two exact ChangeSetNotFound 404 observations and healthy retained runtime boundaries are required.",
+      "The original intent remains intact in evidence. Unknown or different errors, foreign sessions, ambiguous events, changed requests, an existing or pending change set, incomplete reads and a concurrent state change refuse recovery.",
+      "Recovery does not replay CreateChangeSet or alter runtime services. It retains the failed window and allowances and conditionally records abandonment."
+    ],
+    "verification": {
+      "command": "python3 -m unittest ops.promotion.test_maintenance -v",
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "exit_code": 0,
+      "elapsed_seconds": 1.313,
+      "independently_executed": true,
+      "transport": "Offline synthetic AWS and GitHub transport; real recovery, journal, state and budget logic."
+    }
+  },
+  "operations_performed_by_reviewer": {
+    "policy_script_executions": 0,
+    "aws_calls": 0,
+    "state_writes": 0,
+    "runtime_changes": 0
+  },
+  "limits": [
+    "This records source review, not application of the policy or execution of abandonment.",
+    "Ten hours becomes the persistent shortening default until another explicit idle-state review changes it; there is no automatic reset.",
+    "The policy-only write does not change current service counts or expiry schedules. The next promotion calculates and displays its own prospective expiry for human approval.",
+    "Reported projected costs and the next expiry are not replayed or claimed as applied here. The script must pass the actual canonical reserve again when the operator runs it.",
+    "Detailed local and S3 receipts remain private. No raw account identifiers, resource ARNs, capabilities or real user data are copied here."
+  ]
+}
