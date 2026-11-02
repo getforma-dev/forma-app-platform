@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from .aws import AWS
 from .runner import Runner
-from .state import Store, no_duplicates
+from .state import LeaseHeld, Store, no_duplicates
 from .github import validate_summary
 
 
@@ -34,6 +34,13 @@ def main(argv=None):
         args.output.write_text(json.dumps(summary, indent=2) + '\n')
         print(json.dumps(summary))
         return 0
+    except LeaseHeld:
+        # A typed refusal, never an interpolated exception or private state.
+        # The earlier promotion may still be active or have an unknown outcome.
+        print('PROMOTION_LOCK_HELD: An earlier promotion retains the deployment lock. '
+              'Use operator maintenance inspect and reconcile it before a new promotion. '
+              'Do not clear the lock or retry blindly.', file=sys.stderr)
+        return 1
     except Exception:
         # Exception strings may contain signed URLs, private resource identifiers,
         # SDK bodies or state. Do not print them into a public repository's logs.

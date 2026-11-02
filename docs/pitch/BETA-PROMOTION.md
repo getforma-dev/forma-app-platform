@@ -24,7 +24,7 @@ The existing budget limits and requirement for a reconciliation basis less than 
 
 ## Deployment state and failures
 
-One private encrypted state store owns the complete budget ledger, active deployment lock, release packet and write-ahead journal. The original local ledger remains migration evidence. After cutover, legacy local mutation entrypoints refuse to create a competing ledger or deployment. GitHub concurrency complements this lock; it does not replace it.
+One private encrypted state store owns the complete budget ledger, active deployment lock, release packet and write-ahead journal. A known held-lock refusal reports `PROMOTION_LOCK_HELD` with operator inspection guidance. Other refusals and uncertain AWS outcomes remain generic to keep private exception data out of public logs. The original local ledger remains migration evidence. After cutover, legacy local mutation entrypoints refuse to create a competing ledger or deployment. GitHub concurrency complements this lock; it does not replace it.
 
 The deployment lock has no automatic expiry and remains held while approval is pending. Failed or cancelled execution can have an unknown AWS outcome. Do not rerun mutation steps blindly, delete the lock or start a laptop deployment. Reconcile the journal against actual CloudFormation and ECS state, with the previous workflow fenced, before permitting another release. An activation intent cannot be abandoned as though activation never happened.
 
@@ -63,6 +63,8 @@ If a candidate is awaiting its human approval and a source defect is found, do n
 There is currently no GitHub-only abandonment workflow. Any started execution or unknown AWS outcome requires operator reconciliation instead of this prepared-only procedure. Required checks and time fences may remain pending at an agent handoff; record the next action rather than monitoring them continuously.
 
 The November 2 spreadsheet follow-up records cancelled candidate `60fd6bd`, run [41443022905](https://github.com/getforma-dev/forma-app-platform/actions/runs/41443022905), and its **14:27:27 UTC** fence in [APP-108's handoff](../../evidence/APP-108/spreadsheet-review-followup-2026-11-02/README.md). It supersedes the older in-progress PR40–42 batch narrative below; it does not claim that abandonment or the replacement deployment has occurred.
+
+The later [November 2 recovery](../../evidence/APP-167/recovery-2026-11-02/README.md) completed that abandonment and applied the reviewed 18-hour future-shortening policy. Canonical readback is idle at revision 1458 with all 20 windows preserved. Run41479098807 had passed qualification but encountered the earlier lease; it is not an approval target. Its replacement needs a fresh reviewed merge and its own checks/packet. No replacement runtime was deployed by this recovery.
 
 ## Future-expiry policy
 

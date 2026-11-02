@@ -2,7 +2,7 @@ import copy
 import io
 import json
 import unittest
-from ops.promotion.state import Store, Refused, encoded
+from ops.promotion.state import Store, Refused, LeaseHeld, encoded
 
 
 class MemoryS3:
@@ -42,8 +42,19 @@ class StateTests(unittest.TestCase):
 
     def test_two_preparers_cannot_acquire(self):
         self.store.acquire('one', authorization(), 'a')
-        with self.assertRaises(Refused): Store(self.s3, 'bucket', 'beta').acquire('two', authorization(), 'b')
-        self.assertEqual(json.loads(self.s3.objects['beta/state.json'])['ledger'], state()['ledger'])
+        self.store.operation('prepared-operation', {'synthetic': True}, lambda: {'ok': True})
+        before = copy.deepcopy(self.s3.objects); etag = self.s3.etag
+        other = Store(self.s3, 'bucket', 'beta')
+        with self.assertRaises(LeaseHeld): other.acquire('two', authorization(), 'b')
+        self.assertIsNone(other.owner)
+        self.assertEqual(self.s3.objects, before)
+        self.assertEqual(self.s3.etag, etag)
+
+    def test_uncertain_acquisition_write_is_not_a_known_held_lease(self):
+        self.s3.fail_after_write = True
+        with self.assertRaises(TimeoutError): self.store.acquire('one', authorization(), 'a')
+        self.assertEqual(self.store.load()['active']['promotion_id'], 'one')
+        self.assertIsNone(self.store.owner)
 
     def test_stale_cas_cannot_overwrite_ledger_or_lease(self):
         other = Store(self.s3, 'bucket', 'beta'); other.load()
