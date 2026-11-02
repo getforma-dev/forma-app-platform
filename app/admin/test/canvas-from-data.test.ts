@@ -111,6 +111,7 @@ class FakeDocument {
   querySelector(selector: string) { return this.body.querySelector(selector); }
   querySelectorAll(selector: string) { return this.body.querySelectorAll(selector); }
   addEventListener() { /* no global keys here */ }
+  removeEventListener() { /* no global keys here */ }
 }
 
 function freshDocument(): FakeDocument {
@@ -256,7 +257,7 @@ test('a spreadsheet dropped with another file stays a file, and the other file m
   assert.doesNotMatch(notice.textContent, /until you choose/);
 });
 
-test('several spreadsheets: Make an app includes every file from that upload', async () => {
+test('several spreadsheets: Make an app requests the selected files and explains the server cap', async () => {
   const document_ = freshDocument();
   const bar = document_.createElement('input');
   bar.setAttribute('id', 'intent-input');
@@ -280,13 +281,85 @@ test('several spreadsheets: Make an app includes every file from that upload', a
   button(notice, 'Make an app')!.click();
   const sheet = button(document_.body, 'Make an app from this');
   assert.ok(sheet, 'the column sheet opens');
-  assert.match(document_.body.textContent, /includes all 2 spreadsheets/);
+  assert.match(document_.body.textContent, /2 files requested; apps use up to 3 readable tables/);
+  assert.match(document_.body.textContent, /These columns belong to q3_metrics.csv only/);
+  assert.doesNotMatch(document_.body.textContent, /includes all/);
   sheet!.click();
   assert.equal(calls.filter((c) => String(c.url).includes('/apps')).length, 0, 'the app is not built before the purpose is confirmed');
   button(document_.body, 'Build the app')!.click();
   await settle();
   const built = calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
   assert.deepEqual(built.map((c) => c.body), [{ purpose: 'an overview of this data', file_ids: [FILE, FILE2] }]);
+});
+
+test('app result counts distinguish requested files from actually used tables and reject impossible success', async () => {
+  const { appFileSummary } = await import('../src/canvas/data-sheet.ts');
+  assert.equal(appFileSummary(4, 3), 'using 3 of 4 requested files');
+  assert.equal(appFileSummary(4, 1), 'using 1 of 4 requested files');
+  assert.equal(appFileSummary(2, 2), 'using 2 of 2 requested files');
+  assert.equal(appFileSummary(1, 1), 'using 1 requested file');
+  for (const [requested, used] of [[1, 0], [1, 2], [4, 4], [4, -1], [4, 1.5], [4, NaN], [0, 0], [21, 1]]) {
+    assert.throws(() => appFileSummary(requested!, used!), /invalid_app_file_count/);
+  }
+});
+
+const appSheetFile = {
+  file_id: FILE, name: 'q3_metrics.csv', kind: 'csv' as const, media_type: 'text/csv', bytes: 20,
+  sha256: 'sha256:x', created_at: '2026-10-31T00:00:00Z', content_url: `/v1/boxes/${BOX}/files/${FILE}/content`, data: null,
+};
+const appSheetPreview = {
+  format: 'csv' as const, sheet: null, rows: 3,
+  columns: [{ id: 'amount', header: 'Amount', type: 'integer' as const, nullable: false, scale: null }], sample: [['1']],
+};
+const APP = '00000000-0000-4000-8000-0000000a0c01';
+const WORK = '00000000-0000-4000-8000-0000000a0c02';
+
+test('the real app sheet reports the returned used count without changing requested file_ids', async () => {
+  const document_ = freshDocument();
+  const activity = document_.createElement('p');
+  activity.setAttribute('id', 'cv-activity');
+  document_.body.append(activity);
+  const ids = [FILE, FILE2, '00000000-0000-4000-8000-0000000f0c03', '00000000-0000-4000-8000-0000000f0c04'];
+  const calls = fakeFetch((call) => call.url.endsWith('/apps')
+    ? { status: 201, body: { app_id: APP, work_id: WORK, title: 'Summary', files: 3 } }
+    : { status: 200, body: {} });
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  let completed = 0;
+  openDataSheet(BOX, appSheetFile, appSheetPreview, () => { completed += 1; }, false, ids);
+  assert.match(document_.body.textContent, /4 files requested; apps use up to 3 readable tables/);
+  assert.match(document_.body.textContent, /Other requested files use their saved types or inferred defaults/);
+  button(document_.body, 'Make an app from this')!.click();
+  button(document_.body, 'Build the app')!.click();
+  await settle();
+  assert.deepEqual(calls.filter((call) => call.url.endsWith('/apps')).map((call) => call.body), [{ purpose: 'an overview of this data', file_ids: ids }]);
+  assert.deepEqual(calls.filter((call) => call.url.endsWith('/data')).map((call) => call.url), [`/v1/boxes/${BOX}/files/${FILE}/data`]);
+  assert.equal(completed, 1);
+  assert.match(activity.textContent, /generated using 3 of 4 requested files/);
+  assert.doesNotMatch(activity.textContent, /generated from 4 files|includes all/);
+});
+
+test('a single requested file cannot announce success when unreadable or reported as unused', async () => {
+  const { openDataSheet } = await import('../src/canvas/data-sheet.ts');
+  for (const result of [
+    { status: 422, body: { code: 'no_data_files' }, message: /no table \(CSV or XLSX\).*Nothing was placed/ },
+    { status: 201, body: { app_id: APP, work_id: WORK, title: 'Summary', files: 0 }, message: /service is unavailable/ },
+  ]) {
+    const document_ = freshDocument();
+    const activity = document_.createElement('p');
+    activity.setAttribute('id', 'cv-activity');
+    document_.body.append(activity);
+    const calls = fakeFetch((call) => call.url.endsWith('/apps') ? result : { status: 200, body: {} });
+    let completed = 0;
+    openDataSheet(BOX, appSheetFile, appSheetPreview, () => { completed += 1; });
+    button(document_.body, 'Make an app from this')!.click();
+    button(document_.body, 'Build the app')!.click();
+    await settle();
+    assert.deepEqual(calls.filter((call) => call.url.endsWith('/apps')).map((call) => call.body), [{ purpose: 'an overview of this data', file_ids: [FILE] }]);
+    assert.equal(completed, 0);
+    assert.equal(activity.textContent, '');
+    assert.match(document_.body.querySelector('.bx-status')!.textContent, result.message);
+    assert.equal(button(document_.body, 'Build the app')!.disabled, false, 'failure stays actionable without a success announcement');
+  }
 });
 
 test('a folder with files offers Ask, Make a card and Make an app; Make waits for its confirm (APP-124)', async () => {
@@ -410,4 +483,100 @@ test('Ask on a folder posts the question to the folder; its answer is exactly te
   card.append(title);
   item.append(card);
   assert.deepEqual(ask.scopeOfItem(item as unknown as HTMLElement), scope);
+});
+
+test('folder uploads await real outcomes and count confirmed files, retaining partial failure details', async () => {
+  const document_ = freshDocument();
+  const pending: DeferredXHR[] = [];
+  class DeferredXHR {
+    status = 0;
+    responseText = '';
+    upload = { addEventListener() {} };
+    listeners = new Map<string, (() => void)[]>();
+    open() {}
+    addEventListener(type: string, listener: () => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]); }
+    send() { pending.push(this); }
+    finish(status: number, body: unknown) {
+      this.status = status;
+      this.responseText = JSON.stringify(body);
+      for (const listener of this.listeners.get('load') ?? []) listener();
+    }
+  }
+  (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = DeferredXHR;
+  fakeFetch(() => ({ status: 200, body: contents(true, 1) }));
+  const { buildBoxCard } = await import('../src/canvas/boxes.ts');
+  const built = buildBoxCard(contents(true, 0));
+  const card = built.card as unknown as FakeNode;
+  document_.body.append(card);
+  let completed = false;
+  const uploading = built.upload([
+    new File(['first'], 'first.txt'), new File(['second'], 'second.txt'),
+  ], 'land').then(result => { completed = true; return result; });
+  await settle();
+  assert.equal(completed, false, 'a pending upload must not produce a completion summary');
+  assert.doesNotMatch(card.textContent, /files added|uploads confirmed/);
+  pending[0]!.finish(201, { file: {
+    file_id: FILE, name: 'first.txt', kind: 'text', bytes: 5, data: null,
+  } });
+  await settle();
+  assert.equal(completed, false, 'the second upload is still pending');
+  pending[1]!.finish(422, { code: 'unsupported_file' });
+  assert.deepEqual(await uploading, { requested: 2, stored: 1 });
+  assert.match(card.querySelector('.bx-card-status')!.textContent, /1 of 2 uploads confirmed/);
+  assert.match(card.querySelector('.bx-progress')!.textContent, /second\.txt/);
+  assert.doesNotMatch(card.textContent, /2 files added|Ask about them/);
+});
+
+test('oversize and full-folder uploads never report files added', async () => {
+  freshDocument();
+  const { buildBoxCard } = await import('../src/canvas/boxes.ts');
+  fakeFetch(() => ({ status: 200, body: contents(true, 0) }));
+  const oversize = new File(['x'], 'too-large.txt');
+  Object.defineProperty(oversize, 'size', { value: 20 * 1024 * 1024 + 1 });
+  const empty = buildBoxCard(contents(true, 0));
+  assert.deepEqual(await empty.upload([oversize], 'land'), { requested: 1, stored: 0 });
+  assert.match((empty.card as unknown as FakeNode).textContent, /too-large\.txt is over 20 MB and was not uploaded/);
+  assert.match((empty.card as unknown as FakeNode).textContent, /0 of 1 uploads confirmed/);
+  fakeFetch(() => ({ status: 200, body: contents(true, 20) }));
+  const full = buildBoxCard(contents(true, 20));
+  assert.deepEqual(await full.upload([new File(['a'], 'a.txt'), new File(['b'], 'b.txt')], 'land'), { requested: 2, stored: 0 });
+  assert.match((full.card as unknown as FakeNode).textContent, /remaining files were not uploaded/);
+  assert.match((full.card as unknown as FakeNode).textContent, /0 of 2 uploads confirmed/);
+});
+
+test('spreadsheet uploads keep partial and unknown outcomes visible without claiming nothing was stored', async () => {
+  const document_ = freshDocument();
+  fakeFetch(() => ({ status: 201, body: { box: {
+    box_id: BOX, number: 1, name: 'Uploads', kind: 'uploads', owner: true, file_count: 0,
+  } } }));
+  class PartialXHR {
+    status = 0;
+    responseText = '';
+    upload = { addEventListener() {} };
+    listeners = new Map<string, (() => void)[]>();
+    open() {}
+    addEventListener(type: string, listener: () => void) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]); }
+    send(form: FormData) {
+      const file = form.get('file') as File;
+      if (file.name === 'lost.csv') {
+        for (const listener of this.listeners.get('error') ?? []) listener();
+        return;
+      }
+      this.status = 201;
+      this.responseText = JSON.stringify({ file: { file_id: FILE, name: file.name, kind: 'csv', bytes: file.size }, preview: { refused: 'unreadable' } });
+      for (const listener of this.listeners.get('load') ?? []) listener();
+    }
+  }
+  (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = PartialXHR;
+  const { newUntitled } = await import('../src/canvas/boxes.ts');
+  const partial = await newUntitled([new File(['bad syntax'], 'stored.csv'), new File(['a'], 'lost.csv')]);
+  assert.match(partial, /stored\.csv is stored as a file/);
+  assert.match(partial, /1 of 2 spreadsheet uploads confirmed/);
+  assert.match(document_.getElementById('bx-notice')!.textContent, /lost\.csv/);
+  assert.ok(button(document_.getElementById('bx-notice')!, 'Open original file'), 'a parser refusal leaves the stored original available');
+  assert.equal(button(document_.getElementById('bx-notice')!, 'Make an app'), undefined);
+  const unknown = await newUntitled([new File(['a'], 'lost.csv')]);
+  assert.match(unknown, /0 of 1 spreadsheet uploads confirmed/);
+  assert.doesNotMatch(unknown, /Nothing was stored/);
+  assert.ok(button(document_.getElementById('bx-notice')!, 'Open Uploads'), 'unknown outcomes offer inspection before retry');
 });

@@ -47,12 +47,17 @@ export interface WidgetCanvasElements {
   navigatorViewport: HTMLElement;
 }
 
+/** A drop is authorized only by this gesture's matching pointer release. */
+export type WidgetCanvasDragEnd =
+  | { kind: "released"; pointerId: number; x: number; y: number }
+  | { kind: "cancelled" };
+
 export interface WidgetCanvasOptions {
   onChange?: () => void;
   onCommit?: () => void;
   onActiveChange?: (item: HTMLElement | null) => void;
   onActiveItemStateChange?: (item: HTMLElement) => void;
-  onActiveDragStateChange?: (item: HTMLElement, dragging: boolean) => void;
+  onActiveDragStateChange?: (item: HTMLElement, dragging: boolean, completion: WidgetCanvasDragEnd | null) => void;
   onFocusModeChange?: (
     item: HTMLElement | null,
     focused: boolean,
@@ -298,7 +303,7 @@ export class WidgetCanvas {
   readonly #onCommit: () => void;
   readonly #onActiveChange: (item: HTMLElement | null) => void;
   readonly #onActiveItemStateChange: (item: HTMLElement) => void;
-  readonly #onActiveDragStateChange: (item: HTMLElement, dragging: boolean) => void;
+  readonly #onActiveDragStateChange: (item: HTMLElement, dragging: boolean, completion: WidgetCanvasDragEnd | null) => void;
   readonly #onFocusModeChange: (
     item: HTMLElement | null,
     focused: boolean,
@@ -1726,7 +1731,7 @@ export class WidgetCanvas {
           moved = true;
           this.#viewport.classList.add("is-dragging-widget");
           item.classList.add("is-dragging");
-          this.#onActiveDragStateChange(item, true);
+          this.#onActiveDragStateChange(item, true, null);
         }
         nextX = Math.round(original.x + deltaX / startZoom);
         nextY = Math.round(original.y + deltaY / startZoom);
@@ -1736,6 +1741,11 @@ export class WidgetCanvas {
         if ((endEvent && endEvent.pointerId !== pointerId) || ended) return;
         ended = true;
         this.#cancelWidgetDragGesture = null;
+        // Local change (APP-108): cancellation still persists movement, but
+        // cannot borrow a document-level release to perform a file/folder drop.
+        const completion: WidgetCanvasDragEnd = endEvent?.type === "pointerup"
+          ? { kind: "released", pointerId, x: endEvent.clientX, y: endEvent.clientY }
+          : { kind: "cancelled" };
         if (moved && endEvent?.type === "pointerup") {
           nextX = Math.round(original.x + (endEvent.clientX - startClientX) / startZoom);
           nextY = Math.round(original.y + (endEvent.clientY - startClientY) / startZoom);
@@ -1763,7 +1773,7 @@ export class WidgetCanvas {
             if (this.#widgetDragPointerId === pointerId) this.#widgetDragPointerId = null;
             if (item.isConnected && this.#items.get(itemId) === item) {
               this.#updateItemVisibility();
-              this.#onActiveDragStateChange(item, false);
+              this.#onActiveDragStateChange(item, false, completion);
             }
           });
         } else {

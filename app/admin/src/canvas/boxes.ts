@@ -52,6 +52,7 @@ import { registerFocusCard, unregisterFocusCard } from './focus';
 import {
   boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onCanvasDragEnd, onLayoutSaved,
   placeWork, unmountWidget, widgetSpot, workCard,
+  type CanvasDragEnd,
 } from './board';
 import { setFileRouter } from './receipt';
 import { formationChip } from './timing';
@@ -67,7 +68,14 @@ type Report = (message: string) => void;
  * canvas: the files land and the folder offers Ask, Make a card and Make an app).
  */
 type Landing = 'sheet' | 'land';
-type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], landing?: Landing): Promise<void>; rename(): void; name(): string; close(): void };
+type UploadSummary = { requested: number; stored: number };
+type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], landing?: Landing): Promise<UploadSummary>; rename(): void; name(): string; close(): void };
+
+function uploadSummary({ requested, stored }: UploadSummary): string {
+  return stored === requested
+    ? `${stored} ${stored === 1 ? 'file added' : 'files added'} to the ${noun}.`
+    : `${stored} of ${requested} uploads confirmed in the ${noun}. Check the files and upload messages before retrying.`;
+}
 
 const STORAGE_KEY = 'forma.boxes.v1';
 const CMD = `/${FOLDER_COMMAND}`;
@@ -382,11 +390,15 @@ export function buildBoxCard(initial: BoxContents) {
     let landed = 0;
     for (const file of list) {
       if (file.size > MAX_FILE_BYTES) {
-        say(`${file.name} is over 20 MB. Nothing was stored.`);
+        const message = `${file.name} is over 20 MB and was not uploaded.`;
+        progress.append(el(document_, 'li', { class: 'bx-upload' }, message));
+        say(message);
         continue;
       }
       if (contents.files.length >= MAX_BOX_FILES) {
-        say(`This ${noun} already holds 20 files. Nothing more was stored.`);
+        const message = `This ${noun} already holds 20 files. The remaining files were not uploaded.`;
+        progress.append(el(document_, 'li', { class: 'bx-upload' }, message));
+        say(message);
         break;
       }
       const bar = el(document_, 'progress', { max: '1', value: '0' });
@@ -410,15 +422,16 @@ export function buildBoxCard(initial: BoxContents) {
           say(`${file.name} was stored, but it could not be read as a table.`);
         }
       } catch (error) {
-        row.remove();
-        say(`${file.name}: ${refusalText(error)}`);
+        const message = `${file.name}: ${refusalText(error)}`;
+        row.textContent = message;
+        say(message);
       }
     }
     await refresh();
     void refreshBoxes();
-    if (landing === 'land' && landed) {
-      say(`${landed} ${landed === 1 ? 'file' : 'files'} in this ${noun}. Ask about ${landed === 1 ? 'it' : 'them'}, Make a card, or ✨ Make an app.`);
-    }
+    const result = { requested: list.length, stored: landed };
+    if (landing === 'land') say(uploadSummary(result));
+    return result;
   };
 
   pick.addEventListener('click', () => picker.click());
@@ -701,12 +714,13 @@ async function uploadAsSheets(files: File[], suffix = ''): Promise<string> {
   try {
     uploads = await uploadsBox();
   } catch (error) {
-    return refusalText(error);
+    return `${refusalText(error)}${suffix}`;
   }
   const stored: { file: BoxFile; preview?: Preview }[] = [];
+  const failures: string[] = [];
   for (const file of files) {
     if (file.size > MAX_FILE_BYTES) {
-      announce(`${file.name} is over 20 MB. Nothing was stored.`);
+      failures.push(`${file.name} is over 20 MB and was not uploaded.`);
       continue;
     }
     try {
@@ -714,26 +728,33 @@ async function uploadAsSheets(files: File[], suffix = ''): Promise<string> {
       const found = uploaded.preview;
       stored.push({ file: uploaded.file, preview: found && !('refused' in found) ? found : undefined });
     } catch (error) {
-      announce(`${file.name}: ${refusalText(error)}`);
+      failures.push(`${file.name}: ${refusalText(error)}`);
     }
   }
   void refreshBoxes();
-  if (!stored.length) return 'Nothing was stored.';
+  const summary = stored.length === files.length
+    ? `${stored.length} spreadsheets stored as files.`
+    : `${stored.length} of ${files.length} spreadsheet uploads confirmed. Check Uploads before retrying.`;
+  const details = `${failures.length ? ` ${failures.join(' ')}` : ''}${suffix}`;
+  if (!stored.length) {
+    notice(`${summary}${details}`, [{ label: 'Open Uploads', run: () => void openBox(uploads.box_id).then(announce) }]);
+    return `${summary}${details}`;
+  }
   const [first] = stored;
   if (stored.length === 1 && first) {
-    offerSheet(uploads.box_id, first.file, first.preview, suffix);
-    return `${first.file.name} is stored as a file.${suffix}`;
+    offerSheet(uploads.box_id, first.file, first.preview, `${stored.length < files.length ? ` ${summary}` : ''}${details}`);
+    return `${first.file.name} is stored as a file.${stored.length < files.length ? ` ${summary}` : ''}${details}`;
   }
   for (const row of stored) announce(placeSheet(uploads.box_id, row.file));
   const ids = stored.map((row) => row.file.file_id);
-  notice(`${stored.length} spreadsheets stored as files. Double-click to open original contents.${suffix}`, [
+  notice(`${summary} Double-click to open original contents.${details}`, [
     { label: 'Open Uploads', run: () => void openBox(uploads.box_id).then(announce) },
     ...(first?.preview && stored.every((row) => row.preview) ? [
       { label: 'Make a card', run: chooseCard(uploads.box_id, ids) },
       { label: 'Make an app', run: () => openDataSheet(uploads.box_id, first.file, first.preview!, () => undefined, false, ids) },
     ] : []),
   ], 0);
-  return `${stored.length} spreadsheets stored as files.`;
+  return `${summary}${details}`;
 }
 
 const sheetKey = (): string | null => {
@@ -845,7 +866,7 @@ function placeSheet(boxId: string, file: BoxFile, at?: { x: number; y: number },
   removedSheets.delete(key);
   sheets.set(key, { boxId, file: sheetRecord(boxId, file), item });
   if (persist) saveSheets();
-  return `${file.name} is on the canvas. Double-click it to open the sheet. Drag it onto a folder to let that folder read it.`;
+  return `${file.name} is on the canvas. Double-click it to open the sheet. Drag it onto a folder to copy it there.`;
 }
 
 function saveSheets(): void {
@@ -873,20 +894,6 @@ function loadSheets(): { boxId: string; fileId: string; x: number; y: number }[]
   } catch { return []; }
 }
 
-let releaseAt: { x: number; y: number; at: number } | null = null;
-
-function noteRelease(event: PointerEvent): void {
-  if (event.button !== 0) return;
-  releaseAt = { x: event.clientX, y: event.clientY, at: performance.now() };
-}
-
-function takeRelease(): { x: number; y: number } | null {
-  const point = releaseAt;
-  releaseAt = null;
-  if (!point || performance.now() - point.at > 1000) return null;
-  return point;
-}
-
 /** The folder under the pointer, looking through the spreadsheet card on top of it. */
 function folderAt(x: number, y: number, item: HTMLElement): string | null {
   if (typeof document.elementsFromPoint !== 'function') return null;
@@ -908,16 +915,17 @@ function sameSpot(item: HTMLElement, home: { x: number; y: number } | null): boo
 
 const copying = new Set<string>();
 
-/** Dropping a spreadsheet card on a folder copies the file into that folder, which Ask and Make an app read. */
-async function dropSheetOnFolder(item: HTMLElement): Promise<void> {
-  if (!item.classList.contains('cv-item-sheet')) return;
+/** Only a completed drop copies a spreadsheet into a folder. */
+async function dropSheetOnFolder(item: HTMLElement, completion: CanvasDragEnd): Promise<void> {
+  if (completion.kind !== 'released' || !item.classList.contains('cv-item-sheet')) return;
   const spot = [...sheets.values()].find((entry) => entry.item === item);
   if (!spot) return;
   const key = sheetId(spot.boxId, spot.file.file_id);
-  if (copying.has(key)) return;
-  const point = takeRelease();
-  if (!point) return;
-  const target = folderAt(point.x, point.y, item);
+  if (copying.has(key)) {
+    announce(`${spot.file.name} is already being copied. Wait for that copy to finish before trying another folder.`);
+    return;
+  }
+  const target = folderAt(completion.x, completion.y, item);
   if (!target || target === spot.boxId) return;
   const home = widgetSpot(item);
   if (!home) return;
@@ -928,13 +936,13 @@ async function dropSheetOnFolder(item: HTMLElement): Promise<void> {
     if (!response.ok) throw new Error('refused');
     const blob = await response.blob();
     if (!sameSpot(item, home)) {
-      announce(`${spot.file.name} stayed on the canvas.`);
+      announce(`${spot.file.name} was not copied because its icon was ${item.isConnected && sheets.get(key)?.item === item ? 'moved' : 'removed'}. The original file is still stored.`);
       return;
     }
     const uploaded = await uploadFile(target, new File([blob], spot.file.name, { type: blob.type || 'application/octet-stream' }), () => undefined);
-    if (!sameSpot(item, home) || !sheets.has(key)) {
+    if (!sameSpot(item, home) || sheets.get(key)?.item !== item) {
       void open.get(target)?.refresh();
-      announce(`${spot.file.name} was copied into the folder. The icon stayed on the canvas.`);
+      announce(`${spot.file.name} was copied into the folder. ${item.isConnected && sheets.get(key)?.item === item ? 'Its icon remains where you moved it.' : 'Its icon was removed from the canvas.'}`);
       return;
     }
     unmountWidget(item);
@@ -942,9 +950,9 @@ async function dropSheetOnFolder(item: HTMLElement): Promise<void> {
     removedSheets.add(key);
     placeSheet(target, uploaded.file, home ?? undefined);
     void open.get(target)?.refresh();
-    announce(`${spot.file.name} is in the folder. Ask and Make an app there can read it.`);
+    announce(`${spot.file.name} was copied into the folder.`);
   } catch (error) {
-    announce(`${spot.file.name} stayed where it was. ${refusalText(error)}`);
+    announce(`The copy of ${spot.file.name} could not be confirmed. ${refusalText(error)} Check the folder before retrying.`);
   } finally {
     copying.delete(key);
   }
@@ -979,23 +987,21 @@ function offerSheet(boxId: string, file: BoxFile, found?: Preview, suffix = ''):
 }
 
 /** An empty folder, or one that holds the files that are not spreadsheets. */
-async function holdInNewFolder(files: File[]): Promise<{ ok: boolean; text: string }> {
+async function holdInNewFolder(files: File[]): Promise<string> {
   let made: Box;
   try {
     made = await createBox(`Untitled ${noun}`);
   } catch (error) {
-    return { ok: false, text: refusalText(error) };
+    return refusalText(error);
   }
   await refreshBoxes();
   const message = await openBox(made.box_id);
   const entry = open.get(made.box_id);
-  if (!entry) return { ok: false, text: message };
+  if (!entry) return message;
   entry.rename();
-  if (files.length) void entry.upload(files, 'land');
-  const text = files.length
-    ? `A new ${noun} holds your ${files.length === 1 ? 'file' : 'files'}; name it.`
-    : `A new ${noun} is on your canvas; name it.`;
-  return { ok: true, text };
+  if (!files.length) return `A new ${noun} is on your canvas; name it.`;
+  const result = await entry.upload(files, 'land');
+  return uploadSummary(result);
 }
 
 /** "+ New folder" and a drop on empty canvas. Spreadsheets become file icons; other files go in the folder. */
@@ -1004,9 +1010,8 @@ export async function newUntitled(files: File[] = []): Promise<string> {
   const others = files.filter((file) => !isDataFile(file));
   if (spreadsheets.length && !others.length) return uploadAsSheets(spreadsheets);
   const held = await holdInNewFolder(others);
-  if (!spreadsheets.length) return held.text;
-  const sheetText = await uploadAsSheets(spreadsheets, held.ok ? ' The other files are in a new folder.' : '');
-  return `${sheetText} ${held.text}`.trim();
+  if (!spreadsheets.length) return held;
+  return uploadAsSheets(spreadsheets, ` ${held}`);
 }
 
 // --- Provenance on app cards and receipts ---
@@ -1308,8 +1313,7 @@ export function startBoxes(document_: Document): void {
   startExplain();
   markChips();
   onLayoutSaved(() => { save(); saveSheets(); });
-  document_.addEventListener('pointerup', noteRelease, true);
-  onCanvasDragEnd((item) => { void dropSheetOnFolder(item); });
+  onCanvasDragEnd((item, completion) => { void dropSheetOnFolder(item, completion); });
   const restoreCamera = JSON.stringify(canvasApi()?.getCamera());
   void refreshBoxes().then(async () => {
     if (!isDemoCanvas()) for (const row of load()) void openBox(row.id, { x: row.x, y: row.y });

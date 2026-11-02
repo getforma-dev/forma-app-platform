@@ -11,6 +11,7 @@ import {
   createCanvasItem,
   createCanvasSurface,
   type WidgetCanvasItemState,
+  type WidgetCanvasDragEnd,
 } from '../canvas-vendor/index';
 import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
@@ -193,9 +194,10 @@ export function onLayoutSaved(listener: () => void): void {
   layoutListeners.push(listener);
 }
 
-const dragEndListeners: ((item: HTMLElement) => void)[] = [];
-/** Calls `listener` when a canvas item finishes a drag. */
-export function onCanvasDragEnd(listener: (item: HTMLElement) => void): void {
+export type CanvasDragEnd = WidgetCanvasDragEnd;
+const dragEndListeners: ((item: HTMLElement, completion: CanvasDragEnd) => void)[] = [];
+/** Finishes every moved gesture; only `released` may trigger a drop effect. */
+export function onCanvasDragEnd(listener: (item: HTMLElement, completion: CanvasDragEnd) => void): void {
   dragEndListeners.push(listener);
 }
 
@@ -1523,10 +1525,12 @@ export function startBoard(document_: Document): void {
     },
     onKeyboardNavigation: announce,
     // Moving a card by hand (drag or keyboard) pins its group's layout.
-    onActiveDragStateChange: (item, dragging) => {
+    onActiveDragStateChange: (item, dragging, completion) => {
       if (dragging) return;
-      for (const listener of dragEndListeners) listener(item);
-      stackHooks.dragEnd(item);
+      if (completion) {
+        for (const listener of dragEndListeners) listener(item, completion);
+        if (completion.kind === 'released') stackHooks.dragEnd(item);
+      }
       if (widgetItems.has(item)) item.dataset.widgetPinned = 'true';
       const group = groups.get(item.dataset.group ?? '');
       if (group) group.pinned = true;
