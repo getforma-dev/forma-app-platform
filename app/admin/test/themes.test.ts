@@ -47,6 +47,8 @@ test('a judged app theme maps onto one data-theme name', async () => {
   assert.equal(themeName({ accent: 'crimson' }, 'dark'), 'crimson-dark');
   assert.equal(themeName({ accent: 'crimson', mode: 'light' }, 'dark'), 'crimson');
   assert.equal(themeName({ accent: 'slate', mode: 'dark' }, 'light'), 'slate-dark');
+  assert.equal(themeName({ accent: 'harbor' }, 'dark'), 'harbor-dark');
+  assert.equal(themeName({ accent: 'grove', mode: 'light' }, 'dark'), 'grove');
   assert.equal(themeName({}, 'dark'), null);
 });
 
@@ -119,4 +121,11 @@ test('a canvas palette is a closed name and follows the color scheme', async () 
   assert.equal(themeForPalette('stone', 'light'), 'stone');
   assert.equal(themeForPalette('grove', 'dark'), 'grove-dark');
   assert.equal(themeForPalette('nope', 'dark'), 'site-dark');
+});
+
+test('a stored app theme keeps only closed names', async () => {
+  const { appThemesFromStorage } = await import('../src/canvas/shape.ts');
+  const work = '00000000-0000-4000-8000-000000000001';
+  assert.deepEqual(appThemesFromStorage({ [work]: { accent: 'harbor', mode: 'dark' } }), [[work, { accent: 'harbor', mode: 'dark' }]]);
+  assert.deepEqual(appThemesFromStorage({ [work]: { accent: 'cupcake' }, bad: { accent: 'ink' } }), []);
 });

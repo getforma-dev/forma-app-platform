@@ -35,6 +35,12 @@ pub const MAX_WORDS: usize = 300;
 pub const PALETTE: &[&str] = &[
     "default", "green", "crimson", "amber", "cyan", "violet", "rose", "ice", "slate",
 ];
+/// App accents: the card colors, plus the canvas palettes a Shape request can
+/// select as a whole look. Card highlights stay on [`PALETTE`].
+pub const APP_ACCENTS: &[&str] = &[
+    "default", "green", "crimson", "amber", "cyan", "violet", "rose", "ice", "slate", "ink",
+    "harbor", "stone", "grove",
+];
 pub const PRESENTATIONS: &[&str] = &["table", "list", "bar", "line", "number"];
 pub const OPS: &[&str] = &["eq", "ne", "lt", "lte", "gt", "gte", "in"];
 pub const MEASURES: &[&str] = &["count", "sum", "avg", "min", "max"];
@@ -530,7 +536,7 @@ pub fn judge_theme_object(object: Map<String, Value>) -> Result<AppTheme, &'stat
         return Err("empty_view");
     }
     let ok = theme.mode.as_deref().is_none_or(|m| closed(MODES, m))
-        && theme.accent.as_deref().is_none_or(|a| closed(PALETTE, a))
+        && theme.accent.as_deref().is_none_or(|a| closed(APP_ACCENTS, a))
         && theme
             .density
             .as_deref()
@@ -579,10 +585,11 @@ A view may filter or hide records but never removes receipts. Never write prose,
 pub fn theme_system() -> String {
     format!(
         "You theme every card of one app on a dashboard. You never answer in words and never change records or what a card shows.\n\
-Answer with ONLY one JSON object using only these optional keys: \"mode\": one of [{modes}], \"accent\": one of [{palette}], \"density\": one of [{densities}].\n\
+Answer with ONLY one JSON object using only these optional keys: \"mode\": one of [{modes}], \"accent\": one of [{accents}], \"density\": one of [{densities}].\n\
+green, crimson, amber, cyan, violet, rose, ice and slate recolor the app. ink, harbor, stone and grove are whole palettes.\n\
 Never write prose, CSS, HTML, color codes or any other key. If the request cannot be expressed, return {{}}.",
         modes = MODES.join(", "),
-        palette = PALETTE.join(", "),
+        accents = APP_ACCENTS.join(", "),
         densities = DENSITIES.join(", "),
     )
 }
@@ -621,6 +628,10 @@ pub fn color(word: &str) -> Option<&'static str> {
         "rose" | "pink" => "rose",
         "ice" | "blue" => "ice",
         "slate" | "gray" | "grey" => "slate",
+        "ink" => "ink",
+        "harbor" | "navy" => "harbor",
+        "stone" | "umber" => "stone",
+        "grove" | "forest" => "grove",
         "default" => "default",
         _ => return None,
     })
@@ -985,6 +996,14 @@ mod tests {
             judge_theme(r##"{"accent": "#00ff00"}"##),
             Err("invalid_theme")
         );
+        assert_eq!(
+            judge_theme(r#"{"accent": "harbor"}"#)
+                .unwrap()
+                .accent
+                .as_deref(),
+            Some("harbor")
+        );
+        assert_eq!(judge_theme(r#"{"accent": "cupcake"}"#), Err("invalid_theme"));
     }
 
     #[test]

@@ -20,6 +20,8 @@ import { formatValue, type QueryResponse } from './render';
 import type { RecordJson, RecordsJson } from './records';
 
 export const PALETTE = ['default', 'green', 'crimson', 'amber', 'cyan', 'violet', 'rose', 'ice', 'slate'] as const;
+/** Card colors plus the whole canvas palettes Shape may apply to an app. */
+export const APP_ACCENTS = [...PALETTE, 'ink', 'harbor', 'stone', 'grove'] as const;
 const PRESENTATIONS = ['table', 'list', 'bar', 'line', 'number'];
 const OPS = ['eq', 'ne', 'lt', 'lte', 'gt', 'gte', 'in'];
 const MEASURES = ['count', 'sum', 'avg', 'min', 'max'];
@@ -133,7 +135,7 @@ export function cardView(value: unknown, options: { stored?: boolean } = {}): Ca
 export function appTheme(value: unknown): AppTheme | null {
   if (!isObject(value) || !onlyKeys(value, ['mode', 'accent', 'density']) || Object.keys(value).length === 0) return null;
   const theme: AppTheme = {};
-  for (const [key, set] of [['mode', MODES], ['accent', PALETTE as readonly string[]], ['density', DENSITIES]] as const) {
+  for (const [key, set] of [['mode', MODES], ['accent', APP_ACCENTS as readonly string[]], ['density', DENSITIES]] as const) {
     const member = value[key];
     if (member === undefined) continue;
     if (typeof member !== 'string' || !set.includes(member)) return null;
@@ -143,21 +145,23 @@ export function appTheme(value: unknown): AppTheme | null {
 }
 
 const THEME_ACCENTS = ['green', 'crimson', 'amber', 'cyan', 'violet', 'rose', 'ice', 'slate'] as const;
+const THEME_FAMILIES = ['ink', 'harbor', 'stone', 'grove'] as const;
 
 /**
  * The `data-theme` name for a judged app theme. Null inherits the platform
- * theme (site, or site-dark when the operating system is dark). An explicit
- * mode picks that block. Accent default with a mode picks site / site-dark,
- * not the professional ink pair. Density does not choose a color theme.
+ * theme. An explicit mode picks that block. A family name (ink, harbor,
+ * stone, grove) selects that whole palette. Density does not choose a color.
  */
 export function themeName(theme: AppTheme, scheme: 'light' | 'dark'): string | null {
-  const accent = theme.accent && theme.accent !== 'default' && (THEME_ACCENTS as readonly string[]).includes(theme.accent)
-    ? theme.accent : null;
+  const accent = theme.accent && theme.accent !== 'default' ? theme.accent : null;
+  const family = accent && (THEME_FAMILIES as readonly string[]).includes(accent) ? accent : null;
+  const tint = accent && (THEME_ACCENTS as readonly string[]).includes(accent) ? accent : null;
   const mode = theme.mode === 'light' || theme.mode === 'dark' ? theme.mode : null;
-  if (!accent && !mode) return null;
+  if (!family && !tint && !mode) return null;
   const resolved = mode ?? scheme;
-  if (!accent) return resolved === 'dark' ? 'site-dark' : 'site';
-  return resolved === 'dark' ? `${accent}-dark` : accent;
+  const name = family ?? tint;
+  if (!name) return resolved === 'dark' ? 'site-dark' : 'site';
+  return resolved === 'dark' ? `${name}-dark` : name;
 }
 
 // --- The card's data as one table ---

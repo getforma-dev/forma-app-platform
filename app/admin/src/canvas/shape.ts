@@ -35,7 +35,7 @@
 // (`previewNewCard`, the answer's record set); nothing is added without a
 // click on **Add as new card**.
 import { addressFor, fillBar } from './address-chip';
-import { addCards, focusCard, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
+import { addCards, focusCard, isDemoCanvas, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
 import { madeCardRequest, madeLine, madeView, newCardId, removeCard, shareCard, storeCard, type From, type StoredCard } from './cards';
 import { appForm, findAddress, findAppAddress, findCardShortcut, findVerb, type Address, type CanvasCommand } from './command-registry';
 import { isDismissKey, showDockCard } from './dock-card';
@@ -354,6 +354,54 @@ export function shapedSection(document_: Document, state: 'preview' | 'shaped', 
 type Applied = { address: string; view: CardView; table: Table; source: Source; work: string };
 const appliedCards = new Map<string, Applied>();
 const appliedThemes = new Map<string, AppTheme>();
+const WORK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Closed app themes read back from this browser. Unknown names are dropped. */
+export function appThemesFromStorage(value: unknown): [string, AppTheme][] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+  const out: [string, AppTheme][] = [];
+  for (const [work, theme] of Object.entries(value)) {
+    if (!WORK_ID.test(work)) continue;
+    const judged = appTheme(theme);
+    if (judged) out.push([work, judged]);
+    if (out.length === 40) break;
+  }
+  return out;
+}
+
+function themeKey(): string | null {
+  if (typeof document === 'undefined' || isDemoCanvas()) return null;
+  const member = document.getElementById('cv-canvas')?.getAttribute('data-member') ?? '';
+  return /^[0-9a-f]{16}$/.test(member) ? `forma.canvas.app-theme.v1:${member}` : null;
+}
+
+function writeAppThemes(): void {
+  const key = themeKey();
+  if (!key) return;
+  const body: Record<string, AppTheme> = {};
+  for (const [work, theme] of appliedThemes) body[work] = theme;
+  try {
+    localStorage.setItem(key, JSON.stringify(body));
+  } catch {
+    // The look remains on this page when storage is blocked.
+  }
+}
+
+function restoreAppThemes(): void {
+  const key = themeKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(localStorage.getItem(key) ?? '{}');
+  } catch {
+    return;
+  }
+  for (const [work, theme] of appThemesFromStorage(parsed)) {
+    if (document.querySelector(`[data-theme-preview="true"][data-work="${CSS.escape(work)}"]`)) continue;
+    appliedThemes.set(work, theme);
+    setTheme(themeTargets(work), theme);
+  }
+}
 
 function colorScheme(): 'light' | 'dark' {
   return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -776,6 +824,7 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
   for (const node of nodes) node.dataset.themePreview = 'true';
   const revert = () => {
     appliedThemes.delete(app.work);
+    writeAppThemes();
     setTheme(themeTargets(app.work), null);
     unlabel(appHeader(app));
     announce(`/${target.address} has its own look again.`);
@@ -787,9 +836,10 @@ async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string,
       run: () => {
         settle();
         appliedThemes.set(app.work, theme);
+        writeAppThemes();
         setTheme(themeTargets(app.work), theme);
         labelShaped(appHeader(app), revert);
-        report(`Every /${target.address} card is shaped; each keeps its own view. Revert is on the app card.`);
+        report(`Every /${target.address} card is shaped; each keeps its own view. It stays on this browser. Revert is on the app card.`);
       },
     },
   ], () => {
@@ -934,4 +984,8 @@ export function startShape(): void {
   });
   registerCompleter('shape', shapeCompletions);
   registerCompleter('.', dotCompletions, { select: false });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('canvas:changed', () => restoreAppThemes());
+    restoreAppThemes();
+  }
 }

@@ -32,11 +32,13 @@ Dark widget faces keep a luminous glow for the same accent name. Paper and retro
 
 ## Applying an app theme
 
-Shape's closed lists are unchanged. `themeName` in `talk-view.ts` turns them into a theme:
+`themeName` in `talk-view.ts` turns a judged theme into a theme name:
 
 - density alone inherits the platform
 - mode `dark` or `light` with accent `default` selects `site-dark` or `site`
 - an accent with mode `default` follows the operating system, and follows it again if the system scheme changes during the session
 - an explicit mode wins over the system
 
-The choice stays in the session map. APP-157 remains the published appearance. This note does not store a theme on the server, and it does not change a grant.
+Shape can select those same names. `ink`, `harbor`, `stone`, and `grove` are whole palettes. The older color names still recolor an app. Card highlights stay on the color names, so a row mark does not become a second chrome.
+
+An applied app look is stored in this browser under `forma.canvas.app-theme.v1` for the signed-in member. Refresh, sign-out, and sign-in on this browser bring it back. Sign-out does not clear it. A different browser does not have it. The published app design, saved from Edit app, is the copy that follows the member to another browser. A widget's skin, accent, and font are already stored the same way, in `forma.widgets.v1`. The canvas palette is `forma.canvas.palette.v1`. Demo mode does not keep these browser choices.
