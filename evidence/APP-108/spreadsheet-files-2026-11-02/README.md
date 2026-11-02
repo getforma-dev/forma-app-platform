@@ -27,6 +27,10 @@ Screenshots show the [file icon](file-icon.png), [original table](original-cells
 
 Formal APP-108/APP-135 predecessor and broader acceptance gates stay open. No AWS resources, owner listeners, real-user files or credentials were changed by this review.
 
+## CI time budget
+
+The final combined-source PR foundation run [41436350660](https://github.com/getforma-dev/forma-app-platform/actions/runs/41436350660) reached its 20-minute job limit on November 2. GitHub's annotation explicitly records the execution-time limit. Scaffold qualification passed in 9m38s and the immutable-source image build passed in 9m31s; the job was cancelled six seconds into the remaining image verification. The sibling push foundation run passed. This is retained as an incomplete qualification, not a passing image test. The foundation job now allows 30 minutes for the same source, migration, restore, image and isolation checks. No test is removed, skipped or softened; production timeouts and permissions are unchanged. Final GitHub results remain a separate landing gate.
+
 ## Combined branch qualification
 
 The combined source merges the reviewed PR40 theme/scan-context changes, PR41 drag affordance, PR44 command qualifications and the promotion cancellation record through normal merges. The [combined browser report](combined-browser.json) records another complete 11-check journey on that source. Final [320px file icons](combined-file-icon-320.png), [320px original viewer](combined-original-cells-320.png), [390px file icons](combined-file-icon-390.png) and [390px original viewer](combined-original-cells-390.png) show the updated header and file viewer together. The four captures were visually inspected; the icon and modal stay within their viewport, the header does not overlap, and paging/close remain reachable.
