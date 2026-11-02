@@ -338,6 +338,20 @@ button, input, select, textarea { font: inherit; }
 .home-principles p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .home-footer { color: var(--muted); font-size: 12px; }
 .home-footer a { margin-left: 12px; }
+.signin-page { max-width: 32rem; }
+.signin-page h1 { font-size: clamp(32px, 6vw, 46px); }
+.signin-page .lede { margin-bottom: 28px; }
+.signin-page .notice { margin-block: 0 24px; }
+.signin-entry { max-width: none; margin-bottom: 12px; gap: 10px; }
+.signin-entry label { font-size: 16px; font-weight: 500; }
+.signin-entry input { width: 100%; min-width: 0; min-height: 48px; }
+.signin-entry .help { margin: 0 0 10px; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.signin-entry button { min-height: 48px; font-size: 16px; }
+.signin-switch { margin: 0 0 20px; }
+.signin-switch a, .signin-back a { display: inline-flex; align-items: center; min-height: 44px; }
+.signin-invite { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--forma-line); }
+.signin-invite a { display: inline-block; padding-block: 8px; }
+.signin-back { margin: 12px 0 0; font-size: 14px; }
 @media (max-width: 600px) {
   .home-principles { grid-template-columns: 1fr; gap: 24px; margin-block: 40px 32px; }
   .home-principles h2 { margin-top: 10px; }

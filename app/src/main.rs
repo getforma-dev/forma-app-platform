@@ -734,7 +734,10 @@ mod tests {
             format!("form-action 'self' {AUTH_ORIGIN}")
         );
         assert!(policy(&headers).contains("frame-ancestors 'none'"));
-        assert!(body.contains("action=\"/signin/mrswmz3infvgw3dnnzxxa4lsom\""));
+        assert!(body.contains("action=\"/signin\""));
+        assert!(body.contains("name=\"workspace\""));
+        assert!(body.contains("value=\"mrswmz3infvgw3dnnzxxa4lsom\""));
+        assert!(body.contains("Switch workspace"));
         assert!(body.contains("method=\"post\""));
         assert!(!body.contains("<script src"));
         assert!(!body.contains("could not continue"));
@@ -743,7 +746,16 @@ mod tests {
             failed: true,
         }))
         .await;
-        assert!(body.contains("could not continue") && !body.contains("<form"));
+        assert!(body.contains("could not continue") && body.contains("<form"));
+        assert!(body.contains("action=\"/signin\"") && body.contains("name=\"workspace\""));
+        assert!(!body.contains("Switch workspace"));
+        let (_, _, entry) = html(pages.signin(&SigninView {
+            action: None,
+            failed: false,
+        }))
+        .await;
+        assert!(entry.contains("name=\"workspace\"") && entry.contains("required"));
+        assert!(!entry.contains("could not continue") && !entry.contains("<script src"));
         let (_, pending_headers, body) = html(pages.pending(&PendingView {
             csrf_resend: "R".repeat(43),
             csrf_signout: "S".repeat(43),
