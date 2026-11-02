@@ -151,6 +151,14 @@ impl Profile {
             Self::Clean => &CLEAN,
         }
     }
+    fn listening_personas(self, single_persona: bool) -> &'static [Persona] {
+        let all = self.personas();
+        if single_persona {
+            &all[..1]
+        } else {
+            all
+        }
+    }
     fn name(self) -> &'static str {
         match self {
             Self::Pitch => "pitch",
@@ -169,6 +177,8 @@ pub(crate) struct Env {
     pub db_container: String,
     /// One loopback port per persona, in persona order.
     pub persona_ports: Vec<u16>,
+    /// Listener subset only; setup and example seeding still use the full profile.
+    pub listening_personas: &'static [Persona],
     pub python: PathBuf,
 }
 
@@ -210,12 +220,18 @@ impl Env {
             .map(|p| p.trim().parse::<u16>())
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| "GENUI_DEV_PERSONA_PORTS must be a comma-separated port list")?;
-        if persona_ports.len() != profile.personas().len() {
+        let single_persona = match std::env::var("GENUI_DEV_SINGLE_PERSONA").as_deref() {
+            Ok("1") => true,
+            Ok("0") | Err(std::env::VarError::NotPresent) => false,
+            _ => return Err("GENUI_DEV_SINGLE_PERSONA must be 0 or 1".into()),
+        };
+        let listening_personas = profile.listening_personas(single_persona);
+        if persona_ports.len() != listening_personas.len() {
             return Err(format!(
-                "GENUI_DEV_PERSONA_PORTS names {} ports; the {} profile has {} personas",
+                "GENUI_DEV_PERSONA_PORTS names {} ports; the {} profile enables {} listeners",
                 persona_ports.len(),
                 profile.name(),
-                profile.personas().len()
+                listening_personas.len()
             ));
         }
         let python = std::env::var_os("GENUI_DEV_PYTHON")
@@ -230,6 +246,7 @@ impl Env {
             db_port,
             db_container,
             persona_ports,
+            listening_personas,
             python,
         })
     }
@@ -547,10 +564,11 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
     });
 
     let clear_on_reset = (env.profile == Profile::Clean).then_some(epoch);
+    sessions.truncate(env.listening_personas.len());
     let urls = personas::serve(
         app,
         minter,
-        env.profile.personas(),
+        env.listening_personas,
         &env.persona_ports,
         sessions,
         clear_on_reset,
@@ -561,7 +579,7 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         env.profile.name(),
         started.elapsed().as_secs()
     );
-    for (persona, url) in env.profile.personas().iter().zip(urls) {
+    for (persona, url) in env.listening_personas.iter().zip(urls) {
         println!("  {:<6} {:<16} {url}/canvas", persona.key, persona.name);
     }
     watch_manifest().await
@@ -586,5 +604,23 @@ async fn watch_manifest() -> Result<(), String> {
             println!("genui-dev: the front end was rebuilt; restarting (exit {RELOAD})");
             std::process::exit(RELOAD);
         }
+    }
+}
+
+#[cfg(test)]
+mod listener_tests {
+    use super::{Profile, DIEGO};
+
+    #[test]
+    fn single_persona_changes_listeners_without_changing_the_seed_world() {
+        assert_eq!(Profile::Pitch.personas().len(), 3);
+        assert_eq!(Profile::Pitch.listening_personas(false).len(), 3);
+        let focused = Profile::Pitch.listening_personas(true);
+        assert_eq!(focused.len(), 1);
+        assert_eq!(focused[0].principal, DIEGO);
+        assert_eq!(focused[0].key, "diego");
+        assert_eq!(Profile::Pitch.personas().len(), 3);
+        assert_eq!(Profile::Clean.listening_personas(false).len(), 1);
+        assert_eq!(Profile::Clean.listening_personas(true).len(), 1);
     }
 }

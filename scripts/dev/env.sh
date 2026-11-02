@@ -14,6 +14,8 @@
 #
 # State: <checkout>/.cache/dev/<profile>/ (0700): TLS material, credentials,
 # the revision cache, objects, logs. Nothing here reads .env or a secret.
+# GENUI_DEV_SINGLE_PERSONA=1 in .env.dev keeps pitch's Diego listener only;
+# the other personas and their saved data remain in the same database.
 
 GENUI_DEV_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 GENUI_DEV_PROFILE=${1:?profile}
@@ -55,6 +57,20 @@ genui_dev_port_base() {
 }
 
 GENUI_DEV_PORT_BASE=$(genui_dev_port_base)
+genui_dev_single_persona() {
+  local value="${GENUI_DEV_SINGLE_PERSONA:-0}" setting=""
+  # Read only this nonsecret key, never source or evaluate the file. Prefer
+  # the file so `just restart` picks up a change under an existing supervisor.
+  if [[ -f "$GENUI_DEV_ROOT/.env.dev" ]]; then
+    setting=$(sed -n 's/^[[:space:]]*GENUI_DEV_SINGLE_PERSONA[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' "$GENUI_DEV_ROOT/.env.dev" | tail -n 1)
+    [[ -z "$setting" ]] || value="$setting"
+  fi
+  case "$value" in
+    0|1) printf '%s\n' "$value" ;;
+    *) echo "GENUI_DEV_SINGLE_PERSONA must be 0 or 1" >&2; return 1 ;;
+  esac
+}
+GENUI_DEV_SINGLE_PERSONA=$(genui_dev_single_persona)
 genui_dev_slug=$(basename "$GENUI_DEV_ROOT" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-' | cut -c1-32)
 genui_dev_hash=$(printf '%s' "$GENUI_DEV_ROOT" | shasum -a 256 | cut -c1-6)
 GENUI_DEV_PROJECT="genui-dev-${genui_dev_slug}-${genui_dev_hash}-${GENUI_DEV_PROFILE}"
@@ -62,9 +78,11 @@ GENUI_DEV_DB_CONTAINER="${GENUI_DEV_PROJECT}-db"
 GENUI_DEV_STATE="$GENUI_DEV_ROOT/.cache/dev/$GENUI_DEV_PROFILE"
 case $GENUI_DEV_PROFILE in
   pitch)
-    GENUI_DEV_PERSONAS=("diego:Diego Ramos:$((GENUI_DEV_PORT_BASE + 1))"
-                        "sarah:Sarah Chen:$((GENUI_DEV_PORT_BASE + 2))"
-                        "priya:Priya Natarajan:$((GENUI_DEV_PORT_BASE + 3))")
+    GENUI_DEV_PERSONAS=("diego:Diego Ramos:$((GENUI_DEV_PORT_BASE + 1))")
+    if [[ $GENUI_DEV_SINGLE_PERSONA != 1 ]]; then
+      GENUI_DEV_PERSONAS+=("sarah:Sarah Chen:$((GENUI_DEV_PORT_BASE + 2))"
+                          "priya:Priya Natarajan:$((GENUI_DEV_PORT_BASE + 3))")
+    fi
     GENUI_DEV_DB_PORT=$((GENUI_DEV_PORT_BASE + 20))
     GENUI_DEV_PC_PORT=$((GENUI_DEV_PORT_BASE + 30))
     ;;
@@ -79,7 +97,7 @@ GENUI_DEV_PERSONA_PORTS=$(for p in "${GENUI_DEV_PERSONAS[@]}"; do printf '%s,' "
 GENUI_DEV_PERSONA_PORTS=${GENUI_DEV_PERSONA_PORTS%,}
 GENUI_DEV_SERVER_PORT=${GENUI_DEV_PERSONA_PORTS%%,*}
 export GENUI_DEV_ROOT GENUI_DEV_PROFILE GENUI_DEV_PORT_BASE GENUI_DEV_PROJECT GENUI_DEV_DB_CONTAINER \
-  GENUI_DEV_STATE GENUI_DEV_DB_PORT GENUI_DEV_PC_PORT GENUI_DEV_PERSONA_PORTS GENUI_DEV_SERVER_PORT
+  GENUI_DEV_STATE GENUI_DEV_DB_PORT GENUI_DEV_PC_PORT GENUI_DEV_PERSONA_PORTS GENUI_DEV_SERVER_PORT GENUI_DEV_SINGLE_PERSONA
 # process-compose's own API port and log for this instance.
 export PC_PORT_NUM=$GENUI_DEV_PC_PORT
 export PC_LOG_FILE="$GENUI_DEV_STATE/logs/process-compose.log"
