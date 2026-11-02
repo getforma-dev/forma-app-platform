@@ -1,0 +1,29 @@
+{
+  "state_matches_reviewed_import": true,
+  "all_windows": 16,
+  "original_ledger_sha256": "8e23f982ed98a644cb195379e04f672c07148cd9a5fe0a2aae58c60bb7d5368b",
+  "canonical_revision": 0,
+  "live_candidate": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+  "active": null,
+  "local_original_read_only": true,
+  "unconditional_state_write": {
+    "refused": true,
+    "code": "AccessDenied"
+  },
+  "stale_cas": {
+    "refused": true,
+    "code": "PreconditionFailed"
+  },
+  "new_legacy_entry": {
+    "refused": true,
+    "exit_code": 1
+  },
+  "old_environment_entry": {
+    "refused": true,
+    "exit_code": 96
+  },
+  "status": "canonical cutover verified; runtime deployment pending",
+  "application_stack_mutations": 0,
+  "cutover_result_sha256": "7744cb477bed4095f7b97533a98d3863d9a84931014b734ae979dc5595bda954",
+  "canonical_readback_sha256": "ae2f9b9afdc12a8f29622f554be9d27135632155527682e24bc0513b3c400189"
+}

@@ -30,3 +30,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 136 | [APP-136: Developer guide from setup through beta delivery](../0-backlog/APP-136.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
 | 137 | [APP-137: One private beta ledger across repository worktrees](../0-backlog/APP-137.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |
 | 161 | [APP-161: Spike — measure idle app costs and decide safe sleep/wake architecture](../0-backlog/APP-161.md) | [PH09](../phases/PH09.md) | S15 | OPS | P2 | M | Backlog | APP-140, APP-154 |
+| 167 | [APP-167: Promote merged beta releases through GitHub Actions](../2-in-progress/APP-167.md) | [PH08](../phases/PH08.md) | S14 | OPS | P0 | L | In progress | None |

@@ -1,0 +1,30 @@
+{
+  "recorded_at_utc": "2026-11-02T04:33:56.777976+00:00",
+  "scope": "Independent review of actual GitHub environment and branch-policy API responses retained by the bootstrap operator. No AWS request or approval of a pending deployment was performed by this reviewer.",
+  "passed": true,
+  "environments": [
+    {
+      "environment": "beta-plan",
+      "allowed_ref": "refs/heads/pivot/pitch-mvp",
+      "tag_deployments_permitted": false,
+      "human_review_required": false,
+      "self_review_allowed_for_configured_human_owner": false,
+      "admin_bypass": false,
+      "raw_response_sha256": "ff083147b748f52b096143d648c20f5339144f35f1885ebccc300fbe70e77843"
+    },
+    {
+      "environment": "beta",
+      "allowed_ref": "refs/heads/pivot/pitch-mvp",
+      "tag_deployments_permitted": false,
+      "human_review_required": true,
+      "self_review_allowed_for_configured_human_owner": true,
+      "admin_bypass": false,
+      "raw_response_sha256": "49692a62dd361fdbe26b65c809d32e2b7fe647e6527490413abdb176f9f429a3"
+    }
+  ],
+  "limits": [
+    "This proves current configured GitHub protection rules, not working OIDC trust or an approved deployment.",
+    "The reviewer separately confirmed the configured required reviewer is the intended human owner. Only that human may provide the release approval; automation did not provide it.",
+    "IAM, implementation, artifact provenance, state migration and actual end-to-end promotion remain separate review gates."
+  ]
+}

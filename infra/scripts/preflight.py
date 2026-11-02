@@ -620,6 +620,7 @@ def main():
     args = parser.parse_args()
     if (args.abandon is None) == (args.input is None) or (args.abandon is not None and args.activate):
         parser.error('give --input (optionally with --activate), or --abandon WINDOW_ID alone')
+    require(not (args.ledger.parent / 'promotion-managed.json').exists(), 'ledger moved to promotion S3; legacy preflight is fenced')
     # A separate persistent lock survives the atomic replacement of the ledger.
     lock = os.open(str(args.ledger) + '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(lock, 'r+') as locked:
