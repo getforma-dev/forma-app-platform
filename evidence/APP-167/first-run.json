@@ -1,0 +1,64 @@
+{
+  "approval_requested": false,
+  "candidate_sha": "365c88344b9367990d55e668e90a5dcf217dfe77",
+  "confirmed_registry_operations": 178,
+  "deployed": false,
+  "live_candidate_sha": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+  "observed_at_utc": "2026-11-02T06:35:34.444701+00:00",
+  "outcome": "preparation refused before change set; operator scan disposition required",
+  "public_probes": {
+    "canvas": 404,
+    "entry": 200,
+    "live": 200,
+    "mcp": 404,
+    "ready": 200,
+    "slack": 401
+  },
+  "qualified_images": {
+    "operator": {
+      "index_digest": "sha256:cd80392de76f1edb19f1d094722feaef53eb49fef46b55a93446bb6dcfae1e40",
+      "manifest_digest": "sha256:cd80392de76f1edb19f1d094722feaef53eb49fef46b55a93446bb6dcfae1e40"
+    },
+    "qualification": {
+      "index_digest": "sha256:feef106c2e5b9cf784a5180b156b4e88fb4db9cbab5cba4d0e651e8d7c09004e",
+      "manifest_digest": "sha256:feef106c2e5b9cf784a5180b156b4e88fb4db9cbab5cba4d0e651e8d7c09004e"
+    },
+    "service": {
+      "index_digest": "sha256:9405c2f13c7fefad00c5cd633b5c7b75bbcfb976caa2f49d239336716232dfb2",
+      "manifest_digest": "sha256:9405c2f13c7fefad00c5cd633b5c7b75bbcfb976caa2f49d239336716232dfb2"
+    }
+  },
+  "required_push_workflows_passed": 12,
+  "run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41395551487",
+  "runtime_boundary_unchanged": true,
+  "scans": {
+    "operator": {
+      "counts": {
+        "HIGH": 8,
+        "LOW": 3,
+        "MEDIUM": 13
+      },
+      "introduced": 3,
+      "status": "COMPLETE"
+    },
+    "qualification": {
+      "counts": {
+        "HIGH": 8,
+        "LOW": 3,
+        "MEDIUM": 13
+      },
+      "introduced": 0,
+      "status": "COMPLETE"
+    },
+    "service": {
+      "counts": {
+        "HIGH": 8,
+        "LOW": 3,
+        "MEDIUM": 13
+      },
+      "introduced": 0,
+      "status": "COMPLETE"
+    }
+  },
+  "unresolved_operations": 0
+}

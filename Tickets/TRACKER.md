@@ -170,3 +170,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 163 | [APP-163: Find my workspaces after verified email discovery](0-backlog/APP-163.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162 |
 | 164 | [APP-164: Authenticated workspace chooser and safe session switching](0-backlog/APP-164.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162, APP-163 |
 | 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](0-backlog/APP-165.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |
+| 167 | [APP-167: Promote merged beta releases through GitHub Actions](2-in-progress/APP-167.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | L | In progress | None |

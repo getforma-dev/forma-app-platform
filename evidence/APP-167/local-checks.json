@@ -1,0 +1,74 @@
+{
+  "status": "local acceptance passed; live promotion pending",
+  "checks": [
+    {
+      "check": "full repository check",
+      "log_sha256": "82d577761429fd06f50854ce72e3a940f60c8a3ae857ce0e6e89535d887d46f1",
+      "results": [
+        "ok    fmt (2s)",
+        "ok    admin (10s)",
+        "ok    clippy (78s)",
+        "ok    clippy-dev (65s)",
+        "ok    test (144s)",
+        "ok    http-smoke (43s)",
+        "ok    msrv (69s)",
+        "ok    catalog (0s)",
+        "ok    infra (9s)",
+        "ok    py-scripts (6s)",
+        "ok    py-runtime (277s)",
+        "ok    shared-broker (12s)",
+        "ok    py-qualification (4s)",
+        "ok    py-app-scripts (1s)",
+        "ok    py-ops (16s)",
+        "ok    py-promotion (0s)",
+        "ok    py-infra (5s)",
+        "ok    schema-pins (1s)",
+        "ok    contracts (6s)",
+        "ok    board (0s)",
+        "ok    bash-n (0s)"
+      ]
+    },
+    {
+      "check": "final affected suites",
+      "log_sha256": "665106847c6c1a5d559854d3cbcec343ae42d2ba2e1ed8073f16d51a6de6ab62",
+      "results": [
+        "ok    py-ops (13s)",
+        "ok    py-promotion (1s)",
+        "ok    py-infra (5s)",
+        "ok    board (0s)",
+        "ok    bash-n (0s)"
+      ]
+    }
+  ],
+  "promotion_tests": 72,
+  "workflow_validation": {
+    "tool": "actionlint",
+    "version": "1.7.12",
+    "passed": true
+  },
+  "docker_exporter_smoke": {
+    "platform": "linux/arm64",
+    "single_build_dual_export": true,
+    "qualified_local_identity_matches_oci_graph": true,
+    "synthetic_scratch_fixture_only": true,
+    "full_image_qualification": false
+  },
+  "limitations": [
+    "Full repository check completed before final ops-only repairs; all affected suites reran after repairs, including Linux PR-event regressions.",
+    "This local record does not prove actual merged-SHA GitHub CI, production ARM64 qualification, a human approval or live runtime promotion."
+  ],
+  "linux_regression": {
+    "environment": "Linux ARM64 Python 3.11 with GITHUB_EVENT_NAME=pull_request",
+    "network": "disabled",
+    "source_mount": "read-only",
+    "tests": 14,
+    "passed": true,
+    "log_sha256": "d8b59af58ac1e071720e3e750f19ac5366ccc6f8c9adafe6c996dd2682279c77"
+  },
+  "merge_selection_regressions": [
+    "Actual Git multi-commit rebase with final documentation commit",
+    "Runtime file rename into documentation",
+    "Unpublished runtime change followed by documentation push",
+    "Missing published tag never skips a merged candidate"
+  ]
+}
