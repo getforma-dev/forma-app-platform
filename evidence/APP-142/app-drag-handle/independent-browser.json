@@ -1,0 +1,77 @@
+{
+  "started": "2026-11-02T10:29:08.060Z",
+  "scope": "Isolated synthetic member on owned port4801; ordinary UI; no command submission.",
+  "checks": [
+    {
+      "name": "Visible rail moves one complete app without clipping",
+      "before": {
+        "x": 64,
+        "y": 64,
+        "width": 1240,
+        "height": 797
+      },
+      "after": {
+        "x": 129,
+        "y": 99,
+        "width": 1240,
+        "height": 797
+      },
+      "parts": 4
+    },
+    {
+      "name": "Keyboard nudge and browser-local reload persistence",
+      "after": {
+        "x": 130,
+        "y": 109,
+        "width": 1240,
+        "height": 797
+      }
+    },
+    {
+      "name": "Nested form controls do not move app; pointer movement preserves form node, key and draft",
+      "key_preserved": true
+    },
+    {
+      "name": "Ordinary exact-work rename updates app and Move accessible names"
+    },
+    {
+      "name": "390px touch rail remains reachable and moves whole app",
+      "before": {
+        "x": 155,
+        "y": 129,
+        "width": 390,
+        "height": 711
+      },
+      "after": {
+        "x": 179,
+        "y": 157,
+        "width": 390,
+        "height": 711
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "finished": "2026-11-02T10:29:26.091Z",
+  "source_sha256": {
+    "app/admin/src/canvas/unite.ts": "71ee7eb717ccba694783a389e1c11916b186e57cf5955500cd2291b56533055a",
+    "app/admin/src/styles/canvas.css": "69316f40fa7cbb49b648e4568f3d87a73758acf227a0f2ee5da70c223be1a80e"
+  },
+  "requests": {
+    "observed_mutations_in_final_pass": 1,
+    "purpose": "Exact saved-work label through ordinary editor",
+    "command_submissions": 0
+  },
+  "integration_base": "07ea5aac85b69ad90d7bfb2274fb50395705e26f",
+  "local_merge": "bf165cc",
+  "original_pr_head": "73c2afc63c28ae951bd105042032c47ad8e68048",
+  "build_id": "b1d6b75109852cff",
+  "limits": [
+    "Synthetic loopback member on owned4801, fresh isolated headless Chrome contexts; no hosted authentication or customer-data claim.",
+    "Initial attempt created one ordinary Equipment requests template; subsequent attempts reused it and performed two ordinary name changes in total. No command was submitted.",
+    "Three harness preconditions were corrected without product changes: Shift+Arrow is10px; a fresh Open on canvas placement needs Unite; rename labels update after the editor completes command-list refresh. Original failed reports remain in the private cache.",
+    "Touch rail reachability/movement was checked at390px. Screenshot shows a panned canvas and a transient Reconnecting indicator; this is not full responsive-layout, live-stream or real-screen-reader acceptance.",
+    "Existing original evidence covers resize and fan-out/reunite; this independent pass focuses on movement, keyboard persistence, nested fields, rename and touch."
+  ],
+  "private_source_report_sha256": "80c7d5ab4d63276db13ec4623a3c2e9c8932716febbbf246583f0563b44a527c"
+}
