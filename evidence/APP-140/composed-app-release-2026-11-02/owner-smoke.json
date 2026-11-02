@@ -1,0 +1,42 @@
+{
+  "candidate_sha": "9ee4a01b1c4b1b90147928844805b7397aa40903",
+  "real_provider_signin_passed": true,
+  "retained_state_started": "2026-11-02T00:42:24.034Z",
+  "retained_state_completed": "2026-11-02T00:42:26.965Z",
+  "original_records_equal": true,
+  "original_shares_equal": true,
+  "original_record_count": 1,
+  "admitted_template_count": 5,
+  "product_started": "2026-11-02T00:42:33.792Z",
+  "product_completed": "2026-11-02T00:42:52.501Z",
+  "product_checks": [
+    "Normal Create picker created an empty Dining tracker with real zero metrics.",
+    "Real Edit app publication persisted theme and generic button through reload.",
+    "The dialog submitted one audited12.50 command; real dashboard and list show the persisted record after reload.",
+    "Phone layout fits; the same themed app and generic component dialog work in the united canvas."
+  ],
+  "product_passed": true,
+  "page_errors": 0,
+  "visual_review": [
+    "Standalone real12.50 dashboard readable",
+    "390px dialog and page fit",
+    "United canvas retains coherent dark theme and generic dialog"
+  ],
+  "private_report_sha256": {
+    "signin": "e9ce73e63833b6398752de919ae5153002a5042896b692ffeeabd6f465746eb3",
+    "retained": "5fac0a9d2fdce3cdd90c6d647331bbfa1ef95e9fcd9f3e0ccbdbbeb3f9658252",
+    "product": "805a1043ce1b44ffb0a24c9867e652a9fd387e34e3a24ccb144889284529833d",
+    "retained_runner": "95c05b4d972fe190ec37f4996d0b193e7b1fbf44dc926da4d008c1bc3cb34f41",
+    "product_runner": "b3cd8e4fce8cbda8dc19121e8c3a9a79c9512a0b77db8b3d8aaa864726f57ac7"
+  },
+  "private_screenshot_sha256": {
+    "private-page.png": "ee9ad23ee05d32b3a27e85a8903824251fba84ec96795be038d041fc65f8c6d9",
+    "private-phone-modal.png": "50e974d288d6586541c395a16effd1624515d3b657796f382110f376032cd902",
+    "private-canvas.png": "225e13a2719efcb3a416e744016b19f6a77abf045f92b0ed722fcfbb55d0b92b"
+  },
+  "limits": [
+    "One real verified owner and one real audited synthetic meal; no privileged row insertion or session injection.",
+    "No guest verification, invitation acceptance or message was performed in this rollout. Existing pending invitation preserved.",
+    "Manual screen-reader acceptance is not established by the browser checks."
+  ]
+}

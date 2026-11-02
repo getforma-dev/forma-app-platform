@@ -4,9 +4,15 @@ This is the clean profile of [DEPLOY-RUNBOOK.md](DEPLOY-RUNBOOK.md), prepared on
 
 Local source qualification is not a hosted acceptance result. Complete the deployment receipt, real registration/sign-in and owner-to-external-recipient journey before closing APP-140. Keep the owner and recipient mailboxes, codes, provider keys and tokens in the private operator directory only.
 
-## Current status — November 1, 21:57 UTC
+## Current status — November 2, 00:42 UTC
 
-The [authentication repair](../../evidence/APP-140/shared-auth-fix-1d88470/README.md) activated exact candidate `1d88470` at **21:53:16 UTC**, with application TD **14** and broker TD **2** healthy at `1/1/0`. Window `a58e69cd` supersedes `1608eea9`; both enabled shutdown schedules now target **November 30 at 18:00 UTC**. The reviewed reservation projects **$169.82 GenUI / $207.82 combined**, preserving prior history and allowances under the same caps. The same schema-18 manifest required no migration, provisioning, operator task, provider invitation or configuration-secret change during this delivery.
+The [composed-app release](../../evidence/APP-140/composed-app-release-2026-11-02/README.md) activated exact candidate `9ee4a01` at **00:40:47 UTC**, with schema **19**, application TD **15** and broker TD **3** healthy at `1/1/0`. Window `f4449af8` supersedes `a58e69cd`; both enabled shutdown schedules target **November 30 at 16:00 UTC**. The reviewed reservation projects **$169.83 GenUI / $207.83 combined**, preserving prior history and allowances under the same caps. The available pre-migration snapshot, migration and repeated catalog checks, all five public TLS probes and readiness check passed. No tenant, invitation, secret, seed or library setup was replayed.
+
+Fresh genuine owner sign-in passed. The original record and share inventories were unchanged, and the live composed-app journey passed empty Dining tracker creation, persisted layout/theme/action editing, one audited $12.50 meal with reloaded dashboard/list, and phone/canvas dialogs. Guest product-email verification, verified acceptance and the complete recorded journey remain separate and open.
+
+## Previous authentication repair — November 1, 21:57 UTC
+
+The [authentication repair](../../evidence/APP-140/shared-auth-fix-1d88470/README.md) activated exact candidate `1d88470` at **21:53:16 UTC**, with application TD **14** and broker TD **2** healthy at `1/1/0`. Window `a58e69cd` superseded `1608eea9`; its shutdown schedules targeted **November 30 at 18:00 UTC**. Its reviewed reservation projected **$169.82 GenUI / $207.82 combined**, preserving prior history and allowances under the same caps. The same schema-18 manifest required no migration, provisioning, operator task, provider invitation or configuration-secret change during this delivery. The composed-app release above supersedes this window.
 
 The [actual product continuation](../../evidence/APP-139/hosted-guest-entry-2026-11-01/README.md) passed fresh owner sign-in and exact retained data/share checks. SES recipient verification became Success; genuine guest registration then returned to the shared app with product email verification pending. Read-only provider reconciliation at 21:57:42 UTC confirms one unverified guest account and one guest invitation referenced by two broker idempotency aliases. Provider invitation acceptance is not acceptance of the private app share. Human product-email verification, fresh guest sign-in, explicit app acceptance, connected/live/revoke checks and the recording remain open.
 

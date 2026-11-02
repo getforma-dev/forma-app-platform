@@ -1,0 +1,192 @@
+{
+  "candidate_sha": "9ee4a01b1c4b1b90147928844805b7397aa40903",
+  "integration_merge": "d10cf899e3261d350dc4db06dadec1e6a11a0fa0",
+  "pull_request": "https://github.com/getforma-dev/forma-app-platform/pull/38",
+  "tag": {
+    "name": "beta/20261102-9ee4a01",
+    "pushed": true
+  },
+  "activated_at_utc": "2026-11-02T00:40:47Z",
+  "database_version": 19,
+  "public_verification": {
+    "live": true,
+    "canvas": true,
+    "entry": true,
+    "mcp": true,
+    "slack": true,
+    "slack_mode": "on",
+    "at_utc": "2026-11-02T00:41:13Z",
+    "origin": "https://beta.getforma.dev"
+  },
+  "independent_verified_facts": {
+    "exact_reviewed_change_set_update_complete": true,
+    "before_and_after_services_zero_desired_running_pending": true,
+    "main_task_definition_revision": 15,
+    "broker_task_definition_revision": 3,
+    "six_qualified_task_images": true,
+    "same_container_configuration_roles_environment_and_secret_references": true,
+    "two_enabled_utc_expiries_target_exact_services": "2026-11-30T16:00:00Z",
+    "actual_baseline_catalog": 18,
+    "baseline_task_numeric_exit_code": 0,
+    "baseline_catalog_read_only": true,
+    "snapshot_creation_binds_exact_existing_instance": true,
+    "snapshot_available": true,
+    "snapshot_exact_source_resource_id": true,
+    "distinct_operator_tasks": 5,
+    "sequential_operator_tasks": true,
+    "all_operator_exit_codes_numeric_zero": true,
+    "migration_versions": [
+      19,
+      19
+    ],
+    "read_only_catalog_versions": [
+      18,
+      19,
+      19
+    ],
+    "migration_manifests_equal_reviewed_19_checksums": true,
+    "repeat_migration_result_identical": true,
+    "post_migration_stopped_boundary": true,
+    "activation_after_final_catalog_and_stopped_boundary": true,
+    "both_services_desired_running_pending": [
+      1,
+      1,
+      0
+    ],
+    "both_rollouts_completed": true,
+    "healthy_target_groups": 2,
+    "running_task_images_match_qualified_index_arm_config_chains": true,
+    "running_reported_digest_kind": "index",
+    "standard_public_probes_passed": 5,
+    "verified_tls_ready_http_status": 200,
+    "ready_ssl_verify_result": 0,
+    "activation_reused_existing_reservation": true,
+    "remote_annotated_tag": "beta/20261102-9ee4a01",
+    "remote_tag_object": "e4cc148e04accec9c73b0b7932d0644604e09c43",
+    "remote_peeled_candidate": "9ee4a01b1c4b1b90147928844805b7397aa40903"
+  },
+  "operator_tasks": [
+    {
+      "label": "baseline-catalog",
+      "run": 1,
+      "override": "verify-catalog-baseline",
+      "exit_code": 0,
+      "at_utc": "2026-11-02T00:30:50Z"
+    },
+    {
+      "label": "migrate",
+      "run": 1,
+      "override": "migrate",
+      "exit_code": 0,
+      "at_utc": "2026-11-02T00:36:32Z"
+    },
+    {
+      "label": "verify-catalog",
+      "run": 1,
+      "override": "verify-catalog",
+      "exit_code": 0,
+      "at_utc": "2026-11-02T00:37:33Z"
+    },
+    {
+      "label": "migrate",
+      "run": 2,
+      "override": "migrate",
+      "exit_code": 0,
+      "at_utc": "2026-11-02T00:38:38Z"
+    },
+    {
+      "label": "verify-catalog",
+      "run": 2,
+      "override": "verify-catalog",
+      "exit_code": 0,
+      "at_utc": "2026-11-02T00:39:33Z"
+    }
+  ],
+  "registry_images": [
+    {
+      "image": "service",
+      "registry_top_digest": "sha256:b75f5b98da630e771df2703c91f1a4c7edf38c13923de83b0452c9d89103bfd4",
+      "registry_arm64_child_digest": "sha256:9d9146c2b196931365d7140f924e5209c22bdc0386b0fe0b3258a568c16e7167",
+      "registry_configuration_digest": "sha256:5ab76ce191950ea873ecbb02138c4333ca71954d13bbe57edeb44ebfb6a6ef6d",
+      "counts": {
+        "HIGH": 9,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "new_findings": [],
+      "removed_findings": [
+        [
+          "CVE-2026-76642",
+          "HIGH",
+          "util-linux",
+          "2.38.1-5+deb12u3"
+        ],
+        [
+          "CVE-2026-78408",
+          "HIGH",
+          "util-linux",
+          "2.38.1-5+deb12u3"
+        ]
+      ]
+    },
+    {
+      "image": "qualification",
+      "registry_top_digest": "sha256:91d2ca888db7a05e5a824c78845e3a38fc69605d8203d9c176838025a31b93bf",
+      "registry_arm64_child_digest": "sha256:b5e37df711a7ce239d1b44f6e4986d41ef9fcf4bb392b83e76234d74c1a23088",
+      "registry_configuration_digest": "sha256:73fd0b362014f7a9ffe3fd97cdefaf3424a0c78e937f2853428bb88a22a8e4ca",
+      "counts": {
+        "HIGH": 9,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "new_findings": [],
+      "removed_findings": [
+        [
+          "CVE-2026-76642",
+          "HIGH",
+          "util-linux",
+          "2.38.1-5+deb12u3"
+        ],
+        [
+          "CVE-2026-78408",
+          "HIGH",
+          "util-linux",
+          "2.38.1-5+deb12u3"
+        ]
+      ]
+    },
+    {
+      "image": "operator",
+      "registry_top_digest": "sha256:85ec6029eb0a27a9b29cb59351afda02fdb9926c45a2d95254f7162ccc950bd4",
+      "registry_arm64_child_digest": "sha256:d66e151ce70cc6ee6306ddc30182d22c75a530d8ae63c4c9a7c286b676774869",
+      "registry_configuration_digest": "sha256:55c751e0c1c4843de4664f8e12a96a2b55c37ee2e3d535bf05d1e5e8cd5e312c",
+      "counts": {
+        "HIGH": 9,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "new_findings": [],
+      "removed_findings": [
+        [
+          "CVE-2026-76642",
+          "HIGH",
+          "util-linux",
+          "2.38.1-5+deb12u3"
+        ],
+        [
+          "CVE-2026-78408",
+          "HIGH",
+          "util-linux",
+          "2.38.1-5+deb12u3"
+        ]
+      ]
+    }
+  ],
+  "source_sha256": {
+    "private_release": "ebb8e144adf532f954222cb32ec60f386157d3e5c6de0cf1128a91c97e4e789d",
+    "private_aggregate_handoff": "4939c5eba50c5972ec103a3de676a5b12dc92ca6851cfc7a5e0db840904319f4",
+    "private_independent_audit": "55f0701550e6ed5d0668fa6221af8017121094fb68b04a74efcc88ef4f759b83",
+    "private_registry_comparison": "4bd0f4bb5305484eb8d8fb718ea8d0550ecd5f19ea4f45c13391223ad9f4215d"
+  },
+  "scope": "Positive selection from actual retained AWS records; raw account/resource identifiers and secrets remain private. Registry finding removals are scanner observations, not a new package-fix claim."
+}
