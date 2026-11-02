@@ -16,15 +16,17 @@ import {
 } from './box-api';
 import { openModal, previewTable } from './box-viewer';
 import { boardWorks, placeWork } from './board';
-import { announce, el } from './render';
+import { announce, el, isUuid } from './render';
 
 export type SheetDone = { kind: 'card' | 'app' | 'attached' | 'data'; card: Card | null };
 
-/** Opens the sheet for `file` (in box `boxId`) with its `preview`. */
-export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, onDone?: (done: SheetDone) => void, adjust = false): void {
+/** Opens the sheet for `file` (in box `boxId`) with its `preview`. `also` names other spreadsheets from the same upload that Make an app includes. */
+export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, onDone?: (done: SheetDone) => void, adjust = false, also?: readonly string[]): void {
   const document_ = document;
+  const fileIds = [...new Set([file.file_id, ...(also ?? []).filter(isUuid)])];
+  const many = fileIds.length > 1;
   const modal = openModal(adjust || file.data ? `Adjust types · ${file.name}` : `Make data · ${file.name}`,
-    `${preview.rows} rows · ${preview.columns.length} columns${preview.sheet ? ` · sheet ${preview.sheet}` : ''} · types inferred by the parser; change any before you confirm`, undefined, true);
+    `${preview.rows} rows · ${preview.columns.length} columns${preview.sheet ? ` · sheet ${preview.sheet}` : ''} · types inferred by the parser; change any before you confirm${many ? `. The app includes all ${fileIds.length} spreadsheets.` : ''}`, undefined, true);
   const choices = preview.columns.map((column) => {
     const select = el(document_, 'select', { 'aria-label': `Type of ${column.header}` },
       ...COLUMN_TYPES.map((type) => {
@@ -101,12 +103,14 @@ export function openDataSheet(boxId: string, file: BoxFile, preview: Preview, on
     }
     const words = purpose.value.trim() || 'an overview of this data';
     busy(true);
-    status.textContent = 'Registering the data, then generating an app from this file…';
+    status.textContent = many
+      ? `Registering the data, then generating an app from these ${fileIds.length} files…`
+      : 'Registering the data, then generating an app from this file…';
     try {
       await makeData(boxId, file.file_id, columns(), false);
-      const built = await makeApp(boxId, words, [file.file_id]);
+      const built = await makeApp(boxId, words, fileIds);
       await placeWork(built.app_id, built.work_id, []);
-      finish({ kind: 'app', card: { app_id: built.app_id, work_id: built.work_id, title: built.title } }, `${built.title} was generated from ${file.name} and placed.`);
+      finish({ kind: 'app', card: { app_id: built.app_id, work_id: built.work_id, title: built.title } }, `${built.title} was generated from ${many ? `${fileIds.length} files` : file.name} and placed.`);
     } catch (error) {
       status.textContent = refusalText(error);
       busy(false);

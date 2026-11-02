@@ -10,6 +10,7 @@ import { test } from 'node:test';
 
 const BOX = '00000000-0000-4000-8000-0000000b0c01';
 const FILE = '00000000-0000-4000-8000-0000000f0c01';
+const FILE2 = '00000000-0000-4000-8000-0000000f0c02';
 (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = () => 0;
 
 // --- A small fake DOM (no browser): enough for `el()`, the dock and the Library's rows ---
@@ -139,6 +140,32 @@ function fakeFetch(answer: (call: Call) => { status: number; body: unknown }): C
 
 const button = (root: FakeNode, label: string) => root.all().find((node) => node.tagName === 'button' && node.textContent === label);
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+/** `uploadFile` uses XHR, which the fake `fetch` does not see. */
+class FakeXHR {
+  status = 0;
+  responseText = '';
+  upload = { addEventListener() { /* progress is optional */ } };
+  private listeners = new Map<string, (() => void)[]>();
+  open() { /* the URL is fixed by uploadFile */ }
+  addEventListener(type: string, listener: () => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+  send(form: FormData) {
+    const sent = form.get('file');
+    const name = sent instanceof File ? sent.name : 'q3_metrics.csv';
+    const xlsx = name.toLowerCase().endsWith('.xlsx');
+    this.status = 201;
+    this.responseText = JSON.stringify({
+      file: {
+        file_id: xlsx ? FILE2 : FILE, name, kind: xlsx ? 'xlsx' : 'csv', media_type: xlsx ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv',
+        bytes: 900, sha256: 'sha256:x', created_at: '2026-10-31T00:00:00Z', data: null,
+      },
+      preview: { format: xlsx ? 'xlsx' : 'csv', sheet: null, rows: 3, columns: [{ id: 'amount', header: 'Amount', type: 'decimal', nullable: false }], sample: [['1']] },
+    });
+    for (const listener of this.listeners.get('load') ?? []) listener();
+  }
+}
 const contents = (owner: boolean, files: number) => ({
   box: { box_id: BOX, number: 1, name: 'Q3 board pack', kind: 'box', app_id: null, owner, file_count: files, created_at: '2026-10-31T00:00:00Z' },
   files: Array.from({ length: files }, (_, n) => ({
@@ -170,17 +197,66 @@ test('the empty canvas offers "Drop files or upload": a spreadsheet waits, other
   pick.click();
   assert.equal(picked, 1, 'the button opens the file picker (wired once)');
   assert.equal(calls.length, 0, 'nothing is created before files are picked');
-  input.files = [{ name: 'q3_metrics.csv', size: 900 }];
+  (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
+  input.files = [new File(['amount\n1'], 'q3_metrics.csv', { type: 'text/csv' })];
   input.click('change');
   await settle();
   assert.equal(calls.filter((c) => c.method === 'POST' && c.url === '/v1/boxes').length, 0, 'a spreadsheet does not become a folder or an app');
   assert.equal(calls.filter((c) => c.url === '/v1/boxes/uploads').length, 1, 'the file is kept in Uploads until the member chooses');
-  input.files = [{ name: 'notes.pdf', size: 900 }];
+  const notice = document_.getElementById('bx-notice')!;
+  assert.match(notice.textContent, /Nothing is on the canvas until you choose/);
+  assert.ok(button(notice, 'Place the spreadsheet') && button(notice, 'Make a card') && button(notice, 'Make an app'), 'the three choices');
+  notice.all().find((node) => node.getAttribute('aria-label') === 'Dismiss')!.click();
+  assert.equal(notice.hidden, true, 'dismissing the question places nothing');
+  assert.equal(calls.filter((c) => c.url.includes('/apps')).length, 0, 'dismiss does not build an app or a card');
+  input.files = [new File(['amount\n1'], 'q3_metrics.csv', { type: 'text/csv' })];
+  input.click('change');
+  await settle();
+  const makeCard = button(document_.getElementById('bx-notice')!, 'Make a card')!;
+  makeCard.click();
+  makeCard.click();
+  await settle();
+  const cards = calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
+  assert.deepEqual(cards.map((c) => c.body), [{ one_card: true, file_ids: [FILE] }], 'Make a card sends this file, once');
+  input.files = [new File(['amount\n1'], 'notes.pdf', { type: 'application/pdf' })];
   input.click('change');
   await settle();
   const created = calls.filter((c) => c.method === 'POST' && c.url === '/v1/boxes');
   assert.deepEqual(created.map((c) => c.body), [{ name: 'Untitled folder' }], 'a file that is not a spreadsheet still makes a folder');
   assert.equal(input.value, '');
+});
+
+test('several spreadsheets: Make an app includes every file from that upload', async () => {
+  const document_ = freshDocument();
+  const bar = document_.createElement('input');
+  bar.setAttribute('id', 'intent-input');
+  const pick = document_.createElement('button');
+  pick.setAttribute('data-empty-upload-pick', '');
+  const input = document_.createElement('input');
+  input.setAttribute('data-empty-upload', '');
+  document_.body.append(bar, pick, input);
+  const calls = fakeFetch(() => ({ status: 201, body: { box: { box_id: BOX, number: 1, name: 'Uploads', kind: 'uploads', owner: true, file_count: 0, created_at: '2026-10-31T00:00:00Z' } } }));
+  (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
+  const boxes = await import('../src/canvas/boxes.ts');
+  boxes.startEmptyChoices(document_ as unknown as Document);
+  input.files = [
+    new File(['amount\n1'], 'q3_metrics.csv', { type: 'text/csv' }),
+    new File(['pk'], 'other.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+  ];
+  input.click('change');
+  await settle();
+  const notice = document_.getElementById('bx-notice')!;
+  assert.ok(button(notice, 'Place the spreadsheets'), 'both files can be placed');
+  button(notice, 'Make an app')!.click();
+  const sheet = button(document_.body, 'Make an app from this');
+  assert.ok(sheet, 'the column sheet opens');
+  assert.match(document_.body.textContent, /includes all 2 spreadsheets/);
+  sheet!.click();
+  assert.equal(calls.filter((c) => String(c.url).includes('/apps')).length, 0, 'the app is not built before the purpose is confirmed');
+  button(document_.body, 'Build the app')!.click();
+  await settle();
+  const built = calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
+  assert.deepEqual(built.map((c) => c.body), [{ purpose: 'an overview of this data', file_ids: [FILE, FILE2] }]);
 });
 
 test('a folder with files offers Ask, Make a card and Make an app; Make waits for its confirm (APP-124)', async () => {

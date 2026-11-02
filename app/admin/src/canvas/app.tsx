@@ -382,7 +382,7 @@ function Canvas(props: CanvasProps) {
                   <span class="cv-empty-library-count">{props.librarySummary}</span>
                 </button>
               ))}
-              <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload files into a new folder" />
+              <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload a spreadsheet or other files" />
             </div>
             <div class="cv-suggestions" aria-label="Suggestions">
               <span class="cv-suggestions-label">Or try</span>

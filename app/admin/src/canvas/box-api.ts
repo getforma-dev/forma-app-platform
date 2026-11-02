@@ -302,9 +302,10 @@ export async function makeApp(boxId: string, purpose: string, fileIds?: string[]
  * card, the most useful view of its data, linked back to the folder, and
  * names it (`address`, the app's `/name`) when a name is free.
  */
-export async function makeCard(boxId: string, key?: string): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
+export async function makeCard(boxId: string, key?: string, fileIds?: string[]): Promise<{ app_id: string; work_id: string; title: string; address: string | null; timings: unknown }> {
   if (!isUuid(boxId)) throw new BoxError('not_found', 404);
-  const json = await call('POST', `/v1/boxes/${boxId}/apps`, { one_card: true }, key);
+  const ids = fileIds?.filter(isUuid).slice(0, 20);
+  const json = await call('POST', `/v1/boxes/${boxId}/apps`, ids?.length ? { one_card: true, file_ids: ids } : { one_card: true }, key);
   if (!isUuid(json.app_id) || !isUuid(json.work_id)) throw new BoxError('unavailable', 500);
   const address = str(json.address) && /^[a-z][a-z0-9-]{1,31}$/.test(json.address) ? json.address : null;
   return { app_id: json.app_id, work_id: json.work_id, title: str(json.title) ? json.title.slice(0, 120) : 'Card', address, timings: json.timings };
