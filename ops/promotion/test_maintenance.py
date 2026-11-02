@@ -12,6 +12,7 @@ from unittest.mock import patch
 from ops.promotion.maintenance import abandon, terminal_proof
 from ops.promotion.state import digest, encoded, Refused
 from ops.promotion import test_runner
+from ops.promotion.guards import ACCOUNT, REGION
 NOW = test_runner.NOW
 from ops.promotion.test_github import run
 
@@ -184,6 +185,119 @@ class RegistryOnlyAbandonTests(unittest.TestCase):
         with self.assertRaises(TimeoutError): self.attempt()
         self.assertEqual(self.store.load()['ledger'], self.state['ledger']); self.assertIsNotNone(self.store.load()['active'])
         self.assert_no_cloud_mutations()
+
+
+class SyntheticApiError(Exception):
+    def __init__(self, code, status):
+        self.response={'Error':{'Code':code},'ResponseMetadata':{'HTTPStatusCode':status}}
+
+
+class RejectedCreateRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture=test_runner.LifecycleTests('test_real_prepare_packet_execute_summary_and_root_manifest_publish')
+        self.fixture.setUp();self.addCleanup(self.fixture.doCleanups)
+        self.runner,self.aws,self.store=self.fixture.runner,self.fixture.aws,self.fixture.store
+        original=self.aws._call
+        def fail_create(service,operation,args):
+            if operation=='create_change_set':raise SyntheticApiError('ValidationException',400)
+            return original(service,operation,args)
+        self.aws._call=fail_create
+        with patch('ops.promotion.state.now',return_value=NOW.strftime('%Y-%m-%dT%H:%M:%SZ')):
+            with self.assertRaises(SyntheticApiError):self.runner.prepare(self.fixture.request,self.fixture.directory)
+        self.state=self.store.load();self.active=self.state['active'];self.aws.phase='operator'
+        self.runner.clock=lambda:NOW+timedelta(hours=2)
+        self.run=dict(run(),status='completed',updated_at=(NOW+timedelta(minutes=4)).isoformat())
+        self.event={'eventID':'00000000-0000-4000-8000-000000000001','requestID':'00000000-0000-4000-8000-000000000002',
+            'eventTime':(NOW+timedelta(seconds=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'eventName':'CreateChangeSet','eventSource':'cloudformation.amazonaws.com','awsRegion':REGION,
+            'recipientAccountId':ACCOUNT,'eventType':'AwsApiCall','managementEvent':True,'readOnly':False,
+            'userIdentity':{'arn':f'arn:aws:sts::{ACCOUNT}:assumed-role/prepare/beta-plan-42','type':'AssumedRole','accountId':ACCOUNT,
+                'sessionContext':{'sessionIssuer':{'arn':self.state['authority']['prepare_role_arn']}}},
+            'errorCode':'ValidationException','errorMessage':
+                f'User: arn:aws:sts::{ACCOUNT}:assumed-role/restricted-cfn/AWSCloudFormation is not authorized to perform: '
+                f'ssm:GetParameters on resource: arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version '
+                'because no identity-based policy allows the ssm:GetParameters action '
+                '(Service: AWSSimpleSystemsManagement; Status Code: 400; Error Code: AccessDeniedException; Request ID: '
+                '00000000-0000-4000-8000-000000000003; Proxy: null)',
+            'requestParameters':None,'responseElements':None}
+        self.events=[self.event];self.inventory=[];self.absence='ChangeSetNotFound';self.lookup_error=False
+        def transport(service,operation,args):
+            if operation=='lookup_events':
+                if self.lookup_error:raise SyntheticApiError('AccessDenied',403)
+                return {'Events':[{'EventId':e['eventID'],'CloudTrailEvent':json.dumps(e)} for e in self.events]}
+            if operation=='describe_change_set':
+                if self.absence is None:return {'Status':'CREATE_COMPLETE'}
+                raise SyntheticApiError(self.absence,404 if self.absence=='ChangeSetNotFound' else 403)
+            if operation=='list_change_sets':return {'Summaries':self.inventory}
+            return original(service,operation,args)
+        self.aws._call=transport;self.offset=len(self.aws.calls)
+    def attempt(self, enabled=True):
+        return abandon(self.runner,digest(self.store.load()),read_run=lambda _:self.run,reconcile_failed_create=enabled)
+    def held(self):
+        state=self.store.load();self.assertIsNotNone(state['active']);self.assertEqual(state['ledger'],self.state['ledger'])
+        self.assertEqual(state['active']['journal'][-1]['status'],'intent')
+        self.assertFalse(any(o in ['create_change_set','delete_change_set','execute_change_set','update_service','put_image'] for _,o,_ in self.aws.calls[self.offset:]))
+    def test_definitive_rejection_preserves_original_intent_and_omitted_parameter_limit(self):
+        with self.assertRaises(Refused):self.attempt(enabled=False)
+        result=self.attempt();state=self.store.load();self.assertIsNone(state['active']);self.assertEqual(state['live'],self.state['live'])
+        self.assertEqual(set(state['ledger']['windows']),set(self.state['ledger']['windows']))
+        fence=json.loads(self.fixture.s3.objects['beta/promotions/'+result['promotion_id']+'/abandon-fence.json'])
+        self.assertEqual(fence['journal'],self.active['journal']);self.assertEqual(fence['journal'][-1]['status'],'intent')
+        proof=fence['rejected_create_reconciliation'];self.assertFalse(proof['cloudtrail_request_parameters_present'])
+        self.assertFalse(proof['client_token_observed_in_cloudtrail'])
+        self.assertEqual(proof['canonical_client_token'],self.active['journal'][-1]['request']['arguments']['ClientToken'])
+        self.assertEqual(proof['cloudtrail_event'],self.event)
+        self.assertEqual(sum(o=='describe_change_set' for _,o,_ in self.aws.calls[self.offset:]),2)
+        self.assertFalse(any(o in ['create_change_set','delete_change_set','execute_change_set','update_service','put_image'] for _,o,_ in self.aws.calls[self.offset:]))
+    def test_other_error_role_time_region_or_nonnull_mismatch_refuses(self):
+        original=copy.deepcopy(self.event)
+        changes=[lambda e:e.update(errorCode='AccessDenied'),lambda e:e.update(errorMessage=e['errorMessage'].replace('ssm:GetParameters','ssm:GetParameter')),
+            lambda e:e.update(errorMessage=e['errorMessage'].replace('/hnb659fds/version','/different/version')),
+            lambda e:e.update(responseElements={'Id':'created'}),lambda e:e.update(requestParameters={'clientToken':'different'}),
+            lambda e:e.update(awsRegion='us-west-2'),lambda e:e.update(recipientAccountId='000000000000'),
+            lambda e:e['userIdentity'].update(arn=e['userIdentity']['arn']+'-other'),
+            lambda e:e['userIdentity']['sessionContext']['sessionIssuer'].update(arn='wrong-role'),
+            lambda e:e.update(eventTime=(NOW+timedelta(minutes=3)).strftime('%Y-%m-%dT%H:%M:%SZ'))]
+        for change in changes:
+            self.event=copy.deepcopy(original);change(self.event);self.events=[self.event]
+            with self.subTest(change=change),self.assertRaises(Refused):self.attempt()
+            self.held()
+    def test_ambiguous_absent_or_unreadable_cloudtrail_refuses(self):
+        for events in [[],[self.event,copy.deepcopy(self.event)]]:
+            self.events=events
+            with self.assertRaises(Refused):self.attempt()
+            self.held()
+        self.events=[self.event];self.lookup_error=True
+        with self.assertRaises(SyntheticApiError):self.attempt()
+        self.held()
+    def test_altered_intended_token_or_uploaded_template_refuses(self):
+        original=copy.deepcopy(self.active)
+        changed=copy.deepcopy(original);entry=changed['journal'][-1];entry['request']['arguments']['ClientToken']='different';entry['request_sha256']=digest(entry['request'])
+        self.store.change(lambda d:d.update(active=changed))
+        with self.assertRaises(Refused):self.attempt()
+        self.held();self.store.change(lambda d:d.update(active=original))
+        key=original['journal'][-2]['request']['arguments']['Key'];raw=self.fixture.s3.objects[key];self.fixture.s3.objects[key]=raw+b' '
+        with self.assertRaises(Refused):self.attempt()
+        self.held()
+    def test_exact_existing_change_set_pending_inventory_or_wrong_absence_error_refuses(self):
+        for absence in [None,'AccessDenied']:
+            self.absence=absence
+            with self.assertRaises((Refused,RuntimeError)):self.attempt()
+            self.held()
+        self.absence='ChangeSetNotFound'
+        name=self.active['journal'][-1]['request']['arguments']['ChangeSetName']
+        for summary in [{'ChangeSetName':name,'Status':'FAILED','ExecutionStatus':'UNAVAILABLE'},
+                        {'ChangeSetName':'another','Status':'CREATE_COMPLETE','ExecutionStatus':'AVAILABLE'}]:
+            self.inventory=[summary]
+            with self.assertRaises(Refused):self.attempt()
+            self.held()
+    def test_short_fence_and_another_unknown_operation_never_bypass(self):
+        self.run['updated_at']=(self.runner.clock()-timedelta(minutes=64)).isoformat()
+        with self.assertRaises(Refused):self.attempt()
+        self.held();self.run['updated_at']=(NOW+timedelta(minutes=4)).isoformat()
+        self.store.change(lambda d:d['active']['journal'][0].update(status='intent'))
+        with self.assertRaises(Refused):self.attempt()
+        self.held()
 
 
 class LegacyFenceTests(unittest.TestCase):
