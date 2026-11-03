@@ -53,11 +53,13 @@ def plan(runner, hours, expected_state_sha256):
     require(type(old) is int and 0 <= old < MAX_SHORTENING_HOURS
             and type(hours) is int and old < hours <= MAX_SHORTENING_HOURS,
             'hours must strictly increase the shortening default, at most 72')
+    budget = preflight()
+    plans = budget.PLANS['always-on-beta']
     require(state['live']['parameters'].get('MonthlyBudgetUsd') == '170',
-            'the original always-on beta budget must remain unchanged')
-    require(state['policy'].get('budget_genui_cents') == 17000
-            and state['policy'].get('budget_total_cents') == 20800,
-            'canonical policy caps must remain 17000/20800 cents')
+            'stack budget must remain 170')
+    require(state['policy'].get('budget_genui_cents') == plans['genui_cap_cents']
+            and state['policy'].get('budget_total_cents') == plans['project_cap_cents'],
+            'canonical policy caps must remain 18000/21800 cents')
     identity = runner.aws.identity()
     operator_identity(identity, state)
     before = runner.boundary(1)
@@ -65,7 +67,6 @@ def plan(runner, hours, expected_state_sha256):
     after = runner.boundary(1)  # Both reads validate the same exact live baseline.
     reviewed_state(store, expected_state_sha256)
     clock = runner.clock()
-    budget = preflight()
     config = copy.deepcopy(state['live']['config'])
     expiry = budget.timestamp(config['deployment_expires_at_utc']) - timedelta(hours=hours)
     require(expiry > clock + timedelta(hours=24), 'reviewed renewal required before expiry')
@@ -79,9 +80,9 @@ def plan(runner, hours, expected_state_sha256):
     ledger = copy.deepcopy(state['ledger'])
     _, prospective = budget.reserve(config, ledger, clock)
     require(prospective['operating_plan'] == 'always-on-beta'
-            and prospective['genui_allocation_cents'] == 17000
-            and prospective['monthly_budget_cents'] == 20800,
-            'original 17000/20800 cent caps must remain unchanged')
+            and prospective['genui_allocation_cents'] == plans['genui_cap_cents']
+            and prospective['monthly_budget_cents'] == plans['project_cap_cents'],
+            '18000/21800 cent caps must remain unchanged')
     require(ledger == state['ledger'], 'budget validator mutated the original ledger')
     expected_after = copy.deepcopy(state)
     expected_after['policy']['shorten_expiry_hours'] = hours

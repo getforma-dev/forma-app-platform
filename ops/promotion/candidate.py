@@ -11,7 +11,7 @@ import time
 REPOSITORY = "getforma-dev/forma-app-platform"
 REPOSITORY_ID = 1437433309
 OWNER_ID = 268000170
-BRANCH = "pivot/pitch-mvp"
+BRANCH = "main"
 WORKFLOW = ".github/workflows/beta-promote.yml"
 REQUIRED = frozenset({"auth-contract.yml", "baseline.yml", "canvas.yml", "contracts.yml",
     "fixtures.yml", "foundation.yml", "parser-release.yml", "parser.yml", "pitch.yml",

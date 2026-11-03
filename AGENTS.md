@@ -2,7 +2,7 @@
 
 Read README.md, Tickets/README.md and the assigned ticket first. Use the forma-stack skill for implementation and the released package contracts documented in docs/architecture/FRAMEWORK-BASELINE.md.
 
-Use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup, commands, instance ownership, checks and delivery. `pivot/pitch-mvp` is the trunk until the November 3 landing decision; see [ADR-013](docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md).
+Use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup, commands, instance ownership, checks and delivery. `main` is the trunk and the beta deploy branch ([ADR-019](docs/architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)).
 
 - This is the app platform, not the Forma framework or a donor canvas prototype. Own changes here; route framework/auth changes to their existing owners.
 - Phase 1 implementation is authorized. Work through ready tickets and their reviews; the presence of later phases alone does not authorize their implementation.

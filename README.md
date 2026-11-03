@@ -2,7 +2,7 @@
 
 Teams describe, run, adapt and share apps on a canvas, with governed data, receipts and explicit audited commands. This repository owns the application built on Forma Stack: Rust/FMIR SSR, registered canvas islands, PostgreSQL and confined query/parser children.
 
-**Start with [DEVELOPMENT.md](docs/DEVELOPMENT.md)** for setup, local instances, checks, the module map and the path from a change to beta. The current trunk is `pivot/pitch-mvp`; `main` stays at the Phase 1 go-live record until the November 3 revisit ([ADR-013](docs/architecture/ADR-013-REPOSITORY-AND-DELIVERY.md)).
+**Start with [DEVELOPMENT.md](docs/DEVELOPMENT.md)** for setup, local instances, checks, the module map and the path from a change to beta. The trunk is `main`. A reviewed merge prepares the beta deploy and waits for one approval ([ADR-019](docs/architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)).
 
 **License:** All rights reserved; see [LICENSE](LICENSE). The repository was made temporarily public for GitHub Actions during the deployment work. That grants no permission to use, copy or modify it; returning it to private remains part of the delivery follow-up.
 

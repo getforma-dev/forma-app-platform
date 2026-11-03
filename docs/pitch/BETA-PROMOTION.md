@@ -4,7 +4,7 @@
 
 ## Normal release
 
-Merge a reviewed application pull request into `pivot/pitch-mvp`, the current product trunk. The promotion workflow checks the exact merged commit's required push CI, builds and qualifies the service, qualification and operator images on ARM64, and retains those exact image bytes. PR builds have no AWS deployment authority.
+Merge a reviewed application pull request into `main`, the product trunk ([ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). The promotion workflow checks the exact merged commit's required push CI, builds and qualifies the service, qualification and operator images on ARM64, and retains those exact image bytes. PR builds have no AWS deployment authority.
 
 The preparation job publishes the qualified images and prepares a runtime-only AWS change set. Its summary identifies the candidate, image digests and prepared release packet. Review that concrete packet, then approve **Promote to beta** in the run's **Review deployments** control. This is the one deployment approval. Victor can approve a run triggered by his own merge; administrator bypass is disabled.
 
@@ -79,7 +79,7 @@ app/runtime/.venv/bin/python -m ops.promotion.expiry_policy \
   --output "$PRIVATE_RECONCILIATION/expiry-policy-plan.json"
 ```
 
-The eighteen-hour value is the November 2 follow-up proposal, not a universal default. Review its proposed expiry and budget projection. Planning proves a healthy unchanged runtime, no pending change sets and a fresh canonical budget basis. It cannot refresh a stale assessment, reduce reservations, change either original cap (17000/20800 cents), alter authority, or run while a deployment holds the lock. If the plan refuses, investigate its cause rather than increasing hours automatically.
+The eighteen-hour value is the November 2 follow-up proposal, not a universal default. Review its proposed expiry and budget projection. Planning proves a healthy unchanged runtime, no pending change sets and a fresh canonical budget basis. It cannot refresh a stale assessment, reduce reservations, change the reservation ceiling (18000/21800 cents as of ADR-019; earlier packets were checked against 17000/20800), alter authority, or run while a deployment holds the lock. If the plan refuses, investigate its cause rather than increasing hours automatically.
 
 Apply that reviewed value against the same idle hash using another new output path:
 
@@ -94,7 +94,7 @@ Apply redoes the boundary/projection checks, writes immutable source-bound inten
 
 ## Setup record
 
-The `beta-plan` and `beta` GitHub environments allow only the branch `pivot/pitch-mvp`. `beta` requires one approval from Victor-Villacis, with self-review allowed for the sole human owner and administrator bypass disabled. Both settings and branch-policy lists were read back after configuration.
+The `beta-plan` and `beta` GitHub environments allow only the branch `main` (ADR-019; they previously allowed only `pivot/pitch-mvp`). `beta` requires one approval from Victor-Villacis, with self-review allowed for the sole human owner and administrator bypass disabled. Read the branch-policy list back after any change.
 
 The reviewed AWS bootstrap is installed and its policies, trust, OIDC issuer/audience and private bucket settings were read back exactly. Canonical-state cutover preserved all 16 windows and the original ledger hash; the local original is read-only and both new and old environment entrypoints refuse mutation. Actual AWS probes confirmed conditional writes and history protection. PR #46 merged as `07ea5aa`; all 12 required push workflows and ARM64 qualification passed. The [third promotion run](https://github.com/getforma-dev/forma-app-platform/actions/runs/41420932781) successfully prepared the immutable AWS change set. It was cancelled on November 2 at 10:22:51 UTC when the user requested the reviewed PR40–42 batch, so that obsolete packet must not be approved. Application execution and final live verification remain open in APP-167. GitHub uses short-lived OIDC credentials; do not add long-lived AWS access keys as repository secrets.
 
