@@ -35,7 +35,9 @@ def request(value, phase):
 
 
 def outputs(stack):
-    require(stack['StackName'] == STACK and stack['StackStatus'] == 'UPDATE_COMPLETE', 'stack not ready')
+    # A completed rollback is the previous template at rest. An in-progress
+    # rollback is not ready for a new change set.
+    require(stack['StackName'] == STACK and stack['StackStatus'] in {'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'}, 'stack not ready')
     return {p['OutputKey']: p['OutputValue'] for p in stack['Outputs']}
 
 
