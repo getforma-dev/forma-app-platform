@@ -176,4 +176,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](0-backlog/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
-| 172 | [APP-172: Upgrade beta PostgreSQL from 16.13 to 16.15 after the image release](0-backlog/APP-172.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-167 |
+| 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](0-backlog/APP-172.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | L | Backlog | APP-167 |
