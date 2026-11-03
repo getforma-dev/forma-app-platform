@@ -17,6 +17,7 @@ type PendingProps = {
 function Pending(props: PendingProps) {
   return (
     <main class="page">
+      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
       <h1>Confirm your email address</h1>
       <p class="lede">
         Your sign-in worked, but your email address is not confirmed yet. Open the

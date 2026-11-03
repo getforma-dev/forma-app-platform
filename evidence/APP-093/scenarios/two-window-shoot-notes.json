@@ -1,0 +1,18 @@
+{
+  "card_ms": 790,
+  "card_values": [
+    "Amount: $140.00",
+    "Merchant: Sweetgreen",
+    "Category: meals",
+    "Spent on: 2026-10-30",
+    "Note: a team lunch",
+    "Status: submitted"
+  ],
+  "approver_chip": "Approver: Sarah Chen",
+  "confirm_to_filed_ms": 366,
+  "status_after_confirm": "Filed: record v1, commit 6, audit 60ba78d4. Shared with Sarah Chen for approval.",
+  "sarah_live_arrival_ms": 2,
+  "sarah_summary": "1 waiting for your approval · 3 records",
+  "diego_live_approved_ms": 423,
+  "sarah_status_after_open": "That app is already on your canvas."
+}

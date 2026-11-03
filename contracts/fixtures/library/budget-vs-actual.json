@@ -1,0 +1,608 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001401",
+    "revision_id": "00000000-0000-4000-8000-000000001402",
+    "content": {
+      "title": "Budget vs actual",
+      "description": "Budget and actual spend by department and month, the totals, and a variance review form. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "budget_lines",
+          "contract_id": "budget_lines_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "department",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "engineering",
+                  "sales",
+                  "marketing",
+                  "finance",
+                  "operations",
+                  "people",
+                  "support"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "month",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "budget",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "actual",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "decisions",
+          "contract_id": "decisions_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "by_department",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Budget and actual by department",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "budget_lines"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "budget_lines",
+                    "field_id": "department"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "budget",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "budget"
+                    }
+                  },
+                  {
+                    "id": "actual",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "actual"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_month",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Budget and actual by month",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "budget_lines"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "budget_lines",
+                    "field_id": "month"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "budget",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "budget"
+                    }
+                  },
+                  {
+                    "id": "actual",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "actual"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "lines",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Budget lines by actual spend",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "budget_lines"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "budget_lines",
+                    "field_id": "department"
+                  },
+                  {
+                    "input_id": "budget_lines",
+                    "field_id": "month"
+                  },
+                  {
+                    "input_id": "budget_lines",
+                    "field_id": "budget"
+                  },
+                  {
+                    "input_id": "budget_lines",
+                    "field_id": "actual"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "actual"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "budget_lines",
+                  "field_id": "department"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "totals",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "Totals",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "budget_lines"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "lines",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "department"
+                    }
+                  },
+                  {
+                    "id": "budget",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "budget"
+                    }
+                  },
+                  {
+                    "id": "actual",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "budget_lines",
+                      "field_id": "actual"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "variance_review",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Record a variance review",
+          "command_id": "record_decision"
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "record_decision",
+          "record_schema_id": "decision",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "by_department",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "by_month",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "lines",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "totals",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "variance_review",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:8a372b21a0b2d8a056587851e5658a5c16e3e043f14fd1ebbb45170631671562"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001401",
+    "publication_id": "00000000-0000-4000-8000-000000001403",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001402",
+    "definition_digest": "sha256:8a372b21a0b2d8a056587851e5658a5c16e3e043f14fd1ebbb45170631671562",
+    "input_contract_digests": [
+      {
+        "input_id": "budget_lines",
+        "digest": "sha256:6b260409a5172a7f8dc09e2e8e73697d2d694a5447ab7de646039e3d924b23ee"
+      },
+      {
+        "input_id": "decisions",
+        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "decision",
+        "digest": "sha256:3c075b4099b1f49f692e0ad0fb78f4f4a7888c008ff4fe852c48d9d7298251bf"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:3778e5065bad878b7d2a20f91798c4ea8e9e6a915f78a1b3cdc6e4410cbed66b",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001401",
+    "work_id": "00000000-0000-4000-8000-000000001404",
+    "publication_id": "00000000-0000-4000-8000-000000001403",
+    "version": 1,
+    "context": "Prebuilt library: Budget vs actual",
+    "bindings": [
+      {
+        "input_id": "budget_lines",
+        "source_id": "00000000-0000-4000-8000-000000003010",
+        "source_revision_id": "00000000-0000-4000-8000-000000003011",
+        "source_digest": "sha256:70408b1ff67325f51f73c7ce71a48992dac448b1d594f3734f5627912ce890ca",
+        "kind": "source",
+        "contract_digest": "sha256:6b260409a5172a7f8dc09e2e8e73697d2d694a5447ab7de646039e3d924b23ee"
+      },
+      {
+        "input_id": "decisions",
+        "kind": "records",
+        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "collection_id": "00000000-0000-4000-8000-000000001405",
+        "schema_id": "decision",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001405",
+        "schema_id": "decision",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "budget_lines",
+        "source_id": "00000000-0000-4000-8000-000000003010",
+        "source_revision_id": "00000000-0000-4000-8000-000000003011",
+        "source_digest": "sha256:70408b1ff67325f51f73c7ce71a48992dac448b1d594f3734f5627912ce890ca"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003010",
+      "revision_id": "00000000-0000-4000-8000-000000003011",
+      "content_digest": "sha256:5f195ad903687a8c8a7391ebece2cf2cca60950fc9f4e6ad4533521c89d8f5e1",
+      "normalized_digest": "sha256:70408b1ff67325f51f73c7ce71a48992dac448b1d594f3734f5627912ce890ca",
+      "input_contract": {
+        "id": "budget_lines",
+        "contract_id": "budget_lines_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "department",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "engineering",
+                "sales",
+                "marketing",
+                "finance",
+                "operations",
+                "people",
+                "support"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "month",
+            "value_type": {
+              "type": "date"
+            },
+            "nullable": false
+          },
+          {
+            "id": "budget",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          },
+          {
+            "id": "actual",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 28,
+      "timezone": "UTC",
+      "time_semantics": "none",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001401",
+    "work_id": "00000000-0000-4000-8000-000000001404",
+    "mode": "published",
+    "definition_digest": "sha256:8a372b21a0b2d8a056587851e5658a5c16e3e043f14fd1ebbb45170631671562",
+    "publication_id": "00000000-0000-4000-8000-000000001403",
+    "view_id": "by_department",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "budget_lines",
+        "source_id": "00000000-0000-4000-8000-000000003010",
+        "source_revision_id": "00000000-0000-4000-8000-000000003011",
+        "source_digest": "sha256:70408b1ff67325f51f73c7ce71a48992dac448b1d594f3734f5627912ce890ca"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:b339eb024d86890f7300d8a442ef781be34711ebf34cd0c8d7d52fdccb8fef06",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:2af41a2259b29c5350c77bc98277593426855b16a29a9e94f5cc043c2f57ab48",
+      "predicate_digest": "sha256:2af41a2259b29c5350c77bc98277593426855b16a29a9e94f5cc043c2f57ab48"
+    },
+    "digest": "sha256:5ce117f23559b0c05f7ca0510db7e3cc9feb4e4c87f8bcb0b7b002556bb6dda7"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001401",
+    "work_id": "00000000-0000-4000-8000-000000001404",
+    "publication_id": "00000000-0000-4000-8000-000000001403",
+    "command_id": "record_decision",
+    "schema_id": "decision",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001406",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "needs_context"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Reviewer action; synthetic only"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001400"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001401",
+    "work_id": "00000000-0000-4000-8000-000000001404",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "record_decision",
+    "idempotency_key": "00000000000000000000000000001400",
+    "payload_digest": "sha256:97272096aa53dd20ac41e510ae823d38092a85f26ca7bab893886dc0e9454a06",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001406",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001407",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

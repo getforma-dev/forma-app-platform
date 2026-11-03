@@ -1,0 +1,627 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001101",
+    "revision_id": "00000000-0000-4000-8000-000000001102",
+    "content": {
+      "title": "Outbound traffic investigation",
+      "description": "Northstar's Security case: outbound bytes by destination and hour for the organization's assets, the largest transfers, and an observation form. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "traffic",
+          "contract_id": "traffic_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "asset",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "destination",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "bytes",
+              "value_type": {
+                "type": "integer",
+                "unit": "byte"
+              },
+              "nullable": false
+            },
+            {
+              "id": "protocol",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "tcp",
+                  "udp",
+                  "icmp"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "decisions",
+          "contract_id": "decisions_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "total",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "Total outbound bytes",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "traffic"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "connections",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "destination"
+                    }
+                  },
+                  {
+                    "id": "total_bytes",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "bytes"
+                    }
+                  },
+                  {
+                    "id": "largest_transfer",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "bytes"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_destination",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Bytes by destination",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "traffic"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "traffic",
+                    "field_id": "destination"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "connections",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "destination"
+                    }
+                  },
+                  {
+                    "id": "bytes",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "bytes"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "renderer_version": 1,
+          "title": "Bytes per hour",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "traffic"
+            ],
+            "operations": [
+              {
+                "type": "time_bucket",
+                "field": {
+                  "input_id": "traffic",
+                  "field_id": "time"
+                },
+                "seconds": 3600,
+                "timezone": "UTC",
+                "output_field": "time"
+              },
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "traffic",
+                    "field_id": "time"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "bytes",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "bytes"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "largest",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Largest transfers",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "traffic"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "traffic",
+                    "field_id": "time"
+                  },
+                  {
+                    "input_id": "traffic",
+                    "field_id": "asset"
+                  },
+                  {
+                    "input_id": "traffic",
+                    "field_id": "destination"
+                  },
+                  {
+                    "input_id": "traffic",
+                    "field_id": "protocol"
+                  },
+                  {
+                    "input_id": "traffic",
+                    "field_id": "bytes"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "traffic",
+                      "field_id": "bytes"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "traffic",
+                  "field_id": "time"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 25
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "record_observation",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Record an observation",
+          "command_id": "record_decision"
+        },
+        {
+          "id": "caution",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "Caution",
+          "text": "An unmatched destination does not establish compromise."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "record_decision",
+          "record_schema_id": "decision",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "total",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "by_destination",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "timeline",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "largest",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "record_observation",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        },
+        {
+          "view_id": "caution",
+          "column": 0,
+          "row": 5,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:e678a311e3655c53e5370409ee7e18f65a667985bdc3e884723030039e8c6f03"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001101",
+    "publication_id": "00000000-0000-4000-8000-000000001103",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001102",
+    "definition_digest": "sha256:e678a311e3655c53e5370409ee7e18f65a667985bdc3e884723030039e8c6f03",
+    "input_contract_digests": [
+      {
+        "input_id": "traffic",
+        "digest": "sha256:33466e44f927364af0963e3c49ec659cdc4dc9c037aa41d8941eadf0aac55463"
+      },
+      {
+        "input_id": "decisions",
+        "digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "decision",
+        "digest": "sha256:3c075b4099b1f49f692e0ad0fb78f4f4a7888c008ff4fe852c48d9d7298251bf"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:d9c23bec1886c7db951bd2a0ed5d03019929de6bb5bed8815674602c73ada5af",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001101",
+    "work_id": "00000000-0000-4000-8000-000000001104",
+    "publication_id": "00000000-0000-4000-8000-000000001103",
+    "version": 1,
+    "context": "Prebuilt library: Outbound traffic investigation",
+    "bindings": [
+      {
+        "input_id": "traffic",
+        "source_id": "00000000-0000-4000-8000-000000003004",
+        "source_revision_id": "00000000-0000-4000-8000-000000003005",
+        "source_digest": "sha256:c11dbcae7fd5cacf35076b7b86d67e82bbfdc7af97b2c03aa22175bd969abee3",
+        "kind": "source",
+        "contract_digest": "sha256:33466e44f927364af0963e3c49ec659cdc4dc9c037aa41d8941eadf0aac55463"
+      },
+      {
+        "input_id": "decisions",
+        "kind": "records",
+        "contract_digest": "sha256:f0dbed7726f749eb4e7e255dde333f9cd9f92833168636e8d68d5da1db98f2a5",
+        "collection_id": "00000000-0000-4000-8000-000000001105",
+        "schema_id": "decision",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001105",
+        "schema_id": "decision",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "traffic",
+        "source_id": "00000000-0000-4000-8000-000000003004",
+        "source_revision_id": "00000000-0000-4000-8000-000000003005",
+        "source_digest": "sha256:c11dbcae7fd5cacf35076b7b86d67e82bbfdc7af97b2c03aa22175bd969abee3"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003004",
+      "revision_id": "00000000-0000-4000-8000-000000003005",
+      "content_digest": "sha256:b151ac249f035ff846167ee9e12e8f1c6554786a63a1cb90c0d61f31620f77df",
+      "normalized_digest": "sha256:c11dbcae7fd5cacf35076b7b86d67e82bbfdc7af97b2c03aa22175bd969abee3",
+      "input_contract": {
+        "id": "traffic",
+        "contract_id": "traffic_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "asset",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "destination",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "bytes",
+            "value_type": {
+              "type": "integer",
+              "unit": "byte"
+            },
+            "nullable": false
+          },
+          {
+            "id": "protocol",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "tcp",
+                "udp",
+                "icmp"
+              ]
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 360,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001101",
+    "work_id": "00000000-0000-4000-8000-000000001104",
+    "mode": "published",
+    "definition_digest": "sha256:e678a311e3655c53e5370409ee7e18f65a667985bdc3e884723030039e8c6f03",
+    "publication_id": "00000000-0000-4000-8000-000000001103",
+    "view_id": "total",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "traffic",
+        "source_id": "00000000-0000-4000-8000-000000003004",
+        "source_revision_id": "00000000-0000-4000-8000-000000003005",
+        "source_digest": "sha256:c11dbcae7fd5cacf35076b7b86d67e82bbfdc7af97b2c03aa22175bd969abee3"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:e8a6999804af214fbf22ef17e74bf674b05490b2c2447cc47380c8760f69ec29",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:705e6a6025db4825e4c3e3160542554892a738edf0513af6c4e496d704161966",
+      "predicate_digest": "sha256:705e6a6025db4825e4c3e3160542554892a738edf0513af6c4e496d704161966"
+    },
+    "digest": "sha256:4669228b79d662bc35dbf1b0377042cbef69a2f405e1472a9be04fcb2e2d1dbe"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001101",
+    "work_id": "00000000-0000-4000-8000-000000001104",
+    "publication_id": "00000000-0000-4000-8000-000000001103",
+    "command_id": "record_decision",
+    "schema_id": "decision",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001106",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "needs_context"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Reviewer action; synthetic only"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001100"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001101",
+    "work_id": "00000000-0000-4000-8000-000000001104",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "record_decision",
+    "idempotency_key": "00000000000000000000000000001100",
+    "payload_digest": "sha256:adc114b05d24d91ab620b4c403a917cdffd8817709483236498c54297ec583b6",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001106",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001107",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

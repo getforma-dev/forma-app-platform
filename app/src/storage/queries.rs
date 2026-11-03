@@ -32,15 +32,29 @@
 //! one effective typed query whose digest is the receipt's
 //! `predicate_digest`; the stored view query's digest is its `query_digest`.
 //! No money, ratio or lookup is ever added.
+//!
+//! ADR-011 pitch library (APP-094): a view reads one `source` input of any
+//! admitted contract shape, not only `events_v1`. The run carries that input
+//! contract's `fields` (from the re-admitted definition, never the client) to
+//! the engine, which types every column and literal from them. The window
+//! parameter applies to the field named `time` (a timestamp) and the
+//! `destination` parameter to a text field of that name; for an input without
+//! them the parameter is refused (`Denied`), never silently dropped, so a
+//! receipt's `parameters` are always what ran. [`Data::library_catalog`]
+//! lists the admitted library apps the member may open now, joined with the
+//! router sidecar `contracts/fixtures/library/catalog.json`.
 use super::{
-    authorization::{Action, Resource, Transaction},
-    definitions::stored_content,
+    authorization::{Action, Permit, Resource, Transaction},
+    definitions::{stored_content, stored_contents},
     pool::Data,
     require, valid_id, Error, Result, TrustedRequest,
 };
-use crate::admission::{self, digest};
+use crate::{
+    admission::{self, digest},
+    query::worker::{integer_backed, typed_column_types, ColumnType},
+};
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use tokio::time::Instant;
 use tokio_postgres::Row;
 
@@ -82,28 +96,44 @@ impl RunSource {
     }
 }
 
+/// Explicit attribution; a guest is never a member of the resource organization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum QueryActor {
+    Member,
+    Guest {
+        account: String,
+        share: String,
+        version: i64,
+    },
+}
+
 /// An authorized, not yet released query: the identities its receipt pins.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueryRun {
-    organization: String,
-    principal: String,
-    membership_epoch: i64,
-    app: String,
-    work: String,
-    work_version: i64,
-    publication: String,
-    definition_digest: String,
-    policy_epoch: i64,
-    view: String,
-    view_query: Value,
-    query: Value,
-    parameters: Vec<Value>,
-    filter_epoch: i64,
-    record_snapshot_sequence: i64,
-    source: RunSource,
-    dependencies: Vec<RunSource>,
+    pub(super) actor: QueryActor,
+    pub(super) organization: String,
+    pub(super) principal: String,
+    pub(super) membership_epoch: i64,
+    pub(super) app: String,
+    pub(super) work: String,
+    pub(super) work_version: i64,
+    pub(super) publication: String,
+    pub(super) definition_digest: String,
+    pub(super) policy_epoch: i64,
+    pub(super) view: String,
+    pub(super) view_query: Value,
+    pub(super) query: Value,
+    pub(super) parameters: Vec<Value>,
+    pub(super) filter_epoch: i64,
+    pub(super) record_snapshot_sequence: i64,
+    pub(super) source: RunSource,
+    pub(super) dependencies: Vec<RunSource>,
+    pub(super) fields: Vec<Value>,
 }
 impl QueryRun {
+    pub fn actor(&self) -> &QueryActor {
+        &self.actor
+    }
     pub fn organization(&self) -> &str {
         &self.organization
     }
@@ -166,6 +196,11 @@ impl QueryRun {
     pub fn dependencies(&self) -> &[RunSource] {
         &self.dependencies
     }
+    /// The read input's contract `fields` (id, value type, nullability), from
+    /// the re-admitted definition: the engine types its columns from them.
+    pub fn fields(&self) -> &[Value] {
+        &self.fields
+    }
 
     /// A run for engine and receipt unit tests only; never reachable from a
     /// request (the test executable only). The read source is the work's one
@@ -185,7 +220,8 @@ impl QueryRun {
         source: (&str, &str, &str),
     ) -> Self {
         let parsed = parse_parameters(parameters).expect("test parameters");
-        let query = parsed.apply(&view_query).expect("test query");
+        let fields = events_fields();
+        let query = parsed.apply(&view_query, &fields).expect("test query");
         let source = RunSource {
             input: "events".into(),
             source: source.0.into(),
@@ -193,6 +229,7 @@ impl QueryRun {
             normalized_digest: source.2.into(),
         };
         Self {
+            actor: QueryActor::Member,
             organization: organization.into(),
             principal: principal.into(),
             membership_epoch: 1,
@@ -210,8 +247,29 @@ impl QueryRun {
             record_snapshot_sequence: 0,
             dependencies: vec![source.clone()],
             source,
+            fields,
         }
     }
+}
+
+/// The seeded Northstar `events_v1` field list (tests and the worker's
+/// events-shaped default).
+pub fn events_fields() -> Vec<Value> {
+    vec![
+        json!({"id": "time", "value_type": {"type": "timestamp"}, "nullable": false}),
+        json!({"id": "destination", "value_type": {"type": "text"}, "nullable": false}),
+        json!({"id": "bytes", "value_type": {"type": "integer", "unit": "byte"}, "nullable": false}),
+    ]
+}
+
+/// The contract type of `field` among an input's `fields`, if declared.
+pub fn field_type<'a>(fields: &'a [Value], field: &str) -> Option<&'a str> {
+    fields
+        .iter()
+        .find(|f| f.get("id").and_then(Value::as_str) == Some(field))
+        .and_then(|f| f.get("value_type"))
+        .and_then(|t| t.get("type"))
+        .and_then(Value::as_str)
 }
 
 /// The closed run parameters.
@@ -269,7 +327,7 @@ pub fn parse_parameters(value: &Value) -> Option<Parameters> {
 
 impl Parameters {
     /// Receipt named values, in `field_id` order.
-    fn named_values(&self) -> Vec<Value> {
+    pub(super) fn named_values(&self) -> Vec<Value> {
         let mut values = Vec::new();
         if let Some(destination) = &self.destination {
             values.push(
@@ -288,11 +346,22 @@ impl Parameters {
     }
     /// The effective query: the stored view query with the window and the
     /// destination filter applied. A view that declares its own window takes
-    /// no window parameter.
-    fn apply(&self, query: &Value) -> Option<Value> {
+    /// no window parameter. The window needs the input's `time` timestamp
+    /// field and the destination filter its `destination` text field (the
+    /// library convention, `contracts/fixtures/library/catalog.json`
+    /// `window_field`/`destination_field`); otherwise `None`, so the
+    /// parameter is refused rather than recorded in a receipt without
+    /// having run.
+    pub(super) fn apply(&self, query: &Value, fields: &[Value]) -> Option<Value> {
         let mut query = query.as_object()?.clone();
+        let input = query
+            .get("inputs")?
+            .as_array()?
+            .first()?
+            .as_str()?
+            .to_owned();
         if let Some((start, end)) = &self.window {
-            if query.contains_key("window") {
+            if query.contains_key("window") || field_type(fields, "time") != Some("timestamp") {
                 return None;
             }
             query.insert(
@@ -301,10 +370,13 @@ impl Parameters {
             );
         }
         if let Some(destination) = &self.destination {
+            if field_type(fields, "destination") != Some("text") {
+                return None;
+            }
             let operations = query.get_mut("operations")?.as_array_mut()?;
             operations.insert(
                 0,
-                json!({"type": "filter", "field": {"input_id": "events", "field_id": "destination"},
+                json!({"type": "filter", "field": {"input_id": input, "field_id": "destination"},
                     "comparison": "eq", "value": {"type": "text", "value": destination}}),
             );
         }
@@ -327,8 +399,10 @@ fn integer(row: &Row, index: usize) -> Result<i64> {
     row.try_get(index).map_err(|_| Error::Unavailable)
 }
 
-/// The view's typed query in the re-admitted definition content.
-fn view_query(content: &[u8], view: &str) -> Result<Value> {
+/// The view's typed query in the re-admitted definition content, and the
+/// contract `fields` of its one `source` input (`Denied` for a view whose
+/// input is a records collection: Phase 1 runs source inputs only).
+pub(super) fn view_query(content: &[u8], view: &str) -> Result<(Value, Vec<Value>)> {
     let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
     let views = content
         .get("views")
@@ -339,16 +413,229 @@ fn view_query(content: &[u8], view: &str) -> Result<Value> {
         .find(|v| v.get("id").and_then(Value::as_str) == Some(view))
         .ok_or(Error::Denied)?;
     // A view without a query (form, note) has nothing to run.
-    found.get("query").cloned().ok_or(Error::Denied)
+    let query = found.get("query").cloned().ok_or(Error::Denied)?;
+    let inputs = query
+        .get("inputs")
+        .and_then(Value::as_array)
+        .ok_or(Error::Unavailable)?;
+    // APP-005's qualified subset reads exactly one source input.
+    require(inputs.len() == 1)?;
+    let input = inputs[0].as_str().ok_or(Error::Unavailable)?;
+    let fields = source_fields(&content, input).ok_or(Error::Denied)?;
+    Ok((query, fields))
+}
+
+/// The `fields` of the content's `source` input `input`; `None` for an
+/// unknown or records input.
+fn source_fields(content: &Value, input: &str) -> Option<Vec<Value>> {
+    let contract = content
+        .get("inputs")?
+        .as_array()?
+        .iter()
+        .find(|i| i.get("id").and_then(Value::as_str) == Some(input))?;
+    if contract.get("kind").and_then(Value::as_str) != Some("source") {
+        return None;
+    }
+    contract.get("fields")?.as_array().cloned()
 }
 
 /// The pinned premise a run and its release must both see.
-struct Premise {
-    publication: String,
-    work_version: i64,
-    definition_digest: String,
-    policy_epoch: i64,
-    definition_revision: String,
+pub(super) struct Premise {
+    pub(super) publication: String,
+    pub(super) work_version: i64,
+    pub(super) definition_digest: String,
+    pub(super) policy_epoch: i64,
+    pub(super) definition_revision: String,
+}
+
+/// What `premise` and then `stored_content` answer for one work of a batch:
+/// the premise (its `Denied` is the work's), and under it the stored
+/// definition's admitted digest and canonical content.
+pub(super) type Pinned = Result<(Premise, Result<(String, Vec<u8>)>)>;
+
+/// The 1-based `WITH ORDINALITY` column 0 of a batch row, as an index into
+/// `sent` (the caller's indexes of the items it sent).
+pub(super) fn ordinal(row: &Row, sent: &[usize]) -> Result<usize> {
+    let n = integer(row, 0)?;
+    usize::try_from(n)
+        .ok()
+        .and_then(|n| n.checked_sub(1))
+        .and_then(|n| sent.get(n).copied())
+        .ok_or(Error::Unavailable)
+}
+
+/// [`premise`] and then [`stored_content`] for many saved works, in six
+/// statements (the pins; `lock_work_revision` on each pinned premise; the
+/// publications; `stored_contents`): per work the same reads, the same lock
+/// and the same checks in the same order. A store failure ends the batch.
+pub(super) async fn pinned_many(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    works: &[(&str, &str)],
+) -> Result<Vec<Pinned>> {
+    pinned_many_with(transaction, organization, works, true).await
+}
+
+/// [`pinned_many`] with or without `lock_work_revision`. APP-122: an Ask or
+/// Shape read runs in one READ ONLY snapshot (`Transaction::begin_read_only`),
+/// where PostgreSQL refuses the function's `FOR SHARE`; there the pin and its
+/// publication are read from the same snapshot, which no concurrent commit
+/// can change under the read, so `lock: false` takes each pin as read.
+pub(super) async fn pinned_many_with(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    works: &[(&str, &str)],
+    lock: bool,
+) -> Result<Vec<Pinned>> {
+    let mut pinned: Vec<Pinned> = (0..works.len()).map(|_| Err(Error::Denied)).collect();
+    let sent: Vec<usize> = (0..works.len())
+        .filter(|&i| valid_id(works[i].0) && valid_id(works[i].1))
+        .collect();
+    if sent.is_empty() {
+        return Ok(pinned);
+    }
+    let apps: Vec<&str> = sent.iter().map(|&i| works[i].0).collect();
+    let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
+    let rows = transaction.query("SELECT c.n::bigint,w.publication_id::text,w.version::bigint FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) JOIN genui.saved_work w ON w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid", &[&organization,&apps,&ids]).await?;
+    let mut pins: Vec<Option<Result<(String, i64)>>> = (0..works.len()).map(|_| None).collect();
+    for row in &rows {
+        let i = ordinal(row, &sent)?;
+        pins[i] = Some((|| Ok((text(row, 1)?, integer(row, 2)?)))());
+    }
+    // `lock_work_revision` with each work's pin, as `premise` calls it.
+    let mut locking = Vec::new();
+    for (i, pin) in pins.iter().enumerate() {
+        match pin {
+            None => {} // no pin: `Denied`
+            Some(Err(error)) => pinned[i] = Err(*error),
+            Some(Ok(_)) => locking.push(i),
+        }
+    }
+    let pin = |i: usize| pins[i].as_ref().and_then(|p| p.as_ref().ok());
+    let mut locked = vec![false; works.len()];
+    if !lock {
+        for &i in &locking {
+            locked[i] = true;
+        }
+    } else if !locking.is_empty() {
+        let apps: Vec<&str> = locking.iter().map(|&i| works[i].0).collect();
+        let ids: Vec<&str> = locking.iter().map(|&i| works[i].1).collect();
+        let publications: Vec<&str> = locking
+            .iter()
+            .map(|&i| pin(i).map_or("", |p| p.0.as_str()))
+            .collect();
+        let versions: Vec<i64> = locking.iter().map(|&i| pin(i).map_or(0, |p| p.1)).collect();
+        let rows = transaction.query("SELECT c.n::bigint,l.publication_id::text,l.work_version FROM unnest($2::text[],$3::text[],$4::text[],$5::bigint[]) WITH ORDINALITY AS c(app,work,publication,version,n) CROSS JOIN LATERAL genui_private.lock_work_revision($1::text::uuid,c.app::uuid,c.work::uuid,c.publication::uuid,c.version) l", &[&organization,&apps,&ids,&publications,&versions]).await?;
+        let mut first = vec![false; works.len()];
+        for row in &rows {
+            let i = ordinal(row, &locking)?;
+            // `premise` judges the first row the function returns.
+            if std::mem::replace(&mut first[i], true) {
+                continue;
+            }
+            let Some((publication, version)) = pin(i) else {
+                continue;
+            };
+            // `premise`'s order: the publication, then the version.
+            match text(row, 1).map(|p| p == *publication) {
+                Err(error) => pinned[i] = Err(error),
+                Ok(false) => {}
+                Ok(true) => match integer(row, 2) {
+                    Err(error) => pinned[i] = Err(error),
+                    Ok(v) => locked[i] = v == *version,
+                },
+            }
+        }
+    }
+    // The pinned publications of the locked works.
+    let reading: Vec<usize> = (0..works.len()).filter(|&i| locked[i]).collect();
+    let mut premises: Vec<Option<Result<Premise>>> = (0..works.len()).map(|_| None).collect();
+    if !reading.is_empty() {
+        let apps: Vec<&str> = reading.iter().map(|&i| works[i].0).collect();
+        let publications: Vec<&str> = reading
+            .iter()
+            .map(|&i| pin(i).map_or("", |p| p.0.as_str()))
+            .collect();
+        let rows = transaction.query("SELECT c.n::bigint,p.definition_revision_id::text,p.definition_digest::text,p.policy_version::bigint,p.operator_version FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,publication,n) JOIN genui.publications p ON p.organization_id=$1::text::uuid AND p.app_id=c.app::uuid AND p.publication_id=c.publication::uuid", &[&organization,&apps,&publications]).await?;
+        let mut first = vec![false; works.len()];
+        for row in &rows {
+            let i = ordinal(row, &reading)?;
+            if std::mem::replace(&mut first[i], true) {
+                continue;
+            }
+            let Some((publication, version)) = pin(i) else {
+                continue;
+            };
+            premises[i] = Some((|| {
+                let operator: i32 = row.try_get(4).map_err(|_| Error::Unavailable)?;
+                if operator != 1 {
+                    return Err(Error::Unavailable);
+                }
+                Ok(Premise {
+                    publication: publication.clone(),
+                    work_version: *version,
+                    definition_revision: text(row, 1)?,
+                    definition_digest: text(row, 2)?,
+                    policy_epoch: integer(row, 3)?,
+                })
+            })());
+        }
+    }
+    // Each premise's stored definition, re-admitted.
+    let mut revisions = Vec::new();
+    let mut owners = Vec::new();
+    for (i, premise) in premises.iter_mut().enumerate() {
+        match premise.take() {
+            None => {} // locked work without its publication: `Denied`
+            Some(Err(error)) => pinned[i] = Err(error),
+            Some(Ok(premise)) => {
+                revisions.push((works[i].0.to_owned(), premise.definition_revision.clone()));
+                owners.push((i, premise));
+            }
+        }
+    }
+    let contents = stored_contents(transaction, organization, &revisions).await?;
+    for ((i, premise), content) in owners.into_iter().zip(contents) {
+        pinned[i] = Ok((premise, content));
+    }
+    Ok(pinned)
+}
+
+/// The work page's outline of one batched work: its pinned content,
+/// re-admitted under `premise`'s digest (as `work_outline` judges it).
+pub(super) fn outline_of(pinned: &Pinned) -> Result<WorkOutline> {
+    let (premise, content) = pinned.as_ref().map_err(|error| *error)?;
+    let (admitted, content) = content.as_ref().map_err(|error| *error)?;
+    if *admitted != premise.definition_digest {
+        return Err(Error::Unavailable);
+    }
+    let mut outline = outline(content)?;
+    outline.definition_digest = admitted.clone();
+    Ok(outline)
+}
+
+/// For each `(app, work)`, its `genui.record_collections` rows ordered by
+/// `collection_id` (`collection_id`, `schema_id`, `schema_version` from
+/// column 1), in one statement.
+pub(super) async fn collections_many(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    works: &[(&str, &str)],
+) -> Result<Vec<Vec<Row>>> {
+    let mut collections: Vec<Vec<Row>> = (0..works.len()).map(|_| Vec::new()).collect();
+    let sent: Vec<usize> = (0..works.len())
+        .filter(|&i| valid_id(works[i].0) && valid_id(works[i].1))
+        .collect();
+    if sent.is_empty() {
+        return Ok(collections);
+    }
+    let apps: Vec<&str> = sent.iter().map(|&i| works[i].0).collect();
+    let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
+    for row in transaction.query("SELECT c.n::bigint,r.collection_id::text,r.schema_id::text,r.schema_version FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) JOIN genui.record_collections r ON r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid ORDER BY c.n,r.collection_id", &[&organization,&apps,&ids]).await? {
+        let i = ordinal(&row, &sent)?;
+        collections[i].push(row);
+    }
+    Ok(collections)
 }
 async fn premise(
     transaction: &Transaction<'_>,
@@ -379,7 +666,7 @@ async fn premise(
 
 /// The work's binding of `input`, which must be a live source revision whose
 /// stored `normalized_digest` the work bound.
-async fn bound_source(
+pub(super) async fn bound_source(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -411,7 +698,7 @@ async fn bound_source(
 /// `input_id` order: the receipt's `source_revisions` (APP-012 review M3).
 /// The precheck already required each to be a live revision under the
 /// member's `source_read`; the engine reads only the view's one input.
-async fn dependencies(
+pub(super) async fn dependencies(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -463,14 +750,8 @@ impl Data {
             if admitted != premise.definition_digest {
                 return Err(Error::Unavailable);
             }
-            let stored = view_query(&content, view)?;
-            let inputs = stored
-                .get("inputs")
-                .and_then(Value::as_array)
-                .ok_or(Error::Unavailable)?;
-            // APP-005's qualified subset reads exactly one source input.
-            require(inputs.len() == 1)?;
-            let input = inputs[0].as_str().ok_or(Error::Unavailable)?;
+            let (stored, fields) = view_query(&content, view)?;
+            let input = stored["inputs"][0].as_str().ok_or(Error::Unavailable)?;
             let source = bound_source(transaction, org, app, work, input).await?;
             permit
                 .also(Action::SourceRead, Resource::Source(&source.source))
@@ -488,8 +769,9 @@ impl Data {
             // APP-012 review m8).
             let rows = transaction.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[org,&app,&work]).await?;
             let record_snapshot_sequence = integer(rows.first().ok_or(Error::Unavailable)?, 0)?;
-            let query = parameters.apply(&stored).ok_or(Error::Denied)?;
+            let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
             Ok(QueryRun {
+                actor: QueryActor::Member,
                 organization: org.clone(),
                 principal: request.principal.clone(),
                 membership_epoch: request.epoch,
@@ -507,6 +789,7 @@ impl Data {
                 record_snapshot_sequence,
                 source,
                 dependencies,
+                fields,
             })
         }
         .await;
@@ -523,7 +806,8 @@ impl Data {
     /// released.
     pub async fn release_result(&self, request: &TrustedRequest, run: &QueryRun) -> Result<()> {
         require(
-            run.organization == request.organization
+            matches!(run.actor, QueryActor::Member)
+                && run.organization == request.organization
                 && run.principal == request.principal
                 && run.membership_epoch == request.epoch,
         )?;
@@ -571,21 +855,66 @@ pub const QUALIFIED_OPERATORS: [&str; 6] = [
 ];
 
 /// One view of a saved work's pinned definition that the Phase 1 query path
-/// can run: it carries a typed query over exactly one input using only
-/// [`QUALIFIED_OPERATORS`] (APP-005's qualified subset). Forms, notes,
-/// multi-input views and views with an unqualified operator are not listed.
+/// can run: it carries a typed query over exactly one `source` input using
+/// only [`QUALIFIED_OPERATORS`] (APP-005's qualified subset). Forms, notes,
+/// multi-input views, views over a records input and views with an
+/// unqualified operator are not listed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkView {
     pub id: String,
     pub title: String,
     pub kind: String,
+    /// The view's exact-integer result columns (integer, money minor units,
+    /// decimal coefficient: `query::worker::typed_integer_columns` of its
+    /// stored query over its input's contract fields), kept for existing
+    /// consumers (APP-012 review m11; ADR-011 canvas).
+    pub integer_columns: Vec<String>,
+    /// Every result column's value type (`query::worker::typed_column_types`
+    /// of the stored query over its input's contract fields): how the page
+    /// and the canvas display each value (APP-093 review M4).
+    pub column_types: BTreeMap<String, ColumnType>,
+}
+/// Trusted presentation metadata from the pinned, re-admitted definition.
+/// This grants no query or command authority. Unsupported data views remain
+/// visible as unavailable parts instead of silently disappearing.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WorkPart {
+    pub id: String,
+    pub title: String,
+    pub kind: String,
+    pub text: String,
+    pub command: String,
+    pub schema: String,
+    pub operation: String,
+    pub creates: bool,
+    pub row: u32,
+    pub column: u32,
+    pub width: u32,
+    pub runnable: bool,
 }
 /// What the work page shows before any run: the pinned definition's title
 /// and its runnable views, in definition order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkOutline {
+    /// Optional admitted immutable shell/action/theme metadata.
+    pub presentation: Option<Value>,
     pub title: String,
+    /// The definition's description (APP-101: an adapted definition's first
+    /// line carries the canvas chips, `composer::transform::chips_of`).
+    pub description: String,
     pub views: Vec<WorkView>,
+    /// Every admitted part in visual reading order (row, column, declaration).
+    pub parts: Vec<WorkPart>,
+    pub can_window: bool,
+    pub can_destination: bool,
+    /// The pinned definition's admitted digest (APP-104: the canvas library
+    /// pane names a library app's category from the sidecar by it).
+    pub definition_digest: String,
+    /// Record collections this work serves, `(collection_id, schema_id)`.
+    /// Empty when the work has none. Filled by [`Data::work_outline`].
+    pub collections: Vec<(String, String)>,
+    /// Whether the member holds `record_write` on the work now.
+    pub can_write: bool,
 }
 
 /// The runnable views of re-admitted definition content.
@@ -598,6 +927,11 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
             .ok_or(Error::Unavailable)
     };
     let title = label(content.get("title"))?;
+    let description = content
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
     let mut views = Vec::new();
     for view in content
         .get("views")
@@ -605,10 +939,12 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         .ok_or(Error::Unavailable)?
     {
         let query = view.get("query");
-        let single_input = query
+        let fields = query
             .and_then(|q| q.get("inputs"))
             .and_then(Value::as_array)
-            .is_some_and(|inputs| inputs.len() == 1);
+            .filter(|inputs| inputs.len() == 1)
+            .and_then(|inputs| inputs[0].as_str())
+            .and_then(|input| source_fields(&content, input));
         let qualified = query
             .and_then(|q| q.get("operations"))
             .and_then(Value::as_array)
@@ -619,15 +955,98 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
                         .is_some_and(|kind| QUALIFIED_OPERATORS.contains(&kind))
                 })
             });
-        if single_input && qualified {
+        if let (Some(fields), Some(query), true) = (fields, query, qualified) {
+            // Typed by the view's own input contract (APP-093 review M4),
+            // exactly as the engine run types its result.
+            let column_types = typed_column_types(query, &fields);
             views.push(WorkView {
                 id: label(view.get("id"))?,
                 title: label(view.get("title"))?,
                 kind: label(view.get("kind"))?,
+                integer_columns: integer_backed(&column_types).into_iter().collect(),
+                column_types,
             });
         }
     }
-    Ok(WorkOutline { title, views })
+    let supports = |field: &str, kind: &str| {
+        !views.is_empty()
+            && views.iter().all(|view| {
+                let declared = content["views"]
+                    .as_array()
+                    .and_then(|all| all.iter().find(|v| v["id"] == view.id));
+                declared
+                    .and_then(|v| v["query"]["inputs"][0].as_str())
+                    .and_then(|id| source_fields(&content, id))
+                    .is_some_and(|fields| {
+                        fields
+                            .iter()
+                            .any(|f| f["id"] == field && f["value_type"]["type"] == kind)
+                    })
+            })
+    };
+    let can_window = supports("time", "timestamp");
+    let can_destination = supports("destination", "text");
+    let mut parts = Vec::new();
+    for (index, view) in content["views"]
+        .as_array()
+        .ok_or(Error::Unavailable)?
+        .iter()
+        .enumerate()
+    {
+        let id = label(view.get("id"))?;
+        let position = content["default_layout"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["view_id"] == id));
+        let command = view["command_id"].as_str().unwrap_or_default();
+        let declaration = content["commands"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["id"] == command));
+        let coordinate = |key: &str, default: u32| {
+            position
+                .and_then(|p| p[key].as_u64())
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or(default)
+        };
+        parts.push(WorkPart {
+            runnable: views.iter().any(|v| v.id == id),
+            id,
+            title: label(view.get("title"))?,
+            kind: label(view.get("kind"))?,
+            text: view["text"].as_str().unwrap_or_default().into(),
+            command: command.into(),
+            schema: declaration
+                .and_then(|c| c["record_schema_id"].as_str())
+                .or_else(|| {
+                    view.get("records")
+                        .and_then(|records| records["schema_id"].as_str())
+                })
+                .unwrap_or_default()
+                .into(),
+            operation: declaration
+                .and_then(|c| c["operation"].as_str())
+                .unwrap_or_default()
+                .into(),
+            creates: declaration.is_some_and(|c| {
+                c["operation"] == "create" && c["transitions"].as_array().is_some_and(Vec::is_empty)
+            }),
+            row: coordinate("row", index as u32),
+            column: coordinate("column", 0),
+            width: coordinate("width", 12),
+        });
+    }
+    parts.sort_by_key(|part| (part.row, part.column));
+    Ok(WorkOutline {
+        presentation: content.get("presentation").cloned(),
+        title,
+        description,
+        views,
+        parts,
+        can_window,
+        can_destination,
+        definition_digest: String::new(),
+        collections: Vec::new(),
+        can_write: false,
+    })
 }
 
 impl Data {
@@ -651,15 +1070,42 @@ impl Data {
                 .precheck(Action::RecordRead, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
-            let transaction = permit.transaction();
             let org = &request.organization;
-            let premise = premise(transaction, org, app, work).await?;
-            let (admitted, content) =
-                stored_content(transaction, org, app, &premise.definition_revision).await?;
-            if admitted != premise.definition_digest {
-                return Err(Error::Unavailable);
+            let (admitted, content) = {
+                let transaction = permit.transaction();
+                let premise = premise(transaction, org, app, work).await?;
+                let (admitted, content) =
+                    stored_content(transaction, org, app, &premise.definition_revision).await?;
+                if admitted != premise.definition_digest {
+                    return Err(Error::Unavailable);
+                }
+                (admitted, content)
+            };
+            let can_write = match permit
+                .also(Action::RecordWrite, Resource::Work { app, work })
+                .await
+            {
+                Ok(()) => true,
+                Err(Error::Denied) => false,
+                Err(error) => return Err(error),
+            };
+            let collections = {
+                let transaction = permit.transaction();
+                transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[org,&app,&work]).await?
+                    .iter()
+                    .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+                    .collect::<Result<Vec<_>>>()?
+            };
+            let mut outline = outline(&content)?;
+            outline.definition_digest = admitted;
+            outline.can_write = can_write;
+            outline.collections = collections;
+            if let Some(name) = super::work_labels::names(permit.transaction(), org, &[(app, work)])
+                .await?.get(&(app.to_owned(), work.to_owned())).and_then(|label| label.name.as_ref())
+            {
+                outline.title = name.clone();
             }
-            outline(&content)
+            Ok(outline)
         }
         .await;
         transaction.finish(result.is_ok()).await?;
@@ -680,17 +1126,262 @@ pub struct OpenableWork {
     /// record page then offers its command form).
     pub can_write: bool,
 }
-/// At most this many of the organization's saved works are considered.
-const LISTING_CANDIDATES: i64 = 50;
+/// At most this many of the organization's most recent saved works are
+/// considered, newest first (APP-093 review M3: the cap was 50 in `app_id`
+/// order, which compositions crossed and which then hid the library apps).
+/// The library entries are selected apart from this cap.
+const LISTING_CANDIDATES: i64 = 100;
+/// Per library definition, at most this many of its saved works (the
+/// sidecar's seeded work first) are tried for its always-listed entry.
+const LIBRARY_CANDIDATES: i64 = 4;
 
 /// `Ok(false)` for a denial, so the listing omits the item; anything else
 /// (a store failure, which has aborted the transaction) ends the listing.
+#[cfg(test)]
 fn granted(result: Result<()>) -> Result<bool> {
     match result {
         Ok(()) => Ok(true),
         Err(Error::Denied) => Ok(false),
         Err(error) => Err(error),
     }
+}
+
+/// One listed work as the member may open it now, with the premise and the
+/// re-admitted content it was judged under.
+#[derive(Clone)]
+struct Opened {
+    item: OpenableWork,
+    definition_digest: String,
+    content: Vec<u8>,
+}
+
+/// The listing clause for one saved work, after the member fence: `discover`
+/// on its app and `record_read` on the work (which includes `run` on the app,
+/// live `source_read` on every dependency and the unrevoked creator's
+/// authority), its pinned publication under `lock_work_revision` and its
+/// stored definition re-admitted. `None` when the member may not open it.
+/// The listings judge items in batches ([`open_many`]); this one-work form
+/// is the reference the equivalence checks compare against.
+#[cfg(test)]
+async fn open_listed(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    app: &str,
+    work: &str,
+) -> Result<Option<Opened>> {
+    if !granted(permit.also(Action::Discover, Resource::App(app)).await)?
+        || !granted(
+            permit
+                .also(Action::RecordRead, Resource::Work { app, work })
+                .await,
+        )?
+    {
+        return Ok(None);
+    }
+    let can_write = granted(
+        permit
+            .also(Action::RecordWrite, Resource::Work { app, work })
+            .await,
+    )?;
+    let transaction = permit.transaction();
+    let premise = match premise(transaction, org, app, work).await {
+        Ok(premise) => premise,
+        Err(Error::Denied) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let (admitted, content) =
+        stored_content(transaction, org, app, &premise.definition_revision).await?;
+    if admitted != premise.definition_digest {
+        return Err(Error::Unavailable);
+    }
+    let title = super::work_labels::names(transaction, org, &[(app, work)])
+        .await?
+        .remove(&(app.to_owned(), work.to_owned()))
+        .and_then(|label| label.name)
+        .unwrap_or(outline(&content)?.title);
+    let collections = transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[&org,&app,&work]).await?
+        .iter()
+        .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Some(Opened {
+        item: OpenableWork {
+            app: app.to_owned(),
+            work: work.to_owned(),
+            title,
+            collections,
+            can_write,
+        },
+        definition_digest: premise.definition_digest,
+        content,
+    }))
+}
+
+/// The library sidecar's definition digests and seeded work ids.
+fn library_keys(sidecar: &[Value]) -> (Vec<String>, Vec<String>) {
+    let member = |key: &str| -> Vec<String> {
+        sidecar
+            .iter()
+            .filter_map(|entry| entry.get(key).and_then(Value::as_str).map(str::to_owned))
+            .collect()
+    };
+    (member("definition_digest"), member("work_id"))
+}
+
+/// The member's openable library works, at most one per library
+/// definition: the saved works whose pinned publication's definition digest
+/// is a sidecar digest, selected directly by that digest (never through the
+/// capped recency listing), the sidecar's seeded work tried first. Each
+/// entry is the first candidate of its digest the member may open now.
+#[cfg(test)]
+async fn open_library_serial(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    sidecar: &[Value],
+) -> Result<Vec<Opened>> {
+    let candidates = library_candidates(permit, org, sidecar).await?;
+    let mut covered = std::collections::BTreeSet::new();
+    let mut opened = Vec::new();
+    for (app, work, digest) in candidates {
+        if covered.contains(&digest) {
+            continue;
+        }
+        if let Some(found) = open_listed(permit, org, &app, &work).await? {
+            // The pinned digest is re-read under the lock: it must still be
+            // the library definition the candidate was selected by.
+            if found.definition_digest == digest {
+                covered.insert(digest);
+                opened.push(found);
+            }
+        }
+    }
+    Ok(opened)
+}
+
+/// The library candidates (`open_library`): per sidecar digest at most
+/// [`LIBRARY_CANDIDATES`] saved works pinned to it, the seeded work first, as
+/// `(app, work, digest)` in the order they are tried.
+async fn library_candidates(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    sidecar: &[Value],
+) -> Result<Vec<(String, String, String)>> {
+    let (digests, seeded) = library_keys(sidecar);
+    if digests.is_empty() {
+        return Ok(Vec::new());
+    }
+    let candidates = permit.transaction().query("SELECT c.app_id,c.work_id,c.digest FROM (SELECT w.app_id::text AS app_id,w.work_id::text AS work_id,p.definition_digest::text AS digest,row_number() OVER (PARTITION BY p.definition_digest ORDER BY (w.work_id::text=ANY($3::text[])) DESC,w.app_id,w.work_id) AS n FROM genui.saved_work w JOIN genui.publications p ON p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND p.definition_digest::text=ANY($2::text[])) c WHERE c.n<=$4 ORDER BY c.app_id,c.n", &[&org,&digests,&seeded,&LIBRARY_CANDIDATES]).await?;
+    candidates
+        .iter()
+        .map(|row| Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?)))
+        .collect()
+}
+
+/// The listing clause (`open_listed`) for many saved works under one permit,
+/// in a bounded number of statements whatever their number (APP-113's deferred
+/// batching plus exact-work display names): per work the same clauses,
+/// the same lock, re-admission and checks, in the same order. Per work
+/// `Ok(None)` when the member may not open it, and an `Err` that the
+/// listing ends with when it reaches that work, as `open_listed`'s does.
+async fn open_many(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    works: &[(&str, &str)],
+) -> Result<Vec<Result<Option<Opened>>>> {
+    let mut opened: Vec<Result<Option<Opened>>> = (0..works.len()).map(|_| Ok(None)).collect();
+    if works.is_empty() {
+        return Ok(opened);
+    }
+    let grants = permit.grants(works).await?;
+    // `discover` on the app and `record_read` on the work, re-read after
+    // the fence; anything else is omitted before the work's premise.
+    let eligible: Vec<usize> = (0..works.len())
+        .filter(|&i| grants[i].discover && grants[i].record_read)
+        .collect();
+    let keys: Vec<(&str, &str)> = eligible.iter().map(|&i| works[i]).collect();
+    let transaction = permit.transaction();
+    let pinned = pinned_many(transaction, org, &keys).await?;
+    let collections = collections_many(transaction, org, &keys).await?;
+    let work_names = super::work_labels::names(transaction, org, &keys).await?;
+    for ((&i, pinned), rows) in eligible.iter().zip(pinned).zip(collections) {
+        let (app, work) = works[i];
+        opened[i] = (|| {
+            let (premise, content) = match pinned {
+                Ok(pinned) => pinned,
+                Err(Error::Denied) => return Ok(None),
+                Err(error) => return Err(error),
+            };
+            let (admitted, content) = content?;
+            if admitted != premise.definition_digest {
+                return Err(Error::Unavailable);
+            }
+            let title = work_names
+                .get(&(app.to_owned(), work.to_owned()))
+                .and_then(|label| label.name.clone())
+                .unwrap_or(outline(&content)?.title);
+            let collections = rows
+                .iter()
+                .map(|row| Ok((text(row, 1)?, text(row, 2)?)))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(Some(Opened {
+                item: OpenableWork {
+                    app: app.to_owned(),
+                    work: work.to_owned(),
+                    title,
+                    collections,
+                    can_write: grants[i].record_write,
+                },
+                definition_digest: premise.definition_digest,
+                content,
+            }))
+        })();
+    }
+    Ok(opened)
+}
+
+/// The member's openable library works (`open_library_serial`'s rule: per
+/// digest the first candidate the member may open now whose pinned digest,
+/// re-read under the lock, is still the library definition it was selected
+/// by), every candidate judged in one [`open_many`] batch.
+async fn open_library(
+    permit: &Permit<'_, '_>,
+    org: &str,
+    sidecar: &[Value],
+) -> Result<Vec<Opened>> {
+    let candidates = library_candidates(permit, org, sidecar).await?;
+    let mut slots = BTreeMap::new();
+    let mut keys = Vec::new();
+    for (app, work, _) in &candidates {
+        slots
+            .entry((app.as_str(), work.as_str()))
+            .or_insert_with(|| {
+                keys.push((app.as_str(), work.as_str()));
+                keys.len() - 1
+            });
+    }
+    let opened = open_many(permit, org, &keys).await?;
+    library_replay(&candidates, |app, work| opened[slots[&(app, work)]].clone())
+}
+
+/// `open_library_serial`'s loop over judgments already made: `judge` answers
+/// a candidate's `open_listed` outcome the first time the loop reaches it.
+fn library_replay(
+    candidates: &[(String, String, String)],
+    mut judge: impl FnMut(&str, &str) -> Result<Option<Opened>>,
+) -> Result<Vec<Opened>> {
+    let mut covered = std::collections::BTreeSet::new();
+    let mut opened = Vec::new();
+    for (app, work, digest) in candidates {
+        if covered.contains(digest) {
+            continue;
+        }
+        if let Some(found) = judge(app, work)? {
+            if found.definition_digest == *digest {
+                covered.insert(digest.clone());
+                opened.push(found);
+            }
+        }
+    }
+    Ok(opened)
 }
 
 impl Data {
@@ -705,55 +1396,364 @@ impl Data {
     /// `lock_work_revision` and its stored definition re-admitted, exactly as
     /// `work_outline` does, for the title. Nothing is written. A refused
     /// member is `Denied`; the route shows that as an empty listing.
+    ///
+    /// APP-093 review M3: the candidates are the organization's
+    /// [`LISTING_CANDIDATES`] most recent saved works (by their pinned
+    /// publication's `published_at`, newest first: `saved_work` carries no
+    /// creation time) followed by the library entries, which are selected by
+    /// their sidecar definition digest apart from that cap, so no number of
+    /// compositions hides a library app.
     pub async fn openable_works(&self, request: &TrustedRequest) -> Result<Vec<OpenableWork>> {
+        let sidecar = library_sidecar()?;
         let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
             let permit = transaction.fence_member().await?;
             let org = &request.organization;
-            let candidates = permit.transaction().query("SELECT app_id::text,work_id::text FROM genui.saved_work WHERE organization_id=$1::text::uuid ORDER BY app_id,work_id LIMIT $2", &[org,&LISTING_CANDIDATES]).await?;
+            // APP-113 review: the listing clause filters in SQL before the
+            // cap, so other members' works never crowd out the member's own;
+            // `open_listed` below still judges each under the fence.
+            let candidates = permit.transaction().query(&format!("SELECT w.app_id::text,w.work_id::text FROM genui.saved_work w JOIN genui.publications u ON u.organization_id=w.organization_id AND u.app_id=w.app_id AND u.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND {} ORDER BY u.published_at DESC,w.app_id,w.work_id LIMIT $2", listable("$3::text::uuid")), &[org,&LISTING_CANDIDATES,&request.principal]).await?;
+            let recent = candidates
+                .iter()
+                .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+                .collect::<Result<Vec<_>>>()?;
+            let library = library_candidates(&permit, org, &sidecar).await?;
+            // Every candidate is judged once, in one batch; the listing then
+            // takes the judgments in the order `open_listed` reached them.
+            let mut slots = BTreeMap::new();
+            let mut keys = Vec::new();
+            for (app, work) in recent
+                .iter()
+                .map(|(app, work)| (app.as_str(), work.as_str()))
+                .chain(
+                    library
+                        .iter()
+                        .map(|(app, work, _)| (app.as_str(), work.as_str())),
+                )
+            {
+                slots.entry((app, work)).or_insert_with(|| {
+                    keys.push((app, work));
+                    keys.len() - 1
+                });
+            }
+            let opened = open_many(&permit, org, &keys).await?;
+            let judged = |app: &str, work: &str| &opened[slots[&(app, work)]];
+            let mut seen = std::collections::BTreeSet::new();
+            let mut listed = Vec::new();
+            for (app, work) in &recent {
+                if !seen.insert((app.clone(), work.clone())) {
+                    continue;
+                }
+                if let Some(found) = judged(app, work).clone()? {
+                    listed.push(found.item);
+                }
+            }
+            for opened in library_replay(&library, |app, work| judged(app, work).clone())? {
+                if seen.insert((opened.item.app.clone(), opened.item.work.clone())) {
+                    listed.push(opened.item);
+                }
+            }
+            Ok(listed)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// The one-work-at-a-time listing `openable_works` replaced (APP-113's
+    /// deferred batching), kept verbatim as the reference the equivalence
+    /// checks compare the batch with.
+    #[cfg(test)]
+    pub(crate) async fn openable_works_serial(
+        &self,
+        request: &TrustedRequest,
+    ) -> Result<Vec<OpenableWork>> {
+        let sidecar = library_sidecar()?;
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let org = &request.organization;
+            let candidates = permit.transaction().query(&format!("SELECT w.app_id::text,w.work_id::text FROM genui.saved_work w JOIN genui.publications u ON u.organization_id=w.organization_id AND u.app_id=w.app_id AND u.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND {} ORDER BY u.published_at DESC,w.app_id,w.work_id LIMIT $2", listable("$3::text::uuid")), &[org,&LISTING_CANDIDATES,&request.principal]).await?;
+            let mut seen = std::collections::BTreeSet::new();
             let mut listed = Vec::new();
             for row in &candidates {
                 let (app, work) = (text(row, 0)?, text(row, 1)?);
-                let (app, work) = (app.as_str(), work.as_str());
-                if !granted(permit.also(Action::Discover, Resource::App(app)).await)?
-                    || !granted(
-                        permit
-                            .also(Action::RecordRead, Resource::Work { app, work })
-                            .await,
-                    )?
-                {
+                if !seen.insert((app.clone(), work.clone())) {
                     continue;
                 }
-                let can_write = granted(
-                    permit
-                        .also(Action::RecordWrite, Resource::Work { app, work })
-                        .await,
-                )?;
-                let transaction = permit.transaction();
-                let premise = match premise(transaction, org, app, work).await {
-                    Ok(premise) => premise,
-                    Err(Error::Denied) => continue,
-                    Err(error) => return Err(error),
-                };
-                let (admitted, content) =
-                    stored_content(transaction, org, app, &premise.definition_revision).await?;
-                if admitted != premise.definition_digest {
-                    return Err(Error::Unavailable);
+                if let Some(opened) = open_listed(&permit, org, &app, &work).await? {
+                    listed.push(opened.item);
                 }
-                let title = outline(&content)?.title;
-                let collections = transaction.query("SELECT collection_id::text,schema_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[org,&app,&work]).await?
-                    .iter()
-                    .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
-                    .collect::<Result<Vec<_>>>()?;
-                listed.push(OpenableWork {
-                    app: app.to_owned(),
-                    work: work.to_owned(),
-                    title,
-                    collections,
-                    can_write,
+            }
+            for opened in open_library_serial(&permit, org, &sidecar).await? {
+                if seen.insert((opened.item.app.clone(), opened.item.work.clone())) {
+                    listed.push(opened.item);
+                }
+            }
+            Ok(listed)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// `library_catalog` judged one work at a time (the reference).
+    #[cfg(test)]
+    pub(crate) async fn library_catalog_serial(
+        &self,
+        request: &TrustedRequest,
+    ) -> Result<Vec<LibraryEntry>> {
+        self.library_catalog_with(request, true).await
+    }
+}
+
+/// The listing clause in SQL over a `genui.saved_work` row `w` for
+/// `principal`: `discover` on the app and `record_read` on the work (the
+/// prefilter before a listing's cap; `open_listed` stays the judgment).
+pub(super) fn listable(principal: &str) -> String {
+    format!(
+        "EXISTS(SELECT 1 FROM genui.app_permissions x WHERE x.organization_id=w.organization_id AND x.principal_id={principal} AND x.app_id=w.app_id AND x.permission='discover') AND {}",
+        super::authorization::record_read_clause(principal)
+    )
+}
+
+/// APP-101: the first line of a named saved work's `context` (the work the
+/// member saved as a slash command): `forma-command:/<slug>`.
+pub const COMMAND_MARKER: &str = "forma-command:/";
+/// Named works considered per listing.
+const NAMED_CANDIDATES: i64 = 64;
+
+/// The slug a saved work's context names, if it is a named work.
+pub fn command_slug(context: &str) -> Option<&str> {
+    let slug = context.lines().next()?.strip_prefix(COMMAND_MARKER)?;
+    (2..=32).contains(&slug.len()).then_some(slug)
+}
+
+/// One named saved work the member may open now (APP-101).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NamedWork {
+    pub slug: String,
+    pub work: OpenableWork,
+}
+
+impl Data {
+    /// APP-101 (`GET /v1/commands`): the organization's named saved works
+    /// (context marked [`COMMAND_MARKER`]) the member may open now, judged
+    /// exactly as the workspace listing judges each item (`open_listed`,
+    /// under the member fence); a work the member may not open is omitted,
+    /// never named. Nothing is written.
+    pub async fn named_works(&self, request: &TrustedRequest) -> Result<Vec<NamedWork>> {
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let org = &request.organization;
+            let pattern = format!("{COMMAND_MARKER}%");
+            let candidates = permit.transaction().query(&format!("SELECT w.app_id::text,w.work_id::text,w.context FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.context LIKE $2 AND {} ORDER BY w.app_id,w.work_id LIMIT $3", listable("$4::text::uuid")), &[org,&pattern,&NAMED_CANDIDATES,&request.principal]).await?;
+            let mut slugged = Vec::new();
+            for row in &candidates {
+                let (app, work, context) = (text(row, 0)?, text(row, 1)?, text(row, 2)?);
+                let Some(slug) = command_slug(&context) else {
+                    continue;
+                };
+                slugged.push((app, work, slug.to_owned()));
+            }
+            let keys: Vec<(&str, &str)> = slugged
+                .iter()
+                .map(|(app, work, _)| (app.as_str(), work.as_str()))
+                .collect();
+            let mut named = Vec::new();
+            for ((_, _, slug), opened) in slugged.iter().zip(open_many(&permit, org, &keys).await?) {
+                if let Some(opened) = opened? {
+                    named.push(NamedWork {
+                        slug: slug.clone(),
+                        work: opened.item,
+                    });
+                }
+            }
+            Ok(named)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+}
+
+/// APP-109: own works considered per listing.
+const OWN_CANDIDATES: i64 = 16;
+
+impl Data {
+    /// APP-109 (`/v1/notes`): the saved works of `app` this member created
+    /// (creator authority unrevoked), in work id order, each judged exactly as the workspace listing judges it
+    /// (`open_listed`, under the member fence); a work the member may no
+    /// longer open is omitted. A work someone shared with the member is never
+    /// one of these, so notes written here stay the member's own unless the
+    /// member shares the work. Nothing is written.
+    pub async fn own_works(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+    ) -> Result<Vec<OpenableWork>> {
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let org = &request.organization;
+            let candidates = permit.transaction().query("SELECT work_id::text FROM genui.saved_work WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND created_by=$3::text::uuid AND creator_revoked_at IS NULL ORDER BY work_id LIMIT $4", &[org,&app,&request.principal,&OWN_CANDIDATES]).await?;
+            let works = candidates
+                .iter()
+                .map(|row| text(row, 0))
+                .collect::<Result<Vec<_>>>()?;
+            let keys: Vec<(&str, &str)> = works.iter().map(|work| (app, work.as_str())).collect();
+            let mut own = Vec::new();
+            for opened in open_many(&permit, org, &keys).await? {
+                if let Some(opened) = opened? {
+                    own.push(opened.item);
+                }
+            }
+            Ok(own)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+}
+
+/// The router sidecar of the prebuilt library (ADR-011, APP-094): per
+/// library app its purpose, routing examples and the typed summary of its
+/// fields and views, generated by `contracts/make_library.py` and keyed by
+/// the definition digest the seed places. Metadata only: it grants nothing
+/// and names no result.
+const LIBRARY_CATALOG: &str = include_str!("../../../contracts/fixtures/library/catalog.json");
+
+/// The sidecar entries by definition digest.
+pub fn library_sidecar() -> Result<Vec<Value>> {
+    let catalog: Value = serde_json::from_str(LIBRARY_CATALOG).map_err(|_| Error::Unavailable)?;
+    catalog
+        .get("apps")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or(Error::Unavailable)
+}
+
+/// One admitted library app the member may open now: the saved work the
+/// seed placed, its pinned definition's title and description, and the
+/// sidecar's router metadata (purpose, intent and negative examples,
+/// capabilities, typed fields and views). Only apps whose pinned definition
+/// digest is a library definition are listed; a member's own or composed
+/// apps are not library entries.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LibraryEntry {
+    pub library_id: String,
+    pub app: String,
+    pub work: String,
+    pub title: String,
+    pub description: String,
+    pub definition_digest: String,
+    /// The sidecar entry's `purpose`.
+    pub purpose: String,
+    /// The sidecar entry's `routing` (`description`, `intent_examples`,
+    /// `negative_examples`, `capabilities`).
+    pub routing: Value,
+    /// The sidecar entry's `inputs` (id, kind, contract id, typed fields).
+    pub inputs: Value,
+    /// The sidecar entry's `views` (id, kind, title, input, operators,
+    /// parameters, runnable).
+    pub views: Value,
+    pub can_write: bool,
+}
+impl LibraryEntry {
+    /// The entry as the catalog route returns it.
+    pub fn to_json(&self) -> Value {
+        json!({
+            "library_id": self.library_id,
+            "app_id": self.app,
+            "work_id": self.work,
+            "title": self.title,
+            "description": self.description,
+            "definition_digest": self.definition_digest,
+            "purpose": self.purpose,
+            "routing": self.routing,
+            "inputs": self.inputs,
+            "views": self.views,
+            "can_write": self.can_write,
+        })
+    }
+}
+
+impl Data {
+    /// The library catalog for the composer (`GET /v1/library`): the saved
+    /// works whose pinned definition digest the library sidecar names,
+    /// selected directly by that digest (APP-093 review M3: never through the
+    /// capped workspace listing), at most one per library app (its seeded
+    /// work first), each listed only when the member may open it now under
+    /// exactly [`Data::openable_works`]'s clause (`discover` on the app and
+    /// `record_read` on the work after the member fence, the pinned
+    /// publication under `lock_work_revision`, the definition re-admitted),
+    /// with that entry's router metadata, in sidecar order. Nothing is
+    /// written; a refused member is `Denied` (the route shows an empty
+    /// catalog).
+    pub async fn library_catalog(&self, request: &TrustedRequest) -> Result<Vec<LibraryEntry>> {
+        self.library_catalog_with(request, false).await
+    }
+    async fn library_catalog_with(
+        &self,
+        request: &TrustedRequest,
+        _serial: bool,
+    ) -> Result<Vec<LibraryEntry>> {
+        let sidecar = library_sidecar()?;
+        let cap = Instant::now() + QUERY_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let org = &request.organization;
+            let mut listed = Vec::new();
+            #[cfg(test)]
+            let library = if _serial {
+                open_library_serial(&permit, org, &sidecar).await?
+            } else {
+                open_library(&permit, org, &sidecar).await?
+            };
+            #[cfg(not(test))]
+            let library = open_library(&permit, org, &sidecar).await?;
+            for opened in library {
+                let Some(entry) = sidecar.iter().find(|entry| {
+                    entry.get("definition_digest").and_then(Value::as_str)
+                        == Some(opened.definition_digest.as_str())
+                }) else {
+                    continue;
+                };
+                let content = admission::decode(&opened.content).map_err(|_| Error::Unavailable)?;
+                let text = |value: &Value, key: &str| -> String {
+                    value
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned()
+                };
+                listed.push(LibraryEntry {
+                    library_id: text(entry, "library_id"),
+                    app: opened.item.app,
+                    work: opened.item.work,
+                    title: text(&content, "title"),
+                    description: text(&content, "description"),
+                    definition_digest: opened.definition_digest,
+                    purpose: text(entry, "purpose"),
+                    routing: entry.get("routing").cloned().unwrap_or(Value::Null),
+                    inputs: entry.get("inputs").cloned().unwrap_or(Value::Null),
+                    views: entry.get("views").cloned().unwrap_or(Value::Null),
+                    can_write: opened.item.can_write,
                 });
             }
+            let order = |entry: &LibraryEntry| {
+                sidecar.iter().position(|item| {
+                    item.get("library_id").and_then(Value::as_str)
+                        == Some(entry.library_id.as_str())
+                })
+            };
+            listed.sort_by_key(order);
             Ok(listed)
         }
         .await;
@@ -818,7 +1818,11 @@ mod tests {
     #[test]
     fn outline_lists_only_single_input_query_views() {
         let aggregate = json!([{"type": "aggregate", "group_by": [], "measures": []}]);
-        let content = json!({"title": "Northstar", "views": [
+        let content = json!({"title": "Northstar", "inputs": [
+            {"id": "events", "kind": "source", "fields": []}, {"id": "inventory", "kind": "source", "fields": []},
+            {"id": "decisions", "kind": "records", "fields": []}], "views": [
+            // A records-input view runs nowhere in Phase 1: not listed (ADR-011 library).
+            {"id": "status", "title": "status", "kind": "status", "query": {"inputs": ["decisions"], "operations": [{"type": "project"}]}},
             {"id": "total", "title": "total", "kind": "summary", "query": {"inputs": ["events"], "operations": aggregate}},
             {"id": "destinations", "title": "destinations", "kind": "table", "query": {"inputs": ["events", "inventory"], "operations": [{"type": "lookup"}]}},
             {"id": "record_observation", "title": "record observation", "kind": "form"},
@@ -844,11 +1848,64 @@ mod tests {
     }
 
     #[test]
+    fn document_parts_keep_default_layout_notes_commands_and_unqualified_views() {
+        let content = json!({"title":"A complete app", "inputs":[{"id":"source","kind":"source","fields":[]}],
+        "commands":[{"id":"add","record_schema_id":"item","operation":"create","transitions":[]}],
+        "views":[
+            {"id":"table","title":"Table","kind":"table","query":{"inputs":["source"],"operations":[{"type":"project"}]}},
+            {"id":"note","title":"Instructions","kind":"note","text":"Plain text stays plain"},
+            {"id":"form","title":"Add item","kind":"form","command_id":"add"},
+            {"id":"later","title":"Unsupported calculation","kind":"summary","query":{"inputs":["source"],"operations":[{"type":"ratio"}]}}
+        ], "default_layout":[
+            {"view_id":"table","row":2,"column":6,"width":6},
+            {"view_id":"note","row":0,"column":0,"width":12},
+            {"view_id":"form","row":2,"column":0,"width":6},
+            {"view_id":"later","row":3,"column":0,"width":12}
+        ]});
+        let result = outline(&admission::encode(&content).unwrap()).unwrap();
+        assert_eq!(
+            result
+                .parts
+                .iter()
+                .map(|part| part.id.as_str())
+                .collect::<Vec<_>>(),
+            ["note", "form", "table", "later"]
+        );
+        assert_eq!(result.parts[0].text, "Plain text stays plain");
+        assert_eq!(
+            (
+                result.parts[1].command.as_str(),
+                result.parts[1].schema.as_str(),
+                result.parts[1].creates
+            ),
+            ("add", "item", true)
+        );
+        assert_eq!(
+            (
+                result.parts[2].row,
+                result.parts[2].column,
+                result.parts[2].width,
+                result.parts[2].runnable
+            ),
+            (2, 6, 6, true)
+        );
+        assert!(!result.parts[3].runnable);
+        assert_eq!(
+            result
+                .views
+                .iter()
+                .map(|view| view.id.as_str())
+                .collect::<Vec<_>>(),
+            ["table"]
+        );
+    }
+
+    #[test]
     fn effective_query_adds_window_and_destination_only() {
         let total = json!({"operator_version": 1, "inputs": ["events"], "null_policy": "unknown",
             "operations": [{"type": "aggregate", "group_by": [], "measures": [{"id": "total_bytes", "operation": "sum", "field": {"input_id": "events", "field_id": "bytes"}}]}]});
         let parameters = parse_parameters(&json!({"window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z"}, "destination": "198.51.100.7", "filter_epoch": 3})).unwrap();
-        let effective = parameters.apply(&total).unwrap();
+        let effective = parameters.apply(&total, &events_fields()).unwrap();
         assert_eq!(
             effective["window"],
             json!({"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z", "bounds": "half_open"})
@@ -865,6 +1922,249 @@ mod tests {
         );
         let mut windowed = total.clone();
         windowed["window"] = effective["window"].clone();
-        assert_eq!(parameters.apply(&windowed), None);
+        assert_eq!(parameters.apply(&windowed, &events_fields()), None);
+        // ADR-011 library: a window needs the input's `time` timestamp and the
+        // destination filter its `destination` text field; otherwise refused,
+        // never dropped. The filter names the view's own input.
+        let inventory = vec![
+            json!({"id": "sku", "value_type": {"type": "text"}, "nullable": false}),
+            json!({"id": "on_hand", "value_type": {"type": "integer", "unit": "each"}, "nullable": false}),
+        ];
+        let mut stock = total.clone();
+        stock["inputs"] = json!(["inventory"]);
+        assert_eq!(parameters.apply(&stock, &inventory), None);
+        let window_only = parse_parameters(
+            &json!({"window": {"start": "2026-10-22T10:00:00Z", "end": "2026-10-22T10:10:00Z"}}),
+        )
+        .unwrap();
+        assert_eq!(window_only.apply(&stock, &inventory), None);
+        let traffic = vec![
+            json!({"id": "time", "value_type": {"type": "timestamp"}, "nullable": false}),
+            json!({"id": "destination", "value_type": {"type": "text"}, "nullable": false}),
+        ];
+        let mut outbound = total.clone();
+        outbound["inputs"] = json!(["traffic"]);
+        let applied = parameters.apply(&outbound, &traffic).unwrap();
+        assert_eq!(
+            applied["operations"][0]["field"],
+            json!({"input_id": "traffic", "field_id": "destination"})
+        );
+        assert_eq!(
+            parse_parameters(&json!({}))
+                .unwrap()
+                .apply(&stock, &inventory),
+            Some(stock)
+        );
+    }
+
+    /// APP-093 review M4: the expense library's `totals` view is typed by
+    /// its input contract (money USD, exponent 2), so the page shows
+    /// `sum(amount)` = 26262004 minor units (the DuckDB oracle's value) as
+    /// $262,620.04, the canvas card carries the same `column_types`, and a
+    /// digit-only text cell of the `queue` view is never grouped.
+    #[test]
+    fn expense_totals_show_money_and_text_stays_verbatim() {
+        use crate::query::{
+            canvas::canvas_card,
+            page::{card, Outcome},
+            receipt::QueryReceipt,
+            worker::{result_digest, WorkerResult},
+        };
+        let bundle: Value = serde_json::from_slice(
+            &std::fs::read(repository().join("contracts/fixtures/library/expense-review.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        let admitted =
+            admission::admit_definition(&admission::encode(&bundle["definition"]).unwrap())
+                .unwrap();
+        let listed = outline(&admitted.canonical).unwrap();
+        let view = |id: &str| listed.views.iter().find(|v| v.id == id).unwrap().clone();
+        let totals = view("totals");
+        let usd = ColumnType::Money {
+            currency: "USD".into(),
+            minor_unit_exponent: 2,
+        };
+        assert_eq!(
+            totals.column_types,
+            BTreeMap::from([
+                ("claims".to_owned(), ColumnType::Integer),
+                ("largest_claim".to_owned(), usd.clone()),
+                ("total_amount".to_owned(), usd.clone()),
+            ])
+        );
+        // Existing consumers keep their integer-backed column list.
+        assert_eq!(
+            totals.integer_columns,
+            ["claims", "largest_claim", "total_amount"]
+        );
+        let released = |view: &WorkView, columns: &[&str], row: Vec<Value>| {
+            let rows = vec![row];
+            WorkerResult {
+                columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+                integer_columns: view.integer_columns.iter().cloned().collect(),
+                column_types: view.column_types.clone(),
+                result_digest: result_digest(&rows).unwrap(),
+                rows,
+                truncated_page: false,
+                engine_elapsed_ms: 0,
+                wall: Duration::ZERO,
+                peak_rss_bytes: 0,
+            }
+        };
+        let receipt = QueryReceipt {
+            digest: "sha256:feed".into(),
+            document: json!({"digest": "sha256:feed"}),
+        };
+        let result = released(
+            &totals,
+            &["claims", "total_amount", "largest_claim"],
+            vec![json!("240"), json!("26262004"), json!("477866")],
+        );
+        let shown = card(&totals, Outcome::Released(&result, &receipt));
+        assert_eq!(
+            shown
+                .summary
+                .iter()
+                .map(|p| (p.label.as_str(), p.value.as_str(), p.raw.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("claims", "240", "240"),
+                ("total_amount", "$262,620.04", "26262004"),
+                ("largest_claim", "$4,778.66", "477866"),
+            ]
+        );
+        let placed = canvas_card(
+            "00000000-0000-4000-8000-000000001001",
+            "00000000-0000-4000-8000-000000001004",
+            &totals,
+            shown,
+        );
+        let types: Value = serde_json::from_str(&placed.column_types).unwrap();
+        assert_eq!(
+            types["total_amount"],
+            json!({"type": "money", "currency": "USD", "minor_unit_exponent": 2})
+        );
+        assert_eq!(types["claims"], json!({"type": "integer"}));
+        // The queue: `expense_id` is text, so even a digit-only id is verbatim.
+        let queue = view("queue");
+        assert_eq!(queue.column_types["expense_id"], ColumnType::Text);
+        assert_eq!(queue.column_types["time"], ColumnType::Timestamp);
+        assert_eq!(queue.column_types["amount"], usd);
+        let result = released(
+            &queue,
+            &[
+                "expense_id",
+                "time",
+                "employee",
+                "vendor",
+                "category",
+                "amount",
+            ],
+            vec![
+                json!("100200300"),
+                json!("2026-10-01T09:00:00Z"),
+                json!("4242"),
+                json!("Acme"),
+                json!("travel"),
+                json!("123456"),
+            ],
+        );
+        let shown = card(&queue, Outcome::Released(&result, &receipt));
+        assert_eq!(
+            shown.rows[0]
+                .cells
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "100200300",
+                "2026-10-01T09:00:00Z",
+                "4242",
+                "Acme",
+                "travel",
+                "$1,234.56"
+            ]
+        );
+    }
+
+    fn repository() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .to_owned()
+    }
+
+    /// ADR-011 library (APP-094): every library fixture is admitted by the real
+    /// `admit_definition` as the edition the store keeps, its runnable views are
+    /// exactly the outline's, and the embedded sidecar names it by digest.
+    #[test]
+    fn every_library_definition_is_admitted_and_in_the_sidecar() {
+        let sidecar = library_sidecar().unwrap();
+        assert_eq!(sidecar.len(), 20);
+        let directory = repository().join("contracts/fixtures/library");
+        let mut admitted_digests = std::collections::BTreeSet::new();
+        for entry in &sidecar {
+            let fixture = entry["fixture"].as_str().unwrap();
+            let bundle: Value =
+                serde_json::from_slice(&std::fs::read(directory.join(fixture)).unwrap()).unwrap();
+            let definition = &bundle["definition"];
+            let bytes = admission::encode(definition).unwrap();
+            let admitted = admission::admit_definition(&bytes)
+                .unwrap_or_else(|error| panic!("{fixture}: {error:?}"));
+            assert_eq!(admitted.schema_version, 1, "{fixture}: the stored edition");
+            assert_eq!(
+                (admitted.renderer_version, admitted.operator_version),
+                (1, 1)
+            );
+            assert_eq!(definition["digest"], json!(admitted.digest), "{fixture}");
+            assert_eq!(
+                entry["definition_digest"], definition["digest"],
+                "{fixture}"
+            );
+            assert!(
+                admitted_digests.insert(admitted.digest.clone()),
+                "{fixture}: duplicate"
+            );
+            let listed = outline(&admitted.canonical).unwrap();
+            assert_eq!(json!(listed.title), entry["title"], "{fixture}");
+            let runnable: Vec<&str> = entry["views"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|v| v["runnable"] == json!(true))
+                .map(|v| v["id"].as_str().unwrap())
+                .collect();
+            assert_eq!(
+                listed
+                    .views
+                    .iter()
+                    .map(|v| v.id.as_str())
+                    .collect::<Vec<_>>(),
+                runnable,
+                "{fixture}: the sidecar's runnable views are the outline's"
+            );
+            assert!(
+                listed.views.len() >= 3,
+                "{fixture}: a library app shows at least three governed views"
+            );
+            // Each runnable view's query runs over the one source input and
+            // only the qualified operators; its stored query digest is stable.
+            let content = admission::decode(&admitted.canonical).unwrap();
+            for view in content["views"].as_array().unwrap() {
+                let Some(query) = view.get("query") else {
+                    continue;
+                };
+                let input = query["inputs"][0].as_str().unwrap();
+                let fields = source_fields(&content, input).unwrap();
+                assert!(!fields.is_empty());
+                let (stored, found) =
+                    view_query(&admitted.canonical, view["id"].as_str().unwrap()).unwrap();
+                assert_eq!((stored, found), (query.clone(), fields));
+            }
+            let routing = &entry["routing"];
+            assert!(routing["intent_examples"].as_array().unwrap().len() >= 4);
+            assert!(routing["negative_examples"].as_array().unwrap().len() >= 3);
+        }
     }
 }

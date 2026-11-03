@@ -362,10 +362,19 @@ fn the_page_requires_the_window_and_reads_the_form_body_only() {
     .unwrap();
     assert_eq!(filtered["destination"], "198.51.100.7");
     assert_eq!(filtered["window"]["end"], "2026-10-22T10:10:00Z");
-    // No window, half a window, a reversed or malformed one, a duplicate or
+    assert_eq!(
+        form_parameters(&fields(&[("csrf", "t")])).unwrap().0,
+        json!({})
+    );
+    assert_eq!(
+        form_parameters(&fields(&[("csrf", "t"), ("destination", "198.51.100.7")]))
+            .unwrap()
+            .0,
+        json!({"destination":"198.51.100.7"})
+    );
+    // Half a window, a reversed or malformed one, a duplicate or
     // an unknown field: refused, and the submitted values are echoed back.
     for refused in [
-        fields(&[("csrf", "t"), ("destination", "198.51.100.7")]),
         fields(&[
             ("csrf", "t"),
             ("window_start", "2026-10-22T10:00"),
@@ -538,6 +547,8 @@ fn view(id: &str, kind: &str) -> WorkView {
         id: id.into(),
         title: id.into(),
         kind: kind.into(),
+        integer_columns: Vec::new(),
+        column_types: Default::default(),
     }
 }
 /// A result whose integer columns are the byte counts (`total_bytes`,
@@ -550,6 +561,7 @@ pub(crate) fn result(columns: &[&str], rows: Vec<Vec<Value>>) -> WorkerResult {
             .filter(|c| matches!(**c, "total_bytes" | "bytes"))
             .map(|c| (*c).to_owned())
             .collect(),
+        column_types: Default::default(),
         result_digest: result_digest(&rows).unwrap(),
         rows,
         truncated_page: false,
@@ -631,6 +643,18 @@ fn view_states_loading_empty_failed_denied_never_zero() {
     let ready = card(&total, Outcome::Released(&exact, &receipt));
     assert_eq!(ready.state, "ready");
     assert!(ready.ready && ready.has_summary && !ready.has_table);
+    for kind in ["detail", "status"] {
+        let shown = card(&view(kind, kind), Outcome::Released(&exact, &receipt));
+        assert!(shown.has_summary && !shown.has_table && shown.has_receipt);
+        assert_eq!(shown.summary[0].raw, "1140000");
+        assert_eq!(shown.receipt_json, ready.receipt_json);
+    }
+    let filtered = card(
+        &view("filtered", "filter"),
+        Outcome::Released(&exact, &receipt),
+    );
+    assert!(filtered.has_table && filtered.has_receipt && !filtered.has_summary);
+    assert_eq!(filtered.rows[0].cells[0].raw, "1140000");
     assert_eq!(
         (
             ready.summary[0].label.as_str(),
@@ -697,4 +721,175 @@ fn display_groups_exact_decimals_only() {
     assert_eq!(display("2026-10-22T10:00:00Z"), "2026-10-22T10:00:00Z");
     assert_eq!(display("12.5"), "12.5");
     assert_eq!(display(""), "");
+}
+
+/// APP-093 review M4: values are displayed by their column's value type:
+/// money minor units as currency at the exponent, a decimal coefficient at
+/// its scale, an integer grouped, and a text column verbatim even when every
+/// character is a digit. Nothing that is not an exact integer string is
+/// reinterpreted.
+#[test]
+fn values_format_by_their_column_type() {
+    use crate::query::{page::format_value, worker::ColumnType};
+    let usd = ColumnType::Money {
+        currency: "USD".into(),
+        minor_unit_exponent: 2,
+    };
+    assert_eq!(format_value("26262004", &usd), "$262,620.04");
+    assert_eq!(format_value("477866", &usd), "$4,778.66");
+    assert_eq!(format_value("5", &usd), "$0.05");
+    assert_eq!(format_value("0", &usd), "$0.00");
+    assert_eq!(format_value("-150", &usd), "-$1.50");
+    let yen = ColumnType::Money {
+        currency: "JPY".into(),
+        minor_unit_exponent: 0,
+    };
+    assert_eq!(format_value("1234567", &yen), "JPY 1,234,567");
+    let rate = ColumnType::Decimal { scale: 3 };
+    assert_eq!(format_value("1234567", &rate), "1,234.567");
+    assert_eq!(format_value("-7", &rate), "-0.007");
+    assert_eq!(format_value("1140000", &ColumnType::Integer), "1,140,000");
+    for verbatim in [
+        ColumnType::Text,
+        ColumnType::Date,
+        ColumnType::Timestamp,
+        ColumnType::Boolean,
+    ] {
+        assert_eq!(format_value("100200300", &verbatim), "100200300");
+    }
+    // Not an exact integer string: never reinterpreted.
+    for odd in ["12.5", "", "-", "1e3", "١٢٣", "+5"] {
+        assert_eq!(format_value(odd, &usd), odd);
+        assert_eq!(format_value(odd, &ColumnType::Integer), odd);
+    }
+    // A released card: the shown text is formatted, the exact string kept.
+    let mut released = result(
+        &["claims", "total_amount"],
+        vec![vec![json!("240"), json!("26262004")]],
+    );
+    released.column_types = [
+        ("claims".to_owned(), ColumnType::Integer),
+        ("total_amount".to_owned(), usd.clone()),
+    ]
+    .into();
+    let receipt = receipt_for(&released);
+    let summary = card(
+        &view("totals", "summary"),
+        Outcome::Released(&released, &receipt),
+    );
+    assert_eq!(
+        summary
+            .summary
+            .iter()
+            .map(|p| (p.value.as_str(), p.raw.as_str()))
+            .collect::<Vec<_>>(),
+        [("240", "240"), ("$262,620.04", "26262004")]
+    );
+    // A digit-only text cell beside a money cell is never grouped.
+    let mut table = result(
+        &["expense_id", "amount"],
+        vec![vec![json!("100200300"), json!("123456")]],
+    );
+    table.column_types = [
+        ("expense_id".to_owned(), ColumnType::Text),
+        ("amount".to_owned(), usd),
+    ]
+    .into();
+    let receipt = receipt_for(&table);
+    let shown = card(&view("queue", "table"), Outcome::Released(&table, &receipt));
+    assert_eq!(
+        shown.rows[0]
+            .cells
+            .iter()
+            .map(|c| (c.text.as_str(), c.raw.as_str()))
+            .collect::<Vec<_>>(),
+        [("100200300", "100200300"), ("$1,234.56", "123456")]
+    );
+}
+
+/// APP-093 review m5: `GET /v1/library` at the route. Without a live
+/// session (none, a forged session cookie, a pre-access cookie presented as
+/// a session) it is the uniform 404, as is every other method; nothing is
+/// listed and no engine runs. The listing of a live member (only the apps it
+/// may open, a foreign organization's member seeing none of them, 503 on a
+/// store outage) runs over real sessions in
+/// `storage::query_qualification::native_query_campaign`.
+#[tokio::test]
+async fn the_library_route_is_the_uniform_404_without_a_live_session() {
+    let auth = Arc::new(Auth::new(None, None, Arc::new(NoPages)).unwrap());
+    let counting = Arc::new(Counting::default());
+    let app = compose(Arc::new(Work::new(
+        auth,
+        Some(counting.clone()),
+        Arc::new(RecordingPages::default()),
+    )));
+    let same = ("sec-fetch-site", "same-origin");
+    for headers in [
+        vec![],
+        vec![same],
+        vec![same, ("cookie", "__Host-genui_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")],
+        vec![same, ("cookie", "__Host-genui_pre=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")],
+    ] {
+        assert!(uniform_404(&send(&app, "GET", "/v1/library", &headers, vec![]).await));
+        for method in ["POST", "PUT", "DELETE", "PATCH"] {
+            assert!(uniform_404(
+                &send(&app, method, "/v1/library", &headers, b"{}".to_vec()).await
+            ), "{method}");
+        }
+        assert!(uniform_404(&send(&app, "GET", "/v1/library/x", &headers, vec![]).await));
+    }
+    assert_eq!(counting.calls(), 0);
+}
+
+#[test]
+fn document_record_selection_is_closed_bounded_and_not_a_command() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let fields = |items: &[(&str, &str)]| {
+        items
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        document_selections(&fields(&[
+            ("csrf", "token"),
+            ("document_action", "refresh"),
+            ("selection.edit", id)
+        ]))
+        .unwrap()
+        .get("edit")
+        .map(String::as_str),
+        Some(id)
+    );
+    assert_eq!(
+        document_selections(&fields(&[
+            ("document_action", "refresh"),
+            ("selection.file", "new")
+        ]))
+        .unwrap()
+        .get("file")
+        .map(String::as_str),
+        Some("new")
+    );
+    for bad in [
+        fields(&[("document_action", "commit"), ("selection.edit", id)]),
+        fields(&[
+            ("document_action", "refresh"),
+            ("selection.edit", id),
+            ("selection.edit", id),
+        ]),
+        fields(&[
+            ("document_action", "refresh"),
+            ("selection.edit", "javascript:alert(1)"),
+        ]),
+        fields(&[("document_action", "refresh"), ("selection.Bad", id)]),
+        fields(&[("document_action", "refresh"), ("organization_id", id)]),
+    ] {
+        assert!(document_selections(&bad).is_none());
+    }
+    let mut many = fields(&[("document_action", "refresh")]);
+    for index in 0..25 {
+        many.push((format!("selection.form_{index}"), id.into()));
+    }
+    assert!(document_selections(&many).is_none());
 }

@@ -1,0 +1,19 @@
+{
+  "scope": "Local isolated headless browser; synthetic account identities, real application/storage/commands; no hosted signup claim",
+  "errors": [],
+  "checks": [
+    "Owner creates a view-only seven-day share; lost response retries exact UUID/payload; server lists one recovered grant.",
+    "Explicit acceptance shows read-only original app; no automatic placement or ordinary work API access; wrong identity gets neutral sign-in.",
+    "Enabling canvas permission appears live; explicit add stores one connected reference; real audited record commit updates page and canvas.",
+    "Offline clears protected content; reconnect reauthorizes and restores actual data.",
+    "Transient inventory outage masks values without deleting placement or changing canvas geometry.",
+    "Owner revocation clears both document and canvas within five seconds; current authority denies.",
+    "An existing platform member explicitly adds the external reference to the actual workspace canvas; ordinary work access remains denied.",
+    "Account-only guest can sign out to a neutral empty canvas; shared sign-out preserves an existing member workspace session."
+  ],
+  "documentLiveMs": 1592,
+  "canvasLiveMs": 2374,
+  "mobileNoOverflow": true,
+  "documentRevokeMs": 551,
+  "canvasRevokeMs": 1112
+}

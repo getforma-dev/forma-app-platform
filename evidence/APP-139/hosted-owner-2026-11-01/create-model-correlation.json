@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "observed_at_utc": "2026-11-01T20:17:35.228545+00:00",
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "browser_stage": "owner-create",
+  "browser_started_at": "2026-11-01T20:16:08.619Z",
+  "browser_finished_at": "2026-11-01T20:16:21.918Z",
+  "browser_receipt_sha256": "c3e3bc778b58bf864b7550eedd08116cafae36a409faadfd0682c48c89422c33",
+  "model_receipt_sha256": "ae703d0cf6a1431eb68e0e1192a6486a20408a1177099bf93da8b53909f1bdf7",
+  "matching_successes": 1,
+  "no_endpoint_override": true,
+  "compiled_default_endpoint": "https://api.anthropic.com/v1/messages",
+  "correlation_limit": "Exact healthy live task and browser time interval; composer event does not contain browser request ID.",
+  "writes_performed": false,
+  "personal_content_retained": false,
+  "model_event": {
+    "event": "composer.model",
+    "model": "claude-sonnet-4-6",
+    "requested_model": "claude-sonnet-4-6",
+    "attempt": 0,
+    "input_tokens": 4448,
+    "output_tokens": 626,
+    "duration_ms": 7543,
+    "observed_at_utc": "2026-11-01T20:16:18.767000+00:00",
+    "source_line_sha256": "e33ab23ac4634429292f18635d222e0771f0c3a5f5054f2b94a6ff9b8b78aa3d"
+  }
+}

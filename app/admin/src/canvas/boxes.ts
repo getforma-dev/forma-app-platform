@@ -1,0 +1,1340 @@
+// APP-108 (ADR-011 pitch): boxes on the canvas. A box is a card holding the
+// member's files: icon tiles (PDF, image, CSV, spreadsheet, text), drop or
+// pick upload with a progress bar per file, a click opens the viewer
+// (`box-viewer.ts`), a CSV/XLSX is parsed at once by the sealed parser and
+// its inferred columns open in the "Make data" sheet (`data-sheet.ts`), and
+// the box lists the apps built from it. A box can build an app from its
+// files ("Create an app…", or `/storage <box> create me an app for …`): the
+// server sends the composer a capped context and binds the app to the box's
+// source revisions; the app's "Built from box" chip opens the box again, and
+// a receipt names the file its source revision came from.
+//
+// Elsewhere on the canvas: a CSV/XLSX dropped on the board or the intent bar
+// goes into the member's implicit "Uploads" box and becomes a file icon.
+// Double-click opens original cells. Making data or an app is explicit.
+// A parser refusal never hides the stored original file.
+//
+// Members see the noun "Folder" (`box-api.ts` NOUN; code and API keep
+// "box"). Commands: `/folder` (aliases in FOLDER_ALIASES: storage, box,
+// boxes, folders) lists the folders, `/folder <number|name>` opens one,
+// `/folder new <name>` creates one, `/folder uploads` opens the implicit
+// one; `/folder [<folder>] formation <instruction>` acts on the named folder
+// or the selected / last opened / only one: a brief request mounts the
+// Brief card (`brief.ts`), anything else builds an app from the folder
+// (`/folder <folder> create me an app for <purpose>` still works). The
+// Library lists them under Widgets → Folder (APP-120). With a folder card selected, the
+// intent bar's free text carries its id to the action path (`actions.ts`).
+//
+// Nothing from the server is markup: names are text nodes, ids checked UUIDs.
+// Open box cards are remembered in this browser only (`forma.boxes.v1`, not
+// in demo mode), like the widgets.
+//
+// APP-124 (start from your data): a folder with files offers three buttons,
+// one visible path from data to a card to an app: **Ask** (the Ask tab
+// scoped to the folder: a read-only question about its tables), **Make a
+// card** (formation constrained to one card: a minimal app with exactly one
+// card, the most useful view of its data, `POST /v1/boxes/{box}/apps
+// {"one_card": true}`) and **✨ Make an app** (the full formation). Both
+// Make actions open the folder's confirm first; nothing is created before
+// its button. The empty canvas offers "Drop files or upload" (a file picker
+// and a drop target), which makes a new folder holding the files.
+import {
+  ACCEPT, mergeSheetPlacements, contentUrl, createBox, FOLDER_ALIASES, FOLDER_COMMAND, FORMATION_PROMPT, NOUN, noun, NOUN_PLURAL, nouns, renameBox, wantsBrief, defaultColumns, fetchPreview, formatBytes, getBox, isDataFile, lineage, idempotencyKey, listBoxes, makeApp, makeCard, makeData,
+  MAX_BOX_FILES, MAX_FILE_BYTES, refusalText, uploadFile, uploadsBox,
+  type Box, type BoxContents, type BoxFile, type Preview,
+} from './box-api';
+import { openViewer, setMakeDataHandler } from './box-viewer';
+import { openBrief } from './brief';
+import { activeFolder, folderRenamed, openFolderPicker, setActiveFolder, startFolderBar } from './folder-bar';
+import { openDataSheet } from './data-sheet';
+import { startExplain } from './explain';
+import { registerFocusCard, unregisterFocusCard } from './focus';
+import {
+  boardWorks, canvasApi, canvasHost, emitCanvasChanged, isDemoCanvas, mountWidget, onBoardChange, onCanvasDragEnd, onLayoutSaved,
+  markStandaloneWork, placeWork, unmountWidget, widgetSpot, workCard,
+  type CanvasDragEnd,
+} from './board';
+import { setFileRouter } from './receipt';
+import { formationChip } from './timing';
+import { announce, el, isUuid } from './render';
+import { decorateAppCards } from './address-chip';
+import { refreshCommands, registerCommands, registerCompleter, type Completion } from './slash';
+import { setFolderResolver, type Runnable } from './command-registry';
+
+type Report = (message: string) => void;
+/**
+ * How files land: `sheet` (dropped on a folder or "Add files": the first table
+ * opens its column sheet), or `land` (APP-124, a new folder from the empty
+ * canvas: the files land and the folder offers Ask, Make a card and Make an app).
+ */
+type Landing = 'sheet' | 'land';
+type UploadSummary = { requested: number; stored: number };
+type OpenBox = { boxId: string; item: HTMLElement; card: HTMLElement; refresh(): Promise<void>; upload(list: File[], landing?: Landing): Promise<UploadSummary>; rename(): void; name(): string; close(): void };
+
+function uploadSummary({ requested, stored }: UploadSummary): string {
+  return stored === requested
+    ? `${stored} ${stored === 1 ? 'file added' : 'files added'} to the ${noun}.`
+    : `${stored} of ${requested} uploads confirmed in the ${noun}. Check the files and upload messages before retrying.`;
+}
+
+const STORAGE_KEY = 'forma.boxes.v1';
+const CMD = `/${FOLDER_COMMAND}`;
+const open = new Map<string, OpenBox>();
+let boxes: Box[] = [];
+let started = false;
+/** The folder card opened (or brought forward) last. */
+let lastOpened: string | null = null;
+/** APP-124: the folder's **Ask** (set by the Ask wiring, `talk.ts`, so this module never imports the Ask tab). */
+let folderAsk: ((boxId: string, name: string) => void) | null = null;
+export function setFolderAsk(handler: ((boxId: string, name: string) => void) | null): void {
+  folderAsk = handler;
+}
+
+// --- The notice (non-blocking status with actions) ---
+
+function notice(message: string, actions: { label: string; run(): void }[] = [], linger = 12000): void {
+  announce(message);
+  const document_ = document;
+  let host = document_.getElementById('bx-notice');
+  if (!host) {
+    host = el(document_, 'div', { id: 'bx-notice', class: 'bx-notice', role: 'status', 'aria-live': 'polite' });
+    (document_.querySelector('.cv-dock') ?? document_.body).prepend(host);
+  }
+  const close = el(document_, 'button', { type: 'button', class: 'bx-notice-close', 'aria-label': 'Dismiss' }, '×');
+  host.replaceChildren(el(document_, 'span', { class: 'bx-notice-text' }, message),
+    ...actions.map((action) => {
+      const button = el(document_, 'button', { type: 'button', class: 'bx-notice-action' }, action.label);
+      button.addEventListener('click', () => {
+        host?.setAttribute('hidden', '');
+        action.run();
+      });
+      return button;
+    }),
+    close);
+  host.removeAttribute('hidden');
+  close.addEventListener('click', () => host?.setAttribute('hidden', ''));
+  const shown = host;
+  globalThis.clearTimeout(Number(shown.dataset.timer ?? 0));
+  if (linger > 0) shown.dataset.timer = String(globalThis.setTimeout(() => shown.setAttribute('hidden', ''), linger));
+}
+
+// --- Persistence (this browser only) ---
+
+function save(): void {
+  if (isDemoCanvas()) return;
+  const rows: { id: string; x: number; y: number }[] = [];
+  for (const entry of open.values()) {
+    const spot = widgetSpot(entry.item);
+    if (spot) rows.push({ id: entry.boxId, x: spot.x, y: spot.y });
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+  } catch {
+    // view layout only
+  }
+}
+
+function load(): { id: string; x: number; y: number }[] {
+  try {
+    const rows = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(rows)) return [];
+    return rows.slice(0, 12).flatMap((row) => {
+      if (typeof row !== 'object' || row === null) return [];
+      const { id, x, y } = row as Record<string, unknown>;
+      return isUuid(id) && typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y) ? [{ id, x, y }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+// --- The box list (pane, completions) ---
+
+export async function refreshBoxes(): Promise<Box[]> {
+  try {
+    boxes = await listBoxes();
+  } catch {
+    // keep the last list
+  }
+  // APP-120: the Library's Widgets → Folder row lists the member's folders.
+  emitCanvasChanged();
+  return boxes;
+}
+
+function boxLabel(box: Box): string {
+  return box.kind === 'uploads' ? 'Uploads' : box.name;
+}
+
+/** APP-120: the Library's Widgets → Folder row: every folder, and whether it is on the canvas. */
+export function folderEntries(): { id: string; number: number; title: string; detail: string; on: boolean }[] {
+  return boxes.map((box) => ({
+    id: box.box_id,
+    number: box.number,
+    title: boxLabel(box),
+    detail: `${box.file_count} ${box.file_count === 1 ? 'file' : 'files'}${box.owner ? '' : ' · shared'}`,
+    on: open.has(box.box_id),
+  }));
+}
+
+/** APP-120: the Library's Add/Remove on one folder: opens it on the canvas, or takes it off (nothing is deleted). */
+export async function toggleFolder(boxId: string): Promise<string> {
+  const entry = open.get(boxId);
+  if (!entry) return openBox(boxId);
+  entry.close();
+  return `${entry.name()} is back in the library.`;
+}
+
+/** APP-120: takes every folder off the canvas (the Folder row's Remove; nothing is deleted). */
+export function closeFolders(): number {
+  const all = [...open.values()];
+  for (const entry of all) entry.close();
+  return all.length;
+}
+
+/** APP-120: a new, untitled folder (the Folder row's Add). */
+export function newFolder(): Promise<string> {
+  return newUntitled();
+}
+
+/** A box by number ("1") or name (case-insensitive; the longest name the text starts with). */
+function resolve(text: string): { box: Box; rest: string } | null {
+  const trimmed = text.trim();
+  const number = trimmed.match(/^#?(\d{1,4})\b\s*([\s\S]*)$/);
+  if (number) {
+    const box = boxes.find((candidate) => candidate.number === Number(number[1]));
+    return box ? { box, rest: number[2] ?? '' } : null;
+  }
+  const quoted = trimmed.match(/^["“']([^"”']{1,120})["”']\s*([\s\S]*)$/);
+  if (quoted) {
+    const box = boxes.find((candidate) => boxLabel(candidate).toLowerCase() === (quoted[1] ?? '').toLowerCase());
+    return box ? { box, rest: quoted[2] ?? '' } : null;
+  }
+  const lower = trimmed.toLowerCase();
+  let best: Box | null = null;
+  for (const candidate of boxes) {
+    const name = boxLabel(candidate).toLowerCase();
+    if ((lower === name || lower.startsWith(`${name} `)) && (!best || name.length > boxLabel(best).length)) best = candidate;
+  }
+  return best ? { box: best, rest: trimmed.slice(boxLabel(best).length) } : null;
+}
+
+/** "create me an app for metrics" → "metrics"; any other words are the purpose themselves. */
+export function purposeOf(rest: string): string {
+  return rest.trim()
+    .replace(/^(please\s+)?(create|make|build|generate|give)\s+(me\s+)?(an?\s+)?(app|dashboard)\s+(for|of|about|showing|that shows)\s+/i, '')
+    .replace(/^(an?\s+)?app\s+(for|of)\s+/i, '')
+    .trim();
+}
+
+function completions(rest: string): Completion[] {
+  const query = rest.trim().toLowerCase();
+  // APP-118: the folders, then `new`, `formation` (on the selected or last opened folder) and Uploads.
+  const fixed: (Completion & { word: string })[] = [
+    { word: 'new', badge: '+', title: `New ${noun}`, detail: `${CMD} new <name>`, value: `${CMD} new ` },
+    { word: 'formation', badge: '✨', title: 'Formation', detail: `${CMD} formation <instruction> · builds an app from the selected ${noun}`, value: `${CMD} formation ` },
+    { word: 'uploads', badge: '↥', title: 'Uploads', detail: 'Files dropped on the canvas', value: `${CMD} uploads` },
+  ];
+  const listed = boxes
+    .filter((box) => !query || String(box.number).startsWith(query) || boxLabel(box).toLowerCase().includes(query))
+    .slice(0, 8)
+    .map((box) => ({
+      badge: String(box.number), title: boxLabel(box), detail: `${box.file_count} ${box.file_count === 1 ? 'file' : 'files'}`,
+      value: `${CMD} ${box.number}`,
+    }));
+  return [...listed, ...fixed.filter((item) => !query || item.word.startsWith(query)).map(({ word: _word, ...item }) => item)];
+}
+
+// --- Box cards ---
+
+const ICONS: Record<BoxFile['kind'], string> = { pdf: 'PDF', image: 'IMG', csv: 'CSV', xlsx: 'XLS', text: 'TXT' };
+
+/** Opens (or brings into view) the card of box `boxId`; returns a status line. */
+export async function openBox(boxId: string, at?: { x: number; y: number }): Promise<string> {
+  if (!isUuid(boxId) || !canvasHost()) return `That ${noun} is not available.`;
+  const existing = open.get(boxId);
+  if (existing) {
+    canvasApi()?.centerItem(existing.item);
+    canvasApi()?.setActive(existing.item);
+    lastOpened = boxId;
+    if (!at) setActiveFolder({ box_id: boxId, name: existing.name() });
+    await existing.refresh();
+    return `That ${noun} is already on your canvas.`;
+  }
+  let contents: BoxContents;
+  try {
+    contents = await getBox(boxId);
+  } catch (error) {
+    return refusalText(error);
+  }
+  if (open.has(boxId)) return `That ${noun} is already on your canvas.`;
+  const card = buildBoxCard(contents);
+  const item = mountWidget(card.card, { id: `box-${boxId}`, title: boxLabel(contents.box), width: 520, minHeight: 360, at, focus: !at });
+  if (!item) return `The ${noun} could not be placed.`;
+  item.classList.add('cv-item-box');
+  const entry: OpenBox = { boxId, item, card: card.card, refresh: card.refresh, upload: card.upload, rename: card.rename, name: card.name, close: card.close };
+  open.set(boxId, entry);
+  lastOpened = boxId;
+  // Opening a folder makes it the bar's active folder (a restored card does not).
+  if (!at) setActiveFolder({ box_id: boxId, name: boxLabel(contents.box) });
+  else if (activeFolder()?.box_id === boxId) card.card.classList.add('is-folder-active');
+  card.onClose(() => {
+    unregisterFocusCard(card.card);
+    unmountWidget(item);
+    open.delete(boxId);
+    if (activeFolder()?.box_id === boxId) setActiveFolder(null);
+    save();
+  });
+  save();
+  return `${boxLabel(contents.box)} is on your canvas.`;
+}
+
+/** A folder's card (exported for the canvas tests: its buttons and their requests). */
+export function buildBoxCard(initial: BoxContents) {
+  const document_ = document;
+  let contents = initial;
+  const boxId = initial.box.box_id;
+  const closeListeners: (() => void)[] = [];
+  const title = el(document_, 'h2', { class: 'bx-title' }, boxLabel(initial.box));
+  const eyebrow = el(document_, 'p', { class: 'bx-eyebrow' }, '');
+  const status = el(document_, 'p', { class: 'bx-card-status', role: 'status' });
+  const briefButton = el(document_, 'button', { type: 'button', class: 'bx-brief', title: `An AI brief of this ${noun}, cited from its files` }, 'Brief me');
+  // APP-124: data → card → app, one visible path.
+  const askButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-ask', 'data-folder-action': 'ask', title: `Ask a question about this ${noun}’s tables; it changes nothing` }, 'Ask');
+  const cardButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-make-card', 'data-folder-action': 'card', title: `Make one card from this ${noun}: the most useful view of its data` }, 'Make a card');
+  const formationButton = el(document_, 'button', { type: 'button', class: 'bx-brief bx-formation', 'data-folder-action': 'app', title: `Formation: build an app from this ${noun} in words` }, '✨ Make an app');
+  briefButton.addEventListener('click', () => {
+    const item = open.get(boxId)?.item ?? null;
+    void openBrief(boxId, boxLabel(contents.box), false, item).then(announce);
+  });
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'data-widget-close': '', 'aria-label': `Remove the ${noun} from the canvas`, title: 'Remove from canvas (the files stay)' }, '×');
+  const picker = el(document_, 'input', { type: 'file', multiple: '', accept: ACCEPT, hidden: '' });
+  const pick = el(document_, 'button', { type: 'button', class: 'bx-pick' }, 'Add files');
+  const drop = el(document_, 'div', { class: 'bx-drop', 'data-dragging': 'false' },
+    el(document_, 'span', {}, 'Drop PDFs, images, CSV, XLSX or text here, or '), pick, picker,
+    el(document_, 'span', { class: 'bx-limits' }, 'Up to 20 files, 20 MB each'));
+  const progress = el(document_, 'ul', { class: 'bx-progress', 'aria-label': 'Uploads in progress' });
+  const tiles = el(document_, 'ul', { class: 'bx-tiles', 'aria-label': `Files in this ${noun}` });
+  const appsList = el(document_, 'ul', { class: 'bx-apps' });
+  const appsSection = el(document_, 'section', { class: 'bx-apps-section', 'aria-label': `Apps built from this ${noun}` },
+    el(document_, 'h3', { class: 'bx-h' }, `Apps built from this ${noun}`), appsList);
+  const purpose = el(document_, 'input', { type: 'text', maxlength: '200', value: FORMATION_PROMPT, 'aria-label': `What app should be built from this ${noun}` });
+  // APP-124 **Make a card**: the same confirm, saying what one card will be made.
+  const cardPreview = el(document_, 'span', { class: 'bx-card-preview', hidden: '' }, '');
+  const build = el(document_, 'button', { type: 'submit' }, 'Build');
+  const cancelFormation = el(document_, 'button', { type: 'button', class: 'bx-quiet' }, 'Cancel');
+  const form = el(document_, 'form', { class: 'bx-create', autocomplete: 'off', hidden: '' },
+    el(document_, 'span', { class: 'bx-formation-mark', 'aria-hidden': 'true' }, '✨'), purpose, cardPreview, build, cancelFormation);
+  let making: 'app' | 'card' = 'app';
+  const head = el(document_, 'header', { class: 'bx-head' },
+    el(document_, 'span', { class: 'bx-mark', 'aria-hidden': 'true' }),
+    el(document_, 'div', { class: 'bx-id' }, eyebrow, title),
+    close);
+  const card = el(document_, 'article', { class: 'cv-card bx-card', 'data-kind': 'box', 'data-box': boxId, 'data-card': `bx-${boxId}`, 'aria-label': `${NOUN} ${boxLabel(initial.box)}` },
+    head,
+    el(document_, 'div', { class: 'bx-actions' }, askButton, cardButton, formationButton, briefButton),
+    el(document_, 'div', { class: 'bx-body' }, drop, progress, tiles, appsSection),
+    form,
+    status);
+
+  const say = (message: string) => { status.textContent = message; };
+
+  const render = () => {
+    const { box, files, apps } = contents;
+    title.textContent = boxLabel(box);
+    eyebrow.textContent = `${box.kind === 'uploads' ? 'Uploads' : box.kind === 'app' ? `App ${noun}` : NOUN} ${box.number} · ${files.length} ${files.length === 1 ? 'file' : 'files'}${box.owner ? '' : ' · shared with you'}`;
+    drop.hidden = !box.owner;
+    // APP-124: a folder with files offers Ask (any reader), Make a card and Make an app (its owner).
+    askButton.hidden = files.length === 0;
+    cardButton.hidden = !box.owner || files.length === 0;
+    formationButton.hidden = !box.owner || files.length === 0;
+    if (!box.owner) form.hidden = true;
+    title.title = box.owner && box.kind !== 'uploads' ? 'Click to rename' : '';
+    tiles.replaceChildren(...files.map((file) => {
+      const main = el(document_, 'button', { type: 'button', class: 'bx-tile-open', title: `Open ${file.name}` },
+        el(document_, 'span', { class: 'bx-icon', 'data-kind': file.kind, 'aria-hidden': 'true' }, ICONS[file.kind]),
+        el(document_, 'span', { class: 'bx-name' }, file.name),
+        el(document_, 'span', { class: 'bx-meta' }, `${formatBytes(file.bytes)}${file.data ? ` · Data ✓ (${file.data.row_count} rows)` : ''}`));
+      main.addEventListener('click', () => openViewer(file, boxId));
+      const tile = el(document_, 'li', { class: 'bx-tile', 'data-kind': file.kind, 'data-file': file.file_id }, main);
+      if ((file.kind === 'csv' || file.kind === 'xlsx') && box.owner) {
+        const data = el(document_, 'button', { type: 'button', class: `bx-data${file.data ? ' is-data' : ''}` }, file.data ? 'Data ✓' : 'Make data');
+        data.title = file.data ? 'Registered as data. Click to adjust the types (a new revision).' : 'Confirm the columns and register this file as data';
+        data.addEventListener('click', () => void sheetFor(boxId, file, () => void refresh()));
+        tile.append(data);
+      }
+      return tile;
+    }));
+    if (!files.length) tiles.append(el(document_, 'li', { class: 'bx-empty' }, box.owner ? 'No files yet.' : 'No files shared with you here.'));
+    appsSection.hidden = apps.length === 0;
+    appsList.replaceChildren(...apps.map((app) => {
+      const button = el(document_, 'button', { type: 'button', class: 'bx-app' },
+        el(document_, 'span', { class: 'bx-app-kind', 'data-kind': app.kind }, app.kind === 'data' ? 'data card' : 'generated'),
+        el(document_, 'span', { class: 'bx-app-title' }, app.title),
+        el(document_, 'span', { class: 'bx-meta' }, `${app.file_ids.length} ${app.file_ids.length === 1 ? 'file' : 'files'}`));
+      button.addEventListener('click', () => void placeWork(app.app_id, app.work_id, []).then(say));
+      return el(document_, 'li', {}, button);
+    }));
+  };
+
+  const refresh = async () => {
+    try {
+      contents = await getBox(boxId);
+      render();
+    } catch (error) {
+      say(refusalText(error));
+    }
+  };
+
+  const upload = async (list: File[], landing: Landing = 'sheet') => {
+    let opened = false;
+    let landed = 0;
+    for (const file of list) {
+      if (file.size > MAX_FILE_BYTES) {
+        const message = `${file.name} is over 20 MB and was not uploaded.`;
+        progress.append(el(document_, 'li', { class: 'bx-upload' }, message));
+        say(message);
+        continue;
+      }
+      if (contents.files.length >= MAX_BOX_FILES) {
+        const message = `This ${noun} already holds 20 files. The remaining files were not uploaded.`;
+        progress.append(el(document_, 'li', { class: 'bx-upload' }, message));
+        say(message);
+        break;
+      }
+      const bar = el(document_, 'progress', { max: '1', value: '0' });
+      const row = el(document_, 'li', { class: 'bx-upload' }, el(document_, 'span', { class: 'bx-name' }, file.name), bar);
+      progress.append(row);
+      try {
+        const uploaded = await uploadFile(boxId, file, (fraction) => { bar.value = fraction; });
+        row.remove();
+        contents = { ...contents, files: [...contents.files, uploaded.file] };
+        render();
+        landed += 1;
+        say(`${file.name} added.`);
+        const found = uploaded.preview;
+        if (landing === 'land') {
+          // APP-124: nothing more happens until the member picks Ask, Make a card or Make an app.
+          if (found && 'refused' in found) say(`${file.name} was stored, but it could not be read as a table.`);
+        } else if (found && !('refused' in found) && !opened) {
+          opened = true;
+          openDataSheet(boxId, uploaded.file, found, () => void refresh());
+        } else if (found && 'refused' in found) {
+          say(`${file.name} was stored, but it could not be read as a table.`);
+        }
+      } catch (error) {
+        const message = `${file.name}: ${refusalText(error)}`;
+        row.textContent = message;
+        say(message);
+      }
+    }
+    await refresh();
+    void refreshBoxes();
+    const result = { requested: list.length, stored: landed };
+    if (landing === 'land') say(uploadSummary(result));
+    return result;
+  };
+
+  pick.addEventListener('click', () => picker.click());
+  picker.addEventListener('change', () => {
+    const list = Array.from(picker.files ?? []);
+    picker.value = '';
+    if (list.length) void upload(list);
+  });
+  for (const name of ['dragenter', 'dragover']) {
+    card.addEventListener(name, (event) => {
+      if (!(event as DragEvent).dataTransfer?.types.includes('Files') || !contents.box.owner) return;
+      event.preventDefault();
+      event.stopPropagation();
+      drop.dataset.dragging = 'true';
+    });
+  }
+  card.addEventListener('dragleave', () => { drop.dataset.dragging = 'false'; });
+  card.addEventListener('drop', (event) => {
+    if (!(event as DragEvent).dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    drop.dataset.dragging = 'false';
+    if (!contents.box.owner) return;
+    const list = Array.from((event as DragEvent).dataTransfer?.files ?? []);
+    if (list.length) void upload(list);
+  });
+  // The confirm: Make an app edits the formation prompt; Make a card says what it will make.
+  const confirm = (mode: 'app' | 'card') => {
+    const again = !form.hidden && making === mode;
+    making = mode;
+    form.hidden = again;
+    form.dataset.making = mode;
+    purpose.hidden = mode === 'card';
+    cardPreview.hidden = mode !== 'card';
+    build.textContent = mode === 'card' ? 'Make card' : 'Build';
+    if (form.hidden) return;
+    if (mode === 'card') {
+      cardPreview.textContent = cardSummary(contents);
+      build.focus?.();
+      return;
+    }
+    if (!purpose.value.trim()) purpose.value = FORMATION_PROMPT;
+    purpose.focus();
+    purpose.select?.();
+  };
+  formationButton.addEventListener('click', () => confirm('app'));
+  cardButton.addEventListener('click', () => confirm('card'));
+  askButton.addEventListener('click', () => {
+    if (folderAsk) folderAsk(boxId, boxLabel(contents.box));
+    else say('Ask is not available on this page.');
+  });
+  cancelFormation.addEventListener('click', () => { form.hidden = true; });
+  // ADR-011 I4: one idempotency key per confirm, reused when the same confirm is sent again after a failure
+  // (the server answers the first result); a new one once it succeeded or what it makes changed.
+  let pending: { what: string; key: string } | null = null;
+  const keyFor = (what: string): string => {
+    if (pending?.what !== what) pending = { what, key: idempotencyKey() };
+    return pending.key;
+  };
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (build.disabled) return;
+    if (making === 'card') {
+      build.disabled = true;
+      say(`Making one card from this ${noun}…`);
+      void buildCard(boxId, keyFor('card')).then(({ text, made }) => {
+        say(text);
+        if (!made) return;
+        pending = null;
+        form.hidden = true;
+        return refresh();
+      }).finally(() => { build.disabled = false; });
+      return;
+    }
+    const words = purposeOf(purpose.value) || purpose.value.trim();
+    if (!words) return;
+    build.disabled = true;
+    say(`Generating an app from this ${noun} (file names, confirmed columns and a few sample rows only)…`);
+    void buildAppOnce(boxId, words, keyFor(`app:${words}`)).then(({ text, made }) => {
+      say(text);
+      if (!made) return;
+      pending = null;
+      form.hidden = true;
+      purpose.value = FORMATION_PROMPT;
+      return refresh();
+    }).finally(() => { build.disabled = false; });
+  });
+  // Keys typed into the card's fields belong to the field, not the canvas.
+  form.addEventListener('keydown', (event) => {
+    event.stopPropagation();
+    if (event.key === 'Escape') form.hidden = true;
+  });
+  // APP-106 focus mode: F or the focus button; a focused folder is the active folder.
+  registerFocusCard(card, head, NOUN, () => setActiveFolder({ box_id: boxId, name: boxLabel(contents.box) }));
+  head.append(close);
+  // Clicking the card makes it the bar's active folder.
+  card.addEventListener('pointerdown', () => setActiveFolder({ box_id: boxId, name: boxLabel(contents.box) }));
+  // Rename: click the title, Enter or blur saves, Esc cancels.
+  const rename = () => {
+    if (!contents.box.owner || contents.box.kind === 'uploads' || title.hidden) return;
+    const field = el(document_, 'input', { type: 'text', class: 'bx-title-edit', maxlength: '60', value: boxLabel(contents.box), 'aria-label': `Name of the ${noun}` });
+    title.hidden = true;
+    title.after(field);
+    field.focus();
+    field.select();
+    let done = false;
+    const finish = async (keep: boolean) => {
+      if (done) return;
+      done = true;
+      const name = field.value.trim().slice(0, 60);
+      field.remove();
+      title.hidden = false;
+      if (!keep || !name || name === boxLabel(contents.box)) return;
+      try {
+        const renamed = await renameBox(boxId, name);
+        contents = { ...contents, box: renamed };
+        render();
+        folderRenamed(boxId, boxLabel(renamed));
+        say(`Renamed to ${boxLabel(renamed)}.`);
+        void refreshBoxes();
+      } catch (error) {
+        say(refusalText(error));
+      }
+    };
+    field.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') { event.preventDefault(); void finish(true); }
+      if (event.key === 'Escape') { event.preventDefault(); void finish(false); }
+    });
+    field.addEventListener('blur', () => void finish(true));
+  };
+  title.addEventListener('click', rename);
+  const closeNow = () => { for (const listener of closeListeners) listener(); };
+  close.addEventListener('click', closeNow);
+  render();
+  return { card, refresh, upload, rename, name: () => boxLabel(contents.box), close: closeNow, onClose: (listener: () => void) => closeListeners.push(listener) };
+}
+
+async function sheetFor(boxId: string, file: BoxFile, done: () => void): Promise<void> {
+  try {
+    const found = await fetchPreview(boxId, file.file_id);
+    if (!found || 'refused' in found) {
+      announce(`${file.name} could not be read as a table.`);
+      return;
+    }
+    openDataSheet(boxId, file, found, done, Boolean(file.data));
+  } catch (error) {
+    announce(refusalText(error));
+  }
+}
+
+/** APP-124: what **Make a card** will make, said in its confirm (nothing is made before its button). */
+export function cardSummary(contents: BoxContents): string {
+  const data = [...contents.files].filter((file) => file.kind === 'csv' || file.kind === 'xlsx')
+    .sort((a, b) => Number(Boolean(b.data)) - Number(Boolean(a.data)) || b.created_at.localeCompare(a.created_at));
+  const [first] = data;
+  if (!first) return `This ${noun} has no table (CSV or XLSX) to make a card from yet.`;
+  const named = contents.box.kind === 'uploads' || /^untitled/i.test(contents.box.name) ? first.name.replace(/\.[^.]+$/, '') : boxLabel(contents.box);
+  return `Forma makes a standalone card, “${named}”, showing the most useful view of ${first.name}. It links back to this ${noun}.`;
+}
+
+/** APP-124 **Make a card**: one card from the folder's data, placed with its app's address; says so (`made`: it was made). */
+async function buildCard(boxId: string, key: string, fileIds?: string[]): Promise<{ text: string; made: boolean }> {
+  let made: Awaited<ReturnType<typeof makeCard>>;
+  try {
+    made = await makeCard(boxId, key, fileIds);
+  } catch (error) {
+    return { text: refusalText(error), made: false };
+  }
+  try {
+    // The new app's `/name` joins the member's addresses before it is placed, so its card shows the chip.
+    if (made.address) await refreshCommands();
+    const placing = performance.now();
+    markStandaloneWork(made.app_id, made.work_id);
+    const placed = await placeWork(made.app_id, made.work_id, []);
+    if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') decorateAppCards(document);
+    void formationChip(made.timings, performance.now() - placing, made.work_id, workCard(made.work_id, 'app'));
+    void open.get(boxId)?.refresh();
+    return { text: `${made.title}: one card from this ${noun}${made.address ? `, at /${made.address}` : ''}. ${placed}`, made: true };
+  } catch (error) {
+    return { text: `${made.title} was made, but could not be placed: ${refusalText(error)}`, made: true };
+  }
+}
+
+/** Builds an app from a box (capped context on the server), places it, and says so. */
+async function buildApp(boxId: string, purpose: string, report?: Report): Promise<string> {
+  report?.(`Generating an app from the ${noun}…`);
+  return (await buildAppOnce(boxId, purpose)).text;
+}
+
+/** As `buildApp`, with the confirm's idempotency key; `made`: the server made the app. */
+async function buildAppOnce(boxId: string, purpose: string, key?: string): Promise<{ text: string; made: boolean }> {
+  let built: Awaited<ReturnType<typeof makeApp>>;
+  try {
+    built = await makeApp(boxId, purpose, undefined, key);
+  } catch (error) {
+    return { text: refusalText(error), made: false };
+  }
+  try {
+    const placing = performance.now();
+    const placed = await placeWork(built.app_id, built.work_id, []);
+    void formationChip(built.timings, performance.now() - placing, built.work_id, workCard(built.work_id, 'app'));
+    void open.get(boxId)?.refresh();
+    return { text: `${built.title}: generated from ${built.files} ${built.files === 1 ? 'file' : 'files'} of the ${noun}. ${placed}`, made: true };
+  } catch (error) {
+    return { text: `${built.title} was made, but could not be placed: ${refusalText(error)}`, made: true };
+  }
+}
+
+async function newBox(name: string): Promise<string> {
+  try {
+    const made = await createBox(name.slice(0, 60));
+    await refreshBoxes();
+    return openBox(made.box_id);
+  } catch (error) {
+    return refusalText(error);
+  }
+}
+
+// --- Ad hoc data: a CSV/XLSX dropped outside a box ---
+
+/** Store a spreadsheet as a file icon; never implicitly create an app. */
+export async function dropAnywhere(file: File): Promise<void> {
+  const data = isDataFile(file);
+  if (file.size > MAX_FILE_BYTES) {
+    notice(`${file.name} is over 20 MB. Nothing was stored.`);
+    return;
+  }
+  notice(`Uploading ${file.name}…`, [], 0);
+  let uploads: Box;
+  try {
+    uploads = await uploadsBox();
+  } catch (error) {
+    notice(refusalText(error));
+    return;
+  }
+  let uploaded;
+  try {
+    uploaded = await uploadFile(uploads.box_id, file, (fraction) => {
+      const text = document.querySelector('#bx-notice .bx-notice-text');
+      if (text) text.textContent = `Uploading ${file.name}… ${Math.round(fraction * 100)}%`;
+    });
+  } catch (error) {
+    notice(`${file.name}: ${refusalText(error)}`);
+    return;
+  }
+  void refreshBoxes();
+  void open.get(uploads.box_id)?.refresh();
+  const found = uploaded.preview;
+  if (!data) {
+    notice(data ? `${file.name} was kept in Uploads, but it could not be read as a table.` : `${file.name} was kept in Uploads.`,
+      [{ label: 'Open Uploads', run: () => void openBox(uploads.box_id).then(announce) }]);
+    return;
+  }
+  offerSheet(uploads.box_id, uploaded.file, found && !('refused' in found) ? found : undefined);
+}
+
+/** Registers a dropped table with the parser's inferred types, places its data card, offers "Adjust types". */
+async function autoData(boxId: string, file: BoxFile, found: Preview, done: () => void): Promise<void> {
+  notice(`Read ${file.name}: ${found.rows} rows, ${found.columns.length} columns. Registering with the inferred types…`, [], 0);
+  try {
+    const made = await makeData(boxId, file.file_id, defaultColumns(found), true);
+    if (made.card) { markStandaloneWork(made.card.app_id, made.card.work_id); await placeWork(made.card.app_id, made.card.work_id, []); }
+    done();
+    const file_ = { ...file, data: made.data };
+    notice(made.card ? `${file.name} is a data card now (${made.data?.row_count ?? found.rows} rows, types inferred).` : `${file.name} is registered as data.`, [
+      { label: 'Adjust types', run: () => openDataSheet(boxId, file_, found, done, true) },
+      { label: 'Make an app from this', run: () => openDataSheet(boxId, file_, found, done, true) },
+      { label: 'Keep as card', run: () => undefined },
+    ], 20000);
+  } catch (error) {
+    notice(`${file.name}: ${refusalText(error)}`, [
+      { label: 'Choose types', run: () => openDataSheet(boxId, file, found, done) },
+    ], 20000);
+  }
+}
+
+/** Store spreadsheets as file icons. A folder is for anything else. */
+async function uploadAsSheets(files: File[], suffix = ''): Promise<string> {
+  let uploads: Box;
+  try {
+    uploads = await uploadsBox();
+  } catch (error) {
+    return `${refusalText(error)}${suffix}`;
+  }
+  const stored: { file: BoxFile; preview?: Preview }[] = [];
+  const failures: string[] = [];
+  for (const file of files) {
+    if (file.size > MAX_FILE_BYTES) {
+      failures.push(`${file.name} is over 20 MB and was not uploaded.`);
+      continue;
+    }
+    try {
+      const uploaded = await uploadFile(uploads.box_id, file, () => undefined);
+      const found = uploaded.preview;
+      stored.push({ file: uploaded.file, preview: found && !('refused' in found) ? found : undefined });
+    } catch (error) {
+      failures.push(`${file.name}: ${refusalText(error)}`);
+    }
+  }
+  void refreshBoxes();
+  const summary = stored.length === files.length
+    ? `${stored.length} spreadsheets stored as files.`
+    : `${stored.length} of ${files.length} spreadsheet uploads confirmed. Check Uploads before retrying.`;
+  const details = `${failures.length ? ` ${failures.join(' ')}` : ''}${suffix}`;
+  if (!stored.length) {
+    notice(`${summary}${details}`, [{ label: 'Open Uploads', run: () => void openBox(uploads.box_id).then(announce) }]);
+    return `${summary}${details}`;
+  }
+  const [first] = stored;
+  if (stored.length === 1 && first) {
+    offerSheet(uploads.box_id, first.file, first.preview, `${stored.length < files.length ? ` ${summary}` : ''}${details}`);
+    return `${first.file.name} is stored as a file.${stored.length < files.length ? ` ${summary}` : ''}${details}`;
+  }
+  for (const row of stored) announce(placeSheet(uploads.box_id, row.file));
+  const ids = stored.map((row) => row.file.file_id);
+  notice(`${summary} Double-click to open original contents.${details}`, [
+    { label: 'Open Uploads', run: () => void openBox(uploads.box_id).then(announce) },
+    ...(first?.preview && stored.every((row) => row.preview) ? [
+      { label: 'Make a card', run: chooseCard(uploads.box_id, ids) },
+      { label: 'Make an app', run: () => openDataSheet(uploads.box_id, first.file, first.preview!, () => undefined, false, ids) },
+    ] : []),
+  ], 0);
+  return `${summary}${details}`;
+}
+
+const sheetKey = (): string | null => {
+  const member = canvasHost()?.dataset.member ?? '';
+  return /^[0-9a-f]{16}$/.test(member) ? `forma.canvas.sheets.v2:${member}` : null;
+};
+type SheetSpot = { boxId: string; file: BoxFile; item: HTMLElement };
+const sheets = new Map<string, SheetSpot>();
+const removedSheets = new Set<string>();
+
+function sheetId(boxId: string, fileId: string): string {
+  return `${boxId}/${fileId}`;
+}
+
+function sheetRecord(boxId: string, file: Pick<BoxFile, 'file_id' | 'name' | 'kind' | 'bytes'>): BoxFile {
+  return {
+    file_id: file.file_id, name: file.name, kind: file.kind, media_type: '', bytes: file.bytes,
+    sha256: '', created_at: '', content_url: contentUrl(boxId, file.file_id), data: null,
+  };
+}
+
+/** A spreadsheet as a canvas card: it drags like any card and opens on a double-click. */
+function placeSheet(boxId: string, file: BoxFile, at?: { x: number; y: number }, persist = true): string {
+  const key = sheetId(boxId, file.file_id);
+  const existing = sheets.get(key);
+  if (existing) {
+    canvasApi()?.centerItem(existing.item);
+    return `${file.name} is already on the canvas.`;
+  }
+  const document_ = document;
+  const label = file.kind === 'xlsx' ? 'Excel' : 'CSV';
+  const mark = file.kind === 'xlsx' ? 'XLS' : 'CSV';
+  const openIt = () => openViewer(sheetRecord(boxId, file), boxId);
+  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'aria-label': `Remove ${file.name} from the canvas`, title: 'Remove from the canvas. The file stays.' }, '×');
+  const card = el(document_, 'article', {
+    class: 'cv-card bx-sheet', tabindex: '0', 'data-kind': 'sheet', 'data-file': file.file_id, 'data-box': boxId,
+    'data-canvas-drag-handle': '',
+    'aria-label': `${file.name}, ${label} spreadsheet. Double-click to open the sheet.`,
+  },
+  close,
+  el(document_, 'span', { class: 'bx-icon bx-sheet-icon', 'data-kind': file.kind, 'aria-hidden': 'true' }, mark),
+  el(document_, 'h2', { class: 'bx-sheet-name' }, file.name),
+  el(document_, 'p', { class: 'bx-sheet-meta' }, `${label} · Double-click to open`));
+  // The drag handle cancels the click, so a second still pointer-up opens the sheet.
+  let pressed: { x: number; y: number } | null = null;
+  let firstClick = 0;
+  let openedAt = -Infinity;
+  let movedDuringPress = false;
+  const onFace = (event: Event) => {
+    const target = event.target;
+    return !(target instanceof Element && target.closest('button, a'));
+  };
+  const openSoon = () => {
+    const now = performance.now();
+    if (now - openedAt < 500) return;
+    openedAt = now;
+    openIt();
+  };
+  card.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || !onFace(event)) {
+      pressed = null;
+      return;
+    }
+    movedDuringPress = false;
+    pressed = { x: event.clientX, y: event.clientY };
+  });
+  card.addEventListener('pointermove', (event) => {
+    if (pressed && Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5) movedDuringPress = true;
+  });
+  card.addEventListener('pointercancel', () => { pressed = null; firstClick = 0; });
+  card.addEventListener('pointerup', (event) => {
+    if (!pressed || event.button !== 0) return;
+    const moved = movedDuringPress || Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 5;
+    pressed = null;
+    if (moved) {
+      firstClick = 0;
+      return;
+    }
+    const now = performance.now();
+    if (firstClick !== 0 && now - firstClick < 500) {
+      firstClick = 0;
+      openSoon();
+      return;
+    }
+    firstClick = now;
+  });
+  card.addEventListener('dblclick', (event) => {
+    if (!onFace(event) || movedDuringPress) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openSoon();
+  });
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openIt();
+  });
+  const item = mountWidget(card, { id: `sheet-${file.file_id}`, title: file.name, width: 220, minHeight: 180, at, focus: !at });
+  if (!item) return `${file.name} could not be placed.`;
+  item.classList.add('cv-item-sheet');
+  close.addEventListener('click', (event) => {
+    event.stopPropagation();
+    unmountWidget(item);
+    sheets.delete(key);
+    removedSheets.add(key);
+    saveSheets();
+  });
+  removedSheets.delete(key);
+  sheets.set(key, { boxId, file: sheetRecord(boxId, file), item });
+  if (persist) saveSheets();
+  return `${file.name} is on the canvas. Double-click it to open the sheet. Drag it onto a folder to copy it there.`;
+}
+
+function saveSheets(): void {
+  const key = sheetKey();
+  if (!key) return;
+  const rows = [];
+  for (const spot of sheets.values()) {
+    const at = widgetSpot(spot.item);
+    if (!at) continue;
+    rows.push({ boxId: spot.boxId, fileId: spot.file.file_id, x: at.x, y: at.y });
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(mergeSheetPlacements(loadSheets(), rows, removedSheets)));
+  } catch {
+    // The icon stays for this page when storage is blocked.
+  }
+}
+
+function loadSheets(): { boxId: string; fileId: string; x: number; y: number }[] {
+  const key = sheetKey();
+  if (!key) return [];
+  try {
+    const rows: unknown = JSON.parse(localStorage.getItem(key) ?? '[]');
+    return mergeSheetPlacements(rows, [], removedSheets);
+  } catch { return []; }
+}
+
+/** The folder under the pointer, looking through the spreadsheet card on top of it. */
+function folderAt(x: number, y: number, item: HTMLElement): string | null {
+  if (typeof document.elementsFromPoint !== 'function') return null;
+  for (const node of document.elementsFromPoint(x, y)) {
+    if (!(node instanceof Element)) continue;
+    const folder = node.closest<HTMLElement>('.cv-item-box');
+    if (!folder || folder === item) continue;
+    const id = folder.querySelector('[data-box]')?.getAttribute('data-box') ?? '';
+    if (isUuid(id)) return id;
+  }
+  return null;
+}
+
+function sameSpot(item: HTMLElement, home: { x: number; y: number } | null): boolean {
+  if (!home || !item.isConnected || item.classList.contains('is-dragging')) return false;
+  const now = widgetSpot(item);
+  return now !== null && now.x === home.x && now.y === home.y;
+}
+
+const copying = new Set<string>();
+
+/** Only a completed drop copies a spreadsheet into a folder. */
+async function dropSheetOnFolder(item: HTMLElement, completion: CanvasDragEnd): Promise<void> {
+  if (completion.kind !== 'released' || !item.classList.contains('cv-item-sheet')) return;
+  const spot = [...sheets.values()].find((entry) => entry.item === item);
+  if (!spot) return;
+  const key = sheetId(spot.boxId, spot.file.file_id);
+  if (copying.has(key)) {
+    announce(`${spot.file.name} is already being copied. Wait for that copy to finish before trying another folder.`);
+    return;
+  }
+  const target = folderAt(completion.x, completion.y, item);
+  if (!target || target === spot.boxId) return;
+  const home = widgetSpot(item);
+  if (!home) return;
+  copying.add(key);
+  announce(`Adding ${spot.file.name} to the folder…`);
+  try {
+    const response = await fetch(spot.file.content_url, { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('refused');
+    const blob = await response.blob();
+    if (!sameSpot(item, home)) {
+      announce(`${spot.file.name} was not copied because its icon was ${item.isConnected && sheets.get(key)?.item === item ? 'moved' : 'removed'}. The original file is still stored.`);
+      return;
+    }
+    const uploaded = await uploadFile(target, new File([blob], spot.file.name, { type: blob.type || 'application/octet-stream' }), () => undefined);
+    if (!sameSpot(item, home) || sheets.get(key)?.item !== item) {
+      void open.get(target)?.refresh();
+      announce(`${spot.file.name} was copied into the folder. ${item.isConnected && sheets.get(key)?.item === item ? 'Its icon remains where you moved it.' : 'Its icon was removed from the canvas.'}`);
+      return;
+    }
+    unmountWidget(item);
+    sheets.delete(key);
+    removedSheets.add(key);
+    placeSheet(target, uploaded.file, home ?? undefined);
+    void open.get(target)?.refresh();
+    announce(`${spot.file.name} was copied into the folder.`);
+  } catch (error) {
+    announce(`The copy of ${spot.file.name} could not be confirmed. ${refusalText(error)} Check the folder before retrying.`);
+  } finally {
+    copying.delete(key);
+  }
+}
+
+/** One Make a card for these files. A second click while it is running does nothing, and a retry reuses the key. */
+function chooseCard(boxId: string, fileIds: string[]): () => void {
+  const key = idempotencyKey();
+  let busy = false;
+  let made = false;
+  return () => {
+    if (busy || made) return;
+    busy = true;
+    void buildCard(boxId, key, fileIds).then((result) => {
+      busy = false;
+      made = result.made;
+      announce(result.text);
+    });
+  };
+}
+
+/** File placement is the default. App creation remains an explicit choice. */
+function offerSheet(boxId: string, file: BoxFile, found?: Preview, suffix = ''): void {
+  const placed = placeSheet(boxId, file);
+  notice(`${placed}${suffix}`, [
+    { label: 'Open original file', run: () => openViewer(file, boxId) },
+    ...(found ? [
+      { label: 'Make a card', run: chooseCard(boxId, [file.file_id]) },
+      { label: 'Make an app', run: () => openDataSheet(boxId, file, found, () => undefined) },
+    ] : []),
+  ], 0);
+}
+
+/** An empty folder, or one that holds the files that are not spreadsheets. */
+async function holdInNewFolder(files: File[]): Promise<string> {
+  let made: Box;
+  try {
+    made = await createBox(`Untitled ${noun}`);
+  } catch (error) {
+    return refusalText(error);
+  }
+  await refreshBoxes();
+  const message = await openBox(made.box_id);
+  const entry = open.get(made.box_id);
+  if (!entry) return message;
+  entry.rename();
+  if (!files.length) return `A new ${noun} is on your canvas; name it.`;
+  const result = await entry.upload(files, 'land');
+  return uploadSummary(result);
+}
+
+/** "+ New folder" and a drop on empty canvas. Spreadsheets become file icons; other files go in the folder. */
+export async function newUntitled(files: File[] = []): Promise<string> {
+  const spreadsheets = files.filter(isDataFile);
+  const others = files.filter((file) => !isDataFile(file));
+  if (spreadsheets.length && !others.length) return uploadAsSheets(spreadsheets);
+  const held = await holdInNewFolder(others);
+  if (!spreadsheets.length) return held;
+  return uploadAsSheets(spreadsheets, ` ${held}`);
+}
+
+// --- Provenance on app cards and receipts ---
+
+function workOf(node: Element): { app: string; work: string } | null {
+  // A card moved into focus mode leaves its canvas item: its own id
+  // (`c-{work}-{view}`, `a-{work}`) still names the work.
+  const cardId = node.closest<HTMLElement>('[data-card]')?.dataset.card ?? '';
+  const fromId = /^[ac]-([0-9a-f-]{36})/.exec(cardId)?.[1] ?? '';
+  const work = node.closest<HTMLElement>('.cv-item')?.dataset.group ?? node.closest<HTMLElement>('.cv-group')?.dataset.work ?? fromId;
+  const found = boardWorks().find((entry) => entry.work === work);
+  const app = found?.app ?? node.closest<HTMLElement>('.cv-group')?.dataset.app ?? '';
+  return isUuid(app) && isUuid(work) ? { app, work } : null;
+}
+
+async function openLineage(chip: Element): Promise<void> {
+  const owner = workOf(chip);
+  if (!owner) return;
+  const found = await lineage(owner.app, owner.work);
+  announce(found ? await openBox(found.box_id) : 'The box this app was built from is not available to you.');
+}
+
+function markChips(): void {
+  for (const chip of document.querySelectorAll<HTMLElement>('.cv-origin[data-origin="box"]:not([data-box-link])')) {
+    chip.dataset.boxLink = 'true';
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
+    chip.title = `Open the ${noun} this app was built from`;
+  }
+}
+
+async function receiptLineage(details: HTMLDetailsElement): Promise<void> {
+  if (details.dataset.lineage) return;
+  const owner = workOf(details);
+  if (!owner) return;
+  details.dataset.lineage = 'pending';
+  const found = await lineage(owner.app, owner.work);
+  if (!found || !found.files.length) return;
+  const body = details.querySelector('.cv-receipt-body');
+  if (!body) return;
+  const text = body.textContent ?? '';
+  const matched = found.files.filter((file) => file.revision_id && text.includes(file.revision_id));
+  const document_ = document;
+  const rows = (matched.length ? matched : found.files).map((file) => {
+    const button = el(document_, 'button', { type: 'button', class: 'bx-lineage-open' }, 'Open file');
+    button.addEventListener('click', () => openViewer({
+      file_id: file.file_id, name: file.name, kind: file.kind, media_type: '', bytes: 0, sha256: '', created_at: '',
+      content_url: file.content_url, data: null,
+    }, found.box_id));
+    return el(document_, 'li', {}, el(document_, 'span', {}, `Source file: ${file.name} (${noun} ${found.box_name})`), button);
+  });
+  details.dataset.lineage = 'shown';
+  body.prepend(el(document_, 'ul', { class: 'bx-lineage', 'aria-label': 'Files these numbers come from' }, ...rows));
+}
+
+// --- Commands ---
+
+/** `formation`'s target when none is named: the bar's active folder, else the last opened on the board, else the only one. */
+function implicitFolder(): Box | null {
+  const id = activeFolder()?.box_id ?? (lastOpened && open.has(lastOpened) ? lastOpened : null);
+  if (id) return boxes.find((box) => box.box_id === id) ?? null;
+  const own = boxes.filter((box) => box.kind !== 'uploads');
+  if (own.length === 1) return own[0] ?? null;
+  return boxes.length === 1 ? boxes[0] ?? null : null;
+}
+
+/** `formation <instruction>` on a folder: a brief, or an app built from it. */
+async function formation(box: Box, instruction: string, report: Report): Promise<void> {
+  const words = instruction.trim();
+  if (!words) {
+    report(`Say what to do after formation, e.g. ${CMD} formation brief me, or ${CMD} formation build a metrics app.`);
+    return;
+  }
+  report(await openBox(box.box_id));
+  if (wantsBrief(words)) {
+    report(`Writing a brief of ${boxLabel(box)} from its files…`);
+    report(await openBrief(box.box_id, boxLabel(box), true, open.get(box.box_id)?.item ?? null));
+    return;
+  }
+  report(await buildApp(box.box_id, purposeOf(words) || words, report));
+}
+
+/**
+ * A command that ran leaves the bar empty and the `/` list closed (as `/card`
+ * and `/app` do, APP-104): the `input` event lets the slash list re-judge.
+ */
+function clearBar(): void {
+  const input = document.getElementById('intent-input') as HTMLInputElement | null;
+  if (!input || !input.value) return;
+  input.value = '';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+const FOLDER = {
+  slug: FOLDER_COMMAND,
+  aliases: FOLDER_ALIASES,
+  title: `Make an app from a ${noun}`,
+  purpose: `Formation builds an app from a ${noun}’s files; /${FOLDER_COMMAND} alone picks a ${noun}, /${FOLDER_COMMAND} new <name> makes one`,
+  run: async (text: string, report: Report = announce) => {
+    const words = text.trim();
+    await refreshBoxes();
+    if (!words) {
+      // No command knowledge needed: pick a folder, it becomes the bar's active folder.
+      await openFolderPicker();
+      report(`Pick a ${noun}; then just say what you need.`);
+      return;
+    }
+    const created = words.match(/^new\s+([\s\S]{1,60})$/i);
+    if (created) {
+      clearBar();
+      report(await newBox((created[1] ?? '').trim()));
+      return;
+    }
+    if (/^new$/i.test(words)) {
+      report(`Name the ${noun}: ${CMD} new <name>.`);
+      return;
+    }
+    // `formation <instruction>` on the selected / last opened / only folder.
+    const bare = words.match(/^formation\b\s*([\s\S]*)$/i);
+    if (bare) {
+      const target = implicitFolder();
+      if (!target) {
+        await openFolderPicker();
+        report(`Which ${noun}? Type ${CMD} <number> formation <instruction>, or select a ${noun} card first.`);
+        return;
+      }
+      clearBar();
+      await formation(target, bare[1] ?? '', report);
+      return;
+    }
+    let target: { box: Box; rest: string } | null = null;
+    const uploads = words.match(/^uploads\b\s*([\s\S]*)$/i);
+    if (uploads) {
+      try {
+        target = { box: await uploadsBox(), rest: uploads[1] ?? '' };
+      } catch (error) {
+        report(refusalText(error));
+        return;
+      }
+    } else {
+      target = resolve(words);
+    }
+    if (!target) {
+      report(`There is no ${noun} “${words.slice(0, 40)}”. Type ${CMD} to see your ${nouns}.`);
+      return;
+    }
+    clearBar();
+    const named = target.rest.trim().match(/^formation\b\s*([\s\S]*)$/i);
+    if (named) {
+      await formation(target.box, named[1] ?? '', report);
+      return;
+    }
+    // The earlier phrasing still works: "<folder> create me an app for <purpose>".
+    const purpose = purposeOf(target.rest);
+    report(await openBox(target.box.box_id));
+    if (purpose) report(await buildApp(target.box.box_id, purpose, report));
+  },
+};
+
+/**
+ * A folder's name as an address (`Q3 board pack` → `q3-board-pack`, `Ventas año` → `ventas-ano`):
+ * NFKD, lowercase, combining marks dropped, runs of other characters a hyphen, at most 64 characters.
+ * The server judges a one-card app's `/name` against these with the same function (`derive::address_slug`).
+ */
+export function folderSlug(label: string): string {
+  return label.normalize('NFKD').toLowerCase().replace(/\p{M}+/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 64).replace(/-+$/, '');
+}
+
+/**
+ * APP-123: the folder a name names (`q3`, `q3-board-pack`, or its number),
+ * when exactly one folder answers to it, as a runnable formation: `/q3
+ * <words>` and `/folder:q3 <words>` build from its files (a leading
+ * `formation` is accepted, as `/folder <name> formation …` reads); with no
+ * words it opens the folder.
+ */
+export function folderRunnable(name: string, list: Box[] = boxes): Runnable | undefined {
+  const key = name.toLowerCase();
+  const found = /^\d{1,4}$/.test(key)
+    ? list.filter((box) => box.number === Number(key))
+    : list.filter((box) => folderSlug(boxLabel(box)) === key);
+  const [box] = found;
+  if (!box || found.length > 1) return undefined;
+  const label = boxLabel(box);
+  return {
+    slug: key,
+    title: `Formation from ${label}`,
+    purpose: `Builds from the ${noun} ${label}’s files (folder formation); “brief me” writes a brief`,
+    aliases: [],
+    args: [{ name: 'instruction', kind: 'text', required: false }],
+    examples: [`/${key} build a metrics app`, `/${key} brief me`],
+    run: async (text: string, report: Report = announce) => {
+      const words = text.trim().replace(/^formation\b\s*/i, '');
+      clearBar();
+      if (!words) {
+        report(await openBox(box.box_id));
+        return;
+      }
+      await formation(box, words, report);
+    },
+  };
+}
+
+/**
+ * APP-124: the empty canvas's choices. "Drop files or upload" opens a file
+ * picker whose files land in a new folder (a drop on the empty canvas does
+ * the same, below). "Create an app" is the template modal (APP-141).
+ */
+export function startEmptyChoices(document_: Document): void {
+  const input = document_.querySelector<HTMLInputElement>('[data-empty-upload]');
+  const pick = document_.querySelector<HTMLElement>('[data-empty-upload-pick]');
+  if (pick && input && !pick.dataset.wired) {
+    pick.dataset.wired = 'true';
+    // The input is reached through its button, not by Tab.
+    input.tabIndex = -1;
+    pick.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      const list = Array.from(input.files ?? []).slice(0, MAX_BOX_FILES);
+      input.value = '';
+      if (list.length) void newUntitled(list).then(announce);
+    });
+  }
+}
+
+/** Wires boxes onto the started canvas: commands, pane, drops, provenance links, restored cards. */
+export function startBoxes(document_: Document): void {
+  if (started) return;
+  started = true;
+  setMakeDataHandler((boxId, file, preview: Preview) => openDataSheet(boxId, file, preview, () => void open.get(boxId)?.refresh(), Boolean(file.data)));
+  registerCommands([FOLDER]);
+  // APP-123: a folder's name is an address (`/q3 <words>`, `/folder:q3 <words>`).
+  setFolderResolver((name) => folderRunnable(name));
+  // The intent bar: the active folder chip, `@` mentions, the folder lane.
+  startFolderBar(document_, {
+    list: () => boxes,
+    refresh: refreshBoxes,
+    label: boxLabel,
+    itemOf: (boxId) => open.get(boxId)?.item ?? null,
+    onActive: (boxId) => {
+      for (const entry of open.values()) entry.card.classList.toggle('is-folder-active', entry.boxId === boxId);
+    },
+    onBuilt: (boxId) => void open.get(boxId)?.refresh(),
+  });
+  // "+ New folder" in the canvas toolbar.
+  const tools = document_.querySelector('.cv-tools');
+  if (tools && !tools.querySelector('[data-tool="new-folder"]')) {
+    const button = el(document_, 'button', { type: 'button', class: 'cv-tool bx-tool-new', 'data-tool': 'new-folder', title: `New ${noun} (drop files on the canvas to make one too)`, 'aria-label': `New ${noun}` }, `+ ${NOUN}`);
+    button.addEventListener('click', () => void newUntitled().then(announce));
+    tools.append(el(document_, 'span', { class: 'cv-tools-sep', 'aria-hidden': 'true' }), button);
+  }
+  for (const slug of [FOLDER_COMMAND, ...FOLDER_ALIASES]) registerCompleter(slug, completions);
+  startEmptyChoices(document_);
+  // The intent bar routes spreadsheets here; images stay receipts.
+  setFileRouter((file) => {
+    if (!isDataFile(file)) return false;
+    void dropAnywhere(file);
+    return true;
+  });
+  const host = canvasHost();
+  if (host) {
+    for (const name of ['dragenter', 'dragover']) {
+      host.addEventListener(name, (event) => {
+        if (!(event as DragEvent).dataTransfer?.types.includes('Files')) return;
+        event.preventDefault();
+        host.dataset.fileDrag = 'true';
+      });
+    }
+    host.addEventListener('dragleave', (event) => {
+      if (event.target === host) host.dataset.fileDrag = 'false';
+    });
+    host.addEventListener('drop', (event) => {
+      if (!(event as DragEvent).dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      host.dataset.fileDrag = 'false';
+      const list = Array.from((event as DragEvent).dataTransfer?.files ?? []).slice(0, 20);
+      if (!list.length) return;
+      // Empty canvas: a new folder holds them. On another card: Uploads, as before.
+      if ((event.target as Element | null)?.closest('.cv-item')) for (const file of list.slice(0, 5)) void dropAnywhere(file);
+      else void newUntitled(list).then(announce);
+    });
+  }
+  document_.addEventListener('click', (event) => {
+    const chip = (event.target as Element | null)?.closest('.cv-origin[data-origin="box"]');
+    if (chip) void openLineage(chip);
+  });
+  document_.addEventListener('keydown', (event) => {
+    const chip = (event.target as Element | null)?.closest?.('.cv-origin[data-origin="box"]');
+    if (chip && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      void openLineage(chip);
+    }
+  });
+  // `toggle` does not bubble; the capture phase still reaches the document.
+  document_.addEventListener('toggle', (event) => {
+    const details = event.target as HTMLElement | null;
+    if (details instanceof HTMLDetailsElement && details.classList.contains('cv-receipt') && details.open) void receiptLineage(details);
+  }, true);
+  onBoardChange(markChips);
+  // Apps built from a box get their "Summary" card (`explain.ts`).
+  startExplain();
+  markChips();
+  onLayoutSaved(() => { save(); saveSheets(); });
+  onCanvasDragEnd((item, completion) => { void dropSheetOnFolder(item, completion); });
+  const restoreCamera = JSON.stringify(canvasApi()?.getCamera());
+  void refreshBoxes().then(async () => {
+    if (!isDemoCanvas()) for (const row of load()) void openBox(row.id, { x: row.x, y: row.y });
+    // Only references are cached. Resolve authorized metadata before mounting.
+    const placements = loadSheets();
+    const grouped = new Map<string, Promise<BoxContents>>();
+    const pending: Promise<void>[] = [];
+    for (const row of placements) {
+      let request = grouped.get(row.boxId);
+      if (!request) { request = getBox(row.boxId); grouped.set(row.boxId, request); }
+      pending.push(request.then((contents) => {
+        if (removedSheets.has(sheetId(row.boxId, row.fileId))) return;
+        const file = contents.files.find((entry) => entry.file_id === row.fileId);
+        if (file && (file.kind === 'csv' || file.kind === 'xlsx')) placeSheet(row.boxId, file, { x: row.x, y: row.y }, false);
+      }).catch(() => { /* unavailable references disclose no cached content */ }));
+    }
+    await Promise.all(pending);
+    // The board's initial fit precedes asynchronous file metadata. On a
+    // file-only canvas, make restored files visible without overriding a pan
+    // or a newly placed item's camera while those reads were pending.
+    if (sheets.size && !boardWorks().length && restoreCamera === JSON.stringify(canvasApi()?.getCamera())) canvasApi()?.fitAll();
+  });
+}

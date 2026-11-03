@@ -1,0 +1,47 @@
+
+> build
+> tsx build.ts --ssr --strict
+
+SSR mode enabled — emitting IR files
+   IR emitted (real): canvas.ir (33630 bytes, 1 islands)
+   IR emitted (real): signin.ir (1018 bytes, 0 islands)
+   IR emitted (real): record.ir (4453 bytes, 0 islands)
+   IR emitted (real): home.ir (1709 bytes, 0 islands)
+   IR emitted (real): shared.ir (6766 bytes, 1 islands)
+   IR emitted (real): work.ir (14544 bytes, 1 islands)
+   IR emitted (real): sharedCanvas.ir (6398 bytes, 1 islands)
+   IR emitted (real): invite.ir (2451 bytes, 0 islands)
+   IR emitted (real): pending.ir (1791 bytes, 0 islands)
+   IR emitted (real): denied.ir (845 bytes, 0 islands)
+   IR emitted (real): about.ir (878 bytes, 0 islands)
+   IR emitted (real): workspace.ir (1901 bytes, 0 islands)
+
+   dist/shared.9eaadaa8.js  90.7kb
+   dist/sharedCanvas.3d032d06.js  135.6kb
+   dist/work.1f0a9fe4.js  107.3kb
+   dist/canvas.0887f80c.js  508.8kb
+
+   24 assets hashed
+   12 files compressed (brotli 11 + gzip 9)
+   Warning: Budget exceeded: /canvas -> 199.7KB (threshold: 195.3125KB)
+
+   Size report (gzip -9, Brotli beside it; 1 KB = 1,000 B, 1 KiB = 1,024 B). Forma code is @getforma/core, @getforma/router and alien-signals as bundled;
+   N2's ceilings are policy (DR-35 and the 3.1 performance decision): Forma code 28,420 B, the JavaScript of a page 76,800 B, of a canvas 373,760 B, a route with no interactive region none.
+   /                no interactive region  no JavaScript
+   /about           no interactive region  no JavaScript
+   /invite          no interactive region  no JavaScript
+   /signin          no interactive region  no JavaScript
+   /auth/pending    no interactive region  no JavaScript
+   /auth/callback   no interactive region  no JavaScript
+   /workspace       no interactive region  no JavaScript
+   /record          no interactive region  no JavaScript
+   /w/{app}/{work}  islands                Forma 26,393 of 28,420 B  JavaScript 38,878 of 76,800 B  (Brotli: Forma 23,543, JavaScript 34,646)  work.1f0a9fe4.js
+   /s/{share}       islands                Forma 26,571 of 28,420 B  JavaScript 33,108 of 76,800 B  (Brotli: Forma 23,723, JavaScript 29,523)  shared.9eaadaa8.js
+   /shared          islands, canvas        Forma 25,384 of 28,420 B  JavaScript 46,809 of 373,760 B  (Brotli: Forma 22,575, JavaScript 41,600)  sharedCanvas.3d032d06.js
+   /canvas          islands, canvas        Forma 25,952 of 28,420 B  JavaScript 172,318 of 373,760 B  (Brotli: Forma 21,726, JavaScript 144,346)  canvas.0887f80c.js
+   Service worker   sw.js  4,308 B raw, 2,236 B gzip, 1,960 B Brotli; counted in the JavaScript of each route that has JavaScript
+   Build time       4.46 s: bundle 2.97 s, hash 5 ms, compress 1.49 s, manifest 4 ms
+
+Manifest written: dist/manifest.json (build: b3a507a82188...)
+Size report written: dist/size-report.json
+   SW generated: dist/sw.js (verified on-demand assets)

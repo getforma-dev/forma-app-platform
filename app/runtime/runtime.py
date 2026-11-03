@@ -35,12 +35,12 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 7
+DATABASE_SCHEMA_VERSION = 19
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;
 # scripts/check-schema-pins.py checks that agreement group.
-CATALOG_BOUND = 524288
+CATALOG_BOUND = 786432
 # The version whose upgrade created genui_meta.schema_migrations. A new ledger
 # always starts at its historical BETWEEN 1 AND 2 bound; every later migration
 # ALTERs both version CHECKs to its own number (ADR-007 D7.12).
@@ -394,12 +394,18 @@ def auth_config_document(value):
     require(type(lifetime) is int and 1 <= lifetime <= 86400)
     routes = value["organizations"]
     require(isinstance(routes, list) and 1 <= len(routes) <= AUTH_ORGANIZATIONS_MAX)
-    organizations = _organizations_of(routes, AUTH_ROUTE_KEYS)
+    # fAuth registers one exact redirect per client. Guest account sign-in
+    # uses a separate client; existing member-only configuration stays valid.
+    require(all(isinstance(route, dict) and set(route) in (AUTH_ROUTE_KEYS, AUTH_ROUTE_KEYS | {"shared_client_id"}) for route in routes))
+    organizations = _organizations_of([{key: route[key] for key in AUTH_ROUTE_KEYS} for route in routes], AUTH_ROUTE_KEYS)
     require(len(set(organizations)) == len(organizations))
     for route in routes:
         require(isinstance(route["tenant_slug"], str) and _TENANT_SLUG.fullmatch(route["tenant_slug"]) is not None)
         require(isinstance(route["client_id"], str) and _CLIENT_ID.fullmatch(route["client_id"]) is not None
                 and not route["client_id"].endswith("-hosted"))
+        if "shared_client_id" in route:
+            require(isinstance(route["shared_client_id"], str) and _CLIENT_ID.fullmatch(route["shared_client_id"]) is not None
+                    and not route["shared_client_id"].endswith("-hosted") and route["shared_client_id"] != route["client_id"])
     return value
 
 
@@ -519,6 +525,71 @@ def take_auth_configuration_injection():
     return os.environ.pop(AUTH_CONFIGURATION_JSON_ENV, None)
 
 
+# The app receives a narrow invitation-broker capability, never a provider
+# management credential. The injected document is consumed only by serve().
+SHARED_BROKER_JSON_ENV = "GENUI_SHARED_INVITE_BROKER_JSON"
+SHARED_BROKER_FILE_ENV = "GENUI_SHARED_INVITE_BROKER_FILE"
+
+
+def shared_broker_configuration(text):
+    require(isinstance(text, str) and len(text.encode("utf-8")) <= 4096)
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result)
+            result[key] = value
+        return result
+    value = json.loads(text, object_pairs_hook=unique)
+    if value == {}:
+        return None
+    require(isinstance(value, dict) and set(value) == {"origin", "token"})
+    require(_exact_origin(value["origin"]))
+    require(isinstance(value["token"], str) and re.fullmatch(r"[A-Za-z0-9_-]{43}", value["token"]) is not None)
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+class SharedBrokerDirectory:
+    def __init__(self, runtime_path, contents):
+        parent = Path(runtime_path).parent
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and info.st_mode & 0o077 == 0)
+        self.path = Path(tempfile.mkdtemp(prefix="shared-broker-", dir=parent))
+        try:
+            os.chmod(self.path, 0o700)
+            fd = os.open(str(self.config_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(contents)
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def config_path(self):
+        return self.path / "broker.json"
+
+    def close(self):
+        if self.path is not None:
+            self.config_path.unlink(missing_ok=True)
+            self.path.rmdir()
+            self.path = None
+
+
+def take_shared_broker_injection():
+    return os.environ.pop(SHARED_BROKER_JSON_ENV, None)
+
+
+RUNTIME_TENANTS_MAX = 32
+
+
+def require_runtime_tenants(tenants):
+    # Historical qualification uses two fixtures. A real clean organization
+    # adds its own reviewed role/key/prefix; none may alias another boundary.
+    require(isinstance(tenants, list) and 1 <= len(tenants) <= RUNTIME_TENANTS_MAX)
+    require(all(isinstance(t, dict) for t in tenants))
+    for field in ("organization_id", "kms_key_arn", "role_arn"):
+        require(len({t.get(field) for t in tenants}) == len(tenants) and all(t.get(field) for t in tenants))
+
+
 def load(path, now=None):
     now = int(time.time()) if now is None else now
     path = Path(path)
@@ -548,8 +619,7 @@ def load(path, now=None):
     storage = value["storage"]
     require(storage["region"] == "us-east-1" and storage["bucket"])
     tenants = storage["tenants"]
-    require(len(tenants) == 2 and len({x["organization_id"] for x in tenants}) == 2)
-    require(len({x["kms_key_arn"] for x in tenants}) == 2 and len({x["role_arn"] for x in tenants}) == 2)
+    require_runtime_tenants(tenants)
     for tenant in tenants:
         require(str(uuid.UUID(tenant["organization_id"])) == tenant["organization_id"])
         require(tenant["prefix"] == "o/" + tenant["organization_id"] + "/")
@@ -599,7 +669,7 @@ def refresh(path):
     require(set(db_roles) == set(ROLES) and len(set(db_roles.values())) == 4)
     require(all(re.fullmatch(r"arn:aws:iam::877573132739:role/[A-Za-z0-9+=,.@_/-]+", arn) for arn in db_roles.values()))
     tenants = json.loads(os.environ["GENUI_TENANTS_JSON"])
-    require(len(tenants) == 2 and len({t["organization_id"] for t in tenants}) == 2 and len({t["kms_key_arn"] for t in tenants}) == 2)
+    require_runtime_tenants(tenants)
     require(re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", os.environ["GENUI_EVIDENCE_BUCKET"]))
     for tenant in tenants:
         require(set(tenant) == {"organization_id", "role_arn", "kms_key_arn", "prefix"})
@@ -729,10 +799,10 @@ def catalog_resources(directory):
     query = documents[0]
     require(set(query) == {"schema_version", "search_path", "max_output_bytes", "section_row_limit", "sql"})
     require(query["schema_version"] == 1 and query["search_path"] == "pg_catalog, pg_temp"
-            and query["max_output_bytes"] == CATALOG_BOUND and query["section_row_limit"] == 1025
+            and query["max_output_bytes"] == CATALOG_BOUND and query["section_row_limit"] == 2049
             and isinstance(query["sql"], str) and 0 < len(query["sql"].encode()) <= 65536)
     for expected in documents[1:]:
-        require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 1025 for rows in expected.values()))
+        require(isinstance(expected, dict) and expected and all(isinstance(rows, list) and len(rows) < 2049 for rows in expected.values()))
     require(all(set(expected) == set(documents[1]) for expected in documents[2:]))
     return query, dict(enumerate(documents[1:], 1))
 
@@ -912,13 +982,15 @@ def cleanup(report_path):
     print(json.dumps({"run_id": run_id, "deleted_versions": len(report["cleanup"])}))
 
 
-def serve(path, capabilities=None, auth_configuration_text=None):
+def serve(path, capabilities=None, auth_configuration_text=None, shared_broker_text=None):
     # ADR-003 amendment 2026-10-30: out of this process's environment before anything else.
     injected = take_capability_injection()
     capabilities = capabilities if capabilities is not None else injected
     # APP-078 B1: the hosted sign-in configuration leaves the environment the same way.
     injected_auth = take_auth_configuration_injection()
     auth_configuration_text = auth_configuration_text if auth_configuration_text is not None else injected_auth
+    injected_broker = take_shared_broker_injection()
+    shared_broker_text = shared_broker_text if shared_broker_text is not None else injected_broker
     refuse_qualification_injection()
     # Only serve() names the capability directory, and only for the injected secret.
     require(CAPABILITY_DIR_ENV not in os.environ)
@@ -927,16 +999,22 @@ def serve(path, capabilities=None, auth_configuration_text=None):
     # A configured secret is the only source of both files: a plain environment
     # entry naming either file beside it is refused, never preferred or merged.
     require(auth_files is None or (AUTH_CONFIG_FILE_ENV not in os.environ and IDENTITY_REGISTRY_FILE_ENV not in os.environ))
+    broker_file = shared_broker_configuration(shared_broker_text) if shared_broker_text is not None else None
+    require(broker_file is None or SHARED_BROKER_FILE_ENV not in os.environ)
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT): signal.signal(sig, lambda *_: stop.set())
     child = None
     registry_file = None
     capability_directory = None
     auth_directory = None
+    broker_directory = None
     credentials_started = False
     try:
         Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         child_environment = os.environ.copy()
+        if broker_file is not None:
+            broker_directory = SharedBrokerDirectory(path, broker_file)
+            child_environment[SHARED_BROKER_FILE_ENV] = str(broker_directory.config_path)
         if auth_files is not None:
             auth_directory = AuthConfigurationDirectory(path, auth_configuration_text)
             child_environment[AUTH_CONFIG_FILE_ENV] = str(auth_directory.config_path)
@@ -949,6 +1027,7 @@ def serve(path, capabilities=None, auth_configuration_text=None):
             capability_directory = CapabilityDirectory(path, capabilities)
             child_environment[CAPABILITY_DIR_ENV] = str(capability_directory.path)
         capabilities = injected = auth_configuration_text = injected_auth = auth_files = None
+        shared_broker_text = injected_broker = broker_file = None
         while not stop.is_set():
             try:
                 credentials_started = True
@@ -988,8 +1067,12 @@ def serve(path, capabilities=None, auth_configuration_text=None):
                         if auth_directory is not None:
                             auth_directory.close()
                     finally:
-                        if credentials_started:
-                            Path(path).unlink(missing_ok=True)
+                        try:
+                            if broker_directory is not None:
+                                broker_directory.close()
+                        finally:
+                            if credentials_started:
+                                Path(path).unlink(missing_ok=True)
     return 0
 
 
@@ -1057,6 +1140,82 @@ def cache(path, stdin=None):
     return fetch_revision(client, value["storage"]["bucket"], request)
 
 
+# --- APP-108 box objects (the credentialed write/read child) and the normalizer ---
+OBJECT_REQUEST_KEYS = {"operation", "organization_id", "key", "path", "sha256"}
+MAX_OBJECT_BYTES = 64 * 1024 * 1024
+_OBJECT_KEY = re.compile(r"o/[0-9a-f-]{36}/(b/[0-9a-f-]{36}/f/[0-9a-f-]{36}|s/[0-9a-f-]{36}/r/[0-9a-f-]{36}/(original|part\.parquet))")
+
+
+def object_request(raw):
+    require(len(raw) <= 4096)
+    request = json.loads(raw)
+    require(isinstance(request, dict) and set(request) == OBJECT_REQUEST_KEYS)
+    require(request["operation"] in ("put", "get"))
+    require(isinstance(request["organization_id"], str) and _UUID.fullmatch(request["organization_id"]) is not None)
+    require(isinstance(request["key"], str) and _OBJECT_KEY.fullmatch(request["key"]) is not None)
+    require(request["key"].startswith("o/" + request["organization_id"] + "/"))
+    require(isinstance(request["sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", request["sha256"]))
+    require(isinstance(request["path"], str) and Path(request["path"]).is_absolute())
+    return request
+
+
+def put_object(client, bucket, tenant, request):
+    """One write-once PutObject under the tenant key: SSE-KMS, If-None-Match, SHA-256 checksum."""
+    import base64
+    path = Path(request["path"])
+    metadata = path.lstat()
+    require(stat.S_ISREG(metadata.st_mode) and metadata.st_uid == os.geteuid() and metadata.st_size <= MAX_OBJECT_BYTES)
+    body = path.read_bytes()
+    require(hashlib.sha256(body).hexdigest() == request["sha256"])
+    try:
+        client.put_object(Bucket=bucket, Key=request["key"], Body=body, ServerSideEncryption="aws:kms",
+                          SSEKMSKeyId=tenant["kms_key_arn"], ChecksumSHA256=base64.b64encode(bytes.fromhex(request["sha256"])).decode(),
+                          IfNoneMatch="*")
+    except Exception as error:
+        code = getattr(error, "response", {}).get("Error", {}).get("Code", "")
+        if code in ("PreconditionFailed", "412"):
+            raise SystemExit(3)
+        raise
+    return {"stored": True, "bytes": len(body)}
+
+
+def get_object(client, bucket, request):
+    """One bounded GetObject, digest-checked, written to the caller's private path."""
+    path = Path(request["path"])
+    require(not path.exists())
+    response = client.get_object(Bucket=bucket, Key=request["key"])
+    require(0 < int(response["ContentLength"]) <= MAX_OBJECT_BYTES)
+    body = response["Body"].read(MAX_OBJECT_BYTES + 1)
+    require(len(body) == int(response["ContentLength"]) and hashlib.sha256(body).hexdigest() == request["sha256"])
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(body)
+    return {"read": True, "bytes": len(body)}
+
+
+def object_operation(path, stdin=None):
+    request = object_request((stdin or sys.stdin.buffer).read(4097))
+    value = load(path)
+    tenants = [t for t in value["storage"]["tenants"] if t["organization_id"] == request["organization_id"]]
+    require(len(tenants) == 1)
+    tenant = tenants[0]
+    require(request["key"].startswith(tenant["prefix"]))
+    credentials = {"AccessKeyId": tenant["access_key_id"], "SecretAccessKey": tenant["secret_access_key"], "SessionToken": tenant["session_token"]}
+    client = scoped_session(credentials, value["storage"]["region"]).client("s3", config=sdk_config())
+    if request["operation"] == "put":
+        return put_object(client, value["storage"]["bucket"], tenant, request)
+    return get_object(client, value["storage"]["bucket"], request)
+
+
+def normalize():
+    """The box normalizer child (no credential); imported by path as `query`."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("box_normalize", Path(__file__).resolve().with_name("box_normalize.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main()
+
+
 def query():
     """The confined engine child; imported by path because `python3 -I` drops the script directory."""
     import importlib.util
@@ -1071,7 +1230,8 @@ if __name__ == "__main__":
     # mode, first; only serve() writes it out, for its service child alone.
     capabilities = take_capability_injection()
     auth_configuration_text = take_auth_configuration_injection()
-    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache")); parser.add_argument("--generation"); parser.add_argument("--report")
+    shared_broker_text = take_shared_broker_injection()
+    parser = argparse.ArgumentParser(); parser.add_argument("mode", choices=("refresh", "probe", "serve", "migrate", "qualify", "cleanup", "query", "cache", "object", "normalize")); parser.add_argument("--generation"); parser.add_argument("--report")
     args = parser.parse_args()
     try:
         # D7.13: a harness injection in any mode, serve included, is removed
@@ -1081,13 +1241,15 @@ if __name__ == "__main__":
         path = os.environ.get("GENUI_RUNTIME_CONFIG_FILE", "/run/genui/credentials.json")
         # The engine child answers every request with its own one JSON line.
         if args.mode == "query": raise SystemExit(query())
+        if args.mode == "normalize": raise SystemExit(normalize())
         if args.mode == "refresh": refresh(path)
         elif args.mode == "cache": print(json.dumps(cache(path)))
+        elif args.mode == "object": print(json.dumps(object_operation(path)))
         elif args.mode == "probe": print(json.dumps(probe(path, args.generation)))
         elif args.mode == "migrate": migrate()
         elif args.mode == "qualify": qualification(path)
         elif args.mode == "cleanup": cleanup(args.report)
-        else: raise SystemExit(serve(path, capabilities, auth_configuration_text))
+        else: raise SystemExit(serve(path, capabilities, auth_configuration_text, shared_broker_text))
     except Exception:
         print("managed_dependency_operation_refused", file=sys.stderr)
         raise SystemExit(1)

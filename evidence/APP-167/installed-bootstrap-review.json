@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "disposition": "Installed bootstrap authority and retained-state snapshot match the reviewed packet. Cleared for canonical cutover through the reviewed install command and its fresh equality checks.",
+  "template_sha256": "13ea4069be41d2d35e9507b201f5002a979ce14063cf7ba7c29e5f9e710c3c6c",
+  "installed_readback_sha256": "d80fa68c6b99218108d5a7e4f816b4f29e491e3a3e34470fff55fd1bedf541ca",
+  "storage_probe_sha256": "d9d4b443ff274311a079a0d99d6537993b673f60c6bc035f42b008b8024451ca",
+  "second_capture_sha256": "24a3b47d9ec0797eb118872dd62fcb43bd635c0ed85dbb3bcecec7860e3f0648",
+  "independent_checks": {
+    "installed_template_exactly_equal": true,
+    "all_three_role_trust_inline_policy_and_one_hour_session_limits_equal": true,
+    "each_role_has_only_its_one_expected_inline_policy": true,
+    "inline_policy_inventories_not_truncated": true,
+    "no_attached_managed_policies": true,
+    "actual_oidc_provider_url_and_sts_only_audience_equal": true,
+    "bucket_policy_versioning_public_block_and_owner_enforcement_equal": true,
+    "actual_default_encryption_AES256_and_customer_provided_keys_blocked": true,
+    "unconditional_write_denied": true,
+    "conditional_create_succeeded": true,
+    "immutable_overwrite_denied": true,
+    "history_delete_denied": true,
+    "second_capture_ledger_baseline_live_and_authority_equal_original": true
+  },
+  "limitations": [
+    "These are readback and storage-enforcement results, not a completed GitHub deployment or a real user login.",
+    "The install command must recapture and compare the live boundary and original ledger immediately before cutover.",
+    "Actual OIDC role assumption, qualified image promotion, protected human approval, runtime health and tag sealing remain live acceptance checks.",
+    "The reviewer used retained receipts and performed no AWS writes. Private identifiers and full AWS responses are excluded."
+  ]
+}

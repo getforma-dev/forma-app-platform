@@ -12,6 +12,20 @@ from validate import (ContractError, SCHEMA, canonical, digest, domain_name, exa
 ROOT = Path(__file__).resolve().parent
 RETAINED = ROOT / "fixtures" / "impl-2026-10-28.1"
 RETAINED_TWO = ROOT / "fixtures" / "impl-2026-10-29.2"
+RETAINED_THREE = ROOT / "fixtures" / "impl-2026-10-29.3"
+LIBRARY = ROOT / "fixtures" / "library"
+# Stored-data vectors (edition impl-2026-10-31.4): documents admitted and stored before a later rule, which must keep
+# their stored-document verdict. Beta's Expense claims bundle as seeded at 0c3261b (APP-105), byte for byte.
+STORED_EXPENSE = ROOT / "fixtures" / "stored" / "expense-claims-d70710d3.json"
+STORED_EXPENSE_SHA256 = "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
+# The fixture identities edition impl-2026-10-29.3 locked; its copies are retained byte-identically.
+EDITION_THREE_FIXTURES = {
+    "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "command-recovery": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
+    "negative-vectors": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+    "northstar": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+    "spend-review": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
+}
 # The fixture identities edition impl-2026-10-29.2 locked; its copies are retained byte-identically.
 EDITION_TWO_FIXTURES = {
     "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
@@ -441,11 +455,152 @@ class EditionThreeTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "update expects an existing version"):
             check_command(bundle)
 
+    def test_declared_guards_and_initial_values(self):
+        """APP-107 amendment (additive): a transition may carry a typed guard (`when`) over a field of the same record
+        schema, and a filing create may declare the `initial` value of an enum field, chosen by guards; the seeded
+        create must carry it. Ordering comparisons need an ordered field; values are typed literals, never null."""
+        library = ROOT / "fixtures" / "library"
+        deal = loads((library / "deal-desk.json").read_bytes())
+        purchase = loads((library / "purchase-requests.json").read_bytes())
+        validate_bundle(copy.deepcopy(deal))
+        validate_bundle(copy.deepcopy(purchase))
+        # The deal desk seed (8%) is auto-approved by the first initial rule; a seed claiming "submitted" is refused.
+        bundle = copy.deepcopy(deal)
+        status = next(item for item in bundle["command"]["values"] if item["field_id"] == "status")
+        status["value"]["value"] = "submitted"
+        bundle["outcome"]["payload_digest"] = payload_digest(bundle["command"])
+        with self.assertRaisesRegex(ContractError, "declared initial value"):
+            validate_bundle(bundle)
+        # Hostile declarations are refused by the definition rules.
+        def edited(source, change):
+            bundle = copy.deepcopy(source)
+            change(bundle["definition"]["content"]["commands"])
+            return bundle
+        cases = [
+            (lambda c: c[1]["transitions"][0]["when"].update(field_id="nope"), "unknown guard field"),
+            (lambda c: c[1]["transitions"][0]["when"].update(value={"type": "text", "value": "5000"}), "guard value type/unit mismatch"),
+            (lambda c: c[1]["transitions"][0]["when"].update(value={"type": "null"}), "guard value type/unit mismatch"),
+            (lambda c: c[1]["transitions"][0]["when"].update(field_id="vendor", value={"type": "text", "value": "x"}), "ordered field"),
+            (lambda c: c[0]["initial"][0].update(value="paid"), "unknown initial value"),
+            (lambda c: c[0]["initial"][0].update(field_id="item"), "initial requires enum field"),
+            (lambda c: c[1].update(initial=[{"field_id": "status", "value": "submitted"}]), "initial values belong to a filing create"),
+        ]
+        for change, expected in cases:
+            with self.subTest(expected=expected), self.assertRaisesRegex(ContractError, expected):
+                check_command(edited(purchase, change))
+        # A guard member outside the closed shape is a schema refusal.
+        with self.assertRaises(Exception):
+            check_command(edited(purchase, lambda c: c[1]["transitions"][0]["when"].update(sql="1=1")))
 
-def check_command(bundle):
+
+    def test_filing_creates_declare_the_initial_value_of_a_governed_field(self):
+        """APP-113 review (storage 2, 14): a create that may write an enum field another command governs by declared
+        transitions must declare its `initial` value (the expense `submit` could file a claim as `approved`); a
+        command declares each (field, from, to) once; and a guarded transition only counts as fired when its guard
+        holds on the values the command carries."""
+        library = ROOT / "fixtures" / "library"
+        expense = loads((library / "expense-claims.json").read_bytes())
+        purchase = loads((library / "purchase-requests.json").read_bytes())
+        validate_bundle(copy.deepcopy(expense))
+        # The expense seed may not file a claim already approved.
+        bundle = copy.deepcopy(expense)
+        next(item for item in bundle["command"]["values"] if item["field_id"] == "status")["value"]["value"] = "approved"
+        bundle["outcome"]["payload_digest"] = payload_digest(bundle["command"])
+        with self.assertRaisesRegex(ContractError, "declared initial value"):
+            validate_bundle(bundle)
+        def edited(source, change):
+            bundle = copy.deepcopy(source)
+            change(bundle["definition"]["content"]["commands"])
+            return bundle
+        # Edition impl-2026-10-31.4: both rules are the authoring verdict (`new_content=True`); the stored-document
+        # verdict is edition impl-2026-10-29.3's, so the same documents stored before the rules keep validating.
+        for source, change in ((expense, lambda c: c[next(i for i, x in enumerate(c) if x["id"] == "submit")].pop("initial")),
+                               (purchase, lambda c: c[0].pop("initial"))):
+            with self.assertRaisesRegex(ContractError, "requires initial"):
+                check_command(edited(source, change), new_content=True)
+            check_command(edited(source, change))
+        duplicated = lambda c: c[1]["transitions"].append(copy.deepcopy(c[1]["transitions"][-1]))
+        with self.assertRaisesRegex(ContractError, "duplicate transition"):
+            check_command(edited(purchase, duplicated), new_content=True)
+        check_command(edited(purchase, duplicated))
+        # Guard parity: submitted -> manager_approved holds only when amount > $5,000.
+        def decided(amount):
+            bundle = edited(purchase, lambda c: c[1]["writable_fields"].append("amount"))
+            definition = bundle["definition"]
+            definition["digest"] = digest("app-definition", definition["content"])
+            bundle["publication"]["definition_digest"] = bundle["receipt"]["definition_digest"] = definition["digest"]
+            rehash_receipt(bundle["receipt"])
+            command = bundle["command"]
+            command.update(command_id="decide", expected_record_version=1, values=[
+                {"field_id": "status", "value": {"type": "enum", "value": "manager_approved"}},
+                {"field_id": "amount", "value": {"type": "money", "minor_units": amount, "currency": "USD", "minor_unit_exponent": 2}}])
+            bundle["outcome"].update(command_id="decide", record_version=2, payload_digest=payload_digest(command))
+            return bundle
+        validate_bundle(decided("600000"))
+        with self.assertRaisesRegex(ContractError, "create expects absent record"):
+            validate_bundle(decided("100"))
+
+
+def check_command(bundle, new_content=False):
     """validate_bundle after a definition edit: re-identify the definition and its pins."""
     definition = bundle["definition"]
     definition["digest"] = digest("app-definition", definition["content"])
     bundle["publication"]["definition_digest"] = bundle["receipt"]["definition_digest"] = definition["digest"]
     rehash_receipt(bundle["receipt"])
-    validate_bundle(bundle)
+    validate_bundle(bundle, new_content=new_content)
+
+
+class EditionFourTests(unittest.TestCase):
+    """Edition impl-2026-10-31.4 (APP-129): the APP-107/APP-113 command-declaration amendment and the prebuilt library,
+    over the retained edition impl-2026-10-29.3."""
+
+    def test_edition_four_retains_edition_three_byte_identically(self):
+        for name, identity in EDITION_THREE_FIXTURES.items():
+            with self.subTest(fixture=name):
+                self.assertEqual(hashlib.sha256((RETAINED_THREE / (name + ".json")).read_bytes()).hexdigest(), identity)
+                # The current edition's specimens and vectors are edition three's, unchanged.
+                self.assertEqual((RETAINED_THREE / (name + ".json")).read_bytes(), (ROOT / "fixtures" / (name + ".json")).read_bytes())
+        def kept(name):
+            return loads((RETAINED_THREE / (name + ".json")).read_bytes())
+        for name in ("northstar", "spend-review"):
+            with self.subTest(bundle=name):
+                bundle = kept(name)
+                validate_bundle(bundle)
+                self.assertEqual(bundle["definition"]["digest"], digest("app-definition", bundle["definition"]["content"]))
+        run_negative_vectors(self, json.loads((RETAINED_THREE / "negative-vectors.json").read_text()), kept)
+        specimen = kept("command-recovery")
+        for view in specimen["recovery_views"]:
+            validate(view)
+        validate(specimen["claim"])
+        for body in specimen["problems"]:
+            validate_problem(body)
+
+    def test_every_library_bundle_validates_and_matches_the_catalog(self):
+        catalog = json.loads((LIBRARY / "catalog.json").read_text())
+        names = sorted(p.name for p in LIBRARY.glob("*.json") if p.name != "catalog.json")
+        self.assertEqual(names, sorted(app["fixture"] for app in catalog["apps"]))
+        for app in catalog["apps"]:
+            with self.subTest(app=app["library_id"]):
+                raw = (LIBRARY / app["fixture"]).read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), app["fixture_sha256"])
+                bundle = loads(raw)
+                validate_bundle(bundle, new_content=True)
+                self.assertEqual(bundle["definition"]["schema_version"], 1)
+                self.assertEqual(bundle["definition"]["digest"], app["definition_digest"])
+
+    def test_stored_definitions_keep_their_verdict(self):
+        """Victor's option A (2026-10-31): the APP-113 definition rules judge new content only. Beta's stored Expense
+        claims revision predates them: it validates under the stored-document verdict (as under impl-2026-10-29.3 and
+        Rust admission) and is refused only as new content. Storage's command-time fence protects it instead."""
+        raw = STORED_EXPENSE.read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), STORED_EXPENSE_SHA256)
+        bundle = loads(raw)
+        self.assertEqual(bundle["definition"]["digest"], "sha256:d70710d345d807be6893bb88cf73eacdbf3a8e1ebea94de59f2c21c52453d0de")
+        validate_bundle(copy.deepcopy(bundle))
+        validate(bundle["definition"])
+        with self.assertRaisesRegex(ContractError, "create writing a governed enum field requires initial"):
+            validate_bundle(copy.deepcopy(bundle), new_content=True)
+        # The library's current Expense claims app is the same app with `initial` declared: a new revision.
+        current = loads((LIBRARY / "expense-claims.json").read_bytes())
+        self.assertEqual(current["definition"]["app_id"], bundle["definition"]["app_id"])
+        self.assertNotEqual(current["definition"]["digest"], bundle["definition"]["digest"])

@@ -1,0 +1,747 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001901",
+    "revision_id": "00000000-0000-4000-8000-000000001902",
+    "content": {
+      "title": "Deal desk",
+      "description": "Ask for a discount on a deal; up to 10% approves itself by a declared rule, deeper discounts go to the sales manager. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "discount_requests",
+          "contract_id": "discount_requests_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "request_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "account",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "owner",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "deal_amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "discount_pct",
+              "value_type": {
+                "type": "integer",
+                "unit": "percent"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "auto_approved",
+              "value_type": {
+                "type": "boolean"
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "contract_id": "discount_request_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "account",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "deal_amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "discount_pct",
+              "value_type": {
+                "type": "integer",
+                "unit": "percent"
+              },
+              "nullable": false
+            },
+            {
+              "id": "reason",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "by_status",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "Discount requests by status",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "discount_requests"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "status"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "discount_requests",
+                      "field_id": "request_id"
+                    }
+                  },
+                  {
+                    "id": "deal_amount",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "discount_requests",
+                      "field_id": "deal_amount"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "deep_discounts",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Discounts over 10%",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "discount_requests"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "discount_requests",
+                  "field_id": "discount_pct"
+                },
+                "comparison": "gt",
+                "value": {
+                  "type": "integer",
+                  "value": "10",
+                  "unit": "percent"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "request_id"
+                  },
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "account"
+                  },
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "owner"
+                  },
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "deal_amount"
+                  },
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "discount_pct"
+                  },
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "status"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "discount_requests",
+                      "field_id": "discount_pct"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "discount_requests",
+                  "field_id": "request_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_owner",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Requests by owner",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "discount_requests"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "discount_requests",
+                    "field_id": "owner"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "discount_requests",
+                      "field_id": "request_id"
+                    }
+                  },
+                  {
+                    "id": "deepest_discount",
+                    "operation": "max",
+                    "field": {
+                      "input_id": "discount_requests",
+                      "field_id": "discount_pct"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Request a discount",
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "The rule",
+          "text": "Discounts of 10% or less are approved on filing by the app's declared rule (an audited command like any decision); deeper ones wait for the sales manager. History is labeled synthetic."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "discount_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "account",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "deal_amount",
+              "value_type": {
+                "type": "money",
+                "currency": "USD",
+                "minor_unit_exponent": 2
+              },
+              "nullable": false
+            },
+            {
+              "id": "discount_pct",
+              "value_type": {
+                "type": "integer",
+                "unit": "percent"
+              },
+              "nullable": false
+            },
+            {
+              "id": "reason",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "discount_request",
+          "operation": "create",
+          "writable_fields": [
+            "account",
+            "deal_amount",
+            "discount_pct",
+            "reason",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "approved",
+              "when": {
+                "field_id": "discount_pct",
+                "comparison": "lte",
+                "value": {
+                  "type": "integer",
+                  "value": "10",
+                  "unit": "percent"
+                }
+              }
+            },
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "discount_request",
+          "operation": "create",
+          "writable_fields": [
+            "status"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "by_status",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "deep_discounts",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "by_owner",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "request",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:144d7217e4564b59ae668fb1bd081ba50c73544a56d12f97f887f3a3ecfb6678"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001901",
+    "publication_id": "00000000-0000-4000-8000-000000001903",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001902",
+    "definition_digest": "sha256:144d7217e4564b59ae668fb1bd081ba50c73544a56d12f97f887f3a3ecfb6678",
+    "input_contract_digests": [
+      {
+        "input_id": "discount_requests",
+        "digest": "sha256:359c5c65c4884f2616ad3c989532c2d8256af0b8d3cfdac2721989d2dbd638f4"
+      },
+      {
+        "input_id": "requests",
+        "digest": "sha256:dba4a0acdc3733c2113605d7001534e909aad56c85488d1fae8170056f74ca17"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "discount_request",
+        "digest": "sha256:dce642767842cc11e23a677b779930708c6db4daab0cf1c6c5cb5b88cd00fb3d"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:e09e2dae1edf5ec561d0884e434b5be461e5e6e087a99ec4d9f9988a42854c68",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001901",
+    "work_id": "00000000-0000-4000-8000-000000001904",
+    "publication_id": "00000000-0000-4000-8000-000000001903",
+    "version": 1,
+    "context": "Prebuilt library: Deal desk",
+    "bindings": [
+      {
+        "input_id": "discount_requests",
+        "source_id": "00000000-0000-4000-8000-000000003022",
+        "source_revision_id": "00000000-0000-4000-8000-000000003023",
+        "source_digest": "sha256:ba7e909f2d3c8989f18287ac02e0bb9afbc9c90ecb5e2ed9df7c7cd72931a12b",
+        "kind": "source",
+        "contract_digest": "sha256:359c5c65c4884f2616ad3c989532c2d8256af0b8d3cfdac2721989d2dbd638f4"
+      },
+      {
+        "input_id": "requests",
+        "kind": "records",
+        "contract_digest": "sha256:dba4a0acdc3733c2113605d7001534e909aad56c85488d1fae8170056f74ca17",
+        "collection_id": "00000000-0000-4000-8000-000000001905",
+        "schema_id": "discount_request",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001905",
+        "schema_id": "discount_request",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "discount_requests",
+        "source_id": "00000000-0000-4000-8000-000000003022",
+        "source_revision_id": "00000000-0000-4000-8000-000000003023",
+        "source_digest": "sha256:ba7e909f2d3c8989f18287ac02e0bb9afbc9c90ecb5e2ed9df7c7cd72931a12b"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-000000003022",
+      "revision_id": "00000000-0000-4000-8000-000000003023",
+      "content_digest": "sha256:110a73d8b0f136fea34e8550178d5644fa9fc078c256b3ca3278e6d4a6e99635",
+      "normalized_digest": "sha256:ba7e909f2d3c8989f18287ac02e0bb9afbc9c90ecb5e2ed9df7c7cd72931a12b",
+      "input_contract": {
+        "id": "discount_requests",
+        "contract_id": "discount_requests_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "request_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "account",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "owner",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "deal_amount",
+            "value_type": {
+              "type": "money",
+              "currency": "USD",
+              "minor_unit_exponent": 2
+            },
+            "nullable": false
+          },
+          {
+            "id": "discount_pct",
+            "value_type": {
+              "type": "integer",
+              "unit": "percent"
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "auto_approved",
+            "value_type": {
+              "type": "boolean"
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 120,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001901",
+    "work_id": "00000000-0000-4000-8000-000000001904",
+    "mode": "published",
+    "definition_digest": "sha256:144d7217e4564b59ae668fb1bd081ba50c73544a56d12f97f887f3a3ecfb6678",
+    "publication_id": "00000000-0000-4000-8000-000000001903",
+    "view_id": "by_status",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "discount_requests",
+        "source_id": "00000000-0000-4000-8000-000000003022",
+        "source_revision_id": "00000000-0000-4000-8000-000000003023",
+        "source_digest": "sha256:ba7e909f2d3c8989f18287ac02e0bb9afbc9c90ecb5e2ed9df7c7cd72931a12b"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:2d0e7a922f71412aba5b2cd462aefe174ac990f84785509ac6fa307c2981a013",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:51a51f3922b5306b625a23013078367bb6e63acf846df17d994f13ba97ee9b95",
+      "predicate_digest": "sha256:51a51f3922b5306b625a23013078367bb6e63acf846df17d994f13ba97ee9b95"
+    },
+    "digest": "sha256:eea6a726ee028c9140abd5d92c3d8ee2e7f6762da3876376a037b3ee76d51f6e"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001901",
+    "work_id": "00000000-0000-4000-8000-000000001904",
+    "publication_id": "00000000-0000-4000-8000-000000001903",
+    "command_id": "submit",
+    "schema_id": "discount_request",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001906",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "account",
+        "value": {
+          "type": "text",
+          "value": "Quill Education"
+        }
+      },
+      {
+        "field_id": "deal_amount",
+        "value": {
+          "type": "money",
+          "minor_units": "4800000",
+          "currency": "USD",
+          "minor_unit_exponent": 2
+        }
+      },
+      {
+        "field_id": "discount_pct",
+        "value": {
+          "type": "integer",
+          "value": "8",
+          "unit": "percent"
+        }
+      },
+      {
+        "field_id": "reason",
+        "value": {
+          "type": "text",
+          "value": "Multi-year renewal; synthetic only"
+        }
+      },
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "approved"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001900"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001901",
+    "work_id": "00000000-0000-4000-8000-000000001904",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "submit",
+    "idempotency_key": "00000000000000000000000000001900",
+    "payload_digest": "sha256:9985132b6717545d35f3a36968d248655cdff4307aed65ffc6e4b5e68a2c22b6",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001906",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001907",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

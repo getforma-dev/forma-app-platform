@@ -11,10 +11,20 @@
 //! holds only a reference to the caller's process-memory vault (D7.11).
 //!
 //! `TrustedRequest` is constructed here and nowhere else in production: from
-//! the session row, the member's *current* `membership_epoch` read under the
-//! `lock_member_authority` fence, the principal's registered provider
-//! identity and this process's registry identity. A `PreAccess` is a distinct
+//! the session row (or, APP-100, a live Slack link row:
+//! `resolve_slack_link`), the member's *current* `membership_epoch` read
+//! under the `lock_member_authority` fence, the principal's registered
+//! provider identity and this process's registry identity. A `PreAccess` is a distinct
 //! type with no conversion into a `TrustedRequest`.
+//!
+//! APP-099 (ADR-011 pitch): the second production constructor is
+//! [`Workspace::resolve_agent_token`], for an MCP client's bearer agent token
+//! (migration 0010). It is the session path's twin: the token is a capability
+//! of the same shape behind the `fmat_` prefix, found by its domain-separated
+//! digest, and becomes a `TrustedRequest` only under the same member fence,
+//! at the member's current epoch (which must still equal the epoch at
+//! minting), with a live entitlement, an active provider binding, the
+//! principal's registered identity and this process's registry identity.
 //!
 //! Lock order (D7.9): the member fence always precedes any session-row write;
 //! sign-out calls `advance_member_epoch` directly (it takes the member row
@@ -48,6 +58,10 @@ const SESSION_DOMAIN: &[u8] = b"forma:session-cookie:v1";
 const STATE_DOMAIN: &[u8] = b"forma:oauth-state:v1";
 const CONTEXT_DOMAIN: &[u8] = b"forma:prelogin-context:v1";
 const ADMISSION_PAYLOAD_DOMAIN: &[u8] = b"forma:admission-payload:v1";
+const AGENT_TOKEN_DOMAIN: &[u8] = b"forma:agent-token:v1";
+/// The visible prefix of every agent token (APP-099), so secret scanners and
+/// people recognize one; the rest is a session-shaped capability.
+pub const AGENT_TOKEN_PREFIX: &str = "fmat_";
 
 fn random<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0u8; N];
@@ -89,7 +103,7 @@ fn canonical_base64url(value: &str, bytes: usize) -> Option<Vec<u8>> {
     (raw.len() == bytes && URL_SAFE_NO_PAD.encode(&raw) == value).then_some(raw)
 }
 /// A fresh cookie capability for an organization (64 characters).
-fn capability(organization: &str) -> Result<String> {
+pub(super) fn capability(organization: &str) -> Result<String> {
     let organization = uuid_bytes(organization).ok_or(Error::Denied)?;
     let secret: [u8; 32] = random()?;
     let mut raw = [0u8; 48];
@@ -104,13 +118,33 @@ pub fn capability_organization(value: &str) -> Option<String> {
     valid_id(&organization).then_some(organization)
 }
 /// A fresh OAuth `state` (32 random bytes, 43 base64url characters).
-fn fresh_state() -> Result<String> {
+pub(super) fn fresh_state() -> Result<String> {
     Ok(URL_SAFE_NO_PAD.encode(random::<32>()?))
+}
+pub(super) fn fresh_uuid() -> Result<String> {
+    let mut bytes = random::<16>()?;
+    bytes[6] = (bytes[6] & 15) | 0x40;
+    bytes[8] = (bytes[8] & 63) | 0x80;
+    Ok(uuid_string(&bytes))
 }
 /// True for the exact shape of every 32-byte base64url capability this
 /// contract exchanges (our `state`, fAuth's code and refresh token).
 pub fn capability_shaped(value: &str) -> bool {
     canonical_base64url(value, 32).is_some()
+}
+/// A fresh agent token for an organization (APP-099): `fmat_` and a
+/// 64-character capability. Shown to its member once; only its digest is
+/// stored.
+pub(super) fn fresh_agent_token(organization: &str) -> Result<String> {
+    Ok(format!("{AGENT_TOKEN_PREFIX}{}", capability(organization)?))
+}
+/// The stored digest of an agent token.
+pub(super) fn agent_token_digest(token: &str) -> String {
+    digest(AGENT_TOKEN_DOMAIN, token)
+}
+/// The scope an agent token names, or None for anything malformed.
+pub fn agent_token_organization(token: &str) -> Option<String> {
+    capability_organization(token.strip_prefix(AGENT_TOKEN_PREFIX)?)
 }
 fn digest(domain: &[u8], value: &str) -> String {
     domain_digest(domain, value.as_bytes())
@@ -122,6 +156,15 @@ fn same(left: &str, right: &str) -> bool {
             .zip(right.bytes())
             .fold(0u8, |d, (a, b)| d | (a ^ b))
             == 0
+}
+
+/// A Slack team or user id as Slack issues them (uppercase letters and
+/// digits), mirrored by migration 0009's CHECKs.
+pub fn slack_id(value: &str) -> bool {
+    (1..=32).contains(&value.len())
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -279,6 +322,48 @@ pub enum Completion {
 pub struct Ended {
     pub organization: String,
     pub refresh_ref: String,
+}
+
+/// A live agent token (APP-099): the member's trusted request, which tools
+/// pass to the same storage operations the canvas routes call, and the
+/// token's identity and label for the log and the "via" chip. It grants
+/// nothing beyond the member's own request.
+pub struct AgentCaller {
+    pub request: TrustedRequest,
+    pub token_id: String,
+    pub label: String,
+    /// APP-115 (0013): the scope the member chose at minting; it only ever
+    /// narrows what the member may do through this token (`mcp::scope`).
+    pub scope: super::governance::AgentScope,
+}
+impl AgentCaller {
+    /// Test executable only: a caller for unit tests that never reach
+    /// storage (draft bookkeeping, JSON-RPC shape). Never compiled into a
+    /// release build.
+    #[cfg(test)]
+    pub(crate) fn for_tests(organization: &str, principal: &str, token_id: &str) -> Self {
+        Self {
+            request: TrustedRequest {
+                organization: organization.into(),
+                principal: principal.into(),
+                epoch: 1,
+                issuer: String::new(),
+                provider_tenant: String::new(),
+                provider_subject: String::new(),
+                registry_sha256: String::new(),
+            },
+            token_id: token_id.into(),
+            label: "Claude".into(),
+            scope: super::governance::AgentScope::default(),
+        }
+    }
+}
+impl fmt::Debug for AgentCaller {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AgentCaller")
+            .field("token_id", &self.token_id)
+            .finish_non_exhaustive()
+    }
 }
 
 pub enum Lookup<T> {
@@ -508,6 +593,12 @@ impl Workspace {
             let mut pending: Option<(String, i64)> = None;
             if let Some(reservation) = &flow.reservation {
                 let rows = transaction.query("SELECT pending_admission_id::text,floor(extract(epoch FROM expires_at))::bigint,outcome FROM genui_private.record_pending_admission($1::text::uuid,$2::text::uuid,$3,$4,$5)", &[&organization,&reservation,&nonmember.issuer,&nonmember.provider_tenant,&nonmember.provider_subject]).await?;
+                // APP-082: the signup callback holds the code row here (the
+                // definer took FOR UPDATE). The test executable can stop on
+                // that lock so a second public request is observed waiting,
+                // instead of racing by the clock. Production builds omit it.
+                #[cfg(test)]
+                transaction.lease.checkpoint("pending").await;
                 let row = rows.first().ok_or(Error::Denied)?;
                 let id = optional(row, 0)?;
                 let at: Option<i64> = row.try_get(1).map_err(|_| Error::Unavailable)?;
@@ -715,8 +806,9 @@ impl Workspace {
     /// for a seeded active member with an active entitlement, bypassing the
     /// provider exchange. Everything the route then does (`resolve_session`,
     /// the fence, the data role's command) is the production path. Never
-    /// compiled into a release build.
-    #[cfg(test)]
+    /// compiled into a release build; the local dev binary (feature
+    /// `dev-stand`, ADR-012 D12.1) mints its personas' sessions with it.
+    #[cfg(any(test, feature = "dev-stand"))]
     pub(crate) async fn mint_session_for_tests(
         &self,
         organization: &str,
@@ -805,6 +897,204 @@ impl Workspace {
         // D7.9: a lock wait on this cookie's own member row is a session-lookup
         // failure (uniform 404), not an outage; the aborted transaction is
         // rolled back either way.
+        let lock_wait = result.is_err() && transaction.lock_timed_out();
+        let finished = transaction.finish(result.is_ok()).await;
+        if lock_wait {
+            return Err(Error::Denied);
+        }
+        finished?;
+        result
+    }
+
+    /// APP-100 (ADR-011 pitch): the second `TrustedRequest` constructor, for
+    /// a Slack request from workspace `team` by Slack user `user` (both
+    /// already checked against Slack's request signature by the caller). Each
+    /// registry organization is scanned under its own scope (RLS) for an
+    /// unrevoked `genui.slack_links` row; a row admits only when, under the
+    /// member fence, the organization and membership are active, the
+    /// member's **current** epoch equals the epoch recorded at link time (a
+    /// sign-out or an operator revocation advanced it: the link has ended),
+    /// an entitlement is live, the principal's provider binding is active and
+    /// the registry agrees, exactly the session path's judgment. `None` for
+    /// no row, a stale or revoked row, or more than one organization
+    /// answering (an ambiguous Slack user is never guessed at). Nothing is
+    /// written. A lock wait is `Denied` as in `resolve_session`.
+    pub async fn resolve_slack_link(
+        &self,
+        team: &str,
+        user: &str,
+    ) -> Result<Option<TrustedRequest>> {
+        if !(slack_id(team) && slack_id(user)) {
+            return Ok(None);
+        }
+        let registry = &self.inner.registry;
+        let mut found = Vec::new();
+        for organization in registry.organizations() {
+            let transaction =
+                Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
+            let result = async {
+                let rows = transaction.query("SELECT l.principal_id::text,l.membership_epoch_at_link,p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=l.organization_id AND e.principal_id=l.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.slack_links l JOIN genui.principals p ON p.organization_id=l.organization_id AND p.principal_id=l.principal_id JOIN genui.memberships m ON m.organization_id=l.organization_id AND m.principal_id=l.principal_id WHERE l.organization_id=$1::text::uuid AND l.team_id=$2 AND l.slack_user_id=$3 AND l.revoked_at IS NULL", &[&organization,&team,&user]).await?;
+                let Some(row) = rows.first() else {
+                    return Ok(None);
+                };
+                let principal = text(row, 0)?;
+                let issuer = text(row, 2)?;
+                let provider_tenant = text(row, 3)?;
+                let (organization_active, member_active, epoch) =
+                    fence(&transaction, &organization, &principal, integer(row, 5)?).await?;
+                let valid = organization_active
+                    && member_active
+                    && epoch == integer(row, 1)?
+                    && boolean(row, 6)?
+                    && boolean(row, 7)?
+                    && registry.agrees(&issuer, &provider_tenant, &organization);
+                if !valid {
+                    return Ok(None);
+                }
+                Ok(Some(TrustedRequest {
+                    organization: organization.clone(),
+                    principal,
+                    epoch,
+                    issuer,
+                    provider_tenant,
+                    provider_subject: text(row, 4)?,
+                    registry_sha256: registry.identity.sha256.clone(),
+                }))
+            }
+            .await;
+            let lock_wait = result.is_err() && transaction.lock_timed_out();
+            let finished = transaction.finish(result.is_ok()).await;
+            if lock_wait {
+                return Err(Error::Denied);
+            }
+            finished?;
+            if let Some(request) = result? {
+                found.push(request);
+            }
+        }
+        Ok(if found.len() == 1 { found.pop() } else { None })
+    }
+
+    /// APP-100: the unrevoked Slack links of `organization`, as
+    /// `(team, slack user, principal)`, for the approver notifier. A listing
+    /// confers nothing: every use resolves the link again through
+    /// [`Workspace::resolve_slack_link`].
+    pub async fn slack_links(&self, organization: &str) -> Result<Vec<(String, String, String)>> {
+        let transaction = Transaction::begin_nonmember(&self.inner, Some(organization)).await?;
+        let result = async {
+            let rows = transaction.query("SELECT team_id,slack_user_id,principal_id::text FROM genui.slack_links WHERE organization_id=$1::text::uuid AND revoked_at IS NULL ORDER BY linked_at LIMIT 256", &[&organization]).await?;
+            rows.iter()
+                .map(|row| Ok((text(row, 0)?, text(row, 1)?, text(row, 2)?)))
+                .collect::<Result<Vec<_>>>()
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// APP-100: links Slack user `user` of workspace `team` to the member
+    /// behind `request` (a live workspace session, judged by the caller's
+    /// session resolution), in the member's own organization, at the member's
+    /// current epoch (re-read under the fence). A re-link of the same Slack
+    /// user in this organization replaces the earlier member and clears a
+    /// revocation. `Denied` for a member that is no longer current.
+    pub async fn link_slack(&self, request: &TrustedRequest, team: &str, user: &str) -> Result<()> {
+        require(slack_id(team) && slack_id(user))?;
+        let transaction = Transaction::begin(&self.inner, request).await?;
+        let result = async {
+            let (organization_active, member_active, epoch) =
+                fence(&transaction, &request.organization, &request.principal, request.epoch).await?;
+            require(organization_active && member_active && epoch == request.epoch)?;
+            transaction.query("INSERT INTO genui.slack_links(organization_id,link_id,principal_id,team_id,slack_user_id,membership_epoch_at_link,linked_at) VALUES ($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3,$4,$5::bigint,now()) ON CONFLICT (organization_id,team_id,slack_user_id) DO UPDATE SET principal_id=EXCLUDED.principal_id,membership_epoch_at_link=EXCLUDED.membership_epoch_at_link,linked_at=EXCLUDED.linked_at,revoked_at=NULL", &[&request.organization,&request.principal,&team,&user,&epoch]).await?;
+            Ok(())
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// APP-100 `/forma unlink`: revokes the link of `team`/`user` held by the
+    /// member behind `request` (resolved from that same link). Revoking only
+    /// takes authority away. `true` when a live link was revoked.
+    pub async fn unlink_slack(
+        &self,
+        request: &TrustedRequest,
+        team: &str,
+        user: &str,
+    ) -> Result<bool> {
+        require(slack_id(team) && slack_id(user))?;
+        let transaction = Transaction::begin(&self.inner, request).await?;
+        let result = async {
+            let rows = transaction.query("UPDATE genui.slack_links SET revoked_at=now() WHERE organization_id=$1::text::uuid AND team_id=$2 AND slack_user_id=$3 AND principal_id=$4::text::uuid AND revoked_at IS NULL RETURNING link_id::text", &[&request.organization,&team,&user,&request.principal]).await?;
+            Ok(!rows.is_empty())
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// Resolves an MCP client's bearer agent token (APP-099) into the
+    /// member's `TrustedRequest`, exactly as [`Workspace::resolve_session`]
+    /// resolves a cookie: the row by the digest under the token's scope, the
+    /// member fence at the current epoch, which must equal the epoch at
+    /// minting (a sign-out, sign-out-all or any operator epoch change ends
+    /// every token of the member), the token neither revoked nor past its
+    /// `expires_at` (0012: 30 days from minting), an active
+    /// organization and membership, a live entitlement, an active provider
+    /// binding, the principal's registered identity agreeing with this
+    /// process's registry and the registry identity at minting. `None` for
+    /// anything else (malformed, unknown, foreign, revoked, stale): the
+    /// caller answers the uniform 404 for all of them alike. A refused token
+    /// row is kept (its attributions keep their label); only `last_used_at`
+    /// is written, at most once a minute. A lock wait on the member's own row
+    /// is `Denied`, as for a session.
+    pub async fn resolve_agent_token(&self, token: &str) -> Result<Option<AgentCaller>> {
+        let Some(organization) = agent_token_organization(token) else {
+            return Ok(None);
+        };
+        let registry = &self.inner.registry;
+        let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
+        let result = async {
+            let rows = transaction.query(&format!("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,(t.revoked_at IS NULL AND t.expires_at>clock_timestamp()),(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active),{} FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", super::governance::SCOPE_COLUMNS), &[&organization,&agent_token_digest(token)]).await?;
+            let Some(row) = rows.first() else {
+                return Ok(None);
+            };
+            let token_id = text(row, 0)?;
+            let principal = text(row, 1)?;
+            let issuer = text(row, 7)?;
+            let provider_tenant = text(row, 8)?;
+            let (organization_active, member_active, epoch) =
+                fence(&transaction, &organization, &principal, integer(row, 10)?).await?;
+            let valid = boolean(row, 5)?
+                && organization_active
+                && member_active
+                && epoch == integer(row, 4)?
+                && boolean(row, 11)?
+                && boolean(row, 12)?
+                && text(row, 3)? == registry.identity.sha256
+                && registry.agrees(&issuer, &provider_tenant, &organization);
+            if !valid {
+                return Ok(None);
+            }
+            if boolean(row, 6)? {
+                transaction.query("UPDATE genui.agent_tokens SET last_used_at=now() WHERE organization_id=$1::text::uuid AND token_id=$2::text::uuid", &[&organization,&token_id]).await?;
+            }
+            Ok(Some(AgentCaller {
+                request: TrustedRequest {
+                    organization: organization.clone(),
+                    principal,
+                    epoch,
+                    issuer,
+                    provider_tenant,
+                    provider_subject: text(row, 9)?,
+                    registry_sha256: registry.identity.sha256.clone(),
+                },
+                token_id,
+                label: text(row, 2)?,
+                scope: super::governance::AgentScope::from_row(row, 13)?,
+            }))
+        }
+        .await;
         let lock_wait = result.is_err() && transaction.lock_timed_out();
         let finished = transaction.finish(result.is_ok()).await;
         if lock_wait {
@@ -918,6 +1208,22 @@ mod tests {
         assert!(capability_shaped(&state));
         assert!(!capability_shaped(&cookie));
         assert!(!capability_shaped(&state[..42]));
+    }
+
+    #[test]
+    fn agent_tokens_are_prefixed_capabilities_with_their_own_digest_domain() {
+        let token = fresh_agent_token(ORG).unwrap();
+        assert!(token.starts_with(AGENT_TOKEN_PREFIX) && token.len() == 69);
+        assert_eq!(agent_token_organization(&token).as_deref(), Some(ORG));
+        // The bare capability (a session cookie's shape) is not a token.
+        assert_eq!(agent_token_organization(&token[5..]), None);
+        assert_eq!(agent_token_organization(&format!("{token}A")), None);
+        assert_eq!(agent_token_organization("fmat_"), None);
+        assert_eq!(agent_token_organization(""), None);
+        let digest = agent_token_digest(&token);
+        assert!(digest_shaped(&digest) && !digest.contains(&token[5..21]));
+        assert_ne!(digest, super::digest(SESSION_DOMAIN, &token));
+        assert_ne!(digest, super::digest(SESSION_DOMAIN, &token[5..]));
     }
 
     #[test]

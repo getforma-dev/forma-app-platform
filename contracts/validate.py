@@ -36,7 +36,7 @@ VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FORMATS)
 # Edition impl-2026-10-29.2 adds normalized-rows (ADR-009 D9.3) and job-payload (genui.jobs.payload_digest, D9.4).
 DOMAINS = {name: f"forma:{name}:v1" for name in (
     "app-definition", "input-contract", "record-schema", "query", "query-receipt",
-    "command-payload", "source-binding", "result", "normalized-rows", "job-payload")}
+    "command-payload", "source-binding", "result", "normalized-rows", "job-payload", "record-components-receipt")}
 REGISTRY_EDITION = 1  # The operator and renderer registry edition every admitted definition names.
 MAX_RATIONAL_DIGITS = 38
 
@@ -209,7 +209,117 @@ def compatible(value, field):
     return all(value.get(k) == v for k, v in expected.items() if k != "type")
 
 
-def _definition(content):
+GUARD_ORDERED = ("integer", "decimal", "money", "date", "timestamp")
+
+
+def _guard(guard, fields):
+    """APP-107: a declared guard compares one field of the same record schema with a typed, non-null literal."""
+    field = fields.get(guard["field_id"])
+    require(field is not None, "unknown guard field")
+    require(guard["value"]["type"] != "null" and compatible(guard["value"], field), "guard value type/unit mismatch")
+    require(guard["comparison"] in ("eq", "ne") or field["value_type"]["type"] in GUARD_ORDERED, "guard comparison requires an ordered field")
+
+
+def guard_holds(guard, state):
+    """APP-107: a guard over a record state ({field_id: value}); an absent or null value never satisfies it."""
+    value = state.get(guard["field_id"])
+    if value is None or value["type"] == "null":
+        return False
+    literal = guard["value"]
+    if value["type"] in ("money",):
+        a, b = int(value["minor_units"]), int(literal["minor_units"])
+    elif value["type"] == "decimal":
+        a, b = int(value["coefficient"]), int(literal["coefficient"])
+    elif value["type"] == "integer":
+        a, b = int(value["value"]), int(literal["value"])
+    else:
+        a, b = value.get("value"), literal.get("value")
+    return {"eq": a == b, "ne": a != b, "lt": a < b, "lte": a <= b, "gt": a > b, "gte": a >= b}[guard["comparison"]]
+
+
+
+def _presentation(presentation, views):
+    sections = unique(presentation.get("sections", []), "id", "presentation section")
+    actions = unique(presentation.get("actions", []), "id", "presentation action")
+    placed = []
+    for section in sections.values():
+        placed.extend(section["components"])
+    require(len(placed) == len(set(placed)), "duplicate presentation component")
+    require(set(placed) <= views.keys(), "unknown presentation component")
+    action_targets = set()
+    dialogs = set()
+    for action in actions.values():
+        require(action["label"].strip() != "", "presentation action label is empty")
+        require(action["target"] in views, "unknown presentation action target")
+        key = (action["behavior"], action["target"])
+        require(key not in action_targets, "duplicate presentation action target")
+        action_targets.add(key)
+        if action["behavior"] == "dialog":
+            dialogs.add(action["target"])
+        elif sections:
+            require(action["target"] in placed, "navigation target is not placed")
+    if sections:
+        require(set(placed) | dialogs == views.keys(), "presentation must reach every view")
+
+
+
+RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
+
+def _record_component(view, inputs, records):
+    config = view.get("records")
+    require(isinstance(config, dict), "record component requires records configuration")
+    require("query" not in view and "command_id" not in view and "text" not in view, "record component cannot carry query, command or literal text")
+    required, optional = {
+        "records_list": ({"columns"}, {"limit", "order"}),
+        "record_summary": ({"measure"}, set()),
+        "record_trend": ({"measure", "date_field"}, set()),
+        "record_ranking": ({"measure", "group_field"}, {"limit"}),
+        "record_budget": ({"measure", "budget"}, set()),
+    }[view["kind"]]
+    common = {"version", "input_id", "schema_id"}
+    require(common | required <= config.keys() and config.keys() <= common | required | optional, "record component properties do not match kind")
+    source, schema = inputs.get(config["input_id"]), records.get(config["schema_id"])
+    require(source is not None and source["kind"] == "records" and schema is not None, "unknown records input or schema")
+    require(source["fields"] == schema["fields"], "records input and schema fields differ")
+    fields = {field["id"]: field for field in schema["fields"]}
+    for name in config.get("columns", []):
+        require(name in fields, "unknown record component field")
+    if "order" in config:
+        require(config["order"]["field"] in fields, "unknown record component order field")
+        require(fields[config["order"]["field"]]["value_type"]["type"] != "reference", "reference record ordering is not qualified")
+    measure = config.get("measure", {})
+    if measure.get("op") == "sum":
+        field = fields.get(measure["field"])
+        require(field is not None and field["value_type"]["type"] in ("integer", "money"), "record sum requires integer or money")
+    if "date_field" in config:
+        field = fields.get(config["date_field"])
+        require(field is not None and field["value_type"]["type"] == "date", "record trend requires date field")
+    if "group_field" in config:
+        field = fields.get(config["group_field"])
+        require(field is not None and field["value_type"]["type"] in ("text", "enum"), "record ranking requires text or enum field")
+    if view["kind"] == "record_ranking":
+        require(config.get("limit", 5) <= 20, "record ranking limit exceeds bound")
+    if view["kind"] == "record_budget":
+        require(measure.get("op") == "sum", "record budget requires money sum")
+        field = fields.get(measure.get("field"), {})
+        require(field.get("value_type", {}).get("type") == "money", "record budget requires money sum")
+
+def _record_filters(filters, views, inputs):
+    filters = unique(filters, "id", "record filter")
+    require(not (filters.keys() & views.keys()), "record filter id conflicts with view")
+    for item in filters.values():
+        source = inputs.get(item["input_id"])
+        require(source is not None and source["kind"] == "records", "record filter requires records input")
+        fields = {field["id"]: field for field in source["fields"]}
+        field = fields.get(item["field"])
+        required = {"text_contains": "text", "enum": "enum", "date_range": "date"}[item["kind"]]
+        require(field is not None and field["value_type"]["type"] == required, "record filter field type mismatch")
+        for target in item["targets"]:
+            view = views.get(target)
+            require(view is not None and view["kind"] in RECORD_KINDS and view["records"]["input_id"] == item["input_id"], "record filter target scope mismatch")
+
+
+def _definition(content, new_content=False):
     inputs = unique(content["inputs"], "id", "input id")
     for item in inputs.values():
         if "coverage" in item and item["kind"] == "records":
@@ -225,14 +335,47 @@ def _definition(content):
                 require(field["value_type"]["target_input"] in inputs, "unknown reference target")
     for command in commands.values():
         require(command["record_schema_id"] in records, "unknown record schema")
-        writable = record_fields[command["record_schema_id"]]
-        require(set(command["writable_fields"]) <= writable.keys(), "unknown writable field")
+        schema_fields = record_fields[command["record_schema_id"]]
+        require(set(command["writable_fields"]) <= schema_fields.keys(), "unknown writable field")
+        # APP-113 review: one declaration per (field, from, to); storage's rules would otherwise judge
+        # the duplicates' guards together (any of them holding lets the transition fire).
+        # Edition impl-2026-10-31.4: new content only (see `validate`); a stored definition keeps its verdict.
+        if new_content:
+            moves = [(t["field_id"], t["from"], t["to"]) for t in command["transitions"]]
+            require(len(set(moves)) == len(moves), "duplicate transition")
         for transition in command["transitions"]:
-            field = writable.get(transition["field_id"])
+            field = schema_fields.get(transition["field_id"])
             require(field is not None and field["value_type"]["type"] == "enum", "transition requires enum field")
             require(transition["field_id"] in command["writable_fields"], "transition field is not writable")
             require({transition["from"], transition["to"]} <= set(field["value_type"]["values"]), "unknown transition value")
+            if "when" in transition:
+                _guard(transition["when"], schema_fields)
+        # APP-107 amendment: the starting value of an enum field on a create, chosen by declared guards.
+        if "initial" in command:
+            require(command["operation"] == "create" and not command["transitions"], "initial values belong to a filing create")
+            for rule in command["initial"]:
+                field = schema_fields.get(rule["field_id"])
+                require(field is not None and field["value_type"]["type"] == "enum", "initial requires enum field")
+                require(rule["field_id"] in command["writable_fields"], "initial field is not writable")
+                require(rule["value"] in field["value_type"]["values"], "unknown initial value")
+                if "when" in rule:
+                    _guard(rule["when"], schema_fields)
+        # APP-113 review: a create that may write an enum field another command of the same record schema
+        # governs by declared transitions must declare that field's `initial` value, so no filing create
+        # starts a record at a decision outcome (storage refuses such a start for undeclared fields too).
+        # Edition impl-2026-10-31.4: new content only (see `validate`). A stored definition that predates the
+        # rule (beta's Expense claims revision sha256:d70710d3...) keeps its impl-2026-10-29.3 verdict; storage's
+        # command-time fence (`Declaration::decided`, `fence_starts`) refuses such a start for it instead.
+        if new_content and command["operation"] == "create" and not command["transitions"]:
+            governed = {t["field_id"] for other in commands.values() if other is not command
+                        and other["record_schema_id"] == command["record_schema_id"] for t in other["transitions"]}
+            declared = {rule["field_id"] for rule in command.get("initial", [])}
+            require(governed & set(command["writable_fields"]) <= declared, "create writing a governed enum field requires initial")
     for view in views.values():
+        if view["kind"] in RECORD_KINDS:
+            _record_component(view, inputs, records)
+            continue
+        require("records" not in view, "records configuration only belongs to record components")
         if view["kind"] == "form":
             require(view.get("command_id") in commands and "query" not in view, "form requires declared command without query")
         else:
@@ -296,20 +439,36 @@ def _definition(content):
     require(layout.keys() == views.keys(), "layout must name each view exactly once")
     for position in layout.values():
         require(position["column"] + position["width"] <= 12, "layout exceeds grid")
+    if "record_filters" in content:
+        _record_filters(content["record_filters"], views, inputs)
+    if "presentation" in content:
+        _presentation(content["presentation"], views)
     for link in content["links"]:
         require(link["from_view"] in views and link["to_view"] in views and link["input_id"] in inputs, "unknown link target")
 
 
-def validate(entity):
+def validate(entity, *, new_content=False):
+    """One contract document. `new_content=True` is the authoring verdict: it adds the edition impl-2026-10-31.4
+    definition rules for content being made now (APP-113: no duplicate (field, from, to) transition; a filing create
+    writing an enum field another command governs declares its `initial`). The default is the stored-document
+    verdict, unchanged from edition impl-2026-10-29.3, so a stored or retained document never changes verdict."""
     raw = canonical(entity)
     require(len(raw) <= 1024 * 1024, "document exceeds 1 MiB")
     errors = sorted(VALIDATOR.iter_errors(entity), key=lambda e: str(list(e.path)))
     if errors:
         raise ContractError("schema: " + errors[0].message)
     kind = entity["kind"]
-    if kind == "app_definition":
+    if kind == "record_components_receipt":
+        from record_components_contract import validate_semantics
+        try:
+            validate_semantics(entity)
+        except ValueError as exc:
+            raise ContractError(str(exc)) from exc
+        content = {key: value for key, value in entity.items() if key != "digest"}
+        require(entity["digest"] == digest("record-components-receipt", content), "record receipt digest mismatch")
+    elif kind == "app_definition":
         require(len(canonical(entity["content"])) <= 256 * 1024, "definition exceeds 256 KiB")
-        _definition(entity["content"])
+        _definition(entity["content"], new_content)
         require(entity["digest"] == digest("app-definition", entity["content"]), "definition digest mismatch")
     elif kind == "publication":
         if entity["schema_version"] == 2:
@@ -373,14 +532,14 @@ def validate(entity):
     return entity
 
 
-def validate_bundle(bundle):
-    """Cross-artifact consistency for one synthetic fixture, not live authority."""
+def validate_bundle(bundle, *, new_content=False):
+    """Cross-artifact consistency for one synthetic fixture, not live authority. `new_content` as in `validate`."""
     require(set(bundle) == {"context", "definition", "publication", "work", "sources", "receipt", "command", "outcome"}, "unexpected bundle members")
     context = bundle["context"]
     require(set(context) == {"organization_id", "principal_id"}, "invalid trusted fixture context")
     entities = [bundle[k] for k in ("definition", "publication", "work", "receipt", "command", "outcome")] + bundle["sources"]
     for item in entities:
-        validate(item)
+        validate(item, new_content=new_content)
         if "organization_id" in item:
             require(item["organization_id"] == context["organization_id"], "cross-organization reference")
     definition, pub, work = (bundle[k] for k in ("definition", "publication", "work"))
@@ -446,7 +605,12 @@ def validate_bundle(bundle):
     # Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record, or an
     # existing version only when its declaration has transitions and the command carries a declared transition's
     # target (storage requires that transition to fire from the current value; no command writes a no-op revision).
-    targets = {(t["field_id"], t["to"]) for t in declaration.get("transitions", [])}
+    # APP-113 review: a guarded transition fires only when its guard holds, as storage judges it on the
+    # composed record; the bundle carries only the command's values, so a guard is judged when its field
+    # is among them (a guard over a field the command does not write is storage's to judge).
+    supplied = {item["field_id"]: item["value"] for item in command["values"]}
+    targets = {(t["field_id"], t["to"]) for t in declaration.get("transitions", [])
+               if "when" not in t or t["when"]["field_id"] not in supplied or guard_holds(t["when"], supplied)}
     fires = any((item["field_id"], item["value"].get("value")) in targets for item in command["values"])
     existing = command["expected_record_version"] >= 1
     require(declaration["operation"] != "create" or not existing or fires,
@@ -456,6 +620,11 @@ def validate_bundle(bundle):
     for item in command["values"]:
         require(item["field_id"] in declaration["writable_fields"], "command field is not writable")
         require(compatible(item["value"], fields[item["field_id"]]), "command value type/unit mismatch")
+    if not existing and "initial" in declaration:
+        state = {item["field_id"]: item["value"] for item in command["values"]}
+        for field_id in dict.fromkeys(rule["field_id"] for rule in declaration["initial"]):
+            chosen = next((rule["value"] for rule in declaration["initial"] if rule["field_id"] == field_id and ("when" not in rule or guard_holds(rule["when"], state))), None)
+            require(chosen is not None and state.get(field_id) == {"type": "enum", "value": chosen}, "create must carry the declared initial value")
     require(command["expected_work_version"] == work["version"], "work version mismatch")
     require(outcome["payload_digest"] == payload_digest(command), "command payload mismatch")
     require(outcome["idempotency_key"] == command["idempotency_key"] and outcome["command_id"] == command["command_id"] and outcome["record_id"] == command["record_id"], "outcome command identity mismatch")

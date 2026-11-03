@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "observed_at_utc": "2026-11-01T21:47:52.706265+00:00",
+  "scope": "Actual registry read-back and completed Linux/ARM64 child scans; no activation or hosted acceptance assertion.",
+  "images": [
+    {
+      "image": "service",
+      "qualified_local_id": "sha256:e86e338bd55eaf50f3244a727ec1f86bf6e88f76dd75d8d8fb1b7e6d6088d8d6",
+      "registry_index": {
+        "media_type": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:e86e338bd55eaf50f3244a727ec1f86bf6e88f76dd75d8d8fb1b7e6d6088d8d6"
+      },
+      "linux_arm64_child": {
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:cd3f83b2d2223793db1d75691913017b916e4f67aea3355f66ff4ce68b01d539"
+      },
+      "configuration_digest": "sha256:b2529c515b3ea385043ac6f3d68c2ffcb8ee1b4cc97eb5c24bf201cfbefe7e7e",
+      "observed_index_matches_qualified_local_id": true,
+      "raw_index_and_child_hashes_verified": true,
+      "unique_linux_arm64_child_verified": true,
+      "actual_reviewed_change_set_uses_this_index": true,
+      "observed_at_utc": "2026-11-01T21:47:10.748599+00:00",
+      "scan_status": "COMPLETE",
+      "severity_counts": {
+        "CRITICAL": 0,
+        "HIGH": 11,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "finding_comparison": {
+        "prior_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+        "prior_total": 24,
+        "current_total": 24,
+        "introduced": 0,
+        "removed": 0,
+        "exact_multiset_equal": true,
+        "identity_fields": [
+          "vulnerability_name",
+          "severity",
+          "package_name",
+          "package_version"
+        ],
+        "canonical_sorted_array_sha256": "68f8f306caab9cda9048cf834464913ed3e717de4c2ba28f72d9527a1f87ed33"
+      }
+    },
+    {
+      "image": "qualification",
+      "qualified_local_id": "sha256:89c833dddc68575e19595b1b0f785875de4f4e7f5f04a3b0545df5e7798e6141",
+      "registry_index": {
+        "media_type": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:89c833dddc68575e19595b1b0f785875de4f4e7f5f04a3b0545df5e7798e6141"
+      },
+      "linux_arm64_child": {
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:f1753d65b5b0c60a41ab18d6cefd9c46a3899b74c5453700248522eeb4ea1521"
+      },
+      "configuration_digest": "sha256:f220a970e2c593dbbee8b9092150f0dcff236968c55e90429f9c5851f28fce92",
+      "observed_index_matches_qualified_local_id": true,
+      "raw_index_and_child_hashes_verified": true,
+      "unique_linux_arm64_child_verified": true,
+      "actual_reviewed_change_set_uses_this_index": true,
+      "observed_at_utc": "2026-11-01T21:47:49.183127+00:00",
+      "scan_status": "COMPLETE",
+      "severity_counts": {
+        "CRITICAL": 0,
+        "HIGH": 11,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "finding_comparison": {
+        "prior_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+        "prior_total": 24,
+        "current_total": 24,
+        "introduced": 0,
+        "removed": 0,
+        "exact_multiset_equal": true,
+        "identity_fields": [
+          "vulnerability_name",
+          "severity",
+          "package_name",
+          "package_version"
+        ],
+        "canonical_sorted_array_sha256": "68f8f306caab9cda9048cf834464913ed3e717de4c2ba28f72d9527a1f87ed33"
+      }
+    },
+    {
+      "image": "operator",
+      "qualified_local_id": "sha256:7756df219fe58c6b69e8108ef2f990817143105a94d24f85b3cf6f3f15396b56",
+      "registry_index": {
+        "media_type": "application/vnd.oci.image.index.v1+json",
+        "digest": "sha256:7756df219fe58c6b69e8108ef2f990817143105a94d24f85b3cf6f3f15396b56"
+      },
+      "linux_arm64_child": {
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:a6b8eb6645d46e6ecccd2598719a9bdb98ca5b68c35fde3975d74991b189573a"
+      },
+      "configuration_digest": "sha256:4de0c60e257c0e27f783abdf8066f62f632dff7ee688285180578acf10dbf535",
+      "observed_index_matches_qualified_local_id": true,
+      "raw_index_and_child_hashes_verified": true,
+      "unique_linux_arm64_child_verified": true,
+      "actual_reviewed_change_set_uses_this_index": true,
+      "observed_at_utc": "2026-11-01T21:43:30.591716+00:00",
+      "scan_status": "COMPLETE",
+      "severity_counts": {
+        "CRITICAL": 0,
+        "HIGH": 11,
+        "MEDIUM": 10,
+        "LOW": 3
+      },
+      "finding_comparison": {
+        "prior_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+        "prior_total": 24,
+        "current_total": 24,
+        "introduced": 0,
+        "removed": 0,
+        "exact_multiset_equal": true,
+        "identity_fields": [
+          "vulnerability_name",
+          "severity",
+          "package_name",
+          "package_version"
+        ],
+        "canonical_sorted_array_sha256": "68f8f306caab9cda9048cf834464913ed3e717de4c2ba28f72d9527a1f87ed33"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "role": "private comparison of all three completed scans",
+      "name": "registry-scan-comparison.json",
+      "bytes": 5155,
+      "sha256": "c8ee9c4cc2745f9ee2e57809fabb40a7379644dcae40bd0987d1cce8ea89ae34"
+    },
+    {
+      "role": "service current completed scan, with raw index and child manifests",
+      "name": "ecr-scan-service-20261101T214710Z.json",
+      "bytes": 46478,
+      "sha256": "5a1cd41053c284cc1cac1ad57a130104431631affd310b0bc16590dd5d230e3c"
+    },
+    {
+      "role": "service previous completed scan",
+      "name": "ecr-scan-service-20261101T192832Z.json",
+      "bytes": 46478,
+      "sha256": "d8f9c8f5e67f2d15dcce333f0f664c14fc5edeb069363f3a71d8b033fde255b7"
+    },
+    {
+      "role": "qualification current completed scan, with raw index and child manifests",
+      "name": "ecr-scan-qualification-20261101T214748Z.json",
+      "bytes": 45886,
+      "sha256": "cce8e22756e4bac6831ca46cd4110280c49ea053c0226ee652216b52fde7baea"
+    },
+    {
+      "role": "qualification previous completed scan",
+      "name": "ecr-scan-qualification-20261101T193607Z.json",
+      "bytes": 45886,
+      "sha256": "db8b4f98f4a8def25959d4201ab212e1b48816099233a7cd754c62ab3f6d48e0"
+    },
+    {
+      "role": "operator current completed scan, with raw index and child manifests",
+      "name": "ecr-scan-operator-20261101T214329Z.json",
+      "bytes": 47290,
+      "sha256": "a614db202245daf1895c38c517bc711a19d09567bd6094fe02576759cddf94e4"
+    },
+    {
+      "role": "operator previous completed scan",
+      "name": "ecr-scan-operator-20261101T193845Z.json",
+      "bytes": 47290,
+      "sha256": "dfa45f8fa7ed824400a0b2f2647ce3d2c7bedde953db0440101f13f4555984fb"
+    }
+  ],
+  "limits": [
+    "Local image inspection alone does not establish registry identity. Actual registry raw manifest hashes separately establish the observed index, ARM64 child and configuration relationship.",
+    "The qualified local IDs equal the observed OCI index digests in this build; this is an observed relationship, not a general statement that Docker image IDs are registry indexes.",
+    "Each image retains 24 previously reviewed vendor-open findings (11 High, 10 Medium, 3 Low); no vulnerability-free claim is made.",
+    "All current finding multisets exactly match the respective prior711 scans. Completed scans and a reviewed change set do not establish successful deployment."
+  ]
+}

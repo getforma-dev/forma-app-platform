@@ -1,49 +1,63 @@
 # Forma app platform
 
-**License:** All rights reserved; see [LICENSE](LICENSE). This repository is temporarily public only so that GitHub Actions can run during deployment; no permission to use, copy or modify it is granted, and it returns to private afterwards.
+Teams describe, run, adapt and share apps on a canvas, with governed data, receipts and explicit audited commands. This repository owns the application built on Forma Stack: Rust/FMIR SSR, registered canvas islands, PostgreSQL and confined query/parser children.
 
-**October 29 transfer:** start with [the GenUI Claude handoff](CLAUDE-HANDOFF.md). Execution is being wound down at Victor's request; Phase1 is incomplete and the proposed hosted-auth window was withdrawn. The handoff identifies the separate FormaStack/fAuth owner and the unaccepted managed-entry draft.
+**Start with [DEVELOPMENT.md](docs/DEVELOPMENT.md)** for setup, local instances, checks, the module map and the path from a change to beta. The trunk is `main`. A reviewed merge prepares the beta deploy and waits for one approval ([ADR-019](docs/architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)).
 
-The company app platform built on Forma Stack: teams create, run, adapt and share their own apps. Northstar and Spend Review prove the same platform through two different workflows.
+**License:** All rights reserved; see [LICENSE](LICENSE). The repository was made temporarily public for GitHub Actions during the deployment work. That grants no permission to use, copy or modify it; returning it to private remains part of the delivery follow-up.
 
-**Phase 1 is underway — October 28, 2026.** APP-001–005 and APP-007 are complete: published Forma **3.2.0**, locked data contracts, and native canvas/parser/query qualifications. APP-007 has retained [managed foundation evidence](evidence/APP-007/managed/README.md): real RDS migration and role denials, two-tenant S3/KMS isolation, TLS, credential refresh and negative-path refusals, snapshot restore, scheduled service stop and recovery of the qualified initial baseline. The final inventory records every observed task stopped. Independent acceptance and all eight [final source CI checks](evidence/APP-007/managed/ci.json) pass at `b925600`, landed on main. The [live board](Tickets/TRACKER.md) records actual review/completion state. Hosted authentication, application tenant/RLS authorization, invite admission and the integrated saved workflow remain open.
+## Run locally
 
-## Start here
-
-1. [Six-phase roadmap](docs/planning/ROADMAP.md), [phase board](Tickets/PHASES.md), and [quality gates](docs/planning/QUALITY-GATES.md)
-2. [Ticket board](Tickets/TRACKER.md), [sprints](Tickets/SPRINTS.md), [categories](Tickets/CATEGORIES.md), and [FormaStack blockers](Tickets/BLOCKERS.md)
-3. [First session](docs/planning/START-HERE.md)
-4. [Design source guide](docs/planning/SOURCE-GUIDE.md) and [framework baseline](docs/architecture/FRAMEWORK-BASELINE.md)
-5. [Existing related work](docs/planning/EXISTING-WORK.md) and [open decisions](docs/planning/DECISIONS-AND-RISKS.md)
-6. [Phase 2 handoff checklist](docs/planning/PHASE-2-HANDOFF.md) — pending full Phase 1 acceptance
-
-The ticket Markdown files in `Tickets/` are the source of truth. Each of the 74 tickets belongs to one of six phases. Tickets have dependencies, scope, acceptance checks and verification evidence; each phase also requires a reviewed completion gate. `APP-NNN` identifies this application's work; existing `FORMA-NNN` tickets retain their upstream owners. GitHub hosts the private repository; there is no duplicate GitHub Issues board.
-
-## Workspace map
-
-| Folder | Purpose |
-|---|---|
-| `design/` | Frozen platform and Northstar packets, PDFs, diagrams, source material and reviews; checksummed provenance |
-| `Tickets/` | Familiar status folders, ordered tracker, phase/sprint/category views and requirement coverage |
-| `docs/planning/` | Roadmap, pickup instructions, dependencies, decisions and verification gates |
-| `docs/architecture/` | Current implementation baseline and design reconciliation |
-| `contracts/` | Locked schema/encoding edition, synthetic fixtures and cross-language vectors |
-| `spikes/` | Reproducible released-baseline, WASM parser and confined query qualifications |
-| `app/` | Minimal native SSR Rust/browser scaffold, role configuration, migration and managed-check helpers |
-| `infra/` | Pinned TypeScript AWS CDK for the isolated GenUI synthetic environment |
-| `fixtures/` | Entry point for later integrated synthetic acceptance inputs |
-| `evidence/` | Actual checks, failures, reviews, source identities and operational records |
-| `.github/` | Ticket-specific qualification CI and pull request template |
-
-The bounded synthetic environment has been deployed for APP-007 trials at `beta.getforma.dev`. Its [observed configuration](evidence/APP-007/managed/configuration-inventory.json) records private encrypted PostgreSQL 16.13, separate role/key identities and the 2-vCPU/8-GiB ARM64 task configuration. [Public-surface checks](evidence/APP-007/managed/public-surface.json) observed inert pages/readiness and refused representative unavailable application/auth routes; they do not establish signup or application access. The [final operating receipt](evidence/APP-007/managed/final-operating-state.json) records zero service tasks and all ten observed tasks stopped at 01:04 UTC on October 29. Retained RDS/ALB/key/storage resources remain billable; the service stays stopped until another reviewed activation. The [environment plan](docs/planning/SYNTHETIC-ENVIRONMENT.md) and [cost record](docs/planning/SYNTHETIC-ENVIRONMENT-COST.md) capture the $100 monthly project limit and $97.49 reservation, not an invoice or hard billing cap. At Victor’s separate request, unused GateWasm application resources were [torn down](evidence/APP-007/gatewasm-teardown.md); the [FormaStack handoff](docs/planning/CROSS-TEAM-HANDOFF.md) records rebuild prerequisites and team boundaries.
-
-## Check the preparation
-
-Python 3.10+ is sufficient for board checks. Runtime/qualification toolchains and exact commands are documented in each ticket’s owning directory; board checks do not replace them.
+From the checkout root, with the tools in [tools.versions](tools.versions) installed:
 
 ```sh
-python3 Tickets/_tools/board.py check
-python3 Tickets/_tools/board.py next
+just setup
+just doctor
+just dev -d
 ```
 
-After editing or moving a ticket, run `python3 Tickets/_tools/board.py render`, then `check`. See [contributing](CONTRIBUTING.md). Capacity and start dates will be set when implementation starts; sprint numbers are an order, not delivery promises.
+Pitch personas are [Diego on 4001](http://127.0.0.1:4001/canvas), [Sarah on 4002](http://127.0.0.1:4002/canvas) and [Priya on 4003](http://127.0.0.1:4003/canvas) in the main checkout. `just dev clean -d` starts [Alex on 4010](http://127.0.0.1:4010/canvas) as a new customer. A worktree receives its own ports; `just status` prints them. Both profiles keep their data across restarts. See the developer guide before resetting or cleaning an instance.
+
+## Current work and delivery
+
+The latest entry decision is [ADR-016](docs/architecture/ADR-016-WORKSPACE-SIGNIN.md): preserve the existing trial and add workspace name/link entry with an explicit switch control. [APP-162](Tickets/4-done/APP-162.md) implements that first slice; verified-email discovery, authenticated switching and actual workspace-aware invitation delivery remain distinct follow-ups in APP-163–165. The workspace-entry release is deployed as `7c3ab12`; see the [release evidence](evidence/APP-162/aws-workspace-entry-2026-11-02/README.md).
+
+The November 1 [clean first-run decision](docs/planning/first-run/README.md) supersedes the seeded November 2 rehearsal: invite a new member into an empty organization, create one app, save a real record, and share with a recipient who signs up from that share. Only the recording has a three-minute cap. Synthetic input data is allowed; ingestion, admission, persistence, identity and sharing must be real.
+
+Read the [November 1 review](docs/planning/PIVOT-REVIEW-2026-11-01.md) for the design history, Grok PR inventory, fixes and remaining delivery gaps, then [DIRECTION.md](docs/planning/DIRECTION.md) for implementation order. The [MVP gap completion record](docs/planning/MVP-GAPS-2026-11-01.md) tracks templates, complete app documents, contextual Ask and the real hosted signup trial, including remaining external acceptance. PR 31 merged the completed template/layout/document/Ask source with exact-head checks passing and supplied the initial clean activation. The later [shared authentication repair](evidence/APP-140/shared-auth-fix-1d88470/README.md), candidate `1d88470`, supplied the recipient-entry fix; the [composed-app release](evidence/APP-140/composed-app-release-2026-11-02/README.md), candidate `9ee4a01`, delivered the app features retained by the current workspace-entry release `7c3ab12`. The real owner has now completed provider verification/sign-in, empty-workspace creation, one saved record, a pending private share and contextual Ask; [hosted evidence](evidence/APP-139/hosted-owner-2026-11-01/README.md) retains those results. [Real recipient registration](evidence/APP-139/hosted-guest-entry-2026-11-01/README.md) now returns with product email verification pending; verified guest sign-in, explicit app acceptance and the final recording remain open. The [product guide](docs/pitch/GUIDE.md), [canvas rules](docs/pitch/CANVAS-RULES.md), [pitch script](docs/pitch/PITCH-SCRIPT.md) and [recording checklist](docs/pitch/RECORDING.md) retain the seeded rehearsal; use the [clean recording outline](docs/planning/first-run/RECORDING.md) for the current trial.
+
+Beta and local source are separate states. The latest **recorded** beta deploy is `7c3ab123f524c4e9a7b855be0a2f582c626341ae`, application TaskDefinition 16 and broker TaskDefinition 4 with schema 19, activated November 2 at 03:29:22 UTC. Both services are healthy at desired/running/pending 1/1/0; all five TLS probes and readiness passed. [Workspace-entry release evidence](evidence/APP-162/aws-workspace-entry-2026-11-02/README.md) and [RELEASES.md](docs/pitch/RELEASES.md) record the exact candidate, PR 39 merge, qualifications and retained trial identity. Use `forma-trial` at [Sign in](https://beta.getforma.dev/signin), or its [direct link](https://beta.getforma.dev/signin/forma-trial). This release performs no migration, tenant recreation, account reset or invitation replay. The earlier [genuine owner journey](evidence/APP-140/composed-app-release-2026-11-02/README.md) remains evidence for `9ee4a01`; it is not represented as a new credential-login test after this rollout. A production environment does not yet exist; the `getforma.dev` website on OVH is separate.
+
+The [October 31 continuation record](docs/planning/CONTINUATION-2026-10-31.md) preserves the pre-pivot backlog; the November 1 direction controls the current trial. [APP-007 foundation evidence](evidence/APP-007/managed/README.md) preserves an earlier stage; its stopped-service and incomplete-runtime observations are historical, not the current operating instructions. The pitch does not close the unfinished [Phase 1 gate](evidence/phases/PH01/GATE.md) or later platform obligations.
+
+The later [app composition decision](docs/architecture/ADR-015-COMPOSED-APP-PRESENTATION.md) treats cards as components of one coherent web app, with reusable button-to-component actions, persisted themes and real record dashboards. [APP-155–161](Tickets/sprints/S15.md) track this follow-through and a future sleep/wake investigation separately from the November 2 trial. APP-155–160 have implemented, locally qualified behavior merged in [PR 38](https://github.com/getforma-dev/forma-app-platform/pull/38) and deployed as `9ee4a01`; see the [implementation record](docs/planning/COMPOSED-APP-IMPLEMENTATION-2026-11-01.md). Formal Backlog status preserves predecessor and unproved acceptance gates; it does not mean this code is still planned. Manual screen-reader coverage, the genuine recipient continuation and the final recording remain open. APP-161 sleep/wake remains future work.
+
+## Find the owner
+
+| Area | Start here |
+| --- | --- |
+| Setup, commands, state, agents and delivery | [DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+| Rust modules and dependency debt | [MODULE-MAP.md](docs/architecture/MODULE-MAP.md) |
+| Work and acceptance | [Ticket board](Tickets/TRACKER.md), [board guide](Tickets/README.md), [phase gates](docs/planning/QUALITY-GATES.md) |
+| Architecture and design precedence | [ADRs](docs/architecture), [source guide](docs/planning/SOURCE-GUIDE.md), [framework baseline](docs/architecture/FRAMEWORK-BASELINE.md) |
+| Framework/fAuth integration | [Cross-team handoff](docs/planning/CROSS-TEAM-HANDOFF.md), [upstream blockers](Tickets/BLOCKERS.md) |
+| Deferred platform work | [APP-097](Tickets/0-backlog/APP-097.md), [roadmap](docs/planning/ROADMAP.md), [phase board](Tickets/PHASES.md) |
+
+`app/` owns the application, `parser/` the separately built parser, `infra/` and `ops/beta/` delivery, `contracts/` the locked schemas and vectors, and `scripts/dev/` the local recipes. `design/` and `evidence/` retain source history and measured results; they are not disposable scratch. The root Cargo workspace includes `app` and the auth verifier in `spikes/APP-006`; builds go to root `target/`.
+
+## Check a change
+
+```sh
+just check
+just campaigns
+just campaign command
+```
+
+The developer guide explains focused checks, `just ci` and the remote workflows. Ticket Markdown under status folders is authoritative; there is no duplicate GitHub Issues board. After a ticket change, regenerate and validate its derived views:
+
+```sh
+python3 Tickets/_tools/board.py render
+python3 Tickets/_tools/board.py check
+```
+
+Board checks validate planning, links and frozen design hashes; they do not prove application acceptance. See [CONTRIBUTING.md](CONTRIBUTING.md) for the review and evidence rules.

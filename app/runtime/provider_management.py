@@ -1,8 +1,10 @@
 """fAuth management client and private invitation-capability custody for the operator channel.
 
 APP-073 acceptance 6 and 7; ADR-003 §Proposed confidential provider handoff;
-ADR-007 D7.19. Used only by admission_operator.py, never by an HTTP, application
-or signup path, and not packaged in the runtime image.
+ADR-007 D7.19. Used by admission_operator.py and the separately isolated named
+sharing invitation broker. Never imported by the application process or
+packaged in the application runtime image. The broker reuses transport only,
+without access to the ordinary membership invitation capability store.
 
 Consumed contract (merged, hash-bound under evidence/APP-006/upstream-auth-source/
 merged-contract-2026-10-29/; source read at gatewasm 1bf5d3b2fb515c8ed82b0c5a044f7846915e28d0,
@@ -35,7 +37,7 @@ FormaStack's own tenant-scoped management secret (for Northstar
 `fauth-beta/management/northstar`, JSON `{tenant_id, management_key}`), which
 the stack attaches by ARN (parameter ProviderManagementSecretArn, approval A12)
 and never copies: ECS injects its two JSON keys into the operator container
-alone, as GENUI_PROVIDER_MANAGEMENT_SECRET_KEY and
+(and the separately authorized broker task for a clean trial), as GENUI_PROVIDER_MANAGEMENT_SECRET_KEY and
 GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID, beside the non-secret
 GENUI_PROVIDER_MANAGEMENT_URL (parameter ProviderManagementUrl). All three or
 none; the plain variables never appear beside them; the injected tenant must be
@@ -206,7 +208,7 @@ def management_configuration(environ):
     return {"url": present[ENV_MANAGED_URL], "management_key": present[ENV_MANAGED_KEY], "tenant_id": present[ENV_MANAGED_TENANT]}
 
 
-def load_config(environ, required, secret_id=None):
+def load_config(environ, required, secret_id=None, *, capability_store_required=True):
     """None when no provider variable is set and none is required; otherwise all of them, validated,
     with the capability secret (a provider configuration without one is incomplete)."""
     require(ENV_RETIRED_CAPABILITY_DIR not in environ, "provider_capability_directory_retired")
@@ -223,7 +225,10 @@ def load_config(environ, required, secret_id=None):
         require(not required, "provider_configuration_missing")
         return None
     require(ENV_URL in present and (ENV_KEY in present or ENV_KEY_FILE in present), "provider_configuration_incomplete")
-    store = load_store(environ, secret_id, required=True)
+    # The isolated named-share broker uses the provider transport only. Its
+    # separately validated durable state is not an admission capability map.
+    # All existing operator callers retain the mandatory store by default.
+    store = load_store(environ, secret_id, required=capability_store_required)
     try:
         url = urlsplit(present[ENV_URL])
         port = url.port

@@ -282,6 +282,8 @@ pub struct RecordCommand {
     pub writable_fields: Vec<String>,
     /// The declared transitions, `(field_id, from, to)`.
     pub transitions: Vec<(String, String, String)>,
+    /// APP-107: the declared guards and initial values (`storage::rules`).
+    pub rules: super::rules::Rules,
 }
 /// A record read back for its page: current version (0 when absent), its
 /// fields and the commands its schema declares.
@@ -322,32 +324,54 @@ fn require_stored(condition: bool) -> Result<()> {
         Err(Error::Unavailable)
     }
 }
-fn decode_stored(row: &Row, index: usize) -> Result<Value> {
+pub(super) fn decode_stored(row: &Row, index: usize) -> Result<Value> {
     let bytes: Vec<u8> = row.try_get(index).map_err(|_| Error::Unavailable)?;
     require_stored(bytes.len() <= MAX_CANONICAL_BYTES)?;
     admission::decode(&bytes).map_err(|_| Error::Unavailable)
 }
 
 /// A field of the published record schema.
-struct FieldSpec {
-    id: String,
-    value_type: Value,
-    nullable: bool,
+pub(super) struct FieldSpec {
+    pub(super) id: String,
+    pub(super) value_type: Value,
+    pub(super) nullable: bool,
 }
 /// A declared command of the published definition.
-struct Declaration {
-    operation: String,
-    writable: Vec<String>,
-    /// `(field_id, from, to)`.
-    transitions: Vec<(String, String, String)>,
+pub(super) struct Declaration {
+    pub(super) operation: String,
+    pub(super) writable: Vec<String>,
+    /// APP-107: the declared transitions with their guards, and the initial
+    /// values (the one parse of `transitions` and `initial`).
+    pub(super) rules: super::rules::Rules,
+    /// APP-113 review (storage 2): `(field_id, value)` pairs this command
+    /// may not create a record at: every declared transition target of
+    /// another command of the same record schema, on a field this command
+    /// declares no `initial` value for. A filing create therefore never
+    /// writes a decision outcome (an expense `submit` cannot file a claim as
+    /// `approved`); a declared `initial` (Deal desk's guarded auto-approval)
+    /// governs its field instead.
+    pub(super) decided: Vec<(String, String)>,
+}
+impl Declaration {
+    /// The declared transitions `(field_id, from, to)`, in declaration order.
+    pub(super) fn transitions(&self) -> Vec<(String, String, String)> {
+        self.rules
+            .transitions
+            .iter()
+            .map(|(field, from, to, _)| (field.clone(), from.clone(), to.clone()))
+            .collect()
+    }
+    pub(super) fn has_transitions(&self) -> bool {
+        !self.rules.transitions.is_empty()
+    }
 }
 /// The published definition's record schema `schema` at `version` and the
 /// commands declared on it (stored content is admitted content: a shape that
 /// does not parse is unavailability).
-struct Published {
-    definition_digest: String,
-    fields: Vec<FieldSpec>,
-    commands: BTreeMap<String, Declaration>,
+pub(super) struct Published {
+    pub(super) definition_digest: String,
+    pub(super) fields: Vec<FieldSpec>,
+    pub(super) commands: BTreeMap<String, Declaration>,
 }
 
 fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
@@ -359,7 +383,38 @@ fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
         .collect()
 }
 
-async fn published(
+/// Sets every command's `decided` (see `Declaration::decided`): the other
+/// commands' transition targets on the fields it declares no `initial` for.
+fn fence_starts(commands: &mut BTreeMap<String, Declaration>) {
+    let targets: Vec<(String, String, String)> = commands
+        .iter()
+        .flat_map(|(id, declaration)| {
+            declaration
+                .rules
+                .transitions
+                .iter()
+                .map(move |(field, _, to, _)| (id.clone(), field.clone(), to.clone()))
+        })
+        .collect();
+    for (id, declaration) in commands.iter_mut() {
+        let initial: Vec<String> = declaration
+            .rules
+            .initial_fields()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let mut decided: Vec<(String, String)> = targets
+            .iter()
+            .filter(|(owner, field, _)| owner != id && !initial.contains(field))
+            .map(|(_, field, to)| (field.clone(), to.clone()))
+            .collect();
+        decided.sort();
+        decided.dedup();
+        declaration.decided = decided;
+    }
+}
+
+pub(super) async fn published(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -369,7 +424,20 @@ async fn published(
 ) -> Result<Published> {
     let rows = transaction.query("SELECT p.definition_revision_id::text,p.definition_digest::text,d.canonical_content FROM genui.publications p JOIN genui.definition_revisions d ON d.organization_id=p.organization_id AND d.app_id=p.app_id AND d.revision_id=p.definition_revision_id WHERE p.organization_id=$1::text::uuid AND p.app_id=$2::text::uuid AND p.publication_id=$3::text::uuid", &[&organization,&app,&publication]).await?;
     let row = rows.first().ok_or(Error::Denied)?;
-    let content = decode_stored(row, 2)?;
+    let content: Vec<u8> = row.try_get(2).map_err(|_| Error::Unavailable)?;
+    published_content(&content, text(row, 1)?, schema, version)
+}
+
+/// [`published`] over the publication's stored definition bytes and digest
+/// already read (the canvas batch reads them once per work).
+pub(super) fn published_content(
+    content: &[u8],
+    definition_digest: String,
+    schema: &str,
+    version: i64,
+) -> Result<Published> {
+    require_stored(content.len() <= MAX_CANONICAL_BYTES)?;
+    let content = admission::decode(content).map_err(|_| Error::Unavailable)?;
     let schemas = content
         .get("record_schemas")
         .and_then(Value::as_array)
@@ -412,21 +480,6 @@ async fn published(
             .get("id")
             .and_then(Value::as_str)
             .ok_or(Error::Unavailable)?;
-        let transitions = declared
-            .get("transitions")
-            .and_then(Value::as_array)
-            .ok_or(Error::Unavailable)?
-            .iter()
-            .map(|t| {
-                let part = |key: &str| -> Result<String> {
-                    Ok(t.get(key)
-                        .and_then(Value::as_str)
-                        .ok_or(Error::Unavailable)?
-                        .to_owned())
-                };
-                Ok((part("field_id")?, part("from")?, part("to")?))
-            })
-            .collect::<Result<Vec<_>>>()?;
         commands.insert(
             id.to_owned(),
             Declaration {
@@ -436,19 +489,21 @@ async fn published(
                     .ok_or(Error::Unavailable)?
                     .to_owned(),
                 writable: string_list(declared.get("writable_fields"))?,
-                transitions,
+                rules: super::rules::Rules::from_declaration(declared).ok_or(Error::Unavailable)?,
+                decided: Vec::new(),
             },
         );
     }
+    fence_starts(&mut commands);
     Ok(Published {
-        definition_digest: text(row, 1)?,
+        definition_digest,
         fields,
         commands,
     })
 }
 
 /// The work's collection of `schema` at `version`.
-async fn collection(
+pub(super) async fn collection(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -462,7 +517,7 @@ async fn collection(
 }
 
 /// The record's current version (0 when absent) and state.
-async fn current_state(
+pub(super) async fn current_state(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -528,7 +583,7 @@ async fn stored_outcome(
 }
 
 /// The saved work's pin, as the work fence sees it.
-async fn work_pin(
+pub(super) async fn work_pin(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -547,7 +602,7 @@ async fn work_pin(
 /// `lock_work_revision` with the caller's premise: `Ok(true)` when the work
 /// pins exactly that publication and version (and is now `FOR SHARE`
 /// locked), `Ok(false)` when the premise has moved.
-async fn work_fence(
+pub(super) async fn work_fence(
     transaction: &Transaction<'_>,
     organization: &str,
     app: &str,
@@ -572,13 +627,6 @@ fn integer_text(value: Option<&Value>) -> bool {
             && digits.bytes().all(|b| b.is_ascii_digit())
             && (digits == "0" && !s.starts_with('-') || !digits.starts_with('0'))
     })
-}
-fn fixed_digits(value: &str, pattern: &str) -> bool {
-    value.len() == pattern.len()
-        && value.bytes().zip(pattern.bytes()).all(|(v, p)| match p {
-            b'9' => v.is_ascii_digit(),
-            _ => v == p,
-        })
 }
 fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
     object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k))
@@ -629,14 +677,17 @@ fn compatible(value: &Value, field: &FieldSpec) -> bool {
                 && object
                     .get("value")
                     .and_then(Value::as_str)
-                    .is_some_and(|s| fixed_digits(s, "9999-99-99"))
+                    .is_some_and(|s| {
+                        s.len() == 10
+                            && crate::admission::contract_timestamp(&format!("{s}T00:00:00Z"))
+                    })
         }
         "timestamp" => {
             keys_are(object, &["type", "value"])
                 && object
                     .get("value")
                     .and_then(Value::as_str)
-                    .is_some_and(|s| fixed_digits(s, "9999-99-99T99:99:99Z"))
+                    .is_some_and(crate::admission::contract_timestamp)
         }
         "enum" => {
             keys_are(object, &["type", "value"])
@@ -673,7 +724,7 @@ fn compatible(value: &Value, field: &FieldSpec) -> bool {
 }
 
 /// The record's state as stored: a `{field_id, value}` array in schema order.
-fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
+pub(super) fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
     let mut map = BTreeMap::new();
     for item in state.and_then(Value::as_array).into_iter().flatten() {
         let id = item
@@ -694,11 +745,19 @@ fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>> {
 /// `update`, and a `create` command must fire one of its declared
 /// transitions: a note-only edit or a resubmission of the current values
 /// through a `create` is refused, and no command writes a no-op revision.
-fn compose(
+///
+/// APP-113 review (storage 1, 2): `by_filer` is whether the deciding
+/// principal created the record; a declared transition on an existing record
+/// is never taken by its filer (an approver decides other people's claims,
+/// in every path: canvas, Slack, MCP, the command route). A create never
+/// starts a field at another command's transition target unless this
+/// command declares that field's `initial` value (`Declaration::decided`).
+pub(super) fn compose(
     spec: &[FieldSpec],
     declaration: &Declaration,
     current: Option<&Value>,
     values: &Value,
+    by_filer: bool,
 ) -> Result<Vec<u8>> {
     let current = state_map(current)?;
     let creating = current.is_empty();
@@ -718,7 +777,9 @@ fn compose(
     }
     let null = json!({"type": "null"});
     let mut state = Vec::with_capacity(spec.len());
-    let (mut changed, mut fired) = (false, false);
+    let mut composed = Map::new();
+    let mut moves = Vec::new();
+    let mut changed = false;
     for field in spec {
         let value = supplied
             .get(&field.id)
@@ -734,18 +795,47 @@ fn compose(
                 if is_enum {
                     let from = before.get("value").and_then(Value::as_str);
                     let to = value.get("value").and_then(Value::as_str);
-                    let declared = declaration.transitions.iter().any(|(f, a, b)| {
-                        f == &field.id && Some(a.as_str()) == from && Some(b.as_str()) == to
-                    });
-                    require(declared || declaration.operation == "update")?;
-                    fired |= declared;
+                    moves.push((
+                        field.id.as_str(),
+                        from.map(str::to_owned),
+                        to.map(str::to_owned),
+                    ));
                 }
             }
         }
+        composed.insert(field.id.clone(), value.clone());
         state.push(json!({"field_id": field.id, "value": value}));
+    }
+    // APP-107: a declared transition fires only when its guard holds on the
+    // record as composed; a create carries the declared initial value of
+    // every field the command names one for.
+    let mut fired = false;
+    for (field, from, to) in moves {
+        let declared =
+            declaration.rules.transitions.iter().any(|(f, a, b, _)| {
+                f == field && Some(a) == from.as_ref() && Some(b) == to.as_ref()
+            }) && match (&from, &to) {
+                (Some(from), Some(to)) => declaration.rules.allows(field, from, to, &composed),
+                _ => false,
+            };
+        require(declared || declaration.operation == "update")?;
+        fired |= declared;
+    }
+    if creating {
+        for field in declaration.rules.initial_fields() {
+            let (value, _) = declaration
+                .rules
+                .initial_value(field, &composed)
+                .ok_or(Error::Denied)?;
+            require(composed.get(field) == Some(&json!({"type": "enum", "value": value})))?;
+        }
+        for (field, value) in &declaration.decided {
+            require(composed.get(field) != Some(&json!({"type": "enum", "value": value})))?;
+        }
     }
     if !creating {
         require(changed && (fired || declaration.operation == "update"))?;
+        require(!(fired && by_filer))?;
     }
     let bytes = admission::encode(&Value::Array(state)).map_err(|_| Error::Denied)?;
     require(bytes.len() <= MAX_CANONICAL_BYTES)?;
@@ -918,7 +1008,8 @@ impl Data {
                         id: id.clone(),
                         operation: declaration.operation.clone(),
                         writable_fields: declaration.writable.clone(),
-                        transitions: declaration.transitions.clone(),
+                        transitions: declaration.transitions(),
+                        rules: declaration.rules.clone(),
                     })
                     .collect(),
                 can_write,
@@ -1116,13 +1207,14 @@ async fn commit<'a>(
     require(if current_version == 0 {
         declaration.operation == "create"
     } else {
-        declaration.operation == "update" || !declaration.transitions.is_empty()
+        declaration.operation == "update" || declaration.has_transitions()
     })?;
     let state = compose(
         &published.fields,
         declaration,
         current_values.as_ref(),
         &command.values,
+        creator.as_deref() == Some(request.principal.as_str()),
     )?;
     let version = current_version + 1;
     require_stored(version <= SAFE_MAX)?;
@@ -1203,8 +1295,26 @@ mod tests {
         Declaration {
             operation: "create".into(),
             writable: vec!["status".into(), "note".into()],
-            transitions: vec![("status".into(), "needs_context".into(), "reviewed".into())],
+            rules: super::super::rules::Rules {
+                transitions: vec![(
+                    "status".into(),
+                    "needs_context".into(),
+                    "reviewed".into(),
+                    None,
+                )],
+                initial: Vec::new(),
+            },
+            decided: Vec::new(),
         }
+    }
+    /// `compose` as a decider who did not file the record.
+    fn compose(
+        spec: &[FieldSpec],
+        declaration: &Declaration,
+        current: Option<&Value>,
+        values: &Value,
+    ) -> Result<Vec<u8>> {
+        super::compose(spec, declaration, current, values, false)
     }
     fn values(status: &str, note: &str) -> Value {
         json!([
@@ -1250,6 +1360,10 @@ mod tests {
             &json!({"type": "money", "minor_units": "045", "currency": "USD", "minor_unit_exponent": 2}),
             &money
         ));
+        assert!(!compatible(
+            &json!({"type": "money", "minor_units": "12.50", "currency": "USD", "minor_unit_exponent": 2}),
+            &money
+        ));
         let bytes = field("bytes", json!({"type": "integer", "unit": "byte"}), false);
         assert!(compatible(
             &json!({"type": "integer", "value": "-12", "unit": "byte"}),
@@ -1265,11 +1379,60 @@ mod tests {
         ));
         assert!(integer_text(Some(&json!("0"))) && !integer_text(Some(&json!("-0"))));
         assert!(!integer_text(Some(&json!(&"9".repeat(39)))));
-        assert!(fixed_digits("2026-10-29T12:00:00Z", "9999-99-99T99:99:99Z"));
-        assert!(!fixed_digits(
-            "2026-10-29 12:00:00Z",
-            "9999-99-99T99:99:99Z"
-        ));
+    }
+
+    #[test]
+    fn date_and_timestamp_values_require_real_calendar_days_and_utc_clock_times() {
+        let date = field("date", json!({"type":"date"}), false);
+        for valid in [
+            "0001-01-01",
+            "2024-02-29",
+            "2000-02-29",
+            "2026-11-02",
+            "9999-12-31",
+        ] {
+            assert!(
+                compatible(&json!({"type":"date","value":valid}), &date),
+                "refused {valid}"
+            );
+        }
+        for invalid in [
+            "2026-02-30",
+            "2026-02-29",
+            "1900-02-29",
+            "2026-04-31",
+            "0000-01-01",
+            "2026-13-01",
+            "2026-01-00",
+            "2026-1-01",
+            " 2026-11-02",
+            "2026-11-02T00:00:00Z",
+        ] {
+            assert!(
+                !compatible(&json!({"type":"date","value":invalid}), &date),
+                "accepted {invalid}"
+            );
+        }
+        let timestamp = field("at", json!({"type":"timestamp"}), false);
+        for valid in ["2024-02-29T23:59:59Z", "2026-11-02T00:00:00Z"] {
+            assert!(
+                compatible(&json!({"type":"timestamp","value":valid}), &timestamp),
+                "refused {valid}"
+            );
+        }
+        for invalid in [
+            "2026-02-30T12:00:00Z",
+            "2026-11-02T24:00:00Z",
+            "2026-11-02T12:60:00Z",
+            "2026-11-02T12:00:60Z",
+            "2026-11-02 12:00:00Z",
+            "2026-11-02T12:00:00+00:00",
+        ] {
+            assert!(
+                !compatible(&json!({"type":"timestamp","value":invalid}), &timestamp),
+                "accepted {invalid}"
+            );
+        }
     }
 
     #[test]
@@ -1340,7 +1503,7 @@ mod tests {
         );
         let mut update = record_decision();
         update.operation = "update".into();
-        update.transitions.clear();
+        update.rules.transitions.clear();
         assert!(compose(
             &spec,
             &update,
@@ -1374,6 +1537,142 @@ mod tests {
             .err(),
             Some(Error::Denied)
         );
+    }
+
+    /// APP-113 review (storage 1): the filer never takes a declared
+    /// transition on their own record, in the dry run and the commit alike
+    /// (both call `compose`); an `update` edit by the filer and a decision by
+    /// anyone else are unchanged.
+    #[test]
+    fn the_filer_cannot_decide_their_own_record() {
+        let spec = decision();
+        let declaration = record_decision();
+        let first: Value = serde_json::from_slice(
+            &super::compose(
+                &spec,
+                &declaration,
+                None,
+                &values("needs_context", "x"),
+                true,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            super::compose(
+                &spec,
+                &declaration,
+                Some(&first),
+                &values("reviewed", "mine"),
+                true
+            )
+            .err(),
+            Some(Error::Denied)
+        );
+        assert!(super::compose(
+            &spec,
+            &declaration,
+            Some(&first),
+            &values("reviewed", "theirs"),
+            false
+        )
+        .is_ok());
+        let mut edit = record_decision();
+        edit.operation = "update".into();
+        edit.rules.transitions.clear();
+        let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
+        assert!(super::compose(&spec, &edit, Some(&first), &note_only, true).is_ok());
+    }
+
+    /// APP-113 review (storage 2): a filing create without a declared
+    /// `initial` never starts at another command's transition target (an
+    /// expense `submit` cannot file a claim as `approved`); a declared
+    /// `initial` governs its field instead (Deal desk's guarded approval).
+    #[test]
+    fn a_filing_create_never_starts_at_a_decision_outcome() {
+        let spec = vec![
+            field(
+                "status",
+                json!({"type": "enum", "values": ["submitted", "approved", "rejected"]}),
+                false,
+            ),
+            field("note", json!({"type": "text"}), false),
+        ];
+        let submit = Declaration {
+            operation: "create".into(),
+            writable: vec!["status".into(), "note".into()],
+            rules: Default::default(),
+            decided: vec![
+                ("status".into(), "approved".into()),
+                ("status".into(), "rejected".into()),
+            ],
+        };
+        let filed = |status: &str| {
+            json!([
+                {"field_id": "status", "value": {"type": "enum", "value": status}},
+                {"field_id": "note", "value": {"type": "text", "value": "n"}},
+            ])
+        };
+        assert!(compose(&spec, &submit, None, &filed("submitted")).is_ok());
+        for outcome in ["approved", "rejected"] {
+            assert_eq!(
+                compose(&spec, &submit, None, &filed(outcome)).err(),
+                Some(Error::Denied),
+                "{outcome}"
+            );
+        }
+        let auto = Declaration {
+            rules: super::super::rules::Rules::from_declaration(&json!({"transitions": [], "initial": [
+                {"field_id": "status", "value": "approved", "when": {"field_id": "note", "comparison": "eq", "value": {"type": "text", "value": "small"}}},
+                {"field_id": "status", "value": "submitted"},
+            ]}))
+            .unwrap(),
+            decided: Vec::new(),
+            ..submit
+        };
+        let small = json!([
+            {"field_id": "status", "value": {"type": "enum", "value": "approved"}},
+            {"field_id": "note", "value": {"type": "text", "value": "small"}},
+        ]);
+        assert!(compose(&spec, &auto, None, &small).is_ok());
+    }
+
+    #[test]
+    fn decided_starts_are_the_other_commands_targets_without_an_initial() {
+        let rules = |value: Value| super::super::rules::Rules::from_declaration(&value).unwrap();
+        let declaration = |rules| Declaration {
+            operation: "create".into(),
+            writable: vec!["status".into()],
+            rules,
+            decided: Vec::new(),
+        };
+        let mut commands = BTreeMap::from([
+            (
+                "submit".to_owned(),
+                declaration(rules(json!({"transitions": []}))),
+            ),
+            (
+                "decide".to_owned(),
+                declaration(rules(json!({"transitions": [
+                    {"field_id": "status", "from": "submitted", "to": "approved"},
+                    {"field_id": "status", "from": "submitted", "to": "rejected"},
+                ]}))),
+            ),
+            (
+                "auto".to_owned(),
+                declaration(rules(
+                    json!({"transitions": [], "initial": [{"field_id": "status", "value": "approved"}]}),
+                )),
+            ),
+        ]);
+        fence_starts(&mut commands);
+        let pair = |a: &str, b: &str| (a.to_owned(), b.to_owned());
+        assert_eq!(
+            commands["submit"].decided,
+            [pair("status", "approved"), pair("status", "rejected")]
+        );
+        assert!(commands["decide"].decided.is_empty());
+        assert!(commands["auto"].decided.is_empty());
     }
 
     #[test]

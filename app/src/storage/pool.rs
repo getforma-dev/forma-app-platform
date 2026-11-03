@@ -88,8 +88,12 @@ impl Settings {
             hooks: Arc::new(TestHooks::default()),
         })
     }
-    #[cfg(test)]
-    pub(super) fn fixture(
+    /// A loopback database: the test fixtures and, under the `dev-stand`
+    /// feature (ADR-012 D12.1), the local dev binary's Compose PostgreSQL.
+    /// The connection is the same verified-TLS role pool as production; only
+    /// the endpoint is not an RDS name. Never compiled into a release build.
+    #[cfg(any(test, feature = "dev-stand"))]
+    pub(crate) fn fixture(
         credentials: PathBuf,
         registry: PathBuf,
         ca: PathBuf,
@@ -102,6 +106,7 @@ impl Settings {
             ca,
             host: host.into(),
             port,
+            #[cfg(test)]
             hooks: Arc::new(TestHooks::default()),
         }
     }
@@ -115,9 +120,21 @@ pub(crate) struct TestHooks {
     phase: std::sync::Mutex<Option<&'static str>>,
     pub reached: Notify,
     pub release: Notify,
+    /// Member transactions opened and statements sent through them (BEGIN
+    /// and the scope included, COMMIT not): the canvas campaign's round-trip
+    /// count (APP-113 deferred `open_listed` batching).
+    pub transactions: std::sync::atomic::AtomicUsize,
+    pub statements: std::sync::atomic::AtomicUsize,
 }
 #[cfg(test)]
 impl TestHooks {
+    /// `(transactions, statements)` so far.
+    pub fn counts(&self) -> (usize, usize) {
+        (
+            self.transactions.load(Ordering::SeqCst),
+            self.statements.load(Ordering::SeqCst),
+        )
+    }
     pub fn arm(&self, phase: &'static str) {
         *self.phase.lock().unwrap() = Some(phase);
     }
@@ -404,6 +421,10 @@ impl Lease {
     pub async fn checkpoint(&self, phase: &'static str) {
         self.owner.manager.settings.hooks.checkpoint(phase).await;
     }
+    #[cfg(test)]
+    pub fn hooks(&self) -> &TestHooks {
+        &self.owner.manager.settings.hooks
+    }
     pub fn connection(&self) -> &Connection {
         self.object.as_ref().expect("owned lease")
     }
@@ -526,7 +547,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 7 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 19 {
         return Err(Error::Unavailable);
     }
     Ok(())
@@ -673,6 +694,11 @@ impl Stores {
                 inner: create(Role::Worker)?,
             },
         })
+    }
+    /// The test executable's hooks (shared by every role of these stores).
+    #[cfg(test)]
+    pub(crate) fn hooks(&self) -> Arc<TestHooks> {
+        self.data.inner.manager.settings.hooks.clone()
     }
     pub fn registry_identity(&self) -> &RegistryIdentity {
         &self.workspace.inner.registry.identity

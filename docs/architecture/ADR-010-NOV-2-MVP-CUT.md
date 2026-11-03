@@ -114,16 +114,19 @@ Strategy: first the small items that harden the live beta or unblock Phase 2 (po
 
 | Position | Ticket | Why here |
 | --- | --- | --- |
+| 0 | APP-097 (PH08) | First post-November 2 step (target 2026-11-03), per ADR-011: decide what the pitch keeps and close the deferred work (APP-076 remainder, PH01 gate record, APP-086, APP-089, APP-090, APP-014 and APP-084 residuals) before the order below resumes. Added 2026-10-30. |
 | 1 | APP-088 (PH02) | ADR-009 re-review R-M1 and R-m1–R-m6 must be in the ADR text before APP-015's migration 0008 is written; doc-only, a day. |
 | 2 | APP-087 (PH02) | The parser fuel bound (M4) decides what beta members can import; `check-parser-record.py` must be wired before the first PH02 deployment; precedes APP-017 Task A5. |
+| 2a | APP-089 (PH02) | Base-image HIGH CVEs and scan-on-push that scans the arm64 child, before the first PH02 deployment ships a new image. Added 2026-10-30. |
 | 3 | APP-083 (PH07) | The one live PH01 proof the MVP skipped; two verified identities and an hour on the running beta. |
 | 4 | APP-082 (PH07) | Route-level race repeat and provider fault exercise on the local harness; hardens the public entry while invitations are few. |
 | 5 | APP-084 (PH07) | Victor's ADR-003 custody decision and the D7.8 provider audit kinds + migration, before invitations go beyond the demo principals; the migration can ride 0008. |
 | 6 | APP-085 (PH07) | Server-side policy resolution before PH03's second policy row (APP-037); the r1 digest domain rides the next contract edition. |
+| 6a | APP-090 (PH02) | MVP UI fixes (demo counter island, HTML 404/503, select, receipt, contrast and focus, CSS budget) and the designer's mocks, before the demo recording. Added 2026-10-30. |
 | 7 | PH02 Track A (APP-015–019) | Act 2: real import. Per `docs/planning/PHASE-2-EXECUTION-PLAN.md`. |
 | 8 | PH02 Track B (APP-020–025) | Acts 2/4 in full: the 114,000 bytes/minute ratio, CIDR match, the 45,000-cent queue, six linked views. |
 | 9 | PH02 Track C (APP-026–031, APP-081) | Act 1 navigation and the canvas. |
-| 10 | APP-086 (PH07) | Managed qualification residuals, in the first PH02 RDS window (Task D0). |
+| 10 | APP-086 (PH07) | Managed qualification residuals, in the first PH02 RDS window (Task D0); includes the 2026-10-30 qualification refusal diagnosis and a qualification-only window kind. |
 | 11 | APP-080 (PH05) | RDS races, drift and recovery, same window class; required before any real organization. |
 | 12 | PH03 (APP-032–047) | Acts 3 and 4: authoring, publication, AI (the first model call, APP-043). |
 | 13 | PH04 (APP-048–057) | Acts 5 and 6 in full; the recorded six-act rehearsal and packet. |
@@ -158,5 +161,5 @@ Strategy: first the small items that harden the live beta or unblock Phase 2 (po
 ## Consequences
 
 - PH01 can reach its gate on November 2 with twenty tickets Done and the deferrals named (APP-079, APP-080, APP-082, APP-083), per QUALITY-GATES.
-- The board grows to 88 tickets, 7 phases and 13 sprints. `docs/planning/MVP-NOV-2-PLAN.md` holds the day-by-day order; `CLAUDE-HANDOFF.md` carries the dated summary.
+- The board grows to 88 tickets, 7 phases and 13 sprints. `docs/planning/MVP-NOV-2-PLAN.md` holds the day-by-day order; [the historical Claude handoff](https://github.com/getforma-dev/forma-app-platform/blob/93df32175794e856f4aa02055dc5d75b0750c7aa/CLAUDE-HANDOFF.md) carries the dated summary.
 - Nothing is weakened in the controlling ADRs. A sentence moved by this record is verbatim in its new owner; a residual deferred by this record is in a ticket with the review file and finding ids; after November 2, the pick-up order in §6 is the plan until the Phase 2 plan supersedes it.

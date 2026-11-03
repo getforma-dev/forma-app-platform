@@ -35,7 +35,7 @@ use std::{
     time::Duration,
 };
 use tokio::time::Instant;
-use tokio_postgres::Row;
+use tokio_postgres::{error::SqlState, Row};
 
 /// Canonical bytes a reader returns and a column stores (0002 CHECKs).
 pub const MAX_CANONICAL_BYTES: usize = 262_144;
@@ -322,7 +322,10 @@ fn readmit(
 
 /// The workspace confirms the request's provider identity against the
 /// scoped principal and an active binding, as `read_publication` does.
-async fn confirm_identity(transaction: &Transaction<'_>, request: &TrustedRequest) -> Result<()> {
+pub(super) async fn confirm_identity(
+    transaction: &Transaction<'_>,
+    request: &TrustedRequest,
+) -> Result<()> {
     let rows = transaction.query("SELECT 1 FROM genui.principals p JOIN genui.provider_tenant_bindings b USING(organization_id,issuer,provider_tenant_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.issuer=$3 AND p.provider_tenant_id=$4 AND p.provider_subject=$5 AND b.active", &[&request.organization,&request.principal,&request.issuer,&request.provider_tenant,&request.provider_subject]).await?;
     require(rows.len() == 1)
 }
@@ -494,16 +497,23 @@ async fn stored_inputs(
     revision: &str,
 ) -> Result<Vec<InputContract>> {
     let rows = transaction.query("SELECT input_id::text,kind,contract_digest::text,canonical_contract FROM genui.definition_inputs WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND revision_id=$3::text::uuid ORDER BY input_id", &[&organization,&app,&revision]).await?;
-    rows.iter()
-        .map(|row| {
-            Ok(InputContract {
-                input: text(row, 0)?,
-                kind: text(row, 1)?,
-                digest: text(row, 2)?,
-                canonical: bytes(row, 3)?,
-            })
-        })
-        .collect()
+    rows.iter().map(|row| input_row(row, 0)).collect()
+}
+fn input_row(row: &Row, at: usize) -> Result<InputContract> {
+    Ok(InputContract {
+        input: text(row, at)?,
+        kind: text(row, at + 1)?,
+        digest: text(row, at + 2)?,
+        canonical: bytes(row, at + 3)?,
+    })
+}
+fn schema_row(row: &Row, at: usize) -> Result<RecordSchema> {
+    Ok(RecordSchema {
+        schema: text(row, at)?,
+        version: small(row, at + 1)?,
+        digest: text(row, at + 2)?,
+        canonical: bytes(row, at + 3)?,
+    })
 }
 async fn stored_schemas(
     transaction: &Transaction<'_>,
@@ -512,16 +522,7 @@ async fn stored_schemas(
     revision: &str,
 ) -> Result<Vec<RecordSchema>> {
     let rows = transaction.query("SELECT schema_id::text,schema_version,digest::text,canonical_schema FROM genui.definition_record_schemas WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND revision_id=$3::text::uuid ORDER BY schema_id,schema_version", &[&organization,&app,&revision]).await?;
-    rows.iter()
-        .map(|row| {
-            Ok(RecordSchema {
-                schema: text(row, 0)?,
-                version: small(row, 1)?,
-                digest: text(row, 2)?,
-                canonical: bytes(row, 3)?,
-            })
-        })
-        .collect()
+    rows.iter().map(|row| schema_row(row, 0)).collect()
 }
 /// The stored revision, re-admitted; its stored contracts must equal the ones
 /// its content derives (C02: a publication binds exactly what was admitted).
@@ -533,22 +534,107 @@ async fn stored_revision(
 ) -> Result<Admitted> {
     let rows = transaction.query("SELECT schema_version,digest::text,canonical_content FROM genui.definition_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND revision_id=$3::text::uuid", &[&organization,&app,&revision]).await?;
     let row = rows.first().ok_or(Error::Denied)?;
-    require_stored(small(row, 0)? == 1)?;
-    let digest = text(row, 1)?;
-    let admitted = readmit(&bytes(row, 2)?, None, Some(&digest), organization, app)
-        .map_err(|_| Error::Unavailable)?;
-    let sorted = |mut inputs: Vec<InputContract>| {
-        inputs.sort_by(|a, b| a.input.cmp(&b.input));
-        inputs
-    };
-    let mut schemas = admitted.record_schemas.clone();
-    schemas.sort_by(|a, b| (&a.schema, a.version).cmp(&(&b.schema, b.version)));
+    let admitted = readmit_row(row, 0, organization, app)?;
+    let (inputs, schemas) = derived_contracts(&admitted);
     require_stored(
-        stored_inputs(transaction, organization, app, revision).await?
-            == sorted(admitted.inputs.clone())
+        stored_inputs(transaction, organization, app, revision).await? == inputs
             && stored_schemas(transaction, organization, app, revision).await? == schemas,
     )?;
     Ok(admitted)
+}
+/// A `definition_revisions` row (`schema_version`, `digest`,
+/// `canonical_content` from column `at`), re-admitted.
+fn readmit_row(row: &Row, at: usize, organization: &str, app: &str) -> Result<Admitted> {
+    require_stored(small(row, at)? == 1)?;
+    let digest = text(row, at + 1)?;
+    readmit(&bytes(row, at + 2)?, None, Some(&digest), organization, app)
+        .map_err(|_| Error::Unavailable)
+}
+/// The contracts re-admitted content derives, in the stored rows' order.
+fn derived_contracts(admitted: &Admitted) -> (Vec<InputContract>, Vec<RecordSchema>) {
+    let mut inputs = admitted.inputs.clone();
+    inputs.sort_by(|a, b| a.input.cmp(&b.input));
+    let mut schemas = admitted.record_schemas.clone();
+    schemas.sort_by(|a, b| (&a.schema, a.version).cmp(&(&b.schema, b.version)));
+    (inputs, schemas)
+}
+
+/// What `stored_content` answers for one revision of a batch.
+pub(super) type StoredContent = Result<(String, Vec<u8>)>;
+
+/// [`stored_content`] for many `(app, revision)` pairs in three statements:
+/// the same rows (each revision's contracts in the same order), the same
+/// re-admission and the same checks, per revision. A store failure ends the
+/// batch; a revision's own refusal is its entry.
+pub(super) async fn stored_contents(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    revisions: &[(String, String)],
+) -> Result<Vec<StoredContent>> {
+    let mut found: Vec<StoredContent> = vec![Err(Error::Denied); revisions.len()];
+    let sent: Vec<usize> = (0..revisions.len())
+        .filter(|&i| valid_id(&revisions[i].0) && valid_id(&revisions[i].1))
+        .collect();
+    if sent.is_empty() {
+        return Ok(found);
+    }
+    let apps: Vec<&str> = sent.iter().map(|&i| revisions[i].0.as_str()).collect();
+    let ids: Vec<&str> = sent.iter().map(|&i| revisions[i].1.as_str()).collect();
+    let index = |row: &Row| -> Result<usize> {
+        let n: i64 = row.try_get(0).map_err(|_| Error::Unavailable)?;
+        usize::try_from(n)
+            .ok()
+            .and_then(|n| n.checked_sub(1))
+            .and_then(|n| sent.get(n).copied())
+            .ok_or(Error::Unavailable)
+    };
+    let rows = transaction.query("SELECT c.n::bigint,d.schema_version,d.digest::text,d.canonical_content FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,revision,n) JOIN genui.definition_revisions d ON d.organization_id=$1::text::uuid AND d.app_id=c.app::uuid AND d.revision_id=c.revision::uuid", &[&organization,&apps,&ids]).await?;
+    let mut admitted: Vec<Option<Result<Admitted>>> = (0..revisions.len()).map(|_| None).collect();
+    for row in &rows {
+        let i = index(row)?;
+        admitted[i] = Some(readmit_row(row, 1, organization, &revisions[i].0));
+    }
+    let mut inputs: Vec<Result<Vec<InputContract>>> =
+        (0..revisions.len()).map(|_| Ok(Vec::new())).collect();
+    let rows = transaction.query("SELECT c.n::bigint,i.input_id::text,i.kind,i.contract_digest::text,i.canonical_contract FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,revision,n) JOIN genui.definition_inputs i ON i.organization_id=$1::text::uuid AND i.app_id=c.app::uuid AND i.revision_id=c.revision::uuid ORDER BY c.n,i.input_id", &[&organization,&apps,&ids]).await?;
+    for row in &rows {
+        let i = index(row)?;
+        let decoded = input_row(row, 1);
+        if let Ok(list) = &mut inputs[i] {
+            match decoded {
+                Ok(input) => list.push(input),
+                Err(error) => inputs[i] = Err(error),
+            }
+        }
+    }
+    let mut schemas: Vec<Result<Vec<RecordSchema>>> =
+        (0..revisions.len()).map(|_| Ok(Vec::new())).collect();
+    let rows = transaction.query("SELECT c.n::bigint,s.schema_id::text,s.schema_version,s.digest::text,s.canonical_schema FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,revision,n) JOIN genui.definition_record_schemas s ON s.organization_id=$1::text::uuid AND s.app_id=c.app::uuid AND s.revision_id=c.revision::uuid ORDER BY c.n,s.schema_id,s.schema_version", &[&organization,&apps,&ids]).await?;
+    for row in &rows {
+        let i = index(row)?;
+        let decoded = schema_row(row, 1);
+        if let Ok(list) = &mut schemas[i] {
+            match decoded {
+                Ok(schema) => list.push(schema),
+                Err(error) => schemas[i] = Err(error),
+            }
+        }
+    }
+    for (i, slot) in found.iter_mut().enumerate() {
+        let Some(result) = admitted[i].take() else {
+            continue; // no row: `Denied`, as `stored_revision` answers
+        };
+        *slot = (|| {
+            let admitted = result?;
+            let (derived_inputs, derived_schemas) = derived_contracts(&admitted);
+            let stored_inputs = std::mem::replace(&mut inputs[i], Ok(Vec::new()))?;
+            require_stored(stored_inputs == derived_inputs)?;
+            let stored_schemas = std::mem::replace(&mut schemas[i], Ok(Vec::new()))?;
+            require_stored(stored_schemas == derived_schemas)?;
+            Ok((admitted.digest, admitted.canonical))
+        })();
+    }
+    Ok(found)
 }
 
 /// A stored revision's admitted identity and canonical content, re-admitted
@@ -783,7 +869,22 @@ impl Workspace {
                 .zip(&ids[1..])
                 .map(|((schema, (version, _)), id)| (schema.as_str(), (id.as_str(), *version)))
                 .collect();
-            transaction.query("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5,$6::text::uuid)", &[org,&app,&work,&publication,&context,&request.principal]).await?;
+            // APP-121: a "Save as /name" takes the organization's naming
+            // lock (the label writes take it too) and never a name an
+            // organization label's address or alias holds (Denied: the name
+            // route's `name_taken`).
+            if let Some(slug) = super::command_slug(context) {
+                if super::labels::label_holds(transaction, request, slug).await? {
+                    return Err(Error::Denied);
+                }
+            }
+            // APP-113 (0012): a member's slash-command name is unique; a
+            // concurrent naming's committed row refuses this one (Denied).
+            match transaction.query_classified("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,1,$5,$6::text::uuid)", &[org,&app,&work,&publication,&context,&request.principal]).await? {
+                Ok(_) => {}
+                Err(state) if state == SqlState::UNIQUE_VIOLATION => return Err(Error::Denied),
+                Err(_) => return Err(Error::Unavailable),
+            }
             for (schema, (collection, version)) in &collections {
                 transaction.query("INSERT INTO genui.record_collections(organization_id,app_id,work_id,publication_id,collection_id,schema_id,schema_version) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text,$7)", &[org,&app,&work,&publication,collection,schema,version]).await?;
             }

@@ -37,6 +37,12 @@ impl TrustedRequest {
     pub fn organization(&self) -> &str {
         &self.organization
     }
+    /// The member the session resolved to (read-only; APP-095 counts event
+    /// streams per member; the composer's per-member rate-limit key and its
+    /// structured log, APP-093). Authority still comes only from storage.
+    pub fn principal(&self) -> &str {
+        &self.principal
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -106,6 +112,9 @@ pub(super) struct Permit<'a, 'r> {
     precheck: Precheck<'r>,
 }
 
+/// APP-122: how an Ask or Shape read begins (`Transaction::begin_read_only`).
+pub const READ_ONLY_BEGIN: &str = "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY";
+
 /// A member transaction carries its trusted request; the nonmember entry
 /// (ADR-007 D7.1, admission only) carries none and can never precheck, fence
 /// or obtain a `Permit`.
@@ -145,6 +154,18 @@ impl<'a> Transaction<'a> {
             Some(cap),
         )
         .await
+    }
+    /// APP-122 (Ask and Shape): a member read that cannot write. One
+    /// `REPEATABLE READ READ ONLY` snapshot: the member checks, the grants
+    /// and every read see the same committed state, and PostgreSQL refuses
+    /// any write (SQLSTATE 25006) and any row lock in it, so no Ask or Shape
+    /// path can change a record, a card or an audit row.
+    pub async fn begin_read_only(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+        cap: Instant,
+    ) -> Result<Self> {
+        Self::begin_with(pool, request, READ_ONLY_BEGIN, Some(cap)).await
     }
     /// ADR-007 D7.6 (A1): the control role's publication transaction only.
     /// Everything else stays READ COMMITTED. A 40001 at any statement or at
@@ -214,6 +235,59 @@ impl<'a> Transaction<'a> {
         )
         .await
     }
+    /// Account-only authentication and exact-work sharing. This never creates a
+    /// member Permit. Callers must judge the account session and share before
+    /// reading any organization data; only storage's closed sharing modules use it.
+    pub(super) async fn begin_shared(
+        pool: &Arc<RolePool>,
+        organization: Option<&str>,
+        account: Option<&str>,
+    ) -> Result<Self> {
+        require(
+            matches!(pool.role(), Role::Workspace | Role::Data)
+                && organization.is_none_or(valid_id)
+                && account.is_none_or(valid_id),
+        )?;
+        let transaction = Self::open(
+            pool,
+            None,
+            organization.unwrap_or(""),
+            "",
+            "",
+            "BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE",
+            None,
+        )
+        .await?;
+        transaction
+            .query(
+                "SELECT set_config('genui.account_id',$1,true)",
+                &[&account.unwrap_or("")],
+            )
+            .await?;
+        Ok(transaction)
+    }
+    /// Exact-share record projections use one read-only committed snapshot.
+    /// This entry has no member identity and cannot create a member Permit.
+    pub(super) async fn begin_shared_read_only(
+        pool: &Arc<RolePool>,
+        organization: &str,
+        account: &str,
+    ) -> Result<Self> {
+        require(pool.role() == Role::Data && valid_id(organization) && valid_id(account))?;
+        let tx = Self::open(
+            pool,
+            None,
+            organization,
+            "",
+            "",
+            READ_ONLY_BEGIN,
+            Some(Instant::now() + super::QUERY_HANDLER_DEADLINE),
+        )
+        .await?;
+        tx.query("SELECT set_config('genui.account_id',$1,true)", &[&account])
+            .await?;
+        Ok(tx)
+    }
     async fn open(
         pool: &Arc<RolePool>,
         request: Option<&'a TrustedRequest>,
@@ -249,6 +323,12 @@ impl<'a> Transaction<'a> {
             serialization: AtomicBool::new(false),
             lock_wait: AtomicBool::new(false),
         };
+        #[cfg(test)]
+        transaction
+            .lease
+            .hooks()
+            .transactions
+            .fetch_add(1, Ordering::SeqCst);
         transaction.batch(isolation).await?;
         #[cfg(test)]
         transaction.lease.checkpoint("begin").await;
@@ -282,7 +362,14 @@ impl<'a> Transaction<'a> {
     pub fn lock_timed_out(&self) -> bool {
         self.lock_wait.load(Ordering::Relaxed)
     }
+    #[cfg(test)]
+    fn counted(&self) {
+        self.lease.hooks().statements.fetch_add(1, Ordering::SeqCst);
+    }
+    #[cfg(not(test))]
+    fn counted(&self) {}
     pub async fn batch(&self, sql: &str) -> Result<()> {
+        self.counted();
         timeout_at(self.deadline, self.lease.client().batch_execute(sql))
             .await
             .map_err(|_| Error::Deadline)?
@@ -292,6 +379,7 @@ impl<'a> Transaction<'a> {
             })
     }
     pub async fn query(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+        self.counted();
         timeout_at(self.deadline, self.lease.client().query(sql, params))
             .await
             .map_err(|_| Error::Deadline)?
@@ -307,6 +395,7 @@ impl<'a> Transaction<'a> {
         sql: &str,
         params: &[&(dyn ToSql + Sync)],
     ) -> Result<std::result::Result<Vec<Row>, SqlState>> {
+        self.counted();
         match timeout_at(self.deadline, self.lease.client().query(sql, params))
             .await
             .map_err(|_| Error::Deadline)?
@@ -359,6 +448,117 @@ impl<'a> Transaction<'a> {
                 resource: Resource::Organization,
             },
         })
+    }
+    /// The batch form of `precheck` and `fence` for `record_read` on many
+    /// saved works at once (the canvas page: the work page's and the record
+    /// page's authorization, per work, in one transaction): current
+    /// membership, epoch and entitlement, every work's [`Grants`] (the
+    /// `permissions` clauses), the `lock_member_authority` fence, the
+    /// entitlement again and every work's grants re-read after it. A member
+    /// refusal is `Denied` for the whole batch, as it is for each work's own
+    /// precheck. Per work, `record_read` holds only when it held before and
+    /// after the fence (`precheck` then `fence`); `discover` and
+    /// `record_write` are the after-fence re-reads (`Permit::also`). The
+    /// permit names the organization with `Discover`, like `fence_member`'s,
+    /// so it authorizes nothing by itself.
+    pub(super) async fn fence_works<'t>(
+        &'t mut self,
+        works: &[(&str, &str)],
+    ) -> Result<(Permit<'t, 'a>, Vec<Grants>)> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await?;
+        let before = self.grants(request, works).await?;
+        self.lock_member(request).await?;
+        self.entitlement(request).await?;
+        let after = self.grants(request, works).await?;
+        let grants = before
+            .iter()
+            .zip(after)
+            .map(|(before, after)| Grants {
+                record_read: before.record_read && after.record_read,
+                ..after
+            })
+            .collect();
+        Ok((
+            Permit {
+                transaction: self,
+                request,
+                precheck: Precheck {
+                    action: Action::Discover,
+                    resource: Resource::Organization,
+                },
+            },
+            grants,
+        ))
+    }
+    /// APP-122: the member half of `fence_works` inside a READ ONLY snapshot
+    /// (`begin_read_only`): current membership, epoch and entitlement, and
+    /// every work's [`Grants`], with no `lock_member_authority` fence (a
+    /// read-only transaction takes no row lock). The checks and the reads
+    /// that follow share one snapshot, so a revocation committed after it
+    /// began is not seen by either; nothing here can write.
+    /// APP-124 (Ask on a folder): the member half of a `READ ONLY` read with
+    /// no work in it: current membership, epoch and entitlement, without the
+    /// `lock_member_authority` row lock (refused in a read-only snapshot);
+    /// the snapshot itself orders the checks with every read after them.
+    pub(super) async fn read_only_member(&self) -> Result<()> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await
+    }
+    pub(super) async fn read_only_grants(&self, works: &[(&str, &str)]) -> Result<Vec<Grants>> {
+        let request = self.member()?;
+        require(self.lease.role() != Role::Worker)?;
+        self.current_member(request).await?;
+        self.entitlement(request).await?;
+        self.grants(request, works).await
+    }
+    /// For each `(app, work)`, in one statement, exactly the `permissions`
+    /// clauses for `discover` on the app and `record_read`/`record_write` on
+    /// the work (an identifier that is not a canonical UUID is refused, as
+    /// `permissions` refuses it).
+    async fn grants(
+        &self,
+        request: &TrustedRequest,
+        works: &[(&str, &str)],
+    ) -> Result<Vec<Grants>> {
+        let mut grants = vec![Grants::default(); works.len()];
+        let sent: Vec<usize> = (0..works.len())
+            .filter(|&i| valid_id(works[i].0) && valid_id(works[i].1))
+            .collect();
+        if sent.is_empty() {
+            return Ok(grants);
+        }
+        let apps: Vec<&str> = sent.iter().map(|&i| works[i].0).collect();
+        let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
+        let principal = "$2::text::uuid";
+        let sql = format!(
+            "SELECT c.n::bigint,EXISTS(SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=c.app::uuid AND p.permission='discover'),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}) FROM unnest($3::text[],$4::text[]) WITH ORDINALITY AS c(app,work,n)",
+            work_clause(principal, "record_read"),
+            work_clause(principal, "record_write"),
+        );
+        let rows = self
+            .query(
+                &sql,
+                &[&request.organization, &request.principal, &apps, &ids],
+            )
+            .await?;
+        for row in &rows {
+            let n = usize::try_from(integer(row, 0)?).map_err(|_| Error::Unavailable)?;
+            let index = *n
+                .checked_sub(1)
+                .and_then(|n| sent.get(n))
+                .ok_or(Error::Unavailable)?;
+            grants[index] = Grants {
+                discover: boolean(row, 1)?,
+                record_read: boolean(row, 2)?,
+                record_write: boolean(row, 3)?,
+            };
+        }
+        Ok(grants)
     }
     async fn lock_member(&self, request: &TrustedRequest) -> Result<()> {
         let rows = self.query("SELECT organization_active,member_active,membership_epoch FROM genui_private.lock_member_authority($1::text::uuid,$2::text::uuid,$3)", &[&request.organization,&request.principal,&request.epoch]).await?;
@@ -426,6 +626,26 @@ impl<'a> Transaction<'a> {
     }
 }
 
+/// APP-113 review (storage 4, 7): the `record_read` clause of `permissions`
+/// as an SQL predicate over a `genui.saved_work` row aliased `w` and a
+/// principal given as an SQL expression (a placeholder or a column): a work
+/// grant or the unrevoked creator's authority, `run` on the app, and live
+/// `source_read` on every dependency. Listings filter candidates with it
+/// before their `LIMIT`, and a box file grant counts only while it holds for
+/// the grant's work; the authoritative judgment stays `precheck`/`also`.
+pub(super) fn record_read_clause(principal: &str) -> String {
+    work_clause(principal, "record_read")
+}
+
+/// The `permissions` clause for `record_read` or `record_write` (the two
+/// permissions the unrevoked creator also holds) on a `genui.saved_work`
+/// row `w`, for `principal` (an SQL expression); `permission` is one of
+/// those two literals, never request data.
+fn work_clause(principal: &str, permission: &'static str) -> String {
+    debug_assert!(matches!(permission, "record_read" | "record_write"));
+    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='{permission}') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
+}
+
 fn text(row: &Row, index: usize) -> Result<String> {
     row.try_get(index).map_err(|_| Error::Unavailable)
 }
@@ -447,11 +667,24 @@ pub struct Record {
     pub version: i64,
 }
 
+/// One work's grants in a batch (`Transaction::grants`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct Grants {
+    pub discover: bool,
+    pub record_read: bool,
+    pub record_write: bool,
+}
+
 impl<'r> Permit<'_, 'r> {
     /// The fenced transaction, for the storage operation that obtained this
     /// permit; nothing outside `storage` ever sees it.
     pub(super) fn transaction(&self) -> &Transaction<'r> {
         self.transaction
+    }
+    /// Rechecks the wall-clock entitlement after an additional wait while
+    /// this permit still holds the membership/epoch fence.
+    pub(super) async fn recheck_entitlement(&self) -> Result<()> {
+        self.transaction.entitlement(self.request).await
     }
     /// A further permission of the same member, re-read after the fence (for
     /// example `source_read` on each source a saved work binds).
@@ -459,6 +692,12 @@ impl<'r> Permit<'_, 'r> {
         self.transaction
             .permissions(self.request, &Precheck { action, resource })
             .await
+    }
+    /// [`Permit::also`] for `discover`, `record_read` and `record_write` on
+    /// many works in one statement (the same clauses, re-read after the
+    /// fence).
+    pub(super) async fn grants(&self, works: &[(&str, &str)]) -> Result<Vec<Grants>> {
+        self.transaction.grants(self.request, works).await
     }
     async fn publication(&self, publication: &str) -> Result<Publication> {
         require(valid_id(publication))?;

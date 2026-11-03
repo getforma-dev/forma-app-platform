@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 7,
+  "database_version": 19,
   "migrations": [
     {
       "version": 1,
@@ -36,12 +36,72 @@
       "version": 7,
       "file": "0007_command_outcomes.sql",
       "sha256": "7a0007184cad993594749139d87d4ceec88ee262c0af078471fefdd842cc11e9"
+    },
+    {
+      "version": 8,
+      "file": "0008_sharing.sql",
+      "sha256": "bc0a4dbaebc8a36e8bfe8b860b0824f0e308b09204f4089a8174449dded0b829"
+    },
+    {
+      "version": 9,
+      "file": "0009_slack_links.sql",
+      "sha256": "95ec6da10c1c39b37853c986dcd331c6885d18264f3b9201c8fdd36d1e469fae"
+    },
+    {
+      "version": 10,
+      "file": "0010_agent_tokens.sql",
+      "sha256": "82b79d6102604211db1950060a1892a0aab783ab720e530a66414df9037c6d03"
+    },
+    {
+      "version": 11,
+      "file": "0011_boxes.sql",
+      "sha256": "e3a479966c3feb1473259adb2d78d688819086e7f0a7fcb475d1183688e740d1"
+    },
+    {
+      "version": 12,
+      "file": "0012_review_fixes.sql",
+      "sha256": "1fcc8d42449ff8b51963e6a32171ff4b8dc2fffd472180e73135eb6672703779"
+    },
+    {
+      "version": 13,
+      "file": "0013_agent_governance.sql",
+      "sha256": "685ac9f5d17e1abc4352e35d4c18f008aea57262e4b2d001c21dab94c89a421e"
+    },
+    {
+      "version": 14,
+      "file": "0014_labels.sql",
+      "sha256": "700f733fb9af5ef032fd04d114246f33cd0c6ce47f9f3e71441eecc8104951fa"
+    },
+    {
+      "version": 15,
+      "file": "0015_member_cards.sql",
+      "sha256": "e23c520d085a5e738b89eb90e300526a151bfb943055b9e3e4cdf4782fbb21c0"
+    },
+    {
+      "version": 16,
+      "file": "0016_authoring_shell.sql",
+      "sha256": "e9f5ad002af82bbd79934d71457112386661442610ca0834ea869acf1a8f87ec"
+    },
+    {
+      "version": 17,
+      "file": "0017_live_sharing.sql",
+      "sha256": "34b9484d791eff75c85a9f270432b8aea6c47480cf065c428546681e8fc6a805"
+    },
+    {
+      "version": 18,
+      "file": "0018_work_names.sql",
+      "sha256": "cb72989ea53b5c1d08a52c88a14c154038fd4c8e045dfde50e8075a40bbf5435"
+    },
+    {
+      "version": 19,
+      "file": "0019_work_presentation.sql",
+      "sha256": "4639659bbc6542f428a723004a5c35a4d6540795eb73682e6faf73e087536cd9"
     }
   ],
   "catalog": [
     {
       "file": "catalog-query.json",
-      "sha256": "3e3e744dccdc9e4d66561e40840daa5598fa77662f5f02d9c9e7ccb7b4fbafba"
+      "sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b"
     },
     {
       "file": "catalog-v1.json",
@@ -70,6 +130,54 @@
     {
       "file": "catalog-v7.json",
       "sha256": "af4228aa9191125e691e93801c9a3221f31500ecef01964673a07c96fc66da97"
+    },
+    {
+      "file": "catalog-v8.json",
+      "sha256": "03d2851b6cf55ff274ed60b7a3dcc6e4239fd9ac73e18e8430545731e5af55ed"
+    },
+    {
+      "file": "catalog-v9.json",
+      "sha256": "0f75ed14af3c30963407664d17fd48ab9a539f420c7037dc1d42876c6ad6b2ee"
+    },
+    {
+      "file": "catalog-v10.json",
+      "sha256": "96b33ed02618b5ffaf7744bd7948016d8bdf15ba8f1f9a9bb15dd7dfcdbae026"
+    },
+    {
+      "file": "catalog-v11.json",
+      "sha256": "d9bc7f7160018fc734708fdbd18bcc589c9ee94deecd8a815ab081eb8b338104"
+    },
+    {
+      "file": "catalog-v12.json",
+      "sha256": "c74cce74cbbe87bf9f93a82cb34863dd1e50ca5b7f9e9446bcb210c125ffbdbd"
+    },
+    {
+      "file": "catalog-v13.json",
+      "sha256": "c0ff63054768d65b37873d267f4a7218a6fcc58d0bfb028854e3fb6b94083dee"
+    },
+    {
+      "file": "catalog-v14.json",
+      "sha256": "f67738f1670d1c52ba6d67b4875904d3e8283117d7100e0be4cdae91325d9791"
+    },
+    {
+      "file": "catalog-v15.json",
+      "sha256": "7926c0784d02af31bc3743ffdf2cc8bfef16d151af5dd55b36ad96148110860a"
+    },
+    {
+      "file": "catalog-v16.json",
+      "sha256": "3ba0a86750eb36a2e2fa5673f17176d64da30b8115ac058d81b47d4f2cab7d3a"
+    },
+    {
+      "file": "catalog-v17.json",
+      "sha256": "4cfd700fc0acf5786cb33edc313a0c31b064b9caa299a182cd7d6ed4fb04279d"
+    },
+    {
+      "file": "catalog-v18.json",
+      "sha256": "b59e28f38e0a6aab0a0fc4e7feeea8be229b606ed503ecd2988d2e11c92d2f91"
+    },
+    {
+      "file": "catalog-v19.json",
+      "sha256": "a06426c3b9194c8eb2971c5bc4538cd6f4852311467020ed967f3e52c0b7bdb8"
     }
   ]
 }

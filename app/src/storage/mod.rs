@@ -5,42 +5,101 @@
 //! constructor of a `TrustedRequest`, from the session row, the member's
 //! current epoch and the registry identity. A caller cannot construct a
 //! trusted request from headers or verifier strings.
+mod actions;
 mod admission;
+mod agents;
 mod authorization;
+// APP-108 (ADR-011 pitch): boxes, files, registered data, derivations.
+mod boxes;
+// APP-123 (ADR-011 pitch): cards made by you and pinned answers.
+mod cards;
 mod catalog;
 mod commands;
+mod composer;
 mod definitions;
+mod governance;
+mod labels;
 mod pool;
 mod queries;
+mod record_components;
 mod registry;
+pub mod rules;
 mod sessions;
+mod shared_access;
+mod shared_identity;
+mod shared_reads;
+mod sharing;
+mod work_labels;
+mod work_presentation;
+#[cfg(test)]
+mod work_presentation_checks;
 
+pub use actions::{
+    CollectionSummary, DryRun, RecordRow, RecordsListing, WorkReads, READ_ONLY_WORKS, RECORDS_LIMIT,
+};
 pub use admission::{
     code_digest, handle_digest, Admission, PendingAdmission, PendingReason, Reservation, SignOut,
     VerifiedNonmember,
 };
+pub use agents::{
+    agent_label_shaped, AgentAttribution, AgentToken, MintedAgentToken, AGENT_TOKEN_DAYS,
+    MAX_LIVE_AGENT_TOKENS,
+};
 pub use authorization::{Action, Publication, Record, TrustedRequest};
+pub use boxes::{
+    box_name, BoxFile, BoxRow, BoxView, Derivation, FileData, Lineage, NewFile, NewRegistration,
+    MAX_BOX_FILES,
+};
+pub use cards::{Carded, MemberCard, NewCard, ReceiptKey, MAX_MEMBER_CARDS, MAX_SPEC_BYTES};
 pub use commands::{
     idempotency_key_shaped, CommandOutcome, CommandRequest, CommandResult, ConflictReason,
     RecordCommand, RecordDetail, RecordField, RecoveryView, COMMAND_COMMITTED,
     COMMAND_HANDLER_DEADLINE, MAX_COMMAND_VALUES, RETRY_HORIZON_SECONDS,
 };
+pub use composer::{
+    bindings as composer_bindings, AuthoringApp, ComposerContext, LibraryApp, LibraryView,
+    PublishedInput, ReadableSource, CONTEXT_DEADLINE as COMPOSER_CONTEXT_DEADLINE,
+};
 pub use definitions::{
     CurrentRevision, DefinitionDetail, DefinitionRevision, InputContract, PublicationDetail,
     PublishResult, RecordSchema, SavedWork, SavedWorkDetail, WorkBinding, MAX_CANONICAL_BYTES,
 };
+pub use governance::{
+    AccessEntry, AccessRow, AgentScope, AgentSummary, ACTIVITY_LIMIT, MAX_SCOPE_APPS, MAX_TOUCHED,
+    SCOPE_ACTIONS, SCOPE_SPACES,
+};
+pub use labels::{
+    address_shaped, card_shaped, label_description, label_name, merge_label, shortcut_shaped,
+    Label, LabelChange, Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
+};
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
+pub use queries::QueryActor;
 pub use queries::{
-    parse_parameters, query_digests, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline,
-    WorkView, QUERY_HANDLER_DEADLINE,
+    command_slug, events_fields, field_type, library_sidecar, parse_parameters, query_digests,
+    LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkPart,
+    WorkView, COMMAND_MARKER, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
+};
+pub use record_components::{
+    record_component_digest, RecordComponentsRun, RECORD_COMPONENT_BYTES, RECORD_COMPONENT_ROWS,
 };
 pub use registry::RegistryIdentity;
 pub use sessions::{
-    capability_organization, capability_shaped, AdmittedMember, Completion, Ended, FlowKind,
-    FlowRecord, FlowStart, Lookup, PreAccess, PreAccessStart, SignedOut, PRELOGIN_SECONDS,
-    PRE_ACCESS_ABSOLUTE_SECONDS, PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS,
-    SESSION_IDLE_SECONDS,
+    agent_token_organization, capability_organization, capability_shaped, slack_id, AdmittedMember,
+    AgentCaller, Completion, Ended, FlowKind, FlowRecord, FlowStart, Lookup, PreAccess,
+    PreAccessStart, SignedOut, AGENT_TOKEN_PREFIX, PRELOGIN_SECONDS, PRE_ACCESS_ABSOLUTE_SECONDS,
+    PRE_ACCESS_IDLE_SECONDS, SESSION_ABSOLUTE_SECONDS, SESSION_IDLE_SECONDS,
 };
+pub use shared_access::{
+    normalize_share_email, GuestAccess, LinkedApp, LiveShare, NewLiveShare, SharedAuthTarget,
+};
+pub use shared_identity::*;
+pub use shared_reads::GuestQueryRun;
+pub use sharing::{
+    member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
+    SHARE_HANDLER_DEADLINE,
+};
+pub use work_labels::{WorkLabel, WorkLabelResult};
+pub use work_presentation::WorkPresentation;
 
 use std::fmt;
 
@@ -50,6 +109,7 @@ pub enum Error {
     Denied,
     Unavailable,
     Deadline,
+    ProjectionLimit,
     UnknownOutcome,
 }
 
@@ -60,6 +120,7 @@ impl fmt::Display for Error {
             Self::Denied => "resource unavailable",
             Self::Unavailable => "storage unavailable",
             Self::Deadline => "storage deadline exceeded",
+            Self::ProjectionLimit => "record projection bound exceeded",
             Self::UnknownOutcome => "transaction outcome unknown",
         })
     }
@@ -107,13 +168,23 @@ fn valid_id(value: &str) -> bool {
 // The Docker fixtures are crate-visible to the APP-009 session campaign
 // (`auth::tests`); still compiled only into the test executable.
 #[cfg(test)]
+mod actions_campaign;
+// APP-108: the folders campaign (Docker; upload → parse → register → view →
+// derived app → share → isolation).
+#[cfg(test)]
 pub(crate) mod admission_qualification;
 #[cfg(test)]
+mod box_campaign;
+#[cfg(test)]
 pub(crate) mod command_qualification;
+#[cfg(test)]
+mod composer_qualification;
 #[cfg(test)]
 mod definition_qualification;
 #[cfg(test)]
 mod managed_qualification;
+#[cfg(test)]
+mod mcp_campaign;
 #[cfg(test)]
 pub(crate) mod qualification;
 #[cfg(test)]
@@ -123,4 +194,14 @@ mod query_qualification;
 #[cfg(test)]
 mod race_qualification;
 #[cfg(test)]
+mod record_components_campaign;
+#[cfg(test)]
+mod shared_campaign;
+#[cfg(test)]
+mod sharing_qualification;
+#[cfg(test)]
+mod slack_campaign;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod workflows_campaign;

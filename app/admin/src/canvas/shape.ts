@@ -1,0 +1,1021 @@
+// APP-122 Shape: change how a card, an app (its theme) or a widget looks or
+// what it shows. Typed `/shape <address> <words>` (the Shape verb), or
+// `/<app>.<card> <words>` for a card (the dot is the rule), or ⋯ → Shape…,
+// which puts `/shape <address> ` in the bar. The address goes through the
+// existing resolvers (the Library's `findCards` / `findApps`, the member's
+// card shortcuts, the widget kinds), so whatever they accept `/shape` accepts.
+//
+// `POST /v1/shape` answers only a closed spec for the target (judged on the
+// server, `composer::shape`, and again here, `talk-view.ts`). Nothing changes
+// until the member clicks: the spec shows as a *preview* on the item with a
+// dock card (Apply, Add as new card for a card, Cancel); Apply labels the
+// item *shaped* with Revert. Applied views are session-only; app themes stay
+// per member in this browser. A
+// card added as new is stored for the member (APP-123, below). A card's view is evaluated over the card's
+// own data in this browser (`talk-view.ts`), never records: a view may
+// filter or hide records, and every number it computes keeps the receipts
+// of the records it came from (ADR-011 I3). Text nodes only.
+//
+// APP-122 review: the address takes every form the canvas accepts, through
+// one resolver (`resolveTarget`, Ask's scope uses it too): `expenses.ledger`,
+// `3.2`, a card shortcut, `expenses`, a personal shortcut (`e`), and APP-121's
+// full forms `card:expenses.ledger`, `app:expenses`, `widget:calculator`
+// (`folder:` is named, not shapeable yet). A bare name reaches a widget kind
+// first (verbs win), so the Notes app is `app:notes`. A preview is owned by
+// a token: an older preview's Cancel (its dock replaced by a newer one)
+// never undoes the newer preview. Applied cards stay live: on a committed
+// record (or a lagged stream) their data is read again and the view
+// re-evaluated.
+//
+// APP-123: a card made with **Add as new card** is stored per member ("made
+// by you", `cards.ts`, `POST /v1/cards`): it belongs to its app, persists
+// across sessions and is placed again on every load (`placeMadeCard`), live
+// over its records with their receipts; **Remove** deletes it (audited), and
+// the app's owner or an admin can add it for everyone. **Make it a card** on
+// an Ask answer previews a new card over the answer's records
+// (`previewNewCard`, the answer's record set); nothing is added without a
+// click on **Add as new card**.
+import { addressFor, fillBar } from './address-chip';
+import { addCards, ensureAppGroup, focusCard, isDemoCanvas, isOnBoard, onLiveEvent, placeUtilityCard, removeUtilityItem } from './board';
+import { madeCardRequest, madeLine, madeView, newCardId, removeCard, shareCard, storeCard, type From, type StoredCard } from './cards';
+import { appForm, findAddress, findAppAddress, findCardShortcut, findVerb, type Address, type CanvasCommand } from './command-registry';
+import { isDismissKey, showDockCard } from './dock-card';
+import { cardAddress, findApps, findCardRow, findCards, libraryApps, type AppRow, type CardRow } from './library';
+import { recordsJson } from './records';
+import { announce, el, isUuid, receiptSection, released } from './render';
+import { registerCompleter, type Completion } from './slash';
+import {
+  appTheme, cardView, chips, evaluate, fieldsOf, metaText, splitAddress, tableFromQuery, tableFromRecords, themeChips, themeName,
+  type AppTheme, type CardView, type Group, type RecordReceipt, type Shaped, type Table,
+} from './talk-view';
+import { frameCardsOfItem, isUniteItem, setAppView } from './unite';
+import { appComponentVisible } from '../presentation/presentation';
+import type { WidgetCard } from './widgets/card';
+import { widgetFor, widgetKind, widgetOfItem } from './widgets/index';
+import { validState, type WidgetKind, type WidgetState } from './widgets/state';
+
+export const SHAPE_URL = '/v1/shape';
+type Report = (message: string) => void;
+
+// --- Resolving an address (the existing resolvers only) ---
+
+export type Target =
+  | { kind: 'card'; card: CardRow; address: string }
+  | { kind: 'app'; app: AppRow; address: string }
+  | { kind: 'widget'; widget: WidgetCard; address: string }
+  | { kind: 'none'; message: string };
+
+const appAddress = (app: AppRow) => appForm({ slug: app.slug || app.address?.slug || app.number });
+const none = (message: string): Target => ({ kind: 'none', message });
+
+/** The Library row of an app's address (a saved app's own work). */
+function rowOf(address: Address): AppRow | undefined {
+  const rows = libraryApps().filter((row) => row.app === address.app && (!address.work || row.work === address.work));
+  return rows.find((row) => row.slug === address.slug) ?? rows[0];
+}
+
+/** Whether `card` is exactly what `name` says (`3.2`, `expenses.ledger`), not a prefix of it. */
+function exactCard(card: CardRow, name: string): boolean {
+  return card.number === name || (name.includes('.') && card.slug === name.slice(name.indexOf('.') + 1));
+}
+
+/**
+ * What `address` names (module notes): a widget kind, a card (`app.card`,
+ * `3.2`, a card shortcut), else an app, in any of their forms. `strict`
+ * (Ask's `/ask <address> …`) takes only exact names: never a guess from a
+ * title or a prefix, and never a verb or a widget kind for a bare word.
+ */
+export function resolveTarget(address: string, options: { strict?: boolean } = {}): Target {
+  const strict = options.strict === true;
+  const { space, name } = splitAddress(address);
+  if (!name) return none('Name what to shape: /shape expenses.ledger …, /shape expenses …, /shape calculator …');
+  if (space === 'folder') return none('A folder keeps its files; shaping or asking about a folder is not available yet.');
+  if (space === 'widget' || (!space && !strict)) {
+    const kind = widgetKind(name);
+    if (kind) {
+      if (kind === 'note' || kind === 'folder') return none(`A ${kind} keeps its contents; shaping a ${kind} is not available yet.`);
+      const widget = widgetFor(kind);
+      return widget ? { kind: 'widget', widget, address: kind } : none(`Place a ${kind} first: /widget ${kind}.`);
+    }
+    if (space === 'widget') return none(`No widget is called ${name}: weather, calculator or clock.`);
+  }
+  if (!space && strict && findVerb(name)) return none(`/${name} is a command, not an app or a card.`);
+  if (space === 'card' || !space) {
+    const shortcut = findCardShortcut(name);
+    const named = shortcut ? findCards(`${shortcut.address.slug}.${shortcut.card}`) : [];
+    if (named[0]) return cardTarget(named[0]);
+    if (space === 'card' || name.includes('.')) {
+      const cards = findCards(name);
+      const card = strict ? cards.find((candidate) => exactCard(candidate, name)) : cards[0];
+      return card ? cardTarget(card) : none(`No card matches ${name}. Open the Library (L) to see each card’s app.card name.`);
+    }
+  }
+  // An app: its address, an alias or the member's own shortcut (`app:` reaches one a verb shadows).
+  const exact = space === 'app' ? findAppAddress(name) : findAddress(name);
+  const row = exact ? rowOf(exact) : undefined;
+  if (row) return { kind: 'app', app: row, address: appAddress(row) };
+  if (!strict) {
+    const [app] = findApps(name);
+    if (app) return { kind: 'app', app, address: appAddress(app) };
+  }
+  return none(`Nothing answers to ${name}. Shape a card (app.card), an app or a widget.`);
+}
+
+function cardTarget(card: CardRow): Target {
+  // The app card's look is its app's: shaping it themes the app.
+  if (card.slug === 'app') return { kind: 'app', app: card.app, address: appAddress(card.app) };
+  return { kind: 'card', card, address: cardAddress(card) };
+}
+
+/** The address of a canvas item (⋯ → Shape…, ⋯ → Ask about this); null when it has none. */
+export function addressOfItem(item: HTMLElement | null): string | null {
+  if (!item) return null;
+  const widget = widgetOfItem(item);
+  if (widget) return widget.kind;
+  if (isUniteItem(item)) {
+    const row = frameCardsOfItem(item).map(findCardRow).find(Boolean);
+    return row ? appAddress(row.app) : null;
+  }
+  const row = findCardRow(item.dataset.instanceId ?? '');
+  if (!row) return null;
+  return row.slug === 'app' ? appAddress(row.app) : cardAddress(row);
+}
+
+// --- Loading a card's data ---
+
+function cardElement(id: string): HTMLElement | null {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) return null;
+  return document.querySelector<HTMLElement>(`.cv-item .cv-card[data-card="${id}"]`) ?? document.querySelector<HTMLElement>(`.cv-card[data-card="${id}"]`);
+}
+
+/** Where a card's data comes from: its records listing (and collection), or its view's query. */
+export type Source = { records?: string; collection?: string; query?: string };
+export function sourceOf(card: HTMLElement): Source {
+  return { records: card.dataset.records, collection: card.dataset.collection, query: card.dataset.query };
+}
+
+/** What `POST /v1/shape` names as the card's data: its collection, or its view (from `/queries/<view>`). */
+export function sourceTarget(source: Source, table: Table): { collection: string } | { view: string } | null {
+  if (table.source === 'records') {
+    const collection = isUuid(table.collection) ? table.collection : isUuid(source.collection) ? source.collection : '';
+    return collection ? { collection } : null;
+  }
+  const view = /\/queries\/([a-z][a-z0-9_-]{0,63})$/.exec(source.query ?? '')?.[1];
+  return view ? { view } : null;
+}
+
+/** APP-123: where a stored card reads its data: its work's records listing (one collection), or its view's query. */
+export function sourceFor(app: string, work: string, from: From): Source {
+  const base = `/v1/work/${app}/${work}`;
+  return 'collection' in from ? { records: `${base}/records`, collection: from.collection } : { query: `${base}/queries/${from.view}` };
+}
+
+/** The card's own data as a table: its records listing, or its released query result. */
+export async function loadTable(source: Source): Promise<Table | string> {
+  try {
+    const records = source.records;
+    if (records && records.startsWith('/v1/work/')) {
+      const response = await fetch(records, { credentials: 'same-origin', cache: 'no-store' });
+      const listing = response.ok ? recordsJson(await response.json()) : null;
+      return listing ? tableFromRecords(listing, source.collection ?? '') : 'This card’s records could not be read.';
+    }
+    const query = source.query;
+    if (query && query.startsWith('/v1/work/')) {
+      const response = await fetch(query, {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ parameters: {} }),
+      });
+      const result = response.ok ? released(await response.json()) : null;
+      return result ? tableFromQuery(result) : 'This card’s result came without its receipt, so it cannot be shaped.';
+    }
+  } catch {
+    return 'This card’s data could not be read. Check your connection.';
+  }
+  return 'This card has no data to shape (a form or a note). Shape its app’s theme with /shape <app>.';
+}
+
+// --- The request ---
+
+const REFUSALS: Record<string, string> = {
+  could_not_shape: 'That came back as something other than a view, so nothing was shown. Nothing changed.',
+  composer_unavailable: 'Shaping that needs the AI model, and none is configured here. Try “only red invoices”, “total by month” or “highlight overdue in red”.',
+  too_many_requests: 'Too many shapes in a short time. Try again in a moment.',
+  invalid_request: 'Say it in a short sentence (up to 300 characters). Nothing changed.',
+};
+
+async function requestShape(body: Record<string, unknown>): Promise<{ target: string; spec: unknown } | string> {
+  let response: Response;
+  try {
+    response = await fetch(SHAPE_URL, {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+  } catch {
+    return 'The shape could not be sent. Nothing changed.';
+  }
+  const answer = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (response.status === 404) return 'You can’t open that app, so it can’t be shaped.';
+  if (!response.ok) return REFUSALS[typeof answer?.code === 'string' ? answer.code : ''] ?? 'The shape could not be made right now. Nothing changed.';
+  if (!answer || typeof answer.target !== 'string') return REFUSALS.could_not_shape ?? '';
+  return { target: answer.target, spec: answer.spec };
+}
+
+// --- Rendering a shaped card ---
+
+function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
+function receiptList(document_: Document, receipts: RecordReceipt[], table: Table): HTMLElement {
+  const rows = receipts.slice(0, 200).map((r) => el(document_, 'li', {},
+    el(document_, 'code', { title: r.record_id }, shortId(r.record_id)),
+    ` version ${r.version} · commit ${r.commit_sequence} · ${r.committed_at}`));
+  const provenance = table.provenance;
+  return el(document_, 'details', { class: 'cv-shaped-receipts', 'aria-label': 'Receipts' },
+    el(document_, 'summary', {}, `Receipts · ${receipts.length} ${receipts.length === 1 ? 'record' : 'records'}`),
+    el(document_, 'ul', {}, ...rows),
+    provenance ? el(document_, 'p', { class: 'cv-shaped-provenance' },
+      'Publication ', el(document_, 'code', {}, shortId(provenance.publication_id)),
+      ' · definition ', el(document_, 'code', { title: provenance.definition_digest }, provenance.definition_digest.slice(0, 19)),
+      ` · work version ${provenance.work_version}`) : null);
+}
+
+/** The receipts a shaped card keeps: the query's whole receipt, or its records' receipts. */
+function receiptsFor(document_: Document, table: Table, receipts: RecordReceipt[]): HTMLElement {
+  if (table.source === 'query' && table.receipt) return receiptSection(document_, table.receipt);
+  return receiptList(document_, receipts, table);
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+function chart(document_: Document, groups: Group[], line: boolean): Element | null {
+  // Money in several currencies is never drawn on one axis.
+  if (groups.length < 1 || groups.length > 60 || groups.some((g) => g.measured.mixed)) return null;
+  const max = Math.max(...groups.map((g) => g.measured.value), 0);
+  if (max <= 0) return null;
+  const [width, height, pad] = [520, 160, 18];
+  const step = (width - pad * 2) / groups.length;
+  const svg = document_.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height + 22}`);
+  svg.setAttribute('class', 'cv-shaped-chart');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', groups.map((g) => `${g.label}: ${g.measured.text}`).join('; '));
+  const y = (v: number) => pad / 2 + (height - pad) * (1 - v / max);
+  const points: string[] = [];
+  groups.forEach((g, i) => {
+    const x = pad + i * step;
+    if (line) points.push(`${(x + step / 2).toFixed(1)},${y(g.measured.value).toFixed(1)}`);
+    else {
+      const bar = document_.createElementNS(SVG, 'rect');
+      bar.setAttribute('x', (x + step * 0.15).toFixed(1));
+      bar.setAttribute('width', (step * 0.7).toFixed(1));
+      bar.setAttribute('y', y(g.measured.value).toFixed(1));
+      bar.setAttribute('height', (height - pad / 2 - y(g.measured.value)).toFixed(1));
+      bar.setAttribute('class', 'cv-shaped-bar');
+      const tip = document_.createElementNS(SVG, 'title');
+      tip.textContent = `${g.label}: ${g.measured.text}`;
+      bar.append(tip);
+      svg.append(bar);
+    }
+    if (groups.length <= 12) {
+      const label = document_.createElementNS(SVG, 'text');
+      label.setAttribute('x', (x + step / 2).toFixed(1));
+      label.setAttribute('y', String(height + 14));
+      label.setAttribute('text-anchor', 'middle');
+      label.textContent = g.label.length > 12 ? `${g.label.slice(0, 11)}…` : g.label;
+      svg.append(label);
+    }
+  });
+  if (line) {
+    const path = document_.createElementNS(SVG, 'polyline');
+    path.setAttribute('points', points.join(' '));
+    path.setAttribute('class', 'cv-shaped-line');
+    svg.append(path);
+  }
+  return svg;
+}
+
+function body(document_: Document, shaped: Shaped, table: Table, view: CardView): HTMLElement {
+  const box = el(document_, 'div', { class: 'cv-shaped-body' });
+  if (shaped.kind === 'number') {
+    box.append(
+      el(document_, 'p', { class: 'cv-insight-label' }, shaped.measure),
+      el(document_, 'p', { class: 'cv-insight-value value' }, shaped.measured.text),
+      el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)),
+      receiptsFor(document_, table, shaped.receipts));
+    return box;
+  }
+  if (shaped.kind === 'groups') {
+    const figure = view.presentation === 'table' ? null : chart(document_, shaped.groups, view.presentation === 'line');
+    if (figure) box.append(figure);
+    const rows = shaped.groups.map((g) => el(document_, 'tr', {},
+      el(document_, 'th', { scope: 'row' }, g.label),
+      el(document_, 'td', { class: 'value num' }, g.measured.text),
+      el(document_, 'td', {}, table.source === 'records' ? receiptList(document_, g.receipts, table) : `${g.count} rows`)));
+    box.append(
+      el(document_, 'div', { class: 'cv-table' }, el(document_, 'table', {},
+        el(document_, 'thead', {}, el(document_, 'tr', {},
+          el(document_, 'th', { scope: 'col' }, shaped.by.replace(/_/g, ' ')),
+          el(document_, 'th', { scope: 'col' }, shaped.measure),
+          el(document_, 'th', { scope: 'col' }, 'Receipts'))),
+        el(document_, 'tbody', {}, ...rows))),
+      el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)));
+    if (table.source === 'query' && table.receipt) box.append(receiptSection(document_, table.receipt));
+    return box;
+  }
+  const list = view.presentation === 'list';
+  const columns = shaped.columns;
+  const receipts = shaped.rows.flatMap(({ row }) => (row.receipt ? [row.receipt] : []));
+  if (list) {
+    box.append(el(document_, 'ul', { class: 'cv-shaped-list' }, ...shaped.rows.map(({ row, color }) => el(document_, 'li', color ? { 'data-highlight': color } : {},
+      columns.slice(0, 3).map((c) => row.text[c.id] ?? '').filter(Boolean).join(' · ')))));
+  } else {
+    box.append(el(document_, 'div', { class: 'cv-table' }, el(document_, 'table', {},
+      el(document_, 'thead', {}, el(document_, 'tr', {}, ...columns.map((c) => el(document_, 'th', { scope: 'col' }, c.id.replace(/_/g, ' '))))),
+      el(document_, 'tbody', {}, ...shaped.rows.map(({ row, color }) => el(document_, 'tr', color ? { 'data-highlight': color } : {},
+        ...columns.map((c) => el(document_, 'td', { class: ['money', 'integer', 'decimal'].includes(c.type) ? 'value num' : 'value' }, row.text[c.id] ?? '—'))))))));
+  }
+  box.append(
+    el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)),
+    receiptsFor(document_, table, receipts));
+  return box;
+}
+
+/** A shaped card's section: its chips, its label (preview or shaped) and its body with receipts. */
+export function shapedSection(document_: Document, state: 'preview' | 'shaped', address: string, view: CardView, table: Table): HTMLElement {
+  const shaped = evaluate(table, view);
+  return el(document_, 'section', { class: 'cv-shaped', 'data-state': state, 'data-palette': view.palette ?? 'default', 'aria-label': `${state === 'preview' ? 'Preview' : 'Shaped'} view of /${address}` },
+    el(document_, 'p', { class: 'cv-shaped-chips' },
+      el(document_, 'span', { class: 'badge cv-shaped-badge' }, state),
+      ...(view.title ? [el(document_, 'strong', {}, view.title)] : []),
+      ...chips(view).map((chip) => el(document_, 'span', { class: 'cv-shaped-chip' }, chip))),
+    body(document_, shaped, table, view));
+}
+
+// --- Applying: preview, Apply, Add as new card, Revert (session only) ---
+
+type Applied = { address: string; view: CardView; table: Table; source: Source; work: string };
+const appliedCards = new Map<string, Applied>();
+const appliedThemes = new Map<string, AppTheme>();
+const WORK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Closed app themes read back from this browser. Unknown names are dropped. */
+export function appThemesFromStorage(value: unknown): [string, AppTheme][] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+  const out: [string, AppTheme][] = [];
+  for (const [work, theme] of Object.entries(value)) {
+    if (!WORK_ID.test(work)) continue;
+    const judged = appTheme(theme);
+    if (judged) out.push([work, judged]);
+    if (out.length === 40) break;
+  }
+  return out;
+}
+
+function themeKey(): string | null {
+  if (typeof document === 'undefined' || isDemoCanvas()) return null;
+  const member = document.getElementById('cv-canvas')?.getAttribute('data-member') ?? '';
+  return /^[0-9a-f]{16}$/.test(member) ? `forma.canvas.app-theme.v1:${member}` : null;
+}
+
+function writeAppThemes(): void {
+  const key = themeKey();
+  if (!key) return;
+  const body: Record<string, AppTheme> = {};
+  for (const [work, theme] of appliedThemes) body[work] = theme;
+  try {
+    localStorage.setItem(key, JSON.stringify(body));
+  } catch {
+    // The look remains on this page when storage is blocked.
+  }
+}
+
+function restoreAppThemes(): void {
+  const key = themeKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(localStorage.getItem(key) ?? '{}');
+  } catch {
+    return;
+  }
+  for (const [work, theme] of appThemesFromStorage(parsed)) {
+    if (document.querySelector(`[data-theme-preview="true"][data-work="${CSS.escape(work)}"]`)) continue;
+    appliedThemes.set(work, theme);
+    setTheme(themeTargets(work), theme);
+    labelAppTheme(work);
+  }
+}
+
+function colorScheme(): 'light' | 'dark' {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/** Default presentation tokens are not an authored, published app design. */
+export function acceptsAppTheme(node: Pick<HTMLElement, 'dataset'>): boolean {
+  return node.dataset.appPresentation === 'default' || (node.dataset.appPresentation !== 'authored' && !node.dataset.appMode);
+}
+
+/** Cards and the unite frame of one saved work; authored presentation wins. */
+function themeTargets(work: string): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work], .cv-unite[data-work]'))
+    .filter((node) => node.dataset.work === work && acceptsAppTheme(node));
+}
+
+function labelAppTheme(work: string): void {
+  for (const node of themeTargets(work)) {
+    if (node.dataset.kind !== 'app' && node.dataset.kind !== 'unite') continue;
+    const host = head(node);
+    if (!host || host.querySelector(':scope > .cv-shaped-label[data-app-theme]')) continue;
+    labelShaped(host, () => {
+      appliedThemes.delete(work);
+      writeAppThemes();
+      for (const target of themeTargets(work)) unlabel(head(target));
+      setTheme(themeTargets(work), null);
+      announce('App appearance restored.');
+    });
+    host.querySelector<HTMLElement>(':scope > .cv-shaped-label')?.setAttribute('data-app-theme', '');
+  }
+}
+
+if (typeof matchMedia === 'function') {
+  const query = matchMedia('(prefers-color-scheme: dark)');
+  query.addEventListener?.('change', () => {
+    for (const [work, theme] of appliedThemes) {
+      if (theme.mode === 'light' || theme.mode === 'dark') continue;
+      setTheme(themeTargets(work), theme);
+    }
+  });
+}
+
+/**
+ * The preview each item shows now: a newer preview takes the token, so an
+ * older one's Cancel (run when its dock is replaced) leaves it alone.
+ */
+const previews = new Map<unknown, number>();
+let previewSequence = 0;
+export function claimPreview(key: unknown): () => boolean {
+  previewSequence += 1;
+  const token = previewSequence;
+  previews.set(key, token);
+  return () => previews.get(key) === token;
+}
+
+/** Shaped views that stay live: re-read and re-evaluated when their work's records change. */
+type LiveView = { work: string; source: Source; epoch: number; render: (table: Table) => boolean };
+const liveViews = new Map<string, LiveView>();
+/** Re-reads the data of every live shaped view of `work` (every one when null) and re-renders it. */
+export async function refreshShaped(work: string | null): Promise<void> {
+  await Promise.all([...liveViews.entries()].filter(([, live]) => work === null || live.work === work).map(async ([key, live]) => {
+    live.epoch += 1;
+    const epoch = live.epoch;
+    const table = await loadTable(live.source);
+    if (typeof table === 'string' || liveViews.get(key) !== live || live.epoch !== epoch) return;
+    if (!live.render(table)) liveViews.delete(key);
+  }));
+}
+
+function head(card: HTMLElement): HTMLElement | null {
+  return card.querySelector<HTMLElement>(':scope > .cv-card-head, :scope > header, :scope > h2');
+}
+
+/** Hides the card's own content (it keeps running underneath) and shows `section` instead. */
+function showSection(card: HTMLElement, section: HTMLElement | null): void {
+  card.querySelector(':scope > .cv-shaped')?.remove();
+  const header = head(card);
+  for (const child of Array.from(card.children) as HTMLElement[]) {
+    if (child === header || child.classList.contains('cv-shaped')) continue;
+    if (section) {
+      if (!child.hidden) {
+        child.hidden = true;
+        child.dataset.shapeHidden = 'true';
+      }
+    } else if (child.dataset.shapeHidden === 'true') {
+      child.hidden = false;
+      delete child.dataset.shapeHidden;
+    }
+  }
+  if (section) (header ?? card.firstElementChild)?.after(section);
+  if (!section) delete card.dataset.shaped;
+}
+
+function labelShaped(host: HTMLElement | null, revert: () => void): void {
+  if (!host) return;
+  host.querySelector(':scope > .cv-shaped-label')?.remove();
+  const document_ = host.ownerDocument;
+  const button = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-shaped-revert' }, 'Revert');
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    revert();
+  });
+  host.append(el(document_, 'span', { class: 'cv-shaped-label' }, el(document_, 'span', { class: 'badge cv-shaped-badge' }, 'shaped'), button));
+}
+function unlabel(host: HTMLElement | null): void {
+  host?.querySelector(':scope > .cv-shaped-label')?.remove();
+}
+
+function revertCard(card: HTMLElement, id: string, report: Report = announce): void {
+  appliedCards.delete(id);
+  liveViews.delete(`card:${id}`);
+  showSection(card, null);
+  unlabel(head(card));
+  report('Reverted: the card shows its own view again.');
+}
+
+function applyCard(card: HTMLElement, id: string, applied: Applied): void {
+  appliedCards.set(id, applied);
+  showSection(card, shapedSection(card.ownerDocument, 'shaped', applied.address, applied.view, applied.table));
+  card.dataset.shaped = 'true';
+  labelShaped(head(card), () => revertCard(card, id));
+  // Live: the applied view is evaluated again over the card's fresh data.
+  liveViews.set(`card:${id}`, {
+    work: applied.work, source: applied.source, epoch: 0,
+    render: (table) => {
+      if (appliedCards.get(id) !== applied || !card.isConnected) return false;
+      applied.table = table;
+      // A preview open on the card keeps the screen; the applied view updates under it.
+      if (card.dataset.shaped === 'true') showSection(card, shapedSection(card.ownerDocument, 'shaped', applied.address, applied.view, table));
+      return true;
+    },
+  });
+}
+
+/** The dock card that asks Apply / Add as new card / Cancel. */
+function confirmDock(title: string, chipList: string[], buttons: { label: string; primary?: boolean; run: () => void }[], onCancel: () => void): void {
+  const document_ = document;
+  let close = () => undefined as void;
+  let settled = false;
+  const settle = (run: () => void) => {
+    if (settled) return;
+    settled = true;
+    close();
+    run();
+  };
+  const actions = el(document_, 'div', { class: 'cv-confirm-actions' });
+  for (const button of buttons) {
+    const node = el(document_, 'button', { type: 'button', class: button.primary ? 'cv-primary' : 'cv-secondary' }, button.label);
+    node.addEventListener('click', () => settle(button.run));
+    actions.append(node);
+  }
+  const cancel = el(document_, 'button', { type: 'button', class: 'cv-secondary' }, 'Cancel');
+  cancel.addEventListener('click', () => settle(onCancel));
+  actions.append(cancel);
+  const card = el(document_, 'section', { class: 'cv-card cv-confirm cv-shape-confirm', role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'cv-shape-title' },
+    el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', { id: 'cv-shape-title' }, title), el(document_, 'span', { class: 'badge' }, 'preview')),
+    el(document_, 'p', { class: 'cv-shaped-chips' }, ...chipList.map((chip) => el(document_, 'span', { class: 'cv-shaped-chip' }, chip))),
+    el(document_, 'p', { class: 'cv-confirm-note' }, 'Nothing changes until you apply it. No record is written.'),
+    actions);
+  card.addEventListener('keydown', (event) => {
+    if (isDismissKey(event)) {
+      event.preventDefault();
+      settle(onCancel);
+    }
+  });
+  close = showDockCard(document_, card, () => settle(onCancel));
+  actions.querySelector<HTMLButtonElement>('button')?.focus();
+}
+
+async function shapeCard(target: Extract<Target, { kind: 'card' }>, words: string, report: Report): Promise<void> {
+  const row = target.card;
+  const group = await ensureAppGroup(row.app.app, row.app.work);
+  const card = group?.cards.find(card => card.dataset.card === row.id);
+  if (!card) {
+    report(`${target.address} could not be placed to shape it.`);
+    return;
+  }
+  if (!appComponentVisible(row.app.app, row.app.work, card)) {
+    report('That component is hidden in your views on this browser. Change your view preferences in Edit app to show it.');
+    return;
+  }
+  if (!isOnBoard(row.id) || card.closest('[hidden], [inert]')) await setAppView(row.app.app, row.app.work, 'open', { focus: false });
+  if (!isOnBoard(row.id)) { report(`${target.address} could not be placed to shape it.`); return; }
+  report(`Shaping /${target.address}…`);
+  const source = sourceOf(card);
+  const table = await loadTable(source);
+  if (typeof table === 'string') {
+    report(table);
+    return;
+  }
+  const from = sourceTarget(source, table);
+  if (!from) {
+    report('This card’s data has no schema to shape it by. Nothing changed.');
+    return;
+  }
+  const answer = await requestShape({
+    address: target.address, words,
+    target: { kind: 'card', app_id: row.app.app, work_id: row.app.work, card: row.slug, fields: fieldsOf(table), ...from },
+  });
+  if (typeof answer === 'string') {
+    report(answer);
+    return;
+  }
+  const view = answer.target === 'card' ? cardView(answer.spec) : null;
+  if (!view) {
+    report(REFUSALS.could_not_shape ?? '');
+    return;
+  }
+  const before = appliedCards.get(row.id) ?? null;
+  const current = claimPreview(card);
+  showSection(card, shapedSection(card.ownerDocument, 'preview', target.address, view, table));
+  card.dataset.shaped = 'preview';
+  focusCard(card);
+  // Only this preview's own Cancel restores: a newer preview on the card keeps its screen.
+  const restore = () => {
+    if (!current()) return false;
+    if (before) applyCard(card, row.id, before);
+    else {
+      showSection(card, null);
+      unlabel(head(card));
+    }
+    return true;
+  };
+  const applied: Applied = { address: target.address, view, table, source, work: row.app.work };
+  confirmDock(`Shape /${target.address}`, chips(view), [
+    { label: 'Apply', primary: true, run: () => { applyCard(card, row.id, applied); report(`/${target.address} is shaped. Revert is on the card.`); } },
+    {
+      label: 'Add as new card',
+      run: () => {
+        restore();
+        // APP-123: stored per member ("made by you"); it stays until removed.
+        void addMadeCard({ app: row.app.app, work: row.app.work, source: row.slug, address: target.address, title: view.title ?? `${row.title} (shaped)`, from, view }, report);
+      },
+    },
+  ], () => { if (restore()) report('Nothing changed.'); });
+}
+
+// --- APP-123: cards made by you ---
+
+/** Stores a made card and places it; reports why when the server refused (then nothing is added). */
+export async function addMadeCard(card: { app: string; work: string; source: string; address: string; title: string; from: From; view: CardView }, report: Report = announce): Promise<StoredCard | null> {
+  const stored = await storeCard(madeCardRequest({ id: newCardId(), ...card }));
+  if (typeof stored === 'string') {
+    report(stored);
+    return null;
+  }
+  await placeMadeCard(stored, report);
+  report(`A new card from /${card.address} is on the canvas, made by you. It stays until you remove it; its numbers keep their receipts.`);
+  return stored;
+}
+
+/** Takes a placed utility card (a made card, a pinned answer, a preview) off the canvas. */
+export function removePlaced(id: string): void {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) return;
+  const item = document.querySelector<HTMLElement>(`[data-utility="utility-${id}"]`);
+  if (item) removeUtilityItem(item);
+}
+
+/** **Remove** with a second click to confirm: the server's audited remove, then off the canvas. */
+export function removeButton(document_: Document, card: Pick<StoredCard, 'card_id' | 'everyone'>, placed: string, report: Report, after: () => void = () => undefined): HTMLElement {
+  const button = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-made-remove' }, 'Remove');
+  let armed = false;
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!armed) {
+      armed = true;
+      button.textContent = card.everyone ? 'Remove for everyone?' : 'Remove for good?';
+      return;
+    }
+    button.setAttribute('disabled', '');
+    void removeCard(card.card_id).then((removed) => {
+      if (removed !== true) {
+        button.removeAttribute('disabled');
+        report(removed);
+        return;
+      }
+      after();
+      removePlaced(placed);
+      report('Removed. Its records are unchanged.');
+    });
+  });
+  return button;
+}
+
+/**
+ * APP-123: a card made by you (or added for everyone by the app's owner) on
+ * the canvas: its stored view over its records, live, with receipts; the
+ * maker's **Remove**, and the owner's **Add for everyone** / **Keep for me
+ * only**; on another member's card added for everyone, the app's owner or
+ * an admin gets **Keep for its maker only** and **Remove**. False when the
+ * stored spec does not judge (it is not shown).
+ */
+export async function placeMadeCard(card: StoredCard, report: Report = announce): Promise<boolean> {
+  const made = madeView(card);
+  if (!made || !card.app_id || !card.work_id) return false;
+  const [app, work] = [card.app_id, card.work_id];
+  const document_ = document;
+  const placed = `made-${card.card_id}`;
+  const source = sourceFor(app, work, made.from);
+  let current = card;
+  let data: Table | string = await loadTable(source);
+  const build = (): HTMLElement => {
+    const section = typeof data === 'string'
+      ? el(document_, 'section', { class: 'cv-shaped', 'data-state': 'shaped' }, el(document_, 'p', { class: 'cv-shaped-meta' }, data))
+      : shapedSection(document_, 'shaped', current.address, made.view, data);
+    section.prepend(el(document_, 'p', { class: 'cv-shaped-from' }, madeLine(current)));
+    if (typeof data !== 'string' && made.view.records?.length) {
+      const found = new Set(data.rows.map((row) => row.receipt?.record_id));
+      const missing = made.view.records.filter((id) => !found.has(id)).length;
+      if (missing) section.append(el(document_, 'p', { class: 'cv-shaped-meta' }, `${missing} of the answer’s ${made.view.records.length} records are not among the newest records loaded.`));
+    }
+    const actions = el(document_, 'p', { class: 'cv-made-actions' });
+    if (current.mine && current.can_share) {
+      const share = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-made-share' }, current.everyone ? 'Keep for me only' : 'Add for everyone');
+      share.addEventListener('click', (event) => {
+        event.stopPropagation();
+        share.setAttribute('disabled', '');
+        void shareCard(current.card_id, !current.everyone).then((shared) => {
+          if (typeof shared === 'string') {
+            share.removeAttribute('disabled');
+            report(shared);
+            return;
+          }
+          current = shared;
+          rerender();
+          report(shared.everyone ? 'Added for everyone who can open the app.' : 'Only you see it now.');
+        });
+      });
+      actions.append(share);
+    }
+    if (current.can_manage) {
+      // The app's owner or an admin, on another member's card added for
+      // everyone: take it back to its maker (audited), or remove it.
+      const back = el(document_, 'button', { type: 'button', class: 'cv-secondary cv-made-share' }, 'Keep for its maker only');
+      back.addEventListener('click', (event) => {
+        event.stopPropagation();
+        back.setAttribute('disabled', '');
+        void shareCard(current.card_id, false).then((shared) => {
+          if (typeof shared === 'string') {
+            back.removeAttribute('disabled');
+            report(shared);
+            return;
+          }
+          liveViews.delete(`made:${card.card_id}`);
+          removePlaced(placed);
+          report('Only its maker sees it now.');
+        });
+      });
+      actions.append(back);
+    }
+    if (current.mine || current.can_manage) actions.append(removeButton(document_, current, placed, report, () => liveViews.delete(`made:${card.card_id}`)));
+    if (actions.childElementCount) section.append(actions);
+    return section;
+  };
+  let section = build();
+  const rerender = () => {
+    if (!section.isConnected) return false;
+    const next = build();
+    section.replaceWith(next);
+    section = next;
+    return true;
+  };
+  placeUtilityCard(placed, card.title, section);
+  liveViews.set(`made:${card.card_id}`, {
+    work, source, epoch: 0,
+    render: (table) => {
+      data = table;
+      return rerender();
+    },
+  });
+  return true;
+}
+
+/**
+ * APP-123 **Make it a card**: a Shape preview of a new card over an Ask
+ * answer's records (its record set), on the canvas with a dock card. Nothing
+ * is added without a click on **Add as new card**; **Cancel** takes the
+ * preview away.
+ */
+export async function previewNewCard(card: { app: string; work: string; collection: string; address: string; title: string; view: CardView }, report: Report = announce): Promise<void> {
+  const source = sourceFor(card.app, card.work, { collection: card.collection });
+  const table = await loadTable(source);
+  if (typeof table === 'string') {
+    report(table);
+    return;
+  }
+  const placed = 'preview-new-card';
+  placeUtilityCard(placed, `Preview: ${card.title}`, shapedSection(document, 'preview', card.address, card.view, table));
+  const current = claimPreview(placed);
+  confirmDock(`Make it a card: ${card.title}`, chips(card.view), [
+    {
+      label: 'Add as new card', primary: true,
+      run: () => {
+        removePlaced(placed);
+        void addMadeCard({ app: card.app, work: card.work, source: 'records', address: card.address, title: card.title, from: { collection: card.collection }, view: card.view }, report);
+      },
+    },
+  ], () => {
+    if (!current()) return;
+    removePlaced(placed);
+    report('Nothing was added.');
+  });
+}
+
+function appCards(app: AppRow): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.cv-card[data-work]')).filter((card) => card.dataset.work === app.work);
+}
+function setTheme(nodes: HTMLElement[], theme: AppTheme | null): void {
+  for (const node of nodes) {
+    delete node.dataset.themeMode;
+    delete node.dataset.themeAccent;
+    if (!theme) {
+      delete node.dataset.theme;
+      delete node.dataset.themeDensity;
+      continue;
+    }
+    const name = themeName(theme, colorScheme());
+    if (name) node.dataset.theme = name;
+    else delete node.dataset.theme;
+    if (theme.density && theme.density !== 'default') node.dataset.themeDensity = theme.density;
+    else delete node.dataset.themeDensity;
+  }
+}
+async function shapeApp(target: Extract<Target, { kind: 'app' }>, words: string, report: Report): Promise<void> {
+  const { app } = target;
+  if (!appCards(app).length) await addCards(app.app, app.work, null);
+  if (!themeTargets(app.work).length) {
+    report('This app uses its published design. Use Edit app to change that design when you have permission.');
+    return;
+  }
+  report(`Shaping /${target.address}…`);
+  const answer = await requestShape({ address: target.address, words, target: { kind: 'app', app_id: app.app, work_id: app.work } });
+  if (typeof answer === 'string') {
+    report(answer);
+    return;
+  }
+  const theme = answer.target === 'app' ? appTheme(answer.spec) : null;
+  if (!theme) {
+    report(REFUSALS.could_not_shape ?? '');
+    return;
+  }
+  const before = appliedThemes.get(app.work) ?? null;
+  const current = claimPreview(`theme:${app.work}`);
+  const nodes = themeTargets(app.work);
+  if (!nodes.length) {
+    report('The app design changed while Shape was running. Its published appearance is unchanged.');
+    return;
+  }
+  setTheme(nodes, theme);
+  for (const node of nodes) node.dataset.themePreview = 'true';
+  const settle = () => { for (const node of themeTargets(app.work)) delete node.dataset.themePreview; };
+  confirmDock(`Shape /${target.address}: every card`, themeChips(theme), [
+    {
+      label: 'Apply', primary: true,
+      run: () => {
+        settle();
+        if (!themeTargets(app.work).length) {
+          report('The app now uses its published design. No browser appearance was saved.');
+          return;
+        }
+        appliedThemes.set(app.work, theme);
+        writeAppThemes();
+        setTheme(themeTargets(app.work), theme);
+        labelAppTheme(app.work);
+        report(`Every /${target.address} card is shaped; each keeps its own view. It stays on this browser. Revert is on the app card.`);
+      },
+    },
+  ], () => {
+    // A newer theme preview on this app keeps its look.
+    if (!current()) return;
+    settle();
+    setTheme(themeTargets(app.work), before);
+    report('Nothing changed.');
+  });
+}
+
+function shapeWidgetLabel(widget: WidgetCard, previous: WidgetState): void {
+  widget.chips.querySelector('.cv-shaped-label')?.remove();
+  const button = el(widget.card.ownerDocument, 'button', { type: 'button', class: 'cv-secondary cv-shaped-revert' }, 'Revert');
+  const label = el(widget.card.ownerDocument, 'span', { class: 'cv-shaped-label' }, el(widget.card.ownerDocument, 'span', { class: 'badge cv-shaped-badge' }, 'shaped'), button);
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    widget.apply(previous);
+    label.remove();
+    widget.announce('Reverted.');
+  });
+  widget.chips.append(label);
+}
+
+const originals = new WeakMap<HTMLElement, WidgetState>();
+
+async function shapeWidget(target: Extract<Target, { kind: 'widget' }>, words: string, report: Report): Promise<void> {
+  const { widget } = target;
+  report(`Shaping the ${widget.kind}…`);
+  const answer = await requestShape({ address: target.address, words, target: { kind: 'widget', widget: widget.kind, state: widget.state } });
+  if (typeof answer === 'string') {
+    report(answer);
+    return;
+  }
+  const next = answer.target === 'widget' ? validState(widget.kind as WidgetKind, answer.spec) : null;
+  if (!next) {
+    report(REFUSALS.could_not_shape ?? '');
+    return;
+  }
+  // A preview replacing a pending one restores to the look before both.
+  const previous = widget.card.dataset.shapePreview === 'true' ? originals.get(widget.card) ?? widget.state : widget.state;
+  originals.set(widget.card, previous);
+  const current = claimPreview(widget.card);
+  widget.apply(next);
+  widget.card.dataset.shapePreview = 'true';
+  const settle = () => { delete widget.card.dataset.shapePreview; };
+  const look = [`${next.skin} skin`, `${next.accent} accent`, `${next.font} font`];
+  confirmDock(`Shape /${target.address}`, look, [
+    { label: 'Apply', primary: true, run: () => { settle(); shapeWidgetLabel(widget, previous); report(`The ${widget.kind} is shaped. Revert is on it.`); } },
+  ], () => {
+    if (!current()) return;
+    settle();
+    widget.apply(previous);
+    report('Nothing changed.');
+  });
+}
+
+/** `/shape <address> <words>` and the dot shortcut: resolve, ask the server, preview. */
+export async function runShape(address: string, words: string, report: Report = announce): Promise<void> {
+  const target = resolveTarget(address);
+  if (target.kind === 'none') {
+    report(target.message);
+    return;
+  }
+  if (!words.trim()) {
+    fillBar(`/shape ${target.address} `);
+    report(`Say how /${target.address} should look or what it should show, then Enter.`);
+    return;
+  }
+  const input = document.getElementById('intent-input') as HTMLInputElement | null;
+  if (input) input.value = '';
+  if (target.kind === 'card') await shapeCard(target, words.trim(), report);
+  else if (target.kind === 'app') await shapeApp(target, words.trim(), report);
+  else await shapeWidget(target, words.trim(), report);
+}
+
+/** `/<app>.<card> words` (the dot is the rule): the card's Shape; a bare `/<app>.<card>` places it. */
+export async function runDot(target: string, words: string, report: Report = announce): Promise<void> {
+  if (!words) {
+    const [card] = findCards(target);
+    if (!card) {
+      report(`No card matches ${target}. Open the Library (L) to browse.`);
+      return;
+    }
+    report(isOnBoard(card.id) ? `${card.title} is already on your canvas.` : await addCards(card.app.app, card.app.work, [card.id]));
+    const input = document.getElementById('intent-input') as HTMLInputElement | null;
+    if (input) input.value = '';
+    return;
+  }
+  await runShape(target, words, report);
+}
+
+export const SHAPE_COMMAND: CanvasCommand = {
+  slug: 'shape',
+  title: 'Shape',
+  purpose: 'Change how a card, an app (its theme) or a widget looks or what it shows; previewed, then Apply',
+  run: (text: string, report: Report = announce) => {
+    const match = text.trim().match(/^(\S+)\s*([\s\S]*)$/);
+    if (!match) {
+      report('Name what to shape: /shape expenses.ledger only red invoices · /shape expenses dark green · /shape calculator make it a TI-84.');
+      return;
+    }
+    return runShape(match[1] ?? '', match[2] ?? '', report);
+  },
+};
+
+/** `/shape <address>`: cards (app.card), apps and the widgets on the canvas, while the address is typed. */
+export function shapeCompletions(rest: string): Completion[] {
+  if (/\s/.test(rest.trimStart())) return [];
+  // APP-121's full forms narrow to their kind and keep the typed prefix.
+  const { space, name: query } = splitAddress(rest);
+  const form = (kind: string, name: string) => (space ? `${kind}:${name}` : name);
+  const cards = space && space !== 'card' ? [] : findCards(query).filter((card) => card.slug !== 'app').slice(0, 6).map((card) => ({
+    badge: card.number, title: form('card', cardAddress(card)), detail: `${card.title} · its view`, value: `/shape ${form('card', cardAddress(card))} `,
+  }));
+  const apps = (space && space !== 'app') || query.includes('.') ? [] : findApps(query).slice(0, 3).map((app) => {
+    const address = space ? `app:${app.slug || app.number}` : appAddress(app);
+    return { badge: app.number, title: address, detail: `${app.title} · a theme on every card`, value: `/shape ${address} ` };
+  });
+  const widgets = space && space !== 'widget' ? [] : (['weather', 'calculator', 'clock'] as const)
+    .filter((kind) => (!query || kind.startsWith(query)) && widgetFor(kind))
+    .map((kind) => ({ badge: '◇', title: form('widget', kind), detail: 'Its look', value: `/shape ${form('widget', kind)} ` }));
+  return [...cards, ...apps, ...widgets].slice(0, 10);
+}
+
+/** `/expenses.le…`: the cards of that app, by their dotted names (a space then shapes). */
+export function dotCompletions(rest: string): Completion[] {
+  return findCards(rest).filter((card) => card.slug !== 'app').slice(0, 8).map((card) => ({
+    badge: card.number, title: cardAddress(card), detail: `${card.title} · type what it should show`, value: `/${cardAddress(card)} `,
+  }));
+}
+
+/** The address an app or card has on the canvas (for Ask's scope and its chip). */
+export function addressOfWork(app: string, work: string): string {
+  return addressFor(app, work)?.slug ?? '';
+}
+
+export function startShape(): void {
+  onLiveEvent((event) => {
+    if (event.kind === 'stream.lagged') void refreshShaped(null);
+    else if (event.kind === 'record.committed') void refreshShaped(event.work_id);
+  });
+  registerCompleter('shape', shapeCompletions);
+  registerCompleter('.', dotCompletions, { select: false });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('canvas:changed', () => restoreAppThemes());
+    restoreAppThemes();
+  }
+}

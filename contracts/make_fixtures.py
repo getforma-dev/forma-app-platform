@@ -1,9 +1,11 @@
 """Regenerate clearly synthetic contract examples; no parser/query execution is claimed.
 
-Edition impl-2026-10-29.3 specimens: the edition-two bundles and vectors unchanged, plus the APP-013
-recovery view, claim and command problem bodies (fixtures/command-recovery.json). Edition
-impl-2026-10-28.1's and impl-2026-10-29.2's specimens and vectors are retained byte-identically in
-fixtures/impl-2026-10-28.1/ and fixtures/impl-2026-10-29.2/ and are never regenerated.
+Edition impl-2026-10-31.4 specimens are edition impl-2026-10-29.3's, byte for byte: the edition-two
+bundles and vectors unchanged, plus the APP-013 recovery view, claim and command problem bodies
+(fixtures/command-recovery.json). Edition impl-2026-10-31.4 adds no specimen here; its additions are
+the APP-107 guard/initial members and the prebuilt library (fixtures/library/, make_library.py).
+Editions impl-2026-10-28.1's, impl-2026-10-29.2's and impl-2026-10-29.3's specimens and vectors are
+retained byte-identically in fixtures/<edition>/ and are never regenerated.
 """
 import copy
 import hashlib

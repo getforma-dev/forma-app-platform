@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-11-01T21:43:25.133968Z",
+  "scope": "Exact source-head CI and merge metadata; no deployment or hosted acceptance assertion.",
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "merge_order": [
+    35,
+    36
+  ],
+  "pull_requests": [
+    {
+      "number": 35,
+      "url": "https://github.com/getforma-dev/forma-app-platform/pull/35",
+      "head_sha": "f732d0b0c934b72508bb6dbc47220d752685c165",
+      "base_branch": "pivot/pitch-mvp",
+      "checks": {
+        "total": 28,
+        "success": 28,
+        "pending": 0,
+        "failed": 0,
+        "cancelled": 0,
+        "all_completed_before_merge": true,
+        "by_workflow_or_external_check": {
+          "Auth consumer qualification": 2,
+          "Bounded query qualification": 2,
+          "Contract qualification": 2,
+          "Foundation preparation": 2,
+          "Parser qualification": 2,
+          "Parser release qualification": 4,
+          "Pitch campaigns": 2,
+          "Planning integrity": 2,
+          "Published canvas consumer": 2,
+          "Released baseline": 2,
+          "Socket Security: Project Report": 1,
+          "Socket Security: Pull Request Alerts": 1,
+          "Synthetic fixture qualification": 2,
+          "Tenant foundation qualification": 2
+        },
+        "workflow_events": {
+          "workflow_families": 12,
+          "push_success": 12,
+          "pull_request_success": 12,
+          "external_socket_success": 2
+        }
+      },
+      "merge": {
+        "state": "MERGED",
+        "commit_sha": "ba1b5d12e310382697d4941aa7e7d2c819993202",
+        "merged_at_utc": "2026-11-01T21:39:22Z"
+      },
+      "retained_premerge_rollup": {
+        "name": "pr35-checks-final.json",
+        "bytes": 8914,
+        "sha256": "414f5381c495fc65db415b01c85a5d5e81216be7cd1dda90ef49e3053aef7b94"
+      },
+      "merge_verification": {
+        "source": "GitHub pull request metadata and exact-head statusCheckRollup",
+        "command": "gh pr view 35 --repo getforma-dev/forma-app-platform --json number,url,headRefOid,baseRefName,state,mergedAt,mergeCommit,statusCheckRollup",
+        "response_bytes": 9099,
+        "response_sha256": "fa010ff4ce9b709c94efca9023bfa0ea98c925783d96f10ede8d108802784112",
+        "workflow_events_response_sha256": "3e9a7d3991438bdd6bcc44bd3937a2796dd696c9dc95c55af826d84e2986bea9"
+      }
+    },
+    {
+      "number": 36,
+      "url": "https://github.com/getforma-dev/forma-app-platform/pull/36",
+      "head_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+      "base_branch": "pivot/pitch-mvp",
+      "checks": {
+        "total": 28,
+        "success": 28,
+        "pending": 0,
+        "failed": 0,
+        "cancelled": 0,
+        "all_completed_before_merge": true,
+        "by_workflow_or_external_check": {
+          "Auth consumer qualification": 2,
+          "Bounded query qualification": 2,
+          "Contract qualification": 2,
+          "Foundation preparation": 2,
+          "Parser qualification": 2,
+          "Parser release qualification": 4,
+          "Pitch campaigns": 2,
+          "Planning integrity": 2,
+          "Published canvas consumer": 2,
+          "Released baseline": 2,
+          "Socket Security: Project Report": 1,
+          "Socket Security: Pull Request Alerts": 1,
+          "Synthetic fixture qualification": 2,
+          "Tenant foundation qualification": 2
+        },
+        "workflow_events": {
+          "workflow_families": 12,
+          "push_success": 12,
+          "pull_request_success": 12,
+          "external_socket_success": 2
+        }
+      },
+      "merge": {
+        "state": "MERGED",
+        "commit_sha": "9c3b635fbd0ec36346672191de58a354f317422b",
+        "merged_at_utc": "2026-11-01T21:39:27Z"
+      },
+      "retained_premerge_rollup": {
+        "name": "pr36-checks-final.json",
+        "bytes": 8914,
+        "sha256": "0bc52093cc52d4ede1e013729520414b6b42a1d6aafd13dd3835a530088197c2"
+      },
+      "merge_verification": {
+        "source": "GitHub pull request metadata and exact-head statusCheckRollup",
+        "command": "gh pr view 36 --repo getforma-dev/forma-app-platform --json number,url,headRefOid,baseRefName,state,mergedAt,mergeCommit,statusCheckRollup",
+        "response_bytes": 9099,
+        "response_sha256": "cc0e4cda02d966a0e1ef7bc42b2f42917f37ee58a8d427eb476db399b03058eb",
+        "workflow_events_response_sha256": "50b6dacf41a089a065690fd83b834bbd5649c631346b6f1d6577f8181ee34e53"
+      }
+    }
+  ],
+  "limits": [
+    "The checked runtime candidate is 1d88470; its merge commit is a separate Git identity.",
+    "PR35 contains planning changes; future composed-app features remain planned.",
+    "Registry push/scan and delivery are separate gates. The live application remains candidate 711d87d with catalog18 at this handoff.",
+    "Hosted guest registration, acceptance and the connected-app journey have not passed."
+  ]
+}

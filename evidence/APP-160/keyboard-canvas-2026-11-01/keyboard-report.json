@@ -1,0 +1,126 @@
+{
+  "scope": "Read-only synthetic local app keyboard and Chromium accessibility-tree checks. No VoiceOver or real screen-reader announcement claim.",
+  "started": "2026-11-01T23:42:04.955Z",
+  "checks": [
+    "App actions appear as named buttons in the Chromium accessibility tree.",
+    "Enter opens a named native modal; initial focus is the first field, currency is in the accessible input name, and 24 forward/12 reverse tabs stay inside.",
+    "Escape and the keyboard-operated Close button dismiss the modal and restore focus to its exact opener.",
+    "At 320 CSS pixels both app and modal fit the viewport; keyboard modal dismissal still succeeds."
+  ],
+  "requests": {
+    "command_posts": 0,
+    "presentation_posts": 0
+  },
+  "page_errors": [],
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "keyboard_to_primary": [
+    {
+      "tag": "A",
+      "name": "Forma home"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Log meal"
+    }
+  ],
+  "modal_tab_sequence": [
+    {
+      "tag": "INPUT",
+      "name": "value.amount"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.date"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.notes"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Add"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Close"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.restaurant"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.amount"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.date"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.notes"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Add"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Close"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.restaurant"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.amount"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.date"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.notes"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Add"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Close"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.restaurant"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.amount"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.date"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.notes"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Add"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Close"
+    },
+    {
+      "tag": "INPUT",
+      "name": "value.restaurant"
+    }
+  ],
+  "passed": true,
+  "completed": "2026-11-01T23:42:10.462Z"
+}

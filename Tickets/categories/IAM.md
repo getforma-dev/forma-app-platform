@@ -16,3 +16,8 @@ Authenticated principals, tenant boundaries and service authority.
 | 80 | [APP-079: Hosted identity acceptance deferred from Phase 1](../9-blocked/APP-079.md) | [PH06](../phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
 | 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](../0-backlog/APP-082.md) | [PH07](../phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-074 |
 | 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](../0-backlog/APP-084.md) | [PH07](../phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-073 |
+| 117 | [APP-117: Readable organization addresses: sign-in alias (done), organization in every URL, subdomains](../0-backlog/APP-117.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-096 |
+| 162 | [APP-162: Workspace name/link entry and explicit switch on sign-in](../4-done/APP-162.md) | [PH08](../phases/PH08.md) | S14 | IAM | P0 | M | Done | APP-009 |
+| 163 | [APP-163: Find my workspaces after verified email discovery](../0-backlog/APP-163.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162 |
+| 164 | [APP-164: Authenticated workspace chooser and safe session switching](../0-backlog/APP-164.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162, APP-163 |
+| 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](../0-backlog/APP-165.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |

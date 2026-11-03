@@ -1,0 +1,36 @@
+{
+  "recorded_at": "2026-11-01T23:46:28.945722+00:00",
+  "base_commit": "e67968088028a857fbe9920a352afa758ddbc342",
+  "candidate": "Uncommitted final repair over the base commit; source byte hashes and strict asset manifest identify the observed run.",
+  "build": "e4f3f4839e09",
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "source_sha256": {
+    "app/admin/src/presentation/presentation.ts": "9a470462ec30402d4fe652fe5b002efc4f0808d052c6b42c3cd7eabd21b906b6",
+    "app/admin/src/presentation/header.tsx": "565cdec1914a826876b9359629d70afbbbe8b51110d8746e5e20578789786fbe",
+    "app/admin/src/styles/presentation.css": "a92e46ff1dec1a4152ccb831f48af58864c6f8cc9e3661737f3a5dcdf5713784",
+    "app/admin/src/work/app.tsx": "897956e2697e88a1d747a867b7050ba83b396bde79d8c4b983f64914ecbafcd5",
+    "app/admin/src/work/document.ts": "89ddff3df937ba71fd075f8b5566569e11abeb5c17b6957ee34d323a64fe9ba7",
+    "app/admin/src/work/render.ts": "8d7907a6af51fef1b4a4513a1d2309c65851b12e32ad085fa7e8dba37960572f",
+    "app/admin/src/shared/app.tsx": "e0d37b0fe9997711fce07aeb77657e0a0d68cde336e3a91a52949845fb4ed6fb",
+    "app/admin/src/shared/canvas.tsx": "4c73ff0c3181f4654f14ad9b3793a1e14b209c036d83c531a081ec759669fb93",
+    "app/admin/src/shared/canvas-controller.ts": "8c1e5da9ba9daf2b2d92c37bc3ff525588a7d7901b713615999aa66ca563b24e",
+    "app/admin/src/shared/document.ts": "13e5c7107d1b2e838ed43841e365b3a05c261d70257a7dec9ba2fd40c26931b1",
+    "app/admin/src/shared/parts.tsx": "2594a0d4ae725327eede03cfa57df7c973dc51e92f5024a629c9a42d561c8f9b",
+    "app/admin/src/shared/types.ts": "de39dcb0a3e547507109fd66e0a2dcc7906b1232968a5270723c161a781569ac",
+    "app/admin/test/presentation.test.ts": "4944bcc073a63f239382cc6fbc1286b2d2f932ecc5177272809490e2689f0feb",
+    "app/scripts/composed_guest_browser.mjs": "75520504fc8ef6e74d80de10e243835f5b2a102a64a4d9484731a76c8c09f50e"
+  },
+  "artifact_sha256": {
+    "connected-revoked.png": "98d33340ea9f7ec1b55f2013009ea7f46839a475065228ee4d982b9ace40de15",
+    "report.json": "cc514146abcda0c2a5806fe249f317df9741caafd99b147fd05b930d8405e846",
+    "initial-unavailable.png": "0277d7e3d40e672d1f38d8eb36ca9eb877609a9c97405604c6288087642735ca",
+    "initial-native-inventory-oracle.json": "99efc471de9444c308005d99515ef850efbedb3d5a6f1b8a01aa69f111e5603c",
+    "README.md": "1e45a481e4bde85601c4b63de34de6ea5c00988811a2d00c996b8acc595c5c60",
+    "guest-live-dialog.png": "9feea9cdaa96ae7e6485a966a96a635d168af62cf0951b36680d19935cf5d7c2",
+    "guest-mobile-dialog.png": "30696e6b3a8c0b8c6e17ccf5a514af0db7d7e27df4e46baed525e17e37b70f08",
+    "connected-live-dialog.png": "8e4744f055d6ccff023da416519bcf1cc4b5f5f292911b10b86bdfe6f16f6912",
+    "guest-revoked.png": "7800697bcf4d8c69f6d29df453c1ee72ddc2a7fb2bceb60b5024e6c7361edcb5",
+    "initial-unavailable-report.json": "a794847f3287d5ddc869db8db2cec19a42aa660ba1b640b8d1d5796c4804b846"
+  },
+  "browser_exit_code": 0
+}

@@ -62,6 +62,23 @@ struct Database {
     roles: BTreeMap<String, DatabaseCredential>,
 }
 
+/// Production credentials live at most 600 s (the sidecar rewrites them).
+const MAX_LIFETIME: u64 = 600;
+/// ADR-012 D12.1: the local dev binary (feature `dev-stand`, never in a
+/// release build) writes its own credentials for its loopback Compose
+/// database with a long expiry instead of rewriting a 600 s file.
+#[cfg(feature = "dev-stand")]
+pub const DEV_LIFETIME: u64 = 30 * 86_400;
+
+fn max_lifetime(host: &str) -> u64 {
+    #[cfg(feature = "dev-stand")]
+    if host == "localhost" {
+        return DEV_LIFETIME;
+    }
+    let _ = host;
+    MAX_LIFETIME
+}
+
 pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -115,7 +132,10 @@ impl Config {
                 .all(|b| b.is_ascii_hexdigit() || b == b'-')
             || document.issued_at > current.saturating_add(5)
             || document.expires_at <= current
-            || document.expires_at > document.issued_at.saturating_add(600)
+            || document.expires_at
+                > document
+                    .issued_at
+                    .saturating_add(max_lifetime(&document.database.host))
         {
             return Err("credential generation or expiry refused");
         }

@@ -1,0 +1,44 @@
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libssl3 is already the newest version (3.0.22-1~deb12u2).
+openssl is already the newest version (3.0.22-1~deb12u2).
+libgnutls30 is already the newest version (3.7.9-2+deb12u7).
+perl-base is already the newest version (5.36.0-7+deb12u4).
+Suggested packages:
+  debsig-verify glibc-doc libc-l10n locales libnss-nis libnss-nisplus
+  rng-tools krb5-doc krb5-user
+Recommended packages:
+  manpages krb5-locales
+The following packages will be upgraded:
+  dpkg libc-bin libc6 libcap2 libgcrypt20 libgssapi-krb5-2 libk5crypto3
+  libkrb5-3 libkrb5support0 liblzma5 libpcre2-8-0 libsystemd0 libudev1 sed
+14 upgraded, 0 newly installed, 0 to remove and 4 not upgraded.
+Inst dpkg [1.21.22] (1.21.23 Debian:12.15/oldstable [arm64])
+Conf dpkg (1.21.23 Debian:12.15/oldstable [arm64])
+Inst sed [4.9-1] (4.9-1+deb12u1 Debian:12.15/oldstable [arm64])
+Conf sed (4.9-1+deb12u1 Debian:12.15/oldstable [arm64])
+Inst libc6 [2.36-9+deb12u13] (2.36-9+deb12u14 Debian:12.15/oldstable [arm64])
+Conf libc6 (2.36-9+deb12u14 Debian:12.15/oldstable [arm64])
+Inst libc-bin [2.36-9+deb12u13] (2.36-9+deb12u14 Debian:12.15/oldstable [arm64])
+Conf libc-bin (2.36-9+deb12u14 Debian:12.15/oldstable [arm64])
+Inst libcap2 [1:2.66-4+deb12u2+b2] (1:2.66-4+deb12u3+b1 Debian:12.15/oldstable [arm64])
+Conf libcap2 (1:2.66-4+deb12u3+b1 Debian:12.15/oldstable [arm64])
+Inst libgcrypt20 [1.10.1-3] (1.10.1-3+deb12u1 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Conf libgcrypt20 (1.10.1-3+deb12u1 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Inst liblzma5 [5.4.1-1] (5.4.1-1+deb12u2 Debian-Security:12/oldstable-security [arm64])
+Conf liblzma5 (5.4.1-1+deb12u2 Debian-Security:12/oldstable-security [arm64])
+Inst libpcre2-8-0 [10.42-1] (10.42-1+deb12u2 Debian-Security:12/oldstable-security [arm64])
+Conf libpcre2-8-0 (10.42-1+deb12u2 Debian-Security:12/oldstable-security [arm64])
+Inst libsystemd0 [252.39-1~deb12u1] (252.39-1~deb12u2 Debian:12.15/oldstable [arm64])
+Conf libsystemd0 (252.39-1~deb12u2 Debian:12.15/oldstable [arm64])
+Inst libudev1 [252.39-1~deb12u1] (252.39-1~deb12u2 Debian:12.15/oldstable [arm64])
+Conf libudev1 (252.39-1~deb12u2 Debian:12.15/oldstable [arm64])
+Inst libgssapi-krb5-2 [1.20.1-2+deb12u4] (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64]) []
+Inst libkrb5-3 [1.20.1-2+deb12u4] (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64]) []
+Inst libkrb5support0 [1.20.1-2+deb12u4] (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Inst libk5crypto3 [1.20.1-2+deb12u4] (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Conf libgssapi-krb5-2 (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Conf libkrb5-3 (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Conf libkrb5support0 (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])
+Conf libk5crypto3 (1.20.1-2+deb12u5 Debian:12.15/oldstable, Debian-Security:12/oldstable-security [arm64])

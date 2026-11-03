@@ -7,6 +7,8 @@ import { h, mount, createList } from '@getforma/core';
 // fields; every value is typed and authorized by the server. It reads nothing
 // from the request and runs no JavaScript.
 type FieldRow = {
+  label: string;
+  inputMode: string;
   id: string;
   kind: string;
   value: string;
@@ -47,9 +49,10 @@ type RecordProps = {
 function Record(props: RecordProps) {
   return (
     <main class="page">
+      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
       <h1>Record</h1>
       <p class="lede">
-        Seeded definition, retrieved from the library. Schema <span>{props.schema}</span> version{' '}
+        Saved app. Schema <span>{props.schema}</span> version{' '}
         <span>{props.schemaVersion}</span>; record <span>{props.recordId}</span>.
       </p>
       {props.committed ? (
@@ -101,7 +104,7 @@ function Record(props: RecordProps) {
               h(
                 'tr',
                 null,
-                h('th', { scope: 'row' }, row.id),
+                h('th', { scope: 'row' }, row.label),
                 h('td', null, row.value),
                 h('td', { class: 'muted' }, row.kind),
               ),
@@ -128,9 +131,9 @@ function Record(props: RecordProps) {
               h(
                 'p',
                 { class: 'field' },
-                h('label', null, row.id, ' ', h('span', { class: 'muted' }, row.options)),
+                h('label', { for: row.input }, row.label, ' ', h('span', { class: 'muted' }, row.options)),
                 row.writable
-                  ? h('input', { type: 'text', name: row.input, value: row.value })
+                  ? h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })
                   : h('span', { class: 'muted' }, 'not changed by this command'),
                 row.writable ? h('input', { type: 'hidden', name: row.specInput, value: row.spec }) : null,
               ),

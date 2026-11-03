@@ -1,0 +1,167 @@
+{
+  "candidate_sha": "9ee4a01b1c4b1b90147928844805b7397aa40903",
+  "checks": 28,
+  "successful_checks": 28,
+  "workflow_runs": 24,
+  "workflow_events": {
+    "pull_request": 12,
+    "push": 12
+  },
+  "workflow_families": [
+    "Auth consumer qualification",
+    "Bounded query qualification",
+    "Contract qualification",
+    "Foundation preparation",
+    "Parser qualification",
+    "Parser release qualification",
+    "Pitch campaigns",
+    "Planning integrity",
+    "Published canvas consumer",
+    "Released baseline",
+    "Synthetic fixture qualification",
+    "Tenant foundation qualification"
+  ],
+  "observed_at": "2026-11-02T00:13:40.410938+00:00",
+  "results": [
+    {
+      "name": "auth-contract",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035162/job/125020295302"
+    },
+    {
+      "name": "auth-contract",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030515/job/125020281758"
+    },
+    {
+      "name": "query",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035012/job/125020295120"
+    },
+    {
+      "name": "query",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030540/job/125020281835"
+    },
+    {
+      "name": "contracts",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035247/job/125020295581"
+    },
+    {
+      "name": "contracts",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030533/job/125020281572"
+    },
+    {
+      "name": "foundation",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035010/job/125020294980"
+    },
+    {
+      "name": "foundation",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030628/job/125020282034"
+    },
+    {
+      "name": "parser",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035480/job/125020296259"
+    },
+    {
+      "name": "parser",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030521/job/125020281667"
+    },
+    {
+      "name": "parser/ sources, lint and hostile suite",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035211/job/125020295723"
+    },
+    {
+      "name": "parser/ sources, lint and hostile suite",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030525/job/125020281793"
+    },
+    {
+      "name": "pitch-campaigns",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035021/job/125020299222"
+    },
+    {
+      "name": "pitch-campaigns",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030516/job/125020281617"
+    },
+    {
+      "name": "planning",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035046/job/125020295151"
+    },
+    {
+      "name": "planning",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030559/job/125020281930"
+    },
+    {
+      "name": "app-003",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035141/job/125020295567"
+    },
+    {
+      "name": "app-003",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030496/job/125020281637"
+    },
+    {
+      "name": "app-001",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035166/job/125020295407"
+    },
+    {
+      "name": "app-001",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030486/job/125020281542"
+    },
+    {
+      "name": "fixtures",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035173/job/125020295236"
+    },
+    {
+      "name": "fixtures",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030526/job/125020281723"
+    },
+    {
+      "name": "tenant-foundation",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035136/job/125020294938"
+    },
+    {
+      "name": "tenant-foundation",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030491/job/125020281514"
+    },
+    {
+      "name": "qualify the parser bytes extracted from the built image",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364035211/job/125020295396"
+    },
+    {
+      "name": "qualify the parser bytes extracted from the built image",
+      "conclusion": "SUCCESS",
+      "details_url": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41364030525/job/125020281591"
+    },
+    {
+      "name": "Socket Security: Project Report",
+      "conclusion": "SUCCESS",
+      "details_url": "https://socket.dev/dashboard/org/getforma-dev/sbom/317c5666-476c-4b9d-856b-67bdf5c5f753"
+    },
+    {
+      "name": "Socket Security: Pull Request Alerts",
+      "conclusion": "SUCCESS",
+      "details_url": "https://socket.dev"
+    }
+  ]
+}

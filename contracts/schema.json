@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://getforma.dev/contracts/impl-2026-10-29.3/schema.json",
+  "$id": "https://getforma.dev/contracts/impl-2026-11-01.2/schema.json",
   "$defs": {
     "value": {
       "oneOf": [
@@ -439,6 +439,34 @@
       ],
       "additionalProperties": false
     },
+    "guard": {
+      "type": "object",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "comparison": {
+          "enum": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "field_id",
+        "comparison",
+        "value"
+      ],
+      "additionalProperties": false
+    },
     "command_declaration": {
       "type": "object",
       "properties": {
@@ -482,6 +510,9 @@
               "to": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "when": {
+                "$ref": "#/$defs/guard"
               }
             },
             "required": [
@@ -493,6 +524,32 @@
           },
           "minItems": 0,
           "maxItems": 32
+        },
+        "initial": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "when": {
+                "$ref": "#/$defs/guard"
+              }
+            },
+            "required": [
+              "field_id",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
         }
       },
       "required": [
@@ -1025,7 +1082,12 @@
             "filter",
             "form",
             "note",
-            "status"
+            "status",
+            "records_list",
+            "record_summary",
+            "record_trend",
+            "record_ranking",
+            "record_budget"
           ]
         },
         "renderer_version": {
@@ -1045,6 +1107,9 @@
         "text": {
           "type": "string",
           "maxLength": 2000
+        },
+        "records": {
+          "$ref": "#/$defs/record_component"
         }
       },
       "required": [
@@ -1161,6 +1226,17 @@
           },
           "minItems": 1,
           "maxItems": 24
+        },
+        "presentation": {
+          "$ref": "#/$defs/app_presentation"
+        },
+        "record_filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record_filter"
+          },
+          "minItems": 0,
+          "maxItems": 8
         }
       },
       "required": [
@@ -1363,6 +1439,313 @@
           "additionalProperties": false
         }
       ]
+    },
+    "app_theme": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "default",
+            "light",
+            "dark"
+          ]
+        },
+        "accent": {
+          "enum": [
+            "default",
+            "green",
+            "crimson",
+            "amber",
+            "cyan",
+            "violet",
+            "rose",
+            "ice",
+            "slate"
+          ]
+        },
+        "density": {
+          "enum": [
+            "default",
+            "compact",
+            "comfortable",
+            "spacious"
+          ]
+        },
+        "font": {
+          "enum": [
+            "default",
+            "mono"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "accent",
+        "density"
+      ],
+      "additionalProperties": false
+    },
+    "app_section": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 24,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "components"
+      ],
+      "additionalProperties": false
+    },
+    "app_action": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "behavior": {
+          "enum": [
+            "navigate",
+            "dialog"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "behavior",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "app_presentation": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/app_section"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/app_action"
+          },
+          "minItems": 0,
+          "maxItems": 8
+        },
+        "theme": {
+          "$ref": "#/$defs/app_theme"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "record_measure": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "count"
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "sum"
+            },
+            "field": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "op",
+            "field"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "record_component": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "input_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "schema_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "measure": {
+          "$ref": "#/$defs/record_measure"
+        },
+        "group_field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "date_field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "order": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "direction": {
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          "required": [
+            "field",
+            "direction"
+          ],
+          "additionalProperties": false
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "const": "preset"
+            },
+            "minor_units": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,37})(?![\\s\\S])"
+            },
+            "currency": {
+              "const": "USD"
+            },
+            "minor_unit_exponent": {
+              "const": 2
+            }
+          },
+          "required": [
+            "origin",
+            "minor_units",
+            "currency",
+            "minor_unit_exponent"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "input_id",
+        "schema_id"
+      ],
+      "additionalProperties": false
+    },
+    "record_filter": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "input_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "kind": {
+          "enum": [
+            "text_contains",
+            "enum",
+            "date_range"
+          ]
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "input_id",
+        "field",
+        "kind",
+        "targets"
+      ],
+      "additionalProperties": false
     },
     "app_definition": {
       "type": "object",
@@ -2722,7 +3105,12 @@
             "filter",
             "form",
             "note",
-            "status"
+            "status",
+            "records_list",
+            "record_summary",
+            "record_trend",
+            "record_ranking",
+            "record_budget"
           ]
         },
         "version": {
@@ -3082,7 +3470,12 @@
             "filter",
             "form",
             "note",
-            "status"
+            "status",
+            "records_list",
+            "record_summary",
+            "record_trend",
+            "record_ranking",
+            "record_budget"
           ]
         },
         "renderer_version": {
@@ -3102,6 +3495,9 @@
         "text": {
           "type": "string",
           "maxLength": 2000
+        },
+        "records": {
+          "$ref": "#/$defs/record_component"
         }
       },
       "required": [
@@ -3218,6 +3614,17 @@
           },
           "minItems": 1,
           "maxItems": 24
+        },
+        "presentation": {
+          "$ref": "#/$defs/app_presentation"
+        },
+        "record_filters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record_filter"
+          },
+          "minItems": 0,
+          "maxItems": 8
         }
       },
       "required": [
@@ -3419,7 +3826,7 @@
             "$ref": "#/$defs/renderer_identity"
           },
           "minItems": 0,
-          "maxItems": 9
+          "maxItems": 14
         }
       },
       "required": [
@@ -3793,9 +4200,351 @@
         "cancel_requested"
       ],
       "additionalProperties": false
+    },
+    "record_components_receipt": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "record_components_receipt"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "organization_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "app_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "work_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "publication_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+        },
+        "definition_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "work_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "policy_epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "actor": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "member"
+                },
+                "principal_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+                },
+                "membership_epoch": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "kind",
+                "principal_id",
+                "membership_epoch"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "guest"
+                },
+                "account_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+                },
+                "share_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+                },
+                "share_version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "kind",
+                "account_id",
+                "share_id",
+                "share_version"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "operator_version": {
+          "const": 1
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filter_epoch": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                      },
+                      "start": {
+                        "type": "string",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\\s\\S])",
+                        "format": "date"
+                      },
+                      "end": {
+                        "type": "string",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\\s\\S])",
+                        "format": "date"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "start",
+                      "end"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "maxItems": 8
+            }
+          },
+          "required": [
+            "filter_epoch",
+            "filters"
+          ],
+          "additionalProperties": false
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "view_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "kind": {
+                "enum": [
+                  "records_list",
+                  "record_summary",
+                  "record_trend",
+                  "record_ranking",
+                  "record_budget"
+                ]
+              },
+              "population": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2000
+              },
+              "truncated_page": {
+                "type": "boolean"
+              },
+              "budget": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "origin": {
+                        "const": "preset"
+                      },
+                      "minor_units": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9][0-9]{0,37})(?![\\s\\S])"
+                      },
+                      "currency": {
+                        "const": "USD"
+                      },
+                      "minor_unit_exponent": {
+                        "const": 2
+                      }
+                    },
+                    "required": [
+                      "origin",
+                      "minor_units",
+                      "currency",
+                      "minor_unit_exponent"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "view_id",
+              "kind",
+              "population",
+              "truncated_page",
+              "budget"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 32
+        },
+        "snapshot": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "collection_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+              },
+              "schema_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "schema_version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "record_id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\\s\\S])"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "commit_sequence": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "record_id",
+                    "version",
+                    "commit_sequence"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 2000
+              }
+            },
+            "required": [
+              "input_id",
+              "collection_id",
+              "schema_id",
+              "schema_version",
+              "records"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 32
+        },
+        "snapshot_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "result_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        },
+        "partial": {
+          "const": false
+        },
+        "total_scope": {
+          "const": "full_authorized_filtered_collection"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_version",
+        "organization_id",
+        "app_id",
+        "work_id",
+        "publication_id",
+        "definition_digest",
+        "work_version",
+        "policy_epoch",
+        "actor",
+        "operator_version",
+        "parameters",
+        "components",
+        "snapshot",
+        "snapshot_digest",
+        "result_digest",
+        "partial",
+        "total_scope",
+        "digest"
+      ],
+      "additionalProperties": false
     }
   },
   "oneOf": [
+    {
+      "$ref": "#/$defs/record_components_receipt"
+    },
     {
       "$ref": "#/$defs/app_definition"
     },

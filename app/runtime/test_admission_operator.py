@@ -76,6 +76,15 @@ class PureTests(unittest.TestCase):
             with self.subTest(bad=bad[:20]), self.assertRaises(op.Refused):
                 op.parse_grant(bad)
 
+    def test_authoring_only_issue_is_explicit_and_never_combines_resource_grants(self):
+        base = ["issue", "--organization", ORG, "--issued-by", "operator-test"]
+        with self.assertRaisesRegex(op.Refused, "grant_required"):
+            op.validate(op.parser().parse_args(base))
+        parsed = op.validate(op.parser().parse_args(base + ["--authoring-only"]))
+        self.assertEqual(parsed.templates, [])
+        with self.assertRaisesRegex(op.Refused, "authoring_only_with_grants_refused"):
+            op.validate(op.parser().parse_args(base + ["--authoring-only", "--grant", "discover:" + ORG]))
+
     def test_permission_commands_are_a_closed_set(self):
         """ADR-007 amendment (APP-010 review M2): grant/revoke take only the permissions the tables allow,
         never admin_policy, share_work or export, and each permission names exactly its resource."""
@@ -434,11 +443,51 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                                     (op.handle_digest(raw),)), [(org, None)])
         self.assertNotIn(out["handle"], self.dump())
         self.assertEqual(self.query("SELECT count(*) FROM genui.audit_heads WHERE organization_id=%s", (org,)), [(5,)])
+        spaces = self.query("SELECT space_id::text,display_name FROM genui.spaces WHERE organization_id=%s", (org,))
+        policies = self.query("SELECT policy_id::text,policy_version,kind FROM genui.publication_policies WHERE organization_id=%s", (org,))
+        self.assertEqual(len(spaces), 1)
+        self.assertEqual(spaces[0][1], "Workspace")
+        self.assertEqual(uuid.UUID(spaces[0][0]).version, 4)
+        self.assertEqual(len(policies), 1)
+        self.assertEqual(policies[0][1:], (1, "owner_publish"))
+        self.assertEqual(uuid.UUID(policies[0][0]).version, 4)
+        for table in ("principals", "memberships", "entitlements", "apps", "saved_work", "sources",
+                      "definition_revisions", "publications", "internal_records", "app_permissions",
+                      "work_permissions", "source_permissions", "organization_permissions"):
+            self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
         self.assertEqual(self.operator_events(org), [("organization.provisioned",)])
         self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
         before = self.dump()
         self.cli("provision", "--organization", org, "--display-name", "again", "--issuer", ISSUER, "--provider-tenant", "ten_x", expect=1)
         self.assertEqual(self.dump(), before)
+
+    def test_fresh_authoring_only_member_redeems_with_entitlement_and_no_resource_grants(self):
+        org = str(uuid.uuid4()); tenant = "ten_" + org[-12:]; subject = "usr_" + uuid.uuid4().hex
+        self.cli("provision", "--organization", org, "--display-name", "Clean first member",
+                 "--issuer", ISSUER, "--provider-tenant", tenant)
+        issued = self.cli("issue", "--organization", org, "--issued-by", "operator-test",
+                          "--kind", "member_invite", "--authoring-only")
+        digest = op.code_digest(op.normalize_code(issued["code"]))
+        self.assertEqual(self.query("SELECT count(*) FROM genui.code_grant_templates WHERE organization_id=%s", (org,)), [(0,)])
+        with self.connect("genui_workspace") as c:
+            c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (org, digest, "sha256:" + "a" * 64)).fetchone()
+            self.assertEqual(outcome, "reserved")
+            pending, _, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)", (org, reservation, ISSUER, tenant, subject)).fetchone()
+            self.assertEqual(outcome, "pending")
+            parameters = (org, pending, ISSUER, tenant, subject, "sha256:" + "b" * 64)
+            admitted = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)", parameters).fetchone()
+            self.assertEqual(admitted[-1], "admitted")
+            replayed = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)", parameters).fetchone()
+            self.assertEqual(replayed[:-1], admitted[:-1])
+            self.assertEqual(replayed[-1], "replayed")
+        principal, epoch, entitlement, _, _ = admitted
+        self.assertEqual(epoch, 1)
+        self.assertEqual(self.query("SELECT status FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (org, principal)), [("active",)])
+        self.assertEqual(self.query("SELECT status,kind,expires_at>now() FROM genui.entitlements WHERE organization_id=%s AND entitlement_id=%s", (org, entitlement)), [("active", "member_invite", True)])
+        for table in ("apps", "saved_work", "internal_records", "publications", "app_permissions", "work_permissions", "source_permissions", "organization_permissions"):
+            self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
+        self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
 
     def test_bind_provider_tenant_adds_the_real_binding_once_without_an_audit_event(self):
         """APP-078 B1: an existing (seeded) organization gains its real provider tenant binding beside
@@ -982,6 +1031,139 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         verified = self.cli("verify", "--organization", northstar)
         self.assertEqual((verified["verified"], verified["next_commit_sequence"]), (True, 2))
         self.assertEqual(self.cli("seed-spend-review", "--organization", northstar)["changed"], False)
+
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None, "seed-library validates every bundle with contracts/validate.py")
+    def test_seed_spend_review_then_library_places_every_library_app_in_northstar_once(self):
+        """ADR-011 library (APP-094): all library bundles in the first fixture organization, idempotent, exact-match.
+
+        Named to run after `test_seed_spend_review_places_the_fixture_bundle_in_northstar_once` (the class
+        shares one database and that test counts Northstar's apps), so the counts here are relative.
+        """
+        import tenant_seed
+        northstar, canary = tenant_seed.ORGANIZATIONS
+        with self.connect() as c:
+            tenant_seed.seed(c, tenant_seed.make_bundles())
+        bundles = tenant_seed.make_library_bundles(northstar)
+        catalog = tenant_seed.library_catalog()
+        self.assertEqual(len(bundles), 20)
+        self.assertEqual([b["definition"]["app_id"] for b in bundles], [a["app_id"] for a in catalog["apps"]])
+        apps = lambda org: self.query("SELECT count(*) FROM genui.apps WHERE organization_id=%s", (org,))[0][0]
+        before = (apps(northstar), apps(canary))
+        self.assertIn("organization_refused", self.cli("seed-library", "--organization", ORG, expect=1).stderr)
+        first = self.cli("seed-library", "--organization", northstar)
+        self.assertEqual((first["changed"], first["label"], first["edition"], first["synthetic"], first["audit_event"]),
+                         (True, "seeded definition", "impl-2026-10-28.1", True, None))
+        self.assertEqual([a["app_id"] for a in first["apps"]], [a["app_id"] for a in catalog["apps"]])
+        self.assertEqual((apps(northstar), apps(canary)), (before[0] + 20, before[1]))
+        for b, reported in zip(bundles, first["apps"]):
+            app, work = b["definition"]["app_id"], b["work"]["work_id"]
+            self.assertEqual((reported["work_id"], reported["publication_id"], reported["definition_digest"]),
+                             (work, b["publication"]["publication_id"], b["definition"]["digest"]))
+            stored = self.query("SELECT digest::text,canonical_content FROM genui.definition_revisions WHERE organization_id=%s AND app_id=%s", (northstar, app))
+            self.assertEqual(stored, [(b["definition"]["digest"], tenant_seed.canonical(b["definition"]["content"]))])
+            # The source revision row pins the real normalized digest of the generated data (library_sources.py).
+            revision = self.query("SELECT normalized_digest::text FROM genui.source_revisions WHERE organization_id=%s AND source_id=%s AND revision_id=%s",
+                                  (northstar, b["sources"][0]["source_id"], b["sources"][0]["revision_id"]))
+            self.assertEqual(revision, [(b["sources"][0]["normalized_digest"],)])
+            self.assertEqual(self.query("SELECT count(*) FROM genui.work_bindings WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work)), [(2,)])
+            self.assertEqual(self.query("SELECT count(*) FROM genui.internal_records WHERE organization_id=%s AND app_id=%s", (northstar, app)), [(1,)])
+            self.assertEqual(self.query("""SELECT count(*) FROM genui.app_permissions WHERE organization_id=%s AND app_id=%s AND principal_id=%s
+                  AND permission IN ('discover','run')""", (northstar, app, b["context"]["principal_id"])), [(2,)])
+        snapshot = self.dump()
+        again = self.cli("seed-library", "--organization", northstar)
+        self.assertEqual((again["changed"], again["rows_inserted"]), (False, 0))
+        self.assertEqual(self.dump(), snapshot)
+        # A differing existing row refuses whole and writes nothing.
+        app, work = bundles[3]["definition"]["app_id"], bundles[3]["work"]["work_id"]
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.saved_work SET version=2 WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work))
+        tampered = self.dump()
+        self.assertIn("seed_refused", self.cli("seed-library", "--organization", northstar, expect=1).stderr)
+        self.assertEqual(self.dump(), tampered)
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.saved_work SET version=1 WHERE organization_id=%s AND app_id=%s AND work_id=%s", (northstar, app, work))
+        self.cli("backfill", "--organization", northstar)
+        verified = self.cli("verify", "--organization", northstar)
+        self.assertEqual(verified["verified"], True)
+        self.assertEqual(self.cli("seed-library", "--organization", northstar)["changed"], False)
+
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None, "seed-library validates every bundle with contracts/validate.py")
+    def test_seed_then_grant_library_access_gives_a_demo_member_the_library_and_an_owned_app_once(self):
+        """ADR-011 pitch (APP-093 debt 1, APP-096): a freshly invited member gains discover/run on every library app,
+        record_read(/record_write) on each library work, source_read on their sources and an owned authoring app with
+        edit_definition and run, idempotently, with one permission.granted event per new row. Named to run after the
+        library seed test (the class shares one database)."""
+        import tenant_seed
+        northstar = tenant_seed.ORGANIZATIONS[0]
+        with self.connect() as c:
+            tenant_seed.seed(c, tenant_seed.make_bundles())
+        self.cli("seed-library", "--organization", northstar)
+        self.cli("backfill", "--organization", northstar)
+        catalog = tenant_seed.library_catalog()
+        def member_in(org, status="active"):
+            principal = str(uuid.uuid4())
+            with self.connect("postgres") as c:
+                issuer, tenant = c.execute("SELECT issuer,provider_tenant_id FROM genui.provider_tenant_bindings WHERE organization_id=%s ORDER BY issuer LIMIT 1",
+                                           (org,)).fetchone()
+                c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (org, principal, issuer, tenant, "usr_" + principal))
+                c.execute("INSERT INTO genui.memberships VALUES (%s,%s,%s,1)", (org, principal, status))
+            return principal
+        rows = lambda table, principal, *extra: self.query("SELECT count(*) FROM genui.%s WHERE organization_id=%%s AND principal_id=%%s%s" % (table, "".join(extra)),
+                                                           (northstar, principal))[0][0]
+        events = lambda: self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator' AND kind='permission.granted'", (northstar,))[0][0]
+        sources = {r[0] for r in self.query("""SELECT DISTINCT source_id::text FROM genui.work_bindings b JOIN genui.saved_work w USING (organization_id,app_id,work_id)
+              WHERE b.organization_id=%s AND b.kind='source' AND w.app_id = ANY(%s::uuid[])""", (northstar, [a["app_id"] for a in catalog["apps"]]))}
+        self.assertEqual(len(sources), 19)
+
+        demo, authoring = member_in(northstar), str(uuid.uuid4())
+        before_events = events()
+        out = self.cli("grant-library-access", "--organization", northstar, "--principal", demo, "--record-write", "--authoring-app", authoring)
+        self.assertEqual([a["app_id"] for a in out["library_apps"]], [a["app_id"] for a in catalog["apps"]])
+        self.assertEqual([a["library_id"] for a in out["library_apps"]], [a["library_id"] for a in catalog["apps"]])
+        self.assertEqual((out["changed"], out["record_write"], out["membership_epoch"]), (True, True, 1))
+        self.assertEqual(out["authoring_app"], {"app_id": authoring, "created": True, "owner_principal_id": demo})
+        # 20 x (discover, run) + (discover, edit_definition, run) on the owned app; 20 x (record_read, record_write); 19 sources.
+        self.assertEqual(rows("app_permissions", demo), 43)
+        self.assertEqual(rows("work_permissions", demo), 40)
+        self.assertEqual(rows("source_permissions", demo), 19)
+        self.assertEqual({r[0] for r in self.query("SELECT source_id::text FROM genui.source_permissions WHERE principal_id=%s", (demo,))}, sources)
+        self.assertEqual(self.query("SELECT space_id::text,owner_principal_id::text FROM genui.apps WHERE organization_id=%s AND app_id=%s", (northstar, authoring)),
+                         [(tenant_seed.SPACE, demo)])
+        self.assertEqual(sorted(r[0] for r in self.query("SELECT permission FROM genui.app_permissions WHERE app_id=%s AND principal_id=%s", (authoring, demo))),
+                         ["discover", "edit_definition", "run"])
+        self.assertEqual(len(out["granted"]), 43 + 40 + 19)
+        self.assertEqual(events(), before_events + len(out["granted"]))
+        # A work row's event names the work; an app row's names the app alone; a source row's neither.
+        kinds = self.query("""SELECT app_id::text,work_id::text FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator'
+              AND kind='permission.granted' AND actor_principal_id=%s ORDER BY chain_sequence""", (northstar, demo))
+        self.assertEqual(len(kinds), len(out["granted"]))
+        self.assertEqual([(g["app_id"], g["work_id"]) for g in out["granted"]], kinds)
+        # Idempotent: a repeat writes nothing and no event.
+        snapshot = self.dump()
+        again = self.cli("grant-library-access", "--organization", northstar, "--principal", demo, "--record-write", "--authoring-app", authoring)
+        self.assertEqual((again["changed"], again["granted"], again["authoring_app"]), (False, [], {"app_id": authoring, "created": False, "owner_principal_id": demo}))
+        self.assertEqual(self.dump(), snapshot)
+        # A reader without --record-write and no authoring app: library reads only.
+        reader = member_in(northstar)
+        out = self.cli("grant-library-access", "--organization", northstar, "--principal", reader)
+        self.assertEqual((out["authoring_app"], out["record_write"], rows("app_permissions", reader), rows("work_permissions", reader),
+                          rows("source_permissions", reader)), (None, False, 40, 20, 19))
+        self.assertEqual(self.query("SELECT count(*) FROM genui.work_permissions WHERE principal_id=%s AND permission='record_write'", (reader,)), [(0,)])
+        # Refusals write nothing: an inactive or unknown member, another member's app as the authoring app, a space
+        # without an authoring app, an unknown space, and an organization without the library.
+        revoked, other = member_in(northstar, "revoked"), member_in(northstar)
+        legacy = self.member()
+        snapshot = self.dump()
+        for argv, reason in (((northstar, revoked), "member_inactive"), ((northstar, str(uuid.uuid4())), "member_unknown"),
+                             ((northstar, other, "--authoring-app", authoring), "app_owner_mismatch"),
+                             ((northstar, other, "--space", tenant_seed.SPACE), "space_without_authoring_app"),
+                             ((northstar, other, "--authoring-app", str(uuid.uuid4()), "--space", str(uuid.uuid4())), "space_unknown"),
+                             ((ORG, legacy), "library_not_seeded")):
+            with self.subTest(reason=reason):
+                refused = self.cli("grant-library-access", "--organization", argv[0], "--principal", *argv[1:], expect=1)
+                self.assertEqual(json.loads(refused.stderr), {"refused": reason})
+        self.assertEqual(self.dump(), snapshot)
+        self.assertEqual(self.cli("verify", "--organization", northstar)["verified"], True)
 
     def test_verify_recomputes_sql_written_admission_chain_and_detects_tamper(self):
         out = self.issue("--max-redemptions", "1")

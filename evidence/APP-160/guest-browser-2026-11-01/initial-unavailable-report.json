@@ -1,0 +1,16 @@
+{
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "resumed_confirmed_fixture": false,
+  "scope": "Synthetic local owner and account-only recipient. Real admitted empty template, immutable presentation publication, audited commands, named exact-work sharing, authorized record projections and guest browser leases. No hosted/provider claim.",
+  "started_at": "2026-11-01T23:42:13.490Z",
+  "checks": [],
+  "timings": {},
+  "errors": [],
+  "artifacts": [
+    "guest-failure.png",
+    "owner-failure.png"
+  ],
+  "passed": false,
+  "failure": "TimeoutError: locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-create-app][data-create-wired=\"true\"]') to be visible\u001b[22m\n",
+  "finished_at": "2026-11-01T23:42:43.673Z"
+}

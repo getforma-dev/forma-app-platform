@@ -1,0 +1,53 @@
+{
+  "scope": "Local synthetic member and account-only external guest on owned7601/7604; existing accepted share, real HTTP/storage/UI rename and reauthorized live reads; no hosted identity assertion.",
+  "started_at": "2026-11-01T19:17:09.906Z",
+  "checks": [
+    "An already-active named guest share and connected canvas were open before the real UI rename.",
+    "Recipient document and connected app heading updated without navigation or reload through their normal reauthorized refresh.",
+    "Share ID/status/version/expiry/add permission and work publication/version were unchanged; same-authoring-app sibling title and pin were unchanged.",
+    "Account-only guest remains denied workspace and receives no command, Ask or member-work controls; connected placement kept x/y/width."
+  ],
+  "errors": [],
+  "setup_grant": "Previously active named guest share reused",
+  "setup": "Existing active share and connected placement reused",
+  "target": {
+    "app_id": "00000000-0000-4000-8000-00000000d0a1",
+    "work_id": "a74a9601-9ba7-4b61-a77f-8d614d190757",
+    "old_title": "Shared reading review 19:16:59",
+    "new_title": "Shared reading review 19:17:16",
+    "share_id": "00000000-0000-4000-8000-000000000001.d816aa4c-9041-4ea8-855b-6826c28bb141",
+    "share_version": 1,
+    "pin": [
+      {
+        "id": "add_book_form",
+        "publication": "69ed5c0c-2f64-41d9-b835-afb1a7fd5c58",
+        "work_version": "1"
+      }
+    ]
+  },
+  "sibling": {
+    "app_id": "00000000-0000-4000-8000-00000000d0a1",
+    "work_id": "ecc553a0-f1e2-4093-9a0d-9634cf6d2f94",
+    "title": "Independent reading app",
+    "pin": [
+      {
+        "id": "add",
+        "publication": "5239b927-64dd-46d5-8c20-01892e9204e2",
+        "work_version": "1"
+      }
+    ]
+  },
+  "timing": {
+    "rename_http_ms": 197,
+    "recipient_title_observed_after_http_ms": 2105,
+    "connected_title_observed_after_http_ms": 1096,
+    "assertion_deadline_ms": 15000
+  },
+  "passed": true,
+  "finished_at": "2026-11-01T19:17:21.110Z",
+  "source_head": "0ec5e94838dfc0a85c41f4d1735747bdf9042fdd",
+  "harness_notes": [
+    "The first local attempt identified that the old active share targeted another synthetic account; a named guest share was created and explicitly accepted during setup.",
+    "A preparation attempt then used an overbroad h2 selector; corrected it to the connected card header. The final run reused the already-active grant and placement, performed a fresh real rename, and passed without page errors."
+  ]
+}

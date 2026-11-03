@@ -1,0 +1,17 @@
+{
+  "scope": "Local clean persona; real model and audited record, no hosted signup or billing",
+  "checks": [
+    "fresh profile has no library apps and demo mode is off",
+    "cancelled create makes no compose request",
+    "create requests generation and real model returns admitted generated work",
+    "created app can be opened as one united page",
+    "real command commits synthetic record and page refreshes from records",
+    "same browser reload restores the united page and persisted record"
+  ],
+  "demoMode": "",
+  "composeStatus": 200,
+  "app": "00000000-0000-4000-8000-00000000d0a4",
+  "work": "137ccfd7-3e3a-4af1-917d-c836de306472",
+  "modelDurationMs": 6984,
+  "status": "passed"
+}

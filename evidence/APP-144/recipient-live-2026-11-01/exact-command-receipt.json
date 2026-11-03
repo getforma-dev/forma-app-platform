@@ -1,0 +1,19 @@
+{
+  "app_id": "00000000-0000-4000-8000-00000000d0a1",
+  "audit_event_id": "3c5e0b32-c981-47df-b727-6b5b89ee336c",
+  "command_id": "add_book",
+  "commit_sequence": 17,
+  "committed_at": "2026-11-01T19:32:12Z",
+  "idempotency_key": "ef50b1b2a66eb280ea4e3213a2227080",
+  "kind": "command_outcome",
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "payload_digest": "sha256:88618589d959783da2ee39dd83fa9aa4627d2595b319b812d9595837dafac96e",
+  "principal_id": "00000000-0000-4000-8000-00000000006f",
+  "record_id": "ed4f4977-a2e1-4645-bed0-9c3834efbd66",
+  "record_version": 1,
+  "retry_expires_at": "2026-11-02T19:32:12Z",
+  "schema_version": 1,
+  "state": "committed",
+  "work_id": "a74a9601-9ba7-4b61-a77f-8d614d190757",
+  "work_version": 1
+}

@@ -274,9 +274,9 @@ fn from_value(
     })
 }
 
-/// A form text under the published field's `value_type` (echoed by the form
-/// as `spec.<field>`); an empty text is the null value. Storage judges the
-/// result against the published schema, so the echo confers nothing.
+/// An already-normalized scalar under the published field's `value_type`.
+/// Money is an integer minor-unit string here: action resolution has already
+/// converted its human input. Storage still judges the published schema.
 pub(crate) fn typed_value(spec: &Value, raw: &str) -> Option<Value> {
     if raw.is_empty() {
         return Some(json!({"type": "null"}));
@@ -297,6 +297,18 @@ pub(crate) fn typed_value(spec: &Value, raw: &str) -> Option<Value> {
         }
         _ => return None,
     })
+}
+
+/// HTML form money is human major-unit text. Convert it exactly once at this
+/// boundary, before the shared scalar constructor. An echoed spec grants no
+/// authority; storage checks the resulting value against the published schema.
+pub(crate) fn form_typed_value(spec: &Value, raw: &str) -> Option<Value> {
+    if !raw.is_empty() && spec.get("type").and_then(Value::as_str) == Some("money") {
+        let minor = super::money_minor_units(raw, spec.get("minor_unit_exponent")?.as_u64()?)?;
+        typed_value(spec, &minor)
+    } else {
+        typed_value(spec, raw)
+    }
 }
 
 /// The record page's form (D7.16): hidden premise fields, `value.<field>`
@@ -328,7 +340,7 @@ fn from_form(
         .into_iter()
         .map(|(field, raw)| {
             let spec = specs.get(&field)?;
-            Some(json!({"field_id": field, "value": typed_value(spec, &raw)?}))
+            Some(json!({"field_id": field, "value": form_typed_value(spec, &raw)?}))
         })
         .collect::<Option<Vec<_>>>()?;
     let request = CommandRequest {
@@ -417,10 +429,31 @@ async fn submit(
     if !request.well_formed() || payload::digest(&request).is_none() {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_command");
     }
+    let result = commit(stores, &trusted, &request).await;
+    answer(&mode, &app, &work, &request.record, result)
+}
+
+/// The audited command route's commit (ADR-007 D7.9; APP-095's hook): the
+/// request's shape, the commit under the handler deadline, the outcome log
+/// line and the `record.committed` announcement. The route calls it after
+/// its own refusals; APP-100's Slack Confirm and Approve call it with the
+/// TrustedRequest of a resolved Slack link, so every write takes this one
+/// path (ADR-011 I4).
+pub(crate) async fn commit(
+    stores: &storage::Stores,
+    trusted: &TrustedRequest,
+    request: &CommandRequest,
+) -> Result<CommandResult, storage::Error> {
+    if !idempotency_key_shaped(&request.idempotency_key)
+        || !request.well_formed()
+        || payload::digest(request).is_none()
+    {
+        return Err(storage::Error::Denied);
+    }
     let deadline = Instant::now() + COMMAND_HANDLER_DEADLINE - STORAGE_MARGIN;
     let result = stores
         .data
-        .commit_record_until(&trusted, &request, deadline)
+        .commit_record_until(trusted, request, deadline)
         .await;
     tracing::info!(
         outcome = match &result {
@@ -436,7 +469,12 @@ async fn submit(
         },
         "command.submit"
     );
-    answer(&mode, &app, &work, &request.record, result)
+    // APP-095: the committed record is announced in-process; subscribers are
+    // re-authorized at delivery (`events`), so nothing is disclosed here.
+    if let Ok(CommandResult::Committed(outcome)) = &result {
+        crate::events::hub().record_committed(&outcome.organization, &outcome.app, &outcome.work);
+    }
+    result
 }
 
 /// ADR-002: after a lost response the client looks the outcome up by key
@@ -487,8 +525,7 @@ fn notice(query: Option<&str>) -> Option<Notice> {
 
 /// A fresh 128-bit key per render (D7.16), 32 lowercase hex digits.
 fn fresh_key() -> Option<String> {
-    let bytes = capability::random_bytes::<16>()?;
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    capability::random_hex::<16>()
 }
 
 async fn record_page(

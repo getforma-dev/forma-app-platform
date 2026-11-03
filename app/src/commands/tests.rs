@@ -3,7 +3,7 @@
 //! parse into the same request, form texts are typed by the echoed spec, the
 //! notice set is closed, and the problem bodies carry their authorized members.
 use super::{
-    routes::{self, typed_value},
+    routes::{self, form_typed_value, typed_value},
     Notice,
 };
 use crate::{
@@ -723,6 +723,7 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
         operation: "create".into(),
         writable_fields: vec!["status".into()],
         transitions: vec![("status".into(), "needs_context".into(), "reviewed".into())],
+        rules: Default::default(),
     };
     let detail = |version: i64, current: Option<&str>, commands: Vec<RecordCommand>| RecordDetail {
         record_id: "00000000-0000-4000-8000-0000000000f0".into(),
@@ -776,6 +777,7 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
         operation: "update".into(),
         writable_fields: vec!["note".into()],
         transitions: Vec::new(),
+        rules: Default::default(),
     };
     assert_eq!(
         offered(&detail(2, Some("reviewed"), vec![plain.clone()])),
@@ -795,4 +797,203 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
     let mut reader = detail(1, Some("needs_context"), vec![record_decision]);
     reader.can_write = false;
     assert!(!offered(&reader).1);
+}
+
+#[test]
+fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
+    use crate::storage::{RecordCommand, RecordDetail, RecordField};
+    let rules = |initial: Value| {
+        crate::storage::rules::Rules::from_declaration(
+            &json!({"transitions": [], "initial": initial}),
+        )
+        .unwrap()
+    };
+    let command = RecordCommand {
+        id: "add_book".into(),
+        operation: "create".into(),
+        writable_fields: vec!["status".into()],
+        transitions: Vec::new(),
+        rules: rules(json!([{"field_id":"status","value":"to_read"}])),
+    };
+    let mut detail = RecordDetail {
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        schema: "book".into(),
+        schema_version: 1,
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        definition_digest: format!("sha256:{}", "7".repeat(64)),
+        work_version: 1,
+        version: 0,
+        can_write: true,
+        fields: vec![RecordField {
+            id: "status".into(),
+            value_type: json!({"type":"enum","values":["to_read","reading","done"]}),
+            nullable: false,
+            value: json!({"type":"null"}),
+            writable: true,
+        }],
+        commands: vec![command],
+    };
+    let offered = |detail: &RecordDetail, selected| {
+        super::view_for_command("a", "w", detail, "csrf".into(), "same-key".into(), selected)
+    };
+    let view = offered(&detail, Some("add_book"));
+    assert_eq!(view.fields[0].options, "to_read");
+    assert_eq!(view.fields[0].value, "to_read");
+    assert_eq!(
+        view.fields[0].spec,
+        r#"{"type":"enum","values":["to_read","reading","done"]}"#
+    );
+    assert_eq!(view.action, "/v1/work/a/w/commands/add_book");
+    assert!(!offered(&detail, Some("other")).can_write);
+    detail.commands[0].rules = rules(json!([
+        {"field_id":"status","value":"reading","when":{"field_id":"status","comparison":"eq","value":{"type":"enum","value":"reading"}}},
+        {"field_id":"status","value":"to_read"}
+    ]));
+    assert_eq!(
+        offered(&detail, Some("add_book")).fields[0].options,
+        "to_read | reading | done",
+        "a draft-dependent guard is not guessed from an empty record"
+    );
+    detail.commands[0].rules = rules(json!([{"field_id":"status","value":"to_read"}]));
+    detail.commands[0].operation = "update".into();
+    detail.version = 2;
+    detail.fields[0].value = json!({"type":"enum","value":"reading"});
+    assert_eq!(
+        offered(&detail, Some("add_book")).fields[0].value,
+        "reading"
+    );
+    assert_eq!(
+        offered(&detail, Some("add_book")).fields[0].options,
+        "to_read | reading | done"
+    );
+    detail.can_write = false;
+    assert!(!offered(&detail, Some("add_book")).can_write);
+}
+
+#[test]
+fn normalized_action_money_and_human_form_money_share_one_minor_unit_request() {
+    let spec = json!({"type":"money","currency":"USD","minor_unit_exponent":2});
+    let minor = crate::actions::resolve::cents("$86.00").unwrap();
+    let action_value = typed_value(&spec, &minor).unwrap();
+    assert_eq!(action_value["minor_units"], "8600");
+    assert_eq!(crate::actions::resolve::display(&action_value), "$86.00");
+
+    let (mut command, _) = fixture_request();
+    command["values"] = json!([{"field_id":"amount","value":action_value}]);
+    let mut fields = [
+        "publication_id",
+        "schema_id",
+        "schema_version_expected",
+        "record_id",
+        "expected_record_version",
+        "expected_work_version",
+        "idempotency_key",
+    ]
+    .into_iter()
+    .map(|key| {
+        let value = &command[key];
+        (
+            key.to_owned(),
+            value
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| value.to_string()),
+        )
+    })
+    .collect::<Vec<_>>();
+    fields.extend([
+        (
+            "collection_id".into(),
+            "00000000-0000-4000-8000-0000000000ce".into(),
+        ),
+        ("value.amount".into(), "86.00".into()),
+        ("spec.amount".into(), spec.to_string()),
+    ]);
+    let app = command["app_id"].as_str().unwrap();
+    let work = command["work_id"].as_str().unwrap();
+    let id = command["command_id"].as_str().unwrap();
+    let (form, _) = routes::parse_form_for_tests(&fields, app, work, id).unwrap();
+    let json =
+        routes::parse_json_for_tests(&serde_json::to_vec(&command).unwrap(), app, work, id, None)
+            .unwrap();
+    assert_eq!(
+        form, json,
+        "only the human form boundary converts major units"
+    );
+    assert_eq!(form.values[0]["value"]["minor_units"], "8600");
+}
+
+#[test]
+fn money_forms_use_exact_major_units_while_json_remains_minor_units() {
+    let spec = json!({"type":"money","currency":"USD","minor_unit_exponent":2});
+    for (display, minor) in [
+        ("12.50", "1250"),
+        ("12", "1200"),
+        (".50", "50"),
+        ("0.01", "1"),
+        ("-12.50", "-1250"),
+        ("-0.00", "0"),
+        ("00012.50", "1250"),
+        (" 12.50 ", "1250"),
+        (
+            "999999999999999999999999999999999999.99",
+            "99999999999999999999999999999999999999",
+        ),
+    ] {
+        assert_eq!(
+            form_typed_value(&spec, display).unwrap()["minor_units"],
+            minor
+        );
+        let value =
+            json!({"type":"money","minor_units":minor,"currency":"USD","minor_unit_exponent":2});
+        let shown = super::value_text(&value);
+        assert_eq!(form_typed_value(&spec, &shown).unwrap(), value);
+    }
+    for invalid in [
+        "1e2",
+        "12.501",
+        "1,250.00",
+        "$12.50",
+        "NaN",
+        "+1.00",
+        "--1",
+        "1.2.3",
+        ".",
+        "9999999999999999999999999999999999999.99",
+    ] {
+        assert_eq!(form_typed_value(&spec, invalid), None, "accepted {invalid}");
+    }
+    assert_eq!(
+        super::value_text(&json!({"type":"money","minor_units":"1","minor_unit_exponent":2})),
+        "0.01"
+    );
+    assert_eq!(
+        super::value_text(&json!({"type":"money","minor_units":"-1","minor_unit_exponent":2})),
+        "-0.01"
+    );
+    assert_eq!(super::money_minor_units("2.5", 1), Some("25".into()));
+    assert_eq!(super::money_minor_units("2.5", 0), None);
+    assert_eq!(super::money_minor_units("1", 99), None);
+    let (mut command, _) = fixture_request();
+    command["values"] = json!([{"field_id":"amount","value":{"type":"money","minor_units":"1250","currency":"USD","minor_unit_exponent":2}}]);
+    let parse = |command: &Value| {
+        routes::parse_json_for_tests(
+            &serde_json::to_vec(command).unwrap(),
+            command["app_id"].as_str().unwrap(),
+            command["work_id"].as_str().unwrap(),
+            command["command_id"].as_str().unwrap(),
+            None,
+        )
+    };
+    assert_eq!(
+        parse(&command).unwrap().values[0]["value"]["minor_units"],
+        "1250"
+    );
+    command["values"][0]["value"]["minor_units"] = json!("12.50");
+    assert_eq!(
+        parse(&command).unwrap().values[0]["value"]["minor_units"],
+        "12.50",
+        "JSON values are never converted by the form boundary; storage separately refuses this noninteger"
+    );
 }

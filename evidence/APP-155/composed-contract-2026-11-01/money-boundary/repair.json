@@ -1,0 +1,43 @@
+{
+  "scope": "Synthetic local regression and exact CI failure diagnosis; no hosted action or real provider call.",
+  "failure": {
+    "workflow_run": 41362434046,
+    "assertion": "storage::actions_campaign::native_actions_campaign / actions_campaign.rs:622",
+    "expected": "$86.00",
+    "observed": "$8,600.00",
+    "private_log_sha256": "9eb7893bc6e597029410dcab71ff79525ea78462e0c1e58a65efb36da698d350"
+  },
+  "cause": "The HTML major-to-minor money conversion was added to typed_value, also called by action resolution after its own cents conversion. The second conversion multiplied normalized action money by 100.",
+  "repair": "typed_value preserves normalized minor-unit scalars. Only HTML from_form calls form_typed_value. Browser commandRequest uses explicitly named typedFormValue. JSON command values are unchanged. No campaign expected amounts or authority checks changed.",
+  "checks": [
+    {
+      "command": "cargo test --lib --locked commands::",
+      "passed": 25,
+      "failed": 0,
+      "log_sha256": "680586c5aae4941e587c158af2357d9120dd0ca30a3be2541bed4d275fa495f8"
+    },
+    {
+      "command": "npx tsx --test test/money-form.test.ts test/command-outcome.test.ts",
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "exit_code": 0
+    },
+    {
+      "command": "just campaign actions",
+      "passed": 14,
+      "failed": 0,
+      "runtime_seconds": 30.55,
+      "report_sha256": "5b1448a3a17cdf490f8cf4339601c6f38266d99177eca3e80e82f2d23075bbc7",
+      "log_sha256": "55ca8834364a32f5bba9496e7f1c58d5894a081613f78839def6a7b704b0b289"
+    }
+  ],
+  "source_sha256": {
+    "app/src/commands/routes.rs": "f3deead0231e8d2a47594fa59dea3fec6d4419d2888ddad948d1bea2e5278c19",
+    "app/src/commands/tests.rs": "9a0750783ea86f04927b31d0846ae877e4a59e05cf917277fb5b6c12aae8d37a",
+    "app/admin/src/canvas/commands.ts": "108a19c8676590c4bcab32f1e15aedae5eee29aceabbb0796d634836edaf4fd9",
+    "app/admin/test/money-form.test.ts": "620520755e762b4241cc71219fd852d05487c33e979453fe7aff612a59bb9e3f"
+  }
+}

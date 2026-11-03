@@ -14,7 +14,10 @@ FROM rust:1.93.1-bookworm@sha256:7c4ae649a84014c467d79319bbf17ce2632ae8b8be123ac
 WORKDIR /source/app
 ENV CARGO_BUILD_JOBS=2
 ARG TARGETARCH
-COPY app/Cargo.toml app/Cargo.lock ./
+# ADR-013 D13.3: the root workspace manifest and lockfile at /source, the
+# members at their repository paths; cargo finds the root walking up.
+COPY Cargo.toml Cargo.lock /source/
+COPY app/Cargo.toml ./Cargo.toml
 COPY app/src ./src
 COPY app/migrations ./migrations
 COPY app/certs/rds-global-bundle.pem ./certs/rds-global-bundle.pem
@@ -25,11 +28,15 @@ COPY contracts/fixtures /source/contracts/fixtures
 COPY spikes/APP-006/Cargo.toml /source/spikes/APP-006/Cargo.toml
 COPY spikes/APP-006/src /source/spikes/APP-006/src
 # The executable path comes from Cargo's artifact metadata (the library's
-# test-profile artifact), never a guessed filename.
+# test-profile artifact), never a guessed filename. ADR-011 (APP-092): the
+# cfg(test) canvas campaign derives rust_embed over admin/dist, whose derive
+# refuses a missing folder at compile time; this image builds no browser
+# bundle and never runs that campaign, so the folder exists empty here.
 RUN --mount=type=cache,id=genui-qualification-cargo-registry,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=genui-qualification-target-${TARGETARCH},target=/source/app/target \
+    --mount=type=cache,id=genui-qualification-target-${TARGETARCH},target=/source/target \
     set -eu; \
-    cargo test --no-run --locked --lib --message-format=json > /source/cargo-artifacts.jsonl; \
+    mkdir -p /source/app/admin/dist; \
+    cargo test --no-run --locked --lib -p forma-app-platform --message-format=json > /source/cargo-artifacts.jsonl; \
     grep '"reason":"compiler-artifact"' /source/cargo-artifacts.jsonl \
       | grep '"name":"genui"' | grep '"kind":\["lib"\]' | grep '"test":true' \
       | grep -o '"executable":"[^"]*"' | cut -d'"' -f4 > /source/executable-path; \
@@ -41,11 +48,17 @@ RUN --mount=type=cache,id=genui-qualification-cargo-registry,target=/usr/local/c
       "$(basename "$(cat /source/executable-path)")" > /source/build-identity.json
 
 FROM python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
-# Debian security fixes for the base image's openssl, gnutls and perl (APP-078 step 3.5, ECR scan of
-# 2026-10-30: 10 CRITICAL in these packages). Exact versions from bookworm-security; bump them with the base digest.
+# Exact Bookworm security updates, checked against Debian's tracker and ARM64 APT metadata.
+# Preserve APP-078's critical fixes; APP-140 adds every available fix from the 2026-11-01 scan.
+# Remaining vendor-open findings and package evidence: evidence/APP-140/IMAGE-SECURITY.md.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade \
        libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 libgnutls30=3.7.9-2+deb12u7 perl-base=5.36.0-7+deb12u4 \
+       libc6=2.36-9+deb12u14 libc-bin=2.36-9+deb12u14 dpkg=1.21.23 libcap2=1:2.66-4+deb12u3+b1 \
+       libpcre2-8-0=10.42-1+deb12u2 libkrb5-3=1.20.1-2+deb12u5 libk5crypto3=1.20.1-2+deb12u5 \
+       libgssapi-krb5-2=1.20.1-2+deb12u5 libkrb5support0=1.20.1-2+deb12u5 \
+       libsystemd0=252.39-1~deb12u2 libudev1=252.39-1~deb12u2 libgcrypt20=1.10.1-3+deb12u1 \
+       liblzma5=5.4.1-1+deb12u2 sed=4.9-1+deb12u1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY app/runtime/requirements.lock ./requirements.lock

@@ -17,6 +17,12 @@ The controlling references are the [delivered platform design](../../design/form
 
 Checks run as the owning behavior is introduced, and are rerun when changes invalidate the evidence. Security, isolation, exact arithmetic and command consistency are required throughout; their later whole-system review does not defer those controls until the end.
 
+## Composed app follow-through
+
+[PH09 / S15](../../Tickets/phases/PH09.md) is the planned follow-through from [ADR-015](../architecture/ADR-015-COMPOSED-APP-PRESENTATION.md), separate from the November 2 trial. Its gate requires APP-155–160's actual compatible definitions, trusted app shell, typed actions, persisted themes, scoped record reads, exact aggregates and integrated reference-app evidence. APP-161 requires a measured future idle/wake decision and owned follow-ups; it does not require deploying sleep/wake as part of this phase.
+
+APP-160 compares the same saved work in embedded, standalone member and shared/connected presentations, with real command/query receipts, narrow layouts, keyboard/screen-reader use, modal drafts, unknown write outcomes, live updates and revocation. ADR-014's five-second visibility lease and view-only guest projection remain binding. Planning validation, screenshots or an admitted view kind alone do not pass this gate. No older phase depends on PH09, and this phase does not close older platform obligations.
+
 ## Demo-specific applicability
 
 The delivered demo §10.7 explicitly retains platform SR1, SR2, SR4–SR7 and SR10–SR13. It substitutes typed in-process principals for platform SR3, a pinned image digest plus per-build tests for SR8, and accepts the one-operator/no-breakglass reduction for SR9 under demo AR1. APP-056 must record this matrix and verify the applicable or substituted controls; a PH04 pass is not a claim that production controls already exist. Full service tokens, signed releases and managed support controls belong to APP-060/061/063 in PH05.

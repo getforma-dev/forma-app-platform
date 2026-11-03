@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "scope": "Source checks on an isolated local worktree; no hosted deployment",
+  "commands": [
+    {
+      "command": "just check",
+      "result": "initial run: all steps except Rust tests passed; obsolete expected contract/inventory/native binding test entries corrected; see targeted reruns"
+    },
+    {
+      "command": "just check fmt clippy clippy-dev test http-smoke shared-broker contracts",
+      "result": "fmt/clippy/clippy-dev/http-smoke/shared-broker/contracts passed; remaining test fixture/binding expectations corrected afterward"
+    },
+    {
+      "command": "just check admin test http-smoke",
+      "result": "admin74 tests/typecheck/strict build and native HTTP smoke passed; test helper owner binding fix subsequently applied"
+    },
+    {
+      "command": "just check fmt test",
+      "result": "passed:352 library tests,7 native SSR binary tests,3 compile-fail doctests;33 ignored campaigns separately cataloged"
+    },
+    {
+      "command": "python3 Tickets/_tools/board.py check",
+      "result": "passed:153 tickets; frozen design and active links checked"
+    },
+    {
+      "command": "app/runtime/.venv/bin/python -I -m unittest discover -s app/operator -p test_operator.py",
+      "result": "passed33; skipped6 requiring sealed-image/parser environment"
+    }
+  ],
+  "broker": {
+    "tests": 16,
+    "result": "passed",
+    "source_sha256": "15abe0db2c624e0a79f0d9a55ca9dcad6798b2871ee3ba280cdb6ec8d38559b9"
+  },
+  "logs_sha256": {
+    "app154-nonrust-check.log": "9cb891815bbd989069e15a98f87692001641a67430d6f6627b05034565a95c3b",
+    "app154-final-tests.log": "759edcb5e47d24294a53ba19c3aaea2d6e6d63772f0281b7ea4d3812271e01ad",
+    "app154-final-check.log": "b0e0c0042c912944f6c6645c20927da9427476733a2524472be07f675a36fb75",
+    "app154-production-check.log": "1a867fbc0c6851043c2a4711ad153ac42f7c4649171f68c3d733199ed640077e",
+    "app154-operator-package.log": "b3412e5357dcd0291435a6fc27de4370dea92741a683528f8f1d0cb5059fe9a3",
+    "app154-check.log": "a273a309aedf3b59dc9541b6da615c8db6a95faa87b826620cb56cf74787ac21",
+    "app154-native-final.log": "80f83242c77904e124c5ae1cef4aa0801c953ccfe03e27504d632877f4d352c7"
+  },
+  "limits": [
+    "Full source campaign results are separately retained with their source hashes.",
+    "Raw logs remain in the worktree cache; this file records sanitized results and identities.",
+    "Exact final source revision and CI belong to the landing PR."
+  ],
+  "all_check_steps_passed_after_targeted_fixes": true
+}

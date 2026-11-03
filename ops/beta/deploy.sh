@@ -1,0 +1,456 @@
+#!/usr/bin/env bash
+# just deploy <step> <window> [options] (ADR-012 D12.6): the beta redeploy of
+# docs/pitch/DEPLOY-RUNBOOK.md, one step per call, every file of the window in
+# $PRIV/windows/<window-id>/. The runbook stays the authority; each of its
+# items names the step that performs it.
+#
+# Options (any step):
+#   --approved "<words>"  Victor's verbatim word for THIS action. Required by
+#                         every [MUTATION] step; appended to $PRIV/approvals.md
+#                         before any AWS call. Never reused across steps.
+#   --dry-run             print what would run; call nothing, record nothing
+#
+# Steps ([read] calls only read APIs; [local] calls no AWS API):
+#   new        [local]    --candidate <sha> --supersedes <live window id> [--input-from <file>]
+#                         [--clean-trial-file <private fresh identifiers JSON>]
+#                         [--signin-aliases-file <reviewed single clean-trial mapping>]
+#                         makes the window id and directory and release.json (0.1, 0.4),
+#                         with the local image record of `just images` (build.json)
+#   observe    [read]     caller identity, read-only snapshot, stack-before.json, template-before.json (1.1-1.3)
+#   push       [MUTATION] tag and push the three images, record their digests (2.1-2.2);
+#                         refuses local images that are not the ones `just images` qualified
+#   preflight  [local]    deployment-input.json from the superseded window, preflight.py at count 0 (3.1)
+#   abandon    [local]    preflight.py --abandon this window (Rollback, before 3.6)
+#   synth      [local]    cdk synth with the private names files; template.json + sha256 (3.2)
+#   diff       [local]    cdk diff against template-before.json, no AWS call (3.3)
+#   change-set [MUTATION] compose, upload the template, create the change set (3.4.1-3.4.3)
+#   review     [read]     describe the change set and review it against the receipt (3.4.4)
+#   execute    [MUTATION] execute the change set; stack-after.json; the outage starts (3.6)
+#   snapshot   [MUTATION] --name <snapshot id>: RDS snapshot before a migration (5.1)
+#   migrate    [MUTATION] operator task migrate, then verify-catalog (5.2); run it twice
+#   seed       [MUTATION] operator task seed-library; extra args after -- (5.3)
+#   library    [MUTATION] [--organization <id>] build and plan the sources, put the objects, If-None-Match (5.4)
+#   grants     [MUTATION] operator task grant-library-access; extra args after -- (5.5)
+#   activate   [MUTATION] preflight.py --activate at count 1 (6.1); then waits for
+#                         /health/live, records the activation in release.json, appends
+#                         the docs/pitch/RELEASES.md row and creates and pushes the tag
+#                         beta/<yyyymmdd>-<sha7> (ADR-013 D13.2, D13.5). --record-only
+#                         redoes only that part (activation.json already there)
+#   verify     [read]     [<window id>] the five HTTPS checks of 6.2 (no AWS API) against
+#                         the window's release (default: the newest activated one);
+#                         the results go into its release.json
+#   rollback-deny [MUTATION] the service onto the deny-all revision; --restore puts it back (Rollback)
+#   help       this text
+#
+# The release record (ADR-013 D13.5, schema in ops/beta/release.py):
+# $PRIV/windows/<id>/release.json, written by new, push, synth, execute,
+# snapshot, the operator tasks, activate and verify; every approval it ran
+# under is referenced by its line in $PRIV/approvals.md.
+#
+# Secrets (runbook section 4) stay Victor's own commands; no step reads .env.
+set -euo pipefail
+# shellcheck source=ops/beta/lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+printf 'Operator state: %s\n' "$PRIV" >&2
+
+usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; }
+
+step=${1:-help}; shift || true
+case $step in help|-h|--help) usage; exit 0 ;; esac
+
+WINDOW_ID="" organization="" candidate="" supersedes="" input_from="" clean_trial_file="" signin_aliases_file="" snap_name="" restore=0 record_only=0 origin=$BETA_ORIGIN extra=()
+if [[ $step == verify ]]; then
+  if [[ $# -gt 0 && $1 != --* ]]; then WINDOW_ID=$1; shift; fi
+elif [[ $step != new ]]; then
+  [[ $# -gt 0 && $1 != --* ]] || die "usage: just deploy $step <window-id> [options] (just deploy help)"
+  WINDOW_ID=$1; shift
+fi
+while (( $# )); do
+  case $1 in
+    --approved) APPROVED=${2:?--approved needs Victor\'s words}; shift 2 ;;
+    --approved=*) APPROVED=${1#*=}; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --candidate) candidate=$2; shift 2 ;;
+    --supersedes) supersedes=$2; shift 2 ;;
+    --input-from) input_from=$2; shift 2 ;;
+    --clean-trial-file) clean_trial_file=$2; shift 2 ;;
+    --signin-aliases-file) signin_aliases_file=$2; shift 2 ;;
+    --name) snap_name=$2; shift 2 ;;
+    --restore) restore=1; shift ;;
+    --record-only) record_only=1; shift ;;
+    --origin) origin=${2:?}; shift 2 ;;
+    --organization) organization=$2; shift 2 ;;
+    --) shift; extra=("$@"); break ;;
+    *) die "unknown option $1 (just deploy help)" ;;
+  esac
+done
+[[ -n "$APPROVED" && -z "${APPROVED//[[:space:]]/}" ]] && die "--approved is blank"
+export DRY_RUN APPROVED WINDOW_ID
+[[ -z "$signin_aliases_file" || "$step" == new ]] || die "--signin-aliases-file belongs to new; synth/diff use the retained window copy"
+
+# Both operations must consume the same explicit, window-local alias context.
+# No legacy persona aliases enter a clean-trial deployment implicitly.
+window_cdk_context() {
+  if [[ -f "$W/clean-trial.json" ]]; then
+    cdk_context=(-c "cleanTrialFile=$W/clean-trial.json")
+    if [[ -f "$W/signin-aliases.json" ]]; then
+      python3 -I "$REPO/ops/beta/signin_aliases.py" --aliases "$W/signin-aliases.json" \
+        --clean-trial "$W/clean-trial.json" --legacy "$PRIV/signin-aliases.json"
+      cdk_context+=(-c "signinAliasesFile=$W/signin-aliases.json")
+    fi
+  else
+    for f in display-names.json signin-aliases.json; do [[ -f "$PRIV/$f" ]] || (( DRY_RUN )) || die "missing $PRIV/$f (runbook 0.5)"; done
+    cdk_context=(-c "displayNamesFile=$PRIV/display-names.json" -c "signinAliasesFile=$PRIV/signin-aliases.json")
+  fi
+}
+
+# The three images: local name, ECR repository.
+IMAGES="service:genui-synthetic qualification:genui-qualification operator:genui-operator"
+
+case $step in
+  new)
+    priv_ready
+    [[ "$candidate" =~ ^[0-9a-f]{7,40}$ ]] || die "--candidate <commit sha> is required"
+    [[ -n "$supersedes" ]] || die "--supersedes <live window id> is required (the head of the chain)"
+    full=$(git -C "$REPO" rev-parse --verify "$candidate^{commit}") || die "unknown commit $candidate"
+    git -C "$REPO" merge-base --is-ancestor "$full" "@{upstream}" 2>/dev/null || echo "note: $candidate is not on this branch's upstream (runbook 0.1: pushed)" >&2
+    [[ "$supersedes" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || die "--supersedes must be the live window's full id (a lowercase UUIDv4)"
+    build="$REPO/.cache/images/${full:0:7}/build.json"
+    build_args=()
+    if [[ -f "$build" ]]; then
+      jq -e '.passed == true' "$build" >/dev/null || die "$build records a build whose checks did not pass (just images ${full:0:7})"
+      build_args=(--build "$build")
+    else
+      echo "note: no $build yet; run 'just images ${full:0:7}' before 'just deploy push' (push refuses without it)" >&2
+    fi
+    schema=$(git -C "$REPO" show "$full:app/migrations/manifest.json" | jq -er .database_version) || die "no app/migrations/manifest.json at $candidate"
+    branch=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null || git -C "$REPO" rev-parse --abbrev-ref HEAD)
+    WINDOW_ID=$(uuidgen | tr 'A-Z' 'a-z')
+    window_dir "$WINDOW_ID"
+    if [[ -n "$clean_trial_file" ]]; then
+      python3 "$REPO/infra/scripts/window_requests.py" clean-trial-check --clean-trial "$clean_trial_file" >/dev/null
+    fi
+    alias_args=(--predecessor "$PRIV/windows/$supersedes" --legacy "$PRIV/signin-aliases.json")
+    [[ -z "$clean_trial_file" ]] || alias_args+=(--clean-trial "$clean_trial_file")
+    [[ -z "$signin_aliases_file" ]] || alias_args+=(--aliases "$signin_aliases_file")
+    python3 -I "$REPO/ops/beta/signin_aliases.py" "${alias_args[@]}"
+    if (( DRY_RUN )); then echo "would create $W and release.json for candidate ${full:0:12} (schema $schema, $branch)"; exit 0; fi
+    mkdir -m 700 -p "$W"
+    if [[ -n "$clean_trial_file" ]]; then cp "$clean_trial_file" "$W/clean-trial.json"; fi
+    python3 -I "$REPO/ops/beta/signin_aliases.py" "${alias_args[@]}" --output "$W/signin-aliases.json"
+    if [[ -n "$input_from" ]]; then
+      [[ -f "$input_from" ]] || die "no file $input_from"
+      cp "$input_from" "$W/base-input.json"
+    elif [[ -f "$PRIV/windows/$supersedes/deployment-input.json" ]]; then
+      cp "$PRIV/windows/$supersedes/deployment-input.json" "$W/base-input.json"
+    else
+      die "no input for window $supersedes under $PRIV/windows; pass --input-from <its deployment input> (for example under windows/_pre-adr-012/)"
+    fi
+    if [[ -n "$(jq -r '.clean_trial_organization_id // empty' "$W/base-input.json")" && ! -f "$W/clean-trial.json" ]]; then
+      die "this is a clean-trial redeploy; pass --clean-trial-file with its existing reviewed identifiers"
+    fi
+    release_py init --window "$WINDOW_ID" --supersedes "$supersedes" --candidate "$full" --branch "$branch" \
+      --database-version "$schema" ${build_args[@]+"${build_args[@]}"} > "$W/release.json"
+    echo "window $WINDOW_ID"
+    echo "directory $W"
+    ;;
+
+  observe)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    shown '
+aws sts get-caller-identity --query Account --output text
+"$PY" "$REPO/infra/scripts/readonly_snapshot.py" --private-dir "$W/snapshot" --summary "$W/snapshot-summary.json"
+aws cloudformation describe-stacks --stack-name "$STACK" > "$W/stack-before.json"
+aws cloudformation get-template --stack-name "$STACK" --template-stage Original --query TemplateBody > "$W/template-before.json"'
+    echo "check: the account, UPDATE_COMPLETE, the service 1/1 on the live revision, no pending change sets (runbook 1.1-1.2)"
+    ;;
+
+  push)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    C=$(release_get .candidate_sha); C7=${C:0:7}; T=$(release_get .tag)
+    # Push only what `just images` qualified (ADR-013 D13.5): the local image
+    # ids must be the ones build.json recorded.
+    build="$REPO/.cache/images/$C7/build.json"
+    if (( ! DRY_RUN )); then
+      [[ -f "$build" ]] || die "no $build: run 'just images $C7' (build and qualify) first"
+      jq -e '.passed == true' "$build" >/dev/null || die "$build: the image checks did not pass"
+      [[ "$(release_get '.images.service.local_id // empty')" ]] || release_py import-build "$W/release.json" "$build"
+    fi
+    for p in $IMAGES; do
+      n=${p%%:*}
+      id=$(docker image inspect --format '{{.Id}}' "genui-$n:pitch-$C7" 2>/dev/null) || { (( DRY_RUN )) && continue; die "local image genui-$n:pitch-$C7 missing (just images $C7)"; }
+      (( DRY_RUN )) || [[ "$id" == "$(jq -r ".images.$n.id" "$build")" ]] || die "genui-$n:pitch-$C7 is not the image 'just images' qualified ($id); rebuild with 'just images $C7'"
+    done
+    mutate push '
+aws ecr get-login-password | docker login --username AWS --password-stdin "$REG" >/dev/null
+for p in $IMAGES; do
+  n=${p%%:*}; r=${p#*:}
+  docker tag "genui-$n:pitch-$C7" "$REG/$r:$T"
+  ok=0; for i in 1 2 3 4 5 6; do docker push -q "$REG/$r:$T" > "$W/push-$r.log" 2>&1 && { ok=1; break; }; done
+  [ $ok = 1 ] || { echo "push failed: $r (see $W/push-$r.log)" >&2; exit 2; }
+  aws ecr describe-images --repository-name "$r" --image-ids imageTag="$T" > "$W/ecr-$r.json"
+  d=$(jq -r ".imageDetails[0].imageDigest" "$W/ecr-$r.json")
+  z=$(jq -r ".imageDetails[0].imageSizeInBytes" "$W/ecr-$r.json")
+  release_set ".images[\$n].digest = \$d | .images[\$n].size_bytes = (\$z | tonumber)" --arg n "$n" --arg d "$d" --arg z "$z"
+  echo "pushed $r $d"
+done
+release_set ".pushed_at_utc = (now | floor | todate)"'
+    echo "next: read the scan findings from each arm64 child digest (runbook 2.3); a CRITICAL is Victor's call"
+    ;;
+
+  preflight)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    for n in service qualification operator; do
+      [[ -n "$(release_get ".images.$n.digest // empty")" ]] || (( DRY_RUN )) || die "no $n digest in release.json (just deploy push)"
+    done
+    if (( ! DRY_RUN )); then
+      jq --arg w "$WINDOW_ID" --arg sup "$(release_get .supersedes_window_id)" \
+         --arg s "$REG/genui-synthetic@$(release_get .images.service.digest)" \
+         --arg q "$REG/genui-qualification@$(release_get .images.qualification.digest)" \
+         --arg o "$REG/genui-operator@$(release_get .images.operator.digest)" \
+         '.window_id=$w | .supersedes_window_id=$sup | .image_digest=$s | .qualification_image_digest=$q | .operator_image_digest=$o | .service_desired_count=0' \
+         "$W/base-input.json" > "$W/deployment-input.json"
+      if [[ -f "$W/clean-trial.json" ]]; then
+        jq --arg trial "$(jq -er .organization_id "$W/clean-trial.json")" '.clean_trial_organization_id=$trial' "$W/deployment-input.json" > "$W/deployment-input.new.json"
+        mv "$W/deployment-input.new.json" "$W/deployment-input.json"
+      fi
+      echo "deployment-input.json written; deployment_expires_at_utc kept from the base input: $(jq -r .deployment_expires_at_utc "$W/deployment-input.json") (renew it if it is less than a day away, runbook 3.1)"
+    fi
+    shown '
+python3 "$REPO/infra/scripts/preflight.py" --input "$W/deployment-input.json" --ledger "$PRIV/budget-ledger.json" > "$W/receipt.json"
+jq -c "{status, window_id, superseded_window_id}" "$W/receipt.json"'
+    ;;
+
+  abandon)
+    load_env; window_dir "$WINDOW_ID"
+    shown 'python3 "$REPO/infra/scripts/preflight.py" --ledger "$PRIV/budget-ledger.json" --abandon "$WINDOW_ID"'
+    ;;
+
+  synth)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    window_cdk_context
+    shown '
+(cd "$REPO/infra" && npm run synth -- --quiet "${cdk_context[@]}") > "$W/synth.log" 2>&1
+cp "$REPO/infra/cdk.out/GenuiSyntheticFoundation.template.json" "$W/template.json"
+shasum -a 256 "$W/template.json" | cut -d" " -f1 > "$W/template.sha256"
+release_set ".stack.template_sha256 = \$t" --arg t "$(cat "$W/template.sha256")"'
+    ;;
+
+  diff)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ -f "$W/template-before.json" ]] || (( DRY_RUN )) || die "no template-before.json (just deploy observe)"
+    window_cdk_context
+    shown '
+(cd "$REPO/infra" && npx cdk diff GenuiSyntheticFoundation --no-lookups "${cdk_context[@]}" --template "$W/template-before.json") > "$W/cdk-diff.txt" 2>&1 || true'
+    echo "diff in $W/cdk-diff.txt"
+    ;;
+
+  change-set)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    for f in receipt.json template.json; do [[ -f "$W/$f" ]] || (( DRY_RUN )) || die "no $W/$f (preflight, synth)"; done
+    # Composing the request is local (window_requests.py calls no AWS API).
+    prepare 'python3 "$REPO/infra/scripts/window_requests.py" change-set --receipt "$W/receipt.json" --template "$W/template.json" --window-id "$WINDOW_ID" --output "$W/change-set-request.json" > "$W/change-set.out"'
+    mutate change-set '
+aws s3api put-object --bucket "$ASSETS" --key "$(jq -r .upload.key "$W/change-set.out")" --body "$W/template.json" --content-type application/json --checksum-sha256 "$(jq -r .upload.checksum_sha256_base64 "$W/change-set.out")" --if-none-match "*" > /dev/null || echo "(template object already present: a 412 is expected on a retry)"
+aws cloudformation create-change-set --cli-input-json "file://$W/change-set-request.json" > "$W/change-set-create.json"
+aws cloudformation wait change-set-create-complete --stack-name "$STACK" --change-set-name "genui-app078-$WINDOW_ID"'
+    ;;
+
+  review)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    shown '
+aws cloudformation describe-change-set --stack-name "$STACK" --change-set-name "genui-app078-$WINDOW_ID" > "$W/change-set-describe.json"
+python3 "$REPO/infra/scripts/window_requests.py" review-change-set --describe "$W/change-set-describe.json" --receipt "$W/receipt.json" --output "$W/change-set-review.json"
+jq -r ".Changes[].ResourceChange | [.Action, .LogicalResourceId, (.Replacement // \"-\")] | @tsv" "$W/change-set-describe.json"'
+    echo "now check every change by hand against $W/cdk-diff.txt (runbook 3.5) before 'just deploy execute'"
+    ;;
+
+  execute)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ -f "$W/change-set-review.json" ]] || (( DRY_RUN )) || die "no change-set-review.json: run 'just deploy review' first"
+    mutate execute '
+aws cloudformation execute-change-set --stack-name "$STACK" --change-set-name "genui-app078-$WINDOW_ID"
+aws cloudformation wait stack-update-complete --stack-name "$STACK"
+aws cloudformation describe-stacks --stack-name "$STACK" > "$W/stack-after.json"
+aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,taskDefinition:taskDefinition}"'
+    if (( ! DRY_RUN )); then
+      # The stack's task definitions from its outputs (release.json is private;
+      # RELEASES.md shows only the revision number).
+      out() { jq -r --arg k "$1" '.Stacks[0].Outputs[] | select(.OutputKey==$k) | .OutputValue' "$W/stack-after.json"; }
+      td=$(out TaskDefinition); rb=$(out RollbackTaskDefinition)
+      release_set '.executed_at_utc = (now | floor | todate) | .stack.name = $s | .stack.task_definition = $t
+                   | .stack.task_definition_revision = ($t | capture(":(?<n>[0-9]+)$").n | tonumber)
+                   | .stack.rollback_task_definition = $r' --arg s "$STACK" --arg t "$td" --arg r "$rb"
+    fi
+    (( DRY_RUN )) || echo "the outage has started; a desired count other than 0 is a stop (runbook 'Downtime')"
+    ;;
+
+  snapshot)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ "$snap_name" =~ ^genui-pitch-pre-migration-schema[0-9]+-[0-9]{8}$ ]] || die "--name genui-pitch-pre-migration-schema<live version>-<yyyymmdd> (runbook 5.1)"
+    SNAP_NAME=$snap_name; export SNAP_NAME
+    mutate snapshot '
+aws rds create-db-snapshot --db-instance-identifier "$DB" --db-snapshot-identifier "$SNAP_NAME" > "$W/snapshot-create.json"
+aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
+    (( DRY_RUN )) || release_set '.migrations.snapshot = $s' --arg s "$snap_name"
+    ;;
+
+  migrate|seed|grants)
+    # Operator tasks: ops/beta/run-step.sh asks for and records the approval of
+    # each task it runs ([MUTATION]); the composing is local.
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ ! -f "$W/clean-trial.json" || "$step" == migrate ]] || die "clean trial refuses sandbox seed and library grants; provision an empty organization and issue its member invite"
+    if [[ -f "$W/clean-trial.json" ]]; then
+      shown 'python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state stopped > "$W/services-stopped.json"'
+    fi
+    fwd=(--window "$WINDOW_ID"); [[ -n "$APPROVED" ]] && fwd+=(--approved "$APPROVED"); (( DRY_RUN )) && fwd+=(--dry-run)
+    case $step in
+      migrate)
+        # 5.2: migrate, then the read-only catalog check. Run the step twice;
+        # the second migrate output must be identical.
+        "$REPO/ops/beta/run-step.sh" "${fwd[@]}" migrate migrate
+        "$REPO/ops/beta/run-step.sh" "${fwd[@]}" verify-catalog verify-catalog ;;
+      seed)
+        (( ${#extra[@]} )) || die "pass the operator flags after --, e.g. -- --set=--organization=<org id> (runbook 5.3)"
+        "$REPO/ops/beta/run-step.sh" "${fwd[@]}" seed-library admission-seed-library "${extra[@]}" ;;
+      grants)
+        (( ${#extra[@]} )) || die "pass the operator flags after --, e.g. -- --set=--organization=<org> --set=--principal=<id> ... (runbook 5.5)"
+        "$REPO/ops/beta/run-step.sh" "${fwd[@]}" grant-library-access admission-grant-library-access "${extra[@]}" ;;
+    esac
+    ;;
+
+  library)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ ! -f "$W/clean-trial.json" ]] || die "clean trial refuses sandbox library upload"
+    [[ -f "$W/stack-after.json" ]] || (( DRY_RUN )) || die "no $W/stack-after.json (just deploy execute)"
+    ORG=${organization:-00000000-0000-4000-8000-000000000001}; export ORG
+    # [read] the live task definition's environment (bucket, tenants); [local] the files and the plan.
+    prepare '
+TD=$(jq -r ".Stacks[0].Outputs[] | select(.OutputKey==\"TaskDefinition\") | .OutputValue" "$W/stack-after.json")
+aws ecs describe-task-definition --task-definition "$TD" --query "taskDefinition.containerDefinitions[0].environment" > "$W/task-env.json"
+"$PY" "$REPO/app/runtime/library_sources.py" build --organization "$ORG" --cache-root "$PRIV/library" > "$W/library-build.json"
+"$PY" "$REPO/app/runtime/library_sources.py" plan --organization "$ORG" > "$W/library-plan.json"'
+    mutate library '
+"$OPVENV/bin/python" -I "$REPO/ops/beta/upload-library.py" --repo "$REPO" --priv "$PRIV" --window-dir "$W" --organization "$ORG" > "$W/library-upload.json"
+jq -c "[.objects[].state] | group_by(.) | map({(.[0]): length}) | add" "$W/library-upload.json"'
+    ;;
+
+  activate)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    if (( record_only )); then
+      # The activation already ran (activation.json); only the release record,
+      # the RELEASES.md row and the tag are redone. Still Victor's word: it
+      # pushes a tag to origin.
+      [[ -f "$W/activation.json" ]] || (( DRY_RUN )) || die "--record-only: no $W/activation.json (run the activation first)"
+      mutate "activate --record-only" 'true'
+    else
+      [[ ! -e "$W/activation.json" ]] || die "activation response already exists; reconcile it and use --record-only, never repeat activation blindly"
+      prepare 'jq ".service_desired_count = 1" "$W/deployment-input.json" > "$W/deployment-input-activate.json"'
+      mutate activate '
+python3 "$REPO/infra/scripts/preflight.py" --input "$W/deployment-input-activate.json" --ledger "$PRIV/budget-ledger.json" --activate > "$W/activation.json"
+jq -c "{status, window_id, activation_status: .activation.status}" "$W/activation.json"'
+    fi
+    if (( DRY_RUN )); then
+      echo "(dry run: would wait for $origin/health/live, record the activation in release.json, append docs/pitch/RELEASES.md, git tag -a beta/<yyyymmdd>-<sha7> and git push origin <tag>)"
+      exit 0
+    fi
+    receipt_args=(activation-receipt "$W/activation.json" "$W/release.json"); (( record_only )) && receipt_args+=(--record-only)
+    release_py "${receipt_args[@]}" > "$W/activation-receipt.json.new" \
+      || die "activation response is unconfirmed; reconcile it before --record-only (no repeated activation, release row or tag)"
+    mv "$W/activation-receipt.json.new" "$W/activation-receipt.json"
+    release_set '.activation_requested_at_utc = $o | .stack.task_definition = $t
+                 | .stack.task_definition_revision = ($t | capture(":(?<n>[0-9]+)$").n | tonumber)' \
+      --arg o "$(jq -r .observed_at_utc "$W/activation-receipt.json")" --arg t "$(jq -r .task_definition "$W/activation-receipt.json")"
+    # 6.1: one healthy target. The public health route only (no AWS API).
+    wait_s=${GENUI_HEALTH_WAIT_SECONDS:-600} waited=0
+    echo "waiting up to ${wait_s}s for $origin/health/live ..."
+    until code=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code}' "$origin/health/live" 2>/dev/null); [[ "${code%% *}" == 200 ]]; do
+      if (( waited >= wait_s )); then
+        echo "not healthy after ${wait_s}s: no RELEASES.md row and no tag. Check the target (runbook 6.1);" >&2
+        echo "once healthy: just deploy activate $WINDOW_ID --record-only --approved \"<Victor's words>\"" >&2
+        exit 4
+      fi
+      sleep 10; waited=$((waited + 10))
+    done
+    if [[ -f "$W/clean-trial.json" ]]; then
+      # The app health route cannot establish that signup issuance is ready.
+      shown '
+BROKER=$(jq -er ".Stacks[0].Outputs[] | select(.OutputKey==\"SharedBrokerServiceName\") | .OutputValue" "$W/stack-after.json")
+aws ecs wait services-stable --cluster "$CLUSTER" --services "$BROKER"
+python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state healthy > "$W/broker-health.json"'
+    fi
+    # The first healthy observation is the activation time (a --record-only
+    # rerun keeps it, so the row and the tag name stay the same).
+    release_set '.activated_at_utc //= (now | floor | todate)'
+    release_py check "$W/release.json" --activated >/dev/null
+    tag=$(release_py tag "$W/release.json")
+    release_py append "$W/release.json" "$REPO/docs/pitch/RELEASES.md"
+    release_set '.releases_row = $r' --arg r "$(release_py row "$W/release.json")"
+    # D13.2: an annotated tag on the candidate, pushed to origin (a Git
+    # mutation, inside this approved step). The digests are the identity; the
+    # tag is the human handle.
+    C=$(release_get .candidate_sha)
+    if git -C "$REPO" rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+      [[ "$(git -C "$REPO" rev-parse "$tag^{commit}")" == "$C" ]] || die "tag $tag exists on another commit"
+      echo "tag $tag exists"
+    else
+      git -C "$REPO" tag -a "$tag" "$C" -m "beta release $tag
+
+window $(release_get .window_id) (supersedes $(release_get .supersedes_window_id | cut -c1-8))
+TD:$(release_get .stack.task_definition_revision), schema $(release_get .database_version)
+service $(release_get .images.service.digest)
+qualification $(release_get .images.qualification.digest)
+operator $(release_get .images.operator.digest)"
+      echo "tagged $tag"
+    fi
+    if git -C "$REPO" push origin "refs/tags/$tag"; then
+      release_set '.git_tag = {name: $n, pushed: true}' --arg n "$tag"
+    else
+      release_set '.git_tag = {name: $n, pushed: false}' --arg n "$tag"
+      echo "the tag push failed; retry: git push origin refs/tags/$tag" >&2
+    fi
+    echo "release recorded: $W/release.json; docs/pitch/RELEASES.md has the row. Commit it on pivot/pitch-mvp:"
+    echo "  git -C \"$REPO\" commit -m \"RELEASES: $tag\" -- docs/pitch/RELEASES.md && git -C \"$REPO\" push"
+    echo "then 'just deploy verify $WINDOW_ID' (runbook 6.2)"
+    ;;
+
+  verify)
+    # 6.2 against a window's release: the given one, else the newest activated
+    # window that has a release.json. Without any, the checks run alone.
+    if [[ -z "$WINDOW_ID" && -d "$PRIV/windows" ]]; then
+      WINDOW_ID=$(for f in "$PRIV"/windows/*/release.json; do
+                    if [[ -f "$f" ]]; then jq -r 'select(.activated_at_utc != null) | "\(.activated_at_utc) \(.window_id)"' "$f" || true; fi
+                  done | sort | tail -1 | cut -d' ' -f2)
+    fi
+    vargs=(--origin "$origin"); (( DRY_RUN )) && vargs+=(--dry-run)
+    if [[ -z "$WINDOW_ID" ]]; then
+      echo "no activated window with a release.json under $PRIV/windows; checking $origin only"
+      exec "$REPO/ops/beta/verify.sh" "${vargs[@]}"
+    fi
+    priv_ready; window_dir "$WINDOW_ID"; need_window_dir
+    release_py check "$W/release.json" >/dev/null || die "$W/release.json does not match the schema (ops/beta/release.py)"
+    jq -r '"release: \(.candidate_sha[0:7]) \(.git_tag.name // "(no tag yet)") window \(.window_id[0:8]) TD:\(.stack.task_definition_revision // "?") schema \(.database_version)",
+           (.images | to_entries[] | "  \(.key) \(.value.digest // "(not pushed)")")' "$W/release.json"
+    (( DRY_RUN )) || vargs+=(--json "$W/verify.json")
+    status=0
+    "$REPO/ops/beta/verify.sh" "${vargs[@]}" || status=$?
+    if (( ! DRY_RUN )) && [[ -f "$W/verify.json" ]]; then
+      release_set '.verified = ($v + {at_utc: (now | floor | todate), origin: $o})' --argjson v "$(cat "$W/verify.json")" --arg o "$origin"
+      echo "recorded in $W/release.json (.verified)"
+    fi
+    exit $status
+    ;;
+
+  rollback-deny)
+    load_env; window_dir "$WINDOW_ID"; need_window_dir
+    [[ -f "$W/stack-after.json" ]] || (( DRY_RUN )) || die "no $W/stack-after.json (the stack outputs of this window)"
+    if (( restore )); then OUTPUT_KEY=TaskDefinition; else OUTPUT_KEY=RollbackTaskDefinition; fi
+    export OUTPUT_KEY
+    name=rollback-deny; (( restore )) && name="rollback-deny --restore"
+    mutate "$name" '
+TD=$(jq -r --arg k "$OUTPUT_KEY" ".Stacks[0].Outputs[] | select(.OutputKey==\$k) | .OutputValue" "$W/stack-after.json")
+aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TD" --query "service.taskDefinition"'
+    ;;
+
+  *) die "unknown step '$step' (just deploy help)" ;;
+esac

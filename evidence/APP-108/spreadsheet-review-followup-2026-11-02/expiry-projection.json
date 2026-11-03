@@ -1,0 +1,14 @@
+{
+  "projection_only": true,
+  "basis": "Snapshot1454, hypothetical abandonment and reservation at credential fence; no AWS mutation. Fresh actual projection required after abandonment.",
+  "source_candidate": "60fd6bd29348e7b7cbb84e3a5b818c1e94385933",
+  "fence": "2026-11-02T14:27:27Z",
+  "windows_preserved": 20,
+  "old_hours": 14,
+  "proposed_hours": 18,
+  "prospective_expiry": "2026-11-29T20:00:00Z",
+  "genui_cents": 16954,
+  "total_cents": 20754,
+  "genui_cap_cents": 17000,
+  "total_cap_cents": 20800
+}

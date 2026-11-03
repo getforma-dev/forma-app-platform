@@ -98,6 +98,19 @@ definition is not re-admitted through the service's whole-output admission
 path (APP-010, Rust): that path is not reproducible from Python byte for byte,
 so the seeded rows are used, exactly as the seed itself placed them.
 
+The prebuilt library (ADR-011 pitch, APP-094): `seed-library` seeds every library
+app of contracts/fixtures/library/ (the catalog sidecar names each fixture and its
+digest; tenant_seed.make_library_bundles validates all of them before the first
+write) into the named fixture organization through tenant_seed.seed, in one
+transaction under the organization FOR SHARE, exactly as `seed-spend-review`
+does for one bundle: app shell, definition revision with inputs and record
+schemas, publication, saved work with its collection and bindings, the source
+revision (its REAL normalized digest, the bytes `library_sources.py build`
+places in the cache or the deploy uploads), the seeded decision record and the
+author's grants. Exact-match idempotent (`changed: false` on a repeat; any
+differing row refuses whole); no audit event, as for the other seeds. The
+output lists each app with its identities so the record is the retained JSON.
+
 Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
 organization (the two seeded ones) to its real provider tenant for an issuer, the
 row the callback's registry/database agreement needs (ADR-006; the seed binds only
@@ -310,6 +323,8 @@ def parser():
     q.add_argument("--max-redemptions", type=int, default=DEFAULTS["max_redemptions_default"])
     q.add_argument("--expires-days", type=int, default=DEFAULTS["code_expiry_days_default"])
     q.add_argument("--grant", action="append", default=[])
+    q.add_argument("--authoring-only", action="store_true",
+                   help="Explicitly admit an entitled member with no grants to existing resources; first compose creates their owned shell")
     # APP-078 managed channel: the operator mints the code on its own machine
     # (mint_access_code) and the task receives only its digest, so no secret
     # reaches a task override, CloudTrail or the awslogs group.
@@ -364,6 +379,15 @@ def parser():
         q.add_argument(arg, required=True)
     # APP-076 G3: the Spend Review fixture bundle seeded into a fixture organization (Northstar).
     sub.add_parser("seed-spend-review").add_argument("--organization", required=True)
+    # ADR-011 library (APP-094): every library app seeded into a fixture organization.
+    sub.add_parser("seed-library").add_argument("--organization", required=True)
+    # ADR-011 pitch (APP-093 debt 1, APP-096): a demo member's library access and owned authoring app.
+    q = sub.add_parser("grant-library-access")
+    for arg in ("--organization", "--principal"):
+        q.add_argument(arg, required=True)
+    q.add_argument("--record-write", action="store_true")
+    for arg in ("--authoring-app", "--space"):
+        q.add_argument(arg)
     return p
 
 
@@ -371,7 +395,7 @@ def validate(args):
     """Every argument is checked before any connection is opened."""
     if hasattr(args, "organization"):
         identifier(args.organization)
-    for name in ("code_id", "principal", "app", "work", "source", "space", "owner", "from_work", "creator", "revision"):
+    for name in ("code_id", "principal", "app", "work", "source", "space", "owner", "from_work", "creator", "revision", "authoring_app"):
         if getattr(args, name, None) is not None:
             identifier(getattr(args, name))
     if getattr(args, "capability_secret_id", None) is not None:
@@ -399,7 +423,7 @@ def validate(args):
         require(args.kind in ("trial", "member_invite"), "kind_refused")
         require(1 <= args.max_redemptions <= DEFAULTS["max_redemptions_max"], "max_redemptions_out_of_range")
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
-        require(args.grant, "grant_required")
+        require(bool(args.grant) != args.authoring_only, "grant_required" if not args.authoring_only else "authoring_only_with_grants_refused")
         args.templates = sorted({parse_grant(g) for g in args.grant}, key=str)
         invitation = (args.provider_email, args.provider_role, args.provider_issuer, args.provider_tenant)
         if args.provider_input_from_secret:
@@ -434,6 +458,8 @@ def validate(args):
     if args.command == "create-bound-work":
         require(LOCAL_ID.fullmatch(args.input) is not None, "malformed_input")
         require(args.work != args.from_work, "work_exists")
+    if args.command == "grant-library-access":
+        require(args.space is None or args.authoring_app is not None, "space_without_authoring_app")
     return args
 
 
@@ -669,6 +695,14 @@ def provision(c, args):
     c.execute("INSERT INTO genui.organizations(organization_id,display_name,status) VALUES (%s,%s,'active')", (org, args.display_name))
     c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
               (org, args.issuer, args.provider_tenant))
+    # A real first member has no seeded app or grants. The first explicit
+    # compose still needs an organization space and an owner-publish policy;
+    # these empty defaults are operator-owned, in the same provision commit.
+    # Existing organizations refuse above, so their settings are never replaced.
+    c.execute("INSERT INTO genui.spaces(organization_id,space_id,display_name) VALUES (%s,%s,'Workspace')",
+              (org, str(uuid.uuid4())))
+    c.execute("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) VALUES (%s,%s,1,'owner_publish')",
+              (org, str(uuid.uuid4())))
     for chain in CHAINS:
         c.execute("INSERT INTO genui.audit_heads(organization_id,writer_role,chain_sequence,head_hash) VALUES (%s,%s,1,%s)",
                   (org, chain, genesis(org, chain)))
@@ -1269,6 +1303,124 @@ def seed_spend_review(c, args):
             "seeded_record": {"record_id": outcome["record_id"], "version": outcome["record_version"]},
             "author_principal_id": bundle["context"]["principal_id"], "approver_principal_id": pub["approver_id"],
             "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
+
+
+def seed_library(c, args):
+    """ADR-011 library (APP-094): every library bundle in a fixture organization, through the operator seed itself.
+
+    Same transaction shape and rules as `seed_spend_review`: the organization FOR SHARE first
+    (D7.1), every bundle validated before any write, `tenant_seed.seed` writing with its
+    `ON CONFLICT DO NOTHING` then equality check (a repeat is `changed: false`; a differing row
+    refuses whole), D7.7's sequence check, no audit event (D7.8 names no kind): this output is the
+    record. The source bytes are not placed here: `library_sources.py build` writes them into
+    the revision cache (or the deploy uploads them) under the digests these rows pin.
+    """
+    import tenant_seed
+    org = args.organization
+    require(org in tenant_seed.ORGANIZATIONS, "organization_refused")
+    try:
+        bundles = tenant_seed.make_library_bundles(org)
+    except Exception:
+        raise Refused("seed_bundle_refused") from None
+    begin(c, org)
+    lock_organization(c, org, active=True)
+    c.execute("RESET ROLE")
+    changes = []
+    try:
+        tenant_seed.seed(c, bundles, changes)
+    except ValueError:
+        raise Refused("seed_refused") from None
+    c.execute("SET LOCAL ROLE genui_owner")
+    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
+    sequence = c.execute("SELECT next_commit_sequence FROM genui.organization_sequences WHERE organization_id=%s", (org,)).fetchone()
+    highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
+    require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
+    c.commit()
+    apps = []
+    for b in bundles:
+        d, pub, w, outcome = b["definition"], b["publication"], b["work"], b["outcome"]
+        apps.append({"title": d["content"]["title"], "app_id": d["app_id"], "definition_revision_id": d["revision_id"], "definition_digest": d["digest"],
+                     "publication_id": pub["publication_id"], "work_id": w["work_id"], "collection_ids": [item["id"] for item in w["record_collections"]],
+                     "sources": [{"input_id": s["input_contract"]["id"], "source_id": s["source_id"], "revision_id": s["revision_id"],
+                                  "normalized_digest": s["normalized_digest"], "row_count": s["row_count"]} for s in b["sources"]],
+                     "seeded_record": {"record_id": outcome["record_id"], "version": outcome["record_version"]}})
+    return {"organization_id": org, "label": "seeded definition", "edition": tenant_seed.LIBRARY_EDITION, "synthetic": True, "apps": apps,
+            "author_principal_id": bundles[0]["context"]["principal_id"], "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
+
+
+def grant_library_access(c, args):
+    """ADR-011 pitch (APP-093 debt 1, APP-095, APP-096): what a freshly invited beta member needs to retrieve
+    and to generate on the canvas, as one idempotent operator action.
+
+    The library seed (`seed_library`) grants only the fixture author, and the composer drafts a generated or
+    adapted definition only on an app the member **owns** with `edit_definition` and `run` (ADR-007 D7.3:
+    app creation and grants stay operator actions). This command, in one transaction under the D7.1 order
+    (organization active FOR SHARE, the member active FOR UPDATE):
+
+    - grants the member `discover` and `run` on every seeded library app of the organization (the catalog's
+      entries that exist here), `record_read` (and `record_write` with `--record-write`) on each library app's
+      seeded work, and `source_read` on every source those works bind, so `GET /v1/library` lists the whole
+      library and the composer may instantiate any entry (`retrieved`);
+    - with `--authoring-app <uuid>`, creates that app owned by the member (`--space`, default the library's
+      space) when it does not exist, refuses an existing app owned by someone else, and grants the member
+      `discover`, `edit_definition` and `run` on it, so the composer may draft, owner-publish and save
+      (`adapted`, `generated`) and the member's canvas lists what it saved there.
+
+    Every row is `ON CONFLICT DO NOTHING` and every inserted row is one `permission.granted` event on the
+    operator chain (exactly `grant_permission`'s record, with the app id and, for a work row, the work id);
+    a repeat inserts nothing and writes no event. Adding authority advances no epoch. Nothing here reads a
+    secret or a value: identifiers only, as every operator subcommand.
+    """
+    import tenant_seed
+    org, principal = args.organization, args.principal
+    begin(c, org)
+    epoch = lock_active_member(c, org, principal)
+    catalog = tenant_seed.library_catalog()
+    granted, library, space_of_library = [], [], None
+    def grant(table, columns, values, app=None, work=None):
+        placeholders = ",".join(["%s"] * len(values))
+        if c.execute("INSERT INTO genui.%s(%s) VALUES (%s) ON CONFLICT DO NOTHING" % (table, ",".join(columns), placeholders), values).rowcount == 1:
+            append(c, org, "permission.granted", actor=principal, app=app, work=work)
+            granted.append({"table": table, "permission": values[-1], "app_id": app, "work_id": work})
+    for entry in catalog["apps"]:
+        app, work = entry["app_id"], entry["work_id"]
+        row = c.execute("SELECT space_id::text FROM genui.apps WHERE organization_id=%s AND app_id=%s", (org, app)).fetchone()
+        if row is None or c.execute("SELECT 1 FROM genui.saved_work WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                                    (org, app, work)).fetchone() is None:
+            continue
+        space_of_library = space_of_library or row[0]
+        sources = [r[0] for r in c.execute("""SELECT DISTINCT source_id::text FROM genui.work_bindings WHERE organization_id=%s AND app_id=%s
+              AND work_id=%s AND kind='source' ORDER BY 1""", (org, app, work)).fetchall()]
+        for permission in ("discover", "run"):
+            grant("app_permissions", ("organization_id", "principal_id", "app_id", "permission"), (org, principal, app, permission), app=app)
+        for permission in ("record_read",) + (("record_write",) if args.record_write else ()):
+            grant("work_permissions", ("organization_id", "principal_id", "app_id", "work_id", "permission"), (org, principal, app, work, permission),
+                  app=app, work=work)
+        for source in sources:
+            grant("source_permissions", ("organization_id", "principal_id", "source_id", "permission"), (org, principal, source, "source_read"))
+        library.append({"library_id": entry["library_id"], "app_id": app, "work_id": work, "sources": sources})
+    require(library, "library_not_seeded")
+    authoring = None
+    if args.authoring_app is not None:
+        app = args.authoring_app
+        owner = c.execute("SELECT owner_principal_id::text FROM genui.apps WHERE organization_id=%s AND app_id=%s", (org, app)).fetchone()
+        created = False
+        if owner is None:
+            space = args.space or space_of_library
+            require(c.execute("SELECT 1 FROM genui.spaces WHERE organization_id=%s AND space_id=%s", (org, space)).fetchone() is not None,
+                    "space_unknown")
+            c.execute("INSERT INTO genui.apps(organization_id,app_id,space_id,owner_principal_id) VALUES (%s,%s,%s,%s)", (org, app, space, principal))
+            created = True
+        else:
+            require(owner[0] == principal, "app_owner_mismatch")
+        # edit_definition and run: draft, owner-publish and save; discover: the works the composer
+        # saves on it are listed on the member's canvas (openable_works needs discover on the app).
+        for permission in ("discover", "edit_definition", "run"):
+            grant("app_permissions", ("organization_id", "principal_id", "app_id", "permission"), (org, principal, app, permission), app=app)
+        authoring = {"app_id": app, "created": created, "owner_principal_id": principal}
+    c.commit()
+    return {"organization_id": org, "principal_id": principal, "library_apps": library, "record_write": bool(args.record_write),
+            "authoring_app": authoring, "granted": granted, "changed": bool(granted), "membership_epoch": epoch}
 
 
 def verify(c, args):
@@ -1939,7 +2091,7 @@ COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
             "register-source-revision": register_source_revision, "create-bound-work": create_bound_work,
-            "seed-spend-review": seed_spend_review}
+            "seed-spend-review": seed_spend_review, "seed-library": seed_library, "grant-library-access": grant_library_access}
 
 
 def provider_configuration(args):

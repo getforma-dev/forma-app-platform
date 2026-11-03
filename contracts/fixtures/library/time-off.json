@@ -1,0 +1,790 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001701",
+    "revision_id": "00000000-0000-4000-8000-000000001702",
+    "content": {
+      "title": "Time off",
+      "description": "Request time off in your own words; your manager approves or rejects it, and the team sees who is out. Prebuilt library app on labeled synthetic data (ADR-011 pitch).",
+      "inputs": [
+        {
+          "id": "leave_requests",
+          "contract_id": "leave_requests_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "request_id",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "employee",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "leave_type",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "vacation",
+                  "sick",
+                  "personal"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "start",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "end",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "days",
+              "value_type": {
+                "type": "integer",
+                "unit": "day"
+              },
+              "nullable": false
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "requests",
+          "contract_id": "leave_request_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "leave_type",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "vacation",
+                  "sick",
+                  "personal"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "start",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "end",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "days",
+              "value_type": {
+                "type": "integer",
+                "unit": "day"
+              },
+              "nullable": true
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "upcoming",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "Upcoming approved time off",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "leave_requests"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "leave_requests",
+                  "field_id": "status"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "approved"
+                }
+              },
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "leave_requests",
+                  "field_id": "start"
+                },
+                "comparison": "gte",
+                "value": {
+                  "type": "date",
+                  "value": "2026-10-30"
+                }
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "request_id"
+                  },
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "employee"
+                  },
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "leave_type"
+                  },
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "start"
+                  },
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "end"
+                  },
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "days"
+                  }
+                ]
+              },
+              {
+                "type": "sort",
+                "fields": [
+                  {
+                    "field": {
+                      "input_id": "leave_requests",
+                      "field_id": "start"
+                    },
+                    "direction": "asc"
+                  }
+                ],
+                "stable_tiebreak": {
+                  "input_id": "leave_requests",
+                  "field_id": "request_id"
+                }
+              },
+              {
+                "type": "limit",
+                "rows": 50
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "days_by_person",
+          "kind": "chart",
+          "renderer_version": 1,
+          "title": "Days taken by person",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "leave_requests"
+            ],
+            "operations": [
+              {
+                "type": "filter",
+                "field": {
+                  "input_id": "leave_requests",
+                  "field_id": "status"
+                },
+                "comparison": "eq",
+                "value": {
+                  "type": "enum",
+                  "value": "approved"
+                }
+              },
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "employee"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "days",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "leave_requests",
+                      "field_id": "days"
+                    }
+                  },
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "leave_requests",
+                      "field_id": "request_id"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "by_type",
+          "kind": "status",
+          "renderer_version": 1,
+          "title": "Requests by type",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "leave_requests"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [
+                  {
+                    "input_id": "leave_requests",
+                    "field_id": "leave_type"
+                  }
+                ],
+                "measures": [
+                  {
+                    "id": "requests",
+                    "operation": "count",
+                    "field": {
+                      "input_id": "leave_requests",
+                      "field_id": "request_id"
+                    }
+                  },
+                  {
+                    "id": "days",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "leave_requests",
+                      "field_id": "days"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "request",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "Request time off",
+          "command_id": "submit"
+        },
+        {
+          "id": "how",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "How approval works",
+          "text": "A request is filed as a typed record with status submitted; your manager approves or rejects it as an audited command. History is labeled synthetic."
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "leave_request",
+          "version": 1,
+          "fields": [
+            {
+              "id": "leave_type",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "vacation",
+                  "sick",
+                  "personal"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "start",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "end",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            },
+            {
+              "id": "days",
+              "value_type": {
+                "type": "integer",
+                "unit": "day"
+              },
+              "nullable": true
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": true
+            },
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "submitted",
+                  "approved",
+                  "rejected"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "submit",
+          "record_schema_id": "leave_request",
+          "operation": "create",
+          "writable_fields": [
+            "leave_type",
+            "start",
+            "end",
+            "days",
+            "note",
+            "status"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "status",
+              "value": "submitted"
+            }
+          ]
+        },
+        {
+          "id": "decide",
+          "record_schema_id": "leave_request",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "approved"
+            },
+            {
+              "field_id": "status",
+              "from": "submitted",
+              "to": "rejected"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "upcoming",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "days_by_person",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "by_type",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "request",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "how",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:86a67e4981b81e517e6901748899d93d62dd0c5b4648ed48a90ae4fd3c2b9197"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001701",
+    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "definition_revision_id": "00000000-0000-4000-8000-000000001702",
+    "definition_digest": "sha256:86a67e4981b81e517e6901748899d93d62dd0c5b4648ed48a90ae4fd3c2b9197",
+    "input_contract_digests": [
+      {
+        "input_id": "leave_requests",
+        "digest": "sha256:8ffd80420a3b942b7829f2f97a9eeaa6d27c493ce35242a38e1498dd12aec8b0"
+      },
+      {
+        "input_id": "requests",
+        "digest": "sha256:873a28b5bc19a4de77a9da9f82d77efd3d726a170f81cebc402f748d2f83efec"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "leave_request",
+        "digest": "sha256:b7678d1f5d192adb95917e9a28d82127eeef0fea96da2dc2b1aa7d8ee3319f8d"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "admission_digest": "sha256:122e48978a4587de8474dd60c46398f3f8ff37fcee0ace4acfd1582adc191b7f",
+    "policy": {
+      "id": "00000000-0000-4000-8000-0000000000e0",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-000000000066",
+    "approver_epoch": 1,
+    "published_at": "2026-10-30T09:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001701",
+    "work_id": "00000000-0000-4000-8000-000000001704",
+    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "version": 1,
+    "context": "Prebuilt library: Time off",
+    "bindings": [
+      {
+        "input_id": "leave_requests",
+        "source_id": "00000000-0000-4000-8000-00000000301a",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301b",
+        "source_digest": "sha256:b1e154e91754048d917e12ee9043afe2094b44fe43e459e91ea8fd4b36f50eab",
+        "kind": "source",
+        "contract_digest": "sha256:8ffd80420a3b942b7829f2f97a9eeaa6d27c493ce35242a38e1498dd12aec8b0"
+      },
+      {
+        "input_id": "requests",
+        "kind": "records",
+        "contract_digest": "sha256:873a28b5bc19a4de77a9da9f82d77efd3d726a170f81cebc402f748d2f83efec",
+        "collection_id": "00000000-0000-4000-8000-000000001705",
+        "schema_id": "leave_request",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-000000001705",
+        "schema_id": "leave_request",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "leave_requests",
+        "source_id": "00000000-0000-4000-8000-00000000301a",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301b",
+        "source_digest": "sha256:b1e154e91754048d917e12ee9043afe2094b44fe43e459e91ea8fd4b36f50eab"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-000000000001",
+      "source_id": "00000000-0000-4000-8000-00000000301a",
+      "revision_id": "00000000-0000-4000-8000-00000000301b",
+      "content_digest": "sha256:84e1bbf68c47c3624227de797e4b7c72e109807ec805c5f385653756d3a88e34",
+      "normalized_digest": "sha256:b1e154e91754048d917e12ee9043afe2094b44fe43e459e91ea8fd4b36f50eab",
+      "input_contract": {
+        "id": "leave_requests",
+        "contract_id": "leave_requests_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "request_id",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "employee",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "leave_type",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "vacation",
+                "sick",
+                "personal"
+              ]
+            },
+            "nullable": false
+          },
+          {
+            "id": "start",
+            "value_type": {
+              "type": "date"
+            },
+            "nullable": false
+          },
+          {
+            "id": "end",
+            "value_type": {
+              "type": "date"
+            },
+            "nullable": false
+          },
+          {
+            "id": "days",
+            "value_type": {
+              "type": "integer",
+              "unit": "day"
+            },
+            "nullable": false
+          },
+          {
+            "id": "status",
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "submitted",
+                "approved",
+                "rejected"
+              ]
+            },
+            "nullable": false
+          }
+        ]
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 140,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-30T09:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001701",
+    "work_id": "00000000-0000-4000-8000-000000001704",
+    "mode": "published",
+    "definition_digest": "sha256:86a67e4981b81e517e6901748899d93d62dd0c5b4648ed48a90ae4fd3c2b9197",
+    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "view_id": "upcoming",
+    "operator_version": 1,
+    "source_revisions": [
+      {
+        "input_id": "leave_requests",
+        "source_id": "00000000-0000-4000-8000-00000000301a",
+        "source_revision_id": "00000000-0000-4000-8000-00000000301b",
+        "source_digest": "sha256:b1e154e91754048d917e12ee9043afe2094b44fe43e459e91ea8fd4b36f50eab"
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:37f08732d7cb2e46960671d686fceeb27e0f3876c1de339d5bd907c8fbc866ca",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:073b17adcd6525cf5c16e917bd3bc1c939726744b1963b5d6356011ee4fd44d4",
+      "predicate_digest": "sha256:073b17adcd6525cf5c16e917bd3bc1c939726744b1963b5d6356011ee4fd44d4"
+    },
+    "digest": "sha256:573531fe0af29c8564833b5d4f9d0a8cbee388f5bcd3976bb84e21bf3ecfb442"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000001701",
+    "work_id": "00000000-0000-4000-8000-000000001704",
+    "publication_id": "00000000-0000-4000-8000-000000001703",
+    "command_id": "submit",
+    "schema_id": "leave_request",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-000000001706",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "leave_type",
+        "value": {
+          "type": "enum",
+          "value": "vacation"
+        }
+      },
+      {
+        "field_id": "start",
+        "value": {
+          "type": "date",
+          "value": "2026-12-21"
+        }
+      },
+      {
+        "field_id": "end",
+        "value": {
+          "type": "date",
+          "value": "2026-12-23"
+        }
+      },
+      {
+        "field_id": "days",
+        "value": {
+          "type": "integer",
+          "value": "3",
+          "unit": "day"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Holiday trip; synthetic only"
+        }
+      },
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "submitted"
+        }
+      }
+    ],
+    "idempotency_key": "00000000000000000000000000001700"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000001",
+    "app_id": "00000000-0000-4000-8000-000000001701",
+    "work_id": "00000000-0000-4000-8000-000000001704",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "submit",
+    "idempotency_key": "00000000000000000000000000001700",
+    "payload_digest": "sha256:c50470b9fb8a4a5be07769940a25206e484ab4c922f566d07f877142c0720729",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-000000001706",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-000000001707",
+    "committed_at": "2026-10-30T09:05:00Z",
+    "retry_expires_at": "2026-10-31T09:05:00Z"
+  }
+}

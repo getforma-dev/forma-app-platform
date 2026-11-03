@@ -1,0 +1,17 @@
+{
+  "scope": "Selected non-secret fields of the actual committed command outcome. Original full receipt hash retained in sources.json; identities/capability-like retry keys omitted.",
+  "receipt": {
+    "kind": "command_outcome",
+    "state": "committed",
+    "app_id": "224f4bba-50dd-4547-bbdd-5451652a4c1b",
+    "work_id": "39590fb0-e829-473e-80ef-b86600d1072b",
+    "command_id": "add",
+    "record_id": "15ded004-7ebe-47b0-bddf-0e59be0c71e5",
+    "record_version": 1,
+    "commit_sequence": 1,
+    "committed_at": "2026-11-01T20:16:34Z",
+    "audit_event_id": "8d2bb7a0-1f68-4fe1-869c-cfe1bde3e81c",
+    "schema_version": 1,
+    "work_version": 1
+  }
+}

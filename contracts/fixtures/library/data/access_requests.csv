@@ -1,0 +1,151 @@
+request_id,time,requester,system,access_level,status,approver
+REQ-4101,2026-10-01T08:56:43Z,Tomás Herrera,data-warehouse,admin,approved,Priya Natarajan
+REQ-4102,2026-10-01T11:22:18Z,Diego Ramos,hr-records,read,approved,Maya Chen
+REQ-4103,2026-10-01T11:54:50Z,Samuel Okafor,hr-records,write,approved,Lena Fischer
+REQ-4104,2026-10-01T15:04:47Z,Maya Chen,data-warehouse,read,pending,
+REQ-4105,2026-10-02T08:23:04Z,Elena Petrova,source-control,write,denied,Jordan Alvarez
+REQ-4106,2026-10-02T11:23:01Z,Jordan Alvarez,hr-records,read,approved,Samuel Okafor
+REQ-4107,2026-10-02T11:24:19Z,Kwame Mensah,payroll,read,approved,Samuel Okafor
+REQ-4108,2026-10-02T18:34:31Z,Noah Williams,data-warehouse,read,approved,Maya Chen
+REQ-4109,2026-10-03T08:56:36Z,Ingrid Solberg,finance-ledger,read,denied,Maya Chen
+REQ-4110,2026-10-03T10:22:21Z,Priya Natarajan,data-warehouse,write,approved,Samuel Okafor
+REQ-4111,2026-10-03T10:35:30Z,Aisha Bello,hr-records,read,denied,Maya Chen
+REQ-4112,2026-10-03T11:15:27Z,Noah Williams,payroll,write,pending,
+REQ-4113,2026-10-03T11:55:15Z,Grace Park,hr-records,write,approved,Lena Fischer
+REQ-4114,2026-10-03T12:54:59Z,Sofia Rossi,customer-crm,write,pending,
+REQ-4115,2026-10-03T17:03:12Z,Sofia Rossi,data-warehouse,write,denied,Jordan Alvarez
+REQ-4116,2026-10-03T19:45:15Z,Aisha Bello,payroll,write,approved,Samuel Okafor
+REQ-4117,2026-10-04T10:14:34Z,Lena Fischer,customer-crm,read,approved,Lena Fischer
+REQ-4118,2026-10-04T14:22:14Z,Priya Natarajan,hr-records,write,pending,
+REQ-4119,2026-10-04T18:45:43Z,Noah Williams,finance-ledger,read,pending,
+REQ-4120,2026-10-04T19:17:17Z,Aisha Bello,customer-crm,write,pending,
+REQ-4121,2026-10-05T09:17:46Z,Diego Ramos,source-control,read,denied,Maya Chen
+REQ-4122,2026-10-05T11:08:26Z,Maya Chen,production-database,read,approved,Samuel Okafor
+REQ-4123,2026-10-05T12:52:02Z,Priya Natarajan,finance-ledger,write,approved,Lena Fischer
+REQ-4124,2026-10-06T07:22:02Z,Samuel Okafor,hr-records,read,approved,Lena Fischer
+REQ-4125,2026-10-06T09:07:34Z,Aisha Bello,customer-crm,read,pending,
+REQ-4126,2026-10-06T11:59:57Z,Sofia Rossi,payroll,write,approved,Samuel Okafor
+REQ-4127,2026-10-07T07:03:01Z,Ingrid Solberg,production-database,read,pending,
+REQ-4128,2026-10-07T09:29:30Z,Samuel Okafor,data-warehouse,read,denied,Jordan Alvarez
+REQ-4129,2026-10-07T10:05:01Z,Aisha Bello,production-database,write,approved,Lena Fischer
+REQ-4130,2026-10-07T10:30:34Z,Tomás Herrera,source-control,write,approved,Priya Natarajan
+REQ-4131,2026-10-07T10:38:24Z,Aisha Bello,customer-crm,admin,denied,Samuel Okafor
+REQ-4132,2026-10-08T07:00:10Z,Kwame Mensah,production-database,write,approved,Maya Chen
+REQ-4133,2026-10-08T08:41:55Z,Diego Ramos,payroll,admin,approved,Jordan Alvarez
+REQ-4134,2026-10-08T08:55:42Z,Maya Chen,data-warehouse,read,approved,Priya Natarajan
+REQ-4135,2026-10-08T12:32:38Z,Ravi Shankar,data-warehouse,read,denied,Priya Natarajan
+REQ-4136,2026-10-08T13:53:03Z,Priya Natarajan,source-control,admin,pending,
+REQ-4137,2026-10-08T14:44:21Z,Aisha Bello,production-database,read,approved,Maya Chen
+REQ-4138,2026-10-08T16:33:13Z,Grace Park,payroll,write,approved,Lena Fischer
+REQ-4139,2026-10-08T17:19:07Z,Maya Chen,data-warehouse,read,pending,
+REQ-4140,2026-10-09T07:09:23Z,Ingrid Solberg,finance-ledger,read,pending,
+REQ-4141,2026-10-09T12:28:28Z,Elena Petrova,source-control,write,approved,Maya Chen
+REQ-4142,2026-10-09T14:31:55Z,Tomás Herrera,production-database,write,approved,Priya Natarajan
+REQ-4143,2026-10-09T15:22:50Z,Priya Natarajan,customer-crm,write,approved,Samuel Okafor
+REQ-4144,2026-10-09T15:59:58Z,Kwame Mensah,source-control,read,approved,Samuel Okafor
+REQ-4145,2026-10-10T17:07:04Z,Priya Natarajan,hr-records,write,pending,
+REQ-4146,2026-10-11T09:41:00Z,Kwame Mensah,customer-crm,read,approved,Priya Natarajan
+REQ-4147,2026-10-11T11:09:26Z,Elena Petrova,finance-ledger,read,approved,Lena Fischer
+REQ-4148,2026-10-11T12:04:43Z,Diego Ramos,customer-crm,read,approved,Lena Fischer
+REQ-4149,2026-10-11T19:02:46Z,Aisha Bello,hr-records,read,approved,Lena Fischer
+REQ-4150,2026-10-12T08:52:08Z,Aisha Bello,finance-ledger,read,approved,Maya Chen
+REQ-4151,2026-10-12T09:30:44Z,Tomás Herrera,production-database,write,pending,
+REQ-4152,2026-10-12T11:29:44Z,Maya Chen,production-database,read,approved,Priya Natarajan
+REQ-4153,2026-10-12T14:56:01Z,Liam O'Connor,source-control,write,denied,Priya Natarajan
+REQ-4154,2026-10-12T17:34:17Z,Maya Chen,data-warehouse,admin,denied,Maya Chen
+REQ-4155,2026-10-12T17:41:30Z,Tomás Herrera,production-database,read,approved,Samuel Okafor
+REQ-4156,2026-10-12T18:04:50Z,Kwame Mensah,data-warehouse,admin,approved,Maya Chen
+REQ-4157,2026-10-13T11:45:48Z,Elena Petrova,hr-records,write,denied,Samuel Okafor
+REQ-4158,2026-10-13T12:40:58Z,Ingrid Solberg,finance-ledger,write,approved,Priya Natarajan
+REQ-4159,2026-10-13T13:02:00Z,Ingrid Solberg,data-warehouse,write,approved,Jordan Alvarez
+REQ-4160,2026-10-13T17:08:11Z,Kwame Mensah,production-database,write,approved,Maya Chen
+REQ-4161,2026-10-13T19:16:16Z,Tomás Herrera,source-control,write,approved,Priya Natarajan
+REQ-4162,2026-10-14T07:05:18Z,Priya Natarajan,source-control,read,denied,Jordan Alvarez
+REQ-4163,2026-10-14T10:45:48Z,Kwame Mensah,finance-ledger,write,denied,Priya Natarajan
+REQ-4164,2026-10-14T12:09:03Z,Liam O'Connor,customer-crm,write,pending,
+REQ-4165,2026-10-14T17:14:30Z,Priya Natarajan,payroll,read,approved,Maya Chen
+REQ-4166,2026-10-15T07:41:07Z,Maya Chen,payroll,read,pending,
+REQ-4167,2026-10-15T11:13:10Z,Diego Ramos,source-control,write,denied,Priya Natarajan
+REQ-4168,2026-10-15T14:35:05Z,Priya Natarajan,customer-crm,write,approved,Maya Chen
+REQ-4169,2026-10-15T14:46:47Z,Noah Williams,finance-ledger,write,approved,Priya Natarajan
+REQ-4170,2026-10-15T15:37:25Z,Diego Ramos,customer-crm,admin,approved,Jordan Alvarez
+REQ-4171,2026-10-15T16:42:52Z,Samuel Okafor,data-warehouse,write,pending,
+REQ-4172,2026-10-15T17:48:15Z,Jordan Alvarez,hr-records,read,approved,Maya Chen
+REQ-4173,2026-10-15T18:44:01Z,Ingrid Solberg,data-warehouse,read,approved,Lena Fischer
+REQ-4174,2026-10-16T19:20:36Z,Elena Petrova,production-database,read,approved,Maya Chen
+REQ-4175,2026-10-17T07:12:09Z,Kwame Mensah,finance-ledger,read,pending,
+REQ-4176,2026-10-17T09:49:03Z,Grace Park,payroll,write,pending,
+REQ-4177,2026-10-17T10:56:14Z,Ingrid Solberg,production-database,read,approved,Samuel Okafor
+REQ-4178,2026-10-17T11:45:41Z,Liam O'Connor,hr-records,read,approved,Maya Chen
+REQ-4179,2026-10-17T19:37:44Z,Noah Williams,finance-ledger,write,pending,
+REQ-4180,2026-10-18T13:13:45Z,Kwame Mensah,finance-ledger,write,approved,Lena Fischer
+REQ-4181,2026-10-18T13:45:34Z,Priya Natarajan,hr-records,write,approved,Maya Chen
+REQ-4182,2026-10-18T14:55:26Z,Maya Chen,production-database,read,approved,Lena Fischer
+REQ-4183,2026-10-18T15:30:01Z,Tomás Herrera,finance-ledger,read,approved,Jordan Alvarez
+REQ-4184,2026-10-18T16:28:16Z,Samuel Okafor,hr-records,admin,approved,Priya Natarajan
+REQ-4185,2026-10-18T16:40:26Z,Ingrid Solberg,data-warehouse,admin,approved,Maya Chen
+REQ-4186,2026-10-18T18:00:32Z,Grace Park,source-control,read,approved,Maya Chen
+REQ-4187,2026-10-19T09:55:50Z,Liam O'Connor,production-database,read,approved,Priya Natarajan
+REQ-4188,2026-10-19T12:05:58Z,Ravi Shankar,source-control,write,approved,Jordan Alvarez
+REQ-4189,2026-10-19T12:32:40Z,Noah Williams,finance-ledger,write,pending,
+REQ-4190,2026-10-19T19:13:34Z,Noah Williams,payroll,write,approved,Maya Chen
+REQ-4191,2026-10-20T09:38:40Z,Sofia Rossi,payroll,write,approved,Samuel Okafor
+REQ-4192,2026-10-20T10:26:01Z,Diego Ramos,finance-ledger,write,approved,Lena Fischer
+REQ-4193,2026-10-21T07:16:31Z,Samuel Okafor,finance-ledger,read,denied,Maya Chen
+REQ-4194,2026-10-21T08:10:21Z,Priya Natarajan,finance-ledger,write,approved,Priya Natarajan
+REQ-4195,2026-10-21T11:53:59Z,Tomás Herrera,source-control,write,approved,Maya Chen
+REQ-4196,2026-10-21T15:19:56Z,Noah Williams,payroll,read,approved,Jordan Alvarez
+REQ-4197,2026-10-21T16:20:36Z,Samuel Okafor,payroll,read,denied,Maya Chen
+REQ-4198,2026-10-21T19:28:17Z,Tomás Herrera,customer-crm,write,pending,
+REQ-4199,2026-10-21T19:54:10Z,Diego Ramos,finance-ledger,read,approved,Samuel Okafor
+REQ-4200,2026-10-22T07:36:38Z,Jordan Alvarez,payroll,read,approved,Jordan Alvarez
+REQ-4201,2026-10-22T11:34:16Z,Priya Natarajan,production-database,read,denied,Priya Natarajan
+REQ-4202,2026-10-22T13:58:25Z,Ingrid Solberg,customer-crm,read,approved,Lena Fischer
+REQ-4203,2026-10-22T17:32:15Z,Elena Petrova,customer-crm,read,pending,
+REQ-4204,2026-10-22T18:12:35Z,Grace Park,customer-crm,write,pending,
+REQ-4205,2026-10-22T18:15:39Z,Liam O'Connor,customer-crm,write,approved,Maya Chen
+REQ-4206,2026-10-23T10:42:26Z,Sofia Rossi,payroll,write,denied,Priya Natarajan
+REQ-4207,2026-10-23T11:45:25Z,Kwame Mensah,payroll,read,pending,
+REQ-4208,2026-10-23T14:28:45Z,Ravi Shankar,data-warehouse,read,pending,
+REQ-4209,2026-10-23T15:47:31Z,Kwame Mensah,hr-records,read,approved,Jordan Alvarez
+REQ-4210,2026-10-23T17:28:26Z,Lena Fischer,source-control,read,approved,Lena Fischer
+REQ-4211,2026-10-23T19:25:14Z,Sofia Rossi,hr-records,read,approved,Samuel Okafor
+REQ-4212,2026-10-24T07:20:56Z,Ingrid Solberg,production-database,write,approved,Priya Natarajan
+REQ-4213,2026-10-24T07:32:52Z,Jordan Alvarez,production-database,read,approved,Maya Chen
+REQ-4214,2026-10-24T17:41:57Z,Maya Chen,production-database,read,approved,Lena Fischer
+REQ-4215,2026-10-24T18:16:39Z,Grace Park,customer-crm,read,pending,
+REQ-4216,2026-10-24T18:38:57Z,Sofia Rossi,hr-records,write,approved,Samuel Okafor
+REQ-4217,2026-10-24T18:52:10Z,Maya Chen,production-database,read,approved,Maya Chen
+REQ-4218,2026-10-25T10:59:32Z,Priya Natarajan,production-database,read,pending,
+REQ-4219,2026-10-25T12:28:10Z,Samuel Okafor,production-database,read,pending,
+REQ-4220,2026-10-25T12:54:50Z,Ingrid Solberg,data-warehouse,admin,approved,Jordan Alvarez
+REQ-4221,2026-10-25T17:41:38Z,Ravi Shankar,production-database,read,approved,Samuel Okafor
+REQ-4222,2026-10-26T08:39:36Z,Samuel Okafor,source-control,admin,pending,
+REQ-4223,2026-10-26T10:49:55Z,Diego Ramos,finance-ledger,admin,pending,
+REQ-4224,2026-10-26T11:22:06Z,Lena Fischer,hr-records,read,pending,
+REQ-4225,2026-10-26T11:32:41Z,Diego Ramos,customer-crm,read,approved,Priya Natarajan
+REQ-4226,2026-10-26T14:29:36Z,Ingrid Solberg,payroll,read,denied,Priya Natarajan
+REQ-4227,2026-10-27T07:33:29Z,Ravi Shankar,source-control,read,approved,Jordan Alvarez
+REQ-4228,2026-10-27T09:42:43Z,Priya Natarajan,source-control,read,denied,Jordan Alvarez
+REQ-4229,2026-10-27T13:53:58Z,Sofia Rossi,customer-crm,write,approved,Jordan Alvarez
+REQ-4230,2026-10-27T14:22:09Z,Priya Natarajan,customer-crm,write,pending,
+REQ-4231,2026-10-27T14:50:23Z,Lena Fischer,finance-ledger,read,pending,
+REQ-4232,2026-10-27T14:55:36Z,Priya Natarajan,data-warehouse,admin,pending,
+REQ-4233,2026-10-27T15:58:17Z,Priya Natarajan,production-database,read,approved,Priya Natarajan
+REQ-4234,2026-10-27T17:32:23Z,Grace Park,customer-crm,write,approved,Priya Natarajan
+REQ-4235,2026-10-27T18:28:31Z,Diego Ramos,payroll,read,approved,Maya Chen
+REQ-4236,2026-10-27T19:17:35Z,Elena Petrova,payroll,read,approved,Samuel Okafor
+REQ-4237,2026-10-28T07:22:43Z,Grace Park,production-database,write,denied,Maya Chen
+REQ-4238,2026-10-28T09:37:26Z,Jordan Alvarez,production-database,read,approved,Lena Fischer
+REQ-4239,2026-10-28T10:52:46Z,Priya Natarajan,payroll,read,approved,Samuel Okafor
+REQ-4240,2026-10-28T12:33:55Z,Diego Ramos,source-control,admin,approved,Priya Natarajan
+REQ-4241,2026-10-28T14:26:09Z,Aisha Bello,data-warehouse,write,approved,Priya Natarajan
+REQ-4242,2026-10-28T16:13:07Z,Diego Ramos,finance-ledger,read,pending,
+REQ-4243,2026-10-28T17:53:41Z,Aisha Bello,payroll,admin,pending,
+REQ-4244,2026-10-29T09:01:47Z,Lena Fischer,hr-records,read,approved,Priya Natarajan
+REQ-4245,2026-10-29T15:38:46Z,Liam O'Connor,payroll,admin,pending,
+REQ-4246,2026-10-30T08:15:24Z,Elena Petrova,data-warehouse,admin,pending,
+REQ-4247,2026-10-30T12:20:23Z,Diego Ramos,data-warehouse,read,approved,Samuel Okafor
+REQ-4248,2026-10-30T12:55:57Z,Lena Fischer,data-warehouse,read,denied,Lena Fischer
+REQ-4249,2026-10-30T14:52:20Z,Sofia Rossi,customer-crm,read,approved,Maya Chen
+REQ-4250,2026-10-30T17:35:06Z,Maya Chen,source-control,admin,approved,Jordan Alvarez

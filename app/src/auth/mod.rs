@@ -14,6 +14,7 @@
 //! APP-074 adds the public invitation entry (`invite`): `GET /invite` and
 //! `POST /invite/validate`, the backend PAR with the confidential provider
 //! `invite_token`, and the trusted-proxy restriction of the limit keys.
+pub mod aliases;
 pub mod capability;
 pub mod cookies;
 pub mod csrf;
@@ -22,12 +23,16 @@ pub mod pending;
 pub mod pkce;
 pub mod provider;
 pub mod routes;
+pub mod shared;
+pub mod shared_broker;
 pub mod vault;
 
 // Crate-visible to the APP-012 query campaign, which signs members in over
 // the same routes; still compiled only into the test executable.
 #[cfg(test)]
 mod invite_tests;
+#[cfg(test)]
+mod shared_tests;
 #[cfg(test)]
 pub(crate) mod synthetic_issuer;
 #[cfg(test)]
@@ -71,6 +76,23 @@ struct RouteDocument {
     organization_id: String,
     tenant_slug: String,
     client_id: String,
+    #[serde(default, deserialize_with = "shared_client")]
+    shared_client_id: Option<String>,
+}
+
+fn shared_client<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
+}
+
+fn oauth_client(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.ends_with("-hosted")
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Per-organization provider routing, read only after the organization is
@@ -80,6 +102,9 @@ pub struct Route {
     pub organization: String,
     pub tenant_slug: String,
     pub client_id: String,
+    /// Separate registered public client, bound only to /auth/shared/callback.
+    /// Missing configuration disables guest sign-in without changing members.
+    pub shared_client_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +126,7 @@ fn bounded(value: &str, max: usize) -> bool {
 fn exact_origin(value: &str) -> bool {
     url::Url::parse(value).is_ok_and(|u| {
         u.scheme() == "https"
+            && u.host_str().is_some_and(|host| !host.contains('*'))
             && u.origin().ascii_serialization() == value
             && u.username().is_empty()
             && u.password().is_none()
@@ -136,6 +162,9 @@ impl AuthConfig {
                         .bytes()
                         .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
                     || r.client_id.ends_with("-hosted")
+                    || r.shared_client_id
+                        .as_ref()
+                        .is_some_and(|client| !oauth_client(client) || client == &r.client_id)
             })
         {
             return Err("auth configuration refused");
@@ -154,6 +183,7 @@ impl AuthConfig {
                     organization: r.organization_id,
                     tenant_slug: r.tenant_slug,
                     client_id: r.client_id,
+                    shared_client_id: r.shared_client_id,
                 })
                 .collect(),
         })
@@ -331,6 +361,7 @@ pub struct Auth {
     pub(crate) proxies: TrustedProxies,
     /// APP-073's provider invitation capabilities (none: no signup handoff).
     pub(crate) invitations: Option<invite::Invitations>,
+    pub(crate) shared_broker: Option<shared_broker::Client>,
     pub(crate) pages: Arc<dyn Pages>,
 }
 
@@ -349,6 +380,7 @@ impl Auth {
             limits: Limiter::default(),
             proxies: TrustedProxies::none(),
             invitations: None,
+            shared_broker: None,
             pages,
         })
     }
@@ -360,6 +392,10 @@ impl Auth {
     /// APP-074: the provider invitation capabilities for signup handoffs.
     pub fn with_invitations(mut self, invitations: Option<invite::Invitations>) -> Self {
         self.invitations = invitations;
+        self
+    }
+    pub fn with_shared_broker(mut self, broker: Option<shared_broker::Client>) -> Self {
+        self.shared_broker = broker;
         self
     }
     /// The limit key of a request's client (D7.14 trusted proxy).
@@ -434,6 +470,18 @@ impl Auth {
     /// revokes their refresh tokens. Run periodically by the binary.
     pub async fn sweep(&self) {
         if let Some(stores) = &self.stores {
+            match stores.workspace.sweep_shared_identity().await {
+                Ok(references) => {
+                    for reference in references {
+                        self.revoke(&Ended {
+                            organization: String::new(),
+                            refresh_ref: reference,
+                        })
+                        .await;
+                    }
+                }
+                Err(error) => tracing::warn!(code = %error, "auth.shared_sweep"),
+            }
             match stores.workspace.sweep_expired().await {
                 Ok(ended) => {
                     for record in &ended {

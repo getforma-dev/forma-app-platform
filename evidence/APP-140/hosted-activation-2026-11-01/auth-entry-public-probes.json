@@ -1,0 +1,26 @@
+{
+  "observed_at_utc": "2026-11-01T20:14:28.312612+00:00",
+  "passed": true,
+  "probes": [
+    {
+      "probe": "signin",
+      "status": 200,
+      "html": true,
+      "has_signin_or_invite": true
+    },
+    {
+      "probe": "owner-entry",
+      "status": 200,
+      "html": true,
+      "has_signin_or_invite": true
+    },
+    {
+      "probe": "invite",
+      "status": 200,
+      "html": true,
+      "has_signin_or_invite": true
+    }
+  ],
+  "provider_calls": false,
+  "accounts_created": false
+}

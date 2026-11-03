@@ -1,0 +1,16 @@
+{
+  "scope": "Repository automated headless Chrome, disposable profile, synthetic dev identity; real HTTP/admission/storage/commands; injected faults explicitly labeled",
+  "checks": [
+    "Exact template admitted/published with empty records; native HTML retains guide-before-form default layout, CSP and full real form. Live refresh keeps draft node and idempotency key.",
+    "A real audited create reaches another open member document without reload; its unsent form survives.",
+    "Injected malformed success after real commit freezes values; synthetic BFCache lifecycle restores same-command retry; exact same payload/key replays once. This is lifecycle fault coverage, not actual BFCache qualification.",
+    "Previously generated Reading List now offers only its declared unconditional initial status to_read.",
+    "Document layout fits a 390 px mobile viewport without horizontal page overflow."
+  ],
+  "errors": [],
+  "work": {
+    "app_id": "00000000-0000-4000-8000-00000000d0a1",
+    "work_id": "acb8c2d5-d2e3-4a75-a448-3b9443d7f7d2"
+  },
+  "liveMs": 1040
+}

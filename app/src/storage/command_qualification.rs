@@ -424,6 +424,23 @@ async fn campaign() {
         &mut checks,
         "S05 Spend Review in Northstar through the admitted path over the three seeded placeholder records; no claim, outcome or data-chain event exists before the first command",
     );
+    // APP-113 review (storage 1, `commands::compose`): a declared transition
+    // on an existing record is never taken by its filer. The author files;
+    // the reviewer, with record_read and record_write on the work, decides
+    // (APP-131: the campaign predates the rule).
+    for permission in ["discover", "run"] {
+        grant(&fixture, REVIEWER, permission, &["--app", SPEND_APP]);
+    }
+    grant(&fixture, REVIEWER, "source_read", &["--source", EXPENSES]);
+    for permission in ["record_read", "record_write"] {
+        grant(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", SPEND_APP, "--work", &s05.work],
+        );
+    }
+    let reviewer = request(&stores, ORG, REVIEWER, 1);
 
     // --- ik-1 at version 0 → version 1, one transaction ---
     let first = command(
@@ -571,7 +588,14 @@ async fn campaign() {
         1,
         values("reviewed", "Approved — synthetic only"),
     );
-    let outcome2 = committed(stores.data.commit_record(&author, &second).await);
+    // The filer cannot decide their own record (APP-113 storage 1): Denied,
+    // nothing written, the claim released with the rollback.
+    assert_eq!(
+        stores.data.commit_record(&author, &second).await,
+        Err(Error::Denied)
+    );
+    assert_eq!(footprint(&fixture).await, [4, 4, 6, 1, 1, 1]);
+    let outcome2 = committed(stores.data.commit_record(&reviewer, &second).await);
     assert_eq!((outcome2.record_version, outcome2.commit_sequence), (2, 3));
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
     assert_eq!(
@@ -580,13 +604,13 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "ik-2 (reviewed, the declared needs_context → reviewed transition) commits version 2 at commit_sequence 3: one more revision, outcome and audit event; the current pointer is 2",
+        "ik-2 (reviewed, the declared needs_context → reviewed transition) is refused for the record's filer (APP-113: the filer never decides) with nothing written, and commits for the reviewer at version 2, commit_sequence 3: one more revision, outcome and audit event; the current pointer is 2",
     );
 
     // --- refusals that write nothing ---
     let mut undeclared = command(&s05, IK[4], 2, 1, values("needs_context", "back"));
     assert_eq!(
-        stores.data.commit_record(&author, &undeclared).await,
+        stores.data.commit_record(&reviewer, &undeclared).await,
         Err(Error::Denied)
     );
     // APP-013 review M1 (R3): through the create command, a note-only edit
@@ -597,7 +621,7 @@ async fn campaign() {
             stores
                 .data
                 .commit_record(
-                    &author,
+                    &reviewer,
                     &command(&s05, IK[4], 2, 1, values("reviewed", note))
                 )
                 .await,
@@ -608,13 +632,13 @@ async fn campaign() {
     undeclared.values = values("reviewed", "note only change is fine");
     undeclared.command = "approve".into();
     assert_eq!(
-        stores.data.commit_record(&author, &undeclared).await,
+        stores.data.commit_record(&reviewer, &undeclared).await,
         Err(Error::Denied)
     );
     let mut version = command(&s05, IK[4], 2, 1, values("reviewed", "x"));
     version.schema_version_expected = 2;
     assert_eq!(
-        stores.data.commit_record(&author, &version).await,
+        stores.data.commit_record(&reviewer, &version).await,
         Err(Error::Denied)
     );
     let mut typed = command(
@@ -625,22 +649,22 @@ async fn campaign() {
         json!([{"field_id": "status", "value": {"type": "text", "value": "reviewed"}}]),
     );
     assert_eq!(
-        stores.data.commit_record(&author, &typed).await,
+        stores.data.commit_record(&reviewer, &typed).await,
         Err(Error::Denied)
     );
     typed.values = json!([{"field_id": "amount", "value": {"type": "text", "value": "x"}}]);
     assert_eq!(
-        stores.data.commit_record(&author, &typed).await,
+        stores.data.commit_record(&reviewer, &typed).await,
         Err(Error::Denied)
     );
     let mut key = command(&s05, "short", 2, 1, values("reviewed", "x"));
     assert_eq!(
-        stores.data.commit_record(&author, &key).await,
+        stores.data.commit_record(&reviewer, &key).await,
         Err(Error::Denied)
     );
     key.idempotency_key = "0000000000000000000000000000000A".into();
     assert_eq!(
-        stores.data.commit_record(&author, &key).await,
+        stores.data.commit_record(&reviewer, &key).await,
         Err(Error::Denied)
     );
     // A member without record_write on the work, and the canary's member.
@@ -673,17 +697,6 @@ async fn campaign() {
     );
 
     // --- another principal cannot read or replay the outcome by key ---
-    for permission in ["discover", "run"] {
-        grant(&fixture, REVIEWER, permission, &["--app", SPEND_APP]);
-    }
-    grant(&fixture, REVIEWER, "source_read", &["--source", EXPENSES]);
-    grant(
-        &fixture,
-        REVIEWER,
-        "record_write",
-        &["--app", SPEND_APP, "--work", &s05.work],
-    );
-    let reviewer = request(&stores, ORG, REVIEWER, 1);
     assert_eq!(
         stores
             .data
@@ -719,13 +732,12 @@ async fn campaign() {
     );
 
     // --- in flight: the same key while the first command holds its claim ---
-    hooks.arm("record_lock");
-    let paused_stores = stores.clone();
     let paused_command = on(
         IN_FLIGHT_RECORD,
         command(&s05, IK[5], 0, 1, values("needs_context", "A")),
     );
-    let a = {
+    let spawn_holder = || {
+        let paused_stores = stores.clone();
         let request_command = paused_command.clone();
         tokio::spawn(async move {
             let author = request(&paused_stores, ORG, AUTHOR, 1);
@@ -735,7 +747,16 @@ async fn campaign() {
                 .await
         })
     };
+    hooks.arm("record_lock");
+    let a = spawn_holder();
     paused(&hooks).await;
+    let observer = fixture.operator().await;
+    let holder_pid: i32 = observer
+        .client
+        .query_one("SELECT pid FROM pg_stat_activity WHERE datname='genui' AND state='idle in transaction'", &[])
+        .await
+        .unwrap()
+        .get(0);
     let b_stores = stores.clone();
     let b_command = paused_command.clone();
     let b = tokio::spawn(async move {
@@ -744,7 +765,37 @@ async fn campaign() {
     });
     lock_wait(&fixture, 1).await;
     assert_eq!(b.await.unwrap(), Ok(CommandResult::InFlight));
-    // A different key behind the paused command waits on the sequence row.
+    assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
+    // Two serial one-second waits can exhaust the holder's three-second idle
+    // deadline under load. A third concurrent data connection is forbidden by
+    // the process-wide two-slot bound, even with independent Stores. Cancel
+    // this uncommitted holder and observe its connection leave PostgreSQL
+    // before repeating the same command for the distinct-key timeout case.
+    a.abort();
+    assert!(a.await.unwrap_err().is_cancelled());
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let present: bool = observer
+                .client
+                .query_one(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$1)",
+                    &[&holder_pid],
+                )
+                .await
+                .unwrap()
+                .get(0);
+            if !present {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("cancelled holder connection removed");
+    assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
+    hooks.arm("record_lock");
+    let a = spawn_holder();
+    paused(&hooks).await;
     let c_stores = stores.clone();
     let c_command = on(
         IN_FLIGHT_RECORD,
@@ -783,7 +834,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
     check(
         &mut checks,
-        "while a command holds its claim, sequence and record locks, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the released command commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
+        "in two bounded holder cycles, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the first holder is cancelled and its PostgreSQL connection disappears without a write before the second starts; the released second holder commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
     );
 
     // --- busy: a lock wait on the authorization fence ---
@@ -904,13 +955,13 @@ async fn campaign() {
     {
         let operator = fixture.operator().await;
         operator.client.batch_execute(&format!("BEGIN; SET LOCAL ROLE genui_data; SELECT set_config('genui.organization_id','{ORG}',true),set_config('genui.principal_id','{REVIEWER}',true),set_config('genui.membership_epoch','1',true);")).await.unwrap();
-        let visible: i64 = operator
+        // The reviewer sees exactly its own ik-2 outcome, none of the author's.
+        let row = operator
             .client
-            .query_one("SELECT count(*) FROM genui.command_outcomes", &[])
+            .query_one(&format!("SELECT count(*),count(*) FILTER (WHERE principal_id='{REVIEWER}'::uuid) FROM genui.command_outcomes"), &[])
             .await
-            .unwrap()
-            .get(0);
-        assert_eq!(visible, 0);
+            .unwrap();
+        assert_eq!((row.get::<_, i64>(0), row.get::<_, i64>(1)), (1, 1));
         operator.client.batch_execute("ROLLBACK").await.unwrap();
     }
     check(
@@ -923,9 +974,11 @@ async fn campaign() {
     let auth_pages: Arc<dyn Pages> = pages.clone();
     let auth = Arc::new(Auth::new(None, Some(stores.clone()), auth_pages).unwrap());
     let reference = auth.vault.insert("northstar", &vault_token()).unwrap();
+    // The reviewer's session: the form below decides LOST_RECORD, which the
+    // author filed (APP-113 storage 1).
     let cookie = stores
         .workspace
-        .mint_session_for_tests(ORG, AUTHOR, &reference)
+        .mint_session_for_tests(ORG, REVIEWER, &reference)
         .await
         .unwrap();
     let record_page: Arc<dyn RecordPage> = pages;
@@ -1188,7 +1241,7 @@ async fn campaign() {
     assert_eq!(body["kind"], "command_outcome");
     assert_eq!(body["record_version"], 1);
     assert_eq!(body["idempotency_key"], json_key);
-    assert_eq!(body["principal_id"], AUTHOR);
+    assert_eq!(body["principal_id"], REVIEWER);
     let replay = send(
         &app,
         "POST",

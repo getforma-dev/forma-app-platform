@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {chromium} from '/tmp/audit-browser/node_modules/playwright/index.mjs';
+import {readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const fixture=JSON.parse(await readFile('.cache/reports/composed-browser-final4/fixture.json','utf8'));const d=fixture.dining;
+const output='.cache/reports/composed-canvas-debug';
+const manifest=async()=>createHash('sha256').update(await readFile('app/admin/dist/manifest.json')).digest('hex');
+const report={scope:'Read-only local synthetic UI: no injected event behavior or sessions; existing app; no command/design mutations',checks:[],errors:[],mutation_posts:0,started:new Date().toISOString(),manifest_sha256:await manifest()};
+const browser=await chromium.launch({channel:'chrome',headless:true});const context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});const page=await context.newPage();page.setDefaultTimeout(10000);
+page.on('pageerror',e=>report.errors.push(e.message));page.on('request',r=>{const path=new URL(r.url()).pathname;if(r.method()==='POST'&&(path.includes('/commands/')||path.endsWith('/presentation')))report.mutation_posts++;});
+try{
+ await page.goto(`http://127.0.0.1:4801/w/${d.app_id}/${d.work_id}`);await page.getByText('Up to date.',{exact:true}).waitFor();await page.getByRole('link',{name:'Open on the canvas',exact:true}).click();
+ const appCard=page.locator(`.cv-card[data-kind="app"][data-work="${d.work_id}"]`);
+ await appCard.locator('[data-unite-app]').click();const united=page.locator(`.cv-unite[data-work="${d.work_id}"]`);await united.waitFor();
+ report.checks.push('The first ordinary pointer click on the newly placed app card Unite button opens the app frame.');
+ await united.getByRole('button',{name:'Log meal',exact:true}).click();const modal=page.locator('.app-component-dialog');await modal.waitFor();
+ await modal.locator('[name="value.restaurant"]').click();await page.keyboard.type('Unsent identity probe');
+ await page.evaluate(()=>{window.referenceNode=document.querySelector('.app-component-dialog [name="value.restaurant"]');window.referenceKey=document.querySelector('.app-component-dialog [name="idempotency_key"]').value;});
+ await page.keyboard.press('Escape');await united.locator('[data-unite-split]').click();
+ await page.locator(`.navigator-item[data-instance-id="f-${d.work_id}-add"]`).click();
+ const formCard=page.locator(`.cv-card[data-kind="form"][data-work="${d.work_id}"]`);
+ assert.equal(await formCard.locator('[name="value.restaurant"]').inputValue(),'Unsent identity probe');
+ await formCard.locator('[name="value.restaurant"]').click();assert.equal(await formCard.locator('[name="value.restaurant"]').evaluate(n=>document.activeElement===n),true);
+ await formCard.locator('[data-focus-card]').click();const focused=page.locator('[data-focus-stage] [name="value.restaurant"]');await focused.waitFor();
+ assert.equal(await focused.inputValue(),'Unsent identity probe');assert.equal(await focused.evaluate(n=>n===window.referenceNode),true);
+ report.focus_colors=await page.locator('[data-focus-stage] .cv-card').evaluate(card=>({background:getComputedStyle(card).backgroundColor,label:getComputedStyle(card.querySelector('.cv-field-label')).color}));
+ const luminance=color=>{const parts=color.match(/[0-9.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4});return parts[0]*0.2126+parts[1]*0.7152+parts[2]*0.0722};
+ const l=[luminance(report.focus_colors.background),luminance(report.focus_colors.label)].sort((a,b)=>a-b);report.focus_label_contrast=(l[1]+0.05)/(l[0]+0.05);
+ await page.screenshot({path:`${output}/final-focus.png`});assert.ok(report.focus_label_contrast>=4.5,`Focus label contrast ${report.focus_label_contrast}`);await page.locator('[data-focus-close]').click();
+ report.checks.push('After Fan out, the real navigator reveals the parked form; ordinary pointer clicks focus its field and Focus opens the exact original node with the unsent draft.');
+ await page.locator(`.navigator-item[data-instance-id="a-${d.work_id}"]`).click();await appCard.locator('[data-unite-app]').click();await united.waitFor();
+ await united.getByRole('button',{name:'Log meal',exact:true}).click();await modal.waitFor();
+ assert.equal(await modal.locator('[name="value.restaurant"]').inputValue(),'Unsent identity probe');
+ assert.equal(await page.evaluate(()=>document.querySelector('.app-component-dialog [name="value.restaurant"]')===window.referenceNode&&document.querySelector('.app-component-dialog [name="idempotency_key"]').value===window.referenceKey),true);
+ await page.screenshot({path:`${output}/final-reunited-modal.png`});await page.keyboard.press('Escape');
+ report.checks.push('Return, app-card navigation and re-Unite restore the same form node, unsent draft and original idempotency key.');
+ assert.equal(report.mutation_posts,0);assert.deepEqual(report.errors,[]);assert.equal(await manifest(),report.manifest_sha256);
+ report.passed=true;report.completed=new Date().toISOString();
+}catch(error){report.passed=false;report.failure=String(error);await page.screenshot({path:`${output}/final-failure.png`}).catch(()=>{});throw error;}
+finally{await writeFile(`${output}/final-report.json`,JSON.stringify(report,null,2));await browser.close();console.log(JSON.stringify({passed:report.passed,checks:report.checks.length,failure:report.failure}));}

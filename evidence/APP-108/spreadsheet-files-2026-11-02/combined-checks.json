@@ -1,0 +1,111 @@
+{
+  "status": "passed",
+  "observed_at_utc": "2026-11-02T11:07:17.712145+00:00",
+  "tested_source_commit": "f1bbbfb2535e4775a360025bb9568926810dfba9",
+  "reviewed_heads": {
+    "PR42_product": "5569328b01ecf30169f7503e6214dc6280431c3d",
+    "PR40": "fe03aa3ede683a8bd3872cb1c3c3c81296ba60f8",
+    "PR41_trunk_merge": "47d6b2c6148d6795116238e0dc436afcff7d0b56",
+    "PR44": "d77f7de606243bd2b5934b95d5f049da8b287b8a",
+    "promotion_docs": "4cdae80a17a6b6a6a552e6000f6a164f8e549a5b"
+  },
+  "all_reviewed_heads_are_ancestors": true,
+  "source_sha256": {
+    "app/src/boxes/inspect.rs": "14e7705c24c5bbed90e5963c9dc040bb7ae5784922a86a79fb84b23549a87805",
+    "app/src/boxes/routes.rs": "772a3950104a068adbb8a4c2771e6cefd690ff924f09985b4b5ddcbfc9aeeec2",
+    "app/src/boxes/tests.rs": "31e0e28b361b0099625db1c50e6a20bf4cadaaf3a56cac63eeedb0992f8a3aee",
+    "app/src/storage/box_campaign.rs": "79e6f0d7e0b386520bdef9d57e68395f043afdb6bb9fc6f6b31d51b412bff008",
+    "app/src/main.rs": "4c092477726edfe4452d3532b1c43e36f7e4a0fdb108cfe3993d5384bbb6e0be",
+    "app/admin/src/canvas/app.tsx": "8cea3a70ac30946d0f6cb0d366e8a882fa8217f7d03126a4e5acde456f0c28c4",
+    "app/admin/src/canvas/board.ts": "aeb4a82aa26750880ea8cfb2efeccfb78eb110934ab9b895b0cfc8c1f1312197",
+    "app/admin/src/canvas/data-sheet.ts": "e22efd50fe112172eb3c15e922ec18f87ef329bf94b8374748d10f718e2f7ce7",
+    "app/admin/src/canvas/box-api.ts": "2ec2950593404b528aca2611ab839e99c79a4dcb0c8a6c654e21a63dcb38b1d2",
+    "app/admin/src/canvas/box-viewer.ts": "0baba818c117fbfd16195473c6d9b69d6a2c697d81c08a53a85f943ee3f05332",
+    "app/admin/src/canvas/boxes.ts": "eca9112c73b81bb397217c745cf7c36aa63e9b1767005c1212d059e8ff1a2f10",
+    "app/admin/src/styles/canvas.css": "b73ee6d8e95010b07936019b9ea56e00918016324ac82e7caa42fb22510c5b9d",
+    "app/admin/test/canvas-from-data.test.ts": "8dc801ca77fdc0244d70bf1ccad6490c095a01d4b417d6c86a6c8073b0a7d8ec",
+    "app/admin/test/original-sheet.test.ts": "58e4babb5a64c298f5026f180003b48c1a8a31f1d58a3dcfb0d461811c2c539d",
+    "app/scripts/original_sheet_browser.mjs": "236959aae8eb8cc757d221cb6ab7ba12e6c3ee21251824445f4a514077e20aae",
+    "app/admin/src/canvas/palette.ts": "3170e4af8a90b3eb6219a6327e51350069e5b6b27a75065c084462ced7905148",
+    "app/admin/src/styles/themes.css": "33df8371af9ae4fcfbb1cdadfe458d886004f8fd4355719136710a9c9e94169e",
+    "app/admin/src/canvas/unite.ts": "71ee7eb717ccba694783a389e1c11916b186e57cf5955500cd2291b56533055a",
+    "app/admin/src/canvas/render.ts": "c3f9cdb35cf55a5be8e65415a0d3c4cf370e4d7129258cb329b53eae10cbd2a0",
+    "app/admin/src/canvas/naming.ts": "5100ba2648967adba1d13724ea0c626cf64868db293a00786452f1130d545274"
+  },
+  "repository_checks": {
+    "command": "just check",
+    "passed_groups": [
+      "fmt",
+      "admin",
+      "clippy",
+      "clippy-dev",
+      "test",
+      "http-smoke",
+      "msrv",
+      "catalog",
+      "infra",
+      "py-scripts",
+      "py-runtime",
+      "shared-broker",
+      "py-qualification",
+      "py-app-scripts",
+      "py-ops",
+      "py-promotion",
+      "py-infra",
+      "schema-pins",
+      "contracts",
+      "bash-n"
+    ],
+    "failure": "The board read the new README while combined-checks.json was still being written. No code/test failure. Final board rerun recorded separately.",
+    "admin_tests": 115,
+    "rust_library_passed": 376,
+    "rust_library_ignored": 34,
+    "python_runtime_tests": 192,
+    "promotion_tests": 95,
+    "no_skipped_groups": true,
+    "final_board": "just check board passed after completing the evidence file: 166 tickets / 9 phases / 15 sprints / 80 requirements.",
+    "all_21_required_groups_satisfied": true
+  },
+  "browser": {
+    "report": "combined-browser.json",
+    "passed_checks": 11,
+    "errors": 0,
+    "widths": [
+      1440,
+      390,
+      320
+    ],
+    "visually_inspected": [
+      "combined-file-icon-320.png",
+      "combined-original-cells-320.png",
+      "combined-file-icon-390.png",
+      "combined-original-cells-390.png"
+    ]
+  },
+  "deployment": {
+    "contract_sha256": "ef8580511349b5f1883979d034be55f5753ea9453ff1e73390c4d2955889c9c0",
+    "equals_reviewed_PR40_contract": true,
+    "aws_mutations": false,
+    "schema_changes_in_PR42": false,
+    "sealed_parser_changes_in_PR42": false,
+    "hosted_acceptance_claim": false
+  },
+  "private_logs_sha256": {
+    "sheet-combined-check.log": "3224b4bea396810adfe19539bafd94690547909f21f070ed973efff013254bf6",
+    "sheet-combined-board.log": "2b70947c91c387f447d3b5088fad0b5b5dcc4b0489d3ae6274d32e4b9f0b6ee2"
+  },
+  "artifacts_sha256": {
+    "combined-browser.json": "413b741f9feb0c1b077590052089c78ba3249bbda872ad47029ac76ac9613205",
+    "combined-file-icon-320.png": "496342b30f4d8e62e1098b98e3e4ed27b97c934e03ab412409d3016229e529f9",
+    "combined-file-icon-390.png": "11f01aedf3d94e6cc31b152d4b78aa7feec7edb3d6e38ff03796afd928fe2478",
+    "combined-original-cells-320.png": "639dd7d074fd9bdd85ca531377c8f2e75291c2fb3d8db7f62b3cc3ff37a5b0d1",
+    "combined-original-cells-390.png": "11452cb16a8e9a4e1e69010fd7c45e69ba302bb9cb48a66295c996c0da64d6fa"
+  },
+  "limits": [
+    "Local synthetic-member qualification, not a hosted provider journey.",
+    "Original values and immutable bytes; no XLSX styling, formula evaluation or editing.",
+    "Placement is browser/member scoped, not cross-device.",
+    "Previously revoked grant tested; mid-IO revocation is protected by source recheck but not deterministically raced in the campaign.",
+    "Merged deployment contract follows reviewed PR40 pins; deployment requires the separate qualified promotion path."
+  ]
+}

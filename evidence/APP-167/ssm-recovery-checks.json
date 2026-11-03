@@ -1,0 +1,32 @@
+{
+  "command": "just check",
+  "failed_groups": 0,
+  "live_acceptance": "pending new approved merge-triggered run",
+  "log_sha256": "e41e613b4d853df806044f85ab3c29f4d550cfe13ce45d547d26db58d4e68d5e",
+  "passed_groups": [
+    "fmt",
+    "admin",
+    "clippy",
+    "clippy-dev",
+    "test",
+    "http-smoke",
+    "msrv",
+    "catalog",
+    "infra",
+    "py-scripts",
+    "py-runtime",
+    "shared-broker",
+    "py-qualification",
+    "py-app-scripts",
+    "py-ops",
+    "py-promotion",
+    "py-infra",
+    "schema-pins",
+    "contracts",
+    "board",
+    "bash-n"
+  ],
+  "promotion_tests": 95,
+  "scope": "exact CDK bootstrap read and rejected-create reconciliation",
+  "skipped_groups": 0
+}

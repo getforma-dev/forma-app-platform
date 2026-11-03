@@ -2,13 +2,13 @@
 
 Sprints are ordered scope batches within the [implementation phases](PHASES.md), not calendar promises. Scheduling and capacity are agreed at sprint entry. Later batches are forecasts; split work before selection when it exceeds five focused days.
 
-Current board: Backlog: 68, Selected: 1, In progress: 0, In review: 1, Done: 16, Blocked: 2.
+Current board: Backlog: 144, Selected: 1, In progress: 3, In review: 1, Done: 19, Blocked: 2.
 
 | Sprint | Phase | Outcome | Tickets |
 |---|---|---|---|
 | [S01: Rebase and qualify architectural seams](sprints/S01.md) | [PH01](phases/PH01.md) | Verified Forma 3.2 contracts and bounded renderer/parser/query/auth qualification plans. | 6 |
 | [S02: One authorized app, query and saved decision](sprints/S02.md) | [PH01](phases/PH01.md) | Invite-first public beta admission → admitted definition → authorized query → visible receipt → explicit command → atomic outcome/audit → reopen. | 14 |
-| [S03: Real inspected evidence](sprints/S03.md) | [PH02](phases/PH02.md) | CSV and XLSX enter through real inspected upload and become immutable compatible revisions. | 7 |
+| [S03: Real inspected evidence](sprints/S03.md) | [PH02](phases/PH02.md) | CSV and XLSX enter through real inspected upload and become immutable compatible revisions. | 9 |
 | [S04: Correct bounded execution](sprints/S04.md) | [PH02](phases/PH02.md) | Northstar and Spend Review arithmetic executes through generic bounded operations. | 6 |
 | [S05: A useful persistent workspace](sprints/S05.md) | [PH02](phases/PH02.md) | People navigate, arrange, filter and submit forms through spatial and focused workflows. | 7 |
 | [S06: Direct authoring and safe transformation](sprints/S06.md) | [PH03](phases/PH03.md) | People compose both app shapes and make meaningful durable edits before AI polish. | 5 |
@@ -19,3 +19,5 @@ Current board: Backlog: 68, Selected: 1, In progress: 0, In review: 1, Done: 16,
 | [S11: Hosted pilot controls](sprints/S11.md) | [PH05](phases/PH05.md) | Prepared hosted deployment and lifecycle controls support a defined pilot scope. | 10 |
 | [S12: Measured operations and pilot entry](sprints/S12.md) | [PH06](phases/PH06.md) | Measured capacity/recovery/security and operational ownership support the pilot decision. | 7 |
 | [S13: Post-MVP completion](sprints/S13.md) | [PH07](phases/PH07.md) | Every acceptance sentence and review residual deferred by ADR-010 is proven on the live beta or the local harness, or dispositioned with evidence. | 5 |
+| [S14: PIVOT: November 2 pitch demo](sprints/S14.md) | [PH08](phases/PH08.md) | The pitch journey (describe, canvas, governed data, share) rehearsed on the live beta, then the November 3 revisit. | 68 |
+| [S15: Composed app experience](sprints/S15.md) | [PH09](phases/PH09.md) | One coherent app across embedded, member and guest use, with typed component actions, durable appearance and qualified record dashboards. A separate spike decides future idle execution options. | 12 |

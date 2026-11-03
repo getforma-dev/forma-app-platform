@@ -21,6 +21,16 @@ pub fn random_capability() -> Option<String> {
     Some(URL_SAFE_NO_PAD.encode(random_bytes::<32>()?))
 }
 
+/// `N` random bytes as `2N` lowercase hex digits (ids and idempotency keys).
+pub fn random_hex<const N: usize>() -> Option<String> {
+    Some(
+        random_bytes::<N>()?
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect(),
+    )
+}
+
 /// A random canonical UUID (version 4, RFC variant), for vault references.
 pub fn random_uuid() -> Option<String> {
     let mut bytes = random_bytes::<16>()?;

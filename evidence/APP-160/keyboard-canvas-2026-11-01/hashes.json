@@ -1,0 +1,26 @@
+{
+  "scope": "Observed local synthetic final keyboard/canvas build; source hashes are separate from earlier failures.",
+  "artifacts_sha256": {
+    "README.md": "87ab39ca4d2583dd606f12d134c6d364df5056185e60ad3ef3aba313e7e1bfc9",
+    "canvas-focus.png": "6ed02c642df53c6da82f7ce4cb4e43acfbb0d233a034ad5b051f58ce858fb2ff",
+    "canvas-report.json": "25cbe7ec96b8d5b12ab7f1a418990323b26b6cf3f728519c259ede66bd7dff6d",
+    "canvas-repro.mjs": "618e039606c360f0aed457868d4326a22bfee1079bc6881be1bf3eb9f1c219b9",
+    "canvas-reunited-modal.png": "3e3c9b33f8d035741fdc231a0a7b8ab04a905ca39e45e20c3fcba2364e8bfb71",
+    "keyboard-modal-320.png": "7f71cc5b254c0a798a488a3229bc9558fd75ec302db510eaaedd39f31d156834",
+    "keyboard-modal-desktop.png": "421e18ce99570115dbabea59ec707beb9ccd251fb1ed5d1b47dde49dcad48790",
+    "keyboard-report.json": "b2fe36931308e6b765d5f1e71859592654f20e7120ff25ff3e209e24b045a1e9",
+    "keyboard-repro.mjs": "4696797acc056d229a11af53679080fab0131d160fc5f3b14ac61dd02a5c4f42",
+    "modal-ax.json": "da2ebf6c8c9d88b9d719da530647d18c338dbd9acd422cd607ed76ee9ebc7fea",
+    "prior-focus-contrast.png": "ea35d1ad9b78be3891ddde8875c636e45b3db69dea5241e526d6d6738d91070d",
+    "prior-focus-functional-report.json": "b7e900caa243e87f65496d9ca61b1517e86ac324673f1e0167d7018daa6e6b60",
+    "prior-tab-escape.json": "10a3507211acfd21629cb2af5cdf2a455f69b8face6da11df904c220674b2334"
+  },
+  "source_sha256": {
+    "app/admin/src/canvas/controls.ts": "9aaf1bb7bc938cdbf6617a9281cd9ae7edc0b590bf5a33e77ae98927339e92cc",
+    "app/admin/src/canvas/board.ts": "4298bcf879b12f03bbcd93e388aba4cf96e458805521930a2103fd82be38c449",
+    "app/admin/src/canvas/unite.ts": "5cc37926ea9515646b13ac35b189931ae41a437ae1abcca4866eb20b298e20c6",
+    "app/admin/src/presentation/presentation.ts": "9a470462ec30402d4fe652fe5b002efc4f0808d052c6b42c3cd7eabd21b906b6",
+    "app/admin/src/styles/presentation.css": "a92e46ff1dec1a4152ccb831f48af58864c6f8cc9e3661737f3a5dcdf5713784",
+    "app/admin/src/canvas/commands.ts": "108a19c8676590c4bcab32f1e15aedae5eee29aceabbb0796d634836edaf4fd9"
+  }
+}

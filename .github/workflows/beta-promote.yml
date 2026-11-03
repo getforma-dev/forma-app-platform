@@ -1,0 +1,258 @@
+name: Promote to beta
+on:
+  push:
+    branches: [main]
+# Intentionally no PR, workflow_run or dispatch trigger. A required reviewer
+# approves the actual prepared packet; no AWS identity exists in the build job.
+permissions:
+  contents: read
+concurrency:
+  group: beta-promotion
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+jobs:
+  candidate:
+    if: github.repository == 'getforma-dev/forma-app-platform' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && vars.PROMOTION_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      runtime_changed: ${{ steps.select.outputs.runtime_changed }}
+      input_artifact: ${{ steps.inputs.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select exact merged runtime candidate
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m ops.promotion.candidate select --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/inputs/candidate.json"
+      - name: Wait for every required exact push workflow (not this workflow)
+        if: steps.select.outputs.runtime_changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m ops.promotion.candidate wait-ci --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/inputs/ci.json"
+      - name: Retain source-only candidate and CI binding
+        if: steps.select.outputs.runtime_changed == 'true'
+        id: inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: beta-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/inputs/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Documentation-only outcome
+        if: steps.select.outputs.runtime_changed != 'true'
+        run: echo 'Documentation-only merge; no image build, approval or AWS action.' >> "$GITHUB_STEP_SUMMARY"
+
+  qualify:
+    needs: candidate
+    if: needs.candidate.outputs.runtime_changed == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      artifact_digest: ${{ steps.artifact.outputs.artifact-digest }}
+      manifest_digest: ${{ steps.build.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.input_artifact }}
+          path: ${{ runner.temp }}/inputs
+          merge-multiple: true
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11.14'
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          version: v0.38.1
+          driver: docker-container
+          buildkitd-flags: ''
+      - name: Install locked local image qualifiers
+        run: |
+          python3 -m venv app/runtime/.venv
+          app/runtime/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r app/runtime/requirements.lock -r contracts/requirements.lock
+          python3 -m venv app/operator/.venv
+          app/operator/.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r app/operator/requirements.lock
+          python3 -m unittest discover -s ops/promotion -p 'test_*.py' -v
+      - name: Build and qualify exact ARM64 OCI bytes once, without cloud credentials
+        id: build
+        run: python3 -m ops.promotion.build --candidate "$GITHUB_SHA" --input-dir "$RUNNER_TEMP/inputs" --output "$RUNNER_TEMP/qualified" --logs "$RUNNER_TEMP/build-logs"
+      - name: Publish only the source and synthetic qualification bundle
+        id: artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: beta-qualified-${{ github.sha }}
+          path: ${{ runner.temp }}/qualified/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain source-only failure diagnostics from the unprivileged build
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: beta-build-failure-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/build-logs/build-service.log
+            ${{ runner.temp }}/build-logs/build-qualification.log
+            ${{ runner.temp }}/build-logs/build-operator.log
+            ${{ runner.temp }}/build-logs/qualify-0.log
+            ${{ runner.temp }}/build-logs/qualify-1.log
+            ${{ runner.temp }}/build-logs/qualify-2.log
+            ${{ runner.temp }}/build-logs/qualify-3.log
+          retention-days: 3
+          if-no-files-found: ignore
+
+  prepare:
+    needs: [candidate, qualify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: beta-plan
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      promotion_id: ${{ steps.summary.outputs.promotion_id }}
+      packet_sha256: ${{ steps.summary.outputs.packet_sha256 }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MANIFEST_DIGEST: ${{ needs.qualify.outputs.manifest_digest }}
+      PROMOTION_STATE_BUCKET: ${{ vars.PROMOTION_STATE_BUCKET }}
+      PROMOTION_STATE_PREFIX: ${{ vars.PROMOTION_STATE_PREFIX }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify same-run artifact ID, ZIP digest and every qualified OCI byte
+        env:
+          ARTIFACT_ID: ${{ needs.qualify.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.qualify.outputs.artifact_digest }}
+        run: python3 -m ops.promotion.github download --candidate "$GITHUB_SHA" --artifact-id "$ARTIFACT_ID" --artifact-digest "$ARTIFACT_DIGEST" --manifest-digest "$MANIFEST_DIGEST" --output "$RUNNER_TEMP/qualified"
+      - name: Install locked AWS client
+        run: |
+          python3 -m venv .cache/promotion-venv
+          .cache/promotion-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r app/runtime/requirements.lock
+      - name: Recheck current trunk and exact CI immediately before preparation
+        run: python3 -m ops.promotion.candidate wait-ci --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/current-ci.json"
+      - name: Verify immutable OIDC subject and trusted workflow claims without logging the token
+        run: python3 -m ops.promotion.github oidc --candidate "$GITHUB_SHA" --environment beta-plan
+      - uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+        with:
+          role-to-assume: ${{ vars.PROMOTION_PREPARE_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: beta-plan-${{ github.run_id }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+      - name: Prepare private immutable packet and reviewed change set; never execute
+        run: |
+          umask 077
+          python3 -m ops.promotion.github request --candidate "$GITHUB_SHA" --manifest-digest "$MANIFEST_DIGEST" --output "$RUNNER_TEMP/private/request.json"
+          .cache/promotion-venv/bin/python -m ops.promotion prepare --request "$RUNNER_TEMP/private/request.json" --artifact-dir "$RUNNER_TEMP/qualified" --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" --output "$RUNNER_TEMP/private/summary.json"
+      - name: Display the exact immutable packet for the one human approval
+        id: summary
+        run: python3 -m ops.promotion.github summary --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/private/summary.json"
+      # No upload-artifact step here: canonical state, approvals, provider
+      # configuration and AWS receipts are private S3 objects only.
+
+  execute:
+    name: Promote to beta
+    needs: [qualify, prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: beta
+      url: https://beta.getforma.dev
+    outputs:
+      tag: ${{ steps.summary.outputs.tag }}
+      packet_sha256: ${{ steps.summary.outputs.packet_sha256 }}
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MANIFEST_DIGEST: ${{ needs.qualify.outputs.manifest_digest }}
+      PROMOTION_ID: ${{ needs.prepare.outputs.promotion_id }}
+      PACKET_SHA256: ${{ needs.prepare.outputs.packet_sha256 }}
+      PROMOTION_STATE_BUCKET: ${{ vars.PROMOTION_STATE_BUCKET }}
+      PROMOTION_STATE_PREFIX: ${{ vars.PROMOTION_STATE_PREFIX }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Reverify exact qualified artifact; no rebuild and no latest tag
+        env:
+          ARTIFACT_ID: ${{ needs.qualify.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.qualify.outputs.artifact_digest }}
+        run: python3 -m ops.promotion.github download --candidate "$GITHUB_SHA" --artifact-id "$ARTIFACT_ID" --artifact-digest "$ARTIFACT_DIGEST" --manifest-digest "$MANIFEST_DIGEST" --output "$RUNNER_TEMP/qualified"
+      - name: Record actual protected-environment reviewer and exact-run proof privately
+        run: python3 -m ops.promotion.github approval --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/private/approval.json"
+      - name: Install locked AWS client
+        run: |
+          python3 -m venv .cache/promotion-venv
+          .cache/promotion-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r app/runtime/requirements.lock
+      - name: Recheck current trunk and exact CI after approval and before execution
+        run: python3 -m ops.promotion.candidate wait-ci --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/current-ci.json"
+      - name: Verify immutable OIDC subject and trusted workflow claims without logging the token
+        run: python3 -m ops.promotion.github oidc --candidate "$GITHUB_SHA" --environment beta
+      - uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+        with:
+          role-to-assume: ${{ vars.PROMOTION_EXECUTE_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: beta-execute-${{ github.run_id }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+      - name: Execute only the approved packet, verify health and seal private release receipt
+        run: |
+          umask 077
+          python3 -m ops.promotion.github request --candidate "$GITHUB_SHA" --manifest-digest "$MANIFEST_DIGEST" --promotion-id "$PROMOTION_ID" --packet-sha256 "$PACKET_SHA256" --output "$RUNNER_TEMP/private/request.json"
+          .cache/promotion-venv/bin/python -m ops.promotion execute --request "$RUNNER_TEMP/private/request.json" --artifact-dir "$RUNNER_TEMP/qualified" --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" --approval "$RUNNER_TEMP/private/approval.json" --output "$RUNNER_TEMP/private/summary.json"
+      - name: Publish sanitized result only
+        id: summary
+        run: python3 -m ops.promotion.github summary --candidate "$GITHUB_SHA" --output "$RUNNER_TEMP/private/summary.json"
+      # No automatic unlock/rollback on failure or cancellation: uncertain
+      # mutations retain the non-expiring private lease for reconciliation.
+
+  seal:
+    name: Seal verified beta tag (no AWS access)
+    needs: execute
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Create or verify only the annotated tag for the healthy release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.execute.outputs.tag }}
+          PACKET_SHA256: ${{ needs.execute.outputs.packet_sha256 }}
+        run: python3 -m ops.promotion.github seal --candidate "$GITHUB_SHA" --tag "$RELEASE_TAG" --packet-sha256 "$PACKET_SHA256"
+      # A failure here does not undo a verified deployment. Retry this job
+      # alone; the private sealed release receipt remains authoritative.

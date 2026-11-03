@@ -59,8 +59,11 @@ import time
 import uuid
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-STACK = 'GenuiSyntheticFoundation'
-ACCOUNT, REGION = '877573132739', 'us-east-1'
+# The beta's account, region and stack, shared with preflight.py (loaded by path, not sys.path).
+_spec = importlib.util.spec_from_file_location('genui_infra_common', Path(__file__).resolve().parent / 'common.py')
+_COMMON = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_COMMON)
+STACK, ACCOUNT, REGION = _COMMON.STACK, _COMMON.ACCOUNT, _COMMON.REGION
 ASSETS_BUCKET = 'cdk-hnb659fds-assets-%s-%s' % (ACCOUNT, REGION)
 MAX_OVERRIDE_BYTES = 8192
 ORGANIZATIONS = ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002')
@@ -176,7 +179,7 @@ def run_task_request(outputs, definition_key, overrides, window_id, step):
 
 def mint_code(args):
     module = admission_operator()
-    require(args.organization in ORGANIZATIONS, 'organization outside the two fixture organizations')
+    require(args.organization in allowed_organizations(args), 'organization outside the explicitly selected trial')
     require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}', args.label) is not None, 'label must be a short lowercase name')
     private_directory(args.out_dir)
     raw = secrets.token_bytes(module.DEFAULTS['code_secret_bytes'])
@@ -196,6 +199,56 @@ IDENTIFIER_FIELDS = ('issuer_origin', 'jwt_iss', 'jwt_aud', 'access_jwks', 'call
 TENANT_FIELDS = ('slug', 'tenant_id', 'client_id', 'genui_org_uuid')
 
 
+def clean_trial(args):
+    path = getattr(args, 'clean_trial', None)
+    if path is None:
+        return None
+    value = read_json(path)
+    require(isinstance(value, dict) and set(value) == {'organization_id', 'tenant_slug', 'provider_tenant_id'}, 'clean trial fields differ')
+    require(isinstance(value['organization_id'], str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}', value['organization_id'])
+            and value['organization_id'] not in ORGANIZATIONS, 'clean trial must use a fresh organization')
+    require(isinstance(value['tenant_slug'], str) and re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', value['tenant_slug'])
+            and value['tenant_slug'] not in ('northstar', 'canary'), 'clean trial must use a fresh provider slug')
+    require(isinstance(value['provider_tenant_id'], str) and re.fullmatch(r'ten_[A-Za-z0-9_-]{1,250}', value['provider_tenant_id']), 'clean trial provider identity is invalid')
+    return value
+
+
+def allowed_organizations(args):
+    trial = clean_trial(args)
+    return (trial['organization_id'],) if trial else ORGANIZATIONS
+
+
+def shared_broker_configuration(args):
+    trial = clean_trial(args)
+    require(trial is not None, 'broker setup requires the explicit clean trial')
+    private_directory(args.out_dir)
+    outputs = stack_outputs(args.outputs)
+    require(outputs.get('CleanTrialOrganization') == trial['organization_id']
+            and outputs.get('CleanTrialProviderTenant') == trial['provider_tenant_id']
+            and outputs.get('CleanTrialProviderSlug') == trial['tenant_slug'], 'stack and clean trial identifiers differ')
+    rt = runtime_module()
+    token = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b'=').decode('ascii')
+    client = {'origin': args.app_origin, 'token': token}
+    require(rt.shared_broker_configuration(json.dumps(client)) is not None, 'broker client configuration refused')
+    server = {'tenant_slug': trial['tenant_slug'], 'provider_tenant_id': trial['provider_tenant_id'],
+              'client_token': token, 'state_secret_arn': outputs['SharedBrokerStateSecretArn'], 'port': 3001}
+    broker = load(REPOSITORY / 'app/operator/shared_invite_broker.py', 'genui_shared_broker_package')
+    broker.broker_configuration(server)
+    paths = [args.out_dir / 'shared-broker-client.json', args.out_dir / 'shared-broker-server.json']
+    require(all(not p.exists() and not p.is_symlink() for p in paths), 'broker files already exist; reuse the prepared pair rather than silently rotating a token')
+    written = []
+    try:
+        for path, value in zip(paths, (client, server)):
+            write_json(path, value, private=True)
+            written.append(path)
+    except BaseException:
+        for path in written:
+            path.unlink()
+        raise
+    return {'private_files': [str(p) for p in paths], 'organization_id': trial['organization_id'],
+            'handling': 'Write each file to its matching stack secret; never print contents. This command performs no AWS or provider call.'}
+
+
 def auth_configuration(args):
     """The AuthConfiguration secret value, composed from the private identifiers file and checked
     with the supervisor's reader before it is written (0600, in an owned 0700 directory)."""
@@ -210,11 +263,21 @@ def auth_configuration(args):
     require(identifiers['callback'] == args.app_origin + '/auth/callback', 'the registered callback is not <app origin>/auth/callback')
     tenants = identifiers['tenants']
     require(isinstance(tenants, list) and tenants, 'identifiers file names no tenant')
+    trial = clean_trial(args)
+    if trial:
+        require(identifiers.get('shared_callback') == args.app_origin + '/auth/shared/callback', 'shared callback registration must be recorded')
+        require(len(tenants) == 1, 'clean trial auth routing must contain only its fresh provider tenant')
     organizations, bindings = [], []
     for tenant in tenants:
         require(isinstance(tenant, dict) and all(k in tenant for k in TENANT_FIELDS), 'tenant entry lacks a required field')
-        require(tenant['genui_org_uuid'] in ORGANIZATIONS, 'tenant names an organization outside the two fixture organizations')
-        organizations.append({'organization_id': tenant['genui_org_uuid'], 'tenant_slug': tenant['slug'], 'client_id': tenant['client_id']})
+        require(tenant['genui_org_uuid'] in allowed_organizations(args), 'tenant names an organization outside the selected trial')
+        if trial:
+            require(tenant['tenant_id'] == trial['provider_tenant_id'] and tenant['slug'] == trial['tenant_slug'], 'provider binding differs from the clean trial')
+            require(isinstance(tenant.get('shared_client_id'), str) and tenant['shared_client_id'] != tenant['client_id'], 'clean trial requires a separate shared OAuth client')
+        route = {'organization_id': tenant['genui_org_uuid'], 'tenant_slug': tenant['slug'], 'client_id': tenant['client_id']}
+        if 'shared_client_id' in tenant:
+            route['shared_client_id'] = tenant['shared_client_id']
+        organizations.append(route)
         bindings.append({'issuer': identifiers['jwt_iss'], 'provider_tenant_id': tenant['tenant_id'], 'organization_id': tenant['genui_org_uuid']})
     document = {'format': rt.AUTH_CONFIGURATION_FORMAT,
                 'auth_config': {'schema_version': 1, 'auth_origin': origin, 'app_origin': args.app_origin, 'issuer': identifiers['jwt_iss'],
@@ -256,7 +319,7 @@ def invitation_input(args):
         label = recipient['label']
         require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}', label) is not None and label not in labels, 'label must be a short lowercase name, named once')
         labels.add(label)
-        require(recipient['organization_id'] in ORGANIZATIONS, 'recipient names an organization outside the two fixture organizations')
+        require(recipient['organization_id'] in allowed_organizations(args), 'recipient names an organization outside the selected trial')
         require(recipient['organization_id'] in tenants, 'the identifiers file binds no tenant to this organization')
         minted = read_json(Path(args.codes_dir) / ('access-code-%s.json' % label))
         require(minted.get('organization_id') == recipient['organization_id'] and isinstance(minted.get('code_digest'), str),
@@ -403,17 +466,27 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('mint-code')
+    p.add_argument('--clean-trial', type=Path)
     p.add_argument('--organization', required=True); p.add_argument('--label', required=True); p.add_argument('--out-dir', type=Path, required=True)
     p = sub.add_parser('auth-configuration')
+    p.add_argument('--clean-trial', type=Path)
     p.add_argument('--identifiers', type=Path, required=True, help="FormaStack's private identifiers JSON (read for its routing fields only)")
     p.add_argument('--output', type=Path, required=True, help='0600 file in an owned 0700 private directory')
     p.add_argument('--app-origin', default=APP_ORIGIN)
     p.add_argument('--max-access-lifetime-seconds', type=int, default=900, help='the verifier cap; the planned fAuth access lifetime is 900 s (APP-006)')
     p = sub.add_parser('invitation-input')
+    p.add_argument('--clean-trial', type=Path)
     p.add_argument('--private-file', type=Path, required=True, help='0600 recipients JSON: {"recipients": [{label, organization_id, email, role}]}')
     p.add_argument('--codes-dir', type=Path, required=True, help="mint-code's private directory (access-code-<label>.json; only the digest is read)")
     p.add_argument('--identifiers', type=Path, required=True, help="FormaStack's private identifiers JSON (jwt_iss and each tenant's tenant_id only)")
     p.add_argument('--output', type=Path, required=True, help='0600 file in an owned 0700 private directory')
+    p = sub.add_parser('shared-broker-configuration')
+    p.add_argument('--clean-trial', type=Path, required=True)
+    p.add_argument('--outputs', type=Path, required=True)
+    p.add_argument('--out-dir', type=Path, required=True)
+    p.add_argument('--app-origin', default=APP_ORIGIN)
+    p = sub.add_parser('clean-trial-check')
+    p.add_argument('--clean-trial', type=Path, required=True)
     for name in ('operator-task', 'qualification-task'):
         p = sub.add_parser(name)
         p.add_argument('--outputs', type=Path, required=True, help='describe-stacks output after the stack update')
@@ -431,7 +504,7 @@ def main(argv=None):
     p = sub.add_parser('review-change-set')
     p.add_argument('--describe', type=Path, required=True); p.add_argument('--receipt', type=Path); p.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
-    handlers = {'mint-code': mint_code, 'auth-configuration': auth_configuration, 'invitation-input': invitation_input, 'operator-task': operator_task,
+    handlers = {'mint-code': mint_code, 'auth-configuration': auth_configuration, 'invitation-input': invitation_input, 'shared-broker-configuration': shared_broker_configuration, 'clean-trial-check': clean_trial, 'operator-task': operator_task,
                 'qualification-task': qualification_task, 'change-set': change_set, 'review-change-set': review_change_set}
     try:
         result = handlers[args.command](args)

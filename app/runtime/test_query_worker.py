@@ -91,7 +91,9 @@ class EngineChild(unittest.TestCase):
         return {"organization_id": organization, "query": query, "deadline_ms": deadline_ms,
                 "cache_root": str(self.cache), "scratch": str(scratch),
                 "source": {"source_id": source, "revision_id": revision, "normalized_digest": digest or self.digest,
-                           "s3_key": f"o/{organization}/s/{source}/r/{revision}/part.parquet"}}
+                           "s3_key": f"o/{organization}/s/{source}/r/{revision}/part.parquet",
+                           # Deviation 6 (ADR-011 library): the input's contract fields travel with the request.
+                           "input_id": "events", "fields": query_engine.FIELDS}}
 
     def child(self, request):
         """The image's invocation: `python3 -I runtime.py query`, empty environment."""
@@ -215,6 +217,18 @@ class EngineChild(unittest.TestCase):
         request = self.request(windowed(self.views["total"]["query"]))
         request["source"]["s3_key"] = f"o/{OTHER}/s/{SOURCE}/r/{REVISION}/part.parquet"
         self.assertEqual(self.child(request)["reason"], "request_refused")
+        # The field list is closed too: a field outside the contract's column types, an extra member or
+        # a non-local id refuses before any engine admission (deviation 6).
+        for fields in [[{"id": "time", "value_type": {"type": "reference", "target_input": "x"}, "nullable": False}],
+                       [{"id": "time", "value_type": {"type": "timestamp"}, "nullable": False, "sql": "x"}],
+                       [{"id": "Time", "value_type": {"type": "timestamp"}, "nullable": False}], [], "fields"]:
+            request = self.request(windowed(self.views["total"]["query"]))
+            request["source"]["fields"] = fields
+            self.assertEqual(self.child(request)["reason"], "request_refused", fields)
+        # A window needs a `time` timestamp field; the Rust parent refuses it first, the child again.
+        request = self.request(windowed(self.views["total"]["query"]))
+        request["source"]["fields"] = [{"id": "destination", "value_type": {"type": "text"}, "nullable": False}]
+        self.assertEqual(self.child(request)["reason"], "window_refused")
 
     def test_per_request_child_latency(self):
         # Recorded in evidence/APP-012 from the Rust measurement; this keeps a local bound visible.

@@ -328,6 +328,24 @@ def _serve(argv=None):
             reply = {"ok": True}
         elif op == "status":
             reply = {"status": fake.status_of(command["id"])}
+        elif op == "set_status":
+            # The in-process stand-in's set_status, for upstream drift the
+            # management API did not perform (reconcile's remote revocation).
+            fake.set_status(command["id"], command["status"])
+            reply = {"status": fake.status_of(command["id"])}
+        elif op == "shift":
+            # Move one invitation's clock with the ledger row being aged, so
+            # reconcile's attribution window still contains it. Email or id
+            # is required; nothing else moves.
+            seconds = float(command.get("seconds") or 0)
+            email = command.get("email")
+            invite_id = command.get("id")
+            if email is None and invite_id is None:
+                reply = {"error": "shift_target_required"}
+            else:
+                reply = {"ids": fake.shift(
+                    lambda invite: (email is None or invite["email"] == email)
+                    and (invite_id is None or invite["id"] == invite_id), seconds)}
         elif op == "count":
             reply = {"count": fake.count(command["method"], command["path"])}
         else:

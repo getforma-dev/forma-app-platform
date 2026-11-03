@@ -8,15 +8,17 @@ import * as kms from 'aws-cdk-lib/aws-kms';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import { readFileSync } from 'node:fs';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
+import { CLEAN_TRIAL_CONTEXT, cleanTrialConfiguration, SharedBroker, SHARED_BROKER_JSON_ENV } from './shared-broker.js';
 
 // The temporary ingress trial is one real operator address; public mode uses /0.
 // Keep the operator address separately so /0 can never masquerade as that trial.
 const octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
 export const OPERATOR_CIDR_PATTERN = `^(?!(?:0|10|127)\\.)(?!100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.)(?!169\\.254\\.)(?!172\\.(?:1[6-9]|2[0-9]|3[01])\\.)(?!192\\.168\\.)(?!192\\.0\\.[02]\\.)(?!192\\.88\\.99\\.)(?!198\\.(?:18|19)\\.)(?!198\\.51\\.100\\.)(?!203\\.0\\.113\\.)(?!2(?:2[4-9]|[3-5][0-9])\\.)${octet}(?:\\.${octet}){3}/32(?![\\s\\S])`;
-export const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
+const EXPIRY_UTC_PATTERN = '^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z(?![\\s\\S])';
 const IMAGE_DIGEST_BODY = '[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}';
 export const IMAGE_DIGEST_PATTERN = `^${IMAGE_DIGEST_BODY}(?![\\s\\S])`;
 // Empty, or a reviewed digest of the separate APP-075 qualification image.
@@ -36,6 +38,109 @@ export const CAPABILITY_SECRET_ID_ENV = 'GENUI_PROVIDER_CAPABILITY_SECRET_ID';
 // service reads (GENUI_AUTH_CONFIG_FILE, GENUI_IDENTITY_REGISTRY_FILE).
 export const AUTH_CONFIGURATION_ENV = 'GENUI_AUTH_CONFIGURATION_JSON';
 export const AUTH_CONFIGURATION_SECRET_ID_ENV = 'GENUI_AUTH_CONFIGURATION_SECRET_ID';
+// APP-093 (ADR-011 §4): the composer's model key, one more secret injected into the
+// service container only, as the plain environment variable the Rust service reads
+// (composer/model.rs KEY_ENV; runtime.py serve() passes its environment through).
+// Written by the operator (PutSecretValue from a pipe, never argv); the initial `{}`
+// is "no key": the composer answers composer_unavailable and nothing else changes.
+export const COMPOSER_KEY_ENV = 'ANTHROPIC_API_KEY';
+// APP-100 (ADR-011 pitch): the Slack app's bot token and signing secret, from the
+// SlackApp secret's two JSON keys, injected into the service container only as these
+// two variables (slack/mod.rs reads them; runtime.py serve() passes its environment
+// through). Victor writes the values (PutSecretValue from a pipe, never argv). The
+// initial value names both keys empty, which the service treats as "no Slack app":
+// every Slack route answers the uniform 404 and nothing posts. (A bare `{}` would
+// stop the task from starting: ECS refuses a JSON-key secret whose key is absent.)
+export const SLACK_BOT_TOKEN_ENV = 'SLACK_BOT_TOKEN';
+export const SLACK_SIGNING_SECRET_ENV = 'SLACK_SIGNING_SECRET';
+export const SLACK_APP_PLACEHOLDER = '{"bot_token":"","signing_secret":""}';
+// ADR-011 pitch (APP-095): the same-origin path of the organization's event stream
+// the canvas island subscribes to; set on the service task so live updates are on.
+export const CANVAS_EVENTS_URL_ENV = 'GENUI_CANVAS_EVENTS_URL';
+export const CANVAS_EVENTS_URL = '/v1/events';
+// The composer route's deadline (app/src/composer/routes.rs COMPOSE_DEADLINE) plus
+// ten seconds; the ALB must not close an idle connection before the route answers.
+export const COMPOSE_DEADLINE_SECONDS = 120;
+export const ALB_IDLE_TIMEOUT_SECONDS = COMPOSE_DEADLINE_SECONDS + 10;
+// ADR-011 demo mode (APP-098 demo shortcuts register): the organizations whose
+// members' rehearsed intents are answered without a model call (app/src/demo.rs).
+// Victor, 2026-10-30, pitch deploy decision P1: Northstar, the synthetic fixture
+// organization the pitch personas' accounts belong to (docs/pitch/DEPLOY-RUNBOOK.md).
+// Superseded the earlier canary-only choice; a dedicated demo tenant is the proper
+// fix (APP-098 DS-05, APP-097).
+export const DEMO_ORGANIZATIONS_ENV = 'GENUI_DEMO_ORGANIZATIONS';
+// The two synthetic tenants, in key order: Northstar (…0001) and Canary (…0002).
+export const TENANT_IDS = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'] as const;
+export const DEMO_ORGANIZATION_ID = TENANT_IDS[0];
+// app/src/demo.rs requires this switch as well as the organization list
+// (the action path's rehearsed parser); both name the same demo scope.
+export const DEMO_MODE_ENV = 'GENUI_DEMO_MODE';
+// ADR-011 pitch (APP-096, APP-098 DS-44): member display names for the demo
+// personas, read at synth from the private file named by the `displayNamesFile`
+// context value (`{"members":[{"principal_id","display_name"}]}`), passed to
+// the task inline as GENUI_DISPLAY_NAMES_JSON (app/src/directory.rs). Absent
+// context: no variable, every member keeps the neutral label.
+export const DISPLAY_NAMES_JSON_ENV = 'GENUI_DISPLAY_NAMES_JSON';
+export const DISPLAY_NAMES_CONTEXT = 'displayNamesFile';
+// Readable sign-in aliases (2026-10-31): `/signin/northstar` routes as the
+// organization's random handle. Read at synth from the private file named by the
+// `signinAliasesFile` context ({"aliases":[{"name","handle"}]}); passed inline as
+// GENUI_SIGNIN_ALIASES_JSON (app/src/auth/aliases.rs). Absent: no aliases.
+export const SIGNIN_ALIASES_JSON_ENV = 'GENUI_SIGNIN_ALIASES_JSON';
+export const SIGNIN_ALIASES_CONTEXT = 'signinAliasesFile';
+const HANDLE = /^[a-z2-7]{26}$/;
+const ALIAS = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+export function signinAliasesEnvironment(path: unknown): Record<string, string> {
+  if (path === undefined) return {};
+  if (typeof path !== 'string' || path === '') throw new Error('signinAliasesFile must name a file');
+  const aliases = JSON.parse(readFileSync(path, 'utf8'))?.aliases;
+  if (!Array.isArray(aliases) || aliases.length > 20) throw new Error('signinAliasesFile: aliases must be a list of at most 20');
+  const seen = new Set<string>();
+  const clean = aliases.map((alias: any) => {
+    const keys = Object.keys(alias ?? {}).sort().join(',');
+    if (keys !== 'handle,name' || typeof alias.name !== 'string' || typeof alias.handle !== 'string'
+      || !ALIAS.test(alias.name) || alias.name.length < 2 || alias.name.length === 26 || !HANDLE.test(alias.handle) || seen.has(alias.name)) {
+      throw new Error('signinAliasesFile: each alias is exactly {name, handle} with a unique readable name');
+    }
+    seen.add(alias.name);
+    return { name: alias.name, handle: alias.handle };
+  });
+  return { [SIGNIN_ALIASES_JSON_ENV]: JSON.stringify({ aliases: clean }) };
+}
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// app/src/directory.rs MAX_NAME_CHARACTERS and usable_name: 1..=80 characters (Unicode scalar
+// values, not UTF-16 units), not blank, no control character (Rust char::is_control is Cc: C0,
+// DEL and C1). Stricter here, at synth: no format characters (Cf: bidi overrides and isolates,
+// zero-width joiners, BOM) and no line or paragraph separators, so a name cannot reorder or hide
+// text around it on the members list or the approver chip.
+export const MAX_DISPLAY_NAME_CHARACTERS = 80;
+export function usableDisplayName(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const count = [...value].length;
+  return count >= 1 && count <= MAX_DISPLAY_NAME_CHARACTERS && value.trim() !== ''
+    && !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value);
+}
+export function displayNamesEnvironment(path: unknown): Record<string, string> {
+  if (path === undefined) return {};
+  if (typeof path !== 'string' || path === '') throw new Error('displayNamesFile must name a file');
+  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  const members = parsed?.members;
+  if (!Array.isArray(members) || members.length > 50) throw new Error('displayNamesFile: members must be a list of at most 50');
+  const seen = new Set<string>();
+  const clean = members.map((member: any) => {
+    const keys = Object.keys(member ?? {}).sort().join(',');
+    if (keys !== 'display_name,principal_id' || typeof member.principal_id !== 'string' || !UUID.test(member.principal_id)
+      || !usableDisplayName(member.display_name)) {
+      throw new Error('displayNamesFile: each member is exactly {principal_id, display_name} with a usable name');
+    }
+    // The service keys names by principal: a repeat would silently keep only one of them.
+    if (seen.has(member.principal_id)) throw new Error('displayNamesFile: each principal_id appears once');
+    seen.add(member.principal_id);
+    // The service trims the name it shows; the deployed value is that trimmed name.
+    return { principal_id: member.principal_id, display_name: member.display_name.trim() };
+  });
+  return { [DISPLAY_NAMES_JSON_ENV]: JSON.stringify({ members: clean }) };
+}
 // ADR-003 amendment 2026-10-30 (managed invitations; APP-076 G2), as revised the same
 // day after FormaStack's answers: two inputs reach the managed operator task only.
 // FormaStack's existing tenant-scoped fAuth management secret (for Northstar
@@ -63,6 +168,10 @@ export const PROVIDER_MANAGEMENT_URL_PATTERN = '^(?:|https://[a-z0-9](?:[a-z0-9.
 export class GenuiFoundation extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
+    const cleanTrial = cleanTrialConfiguration(this.node.tryGetContext(CLEAN_TRIAL_CONTEXT));
+    if (cleanTrial && this.node.tryGetContext(DISPLAY_NAMES_CONTEXT) !== undefined) {
+      throw new Error('A clean trial does not accept sandbox persona display names');
+    }
     Tags.of(this).add('Application', 'forma-app-platform');
     Tags.of(this).add('Environment', 'synthetic');
     const operator = new CfnParameter(this, 'Operator', { type: 'String', minLength: 1, description: 'Named operator before provisioning' });
@@ -112,8 +221,8 @@ export class GenuiFoundation extends Stack {
       autoMinorVersionUpgrade: false, deletionProtection: true, removalPolicy: RemovalPolicy.RETAIN,
       parameters: { 'rds.force_ssl': '1' },
     });
-    const tenantIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
-    const keys = ['northstar', 'canary'].map(name => new kms.Key(this, `${name}Key`, {
+    const tenantIds = [...TENANT_IDS, ...(cleanTrial ? [cleanTrial.organization_id] : [])];
+    const keys = ['northstar', 'canary', ...(cleanTrial ? ['cleanTrial'] : [])].map(name => new kms.Key(this, `${name}Key`, {
       description: `GenUI synthetic ${name} organization`, enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
     }));
     const bucket = new s3.Bucket(this, 'Evidence', {
@@ -199,6 +308,31 @@ export class GenuiFoundation extends Stack {
       description: 'GenUI hosted sign-in configuration and identity registry: written by the operator, injected into the service task only (APP-078 B1)',
       encryptionKey: authConfigurationKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
     });
+    // APP-093 (ADR-011 §4): the composer's model key. The operator writes it with
+    // PutSecretValue (the value piped from its private file, never argv or a log);
+    // ECS injects it into the service container only, under COMPOSER_KEY_ENV; the
+    // service reads that variable alone and treats the initial `{}` as no key. Its
+    // own retained KMS key, like the two secrets above; a new value reaches the
+    // service at its next task start (force a new deployment after a write).
+    const composerModelKey = new kms.Key(this, 'ComposerModelKey', {
+      description: 'GenUI composer model key (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const composerModel = new secretsmanager.Secret(this, 'ComposerModel', {
+      description: 'GenUI composer model key: written by the operator, injected into the service task only (APP-093, ADR-011)',
+      encryptionKey: composerModelKey, secretStringValue: SecretValue.unsafePlainText('{}'), removalPolicy: RemovalPolicy.RETAIN,
+    });
+    // APP-100 (ADR-011 pitch): the Slack app's bot token and signing secret, written
+    // by Victor (PutSecretValue from a pipe, never argv); ECS injects the two JSON keys
+    // into the service container only, as SLACK_BOT_TOKEN_ENV and SLACK_SIGNING_SECRET_ENV.
+    // Its own retained KMS key, like the composer key; a new value reaches the service
+    // at its next task start (force a new deployment after a write).
+    const slackAppKey = new kms.Key(this, 'SlackAppKey', {
+      description: 'GenUI Slack app credentials (environment)', enableKeyRotation: true, removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const slackApp = new secretsmanager.Secret(this, 'SlackApp', {
+      description: 'GenUI Slack app bot token and signing secret: written by the operator, injected into the service task only (APP-100, ADR-011)',
+      encryptionKey: slackAppKey, secretStringValue: SecretValue.unsafePlainText(SLACK_APP_PLACEHOLDER), removalPolicy: RemovalPolicy.RETAIN,
+    });
     const task = new ecs.FargateTaskDefinition(this, 'Task', { cpu: 2048, memoryLimitMiB: 8192, taskRole, executionRole, runtimePlatform });
     task.addVolume({ name: 'runtime-config' });
     const log = new logs.LogGroup(this, 'Logs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy: RemovalPolicy.RETAIN });
@@ -210,6 +344,14 @@ export class GenuiFoundation extends Stack {
       // ADR-007 D7.14 (APP-074): only the ALB's subnets are trusted proxies, so the
       // rightmost X-Forwarded-For hop is believed from them alone.
       GENUI_TRUSTED_PROXY_CIDRS: vpc.publicSubnets.map(subnet => subnet.ipv4CidrBlock).join(','),
+      // ADR-011 pitch (APP-095, APP-096): the canvas island subscribes to the
+      // organization's live stream at this same-origin route (main.rs accepts
+      // only a `/v1/` path). Live updates are on in every deployment.
+      [CANVAS_EVENTS_URL_ENV]: CANVAS_EVENTS_URL,
+      [DEMO_ORGANIZATIONS_ENV]: cleanTrial ? '' : DEMO_ORGANIZATION_ID,
+      [DEMO_MODE_ENV]: cleanTrial ? '0' : '1',
+      ...displayNamesEnvironment(this.node.tryGetContext(DISPLAY_NAMES_CONTEXT)),
+      ...signinAliasesEnvironment(this.node.tryGetContext(SIGNIN_ALIASES_CONTEXT)),
     };
     const container = task.addContainer('workspace', {
       image: ecs.ContainerImage.fromRegistry(image.valueAsString), readonlyRootFilesystem: true,
@@ -222,6 +364,9 @@ export class GenuiFoundation extends Stack {
       secrets: {
         [CAPABILITY_SECRET_ENV]: ecs.Secret.fromSecretsManager(capabilitySecret),
         [AUTH_CONFIGURATION_ENV]: ecs.Secret.fromSecretsManager(authConfiguration),
+        [COMPOSER_KEY_ENV]: ecs.Secret.fromSecretsManager(composerModel),
+        [SLACK_BOT_TOKEN_ENV]: ecs.Secret.fromSecretsManager(slackApp, 'bot_token'),
+        [SLACK_SIGNING_SECRET_ENV]: ecs.Secret.fromSecretsManager(slackApp, 'signing_secret'),
       },
       healthCheck: { command: ['CMD', 'python3', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health/live', timeout=2).read()"], interval: Duration.seconds(30), timeout: Duration.seconds(5), retries: 3, startPeriod: Duration.seconds(60) },
     });
@@ -253,7 +398,11 @@ export class GenuiFoundation extends Stack {
     albSecurity.addIngressRule(ec2.Peer.ipv4(Fn.conditionIf(publicIngress.logicalId, '0.0.0.0/0', operatorCidr.valueAsString).toString()), ec2.Port.tcp(443), 'Public beta HTTPS or the temporary operator-only trial');
     albSecurity.addEgressRule(taskSecurity, ec2.Port.tcp(3000), 'Application and readiness probes');
     taskSecurity.addIngressRule(albSecurity, ec2.Port.tcp(3000), 'Only the ALB reaches the application');
-    const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroup: albSecurity, dropInvalidHeaderFields: true });
+    // ADR-011 pitch (APP-093 debt 4, APP-096): `POST /v1/compose` waits on the
+    // model for up to 120 s (composer/routes.rs COMPOSE_DEADLINE) and the event
+    // stream (`GET /v1/events`) idles between 15 s heartbeats, so the ALB's idle
+    // timeout must outlast the composer route; 130 s leaves 10 s for the answer.
+    const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', { vpc, internetFacing: true, vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, securityGroup: albSecurity, dropInvalidHeaderFields: true, idleTimeout: Duration.seconds(ALB_IDLE_TIMEOUT_SECONDS) });
     // APP-074 review m3: app/src/http/proxy.rs believes only the rightmost hop of the
     // last X-Forwarded-For line from these subnets, which holds only while the ALB
     // appends the client address (never `preserve`) without a client port.
@@ -381,7 +530,9 @@ export class GenuiFoundation extends Stack {
     // these two actions on this one secret, and its key only through Secrets Manager.
     // APP-078 B1: the same two actions on the auth configuration secret, so the
     // operator channel can read and rewrite it; the operator's own credentials do
-    // the window's PutSecretValue from the composed private file.
+    // the window's PutSecretValue from the composed private file. APP-113: no operator
+    // command reads or writes the composer model key or the Slack app secret (Victor
+    // writes both with his own credentials), so the operator task holds neither.
     operatorRole.addToPolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue', 'secretsmanager:PutSecretValue'], resources: [capabilitySecret.secretArn, authConfiguration.secretArn] }));
     operatorRole.addToPolicy(new iam.PolicyStatement({
       actions: ['kms:Decrypt', 'kms:GenerateDataKey'], resources: [capabilityKey.keyArn, authConfigurationKey.keyArn],
@@ -410,6 +561,24 @@ export class GenuiFoundation extends Stack {
     const managementAttached = new CfnCondition(this, 'ProviderManagementAttached', {
       expression: Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')),
     });
+    if (cleanTrial) {
+      const trialOrganization = new CfnParameter(this, 'CleanTrialOrganizationId', { type: 'String',
+        allowedValues: [cleanTrial.organization_id], description: 'Fresh trial organization pinned by the reviewed identifiers and budget reservation.' });
+      new CfnRule(this, 'CleanTrialBrokerInputs', { assertions: [{
+        assert: Fn.conditionAnd(Fn.conditionNot(Fn.conditionEquals(managementSecretArn.valueAsString, '')),
+          Fn.conditionNot(Fn.conditionEquals(operatorImage.valueAsString, ''))),
+        assertDescription: 'A clean trial requires its provider management binding and the reviewed operator image for isolated signup.',
+      }] });
+      const broker = new SharedBroker(this, 'SharedBroker', { vpc, cluster, listener, albSecurity, log, runtimePlatform,
+        operatorImage: operatorImage.valueAsString, repositoryArn: repositoryOf(operatorImage.valueAsString),
+        managementSecretArn: managementSecretArn.valueAsString, managementUrl: managementUrl.valueAsString,
+        expiry: Fn.join('', ['at(', Fn.select(0, Fn.split('Z', expiresAt.valueAsString)), ')']), expiryGroup });
+      container.addSecret(SHARED_BROKER_JSON_ENV, ecs.Secret.fromSecretsManager(broker.clientConfiguration));
+      new CfnOutput(this, 'CleanTrialOrganization', { value: cleanTrial.organization_id });
+      new CfnOutput(this, 'CleanTrialProviderTenant', { value: cleanTrial.provider_tenant_id });
+      new CfnOutput(this, 'CleanTrialProviderSlug', { value: cleanTrial.tenant_slug });
+      void trialOrganization;
+    }
     new CfnRule(this, 'ProviderManagementComplete', {
       assertions: [{
         assert: Fn.conditionOr(
@@ -481,6 +650,9 @@ export class GenuiFoundation extends Stack {
     new CfnOutput(this, 'ProviderCapabilitySecretArn', { value: capabilitySecret.secretArn });
     // The secret the window's PutSecretValue targets (an identifier, not a value).
     new CfnOutput(this, 'AuthConfigurationSecretArn', { value: authConfiguration.secretArn });
+    // APP-093: the secret the operator's PutSecretValue of the composer model key targets (an identifier, not a value).
+    new CfnOutput(this, 'ComposerModelSecretArn', { value: composerModel.secretArn });
+    new CfnOutput(this, 'SlackAppSecretArn', { value: slackApp.secretArn });
     // The operator host's invitation-input target (an identifier, not a value; APP-078 runbook 15.3).
     new CfnOutput(this, 'OperatorInvitationInputSecretArn', { value: invitationInput.secretArn });
     // APP-076 G11: the deny-all rollback revision on the same image (`PREVIOUS_TD`).

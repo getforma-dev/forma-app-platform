@@ -1,0 +1,29 @@
+{
+  "base": "f732d0b0c934b72508bb6dbc47220d752685c165",
+  "source_sha256": {
+    "app/src/auth/mod.rs": "88b5b092adaa9c52accdf9d9d24c73f051fb528ebc63eefdeb5ed8afbe8dbc3c",
+    "app/src/auth/shared.rs": "938385b9d98f8ed89bb68d5f66a5e7da0a09d975e9e29957fa0674989a79f91a",
+    "app/src/auth/shared_tests.rs": "cd628c2395d97e66f852cd72e60f707dd61103ae96730ee10e580e9c55bf4819",
+    "app/src/dev/mod.rs": "353d4895b6545d1caea8be541866cf462a9daa74cb4764e47e47ae53f021d3b5",
+    "app/src/main.rs": "90293e9186a5fc932435ba3703791c93914922aa489a50bf8f7f532dfbcc2de0",
+    "app/src/sharing/live.rs": "a834bc30042b214283939519cc3c1b9fefd7d5ee35c84fed733e22e527d0a8f9",
+    "evidence/APP-154/shared-auth-entry-2026-11-01/browser.mjs": "0ab441d3d7e10e7c9640ff389b8f617ccfca3c478352f22db7b5a0d24a2b4783"
+  },
+  "admin_manifest_sha256": "822286b0716b3f675a88510f18510a192c53d6dd7ad8e83f0456995777e5d37b",
+  "checks": {
+    "strict_admin_build": "passed",
+    "fmt": "passed",
+    "clippy": "passed",
+    "clippy_dev": "passed",
+    "rust_library": 364,
+    "native_binary": 8,
+    "doctests": 3,
+    "http_smoke": "passed",
+    "rust_1_85_msrv": "passed",
+    "native_policy_browser_cases": 5,
+    "postgres_identity_campaign_checks": 8,
+    "board": "passed",
+    "diff": "passed"
+  },
+  "hosted_signup_or_deployment": false
+}

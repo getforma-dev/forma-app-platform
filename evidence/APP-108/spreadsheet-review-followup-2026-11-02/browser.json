@@ -1,0 +1,24 @@
+{
+  "scope": "Owned loopback stand; synthetic member, actual upload/storage/read routes and mouse gestures. Response delays retain real server responses. No model/provider/hosted claim.",
+  "started_at": "2026-11-02T13:32:57.800Z",
+  "completed_at": "2026-11-02T13:33:29.872Z",
+  "checks": [
+    "Mixed CSV/text upload makes no completed companion claim while its actual response is held; completion reports the stored file after release.",
+    "Over-20-MiB companion is rejected locally; the mixed notice reports 0 of 1 stored and keeps the CSV file without a false folder success.",
+    "A completed real mouse drop copies exactly one immutable file; success claims only the copy, never automatic Ask/app context inclusion.",
+    "Double-clicking the successfully copied file opens its original cells after drag; drag itself never opens a viewer.",
+    "A real drag cancelled through the browser blur handler after a recent folder click performs no copy; the old pointer release is not reused.",
+    "Removing the icon while the actual source-content response is held prevents the copy upload and reports removal honestly.",
+    "Removing the icon after a real server copy but before response delivery preserves exactly one copied file and reports the removed icon.",
+    "A second real drop during the first content read is refused visibly; the original copy completes once with no duplicate upload."
+  ],
+  "errors": [],
+  "passed": true,
+  "raw_report_sha256": "1f718439ff71f633469724860c3ec034b6b61d678ff1628c074a1b3d2c6bff0d",
+  "limitations": [
+    "Synthetic local member, not hosted provider authentication.",
+    "Cancellation uses a real mouse drag and an explicit browser blur-handler signal.",
+    "No model/Ask/app generation or source registration calls in this browser campaign.",
+    "Interrupted/failed harness attempts retained privately; final response delays occur inside Chrome, preserving original browser request metadata."
+  ]
+}

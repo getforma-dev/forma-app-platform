@@ -1,0 +1,24 @@
+# The root Cargo workspace (ADR-013 D13.3): the product (`app`, package
+# forma-app-platform) and the one spike it depends on in release builds
+# (`spikes/APP-006`, genui-auth-verifier). One lockfile, one target/ per
+# checkout, one place for profiles (Cargo honors [profile.*] only here).
+#
+# Excluded: `parser` keeps its own workspace, lockfile, toolchain file,
+# vendored `zip` patch and release profile (ADR-009 D9.1); the frozen Rust
+# spikes are evidence, built only by their own CI workflows.
+[workspace]
+resolver = "3"
+members = ["app", "spikes/APP-006"]
+exclude = ["parser", "spikes/APP-001/minimal", "spikes/APP-003", "spikes/APP-004"]
+
+# ADR-012 D12.4 (moved here from app/Cargo.toml by ADR-013 D13.3): dev builds
+# keep line tables (backtraces keep line numbers) and pack debug info, instead
+# of macOS's default of leaving it in every codegen unit's object file across
+# build hashes (inventory §B.7). Dependencies carry no debug info. Release
+# profiles and images are unaffected.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "packed"
+
+[profile.dev.package."*"]
+debug = false

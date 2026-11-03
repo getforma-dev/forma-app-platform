@@ -10,3 +10,4 @@ Policy, exact-content publication, pinned work and maintenance.
 | 42 | [APP-039: Reviewer inbox over admitted bytes](../0-backlog/APP-039.md) | [PH03](../phases/PH03.md) | S07 | GOV | P1 | L | Backlog | APP-035, APP-037, APP-038 |
 | 43 | [APP-040: Implement explicit work-version adoption and rollback](../0-backlog/APP-040.md) | [PH03](../phases/PH03.md) | S07 | GOV | P0 | L | Backlog | APP-031, APP-037, APP-038 |
 | 44 | [APP-041: Ownership, app placement, retirement and missing dependencies](../0-backlog/APP-041.md) | [PH03](../phases/PH03.md) | S07 | GOV | P1 | L | Backlog | APP-026, APP-037, APP-038, APP-040 |
+| 115 | [APP-115: Agent access governance: agent identities, scoped tokens, organization policies, and an admin trace console](../0-backlog/APP-115.md) | [PH08](../phases/PH08.md) | S14 | GOV | P1 | XL | Backlog | APP-099, APP-100, APP-113 |

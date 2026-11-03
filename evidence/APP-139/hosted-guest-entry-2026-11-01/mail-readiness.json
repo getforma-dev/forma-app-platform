@@ -1,0 +1,15 @@
+{
+  "scope": "Read-only SES recipient readiness; not product account verification",
+  "observed_at_utc": "2026-11-01T20:57:00.757911+00:00",
+  "recipient_role": "guest",
+  "recipient_ses_verification_status": "Success",
+  "sending_enabled": true,
+  "production_access_enabled": false,
+  "remote_mutations": false,
+  "private_source": {
+    "basename": "ses-recipient-one-off-20261101T205700Z.json",
+    "bytes": 214,
+    "sha256": "d403738d43dc111ff114f10e5b7ee87e85068e7d0ae27868dcc797802ae2895b"
+  },
+  "limits": "SES sandbox recipient readiness only. No provider signup, product email verification, mail delivery or production-access approval is established by this read."
+}

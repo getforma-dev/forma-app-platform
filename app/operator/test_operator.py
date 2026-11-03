@@ -168,7 +168,9 @@ class PackageTests(unittest.TestCase):
                  (["register-source-revision", "--organization", NORTHSTAR, "--record", "x", "--record-json", "{}"], True),
                  (["register-source-revision", "--organization", NORTHSTAR], True),
                  (["reconcile", "--organization", NORTHSTAR], False), (["revoke", "--organization", NORTHSTAR, "--code-id", NORTHSTAR], False),
-                 (["seed-spend-review", "--organization", NORTHSTAR], False), (["list", "--organization", NORTHSTAR], False)]
+                 (["seed-spend-review", "--organization", NORTHSTAR], False), (["seed-library", "--organization", NORTHSTAR], False),
+                 (["grant-library-access", "--organization", NORTHSTAR, "--principal", NORTHSTAR, "--authoring-app", NORTHSTAR], False),
+                 (["list", "--organization", NORTHSTAR], False)]
         for argv, refused in cases:
             with self.subTest(argv=argv):
                 self.assertEqual(op.managed_form_refused(admission_operator.parser().parse_args(argv)), refused)
@@ -388,6 +390,26 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(sorted(name for name in names if name.startswith("app/migrations/")), migrations)
         for source in check_image.dockerfile_sources():
             self.assertTrue(source in names or any(name.startswith(source.rstrip("/") + "/") for name in names), source)
+
+    def test_copied_contract_validator_validates_record_receipts(self):
+        import check_image
+        with tempfile.TemporaryDirectory(prefix="genui-contract-package-") as directory:
+            root = Path(directory)
+            # Stage only the top-level contract files the actual Dockerfile copies.
+            for source in check_image.dockerfile_sources():
+                path = Path(source)
+                if path.parent == Path("contracts") and (REPOSITORY / path).is_file():
+                    shutil.copyfile(REPOSITORY / path, root / path.name)
+            probe = check_image.record_receipts_probe(str(root))
+            result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {
+                "member": "valid", "guest": "valid", "invalid_budget": "refused"})
+            # The old image's omitted helper must fail this same behavioral probe.
+            (root / "record_components_contract.py").unlink()
+            result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ModuleNotFoundError", result.stderr)
 
     def test_object_keys_are_the_adr_009_b1_layout(self):
         source, revision = str(uuid.uuid4()), str(uuid.uuid4())

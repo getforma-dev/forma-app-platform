@@ -28,6 +28,31 @@ pub const COMMAND_BODY_LIMIT: usize = 256 * 1024;
 /// D7.14: every handler.
 pub const HANDLER_DEADLINE: Duration = Duration::from_secs(5);
 
+/// How a bounded body read ended short of bytes.
+#[derive(Debug, Eq, PartialEq)]
+pub enum BodyRefused {
+    /// More than the bound, or the stream failed.
+    TooLarge,
+    /// The bytes did not arrive within the deadline (composer review M1).
+    Stalled,
+}
+
+/// A request body of at most `limit` bytes arriving within `deadline`: a
+/// caller that trickles or stalls holds a route no longer than any other
+/// handler. Routes read it only after the session check, so an anonymous
+/// caller spends nothing.
+pub async fn read_bounded(
+    body: Body,
+    limit: usize,
+    deadline: Duration,
+) -> Result<axum::body::Bytes, BodyRefused> {
+    match tokio::time::timeout(deadline, to_bytes(body, limit)).await {
+        Ok(Ok(bytes)) => Ok(bytes),
+        Ok(Err(_)) => Err(BodyRefused::TooLarge),
+        Err(_) => Err(BodyRefused::Stalled),
+    }
+}
+
 /// `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and
 /// `Referrer-Policy: no-referrer` (a redirect may carry a front-channel
 /// capability such as fAuth's `request_uri`).
@@ -130,6 +155,37 @@ pub fn uniform(router: Router) -> Router {
         .fallback_service(inner)
         .layer(middleware::map_response(without_allow))
 }
+/// `uniform`, plus routes that wait on an external model and so run under
+/// `COMPOSE_DEADLINE` instead of the D7.14 handler deadline (APP-093's
+/// `POST /v1/compose`; ADR-011 §4 relaxes the deadline for that one route).
+/// Those routes keep every other property: a method mismatch on them is the
+/// uniform 404 and no answer carries `Allow` (the `long` router answers the
+/// whole `long_path` as one service, so its method router's `Allow` is
+/// removed by the outer layer like the inner router's).
+#[cfg(test)]
+pub fn uniform_with(router: Router, long_path: &'static str, long: Router) -> Router {
+    uniform_with_many(router, vec![(long_path, long)])
+}
+/// `uniform_with` for several long-deadline paths (ADR-011 scenarios: the
+/// composer's `/v1/compose` and the action path's `/v1/act` both wait on a
+/// model). Each path is one service under `long_deadline`.
+pub fn uniform_with_many(router: Router, long: Vec<(&'static str, Router)>) -> Router {
+    let inner = router
+        .fallback(fallback)
+        .method_not_allowed_fallback(fallback)
+        .layer(middleware::from_fn(deadline));
+    let mut outer = Router::new();
+    for (path, long) in long {
+        let long = long
+            .fallback(fallback)
+            .method_not_allowed_fallback(fallback)
+            .layer(middleware::from_fn(long_deadline));
+        outer = outer.route_service(path, long.into_service::<Body>());
+    }
+    outer
+        .fallback_service(inner)
+        .layer(middleware::map_response(without_allow))
+}
 async fn without_allow(mut response: Response) -> Response {
     response.headers_mut().remove(header::ALLOW);
     response
@@ -159,7 +215,23 @@ where
 
 /// D7.14 handler deadline; a request that outlives it is unavailable.
 pub async fn deadline(request: Request, next: Next) -> Response {
-    tokio::time::timeout(HANDLER_DEADLINE, next.run(request))
+    // APP-108: the folder routes that parse, normalize or call a model run
+    // under the composer's deadline (their paths carry ids, so they cannot
+    // be `uniform_with_many`'s static long paths).
+    let budget = if crate::boxes::routes::long_path(request.uri().path()) {
+        COMPOSE_DEADLINE
+    } else {
+        HANDLER_DEADLINE
+    };
+    tokio::time::timeout(budget, next.run(request))
+        .await
+        .unwrap_or_else(|_| unavailable())
+}
+/// The composer's deadline (APP-093): the whole `POST /v1/compose`, model
+/// calls included.
+pub const COMPOSE_DEADLINE: Duration = crate::composer::COMPOSE_DEADLINE;
+async fn long_deadline(request: Request, next: Next) -> Response {
+    tokio::time::timeout(COMPOSE_DEADLINE, next.run(request))
         .await
         .unwrap_or_else(|_| unavailable())
 }

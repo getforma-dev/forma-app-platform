@@ -1,0 +1,1967 @@
+{
+  "scope": "Actual local synthetic existing Dining dark and Equipment default-light apps. Read-only product journey; no saved commands or design changes.",
+  "started_at": "2026-11-01T23:44:01.732Z",
+  "fixture_sha256": "be0361d13a3485aece0e6dc72ca9bba037f69860554ef6c8669dff5c3e44945d",
+  "manifest_sha256": "59f241cf2fada692c8d1bb00a56e8033b48d8b3b6d8e96cfc9ceb7b96e15d7b5",
+  "checks": [
+    "dining: actual standalone, united header controls/link/origin badge, fanned form and focused form colors meet 4.5:1; the same unsent form node/key survives movement.",
+    "equipment: actual standalone, united header controls/link/origin badge, fanned form and focused form colors meet 4.5:1; the same unsent form node/key survives movement."
+  ],
+  "themes": {
+    "dining": {
+      "standalone": {
+        "mode": "dark",
+        "root_background": [
+          16,
+          23,
+          29
+        ],
+        "root_text": [
+          241,
+          245,
+          249,
+          255
+        ],
+        "samples": [
+          {
+            "selector": "h1",
+            "text": "Dining tracker",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "[data-app-action]",
+            "text": "Log meal",
+            "foreground": [
+              16,
+              42,
+              49,
+              255
+            ],
+            "background": [
+              134,
+              239,
+              172
+            ],
+            "css_background": "rgb(134, 239, 172)",
+            "contrast": 10.701433664325734
+          },
+          {
+            "selector": "[data-app-action]",
+            "text": "About this tracker",
+            "foreground": [
+              16,
+              42,
+              49,
+              255
+            ],
+            "background": [
+              134,
+              239,
+              172
+            ],
+            "css_background": "rgb(134, 239, 172)",
+            "contrast": 10.701433664325734
+          },
+          {
+            "selector": "[data-app-action]",
+            "text": "View meals",
+            "foreground": [
+              16,
+              42,
+              49,
+              255
+            ],
+            "background": [
+              134,
+              239,
+              172
+            ],
+            "css_background": "rgb(134, 239, 172)",
+            "contrast": 10.701433664325734
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          }
+        ]
+      },
+      "united": {
+        "mode": "dark",
+        "root_background": [
+          16,
+          23,
+          29
+        ],
+        "root_text": [
+          241,
+          245,
+          249,
+          255
+        ],
+        "samples": [
+          {
+            "selector": ".cv-unite-head h2",
+            "text": "Dining tracker",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Ask about this app",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgb(25, 35, 44)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Focus",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgb(25, 35, 44)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Edit app",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgb(25, 35, 44)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Share",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgb(25, 35, 44)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Fan out",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgb(25, 35, 44)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-unite-head a",
+            "text": "Open page",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgb(25, 35, 44)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-unite-head .cv-origin",
+            "text": "Adapted to your request",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              30,
+              49,
+              46
+            ],
+            "css_background": "color(srgb 0.118275 0.191843 0.18102)",
+            "contrast": 9.749785314712401
+          },
+          {
+            "selector": ".cv-unite-head .cv-origin",
+            "text": "Dining tracker template",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              30,
+              49,
+              46
+            ],
+            "css_background": "color(srgb 0.118275 0.191843 0.18102)",
+            "contrast": 9.749785314712401
+          },
+          {
+            "selector": ".cv-unite-count",
+            "text": "8 parts",
+            "foreground": [
+              180,
+              194,
+              208,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 9.952567695156903
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          }
+        ]
+      },
+      "fanned": {
+        "mode": "dark",
+        "root_background": [
+          25,
+          35,
+          44
+        ],
+        "root_text": [
+          241,
+          245,
+          249,
+          255
+        ],
+        "samples": [
+          {
+            "selector": ".cv-card-head h3",
+            "text": "Add meal",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "restaurant",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "amount (USD)",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "date",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "notes",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".badge",
+            "text": "form",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "a",
+            "text": "Choose a record on the app page",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": "button[type=\"submit\"]",
+            "text": "Add",
+            "foreground": [
+              16,
+              42,
+              49,
+              255
+            ],
+            "background": [
+              134,
+              239,
+              172
+            ],
+            "css_background": "rgb(134, 239, 172)",
+            "contrast": 10.701433664325734
+          }
+        ]
+      },
+      "focus": {
+        "mode": "dark",
+        "root_background": [
+          25,
+          35,
+          44
+        ],
+        "root_text": [
+          241,
+          245,
+          249,
+          255
+        ],
+        "samples": [
+          {
+            "selector": ".cv-card-head h3",
+            "text": "Add meal",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "restaurant",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "amount (USD)",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "date",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "notes",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".badge",
+            "text": "form",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              16,
+              23,
+              29
+            ],
+            "css_background": "rgb(16, 23, 29)",
+            "contrast": 16.49187042026391
+          },
+          {
+            "selector": "a",
+            "text": "Choose a record on the app page",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": "button[type=\"submit\"]",
+            "text": "Add",
+            "foreground": [
+              16,
+              42,
+              49,
+              255
+            ],
+            "background": [
+              134,
+              239,
+              172
+            ],
+            "css_background": "rgb(134, 239, 172)",
+            "contrast": 10.701433664325734
+          }
+        ]
+      },
+      "record_focus": {
+        "mode": "dark",
+        "root_background": [
+          25,
+          35,
+          44
+        ],
+        "root_text": [
+          241,
+          245,
+          249,
+          255
+        ],
+        "samples": [
+          {
+            "selector": "h2",
+            "text": "Meals",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": ".receipt summary",
+            "text": "Calculation details",
+            "foreground": [
+              134,
+              239,
+              172,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 11.346471643829885
+          },
+          {
+            "selector": "th",
+            "text": "Restaurant",
+            "foreground": [
+              180,
+              194,
+              208,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 8.776297036957798
+          },
+          {
+            "selector": "th",
+            "text": "Amount",
+            "foreground": [
+              180,
+              194,
+              208,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 8.776297036957798
+          },
+          {
+            "selector": "th",
+            "text": "Date",
+            "foreground": [
+              180,
+              194,
+              208,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 8.776297036957798
+          },
+          {
+            "selector": "th",
+            "text": "Notes",
+            "foreground": [
+              180,
+              194,
+              208,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 8.776297036957798
+          },
+          {
+            "selector": "td",
+            "text": "Outside",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "$99.99",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "2026-12-01",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "—",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "Cafe B",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "$25.00",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "2026-11-04",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "—",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "Cafe A",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "$7.50",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "2026-11-03",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "—",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "Cafe A",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "$12.50",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "2026-11-02",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "—",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "Outside",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "$99.99",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "2026-10-31",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          },
+          {
+            "selector": "td",
+            "text": "—",
+            "foreground": [
+              241,
+              245,
+              249,
+              255
+            ],
+            "background": [
+              25,
+              35,
+              44
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 14.542734893798915
+          }
+        ]
+      }
+    },
+    "equipment": {
+      "standalone": {
+        "mode": "default",
+        "root_background": [
+          255,
+          255,
+          255
+        ],
+        "root_text": [
+          22,
+          32,
+          51,
+          255
+        ],
+        "samples": [
+          {
+            "selector": "h1",
+            "text": "Equipment requests",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "[data-app-action]",
+            "text": "Request equipment",
+            "foreground": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "background": [
+              21,
+              94,
+              117
+            ],
+            "css_background": "rgb(21, 94, 117)",
+            "contrast": 7.266842816941486
+          }
+        ]
+      },
+      "united": {
+        "mode": "default",
+        "root_background": [
+          255,
+          255,
+          255
+        ],
+        "root_text": [
+          22,
+          32,
+          51,
+          255
+        ],
+        "samples": [
+          {
+            "selector": ".cv-unite-head h2",
+            "text": "Equipment requests",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Ask about this app",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgb(248, 250, 252)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Focus",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgb(248, 250, 252)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Edit app",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgb(248, 250, 252)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Share",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgb(248, 250, 252)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-unite-head button",
+            "text": "Fan out",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgb(248, 250, 252)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-unite-head a",
+            "text": "Open page",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgb(248, 250, 252)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-unite-head .cv-origin",
+            "text": "Adapted to your request",
+            "foreground": [
+              21,
+              94,
+              117,
+              255
+            ],
+            "background": [
+              227,
+              236,
+              238
+            ],
+            "css_background": "color(srgb 0.889882 0.924235 0.935059)",
+            "contrast": 6.055345603661575
+          },
+          {
+            "selector": ".cv-unite-head .cv-origin",
+            "text": "Equipment requests template",
+            "foreground": [
+              21,
+              94,
+              117,
+              255
+            ],
+            "background": [
+              227,
+              236,
+              238
+            ],
+            "css_background": "color(srgb 0.889882 0.924235 0.935059)",
+            "contrast": 6.055345603661575
+          },
+          {
+            "selector": ".cv-unite-count",
+            "text": "4 parts",
+            "foreground": [
+              73,
+              87,
+              107,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 7.345536827445211
+          }
+        ]
+      },
+      "fanned": {
+        "mode": "default",
+        "root_background": [
+          248,
+          250,
+          252
+        ],
+        "root_text": [
+          22,
+          32,
+          51,
+          255
+        ],
+        "samples": [
+          {
+            "selector": ".cv-card-head h3",
+            "text": "Add request",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "item",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "requester",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "notes",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".badge",
+            "text": "form",
+            "foreground": [
+              21,
+              94,
+              117,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 6.945437128252402
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgb(255, 255, 255)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgb(255, 255, 255)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgb(255, 255, 255)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "a",
+            "text": "Choose a record on the app page",
+            "foreground": [
+              21,
+              94,
+              117,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 6.945437128252402
+          },
+          {
+            "selector": "button[type=\"submit\"]",
+            "text": "Add",
+            "foreground": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "background": [
+              21,
+              94,
+              117
+            ],
+            "css_background": "rgb(21, 94, 117)",
+            "contrast": 7.266842816941486
+          }
+        ]
+      },
+      "focus": {
+        "mode": "default",
+        "root_background": [
+          248,
+          250,
+          252
+        ],
+        "root_text": [
+          22,
+          32,
+          51,
+          255
+        ],
+        "samples": [
+          {
+            "selector": ".cv-card-head h3",
+            "text": "Add request",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "item",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "requester",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".cv-field-label",
+            "text": "notes",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 15.576900991111426
+          },
+          {
+            "selector": ".badge",
+            "text": "form",
+            "foreground": [
+              21,
+              94,
+              117,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 6.945437128252402
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgb(255, 255, 255)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgb(255, 255, 255)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "input[type=\"text\"]",
+            "text": "",
+            "foreground": [
+              22,
+              32,
+              51,
+              255
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "css_background": "rgb(255, 255, 255)",
+            "contrast": 16.297734611550457
+          },
+          {
+            "selector": "a",
+            "text": "Choose a record on the app page",
+            "foreground": [
+              21,
+              94,
+              117,
+              255
+            ],
+            "background": [
+              248,
+              250,
+              252
+            ],
+            "css_background": "rgba(0, 0, 0, 0)",
+            "contrast": 6.945437128252402
+          },
+          {
+            "selector": "button[type=\"submit\"]",
+            "text": "Add",
+            "foreground": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "background": [
+              21,
+              94,
+              117
+            ],
+            "css_background": "rgb(21, 94, 117)",
+            "contrast": 7.266842816941486
+          }
+        ]
+      }
+    }
+  },
+  "errors": [],
+  "writes": [],
+  "authorized_query_posts": 1,
+  "passed": true,
+  "finished_at": "2026-11-01T23:44:17.129Z"
+}

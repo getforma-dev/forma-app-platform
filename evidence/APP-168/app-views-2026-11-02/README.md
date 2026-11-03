@@ -1,0 +1,15 @@
+# APP-168 whole-app view qualification
+
+Implemented on `pivot/app-view-library` in [PR #48](https://github.com/getforma-dev/forma-app-platform/pull/48), superseding #47. This is actual local browser and repository evidence, not an AWS deployment or hosted sign-in rehearsal.
+
+- [Canvas browser](canvas-browser.json): 12 checks with existing synthetic authorized works, actual query completion and pointer/keyboard gestures. App Card/Open/Stack retain one object; Focus, new-tab page, drag/resize, Library categories/manual saved-card refresh, reload and removal pass.
+- [Member browser](member-browser.json): 7 checks on a Dining tracker created through the ordinary template picker with unchanged description. Later attempts reuse its exact journaled saved work. Authorized Edit/Share opens, actual generic modal form node/value/key survives all view changes, personal hiding skips the form in Stack/Focus/member page, unhide restores its draft, and 375×812 layout fits. No record command, design publication or share mutation was sent in the final run. Earlier creation and harness corrections remain in private local attempt journals.
+- [Checks](checks.json): all 21 repository groups passed across the full check and required affected reruns; 164 admin tests, 376 Rust library tests, 8 native SSR tests and 3 doctests. The focused suites exercise migration, queued placement/removal, late live events, initial-restore tombstones, hidden components/guest exclusion, cold component navigation, and saved-card refresh/removal races.
+
+Independent reviewers found and closed overlapping ownership, restore/remove resurrection, pending swap/live mode loss, lost naming controls, stale category chrome, missing Focus first reads, cold Explain/Shape placement, and saved-card lifecycle issues. Normal errors/loading/receipts remain; inner remove/Focus and successful Ready chrome are suppressed inside app views. No backend definition, query, record, permission or sharing schema changed. The one Rust edit updates a native rendering test assertion.
+
+Screenshots: [App Card](app-card.png), [Stack](stack.png), [Open](open.png), [retained draft](draft-restored.png), [mobile canvas](canvas-375.png), [mobile app dialog](page-dialog-375.png). Names and records shown are synthetic. No credentials or browser session state are included.
+
+Reproduce from an owned stand with port base 4700 (`just dev -d`), then run the two browser scripts listed in checks.json with `PLAYWRIGHT_MODULE` pointing to an installed Playwright entry. The member runner owns 4703, journals creation, reuses its fixture and refuses a mixed-manifest result. Do not reset another stand. Unit/native checks need the repository's pinned setup.
+
+Known boundaries: saved-work classification and component hiding are personal browser preferences; dedicated saved cards/answers retain existing durable card IDs. Guest visibility remains the published design. APP-169/170 own durable work classification/cleanup and published hiding. APP-171 is the future icon exploration. Deployment is intentionally held; the inherited prepared-candidate recovery requirements remain unchanged.

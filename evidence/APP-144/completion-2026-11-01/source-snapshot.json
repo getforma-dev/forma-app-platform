@@ -1,0 +1,28 @@
+{
+  "base": "9ba2061ce318fafe6211db53d056760d450e267e",
+  "branch": "pivot/mvp-gap-completion",
+  "scope": "Source snapshot after focused native member/guest SSR and query/sharing campaigns; parent integration owns final commit/full-check evidence",
+  "sha256": {
+    "app/src/storage/queries.rs": "0228829f2c4200cbd50d8a88e0dccdf8fc58678dac26632d5df2993b6aeda48a",
+    "app/src/commands/mod.rs": "50a1835468271c70449b11eb20565a0ab1a8b1a4374c2bd647e82535d3a51895",
+    "app/src/commands/tests.rs": "e37f856bca146ded5835459b7a792c5e9ae605e81dcc940685c37d484f82abba",
+    "app/src/query/routes.rs": "35adeaa4233f63432b38937dd42fee7940497a13adfe59f2f6083b9986a2e3ea",
+    "app/src/query/route_tests.rs": "baa1be10b4f9169c508330f0991347b79a5c65c42c9bd96d8eed35bbfdc41895",
+    "app/src/query/page.rs": "dfae7a8dd31df4b0aaec99996c3222db01a8f723e8c7ca097e9c5e3923ea9880",
+    "app/src/sharing/live.rs": "237a1ae2d995c9ed72e3834d81ed983042526cc5877ed3426d1c00bff2097593",
+    "app/src/storage/query_qualification.rs": "15f9703ca997c7b57b525deddcc662753f13bbb1313c931332e05a2c3756afcb",
+    "app/src/storage/shared_campaign.rs": "513e29a5a0b6baf11b97d979d90a65497d429e7ba5ced35b37765779880faa08",
+    "app/src/main.rs": "c4523cd2f964d695c447e54bd2013724f07afd06203952b416094c76e62570bb",
+    "app/admin/src/work/app.tsx": "5becadb78a2012009a89a4dc5a6a902d86af601d69312f7149b37c512cf84e3c",
+    "app/admin/src/work/document.ts": "77956a4de4915c55f35279d741098f0a7ce6fa891524e1d0bef2f9a77e979b8e",
+    "app/admin/src/work/render.ts": "2de8e0f29771995aa35e90c5928b7e252e4f9abdca206514b58c807aafaab6a2",
+    "app/admin/src/shared/app.tsx": "3d4a86e8b0c3e0ecf7a2e42f4a7e073ffb1c45dd36a9e0e4718f8dc7d3764197",
+    "app/admin/src/shared/canvas.tsx": "fff51152c7035a1eaa43f5ac873c6f5e5433b0966c4d54ca0c82c7e8cf51e6e9",
+    "app/admin/src/shared/document.ts": "a2a106c9cc4b71dd5790945119a1660a8f1ab5892dff90ff3f2741a23ee9297d",
+    "app/admin/src/shared/parts.tsx": "907c12fff718447d65e981ba6971255b4344fbc3cbfa8b80f3f7341a6eca1874",
+    "app/admin/src/shared/types.ts": "1d4b5c8fb903700db484facbf20325a9e59f308376383d62fe99fc1590e82ff7",
+    "app/admin/src/styles/app.css": "50095ca61d3ba6161cac87246940e251a713c962aa903403c5d8a4fda04e880c",
+    "app/admin/test/work-render.test.ts": "03114f932349e6a48ee187622a8e368148d174310ad46d6dcb61136f35221a86"
+  },
+  "admin_manifest_sha256": "822286b0716b3f675a88510f18510a192c53d6dd7ad8e83f0456995777e5d37b"
+}

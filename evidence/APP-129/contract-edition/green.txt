@@ -1,0 +1,142 @@
+$ contracts/.venv/bin/python --version; node --version
+Python 3.11.14
+v22.21.0
+exit=0
+
+$ contracts/.venv/bin/python -m unittest discover -s contracts -p 'test_*.py' -v
+test_ambiguous_json_refusals (test_contracts.CanonicalTests.test_ambiguous_json_refusals) ... ok
+test_array_order_domains_and_unicode_meaning_preserved (test_contracts.CanonicalTests.test_array_order_domains_and_unicode_meaning_preserved) ... ok
+test_depth_limit (test_contracts.CanonicalTests.test_depth_limit) ... ok
+test_floats_and_unregistered_domains_refused (test_contracts.CanonicalTests.test_floats_and_unregistered_domains_refused) ... ok
+test_golden_vectors (test_contracts.CanonicalTests.test_golden_vectors) ... ok
+test_key_order_does_not_change_digest (test_contracts.CanonicalTests.test_key_order_does_not_change_digest) ... ok
+test_all_registered_renderer_tags_have_shape (test_contracts.ContractTests.test_all_registered_renderer_tags_have_shape) ... ok
+test_command_payload_hash_binds_versions_and_values_not_retry_key (test_contracts.ContractTests.test_command_payload_hash_binds_versions_and_values_not_retry_key) ... ok
+test_complete_job_requires_result_failure_requires_reason (test_contracts.ContractTests.test_complete_job_requires_result_failure_requires_reason) ... ok
+test_definition_byte_cap (test_contracts.ContractTests.test_definition_byte_cap) ... ok
+test_half_open_window_requires_increasing_valid_instants (test_contracts.ContractTests.test_half_open_window_requires_increasing_valid_instants) ... ok
+test_negative_fixture_vectors (test_contracts.ContractTests.test_negative_fixture_vectors) ... ok
+test_parameter_values_are_not_executable (test_contracts.ContractTests.test_parameter_values_are_not_executable) ... ok
+test_preview_receipt_has_no_publication_claim (test_contracts.ContractTests.test_preview_receipt_has_no_publication_claim) ... ok
+test_schema_source_matches_published_artifact (test_contracts.ContractTests.test_schema_source_matches_published_artifact) ... ok
+test_two_distinct_apps_share_contract (test_contracts.ContractTests.test_two_distinct_apps_share_contract) ... ok
+test_valid_owner_publication_policy (test_contracts.ContractTests.test_valid_owner_publication_policy) ... ok
+test_edition_four_retains_edition_three_byte_identically (test_contracts.EditionFourTests.test_edition_four_retains_edition_three_byte_identically) ... ok
+test_every_library_bundle_validates_and_matches_the_catalog (test_contracts.EditionFourTests.test_every_library_bundle_validates_and_matches_the_catalog) ... ok
+test_stored_definitions_keep_their_verdict (test_contracts.EditionFourTests.test_stored_definitions_keep_their_verdict)
+Victor's option A (2026-10-31): the APP-113 definition rules judge new content only. Beta's stored Expense ... ok
+test_create_on_an_existing_record_must_name_a_declared_transition (test_contracts.EditionThreeTests.test_create_on_an_existing_record_must_name_a_declared_transition)
+Edition impl-2026-10-29.3 amendment (APP-013 review M1): a create command expects the absent record ... ok
+test_declared_guards_and_initial_values (test_contracts.EditionThreeTests.test_declared_guards_and_initial_values)
+APP-107 amendment (additive): a transition may carry a typed guard (`when`) over a field of the same record ... ok
+test_edition_three_retains_edition_two_byte_identically (test_contracts.EditionThreeTests.test_edition_three_retains_edition_two_byte_identically) ... ok
+test_filing_creates_declare_the_initial_value_of_a_governed_field (test_contracts.EditionThreeTests.test_filing_creates_declare_the_initial_value_of_a_governed_field)
+APP-113 review (storage 2, 14): a create that may write an enum field another command governs by declared ... ok
+test_recovery_view_and_problem_refusals (test_contracts.EditionThreeTests.test_recovery_view_and_problem_refusals) ... ok
+test_recovery_views_claim_and_problem_bodies_validate (test_contracts.EditionThreeTests.test_recovery_views_claim_and_problem_bodies_validate) ... ok
+test_edition_two_retains_every_edition_one_vector (test_contracts.EditionTwoTests.test_edition_two_retains_every_edition_one_vector) ... ok
+test_exact_rational_lowest_terms_and_38_digit_bound (test_contracts.EditionTwoTests.test_exact_rational_lowest_terms_and_38_digit_bound) ... ok
+test_job_state_cancelled_and_queue_fields (test_contracts.EditionTwoTests.test_job_state_cancelled_and_queue_fields) ... ok
+test_normalized_rows_digest_domain (test_contracts.EditionTwoTests.test_normalized_rows_digest_domain) ... ok
+test_problem_codes_and_limit_bodies (test_contracts.EditionTwoTests.test_problem_codes_and_limit_bodies) ... ok
+test_receipt_operator_and_renderer_identity_lists (test_contracts.EditionTwoTests.test_receipt_operator_and_renderer_identity_lists) ... ok
+
+----------------------------------------------------------------------
+Ran 32 tests in 2.524s
+
+OK
+exit=0
+
+$ node contracts/verify_vectors.mjs
+6 edition-one and 13 edition-two canonical byte/digest vectors match independently in JavaScript
+exit=0
+
+$ contracts/.venv/bin/python contracts/lock.py check
+Contract edition impl-2026-10-31.4 lock matches 55 artifacts, 13 artifacts of 3 retained editions and both frozen source identities
+exit=0
+
+$ app/operator/.venv/bin/python contracts/make_library.py --check
+{"files": 40, "apps": 20}
+exit=0
+
+$ contracts/.venv/bin/python contracts/make_fixtures.py && git status --porcelain contracts/fixtures
+?? contracts/fixtures/impl-2026-10-29.3/
+?? contracts/fixtures/stored/
+exit=0
+
+# CI-equivalent run: a fresh 'python3 -m venv' (Python 3.11.14, as contracts.yml) outside the checkout, then the workflow's exact steps with that interpreter.
+$ /Users/victorvillacis/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/bin/python3.11 -m venv /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/e29/civenv && /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/e29/civenv/bin/python -m pip install -q --require-hashes --only-binary=:all: -r contracts/requirements.lock && /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/e29/civenv/bin/python --version
+
+[notice] A new release of pip is available: 24.0 -> 26.2.2
+[notice] To update, run: /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/e29/civenv/bin/python -m pip install --upgrade pip
+Python 3.11.14
+exit=0
+
+$ /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/e29/civenv/bin/python -m unittest discover -s contracts -p 'test_*.py' 2>&1 | tail -3
+Ran 32 tests in 2.525s
+
+OK
+exit=0
+
+$ node contracts/verify_vectors.mjs
+6 edition-one and 13 edition-two canonical byte/digest vectors match independently in JavaScript
+exit=0
+
+$ /private/tmp/claude-501/-Users-victorvillacis-dev/df0e31da-4f04-46a7-8043-30cdac91f9c2/scratchpad/e29/civenv/bin/python contracts/lock.py check
+Contract edition impl-2026-10-31.4 lock matches 55 artifacts, 13 artifacts of 3 retained editions and both frozen source identities
+exit=0
+
+# Rust (app/, CARGO_BUILD_JOBS=4; app/admin built first with npm run build)
+$ cd app && cargo +1.93.1 test --locked --lib admission:: 2>&1 | grep -E '^test |^test result'
+test admission::tests::digests_are_domain_separated_and_registered ... ok
+test admission::tests::stored_definitions_that_predate_the_authoring_rules_still_admit ... ok
+test admission::tests::fixtures_digests_match_python ... ok
+test admission::tests::unregistered_digest_domain_is_refused - should panic ... ok
+test storage::admission::tests::code_digest_matches_the_operator_vector_for_every_accepted_spelling ... ok
+test admission::tests::strict_decoder_matches_python_loads ... ok
+test storage::admission::tests::digest_shape_and_sign_out_reasons_are_closed ... ok
+test storage::admission::tests::handle_digest_matches_the_operator_vector_and_is_strict ... ok
+test storage::admission::tests::malformed_codes_have_no_digest ... ok
+test admission::tests::edition_two_vectors_match_contracts_lock ... ok
+test admission::tests::declared_guards_and_initial_values_match_validate_py ... ok
+test admission::tests::unregistered_renderer_or_operator_version_refuses ... ok
+test admission::tests::rejects_unknown_fields_executable_strings_and_client_grants_with_coded_reason ... ok
+test admission::tests::edition_one_definitions_still_admit ... ok
+test admission::tests::rejects_over_complex_definitions ... ok
+test admission::tests::canonical_vectors_match_contracts_lock ... ok
+test admission::tests::shape_and_reference_rules_match_validate_py ... ok
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 343 filtered out; finished in 0.20s
+exit=0
+
+$ cd app && cargo +1.93.1 test --locked --lib storage::queries 2>&1 | grep -E '^test |^test result'
+test storage::queries::tests::parameters_are_closed_and_validated ... ok
+test storage::queries::tests::effective_query_adds_window_and_destination_only ... ok
+test storage::queries::tests::outline_lists_only_single_input_query_views ... ok
+test storage::queries::tests::expense_totals_show_money_and_text_stays_verbatim ... ok
+test storage::queries::tests::every_library_definition_is_admitted_and_in_the_sidecar ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 355 filtered out; finished in 0.05s
+exit=0
+
+$ cd app && cargo +1.93.1 test --locked --lib managed_qualification 2>&1 | grep -E '^test result'
+test result: ok. 20 passed; 0 failed; 3 ignored; 0 measured; 337 filtered out; finished in 4.24s
+exit=0
+
+# just check (the CI-fast set, 16 steps): summary
+=== check summary
+  ok    fmt (0s)
+  ok    clippy (47s)
+  ok    test (15s)
+  ok    msrv (49s)
+  ok    catalog (0s)
+  ok    admin (8s)
+  ok    infra (13s)
+  ok    py-scripts (8s)
+  ok    py-runtime (260s)
+  ok    py-qualification (1s)
+  ok    py-app-scripts (1s)
+  ok    py-infra (1s)
+  ok    schema-pins (0s)
+  ok    contracts (3s)
+  ok    board (0s)
+  ok    bash-n (1s)
+exit=0

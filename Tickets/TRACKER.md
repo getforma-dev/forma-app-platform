@@ -20,8 +20,8 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 12 | [APP-010: Persist and admit a minimal typed definition and work binding](4-done/APP-010.md) | [PH01](phases/PH01.md) | S02 | FND | P0 | L | Done | APP-002, APP-008 |
 | 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](4-done/APP-011.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | M | Done | APP-002, APP-007 |
 | 14 | [APP-012: Deliver a minimal authorized query with receipt](4-done/APP-012.md) | [PH01](phases/PH01.md) | S02 | QRY | P0 | L | Done | APP-003, APP-005, APP-009, APP-010, APP-011 |
-| 15 | [APP-013: Commit one declared internal record and recover outcome](3-in-review/APP-013.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | L | In review | APP-012 |
-| 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](0-backlog/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | Backlog | APP-013 |
+| 15 | [APP-013: Commit one declared internal record and recover outcome](4-done/APP-013.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | L | Done | APP-012 |
+| 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](2-in-progress/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | In progress | APP-013 |
 | 17 | [APP-015: Implement durable jobs, leases and cancellation](0-backlog/APP-015.md) | [PH02](phases/PH02.md) | S03 | OPS | P0 | L | Backlog | APP-008, APP-009, APP-073 |
 | 18 | [APP-016: Store original and normalized immutable revisions](0-backlog/APP-016.md) | [PH02](phases/PH02.md) | S03 | ING | P0 | L | Backlog | APP-008, APP-010 |
 | 19 | [APP-017: Build CSV and XLSX import jobs](0-backlog/APP-017.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | L | Backlog | APP-004, APP-015, APP-016 |
@@ -94,3 +94,85 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](0-backlog/APP-086.md) | [PH07](phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |
 | 87 | [APP-087: Decide the parser fuel bound and close the parser packaging residuals (APP-017 preparation review)](0-backlog/APP-087.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | M | Backlog | APP-004 |
 | 88 | [APP-088: Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)](0-backlog/APP-088.md) | [PH02](phases/PH02.md) | S03 | QRY | P1 | S | Backlog | None |
+| 89 | [APP-089: Harden the container images: base CVEs and effective scan-on-push](0-backlog/APP-089.md) | [PH02](phases/PH02.md) | S03 | OPS | P1 | M | Backlog | APP-075, APP-078 |
+| 90 | [APP-090: MVP UI fixes and the designer handoff](0-backlog/APP-090.md) | [PH02](phases/PH02.md) | S03 | UX | P1 | M | Backlog | APP-076, APP-078 |
+| 091 | [APP-091: Pitch clone and join plan: canvas, planner and composer on the platform backbone](2-in-progress/APP-091.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | In progress | APP-012, APP-074 |
+| 092 | [APP-092: Canvas in the signed-in workspace](0-backlog/APP-092.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-091 |
+| 093 | [APP-093: Composer: describe an app and assemble it from admitted modules](0-backlog/APP-093.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-091, APP-092 |
+| 094 | [APP-094: Governed data on the canvas: views with receipts and the record form](0-backlog/APP-094.md) | [PH08](phases/PH08.md) | S14 | QRY | P0 | L | Backlog | APP-093 |
+| 095 | [APP-095: Share an app with a teammate under policy](0-backlog/APP-095.md) | [PH08](phases/PH08.md) | S14 | SHR | P0 | M | Backlog | APP-094 |
+| 096 | [APP-096: Deploy and rehearse the pitch on beta.getforma.dev](0-backlog/APP-096.md) | [PH08](phases/PH08.md) | S14 | VAL | P0 | L | Backlog | APP-092, APP-093, APP-094, APP-095 |
+| 097 | [APP-097: Post-November 2 revisit: land the pitch and close the deferred work](0-backlog/APP-097.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | L | Backlog | APP-076, APP-078, APP-086, APP-089, APP-090, APP-014, APP-084, APP-096 |
+| 098 | [APP-098: Demo shortcuts register: every mock, hard-code and pitch limit behind GENUI_DEMO_MODE](0-backlog/APP-098.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-091 |
+| 099 | [APP-099: Forma as an MCP server: any agent (Claude, OpenAI, others) works through the governed canvas](0-backlog/APP-099.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095 |
+| 100 | [APP-100: Slack: file, approve and get notified in Slack through the governed action path](0-backlog/APP-100.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099 |
+| 101 | [APP-101: Instant pick and live transform: prebuilt apps land at once and reshape to the request](0-backlog/APP-101.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-094 |
+| 102 | [APP-102: Receipt upload and the expense ledger: a photo becomes a reviewed row, every row adds up live](0-backlog/APP-102.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | M | Backlog | APP-093, APP-095 |
+| 103 | [APP-103: Canvas utility widgets: weather, calculator and clock that a member customizes in words](0-backlog/APP-103.md) | [PH08](phases/PH08.md) | S14 | AI | P1 | M | Backlog | APP-094, APP-101 |
+| 104 | [APP-104: Canvas library pane, a clean board, and Figma-style controls](0-backlog/APP-104.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-094, APP-101, APP-103 |
+| 105 | [APP-105: Ad hoc pitch work of 2026-10-30: deploy fixes, live operations, canvas additions and what remains](0-backlog/APP-105.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-096, APP-099, APP-100, APP-101, APP-102, APP-103, APP-104 |
+| 106 | [APP-106: Focus mode and Unite: work on a card in a modal, and assemble an app's cards into the whole app](0-backlog/APP-106.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104 |
+| 107 | [APP-107: Workflow library: the approval processes real companies run, end to end](0-backlog/APP-107.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099, APP-100 |
+| 108 | [APP-108: Folders (boxes): file cards with a viewer, real CSV data, and apps built from a folder that trace back to it](0-backlog/APP-108.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-104, APP-106 |
+| 109 | [APP-109: Quick notes: /note saves a note as a card](0-backlog/APP-109.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-103, APP-104 |
+| 110 | [APP-110: Pitch scope ledger: what the demo ships, what is deferred, and what needs enterprise refinement](0-backlog/APP-110.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-098, APP-105 |
+| 111 | [APP-111: Pro plan: large documents become a cited brief and a shareable app](0-backlog/APP-111.md) | [PH08](phases/PH08.md) | S14 | AI | P1 | XL | Backlog | APP-108 |
+| 112 | [APP-112: Command parity: every slash command has a click path](0-backlog/APP-112.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-104, APP-106, APP-108, APP-109 |
+| 113 | [APP-113: Code review of the pitch (2026-10-30): findings, fixes and deferrals](0-backlog/APP-113.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | S | Backlog | APP-099, APP-100, APP-104, APP-107, APP-108 |
+| 114 | [APP-114: Landing page for getforma.dev: the product, how it connects, security, and the beta list](0-backlog/APP-114.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-096, APP-110 |
+| 115 | [APP-115: Agent access governance: agent identities, scoped tokens, organization policies, and an admin trace console](0-backlog/APP-115.md) | [PH08](phases/PH08.md) | S14 | GOV | P1 | XL | Backlog | APP-099, APP-100, APP-113 |
+| 116 | [APP-116: Timing chip: real step durations on screen for demos and trust](0-backlog/APP-116.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-101, APP-104 |
+| 117 | [APP-117: Readable organization addresses: sign-in alias (done), organization in every URL, subdomains](0-backlog/APP-117.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-096 |
+| 118 | [APP-118: Command system: one registry, argument hints, /commands help, /apps opens the Library](0-backlog/APP-118.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104, APP-112 |
+| 119 | [APP-119: Commands are verbs, apps are addresses: split the registry, derive app hints from definitions](0-backlog/APP-119.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-118 |
+| 120 | [APP-120: One canvas model: apps (with cards), widgets, arrangements; one grammar; Library = Apps + Widgets](0-backlog/APP-120.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-119 |
+| 121 | [APP-121: User naming: app and card names, addresses, descriptions (owner) and personal aliases (member)](0-backlog/APP-121.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | L | Backlog | APP-120 |
+| 122 | [APP-122: Two AI jobs: Ask (read-only conversation about the data) and Shape (change the look or view of a card, an app or a widget), separated by where you type](0-backlog/APP-122.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-121 |
+| 123 | [APP-123: Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /forma, /<folder> words](0-backlog/APP-123.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-122, APP-097 |
+| 124 | [APP-124: Start from your data: drop files, Ask the folder, Make a card, Make an app](0-backlog/APP-124.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-108, APP-122, APP-123 |
+| 125 | [APP-125: Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink](0-backlog/APP-125.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | None |
+| 126 | [APP-126: Developer workflow step 2: the front door (justfile, campaign catalog, VS Code workspace)](0-backlog/APP-126.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125 |
+| 127 | [APP-127: Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)](0-backlog/APP-127.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-126 |
+| 128 | [APP-128: Developer workflow step 4: the genui-dev binary under process-compose (Compose PostgreSQL, in-process personas, clean profile)](0-backlog/APP-128.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-125, APP-126 |
+| 129 | [APP-129: Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)](0-backlog/APP-129.md) | [PH08](phases/PH08.md) | S14 | FND | P1 | S | Backlog | APP-107, APP-113 |
+| 130 | [APP-130: Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep](0-backlog/APP-130.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128 |
+| 131 | [APP-131: Developer workflow step 5: CI green or quarantined (Foundation, Tenant foundation, the APP-013 campaign)](0-backlog/APP-131.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126 |
+| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](0-backlog/APP-132.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-128 |
+| 133 | [APP-133: Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map](0-backlog/APP-133.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127, APP-130 |
+| 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](0-backlog/APP-135.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
+| 136 | [APP-136: Developer guide from setup through beta delivery](0-backlog/APP-136.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
+| 137 | [APP-137: One private beta ledger across repository worktrees](0-backlog/APP-137.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |
+| 138 | [APP-138: Forma Canvas — shared Forma brand and application design](4-done/APP-138.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Done | None |
+| 139 | [APP-145: Give a new member one authoring shell so the first description can publish](0-backlog/APP-145.md) | [PH08](phases/PH08.md) | S14 | AUT | P0 | M | Backlog | APP-093 |
+| 140 | [APP-141: Create an app before it reaches the canvas](0-backlog/APP-141.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-093, APP-104, APP-120, APP-145 |
+| 141 | [APP-142: The app is a page: focus inside it, fan-out back to cards](0-backlog/APP-142.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
+| 142 | [APP-144: Open an app as a page and use it there](0-backlog/APP-144.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
+| 143 | [APP-143: Ask about the app, the card, or the widget you clicked](0-backlog/APP-143.md) | [PH08](phases/PH08.md) | S14 | AI | P1 | M | Backlog | APP-094, APP-142 |
+| 144 | [APP-154: Private live app sharing, external guests and connected canvas placement](0-backlog/APP-154.md) | [PH08](phases/PH08.md) | S14 | SHR | P0 | L | Backlog | APP-074, APP-095, APP-144 |
+| 145 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](0-backlog/APP-139.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095, APP-145, APP-144, APP-154 |
+| 146 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](0-backlog/APP-140.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
+| 147 | [APP-146: Spike — what an app is](0-backlog/APP-146.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
+| 148 | [APP-147: Spike — what a component of an app is](0-backlog/APP-147.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
+| 149 | [APP-148: Spike — what a widget is](0-backlog/APP-148.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-103, APP-120 |
+| 150 | [APP-149: Spike — what a box is, and where it sits](0-backlog/APP-149.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-108, APP-120 |
+| 151 | [APP-150: Favorite sections, and a way to go to one](0-backlog/APP-150.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
+| 152 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](0-backlog/APP-151.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
+| 153 | [APP-152: An API bank, and an easy way to add an API](0-backlog/APP-152.md) | [PH08](phases/PH08.md) | S14 | AI | P2 | L | Backlog | APP-093, APP-104 |
+| 154 | [APP-153: Spike — why the library pane has four tabs](0-backlog/APP-153.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
+| 155 | [APP-155: One coherent app presentation on the canvas and at its own URL](0-backlog/APP-155.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-139, APP-140, APP-142, APP-144, APP-146, APP-147, APP-154 |
+| 156 | [APP-156: Typed buttons that open app components and command forms](0-backlog/APP-156.md) | [PH09](phases/PH09.md) | S15 | AUT | P1 | L | Backlog | APP-155 |
+| 157 | [APP-157: Persisted bounded app appearance across all presentations](0-backlog/APP-157.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-155, APP-122 |
+| 158 | [APP-158: Place an admitted records list with authoritative scoped filters](0-backlog/APP-158.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-144, APP-155, APP-020, APP-025 |
+| 159 | [APP-159: Compute bounded authorized record summaries, trends and rankings](0-backlog/APP-159.md) | [PH09](phases/PH09.md) | S15 | QRY | P1 | L | Backlog | APP-158, APP-021, APP-023, APP-024 |
+| 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](0-backlog/APP-160.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
+| 161 | [APP-161: Spike — measure idle app costs and decide safe sleep/wake architecture](0-backlog/APP-161.md) | [PH09](phases/PH09.md) | S15 | OPS | P2 | M | Backlog | APP-140, APP-154 |
+| 162 | [APP-162: Workspace name/link entry and explicit switch on sign-in](4-done/APP-162.md) | [PH08](phases/PH08.md) | S14 | IAM | P0 | M | Done | APP-009 |
+| 163 | [APP-163: Find my workspaces after verified email discovery](0-backlog/APP-163.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162 |
+| 164 | [APP-164: Authenticated workspace chooser and safe session switching](0-backlog/APP-164.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162, APP-163 |
+| 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](0-backlog/APP-165.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |
+| 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](0-backlog/APP-166.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |
+| 167 | [APP-167: Promote merged beta releases through GitHub Actions](2-in-progress/APP-167.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | L | In progress | None |
+| 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](3-in-review/APP-168.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | In review | None |
+| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](0-backlog/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
+| 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
+| 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |

@@ -1,4 +1,0 @@
-{
-  "folders": [{ "path": ".", "name": "Forma App Platform — GenUI" }],
-  "settings": { "files.exclude": { "**/.DS_Store": true }, "search.exclude": { "**/design/**/deliverables/**/html/**": true } }
-}

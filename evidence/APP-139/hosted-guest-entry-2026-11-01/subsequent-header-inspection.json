@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "scope": "Subsequent anonymous read-only hosted inspection, not original failed browser console",
+  "started_at_utc": "2026-11-01T21:21:17.699331+00:00",
+  "finished_at_utc": "2026-11-01T21:21:17.849405+00:00",
+  "deployment_context_candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "method": "GET",
+  "status": 200,
+  "request_cookies_sent": false,
+  "redirect_following_enabled": false,
+  "provider_navigation_performed": false,
+  "form_action": "form-action 'self'",
+  "cache_control": "no-store",
+  "native_sign_in_button_present": true,
+  "native_create_account_button_present": true,
+  "private_source_artifacts": [
+    {
+      "name": "guest-entry-header-inspection-20261101T212117849417Z-headers.json",
+      "bytes": 1534,
+      "sha256": "9dd8dcddac1046395f9106a49f4248b7fde69bcbecd2ffa496bb2dde68202691",
+      "private_mode": "0600"
+    },
+    {
+      "name": "guest-entry-header-inspection-20261101T212117849417Z-body.html",
+      "bytes": 2960,
+      "sha256": "d693a63af752525e9a9ad5e52785c81da624e1ad220614db5274fe7c869411cf",
+      "private_mode": "0600"
+    }
+  ],
+  "sanitization": "Only status, times, policy directive, cache policy and button booleans selected; raw nonce, request identifiers, locators, body and all other headers stay private"
+}

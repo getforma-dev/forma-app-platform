@@ -180,8 +180,8 @@ pub(crate) async fn lock_wait(fixture: &Fixture, waiters: i64) {
     .await
     .expect("observed lock wait");
 }
-async fn paused(hooks: &TestHooks) {
-    timeout(Duration::from_secs(5), hooks.reached.notified())
+pub(crate) async fn paused(hooks: &TestHooks) {
+    timeout(Duration::from_secs(10), hooks.reached.notified())
         .await
         .expect("admission barrier reached");
 }
@@ -274,6 +274,55 @@ async fn admitted(
         other => panic!("admission refused: {other:?}"),
     }
 }
+/// Takes the last redemption of `code_digest` through the storage admission
+/// path, for a fresh fixture identity. A public callback prepared before this
+/// call then finds the code exhausted. The issuer and tenant must be the
+/// registry binding for `organization`.
+pub(crate) async fn consume_last_slot(
+    stores: &Stores,
+    organization: &str,
+    code_digest: &str,
+    issuer: &str,
+    provider_tenant: &str,
+    label: &str,
+) -> String {
+    let subject = format!("usr_slot_{label}");
+    let identity = VerifiedNonmember {
+        issuer: issuer.into(),
+        provider_tenant: provider_tenant.into(),
+        provider_subject: subject.clone(),
+        registry_sha256: stores.registry_identity().sha256.clone(),
+        email_verified: true,
+    };
+    let Reservation::Reserved { reservation, .. } = stores
+        .workspace
+        .reserve_code(organization, code_digest, &sha(label))
+        .await
+        .expect("competing reservation")
+    else {
+        panic!("competing reservation refused");
+    };
+    let PendingAdmission::Pending {
+        pending_admission, ..
+    } = stores
+        .workspace
+        .record_pending_admission(&identity, organization, &reservation)
+        .await
+        .expect("competing pending")
+    else {
+        panic!("competing pending refused");
+    };
+    let Admission::Admitted { .. } = stores
+        .workspace
+        .admit(&identity, organization, &pending_admission, &sha(label))
+        .await
+        .expect("competing admission")
+    else {
+        panic!("competing admission refused");
+    };
+    subject
+}
+
 /// One full invited path for a fresh identity: reserve, pending, admit.
 async fn admit_new(stores: &Stores, digest: &str, label: &str) -> (String, i64, String) {
     let identity = nonmember(stores, ORG, label);

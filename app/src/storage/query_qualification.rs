@@ -48,6 +48,58 @@ const CONTRACT: &str = "sha256:b92d4b96754e5e9de1863dff09e615880ded8d57de22e7546
 const PLACEHOLDER: &str = "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119";
 const DEADLINE: Duration = Duration::from_millis(1800);
 
+/// Shared-app HTTP qualification uses the same uploaded fixture identity and
+/// confined engine as this campaign. The caller owns the new work identifier.
+pub(super) fn prepare_shared_engine(
+    fixture: &Fixture,
+    work: &str,
+) -> (Directory, Arc<crate::query::Engine>) {
+    let uploaded = json!({"organization_id":ORG,"source_id":SOURCE,"revision_id":REVISION,
+        "content_digest":CONTENT,"normalized_digest":NORMALIZED,"object_digest":NORMALIZED,
+        "row_count":6,"contract_digest":CONTRACT});
+    let path = record(fixture, "shared-uploaded-source.json", &uploaded);
+    operator(
+        fixture,
+        &[
+            "register-source-revision",
+            "--organization",
+            ORG,
+            "--record",
+            &path,
+        ],
+    );
+    operator(
+        fixture,
+        &[
+            "create-bound-work",
+            "--organization",
+            ORG,
+            "--app",
+            APP,
+            "--from-work",
+            WORK,
+            "--work",
+            work,
+            "--creator",
+            PRINCIPAL,
+            "--input",
+            "events",
+            "--source",
+            SOURCE,
+            "--revision",
+            REVISION,
+        ],
+    );
+    let python = fixture_python();
+    let root = Directory::new("shared-http");
+    assert_eq!(
+        cache_northstar(&python, &root.0.join("cache"), ORG, REVISION),
+        NORMALIZED
+    );
+    let engine = Arc::new(real_engine(&python, &root.0));
+    (root, engine)
+}
+
 fn record(fixture: &Fixture, name: &str, value: &Value) -> String {
     let path = fixture.directory.0.join(name);
     std::fs::write(&path, serde_json::to_vec(value).unwrap()).unwrap();
@@ -66,7 +118,7 @@ async fn rows(fixture: &Fixture, sql: &str) -> Vec<String> {
         .collect()
 }
 /// The contract validator's verdict on one document (contracts/validate.py).
-fn contract_valid(document: &Value) -> bool {
+pub(super) fn contract_valid(document: &Value) -> bool {
     let mut child = Command::new(fixture_python())
         .current_dir(repository().join("contracts"))
         .args([
@@ -567,6 +619,366 @@ async fn campaign() {
         "authorized_member_gets_exact_result_and_receipt_digest: total 1,140,000, destination 198.51.100.7 900,000 and the five timeline buckets of the APP-011 oracle, each released after re-authorization with a contract-valid published receipt pinning the new revision's real digest; the receipt lists every source dependency of the work (events and inventory) and passes contracts/validate.py validate_bundle against the work, while a receipt cut to the read input alone is refused (source evidence dependency mismatch)",
     );
 
+    // --- ADR-011 prebuilt library (APP-094): seeded, cached, run, receipted ---
+    // The library's size is its catalog's: it was 13 when this campaign was
+    // written and has grown since (APP-107, 20 apps); APP-131. The operator's
+    // seed and the catalog listing must both cover all of it.
+    let library: Value = serde_json::from_slice(include_bytes!(
+        "../../../contracts/fixtures/library/catalog.json"
+    ))
+    .unwrap();
+    let library_apps = library["apps"].as_array().unwrap().len();
+    // Apps may share a source: library_sources.build caches each source once.
+    let library_sources = library["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|app| app["sources"].as_array().unwrap())
+        .map(|source| source["source_id"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    let seeded = operator(&fixture, &["seed-library", "--organization", ORG]);
+    assert_eq!(seeded["changed"], true);
+    assert_eq!(seeded["apps"].as_array().unwrap().len(), library_apps);
+    assert_eq!(seeded["audit_event"], Value::Null);
+    let again = operator(&fixture, &["seed-library", "--organization", ORG]);
+    assert_eq!(
+        (again["changed"].clone(), again["rows_inserted"].clone()),
+        (json!(false), json!(0))
+    );
+    let built = Command::new(&python)
+        .current_dir(repository().join("app/runtime"))
+        .args([
+            "-c",
+            "import json,sys,library_sources as l; print(json.dumps(l.build(sys.argv[1], sys.argv[2])))",
+            ORG,
+            root.0.join("cache").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let built: Value = serde_json::from_slice(&built.stdout).unwrap();
+    assert_eq!(built.as_array().unwrap().len(), library_sources);
+    let catalog: Value = serde_json::from_slice(
+        &std::fs::read(repository().join("contracts/fixtures/library/catalog.json")).unwrap(),
+    )
+    .unwrap();
+    let entry = |library_id: &str| -> Value {
+        catalog["apps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["library_id"] == json!(library_id))
+            .unwrap()
+            .clone()
+    };
+    let ids = |library_id: &str| -> (String, String) {
+        let e = entry(library_id);
+        (
+            e["app_id"].as_str().unwrap().to_owned(),
+            e["work_id"].as_str().unwrap().to_owned(),
+        )
+    };
+    // The catalog the composer reads: every library app the member may open,
+    // with its router metadata; a member without the grants sees none.
+    let listed = stores.data.library_catalog(&member).await.unwrap();
+    assert_eq!(listed.len(), library_apps);
+    for item in &listed {
+        assert!(item.routing["intent_examples"].as_array().unwrap().len() >= 4);
+        assert!(!item.purpose.is_empty() && !item.title.is_empty());
+        assert_eq!(
+            item.definition_digest,
+            entry(&item.library_id)["definition_digest"]
+        );
+    }
+    let reviewer = request(&stores, ORG, REVIEWER, 1);
+    assert_eq!(
+        stores.data.library_catalog(&reviewer).await.unwrap(),
+        Vec::new()
+    );
+    check(
+        &mut checks,
+        "seed-library places every library app of contracts/fixtures/library/catalog.json once (exact-match idempotent, no audit event), library_sources.build caches their revisions under the pinned digests, and library_catalog lists them with router metadata for the granted member only",
+    );
+    // APP-093 review M3: more compositions than the recency cap (120 saved
+    // works pinning a newer publication of the authoring app) never hide a
+    // library app: library entries are selected by their sidecar digest
+    // apart from the capped listing, and the catalog keeps the seeded works.
+    const COMPOSED: &str = "00000000-0000-4000-8000-00000000c0de";
+    fixture.sql(&format!("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,publication_sequence) SELECT organization_id,app_id,'{COMPOSED}',definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,now()+interval '1 hour',canonical_envelope,publication_sequence+1000 FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}' ORDER BY publication_sequence DESC LIMIT 1; INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) SELECT '{ORG}','{APP}',gen_random_uuid(),'{COMPOSED}',1,'APP-093 M3 composition '||g,'{PRINCIPAL}' FROM generate_series(1,120) g;"), "genui");
+    let saved: i64 = rows(
+        &fixture,
+        &format!("SELECT count(*)::text FROM genui.saved_work WHERE organization_id='{ORG}'"),
+    )
+    .await[0]
+        .parse()
+        .unwrap();
+    assert!(saved > 120 + library_apps as i64, "{saved} saved works");
+    let crowded = stores.data.library_catalog(&member).await.unwrap();
+    assert_eq!(crowded.len(), library_apps);
+    for item in &crowded {
+        let (app, work) = ids(&item.library_id);
+        assert_eq!(
+            (item.app.as_str(), item.work.as_str()),
+            (app.as_str(), work.as_str()),
+            "the seeded work"
+        );
+    }
+    let workspace = stores.data.openable_works(&member).await.unwrap();
+    for entry in catalog["apps"].as_array().unwrap() {
+        let (app, work) = ids(entry["library_id"].as_str().unwrap());
+        assert!(
+            workspace.iter().any(|w| w.app == app && w.work == work),
+            "{} is listed",
+            entry["library_id"]
+        );
+    }
+    assert!(workspace.len() <= 100 + library_apps);
+    // Newest first: the listing opens with the latest compositions.
+    assert_eq!(workspace[0].app, APP);
+    assert_eq!(
+        stores.data.library_catalog(&reviewer).await.unwrap(),
+        Vec::new()
+    );
+    fixture.sql(&format!("DELETE FROM genui.saved_work WHERE organization_id='{ORG}' AND publication_id='{COMPOSED}'; DELETE FROM genui.publications WHERE organization_id='{ORG}' AND publication_id='{COMPOSED}';"), "genui");
+    check(
+        &mut checks,
+        "APP-093 M3: with 120 more saved works than the 100-work recency cap (all newer than the library), openable_works still lists every seeded library work after the newest compositions and library_catalog still lists every seeded work (selected by sidecar definition digest, never through the capped listing); an ungranted member still sees none",
+    );
+    let (expense_app, expense_work) = ids("expense-review");
+    let outline = stores
+        .data
+        .work_outline(&member, &expense_app, &expense_work)
+        .await
+        .unwrap();
+    assert_eq!(
+        outline
+            .views
+            .iter()
+            .map(|v| v.id.as_str())
+            .collect::<Vec<_>>(),
+        ["totals", "queue", "by_category", "by_status"]
+    );
+    let mut library_receipts = serde_json::Map::new();
+    let run_view = |app: String, work: String, view: &'static str, parameters: Value| {
+        let stores = stores.clone();
+        let engine = engine.clone();
+        let member = request(&stores, ORG, PRINCIPAL, 1);
+        async move {
+            let run = stores
+                .data
+                .run_query(&member, &app, &work, view, &parameters)
+                .await
+                .unwrap();
+            let result = engine.execute(&run, DEADLINE).await.unwrap();
+            stores.data.release_result(&member, &run).await.unwrap();
+            let receipt = receipt::build(&run, &result).unwrap();
+            assert!(contract_valid(&receipt.document), "{}", receipt.document);
+            assert_eq!(
+                receipt.document["result_digest"],
+                json!(result.result_digest)
+            );
+            assert_eq!(receipt.document["view_id"], json!(view));
+            (result, receipt)
+        }
+    };
+    let (totals, totals_receipt) = run_view(
+        expense_app.clone(),
+        expense_work.clone(),
+        "totals",
+        json!({}),
+    )
+    .await;
+    assert_eq!(totals.columns, ["claims", "total_amount", "largest_claim"]);
+    assert_eq!(
+        totals.rows,
+        vec![vec![
+            json!("240"),
+            totals.rows[0][1].clone(),
+            totals.rows[0][2].clone()
+        ]]
+    );
+    assert!(
+        totals.integer_columns.contains("total_amount")
+            && totals.integer_columns.contains("largest_claim")
+    );
+    // APP-093 review M4: the money columns carry their type, and the page
+    // shows sum(amount) = 26262004 minor units (the DuckDB oracle) as
+    // currency, the exact value kept as the hover title and in the receipt's
+    // result digest.
+    let usd = crate::query::worker::ColumnType::Money {
+        currency: "USD".into(),
+        minor_unit_exponent: 2,
+    };
+    assert_eq!(totals.column_types["total_amount"], usd);
+    assert_eq!(totals.column_types["largest_claim"], usd);
+    assert_eq!(
+        totals.column_types["claims"],
+        crate::query::worker::ColumnType::Integer
+    );
+    assert_eq!(totals.rows[0][1], json!("26262004"));
+    let totals_view = outline.views.iter().find(|v| v.id == "totals").unwrap();
+    assert_eq!(totals_view.column_types, totals.column_types);
+    let shown = crate::query::page::card(
+        totals_view,
+        crate::query::page::Outcome::Released(&totals, &totals_receipt),
+    );
+    assert_eq!(shown.summary[1].value, "$262,620.04");
+    assert_eq!(shown.summary[1].raw, "26262004");
+    check(
+        &mut checks,
+        "APP-093 M4: the expense library totals carry column_types (claims integer, total_amount and largest_claim money USD exponent 2) from the re-admitted input contract; the card shows sum(amount) 26262004 minor units as $262,620.04 with the exact value as its hover title",
+    );
+    library_receipts.insert("expense_totals".into(), totals_receipt.document.clone());
+    let (queue, queue_receipt) = run_view(
+        expense_app.clone(),
+        expense_work.clone(),
+        "queue",
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        queue.columns,
+        [
+            "expense_id",
+            "time",
+            "employee",
+            "vendor",
+            "category",
+            "amount"
+        ]
+    );
+    assert_eq!((queue.rows.len(), queue.truncated_page), (50, true));
+    assert_eq!(queue_receipt.document["truncated_page"], json!(true));
+    let amounts: Vec<i64> = queue
+        .rows
+        .iter()
+        .map(|r| r[5].as_str().unwrap().parse().unwrap())
+        .collect();
+    assert!(
+        amounts.windows(2).all(|w| w[0] >= w[1]),
+        "ordered by amount desc"
+    );
+    library_receipts.insert("expense_queue".into(), queue_receipt.document.clone());
+    let (grouped, grouped_receipt) = run_view(
+        expense_app.clone(),
+        expense_work.clone(),
+        "by_category",
+        json!({}),
+    )
+    .await;
+    assert_eq!(grouped.columns, ["category", "claims", "amount"]);
+    assert_eq!(
+        grouped
+            .rows
+            .iter()
+            .map(|r| r[1].as_str().unwrap().parse::<i64>().unwrap())
+            .sum::<i64>(),
+        240
+    );
+    library_receipts.insert(
+        "expense_by_category".into(),
+        grouped_receipt.document.clone(),
+    );
+    let (vendor_app, vendor_work) = ids("vendor-spend");
+    let (unpaid, _) = run_view(vendor_app, vendor_work, "unpaid", json!({})).await;
+    assert_eq!(unpaid.columns, ["invoice_id", "vendor", "amount", "due"]);
+    assert!(!unpaid.rows.is_empty());
+    let (tickets_app, tickets_work) = ids("support-queue");
+    let (timeline, timeline_receipt) = run_view(
+        tickets_app,
+        tickets_work,
+        "timeline",
+        json!({"window": {"start": "2026-10-10T00:00:00Z", "end": "2026-10-13T00:00:00Z"}}),
+    )
+    .await;
+    assert_eq!(timeline.columns, ["time", "tickets"]);
+    assert!(timeline.rows.iter().all(|r| {
+        let day = r[0].as_str().unwrap();
+        day.ends_with("T00:00:00Z")
+            && ("2026-10-10T00:00:00Z".."2026-10-13T00:00:00Z").contains(&day)
+    }));
+    assert_eq!(
+        timeline_receipt.document["parameters"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    library_receipts.insert(
+        "tickets_timeline_windowed".into(),
+        timeline_receipt.document.clone(),
+    );
+    let (traffic_app, traffic_work) = ids("outbound-traffic");
+    let (filtered_total, filtered_receipt) = run_view(
+        traffic_app,
+        traffic_work,
+        "total",
+        json!({"destination": "198.51.100.7", "filter_epoch": 2}),
+    )
+    .await;
+    assert_eq!(
+        filtered_total.columns,
+        ["connections", "total_bytes", "largest_transfer"]
+    );
+    assert_eq!(
+        filtered_receipt.document["parameters"][0]["field_id"],
+        json!("destination")
+    );
+    assert_eq!(filtered_receipt.document["filter_epoch"], json!(2));
+    library_receipts.insert(
+        "traffic_total_filtered".into(),
+        filtered_receipt.document.clone(),
+    );
+    // A window or destination parameter for an input without those fields is
+    // refused before any engine, never recorded in a receipt it did not shape.
+    let (inventory_app, inventory_work) = ids("inventory-comparison");
+    assert_eq!(
+        stores
+            .data
+            .run_query(
+                &member,
+                &inventory_app,
+                &inventory_work,
+                "totals",
+                &window()
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        stores
+            .data
+            .run_query(
+                &member,
+                &inventory_app,
+                &inventory_work,
+                "totals",
+                &json!({"destination": "x"})
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    // The reviewer holds no grant on a library app: denied before any engine.
+    assert_eq!(
+        stores
+            .data
+            .run_query(&reviewer, &expense_app, &expense_work, "totals", &json!({}))
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    check(
+        &mut checks,
+        "library views run through run_query, the confined engine, release_result and a contract-valid receipt: a summary (count/sum/max over money), a paged table (50 rows, truncated), a grouped breakdown, a boolean filter, a windowed daily timeline and a destination-filtered total; a window or destination on an input without those fields and an ungranted member are Denied before any engine",
+    );
+
     // --- The seeded placeholder work: authorized, but never a number ---
     let placeholder = stores
         .data
@@ -840,6 +1252,7 @@ async fn campaign() {
                          "content_digest": CONTENT, "normalized_digest": NORMALIZED, "contract_digest": CONTRACT},
             "bound_work": BOUND,
             "receipts": {"total": total.document, "destination": destination_receipt.document, "timeline": timeline_receipt.document},
+            "library_receipts": library_receipts,
             "latency": latency,
             "routes": routes,
             "admission": {"peak_task_running": stats.peak_task_running, "peak_organization_running": stats.peak_organization_running,
@@ -850,7 +1263,8 @@ async fn campaign() {
                 "Synthetic local password authentication is not RDS IAM. The storage checks use synthetic registry-bound requests; the route and page checks use real APP-009 sessions minted through the product routes against the cfg(test) synthetic loopback issuer (SIMULATED provider), rendered by a recording page renderer (the SSR page is the binary's test).",
                 "The revision cache is seeded locally with the bytes APP-077 uploads (same SHA-256); the credentialed S3 fetch is unit-tested against botocore's Stubber, not S3.",
                 "The engine child runs on macOS arm64 with the locked venv, not in the linux image under Fargate; its latency is re-measured in APP-078's window.",
-                "The registered record is written by the test with the APP-077 digests and the content-derived revision id; upload-sources itself (merged separately) is not run here."
+                "The registered record is written by the test with the APP-077 digests and the content-derived revision id; upload-sources itself (merged separately) is not run here.",
+                "The library revisions (ADR-011) are normalized into the local cache by library_sources.build from the committed synthetic CSVs; their upload to the bucket is the deploy's (APP-096), under the B1 keys library_sources.py plan prints."
             ]
         })).unwrap()).unwrap();
     }
@@ -1107,6 +1521,11 @@ async fn route_campaign(
     assert_eq!(total.headers[header::CACHE_CONTROL], "no-store");
     let (rows, total_receipt) = receipted(&total.body);
     assert_eq!(rows, json!([["1140000"]]));
+    // APP-093 review M4: the route carries each column's value type.
+    assert_eq!(
+        serde_json::from_str::<Value>(&total.body).unwrap()["column_types"],
+        json!({"total_bytes": {"type": "integer"}})
+    );
     for (key, value) in [
         ("organization_id", json!(ORG)),
         ("app_id", json!(APP)),
@@ -1208,7 +1627,7 @@ async fn route_campaign(
         "impossible window bounds (2026-02-31, 2026-04-31, year 0000) are 422 invalid_parameters on the JSON route before authorization or any engine (review M2, probe P6)",
     );
 
-    // --- The work page: idle views, then a run with every state's receipt ---
+    // --- The work page: declared defaults, then parameterized runs ---
     let opened = maya.get(&routes, &page).await;
     assert_eq!(opened.status, StatusCode::OK);
     let props = last_page();
@@ -1218,15 +1637,16 @@ async fn route_campaign(
             .iter()
             .map(|v| (v.id.as_str(), v.state.as_str()))
             .collect::<Vec<_>>(),
-        [("total", "idle"), ("timeline", "idle")]
+        [("total", "ready"), ("timeline", "ready")]
     );
-    assert!(props
-        .views
-        .iter()
-        .all(|v| !v.has_summary && !v.has_table && !v.has_receipt));
+    assert!(props.views.iter().all(|v| v.has_receipt));
     assert_eq!(props.action, page);
     let csrf = props.csrf.clone();
-    assert_eq!(counting.calls(), 4, "opening the page runs nothing");
+    assert_eq!(
+        counting.calls(),
+        6,
+        "opening the page runs declared defaults"
+    );
     let form = |start: &str, end: &str, destination: &str| {
         format!("csrf={csrf}&window_start={start}&window_end={end}&destination={destination}")
     };
@@ -1307,11 +1727,11 @@ async fn route_campaign(
         delivered_receipts.push(serde_json::from_str(&view.receipt_json).unwrap());
     }
     let calls = counting.calls();
-    // No window: 422 rendered directly (no redirect, the run cookie untouched),
+    // Half a window: 422 rendered directly (no redirect, the run cookie untouched),
     // every view idle, nothing ran; an impossible day likewise; a bad token: 403.
     let kept = maya.cookie(crate::auth::cookies::RUN).unwrap();
     for refused_form in [
-        form("", "", "198.51.100.7"),
+        form("2026-10-22T10:00", "", "198.51.100.7"),
         form("2026-02-31T00:00", "2026-03-01T00:00", ""),
         form("0000-01-01T00:00", "0000-01-01T10:10", ""),
     ] {
@@ -1343,7 +1763,7 @@ async fn route_campaign(
     assert_eq!(counting.calls(), calls, "refused forms run nothing");
     check(
         checks,
-        "work page: GET /w/{app}/{work} shows the definition's two runnable views idle and runs nothing; the run form (window required, destination optional, synchronizer token) answers 303 to the page with the run cookie and the page then shows total 1,140,000 and the five timeline buckets with contract-valid receipts listing every source dependency, 900,000 for the destination, and empty (never zero) for a destination with no event; a missing window and an impossible day (2026-02-31, year 0000) are 422 with every view idle and the run cookie untouched, a forged token 403, none reaching the engine",
+        "work page: GET /w/{app}/{work} runs the definition's two source views with their declared defaults and released receipts; the run form (optional complete window, destination, synchronizer token) answers 303 to the page with the run cookie and the page then shows total 1,140,000 and the five timeline buckets with contract-valid receipts listing every source dependency, 900,000 for the destination, and empty (never zero) for a destination with no event; a partial window and an impossible day (2026-02-31, year 0000) are 422 with every view idle and the run cookie untouched, a forged token 403, none reaching the engine",
     );
 
     // --- Reload restores (ADR-010 §1 act 4): GET again, fresh run and release ---
@@ -1384,12 +1804,16 @@ async fn route_campaign(
         delivered_receipts.push(serde_json::from_str(&props.views[0].receipt_json).unwrap());
         reloads.push(json!({"reload": reload, "total": props.views[0].summary[0].value, "timeline_rows": props.views[1].rows.len(), "receipt_digest": props.views[0].receipt_digest}));
     }
-    // Revocation between execution and release on a restored run: denied cards.
+    // APP-144: revocation between execution and release denies the whole
+    // document, including the record/form props assembled before the query.
+    *pages.last.lock().unwrap() = None;
     let (computed, resume) = counting.pause_next();
-    let racing = tokio::spawn(send_raw(
-        routes.clone(),
-        raw_request("GET", &page, &jar(&maya), Vec::new()),
-    ));
+    let mut refreshing = raw_request("GET", &page, &jar(&maya), Vec::new());
+    refreshing.headers_mut().insert(
+        header::ACCEPT,
+        axum::http::HeaderValue::from_static("application/json"),
+    );
+    let racing = tokio::spawn(send_raw(routes.clone(), refreshing));
     computed.await.unwrap();
     operator(
         &c.fixture,
@@ -1407,20 +1831,11 @@ async fn route_campaign(
     );
     resume.send(()).unwrap();
     let reply = racing.await.unwrap();
-    assert_eq!(reply.0, StatusCode::OK);
-    let props = last_page();
-    assert_eq!(
-        props
-            .views
-            .iter()
-            .map(|v| v.state.as_str())
-            .collect::<Vec<_>>(),
-        ["denied", "denied"]
+    assert!(raw_404(&reply), "{:?}", String::from_utf8_lossy(&reply.2));
+    assert!(
+        pages.last.lock().unwrap().is_none(),
+        "no document rendered after revocation"
     );
-    assert!(props
-        .views
-        .iter()
-        .all(|v| v.summary.is_empty() && v.rows.is_empty() && !v.has_receipt));
     // Authority already lost when the page reloads: the page itself fails
     // closed (uniform 404), so nothing is shown at all.
     assert!(maya.get(&routes, &page).await.uniform_404());
@@ -1463,7 +1878,7 @@ async fn route_campaign(
     assert!(last_page().views.iter().all(|v| v.idle));
     let idle_again = maya.get(&routes, &page).await;
     assert_eq!(idle_again.status, StatusCode::OK);
-    assert!(last_page().views.iter().all(|v| v.idle));
+    assert!(last_page().views.iter().all(|v| v.ready && v.has_receipt));
     let shown = run_and_show(
         &mut maya,
         &routes,
@@ -1472,7 +1887,7 @@ async fn route_campaign(
     )
     .await;
     assert_eq!(shown.status, StatusCode::OK);
-    let calls = calls + 2;
+    let calls = calls + 4;
     assert_eq!(counting.calls(), calls);
     let mut tampered = maya.cookie(crate::auth::cookies::RUN).unwrap();
     let last = tampered.pop().unwrap();
@@ -1492,7 +1907,7 @@ async fn route_campaign(
         .uniform_404());
     check(
         checks,
-        "reload restores (ADR-010 act 4): after the run form's 303, GET /w/{app}/{work} twice shows the same 1,140,000 and five buckets with a fresh run and release each time (dispatch +2 per reload, identical receipt identity for the same pinned state and parameters) and refreshes the Strict run cookie; a source_read revocation between execution and release of a restored run renders both views denied, a revocation before the reload makes the page the uniform 404; the cookie presented on another work of hers and a tampered cookie are ignored and cleared with every view idle and no dispatch; a query string stays the uniform 404",
+        "reload restores (ADR-010 act 4): after the run form's 303, GET /w/{app}/{work} twice shows the same 1,140,000 and five buckets with a fresh run and release each time (dispatch +2 per reload, identical receipt identity for the same pinned state and parameters) and refreshes the Strict run cookie; a source_read revocation between execution and release of an Accept: application/json refresh refuses the whole document with the uniform 404 and never invokes its renderer, as does a revocation before reload; the cookie presented on another work of hers and a tampered cookie are ignored and cleared with every view idle and no dispatch; a query string stays the uniform 404",
     );
 
     // --- D7.9 (review M4): a lock wait on the member's own row during session
@@ -1723,6 +2138,145 @@ async fn route_campaign(
         &format!("foreign, revoked, pre-access and anonymous requests get the uniform 404 and invoke no engine: {denials} requests (anonymous, a pre-access session, a pre-access cookie presented as a session, a canary member replaying the Northstar ids, a member without work or source access, a revoked membership, and the member after her own source_read revocation) on the JSON route, the page and the run form; the dispatch counter did not move and the service log gained no query.dispatch line"),
     );
 
+    // --- APP-093 review m5: GET /v1/library at the route ---
+    // Without a live session (anonymous, pre-access, a pre-access cookie as a
+    // session, a revoked membership) the uniform 404; a live member of either
+    // organization gets 200 with only the library apps it may open now: none
+    // for the canary member (its organization holds no Northstar app) and the
+    // member without grants, exactly the one granted app for Maya.
+    for (label, browser) in [
+        ("anonymous", &mut anonymous),
+        ("pre-access", &mut pending),
+        ("pre-access cookie as a session", &mut swapped),
+        ("revoked membership", &mut revoked),
+    ] {
+        assert!(
+            browser.get(&routes, "/v1/library").await.uniform_404(),
+            "{label} library"
+        );
+        assert!(
+            browser
+                .post(&routes, "/v1/library", "{}")
+                .await
+                .uniform_404(),
+            "{label} library POST"
+        );
+    }
+    let library = |reply: &crate::auth::tests::Reply| -> Vec<(String, String, String)> {
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+        assert_eq!(reply.headers[header::CONTENT_TYPE], "application/json");
+        assert_eq!(reply.headers[header::CACHE_CONTROL], "no-store");
+        let body: Value = serde_json::from_str(&reply.body).unwrap();
+        assert_eq!(
+            (body["schema_version"].clone(), body["synthetic"].clone()),
+            (json!(1), json!(true))
+        );
+        body["apps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| {
+                (
+                    a["library_id"].as_str().unwrap().to_owned(),
+                    a["app_id"].as_str().unwrap().to_owned(),
+                    a["work_id"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    for (label, browser) in [
+        ("canary member (foreign organization)", &mut canary),
+        ("member without library grants", &mut outsider),
+    ] {
+        assert_eq!(
+            library(&browser.get(&routes, "/v1/library").await),
+            Vec::new(),
+            "{label}"
+        );
+        assert!(
+            browser
+                .post(&routes, "/v1/library", "{}")
+                .await
+                .uniform_404(),
+            "{label} library POST"
+        );
+    }
+    assert_eq!(library(&maya.get(&routes, "/v1/library").await), Vec::new());
+    let sidecar: Value = serde_json::from_slice(
+        &std::fs::read(repository().join("contracts/fixtures/library/catalog.json")).unwrap(),
+    )
+    .unwrap();
+    let expense = sidecar["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["library_id"] == "expense-review")
+        .unwrap()
+        .clone();
+    let (expense_app, expense_work, expense_source) = (
+        expense["app_id"].as_str().unwrap(),
+        expense["work_id"].as_str().unwrap(),
+        expense["sources"][0]["source_id"].as_str().unwrap(),
+    );
+    let library_grants: [(&str, Vec<&str>); 4] = [
+        ("discover", vec!["--app", expense_app]),
+        ("run", vec!["--app", expense_app]),
+        (
+            "record_read",
+            vec!["--app", expense_app, "--work", expense_work],
+        ),
+        ("source_read", vec!["--source", expense_source]),
+    ];
+    for (permission, resource) in &library_grants {
+        grant(&c.fixture, &member, permission, resource);
+    }
+    assert_eq!(
+        library(&maya.get(&routes, "/v1/library").await),
+        [(
+            "expense-review".to_owned(),
+            expense_app.to_owned(),
+            expense_work.to_owned()
+        )]
+    );
+    // M4 at the route: the expense totals answer carries the money type.
+    let totals = maya
+        .post(
+            &routes,
+            &format!("/v1/work/{expense_app}/{expense_work}/queries/totals"),
+            &query_body(&json!({})),
+        )
+        .await;
+    assert_eq!(totals.status, StatusCode::OK, "{}", totals.body);
+    let (rows, _) = receipted(&totals.body);
+    assert_eq!(rows[0][1], json!("26262004"));
+    assert_eq!(
+        serde_json::from_str::<Value>(&totals.body).unwrap()["column_types"],
+        json!({"claims": {"type": "integer"},
+            "largest_claim": {"type": "money", "currency": "USD", "minor_unit_exponent": 2},
+            "total_amount": {"type": "money", "currency": "USD", "minor_unit_exponent": 2}})
+    );
+    // Without the work's record_read the app is not listed again.
+    crate::storage::definition_qualification::revoke(
+        &c.fixture,
+        &member,
+        "record_read",
+        &["--app", expense_app, "--work", expense_work],
+    );
+    assert_eq!(library(&maya.get(&routes, "/v1/library").await), Vec::new());
+    for (permission, resource) in &library_grants[..2] {
+        crate::storage::definition_qualification::revoke(&c.fixture, &member, permission, resource);
+    }
+    crate::storage::definition_qualification::revoke(
+        &c.fixture,
+        &member,
+        "source_read",
+        &["--source", expense_source],
+    );
+    check(
+        checks,
+        "APP-093 m5, GET /v1/library at the route: anonymous, pre-access, a pre-access cookie as a session and a revoked membership get the uniform 404 (POST is the fallback's 404); a live canary member and a member without grants get 200 with no app; Maya gets exactly expense-review (its seeded app and work) once granted discover, run, record_read and source_read (and its totals route answer carries column_types: claims integer, total_amount 26262004 and largest_claim money USD exponent 2), and nothing once record_read is revoked",
+    );
+
     // --- Revocation between execution and delivery denies the release ---
     let calls = counting.calls();
     let (computed, resume) = counting.pause_next();
@@ -1760,11 +2314,126 @@ async fn route_campaign(
         "the engine computed; the release was denied"
     );
     grant(&c.fixture, &member, "source_read", &["--source", SOURCE]);
+    // APP-144: put a real committed record behind the page before pausing
+    // its source query. The final authority check must protect the records
+    // and command forms already assembled, not only the computed numbers.
+    operator(&c.fixture, &["backfill", "--organization", ORG]);
+    let live = |reference: &str| c.auth.vault.contains(reference);
+    let current = match stores
+        .workspace
+        .resolve_session(&maya.cookie(crate::auth::cookies::SESSION).unwrap(), &live)
+        .await
+        .unwrap()
+    {
+        Lookup::Live(member) => member,
+        _ => panic!("current page member"),
+    };
+    let listing = stores
+        .data
+        .list_records(&current, APP, ROUTE_WORK)
+        .await
+        .unwrap();
+    let command = CommandRequest {
+        app: APP.into(),
+        work: ROUTE_WORK.into(),
+        publication: listing.publication,
+        command: "record_decision".into(),
+        schema: "decision".into(),
+        schema_version_expected: 1,
+        record: "00000000-0000-4000-8000-0000000012d4".into(),
+        expected_record_version: 0,
+        expected_work_version: listing.work_version,
+        values: json!([
+            {"field_id":"status","value":{"type":"enum","value":"needs_context"}},
+            {"field_id":"note","value":{"type":"text","value":"APP-144 private record before revoke"}},
+        ]),
+        idempotency_key: "000000000000000000000000000012d4".into(),
+    };
+    assert!(matches!(
+        stores.data.commit_record(&current, &command).await.unwrap(),
+        CommandResult::Committed(_)
+    ));
     // The page: the form's 303 saves the run; the GET it redirects to computes
-    // both views, then denies both at release.
+    // both views, then denies the entire document at release.
     let opened = maya.get(&routes, &page).await;
     assert_eq!(opened.status, StatusCode::OK);
-    let csrf = last_page().csrf;
+    let before_revoke = last_page();
+    assert!(
+        !before_revoke.forms.is_empty(),
+        "a writer's real command form is present"
+    );
+    assert!(
+        before_revoke
+            .record_cards
+            .iter()
+            .flat_map(|card| &card.rows)
+            .any(|row| row.record_id == command.record
+                && row
+                    .cells
+                    .iter()
+                    .any(|cell| cell.text == "APP-144 private record before revoke")),
+        "the authorized document contains the committed record"
+    );
+    let form_id = before_revoke
+        .parts
+        .iter()
+        .find(|part| part.is_form)
+        .expect("declared form")
+        .id
+        .clone();
+    let selection = format!(
+        "csrf={}&document_action=refresh&selection.{}={}",
+        before_revoke.csrf, form_id, command.record
+    );
+    let selected = maya.post(&routes, &page, &selection).await;
+    assert_eq!(selected.status, StatusCode::OK);
+    assert_eq!(last_page().forms[0].record, command.record);
+    assert_eq!(last_page().forms[0].record_version, "1");
+    assert_eq!(last_page().forms[0].command, "record_decision");
+    let refreshed = maya
+        .send(
+            &routes,
+            "POST",
+            &page,
+            &selection,
+            &[
+                ("sec-fetch-site", "same-origin"),
+                ("accept", "application/json"),
+            ],
+        )
+        .await;
+    assert_eq!(refreshed.status, StatusCode::OK);
+    let wire: Value = serde_json::from_str(&refreshed.body).unwrap();
+    assert_eq!(wire["forms"][0]["record"], command.record);
+    assert_eq!(
+        wire["parts"].as_array().unwrap().len(),
+        before_revoke.parts.len()
+    );
+    assert_eq!(wire["forms"][0]["record_version"], "1");
+    assert!(maya
+        .post(
+            &routes,
+            &page,
+            &format!(
+                "csrf={}&document_action=refresh&selection.{}=00000000-0000-4000-8000-0000000012ff",
+                before_revoke.csrf, form_id
+            )
+        )
+        .await
+        .uniform_404());
+    assert!(maya
+        .post(
+            &routes,
+            &page,
+            &format!(
+                "csrf={}&document_action=refresh&selection.unknown={}",
+                before_revoke.csrf, command.record
+            )
+        )
+        .await
+        .uniform_404());
+    check(checks, "APP-144: declared form chooses a real current record through a CSRF-protected body, keeping its exact command/version; live JSON uses the same ordered parts and snake_case wire props; missing records and undeclared form selectors are uniform 404");
+    let csrf = before_revoke.csrf;
     let posted = maya
         .post(
             &routes,
@@ -1773,6 +2442,7 @@ async fn route_campaign(
         )
         .await;
     assert_eq!(posted.status, StatusCode::SEE_OTHER);
+    *pages.last.lock().unwrap() = None;
     let (computed, resume) = counting.pause_next();
     let racing = tokio::spawn(send_raw(
         routes.clone(),
@@ -1791,25 +2461,17 @@ async fn route_campaign(
     );
     resume.send(()).unwrap();
     let reply = racing.await.unwrap();
-    assert_eq!(reply.0, StatusCode::OK);
-    let props = last_page();
-    assert_eq!(
-        props
-            .views
-            .iter()
-            .map(|v| v.state.as_str())
-            .collect::<Vec<_>>(),
-        ["denied", "denied"]
+    assert!(raw_404(&reply), "{:?}", String::from_utf8_lossy(&reply.2));
+    assert!(!String::from_utf8_lossy(&reply.2).contains("APP-144 private record before revoke"));
+    assert!(
+        pages.last.lock().unwrap().is_none(),
+        "no record/form document rendered after revocation"
     );
-    assert!(props
-        .views
-        .iter()
-        .all(|v| v.summary.is_empty() && v.rows.is_empty() && !v.has_receipt));
     // And the revoked membership ends the session for the next request.
     assert!(maya.get(&routes, &page).await.uniform_404());
     check(
         checks,
-        "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; on the page a membership revocation in the same gap (the run form's 303, then the restored GET) renders both views denied with no value or receipt, and the next request finds no session",
+        "revocation between execution and delivery denies release: with the engine paused after computing 1,140,000, a source_read revocation turns the JSON response into the uniform 404 with no number; the authorized work page contains a real committed record and command form, then a membership revocation during its source query refuses the whole document with uniform 404, no record value and no renderer invocation; the next request finds no session",
     );
     // Every receipt the page delivered validates under contracts/validate.py
     // (review M2: a receipt the validator refuses is never delivered).
@@ -2048,6 +2710,12 @@ async fn route_campaign(
             (down_app.clone(), "GET", "/workspace".to_owned(), Vec::new()),
             (
                 down_routes.clone(),
+                "GET",
+                "/v1/library".to_owned(),
+                Vec::new(),
+            ),
+            (
+                down_routes.clone(),
                 "POST",
                 format!("/v1/work/{APP}/{load_work}/queries/total"),
                 query_body(&window()).into_bytes(),
@@ -2083,6 +2751,7 @@ async fn route_campaign(
     let outage_ms = started.elapsed().as_millis();
     for (router, method, uri) in [
         (down_app.clone(), "GET", "/workspace".to_owned()),
+        (down_routes.clone(), "GET", "/v1/library".to_owned()),
         (
             down_routes.clone(),
             "POST",
@@ -2098,7 +2767,7 @@ async fn route_campaign(
     down.close().await.unwrap();
     check(
         checks,
-        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
+        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, GET /v1/library, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
     );
     let mut report = report;
     report["store_outage"] = json!({"requests": outage, "elapsed_ms": outage_ms, "dispatch_calls": down_counting.calls()});
@@ -2154,3 +2823,11 @@ async fn route_campaign(
     let Campaign { fixture, .. } = c;
     (fixture, report)
 }
+
+/// ADR-011: the pitch canvas campaign extends this one (its fixture helpers).
+#[path = "canvas_campaign.rs"]
+mod canvas_campaign;
+
+/// ADR-011: the pitch integration campaign (APP-096) extends this one too.
+#[path = "pitch_qualification.rs"]
+pub(crate) mod pitch_campaign;

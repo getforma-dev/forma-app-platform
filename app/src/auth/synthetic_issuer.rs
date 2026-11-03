@@ -125,10 +125,13 @@ pub struct Tenant {
     pub slug: &'static str,
     pub tenant_id: String,
     pub client_id: &'static str,
+    pub shared_client_id: &'static str,
 }
 
 struct Par {
     slug: String,
+    client_id: String,
+    redirect_uri: String,
     state: String,
     challenge: String,
     /// The pending invitation's token this request was pushed with.
@@ -159,6 +162,8 @@ pub enum ParMode {
 }
 struct Grant {
     slug: String,
+    client_id: String,
+    redirect_uri: String,
     challenge: String,
     subject: String,
     created: Instant,
@@ -379,7 +384,19 @@ impl Issuer {
             return None;
         }
         let tenant = self.state.tenants.iter().find(|t| t.slug == slug)?;
-        if pairs.get("client_id")? != tenant.client_id {
+        if ![tenant.client_id, tenant.shared_client_id].contains(&pairs.get("client_id")?.as_str())
+        {
+            return None;
+        }
+        if self
+            .state
+            .pars
+            .lock()
+            .unwrap()
+            .get(pairs.get("request_uri")?)?
+            .client_id
+            != *pairs.get("client_id")?
+        {
             return None;
         }
         Some((slug, pairs.get("request_uri")?.clone()))
@@ -391,6 +408,8 @@ impl Issuer {
             code.clone(),
             Grant {
                 slug,
+                client_id: par.client_id,
+                redirect_uri: par.redirect_uri,
                 challenge: par.challenge,
                 subject: subject.into(),
                 created: Instant::now(),
@@ -527,8 +546,11 @@ async fn par(
     ];
     if form.iter().any(|(k, _)| !allowed.contains(&k.as_str()))
         || get("provider").as_deref() != Some("email")
-        || get("client_id").as_deref() != Some(tenant.client_id)
-        || get("redirect_uri").as_deref() != Some(CALLBACK)
+        || !((get("client_id").as_deref() == Some(tenant.client_id)
+            && get("redirect_uri").as_deref() == Some(CALLBACK))
+            || (get("client_id").as_deref() == Some(tenant.shared_client_id)
+                && get("redirect_uri").as_deref()
+                    == Some("https://beta.getforma.dev/auth/shared/callback")))
         || get("response_type").as_deref() != Some("code")
         || get("code_challenge_method").as_deref() != Some("S256")
         || get("code_challenge").is_none_or(|c| c.len() != 43)
@@ -572,6 +594,8 @@ async fn par(
         request_uri.clone(),
         Par {
             slug,
+            client_id: get("client_id").unwrap(),
+            redirect_uri: get("redirect_uri").unwrap(),
             state: get("state").unwrap(),
             challenge: get("code_challenge").unwrap(),
             invitation: invite,
@@ -700,10 +724,13 @@ async fn token(
             // One-use code: removed whatever happens next.
             let grant = state.grants.lock().unwrap().remove(text("code"));
             let valid = fields.len() == 5
-                && tenant.is_some_and(|t| t.client_id == text("client_id"))
-                && text("redirect_uri") == CALLBACK
+                && tenant.is_some_and(|t| {
+                    [t.client_id, t.shared_client_id].contains(&text("client_id"))
+                })
                 && grant.as_ref().is_some_and(|g| {
                     g.slug == slug
+                        && g.client_id == text("client_id")
+                        && text("redirect_uri") == g.redirect_uri
                         && g.created.elapsed() <= Duration::from_secs(60)
                         && super::pkce::challenge(text("code_verifier")) == g.challenge
                 });

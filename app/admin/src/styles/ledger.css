@@ -1,0 +1,120 @@
+/* APP-102: the receipt attachment on the intent bar and the expense ledger
+   card. Tokens come from canvas.css (light and dark). */
+
+/* The intent bar gains an attach button and a thumbnail chip. */
+.cv-intent[data-attach="wired"] { display: flex; }
+.cv-intent[data-attach="wired"] #intent-input { flex: 1 1 auto; }
+.cv-intent[data-dragging="true"] {
+  border-color: var(--cv-accent);
+  box-shadow: 0 0 0 3px var(--cv-accent-soft);
+}
+.cv-attach {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--cv-muted);
+  cursor: pointer;
+}
+.cv-attach:hover, .cv-attach:focus-visible { background: var(--cv-accent-soft); color: var(--cv-accent); }
+.cv-intent[data-receipt="attached"] .cv-attach { color: var(--cv-accent); }
+.cv-attach-chip {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+.cv-attach-chip[hidden] { display: none; }
+.cv-attach-thumb {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+}
+.cv-attach-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--cv-line);
+  border-radius: 50%;
+  background: var(--cv-surface);
+  color: var(--cv-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The confirmation card's receipt thumbnail. */
+.cv-confirm-receipt {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0 0 0.75rem;
+}
+.cv-confirm-receipt img {
+  width: 72px;
+  max-height: 96px;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+  background: var(--cv-sunken);
+}
+.cv-confirm-receipt figcaption { color: var(--cv-muted); font-size: 0.8rem; }
+
+/* The expense ledger card. */
+.cv-ledger-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 0.6rem;
+}
+.cv-ledger-controls:empty { display: none; }
+.cv-ledger-controls select,
+.cv-ledger-controls input {
+  height: 30px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 8px;
+  background: var(--cv-surface);
+  color: var(--cv-text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.cv-ledger-custom { display: inline-flex; gap: 0.35rem; align-items: center; }
+.cv-ledger-custom[hidden] { display: none; }
+.cv-ledger-total { margin: 0 0 0.75rem; }
+.cv-ledger-total-value {
+  font-size: 1.6rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.cv-ledger-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+.cv-ledger-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.cv-ledger-table caption {
+  padding-bottom: 0.3rem;
+  color: var(--cv-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.cv-ledger-table th,
+.cv-ledger-table td { padding: 0.3rem 0.2rem; border-top: 1px solid var(--cv-hairline); }
+.cv-ledger-table th { font-weight: 500; text-align: left; }
+.cv-ledger-table td.num { text-align: right; font-variant-numeric: tabular-nums; }

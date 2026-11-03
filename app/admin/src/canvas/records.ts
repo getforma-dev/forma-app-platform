@@ -1,0 +1,300 @@
+// The records card (ADR-011 scenarios, APP-093/APP-095): a saved work's
+// current records as the server lists them through
+// `GET /v1/work/{app}/{work}/records` (record_read on the work, RLS, the work
+// fence), newest commit first. The card is rendered on the server first
+// (`canvas/app.tsx`, `query::canvas::records_cards`) and refreshed here on
+// every `record.committed` event of its work and after every command this
+// browser confirms. A pending record (at a declared transition's starting
+// state) offers Approve and Reject to a member who holds record_write: each
+// asks `POST /v1/act` for a server-minted `decide` draft (the typed command
+// and its idempotency key) and posts it through the audited command route.
+// Nothing here computes a value: every cell is a display the server attached
+// to a typed value, every identity (publication, definition digest, commit
+// sequence, version) is the record's own.
+import { postDraft, requestDecision, type Draft } from './actions';
+import { label } from './display';
+import { el, isUuid, pulseTarget, retryButton, skeleton } from './render';
+import { liveArrival } from './board';
+import { showActivity, showLiveTiming, showTiming } from './timing';
+
+export type RecordValueJson = { field_id: string; value: unknown; display: string };
+export type RecordJson = {
+  record_id: string; collection_id: string; schema_id: string; version: number; commit_sequence: number;
+  committed_at: string; creator: { principal_id: string; label: string }; updater: { principal_id: string; label: string };
+  values: RecordValueJson[];
+  /** The channel or agent that committed this version ("Slack" for APP-100, DS-59; an MCP agent's label such as "Claude" or "OpenAI" for APP-099), a display label only. */
+  via?: string | null;
+  /** APP-107: the transitions that may fire now (declared guards judged by the server). */
+  next?: { to: string; rule: string | null }[];
+  /** APP-107: a purchase request's PO reference; display only. */
+  reference?: string;
+  /** APP-107: server-computed display flags (an invoice's PO match). */
+  flags?: { kind: string; state: string; label: string }[];
+};
+export type RecordsJson = {
+  app_id: string; work_id: string; publication_id: string; definition_digest: string; work_version: number; can_write: boolean;
+  collections: {
+    collection_id: string; schema_id: string; schema_version: number;
+    fields: { id: string; type: string; nullable: boolean; writable: boolean; values?: string[] }[];
+    commands: { id: string; operation: string; writable_fields: string[]; transitions: { field_id: string; from: string; to: string }[] }[];
+  }[];
+  records: RecordJson[];
+  truncated: boolean;
+};
+/** The server's records card JSON (`GET /v1/canvas/works/{app}/{work}` → `records[]`). */
+export type RecordsCardJson = {
+  id: string; title: string; summary: string; url: string; collection: string; schema: string; can_write: boolean;
+  decide: string; status_field: string; count: string; pending: string; waiting?: string;
+};
+
+export function recordsJson(value: unknown): RecordsJson | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const listing = value as RecordsJson;
+  if (!isUuid(listing.app_id) || !isUuid(listing.work_id) || !Array.isArray(listing.records) || !Array.isArray(listing.collections)) return null;
+  return listing;
+}
+
+/** `sha256:<64 hex>` as its first twelve and last six digits (`query::canvas::short_digest`). */
+function shortDigest(digest: string): string {
+  return /^sha256:[0-9a-f]{64}$/.test(digest) ? `sha256:${digest.slice(7, 19)}…${digest.slice(-6)}` : digest;
+}
+
+/** The idle shell of a records card the island places (`buildGroup`); `refreshRecords` fills it. */
+export function buildRecordsCard(document_: Document, card: RecordsCardJson): HTMLElement {
+  const node = el(document_, 'article', {
+    class: 'cv-card cv-records', 'data-card': card.id, 'data-kind': 'records', 'data-records': card.url,
+    'data-collection': card.collection, 'data-schema': card.schema, 'data-decide': card.decide, 'data-status-field': card.status_field,
+    'data-can-write': card.can_write ? 'true' : 'false', 'data-pending': card.pending, 'data-waiting': card.waiting ?? '0', 'aria-label': card.title,
+  },
+  el(document_, 'header', { class: 'cv-card-head' }, el(document_, 'h3', {}, card.title), el(document_, 'span', { class: 'badge' }, 'records')),
+  el(document_, 'p', { class: 'cv-records-summary', 'data-summary': '' }, card.summary),
+  el(document_, 'div', { class: 'cv-card-body', 'data-body': '' }, skeleton(document_, 'records'), el(document_, 'p', { class: 'sr-only', role: 'status' }, 'Loading records…')),
+  el(document_, 'p', { class: 'cv-records-provenance', 'data-provenance': '' }),
+  el(document_, 'p', { class: 'cv-outcome', role: 'status', 'data-outcome': '' }));
+  return node;
+}
+
+/**
+ * APP-113: records with a decision in flight in this page. A live refresh
+ * redraws the rows; their buttons stay disabled until the decision settles,
+ * so a second click cannot send a second decision.
+ */
+const deciding = new Set<string>();
+
+function rowButtons(card: HTMLElement, record: string): HTMLButtonElement[] {
+  return Array.from(card.querySelectorAll<HTMLButtonElement>(`tr[data-record="${CSS.escape(record)}"] button`));
+}
+
+function valueOf(record: RecordJson, field: string): RecordValueJson | undefined {
+  return record.values.find((v) => v.field_id === field);
+}
+/** APP-107: a decision's button text ("approved" → "Approve", "manager_approved" → "Approve (manager)", "paid" → "Mark paid"). */
+export function decisionLabel(to: string): string {
+  const step = /^(\w+?)_approved$/.exec(to);
+  if (step) return `Approve (${label(step[1]).toLowerCase()})`;
+  const verbs: Record<string, string> = { approved: 'Approve', rejected: 'Reject', granted: 'Grant', denied: 'Deny', paid: 'Mark paid', disputed: 'Dispute' };
+  return verbs[to] ?? label(to.replace(/ed$/, 'e'));
+}
+function positive(to: string): boolean {
+  return /approv|grant|accept|paid/.test(to);
+}
+/** The targets a record may move to now: the server's `next` when given, else the declared ones from its value. */
+function nextOf(record: RecordJson, declared: { field_id: string; from: string; to: string }[], field: string, status: string): string[] {
+  if (Array.isArray(record.next)) return record.next.map((n) => n.to);
+  return declared.filter((t) => t.field_id === field && t.from === status).map((t) => t.to);
+}
+function statusOf(record: RecordJson, field: string): string {
+  const value = valueOf(record, field)?.value as { value?: unknown } | undefined;
+  return typeof value?.value === 'string' ? value.value : '';
+}
+
+/** Draws the listing into the card: the summary line, the table and the provenance line. */
+export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
+  const document_ = card.ownerDocument;
+  const collection = listing.collections.find((c) => c.collection_id === card.dataset.collection) ?? listing.collections[0];
+  const body = card.querySelector<HTMLElement>('[data-body]');
+  const summary = card.querySelector<HTMLElement>('[data-summary]');
+  const provenance = card.querySelector<HTMLElement>('[data-provenance]');
+  if (!collection || !body) return;
+  const decide = collection.commands.find((c) => c.transitions.length > 0);
+  const statusField = decide?.transitions[0]?.field_id ?? '';
+  const froms = new Set((decide?.transitions ?? []).map((t) => t.from));
+  const records = listing.records.filter((r) => r.collection_id === collection.collection_id);
+  const pending = records.filter((r) => listing.can_write && froms.has(statusOf(r, statusField)) && nextOf(r, decide?.transitions ?? [], statusField, statusOf(r, statusField)).length > 0);
+  card.dataset.pendingNow = String(pending.length);
+  card.dataset.decide = decide?.id ?? '';
+  card.dataset.statusField = statusField;
+  card.dataset.canWrite = listing.can_write ? 'true' : 'false';
+  const count = records.length;
+  if (summary) {
+    summary.textContent = listing.can_write && decide
+      ? `${pending.length === 0 ? 'Nothing' : pending.length} waiting for your approval · ${count} ${count === 1 ? 'record' : 'records'}`
+      : `${count} ${count === 1 ? 'record' : 'records'}`;
+  }
+  const previous = new Set(Array.from(card.querySelectorAll<HTMLElement>('tr[data-record]')).map((row) => `${row.dataset.record}@${row.dataset.version}`));
+  if (!records.length) {
+    body.replaceChildren(el(document_, 'p', { class: 'cv-message', role: 'status' }, 'No records yet.'));
+  } else {
+    const shown = collection.fields.filter((f) => f.id !== statusField);
+    const head = el(document_, 'tr', {});
+    for (const field of shown) head.append(el(document_, 'th', { scope: 'col' }, label(field.id)));
+    if (statusField) head.append(el(document_, 'th', { scope: 'col' }, label(statusField)));
+    head.append(el(document_, 'th', { scope: 'col' }, 'Filed by'));
+    if (pending.length) head.append(el(document_, 'th', { scope: 'col', class: 'cv-records-actions-head' }, 'Decision'));
+    const rows = el(document_, 'tbody', {});
+    for (const record of records) {
+      const status = statusOf(record, statusField);
+      const targets = nextOf(record, decide?.transitions ?? [], statusField, status);
+      const isPending = listing.can_write && froms.has(status) && targets.length > 0;
+      const tr = el(document_, 'tr', { 'data-record': record.record_id, 'data-version': String(record.version), 'data-status': status });
+      if (!previous.has(`${record.record_id}@${record.version}`) && previous.size) {
+        tr.classList.add('is-new');
+        // APP-116: a change made through an agent (MCP) or Slack: who and when (the event carries no tool or duration).
+        if (record.via) showActivity(card, record.via, status ? `${valueOf(record, shown[0]?.id ?? '')?.display ?? 'record'} ${status}` : 'record changed');
+      }
+      shown.forEach((field, index) => {
+        const value = valueOf(record, field.id);
+        const numeric = field.type === 'money' || field.type === 'integer' || field.type === 'decimal';
+        const cell = el(document_, 'td', { class: numeric ? 'value num' : 'value', title: `${label(field.id)}: ${value?.display ?? '—'} · version ${record.version}` }, value?.display ?? '—');
+        // APP-107: the PO reference and the PO match, beside the first value (display only).
+        if (index === 0 && record.reference) cell.append(el(document_, 'span', { class: 'cv-ref-chip', title: 'Purchase order reference' }, record.reference));
+        if (index === 0) for (const flag of record.flags ?? []) cell.append(el(document_, 'span', { class: 'cv-flag-chip', 'data-state': flag.state, title: flag.label }, flag.state === 'match' ? 'PO match' : flag.state === 'mismatch' ? 'PO mismatch' : 'PO not found'));
+        tr.append(cell);
+      });
+      if (statusField) {
+        tr.append(el(document_, 'td', { class: 'cv-status' }, el(document_, 'span', { class: 'cv-status-chip', 'data-status': status }, status)));
+      }
+      const by = el(document_, 'td', { class: 'cv-records-by', title: record.creator.principal_id }, record.creator.label);
+      if (record.via) by.append(el(document_, 'span', { class: 'cv-via-chip', title: `Version ${record.version} was committed from ${record.via}` }, `via ${record.via}`));
+      tr.append(by);
+      if (pending.length) {
+        const cell = el(document_, 'td', { class: 'cv-records-actions' });
+        if (isPending && decide) {
+          for (const to of targets) {
+            const rule = record.next?.find((n) => n.to === to)?.rule;
+            const button = el(document_, 'button', { type: 'button', class: positive(to) ? 'cv-approve' : 'cv-reject', 'data-decide': to, ...(rule ? { title: `Declared rule: ${rule}` } : {}) }, decisionLabel(to));
+            button.disabled = deciding.has(record.record_id);
+            button.addEventListener('click', () => void decideRecord(card, listing, record, to));
+            cell.append(button);
+          }
+        }
+        tr.append(cell);
+      }
+      rows.append(tr);
+    }
+    body.replaceChildren(el(document_, 'div', { class: 'cv-table cv-records-table' }, el(document_, 'table', {}, el(document_, 'thead', {}, head), rows)));
+  }
+  if (provenance) {
+    const newest = records[0];
+    provenance.replaceChildren(
+      el(document_, 'span', { class: 'cv-verified' }, 'Records'),
+      el(document_, 'code', { title: `Publication ${listing.publication_id}` }, `publication ${listing.publication_id.slice(0, 8)}`),
+      el(document_, 'code', { title: `Definition digest ${listing.definition_digest}` }, shortDigest(listing.definition_digest)),
+      el(document_, 'code', { title: 'The organization commit sequence of the newest record shown' }, newest ? `commit ${newest.commit_sequence}` : 'no commits'),
+      el(document_, 'span', { class: 'cv-receipt-meta' }, `work v${listing.work_version}${listing.truncated ? ' · first page' : ''}`));
+  }
+  card.dataset.state = 'ready';
+  const chip = card.querySelector<HTMLElement>('.badge');
+  if (chip) chip.textContent = `${count} ${count === 1 ? 'record' : 'records'}`;
+}
+
+/** Fetches the listing and redraws the card; a refusal shows no row. */
+export async function refreshRecords(card: HTMLElement, live = false): Promise<void> {
+  const url = card.dataset.records ?? '';
+  if (!url.startsWith('/v1/work/')) return;
+  const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
+  card.dataset.epoch = epoch;
+  let response: Response | null = null;
+  try {
+    response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+  } catch {
+    // APP-113: a network error shows the failed state below, never "Loading…" forever.
+  }
+  if (card.dataset.epoch !== epoch) return;
+  const body: unknown = response ? await response.json().catch(() => null) : null;
+  if (card.dataset.epoch !== epoch) return;
+  const listing = response?.ok ? recordsJson(body) : null;
+  if (!listing) {
+    const denied = response?.status === 404;
+    const message = denied ? 'You don’t have access to these records.' : 'The records couldn’t load.';
+    card.dataset.state = denied ? 'denied' : 'failed';
+    card.querySelector<HTMLElement>('[data-body]')?.replaceChildren(el(card.ownerDocument, 'p', { class: 'cv-message', role: 'alert' }, message),
+      ...(denied ? [] : [retryButton(card.ownerDocument)]));
+    return;
+  }
+  renderRecords(card, listing);
+  // APP-116: on a live update, the time from the event's arrival to the redrawn card.
+  const arrived = live && listing.work_id ? liveArrival(listing.work_id) : undefined;
+  if (arrived !== undefined && performance.now() - arrived < 15000) {
+    showLiveTiming(card, performance.now() - arrived);
+  }
+  if (live) {
+    const item = pulseTarget(card);
+    item.classList.remove('is-live-updated');
+    void item.offsetWidth;
+    item.classList.add('is-live-updated');
+    window.setTimeout(() => item.classList.remove('is-live-updated'), 1600);
+  }
+}
+
+/** Approve or Reject: a server-minted decide draft, then the audited command route (once per record at a time). */
+async function decideRecord(card: HTMLElement, listing: RecordsJson, record: RecordJson, to: string): Promise<void> {
+  const id = record.record_id;
+  if (deciding.has(id)) return;
+  deciding.add(id);
+  const outcome = card.querySelector<HTMLElement>('[data-outcome]');
+  for (const button of rowButtons(card, id)) button.disabled = true;
+  if (outcome) {
+    outcome.setAttribute('role', 'status');
+    outcome.textContent = 'Preparing the decision…';
+  }
+  const started = performance.now();
+  try {
+    let draft: Draft;
+    try {
+      draft = await requestDecision(listing.app_id, listing.work_id, id, to);
+    } catch (error) {
+      if (outcome) {
+        outcome.setAttribute('role', 'alert');
+        outcome.textContent = error instanceof Error && error.message ? error.message : 'The decision could not be prepared. Nothing was changed.';
+      }
+      return;
+    }
+    if (outcome) outcome.textContent = `Saving: ${label(to)}…`;
+    const drafted = performance.now() - started;
+    const committing = performance.now();
+    const result = await postDraft(draft);
+    const saved = performance.now() - committing;
+    if (result.kind === 'committed') {
+      if (outcome) {
+        outcome.replaceChildren();
+        outcome.setAttribute('role', 'status');
+        outcome.append(el(card.ownerDocument, 'strong', {}, `${label(to)}. `), `Record version ${result.recordVersion}, commit ${result.commit}. Audit event `, el(card.ownerDocument, 'code', {}, result.audit));
+      }
+      deciding.delete(id);
+      const reading = performance.now();
+      await refreshRecords(card, true);
+      showTiming('Decision', [
+        { label: 'draft', ms: drafted, server: typeof draft.parse_ms === 'number' ? draft.parse_ms : null },
+        { label: 'saved', ms: saved },
+        { label: 'shown', ms: performance.now() - reading },
+      ], card);
+    } else if (outcome) {
+      outcome.replaceChildren();
+      outcome.setAttribute('role', 'alert');
+      outcome.append(result.message);
+    }
+  } finally {
+    // The rows may have been redrawn meanwhile: re-enable the current row's buttons.
+    deciding.delete(id);
+    for (const button of rowButtons(card, id)) button.disabled = false;
+  }
+}
+
+/** Wires a server-rendered or island-built records card: its buttons, then a first refresh when it is idle. */
+export function wireRecordsCard(card: HTMLElement): void {
+  if (card.dataset.wired === 'true') return;
+  card.dataset.wired = 'true';
+  // Server-rendered rows carry plain buttons; the first refresh rebuilds them wired.
+  void refreshRecords(card);
+}

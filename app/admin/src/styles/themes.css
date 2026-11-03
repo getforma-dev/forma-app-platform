@@ -1,0 +1,588 @@
+/* Theme roles (APP-166).
+   One vocabulary, named themes, nested with data-theme. DaisyUI's swap is the
+   model; this file is plain CSS. No Tailwind, no extra palette names from a
+   model, no authored CSS.
+
+   A component reads var(--cv-*) or the native aliases below. Those aliases
+   point at roles. A theme redeclares every role, so a nested data-theme
+   cannot leave the parent's accent on the child's text.
+
+   site / site-dark are the current paper, charcoal and lime identity
+   (APP-138). They stay the platform default: :root is site, and a dark
+   operating system uses site-dark only when nobody has set data-theme.
+   ink / ink-dark are the professional pair. Nothing sets them until the
+   platform default is chosen.
+
+   Shape's closed accent and mode names select green, crimson, amber, cyan,
+   violet, rose, ice, slate, and the -dark block of each. Published composed
+   apps keep data-app-mode and their own --app-* values (APP-157).
+
+   Measure is one scale for every color theme. A theme may change color,
+   not the rhythm: 4px steps, 4/6/8px corners, 40px controls, 13px UI type.
+   Card density still adjusts padding on a card. It does not replace this scale. */
+
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+  --control: 2.5rem;
+  --font-ui: 0.8125rem;
+  --font-meta: 0.6875rem;
+  --leading-ui: 1.45;
+}
+
+:root,
+[data-theme="site"] {
+  color-scheme: light;
+  --role-shell: #f4f4ed;
+  --role-canvas: #f4f4ed;
+  --role-surface: #ffffff;
+  --role-sunken: #eeefe6;
+  --role-text: #1a1d18;
+  --role-muted: #555d4e;
+  --role-faint: #62695b;
+  --role-edge: #858c7c;
+  --role-line: rgb(26 29 24 / 11%);
+  --role-hairline: rgb(26 29 24 / 7%);
+  --role-rule: #daddd0;
+  --role-accent: #416609;
+  --role-on-accent: #ffffff;
+  --role-accent-soft: rgb(65 102 9 / 9%);
+  --role-mark: #c5f953;
+  --role-on-mark: #1a1d18;
+  --role-mark-edge: #6d8a32;
+  --role-mark-hover: #b6eb43;
+  --role-seal: #356b45;
+  --role-seal-soft: rgb(53 107 69 / 10%);
+  --role-chart: #7c954b;
+  --role-chart-peak: #416609;
+  --role-chart-fill: rgb(65 102 9 / 12%);
+  --role-busy: #b54708;
+  --role-bad: #b42318;
+  --role-grid: rgb(26 29 24 / 13%);
+  --role-shadow: 0 1px 1px rgb(26 29 24 / 4%), 0 2px 6px rgb(26 29 24 / 4%), 0 16px 36px -12px rgb(26 29 24 / 14%);
+  --role-shadow-lift: 0 2px 4px rgb(26 29 24 / 6%), 0 28px 60px -16px rgb(26 29 24 / 26%);
+  --role-describe: #1a1d18;
+  --role-describe-edge: #1a1d18;
+  --role-describe-hover: #1a1d18;
+  --mark-green: #166534;
+  --mark-crimson: #9f1239;
+  --mark-amber: #92400e;
+  --mark-cyan: #155e75;
+  --mark-violet: #5b21b6;
+  --mark-rose: #9d174d;
+  --mark-ice: #075985;
+  --mark-slate: #334155;
+  /* Light-face inks. Later themes do not override these, so paper and retro stay readable in the dark. */
+  --ink-green: #166534;
+  --ink-crimson: #9f1239;
+  --ink-amber: #92400e;
+  --ink-cyan: #155e75;
+  --ink-violet: #5b21b6;
+  --ink-rose: #9d174d;
+  --ink-ice: #075985;
+  --ink-slate: #334155;
+}
+
+[data-theme="site-dark"] {
+  color-scheme: dark;
+  --role-shell: #141914;
+  --role-canvas: #111610;
+  --role-surface: #1c231c;
+  --role-sunken: #181f18;
+  --role-text: #edf0e4;
+  --role-muted: #b3bea9;
+  --role-faint: #a5b19b;
+  --role-edge: #75836d;
+  --role-line: rgb(255 255 255 / 9%);
+  --role-hairline: rgb(255 255 255 / 6%);
+  --role-rule: #354134;
+  --role-accent: #c5f953;
+  --role-on-accent: #1a1d18;
+  --role-accent-soft: rgb(197 249 83 / 12%);
+  --role-mark: #c5f953;
+  --role-on-mark: #1a1d18;
+  --role-mark-edge: #6d8a32;
+  --role-mark-hover: #b6eb43;
+  --role-seal: #a1d59b;
+  --role-seal-soft: rgb(161 213 155 / 12%);
+  --role-chart: #91ae62;
+  --role-chart-peak: #c5f953;
+  --role-chart-fill: rgb(197 249 83 / 16%);
+  --role-busy: #fdb022;
+  --role-bad: #ff8a80;
+  --role-grid: rgb(255 255 255 / 10%);
+  --role-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 18px 40px -12px rgb(0 0 0 / 60%);
+  --role-shadow-lift: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 30px 70px -18px rgb(0 0 0 / 75%);
+  --role-describe: #242e1e;
+  --role-describe-edge: #859566;
+  --role-describe-hover: #2c3823;
+  --mark-green: #86efac;
+  --mark-crimson: #fda4af;
+  --mark-amber: #fcd34d;
+  --mark-cyan: #67e8f9;
+  --mark-violet: #c4b5fd;
+  --mark-rose: #f9a8d4;
+  --mark-ice: #bae6fd;
+  --mark-slate: #cbd5e1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --role-shell: #141914;
+    --role-canvas: #111610;
+    --role-surface: #1c231c;
+    --role-sunken: #181f18;
+    --role-text: #edf0e4;
+    --role-muted: #b3bea9;
+    --role-faint: #a5b19b;
+    --role-edge: #75836d;
+    --role-line: rgb(255 255 255 / 9%);
+    --role-hairline: rgb(255 255 255 / 6%);
+    --role-rule: #354134;
+    --role-accent: #c5f953;
+    --role-on-accent: #1a1d18;
+    --role-accent-soft: rgb(197 249 83 / 12%);
+    --role-mark: #c5f953;
+    --role-on-mark: #1a1d18;
+    --role-mark-edge: #6d8a32;
+    --role-mark-hover: #b6eb43;
+    --role-seal: #a1d59b;
+    --role-seal-soft: rgb(161 213 155 / 12%);
+    --role-chart: #91ae62;
+    --role-chart-peak: #c5f953;
+    --role-chart-fill: rgb(197 249 83 / 16%);
+    --role-busy: #fdb022;
+    --role-bad: #ff8a80;
+    --role-grid: rgb(255 255 255 / 10%);
+    --role-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 18px 40px -12px rgb(0 0 0 / 60%);
+    --role-shadow-lift: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 30px 70px -18px rgb(0 0 0 / 75%);
+    --role-describe: #242e1e;
+    --role-describe-edge: #859566;
+    --role-describe-hover: #2c3823;
+    --mark-green: #86efac;
+    --mark-crimson: #fda4af;
+    --mark-amber: #fcd34d;
+    --mark-cyan: #67e8f9;
+    --mark-violet: #c4b5fd;
+    --mark-rose: #f9a8d4;
+    --mark-ice: #bae6fd;
+    --mark-slate: #cbd5e1;
+  }
+}
+
+/* Professional pair. Same grounds as an app accent theme, teal as the brand.
+   Not the default. */
+[data-theme="ink"],
+:is(
+  [data-theme="green"],
+  [data-theme="crimson"],
+  [data-theme="amber"],
+  [data-theme="cyan"],
+  [data-theme="violet"],
+  [data-theme="rose"],
+  [data-theme="ice"],
+  [data-theme="slate"]
+) {
+  color-scheme: light;
+  --role-shell: #f8fafc;
+  --role-canvas: #f8fafc;
+  --role-surface: #ffffff;
+  --role-sunken: #eef2f6;
+  --role-text: #162033;
+  --role-muted: #49576b;
+  --role-faint: #5c6b80;
+  --role-edge: #64748b;
+  --role-line: rgb(22 32 51 / 12%);
+  --role-hairline: rgb(22 32 51 / 7%);
+  --role-rule: #d5dde6;
+  --role-accent: #155e75;
+  --role-on-accent: #ffffff;
+  --role-accent-soft: rgb(21 94 117 / 12%);
+  --role-mark: #155e75;
+  --role-on-mark: #ffffff;
+  --role-mark-edge: #0f4c5c;
+  --role-mark-hover: #124e62;
+  --role-seal: #356b45;
+  --role-seal-soft: rgb(53 107 69 / 10%);
+  --role-chart: #0e7490;
+  --role-chart-peak: #155e75;
+  --role-chart-fill: rgb(21 94 117 / 14%);
+  --role-busy: #b54708;
+  --role-bad: #b42318;
+  --role-grid: rgb(22 32 51 / 14%);
+  --role-shadow: 0 1px 1px rgb(22 32 51 / 4%), 0 2px 6px rgb(22 32 51 / 5%), 0 16px 36px -12px rgb(22 32 51 / 12%);
+  --role-shadow-lift: 0 2px 4px rgb(22 32 51 / 6%), 0 28px 60px -16px rgb(22 32 51 / 18%);
+  --role-describe: #162033;
+  --role-describe-edge: #162033;
+  --role-describe-hover: #1e2c42;
+  --mark-green: #166534;
+  --mark-crimson: #9f1239;
+  --mark-amber: #92400e;
+  --mark-cyan: #155e75;
+  --mark-violet: #5b21b6;
+  --mark-rose: #9d174d;
+  --mark-ice: #075985;
+  --mark-slate: #334155;
+}
+
+[data-theme="ink-dark"],
+:is(
+  [data-theme="green-dark"],
+  [data-theme="crimson-dark"],
+  [data-theme="amber-dark"],
+  [data-theme="cyan-dark"],
+  [data-theme="violet-dark"],
+  [data-theme="rose-dark"],
+  [data-theme="ice-dark"],
+  [data-theme="slate-dark"]
+) {
+  color-scheme: dark;
+  --role-shell: #10171d;
+  --role-canvas: #10171d;
+  --role-surface: #19232c;
+  --role-sunken: #0e141a;
+  --role-text: #f1f5f9;
+  --role-muted: #b4c2d0;
+  --role-faint: #94a3b8;
+  --role-edge: #64748b;
+  --role-line: #5c6d7e;
+  --role-hairline: rgb(255 255 255 / 10%);
+  --role-rule: #5c6d7e;
+  --role-accent: #a5f3fc;
+  --role-on-accent: #102a31;
+  --role-accent-soft: rgb(165 243 252 / 14%);
+  --role-mark: #a5f3fc;
+  --role-on-mark: #102a31;
+  --role-mark-edge: #67e8f9;
+  --role-mark-hover: #cffafe;
+  --role-seal: #a1d59b;
+  --role-seal-soft: rgb(161 213 155 / 14%);
+  --role-chart: #67e8f9;
+  --role-chart-peak: #a5f3fc;
+  --role-chart-fill: rgb(165 243 252 / 16%);
+  --role-busy: #fdb022;
+  --role-bad: #ff8a80;
+  --role-grid: rgb(241 245 249 / 12%);
+  --role-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 18px 40px -12px rgb(0 0 0 / 55%);
+  --role-shadow-lift: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 30px 70px -18px rgb(0 0 0 / 70%);
+  --role-describe: #19232c;
+  --role-describe-edge: #64748b;
+  --role-describe-hover: #243140;
+  --mark-green: #86efac;
+  --mark-crimson: #fda4af;
+  --mark-amber: #fcd34d;
+  --mark-cyan: #67e8f9;
+  --mark-violet: #c4b5fd;
+  --mark-rose: #f9a8d4;
+  --mark-ice: #bae6fd;
+  --mark-slate: #cbd5e1;
+}
+
+/* Harbor: blue-gray ground, navy mark. */
+[data-theme="harbor"] {
+  color-scheme: light;
+  --role-shell: #f4f7fb;
+  --role-canvas: #f4f7fb;
+  --role-surface: #ffffff;
+  --role-sunken: #e8eef6;
+  --role-text: #102033;
+  --role-muted: #3d5168;
+  --role-faint: #51647c;
+  --role-edge: #5d7390;
+  --role-line: rgb(16 32 51 / 12%);
+  --role-hairline: rgb(16 32 51 / 7%);
+  --role-rule: #d5deea;
+  --role-accent: #1e3a5f;
+  --role-on-accent: #ffffff;
+  --role-accent-soft: rgb(30 58 95 / 12%);
+  --role-mark: #1e3a5f;
+  --role-on-mark: #ffffff;
+  --role-mark-edge: #152a46;
+  --role-mark-hover: #163055;
+  --role-seal: #356b45;
+  --role-seal-soft: rgb(53 107 69 / 10%);
+  --role-chart: #245080;
+  --role-chart-peak: #1e3a5f;
+  --role-chart-fill: rgb(30 58 95 / 14%);
+  --role-busy: #b54708;
+  --role-bad: #b42318;
+  --role-grid: rgb(16 32 51 / 14%);
+  --role-shadow: 0 1px 1px rgb(16 32 51 / 4%), 0 2px 6px rgb(16 32 51 / 5%), 0 16px 36px -12px rgb(16 32 51 / 14%);
+  --role-shadow-lift: 0 2px 4px rgb(16 32 51 / 6%), 0 28px 60px -16px rgb(16 32 51 / 20%);
+  --role-describe: #102033;
+  --role-describe-edge: #102033;
+  --role-describe-hover: #163055;
+  --mark-green: #166534;
+  --mark-crimson: #9f1239;
+  --mark-amber: #92400e;
+  --mark-cyan: #155e75;
+  --mark-violet: #5b21b6;
+  --mark-rose: #9d174d;
+  --mark-ice: #075985;
+  --mark-slate: #334155;
+}
+[data-theme="harbor-dark"] {
+  color-scheme: dark;
+  --role-shell: #0c121c;
+  --role-canvas: #0c121c;
+  --role-surface: #152033;
+  --role-sunken: #101826;
+  --role-text: #e8eef7;
+  --role-muted: #b6c4d6;
+  --role-faint: #93a6bd;
+  --role-edge: #6e86a6;
+  --role-line: #5d7390;
+  --role-hairline: rgb(255 255 255 / 10%);
+  --role-rule: #5d7390;
+  --role-accent: #a9c8ef;
+  --role-on-accent: #0c121c;
+  --role-accent-soft: rgb(169 200 239 / 16%);
+  --role-mark: #a9c8ef;
+  --role-on-mark: #0c121c;
+  --role-mark-edge: #a9c8ef;
+  --role-mark-hover: #d5e6f8;
+  --role-seal: #a1d59b;
+  --role-seal-soft: rgb(161 213 155 / 14%);
+  --role-chart: #a9c8ef;
+  --role-chart-peak: #a9c8ef;
+  --role-chart-fill: rgb(169 200 239 / 16%);
+  --role-busy: #fdb022;
+  --role-bad: #ff8a80;
+  --role-grid: rgb(232 238 247 / 12%);
+  --role-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 18px 40px -12px rgb(0 0 0 / 55%);
+  --role-shadow-lift: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 30px 70px -18px rgb(0 0 0 / 70%);
+  --role-describe: #152033;
+  --role-describe-edge: #6e86a6;
+  --role-describe-hover: #1c2c44;
+  --mark-green: #86efac;
+  --mark-crimson: #fda4af;
+  --mark-amber: #fcd34d;
+  --mark-cyan: #67e8f9;
+  --mark-violet: #c4b5fd;
+  --mark-rose: #f9a8d4;
+  --mark-ice: #bae6fd;
+  --mark-slate: #cbd5e1;
+}
+
+/* Stone: warm stone ground, umber mark. */
+[data-theme="stone"] {
+  color-scheme: light;
+  --role-shell: #f7f4f0;
+  --role-canvas: #f7f4f0;
+  --role-surface: #ffffff;
+  --role-sunken: #efe8e0;
+  --role-text: #2c241c;
+  --role-muted: #5e5146;
+  --role-faint: #6f6256;
+  --role-edge: #8a7b6c;
+  --role-line: rgb(44 36 28 / 12%);
+  --role-hairline: rgb(44 36 28 / 7%);
+  --role-rule: #e4d9cc;
+  --role-accent: #6f4428;
+  --role-on-accent: #ffffff;
+  --role-accent-soft: rgb(111 68 40 / 12%);
+  --role-mark: #6f4428;
+  --role-on-mark: #ffffff;
+  --role-mark-edge: #5a3620;
+  --role-mark-hover: #5c381f;
+  --role-seal: #356b45;
+  --role-seal-soft: rgb(53 107 69 / 10%);
+  --role-chart: #8a5a32;
+  --role-chart-peak: #6f4428;
+  --role-chart-fill: rgb(111 68 40 / 14%);
+  --role-busy: #92400e;
+  --role-bad: #b42318;
+  --role-grid: rgb(44 36 28 / 14%);
+  --role-shadow: 0 1px 1px rgb(44 36 28 / 4%), 0 2px 6px rgb(44 36 28 / 5%), 0 16px 36px -12px rgb(44 36 28 / 14%);
+  --role-shadow-lift: 0 2px 4px rgb(44 36 28 / 6%), 0 28px 60px -16px rgb(44 36 28 / 20%);
+  --role-describe: #2c241c;
+  --role-describe-edge: #2c241c;
+  --role-describe-hover: #3a3128;
+  --mark-green: #166534;
+  --mark-crimson: #9f1239;
+  --mark-amber: #92400e;
+  --mark-cyan: #155e75;
+  --mark-violet: #5b21b6;
+  --mark-rose: #9d174d;
+  --mark-ice: #075985;
+  --mark-slate: #334155;
+}
+[data-theme="stone-dark"] {
+  color-scheme: dark;
+  --role-shell: #161310;
+  --role-canvas: #161310;
+  --role-surface: #231e19;
+  --role-sunken: #1c1814;
+  --role-text: #f6f0e8;
+  --role-muted: #d2c3b4;
+  --role-faint: #b5a494;
+  --role-edge: #8d7c6b;
+  --role-line: #6e5f51;
+  --role-hairline: rgb(255 255 255 / 10%);
+  --role-rule: #6e5f51;
+  --role-accent: #efd0b4;
+  --role-on-accent: #2c241c;
+  --role-accent-soft: rgb(239 208 180 / 16%);
+  --role-mark: #efd0b4;
+  --role-on-mark: #2c241c;
+  --role-mark-edge: #efd0b4;
+  --role-mark-hover: #f8e6d4;
+  --role-seal: #a1d59b;
+  --role-seal-soft: rgb(161 213 155 / 14%);
+  --role-chart: #efd0b4;
+  --role-chart-peak: #efd0b4;
+  --role-chart-fill: rgb(239 208 180 / 16%);
+  --role-busy: #fdb022;
+  --role-bad: #ff8a80;
+  --role-grid: rgb(246 240 232 / 12%);
+  --role-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 18px 40px -12px rgb(0 0 0 / 55%);
+  --role-shadow-lift: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 30px 70px -18px rgb(0 0 0 / 70%);
+  --role-describe: #231e19;
+  --role-describe-edge: #8d7c6b;
+  --role-describe-hover: #2e2822;
+  --mark-green: #86efac;
+  --mark-crimson: #fda4af;
+  --mark-amber: #fcd34d;
+  --mark-cyan: #67e8f9;
+  --mark-violet: #c4b5fd;
+  --mark-rose: #f9a8d4;
+  --mark-ice: #bae6fd;
+  --mark-slate: #cbd5e1;
+}
+
+/* Grove: mist ground, forest mark. Not the electric lime of Forma. */
+[data-theme="grove"] {
+  color-scheme: light;
+  --role-shell: #f3f6f4;
+  --role-canvas: #f3f6f4;
+  --role-surface: #ffffff;
+  --role-sunken: #e5eee8;
+  --role-text: #14241c;
+  --role-muted: #3e5649;
+  --role-faint: #51685b;
+  --role-edge: #5f786b;
+  --role-line: rgb(20 36 28 / 12%);
+  --role-hairline: rgb(20 36 28 / 7%);
+  --role-rule: #d5e3da;
+  --role-accent: #1d4f3a;
+  --role-on-accent: #ffffff;
+  --role-accent-soft: rgb(29 79 58 / 12%);
+  --role-mark: #1d4f3a;
+  --role-on-mark: #ffffff;
+  --role-mark-edge: #163c2c;
+  --role-mark-hover: #163e2e;
+  --role-seal: #356b45;
+  --role-seal-soft: rgb(53 107 69 / 10%);
+  --role-chart: #2f6b50;
+  --role-chart-peak: #1d4f3a;
+  --role-chart-fill: rgb(29 79 58 / 14%);
+  --role-busy: #b54708;
+  --role-bad: #b42318;
+  --role-grid: rgb(20 36 28 / 14%);
+  --role-shadow: 0 1px 1px rgb(20 36 28 / 4%), 0 2px 6px rgb(20 36 28 / 5%), 0 16px 36px -12px rgb(20 36 28 / 14%);
+  --role-shadow-lift: 0 2px 4px rgb(20 36 28 / 6%), 0 28px 60px -16px rgb(20 36 28 / 20%);
+  --role-describe: #14241c;
+  --role-describe-edge: #14241c;
+  --role-describe-hover: #1c3328;
+  --mark-green: #166534;
+  --mark-crimson: #9f1239;
+  --mark-amber: #92400e;
+  --mark-cyan: #155e75;
+  --mark-violet: #5b21b6;
+  --mark-rose: #9d174d;
+  --mark-ice: #075985;
+  --mark-slate: #334155;
+}
+[data-theme="grove-dark"] {
+  color-scheme: dark;
+  --role-shell: #101613;
+  --role-canvas: #101613;
+  --role-surface: #18211c;
+  --role-sunken: #131b17;
+  --role-text: #e8f3ec;
+  --role-muted: #b9d0c2;
+  --role-faint: #93b0a0;
+  --role-edge: #6d8c7c;
+  --role-line: #5c7568;
+  --role-hairline: rgb(255 255 255 / 10%);
+  --role-rule: #5c7568;
+  --role-accent: #a5d8bc;
+  --role-on-accent: #102018;
+  --role-accent-soft: rgb(165 216 188 / 16%);
+  --role-mark: #a5d8bc;
+  --role-on-mark: #102018;
+  --role-mark-edge: #a5d8bc;
+  --role-mark-hover: #d5f0e0;
+  --role-seal: #a1d59b;
+  --role-seal-soft: rgb(161 213 155 / 14%);
+  --role-chart: #a5d8bc;
+  --role-chart-peak: #a5d8bc;
+  --role-chart-fill: rgb(165 216 188 / 16%);
+  --role-busy: #fdb022;
+  --role-bad: #ff8a80;
+  --role-grid: rgb(232 243 236 / 12%);
+  --role-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 18px 40px -12px rgb(0 0 0 / 55%);
+  --role-shadow-lift: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 30px 70px -18px rgb(0 0 0 / 70%);
+  --role-describe: #18211c;
+  --role-describe-edge: #6d8c7c;
+  --role-describe-hover: #203028;
+  --mark-green: #86efac;
+  --mark-crimson: #fda4af;
+  --mark-amber: #fcd34d;
+  --mark-cyan: #67e8f9;
+  --mark-violet: #c4b5fd;
+  --mark-rose: #f9a8d4;
+  --mark-ice: #bae6fd;
+  --mark-slate: #cbd5e1;
+}
+
+[data-theme="green"] { --role-accent: #166534; --role-on-accent: #ffffff; --role-accent-soft: rgb(22 101 52 / 14%); --role-mark: #166534; --role-on-mark: #ffffff; --role-mark-edge: #14532d; --role-mark-hover: #14532d; --role-chart: #166534; --role-chart-peak: #166534; --role-chart-fill: rgb(22 101 52 / 16%); }
+[data-theme="crimson"] { --role-accent: #9f1239; --role-on-accent: #ffffff; --role-accent-soft: rgb(159 18 57 / 12%); --role-mark: #9f1239; --role-on-mark: #ffffff; --role-mark-edge: #881337; --role-mark-hover: #881337; --role-chart: #9f1239; --role-chart-peak: #9f1239; --role-chart-fill: rgb(159 18 57 / 14%); }
+[data-theme="amber"] { --role-accent: #92400e; --role-on-accent: #ffffff; --role-accent-soft: rgb(146 64 14 / 14%); --role-mark: #92400e; --role-on-mark: #ffffff; --role-mark-edge: #78350f; --role-mark-hover: #78350f; --role-chart: #92400e; --role-chart-peak: #92400e; --role-chart-fill: rgb(146 64 14 / 16%); }
+[data-theme="cyan"] { --role-accent: #155e75; --role-on-accent: #ffffff; --role-accent-soft: rgb(21 94 117 / 12%); --role-mark: #155e75; --role-on-mark: #ffffff; --role-mark-edge: #0f4c5c; --role-mark-hover: #124e62; --role-chart: #0e7490; --role-chart-peak: #155e75; --role-chart-fill: rgb(21 94 117 / 14%); }
+[data-theme="violet"] { --role-accent: #5b21b6; --role-on-accent: #ffffff; --role-accent-soft: rgb(91 33 182 / 12%); --role-mark: #5b21b6; --role-on-mark: #ffffff; --role-mark-edge: #4c1d95; --role-mark-hover: #4c1d95; --role-chart: #5b21b6; --role-chart-peak: #5b21b6; --role-chart-fill: rgb(91 33 182 / 14%); }
+[data-theme="rose"] { --role-accent: #9d174d; --role-on-accent: #ffffff; --role-accent-soft: rgb(157 23 77 / 12%); --role-mark: #9d174d; --role-on-mark: #ffffff; --role-mark-edge: #831843; --role-mark-hover: #831843; --role-chart: #9d174d; --role-chart-peak: #9d174d; --role-chart-fill: rgb(157 23 77 / 14%); }
+[data-theme="ice"] { --role-accent: #075985; --role-on-accent: #ffffff; --role-accent-soft: rgb(7 89 133 / 12%); --role-mark: #075985; --role-on-mark: #ffffff; --role-mark-edge: #0c4a6e; --role-mark-hover: #0c4a6e; --role-chart: #075985; --role-chart-peak: #075985; --role-chart-fill: rgb(7 89 133 / 14%); }
+[data-theme="slate"] { --role-accent: #334155; --role-on-accent: #ffffff; --role-accent-soft: rgb(51 65 85 / 12%); --role-mark: #334155; --role-on-mark: #ffffff; --role-mark-edge: #1e293b; --role-mark-hover: #1e293b; --role-chart: #334155; --role-chart-peak: #334155; --role-chart-fill: rgb(51 65 85 / 14%); }
+
+[data-theme="green-dark"] { --role-accent: #86efac; --role-on-accent: #102a31; --role-accent-soft: rgb(134 239 172 / 16%); --role-mark: #86efac; --role-on-mark: #102a31; --role-mark-edge: #86efac; --role-mark-hover: #bbf7d0; --role-chart: #86efac; --role-chart-peak: #86efac; --role-chart-fill: rgb(134 239 172 / 16%); }
+[data-theme="crimson-dark"] { --role-accent: #fda4af; --role-on-accent: #102a31; --role-accent-soft: rgb(253 164 175 / 16%); --role-mark: #fda4af; --role-on-mark: #102a31; --role-mark-edge: #fda4af; --role-mark-hover: #ffe4e6; --role-chart: #fda4af; --role-chart-peak: #fda4af; --role-chart-fill: rgb(253 164 175 / 16%); }
+[data-theme="amber-dark"] { --role-accent: #fcd34d; --role-on-accent: #102a31; --role-accent-soft: rgb(252 211 77 / 16%); --role-mark: #fcd34d; --role-on-mark: #102a31; --role-mark-edge: #fcd34d; --role-mark-hover: #fef3c7; --role-chart: #fcd34d; --role-chart-peak: #fcd34d; --role-chart-fill: rgb(252 211 77 / 16%); }
+[data-theme="cyan-dark"] { --role-accent: #67e8f9; --role-on-accent: #102a31; --role-accent-soft: rgb(103 232 249 / 16%); --role-mark: #67e8f9; --role-on-mark: #102a31; --role-mark-edge: #67e8f9; --role-mark-hover: #cffafe; --role-chart: #67e8f9; --role-chart-peak: #67e8f9; --role-chart-fill: rgb(103 232 249 / 16%); }
+[data-theme="violet-dark"] { --role-accent: #c4b5fd; --role-on-accent: #102a31; --role-accent-soft: rgb(196 181 253 / 16%); --role-mark: #c4b5fd; --role-on-mark: #102a31; --role-mark-edge: #c4b5fd; --role-mark-hover: #ede9fe; --role-chart: #c4b5fd; --role-chart-peak: #c4b5fd; --role-chart-fill: rgb(196 181 253 / 16%); }
+[data-theme="rose-dark"] { --role-accent: #f9a8d4; --role-on-accent: #102a31; --role-accent-soft: rgb(249 168 212 / 16%); --role-mark: #f9a8d4; --role-on-mark: #102a31; --role-mark-edge: #f9a8d4; --role-mark-hover: #fce7f3; --role-chart: #f9a8d4; --role-chart-peak: #f9a8d4; --role-chart-fill: rgb(249 168 212 / 16%); }
+[data-theme="ice-dark"] { --role-accent: #bae6fd; --role-on-accent: #102a31; --role-accent-soft: rgb(186 230 253 / 16%); --role-mark: #bae6fd; --role-on-mark: #102a31; --role-mark-edge: #bae6fd; --role-mark-hover: #e0f2fe; --role-chart: #bae6fd; --role-chart-peak: #bae6fd; --role-chart-fill: rgb(186 230 253 / 16%); }
+[data-theme="slate-dark"] { --role-accent: #cbd5e1; --role-on-accent: #102a31; --role-accent-soft: rgb(203 213 225 / 16%); --role-mark: #cbd5e1; --role-on-mark: #102a31; --role-mark-edge: #cbd5e1; --role-mark-hover: #f1f5f9; --role-chart: #cbd5e1; --role-chart-peak: #cbd5e1; --role-chart-fill: rgb(203 213 225 / 16%); }
+
+/* Glow accents for a dark widget face. Light skins use --mark-* instead. */
+[data-theme="green"], [data-theme="green-dark"] { --widget-glow: #34d399; --widget-glow-ink: #05281a; --widget-ink: var(--ink-green); }
+[data-theme="crimson"], [data-theme="crimson-dark"] { --widget-glow: #ff4d4f; --widget-glow-ink: #2a0405; --widget-ink: var(--ink-crimson); }
+[data-theme="amber"], [data-theme="amber-dark"] { --widget-glow: #ffb000; --widget-glow-ink: #261800; --widget-ink: var(--ink-amber); }
+[data-theme="cyan"], [data-theme="cyan-dark"] { --widget-glow: #22d3ee; --widget-glow-ink: #032029; --widget-ink: var(--ink-cyan); }
+[data-theme="violet"], [data-theme="violet-dark"] { --widget-glow: #a78bfa; --widget-glow-ink: #1a1033; --widget-ink: var(--ink-violet); }
+[data-theme="rose"], [data-theme="rose-dark"] { --widget-glow: #fb7185; --widget-glow-ink: #2d0710; --widget-ink: var(--ink-rose); }
+[data-theme="ice"], [data-theme="ice-dark"] { --widget-glow: #93c5fd; --widget-glow-ink: #0b1a2e; --widget-ink: var(--ink-ice); }
+[data-theme="slate"], [data-theme="slate-dark"] { --widget-glow: #cbd5e1; --widget-glow-ink: #1e293b; --widget-ink: var(--ink-slate); }
+
+/* Native pages. --bg follows the shell, not the darker board.
+   Rebinding on [data-theme] is required: a custom property inherits the
+   computed color, not the var() that produced it. */
+:root, [data-theme] {
+  --bg: var(--role-shell);
+  --fg: var(--role-text);
+  --muted: var(--role-muted);
+  --accent: var(--role-accent);
+  --border: var(--role-edge);
+  --bad: var(--role-bad);
+  --forma-lime: var(--role-mark);
+  --forma-line: var(--role-rule);
+  --forma-surface: var(--role-surface);
+}

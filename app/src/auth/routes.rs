@@ -1,4 +1,4 @@
-//! ADR-006 routes, exactly: `GET /signin`, `GET|POST /signin/{handle}`,
+//! ADR-006 routes: `GET|POST /signin`, `GET|POST /signin/{handle}`,
 //! `GET /auth/callback`, `GET /auth/pending`, `POST /auth/pending/resend`,
 //! `POST /auth/signout`, `POST /auth/signout-all`, and the protected
 //! workspace entry `GET /workspace`, and APP-074's `GET /invite` and `POST
@@ -31,7 +31,7 @@ pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route("/invite", get(invite::entry))
         .route("/invite/validate", post(invite::validate))
-        .route("/signin", get(signin_page))
+        .route("/signin", get(signin_page).post(signin_workspace_start))
         .route(
             "/signin/{handle}",
             get(signin_handle_page).post(signin_start),
@@ -69,6 +69,8 @@ pub(crate) fn clear_all(response: &mut Response) {
         cookies::PRE_ACCESS,
         cookies::SESSION,
         cookies::RUN,
+        cookies::SHARED_SESSION,
+        cookies::SHARED_PRELOGIN,
     ] {
         add_cookie(response, cookies::clear(name));
     }
@@ -76,7 +78,10 @@ pub(crate) fn clear_all(response: &mut Response) {
 
 /// A well-formed sign-in handle (no lookup: shape only).
 fn handle_action(handle: &str) -> Option<String> {
-    (handle.len() <= 64 && handle_digest(handle).is_some()).then(|| format!("/signin/{handle}"))
+    (handle.len() <= 64
+        && (handle_digest(&super::aliases::canonical(handle)).is_some()
+            || super::aliases::alias_shaped(handle)))
+    .then(|| format!("/signin/{handle}"))
 }
 
 fn signin(auth: &Auth, action: Option<String>, failed: bool) -> Response {
@@ -92,17 +97,37 @@ pub(crate) fn neutral_failure(auth: &Auth) -> Response {
     signin(auth, None, true)
 }
 
+/// The issuer whose closed-registry binding `registered` requires. A
+/// configured sign-in provider names its own. The dev binary has none
+/// (ADR-012): personas are minted locally, and the fixture issuer in that
+/// binary's registry is the binding that is checked instead. A release build
+/// with no provider registers nothing, so a missing provider cannot skip the
+/// check.
+pub(crate) fn registration_issuer(auth: &Auth) -> Option<&str> {
+    if let Some(provider) = &auth.provider {
+        return Some(provider.config.issuer.as_str());
+    }
+    #[cfg(feature = "dev-stand")]
+    {
+        Some(crate::dev::DEV_ISSUER)
+    }
+    #[cfg(not(feature = "dev-stand"))]
+    {
+        None
+    }
+}
+
 /// APP-074 review M2: a cookie capability names an organization (its first
 /// 16 bytes, not a secret) that the closed registry binds for the configured
 /// issuer; anything else is refused before any database transaction.
 pub(crate) fn registered(auth: &Auth, cookie: &str) -> bool {
-    let (Some(provider), Some(stores)) = (&auth.provider, &auth.stores) else {
+    let (Some(issuer), Some(stores)) = (registration_issuer(auth), &auth.stores) else {
         return false;
     };
     crate::storage::capability_organization(cookie).is_some_and(|organization| {
         stores
             .workspace
-            .provider_tenant(&organization, &provider.config.issuer)
+            .provider_tenant(&organization, issuer)
             .is_some()
     })
 }
@@ -135,8 +160,31 @@ pub(crate) fn lookup_failed(auth: &Auth, class: &str) {
 }
 
 async fn signin_page(State(auth): State<Arc<Auth>>, request: Request) -> Response {
-    let hint = cookies::read(request.headers(), cookies::ORGANIZATION_HINT);
+    let hint = if request.uri().query() == Some("switch=1") {
+        None
+    } else {
+        cookies::read(request.headers(), cookies::ORGANIZATION_HINT)
+    };
     signin(&auth, hint.as_deref().and_then(handle_action), false)
+}
+
+/// Treat a workspace address only as a local routing selector. Exact lexical
+/// origin/path matching deliberately refuses URL parser repairs (userinfo,
+/// dot segments, backslashes, percent escapes and alternate ports). No URL
+/// supplied by a visitor is fetched or used as a redirect destination.
+pub(crate) fn workspace_handle<'a>(value: &'a str, origin: &str) -> Option<&'a str> {
+    if value.len() > 512 {
+        return None;
+    }
+    let value = value.trim();
+    let segment = if let Some(path) = value.strip_prefix(origin) {
+        path.strip_prefix("/signin/")?
+    } else if let Some(segment) = value.strip_prefix("/signin/") {
+        segment
+    } else {
+        value
+    };
+    (handle_digest(segment).is_some() || super::aliases::alias_shaped(segment)).then_some(segment)
 }
 /// A path the extractor cannot decode (invalid percent-encoding or UTF-8)
 /// is no handle at all: the same page as a malformed one, never axum's
@@ -157,7 +205,7 @@ async fn signin_handle_page(
 async fn start(auth: &Auth, handle: &str, class: &str) -> Result<(String, String), ()> {
     let provider = auth.provider.as_ref().ok_or(())?;
     let stores = auth.stores.as_ref().ok_or(())?;
-    let digest = handle_digest(handle).ok_or(())?;
+    let digest = handle_digest(&super::aliases::canonical(handle)).ok_or(())?;
     let organization = stores
         .workspace
         .resolve_handle(&digest)
@@ -214,7 +262,14 @@ async fn signin_start(
     path: Result<Path<String>, PathRejection>,
     request: Request,
 ) -> Response {
-    let handle = handle_of(path);
+    signin_attempt(auth, Some(handle_of(path)), request).await
+}
+
+async fn signin_workspace_start(State(auth): State<Arc<Auth>>, request: Request) -> Response {
+    signin_attempt(auth, None, request).await
+}
+
+async fn signin_attempt(auth: Arc<Auth>, handle: Option<String>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, auth.origin()) {
         return http::cross_site();
@@ -226,9 +281,21 @@ async fn signin_start(
     ]) {
         return http::too_many_requests(retry);
     }
-    if http::form(body).await.is_none() {
+    let Some(fields) = http::form(body).await else {
         return http::payload_too_large();
-    }
+    };
+    let handle = match handle {
+        Some(handle) => handle,
+        None => match fields.as_slice() {
+            [(name, value)] if name == "workspace" => {
+                let Some(handle) = workspace_handle(value, auth.origin()) else {
+                    return neutral_failure(&auth);
+                };
+                handle.to_owned()
+            }
+            _ => return neutral_failure(&auth),
+        },
+    };
     if handle_action(&handle).is_none() {
         return neutral_failure(&auth);
     }
@@ -247,7 +314,7 @@ async fn signin_start(
 }
 
 /// The two callback parameters, each exactly once and canonical.
-fn callback_query(query: Option<&str>) -> Option<(String, String)> {
+pub(crate) fn callback_query(query: Option<&str>) -> Option<(String, String)> {
     let query = query?;
     if query.len() > 256 {
         return None;
@@ -592,6 +659,7 @@ async fn signout(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     }
     let session = cookies::read(&parts.headers, cookies::SESSION);
     let pre = cookies::read(&parts.headers, cookies::PRE_ACCESS);
+    let shared = cookies::read(&parts.headers, cookies::SHARED_SESSION);
     let Some(token) = body_token(body).await else {
         return http::payload_too_large();
     };
@@ -600,7 +668,7 @@ async fn signout(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         clear_all(&mut response);
         response
     };
-    if session.is_none() && pre.is_none() {
+    if session.is_none() && pre.is_none() && shared.is_none() {
         return done();
     }
     let tied = session
@@ -609,6 +677,12 @@ async fn signout(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         .any(|cookie| auth.csrf.verify(csrf::Form::SignOut, cookie, &token));
     if !tied {
         return http::cross_site();
+    }
+    if super::shared::end_browser(&auth, &parts.headers)
+        .await
+        .is_err()
+    {
+        return http::unavailable();
     }
     if let Some(stores) = &auth.stores {
         if let Some(cookie) = &session {
@@ -666,10 +740,33 @@ async fn signout_all(State(auth): State<Arc<Auth>>, request: Request) -> Respons
             for record in &ended {
                 auth.revoke(record).await;
             }
+            if super::shared::end_browser(&auth, &parts.headers)
+                .await
+                .is_err()
+            {
+                return http::unavailable();
+            }
             let mut response = http::see_other("/");
             clear_all(&mut response);
             response
         }
         Err(_) => http::unavailable(),
+    }
+}
+
+#[cfg(test)]
+mod registration_tests {
+    use super::registration_issuer;
+    use crate::auth::tests::TestPages;
+    use crate::auth::Auth;
+    use std::sync::Arc;
+
+    #[test]
+    fn a_release_build_without_a_provider_names_no_issuer() {
+        let auth = Auth::new(None, None, Arc::new(TestPages)).unwrap();
+        #[cfg(not(feature = "dev-stand"))]
+        assert!(registration_issuer(&auth).is_none());
+        #[cfg(feature = "dev-stand")]
+        assert_eq!(registration_issuer(&auth), Some(crate::dev::DEV_ISSUER));
     }
 }

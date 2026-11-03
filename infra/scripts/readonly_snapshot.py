@@ -19,14 +19,17 @@ and request ids, with the database endpoint, operator address and raw
 environment removed.
 """
 import argparse
+import importlib.util
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 
-STACK = 'GenuiSyntheticFoundation'
-REGION = 'us-east-1'
-ACCOUNT = '877573132739'
+# The beta's account, region and stack, shared with preflight.py (loaded by path, not sys.path).
+_spec = importlib.util.spec_from_file_location('genui_infra_common', Path(__file__).resolve().parent / 'common.py')
+_COMMON = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_COMMON)
+STACK, REGION, ACCOUNT = _COMMON.STACK, _COMMON.REGION, _COMMON.ACCOUNT
 # service -> the only boto3 methods this tool may call.
 ALLOWED = {
     'sts': {'get_caller_identity'},

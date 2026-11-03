@@ -1,0 +1,24 @@
+{
+  "scope": "source identity for reviewed composed-app contract/adoption seam; no deployment or hosted-user proof",
+  "sha256": {
+    "app/src/storage/work_presentation.rs": "b5547c138bfc0eba8dcfff91edb428c6ebdc4e7ea46958aaa9125db7d72325f5",
+    "app/src/storage/work_presentation_checks.rs": "f879113fe6075924739ce1eda90899fb24307d5134849ca35ccb4726115d7d4d",
+    "app/src/composer/presentation.rs": "772bb715a8e229472ef140c9d2bc890e650b542a983ebd2203207a379795da8a",
+    "app/src/composer/templates.rs": "51a41eeaf1a9086b85c3d0340386ca44eb2ddb145e6a8d9db46092834b1b2c71",
+    "app/migrations/0019_work_presentation.sql": "4639659bbc6542f428a723004a5c35a4d6540795eb73682e6faf73e087536cd9",
+    "app/migrations/catalog-v19.json": "a06426c3b9194c8eb2971c5bc4538cd6f4852311467020ed967f3e52c0b7bdb8",
+    "app/migrations/manifest.json": "89e68d70fdb47ca4672d690bc0750bf2da8d605dd7b76d98302579bba586162b",
+    "contracts/schema.py": "1e9c30dc79ce399704d3d3ee0963493d53bda713a1da7571f1fe984d69679e11",
+    "contracts/validate.py": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+    "contracts/record_components_contract.py": "480365204d09538778b9a687c35e2a27f19169a96608dc8c15d3eacda3cadcee",
+    "app/src/admission/validate.rs": "7582bde913bb77da5fe8374600041247248f30cf58f2545551c7168e05071bd3",
+    "contracts/test_presentation.py": "ea4e3b28db884e59018a0cc78b8baee3897e0c889b6e94a20f1d92a13f2d88aa",
+    "app/src/commands/mod.rs": "1e288b5bf5d57ed4620bd14d3577d536a0612b0501d9d7c41d1ebf4b54f5a297",
+    "app/src/commands/routes.rs": "f3deead0231e8d2a47594fa59dea3fec6d4419d2888ddad948d1bea2e5278c19",
+    "app/src/commands/tests.rs": "9a0750783ea86f04927b31d0846ae877e4a59e05cf917277fb5b6c12aae8d37a",
+    "app/src/storage/commands.rs": "83d80280ff2c1cfb3cdaa9ff1c176626e864c7121807175ccab78f6b3ddf461c",
+    "app/admin/src/canvas/commands.ts": "108a19c8676590c4bcab32f1e15aedae5eee29aceabbb0796d634836edaf4fd9",
+    "app/admin/test/money-form.test.ts": "620520755e762b4241cc71219fd852d05487c33e979453fe7aff612a59bb9e3f",
+    "app/src/admission/tests.rs": "5f9f23657b107836c65bc8d6d28045d27ff4f8ca425948b73c77e2e3f75790be"
+  }
+}

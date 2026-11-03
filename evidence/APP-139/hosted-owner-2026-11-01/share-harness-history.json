@@ -1,0 +1,35 @@
+{
+  "attempts": [
+    {
+      "started_at": "2026-11-01T20:16:41.900Z",
+      "finished_at": "2026-11-01T20:17:14.014Z",
+      "failure_type": "TimeoutError",
+      "passed": false,
+      "reason": "The harness clicked before asynchronous module/controller readiness.",
+      "non_get_request_count": 0,
+      "before_mutation_journal": true
+    },
+    {
+      "started_at": "2026-11-01T20:21:09.075Z",
+      "finished_at": "2026-11-01T20:21:41.873Z",
+      "failure_type": "TimeoutError",
+      "passed": false,
+      "reason": "Exact label matching did not match the expiry select accessible name; the observed select name was used.",
+      "non_get_request_count": 0,
+      "before_mutation_journal": true
+    }
+  ],
+  "read_only_diagnostic": {
+    "dialog_count": 1,
+    "actual_shares": 0,
+    "write_count": 0
+  },
+  "selector_read_only_proof": {
+    "exact_expiry_label": 0,
+    "observed_named_select": 1,
+    "email_label": 1,
+    "canvas_label": 1,
+    "actual_shares": 0
+  },
+  "interpretation": "Harness readiness/selector errors, not product runtime failures. Neither attempt wrote a grant; the later single successful POST produced the one persisted pending share."
+}

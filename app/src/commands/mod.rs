@@ -21,7 +21,7 @@ pub mod routes;
 #[cfg(test)]
 mod tests;
 
-use crate::storage::RecordDetail;
+use crate::storage::{RecordCommand, RecordDetail};
 use axum::response::Response;
 
 /// A form notice the record page shows after a redirect (closed set).
@@ -114,6 +114,80 @@ pub trait RecordPage: Send + Sync {
     fn record(&self, view: &RecordView) -> Response;
 }
 
+/// Exact human decimal -> canonical minor units. This is a form boundary;
+/// the JSON command API continues to accept integer minor_units unchanged.
+/// The admitted money type currently uses USD exponent2; bounded exponent
+/// handling prevents a forged form spec from creating an oversized value.
+pub(crate) fn money_minor_units(raw: &str, exponent: u64) -> Option<String> {
+    if exponent > 6 || raw.len() > 64 {
+        return None;
+    }
+    let raw = raw.trim();
+    let (negative, raw) = raw.strip_prefix('-').map_or((false, raw), |v| (true, v));
+    let (whole, fraction) = raw.split_once('.').unwrap_or((raw, ""));
+    if whole.is_empty() && fraction.is_empty()
+        || !whole.bytes().all(|b| b.is_ascii_digit())
+        || !fraction.bytes().all(|b| b.is_ascii_digit())
+        || fraction.len() > exponent as usize
+        || exponent == 0 && raw.contains('.')
+    {
+        return None;
+    }
+    let mut digits = format!(
+        "{whole}{fraction}{}",
+        "0".repeat(exponent as usize - fraction.len())
+    );
+    digits = digits.trim_start_matches('0').to_owned();
+    if digits.is_empty() {
+        digits.push('0');
+    }
+    if digits.len() > 38 {
+        return None;
+    }
+    Some(format!(
+        "{}{digits}",
+        if negative && digits != "0" { "-" } else { "" }
+    ))
+}
+fn money_major_units(minor: &str, exponent: u64) -> Option<String> {
+    if exponent > 6 {
+        return None;
+    }
+    let (negative, digits) = minor
+        .strip_prefix('-')
+        .map_or((false, minor), |v| (true, v));
+    if digits.is_empty()
+        || digits.len() > 38
+        || !digits.bytes().all(|b| b.is_ascii_digit())
+        || digits.len() > 1 && digits.starts_with('0')
+        || negative && digits == "0"
+    {
+        return None;
+    }
+    if exponent == 0 {
+        return Some(minor.to_owned());
+    }
+    let padded = format!("{digits:0>width$}", width = exponent as usize + 1);
+    let split = padded.len() - exponent as usize;
+    Some(format!(
+        "{}{}.{}",
+        if negative { "-" } else { "" },
+        &padded[..split],
+        &padded[split..]
+    ))
+}
+/// A human label, separate from the stable schema field ID.
+pub fn field_label(field: &FieldRow) -> String {
+    let label = field.id.replace('_', " ");
+    if field.kind == "money" {
+        let spec: serde_json::Value = serde_json::from_str(&field.spec).unwrap_or_default();
+        if let Some(currency) = spec.get("currency").and_then(serde_json::Value::as_str) {
+            return format!("{label} ({currency})");
+        }
+    }
+    label
+}
+
 /// The text a form input carries for a stored value, and the text back.
 fn value_text(value: &serde_json::Value) -> String {
     let get = |key: &str| {
@@ -128,7 +202,14 @@ fn value_text(value: &serde_json::Value) -> String {
     match value.get("type").and_then(serde_json::Value::as_str) {
         Some("null") => String::new(),
         Some("decimal") => get("coefficient"),
-        Some("money") => get("minor_units"),
+        Some("money") => money_major_units(
+            &get("minor_units"),
+            value
+                .get("minor_unit_exponent")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(99),
+        )
+        .unwrap_or_default(),
         Some("reference") => get("record_id"),
         _ => get("value"),
     }
@@ -147,6 +228,21 @@ pub fn view(
     idempotency_key: String,
     notice: Option<Notice>,
 ) -> RecordView {
+    let mut view = view_for_command(app, work, detail, csrf, idempotency_key, None);
+    view.notice = notice;
+    view
+}
+
+/// A declared form selects its own command, never a different command which
+/// happens to sort first. Storage still judges the actual submitted record.
+pub fn view_for_command(
+    app: &str,
+    work: &str,
+    detail: &RecordDetail,
+    csrf: String,
+    idempotency_key: String,
+    selected: Option<&str>,
+) -> RecordView {
     let current = |field: &str| {
         detail
             .fields
@@ -155,18 +251,24 @@ pub fn view(
             .and_then(|f| f.value.get("value"))
             .and_then(serde_json::Value::as_str)
     };
+    let admits = |c: &&RecordCommand| match (detail.version, c.operation.as_str()) {
+        (0, operation) => operation == "create",
+        (_, "update") => true,
+        (_, "create") => c
+            .transitions
+            .iter()
+            .any(|(field, from, _)| current(field) == Some(from.as_str())),
+        _ => false,
+    };
+    // ADR-011 scenarios: on an absent record a pure `create` (no declared
+    // transitions, the one that files a new record) is offered before a
+    // transition-only `create` such as `decide`, whatever their ids sort as.
     let command = detail
         .commands
         .iter()
-        .find(|c| match (detail.version, c.operation.as_str()) {
-            (0, operation) => operation == "create",
-            (_, "update") => true,
-            (_, "create") => c
-                .transitions
-                .iter()
-                .any(|(field, from, _)| current(field) == Some(from.as_str())),
-            _ => false,
-        })
+        .filter(|command| selected.is_none_or(|id| command.id == id))
+        .filter(admits)
+        .min_by_key(|c| (detail.version == 0 && !c.transitions.is_empty()) as u8)
         .cloned();
     let fields = detail
         .fields
@@ -178,22 +280,41 @@ pub fn view(
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("text")
                 .to_owned();
-            let options = field
-                .value_type
-                .get("values")
-                .and_then(serde_json::Value::as_array)
-                .map(|values| {
-                    values
+            // The first unconditional initial rule always wins when it is
+            // first for this field. Later guarded/default rules cannot change
+            // that value. A guard before it depends on the draft, so retain
+            // the declared choices and let the audited command judge them.
+            let initial = command
+                .as_ref()
+                .filter(|_| detail.version == 0)
+                .and_then(|c| {
+                    c.rules
+                        .initial
                         .iter()
-                        .filter_map(serde_json::Value::as_str)
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                })
-                .unwrap_or_default();
+                        .find(|(id, _, _)| id == &field.id)
+                        .filter(|(_, _, guard)| guard.is_none())
+                        .map(|(_, value, _)| value.as_str())
+                });
+            let options = initial.map(str::to_owned).unwrap_or_else(|| {
+                field
+                    .value_type
+                    .get("values")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(serde_json::Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    })
+                    .unwrap_or_default()
+            });
             FieldRow {
                 id: field.id.clone(),
                 kind,
-                value: value_text(&field.value),
+                value: initial
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| value_text(&field.value)),
                 input: format!("value.{}", field.id),
                 spec: serde_json::to_string(&field.value_type).unwrap_or_default(),
                 spec_input: format!("spec.{}", field.id),
@@ -225,6 +346,6 @@ pub fn view(
         command: command.map(|c| c.id).unwrap_or_default(),
         csrf,
         idempotency_key,
-        notice,
+        notice: None,
     }
 }

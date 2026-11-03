@@ -1,0 +1,50 @@
+{
+  "candidate_sha": "711d87d985cd0484bd25d2f863f6428d370881ea",
+  "built_at_utc": "2026-11-01T19:24:27Z",
+  "images": {
+    "service": {
+      "reference": "genui-service:pitch-711d87d",
+      "id": "sha256:6d3f93f1ebd71c673a793faac8350efec00aef6f6e7ac6bcad86ed8369591362",
+      "size_bytes": 542686886,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T19:23:13Z"
+    },
+    "qualification": {
+      "reference": "genui-qualification:pitch-711d87d",
+      "id": "sha256:abba554d213803d31abb1d44f7d31a0ff7803324949e49fa79e982c20ef29886",
+      "size_bytes": 620292538,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T19:24:14Z"
+    },
+    "operator": {
+      "reference": "genui-operator:pitch-711d87d",
+      "id": "sha256:5b02040c4b359aeb405ced0b3f14b5644b33b131b3f98e9a4d797b0b657ab2cf",
+      "size_bytes": 513992925,
+      "architecture": "arm64",
+      "created_at_utc": "2026-11-01T19:24:27Z"
+    }
+  },
+  "checks_passed": true,
+  "passed": true,
+  "parser_identity_equal": true,
+  "qualifications": {
+    "service": {
+      "passed": true,
+      "recorded_at": "2026-11-01T19:24:32.236152+00:00",
+      "scope": "Local image/volume/HTTP security qualification; no managed service calls",
+      "source_receipt_sha256": "146bd64fa3d6625e2d691eb77ab4e3c294f9fd1373fcb0cde1468b1e8174e89a"
+    },
+    "qualification": {
+      "passed": true,
+      "recorded_at": "2026-11-01T19:24:38.899621+00:00",
+      "scope": "APP-075 local confined qualification-image checks; no AWS/RDS/registry",
+      "source_receipt_sha256": "20599b961ba7780c13c522ccecc893d88fb2e507f12119475a7c4f91bef72c37"
+    },
+    "operator": {
+      "passed": true,
+      "recorded_at": "2026-11-01T19:24:52.469746+00:00",
+      "scope": "APP-077 local confined operator-image checks; no AWS/RDS/registry",
+      "source_receipt_sha256": "0f5119ae6c9e536c71d0fa527980666c861f622d531c79fa63001e63a4387f75"
+    }
+  }
+}

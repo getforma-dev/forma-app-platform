@@ -1,0 +1,25 @@
+{
+  "scope": "Read-only synthetic local app keyboard and Chromium accessibility-tree checks. No VoiceOver or real screen-reader announcement claim.",
+  "started": "2026-11-01T23:15:00.458Z",
+  "checks": [
+    "App actions appear as named buttons in the Chromium accessibility tree."
+  ],
+  "requests": {
+    "command_posts": 0,
+    "presentation_posts": 0
+  },
+  "page_errors": [],
+  "manifest_sha256": "9e95277929313cee106208c8fa654a6052d520dee6d2efa6053fa582e6a9f903",
+  "keyboard_to_primary": [
+    {
+      "tag": "A",
+      "name": "Forma home"
+    },
+    {
+      "tag": "BUTTON",
+      "name": "Log meal"
+    }
+  ],
+  "passed": false,
+  "failure": "AssertionError [ERR_ASSERTION]: forward focus remains in modal\n\nfalse !== true\n"
+}

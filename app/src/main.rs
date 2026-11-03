@@ -1,20 +1,13 @@
-use axum::{
-    extract::State,
-    http::{header, StatusCode},
-    response::{IntoResponse, Response},
-    routing::get,
-    Router,
-};
+use axum::{extract::State, http::StatusCode, response::Response, routing::get, Router};
 use forma_ir::PageProps;
 use forma_server::{
-    assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, PageResponse,
-    PolicyExtensions, RenderCtx, RenderError, RouteMode,
+    assets, load_ir_modules, render_browser_shell, sw, PageConfig, PageHandle, RenderCtx, RouteMode,
 };
-use genui::auth::{
-    self, Auth, AuthConfig, DeniedView, InviteView, PendingView, ResendResult, SigninView,
-    WorkspaceView,
+use genui::auth::{self, Auth, AuthConfig};
+use genui::pages::{
+    respond, DeniedProps, InviteProps, PendingProps, RecordProps, SigninProps, SsrPages,
+    WorkspaceProps,
 };
-use genui::commands::{self, Notice, RecordPage, RecordView};
 use rust_embed::Embed;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -23,310 +16,15 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 struct Assets;
 
 #[derive(PageProps)]
-struct HomeProps {
-    count: u32,
-}
+struct HomeProps {}
 #[derive(PageProps)]
 struct AboutProps {}
-// APP-009 (ADR-006) pages: typed props only; no page reads a request value.
-// APP-074: the invitation entry never shows a submitted code back.
-#[derive(PageProps)]
-struct InviteProps {
-    failed: bool,
-    /// APP-074 review m4: the ADR-006 window that refused, named.
-    limit_minute: bool,
-    limit_day: bool,
-    limit_service: bool,
-    unavailable: bool,
-    described_by: String,
-}
-#[derive(PageProps)]
-struct SigninProps {
-    action: String,
-    has_action: bool,
-    failed: bool,
-}
-#[derive(PageProps)]
-struct PendingProps {
-    csrf_resend: String,
-    csrf_signout: String,
-    resend_available: bool,
-    cooldown_seconds: u32,
-    held: bool,
-    hours_remaining: u32,
-    requested: bool,
-    unavailable: bool,
-}
-#[derive(PageProps)]
-struct DeniedProps {
-    csrf_signout: String,
-}
-// APP-076 G9: the member's openable works, resolved by the auth route.
-#[derive(PageProps)]
-struct RecordLinkProps {
-    id: String,
-    label: String,
-    href: String,
-}
-#[derive(PageProps)]
-struct WorkspaceItemProps {
-    id: String,
-    title: String,
-    href: String,
-    has_records: bool,
-    records: Vec<RecordLinkProps>,
-}
-#[derive(PageProps)]
-struct WorkspaceProps {
-    csrf_signout: String,
-    csrf_signout_all: String,
-    has_items: bool,
-    items: Vec<WorkspaceItemProps>,
-}
-// APP-013 record page (D7.16): typed rows and premise fields; the key and the
-// token are minted per render by the route, never read from the request.
-#[derive(PageProps)]
-struct FieldRowProps {
-    id: String,
-    kind: String,
-    value: String,
-    input: String,
-    spec: String,
-    spec_input: String,
-    options: String,
-    nullable: bool,
-    writable: bool,
-}
-#[derive(PageProps)]
-struct RecordProps {
-    app: String,
-    work: String,
-    collection: String,
-    record_id: String,
-    schema: String,
-    schema_version: String,
-    publication: String,
-    work_version: String,
-    version: String,
-    exists: bool,
-    fields: Vec<FieldRowProps>,
-    command: String,
-    action: String,
-    can_write: bool,
-    csrf: String,
-    idempotency_key: String,
-    committed: bool,
-    replayed: bool,
-    conflict: bool,
-    stale: bool,
-    in_flight: bool,
-    busy: bool,
-    refused: bool,
-    unknown: bool,
-}
 
 struct AppState {
     manifest: forma_server::AssetManifest,
     readiness: Arc<genui::readiness::Readiness>,
     home: Option<PageHandle<HomeProps>>,
     about: Option<PageHandle<AboutProps>>,
-}
-
-/// The APP-009 pages, rendered as complete `PageResponse`s (fresh nonce,
-/// CSP and `no-store` together). The auth module decides status and cookies.
-struct SsrPages {
-    /// The configured fAuth origin: the two anonymous forms' `POST` answers
-    /// `303` there, and Chromium and WebKit judge `form-action` on every hop
-    /// of a form submission's redirect chain (APP-009 review M1).
-    auth_origin: Option<String>,
-    invite: PageHandle<InviteProps>,
-    signin: PageHandle<SigninProps>,
-    pending: PageHandle<PendingProps>,
-    denied: PageHandle<DeniedProps>,
-    workspace: PageHandle<WorkspaceProps>,
-    record: PageHandle<RecordProps>,
-}
-impl RecordPage for SsrPages {
-    fn record(&self, view: &RecordView) -> Response {
-        let notice = |expected: Notice| view.notice == Some(expected);
-        respond(
-            "/record",
-            self.record.render(
-                &RecordProps {
-                    app: view.app.clone(),
-                    work: view.work.clone(),
-                    collection: view.collection.clone(),
-                    record_id: view.record_id.clone(),
-                    schema: view.schema.clone(),
-                    schema_version: view.schema_version.clone(),
-                    publication: view.publication.clone(),
-                    work_version: view.work_version.clone(),
-                    version: view.version.clone(),
-                    exists: view.exists,
-                    fields: view
-                        .fields
-                        .iter()
-                        .map(|row| FieldRowProps {
-                            id: row.id.clone(),
-                            kind: row.kind.clone(),
-                            value: row.value.clone(),
-                            input: row.input.clone(),
-                            spec: row.spec.clone(),
-                            spec_input: row.spec_input.clone(),
-                            options: row.options.clone(),
-                            nullable: row.nullable,
-                            writable: row.writable,
-                        })
-                        .collect(),
-                    command: view.command.clone(),
-                    action: view.action.clone(),
-                    can_write: view.can_write,
-                    csrf: view.csrf.clone(),
-                    idempotency_key: view.idempotency_key.clone(),
-                    committed: notice(Notice::Committed),
-                    replayed: notice(Notice::Replayed),
-                    conflict: notice(Notice::Conflict),
-                    stale: notice(Notice::Stale),
-                    in_flight: notice(Notice::InFlight),
-                    busy: notice(Notice::Busy),
-                    refused: notice(Notice::Refused),
-                    unknown: notice(Notice::Unknown),
-                },
-                &RenderCtx::new().with_title("Record"),
-            ),
-        )
-    }
-}
-impl SsrPages {
-    /// A page whose form hands off to the auth origin: `form-action 'self'`
-    /// plus that exact origin (forma-server `PolicyExtensions::form_action`).
-    /// Without a configured origin the form fails neutrally and stays `'self'`.
-    fn handoff(&self, title: &str) -> RenderCtx {
-        let ctx = RenderCtx::new().with_title(title);
-        match &self.auth_origin {
-            Some(origin) => ctx.with_policy(PolicyExtensions::new().form_action(origin.clone())),
-            None => ctx,
-        }
-    }
-}
-impl auth::Pages for SsrPages {
-    fn invite(&self, view: &InviteView) -> Response {
-        respond(
-            "/invite",
-            self.invite.render(
-                &InviteProps {
-                    failed: view.failed,
-                    limit_minute: view.limited == Some(auth::InviteLimit::Minute),
-                    limit_day: view.limited == Some(auth::InviteLimit::Day),
-                    limit_service: view.limited == Some(auth::InviteLimit::Service),
-                    unavailable: view.unavailable,
-                    described_by: if view.failed || view.limited.is_some() || view.unavailable {
-                        "invite-error"
-                    } else {
-                        "invite-help"
-                    }
-                    .into(),
-                },
-                &self.handoff("Enter your invitation code"),
-            ),
-        )
-    }
-    fn signin(&self, view: &SigninView) -> Response {
-        respond(
-            "/signin",
-            self.signin.render(
-                &SigninProps {
-                    action: view.action.clone().unwrap_or_default(),
-                    has_action: view.action.is_some(),
-                    failed: view.failed,
-                },
-                &self.handoff("Sign in"),
-            ),
-        )
-    }
-    fn pending(&self, view: &PendingView) -> Response {
-        respond(
-            "/auth/pending",
-            self.pending.render(
-                &PendingProps {
-                    csrf_resend: view.csrf_resend.clone(),
-                    csrf_signout: view.csrf_signout.clone(),
-                    resend_available: view.resend_available,
-                    cooldown_seconds: view.cooldown_seconds,
-                    held: view.hours_remaining > 0,
-                    hours_remaining: view.hours_remaining,
-                    requested: view.result == Some(ResendResult::Requested),
-                    unavailable: view.result == Some(ResendResult::Unavailable),
-                },
-                &RenderCtx::new().with_title("Confirm your email address"),
-            ),
-        )
-    }
-    fn denied(&self, view: &DeniedView) -> Response {
-        respond(
-            "/auth/callback",
-            self.denied.render(
-                &DeniedProps {
-                    csrf_signout: view.csrf_signout.clone(),
-                },
-                &RenderCtx::new().with_title("No access"),
-            ),
-        )
-    }
-    fn workspace(&self, view: &WorkspaceView) -> Response {
-        respond(
-            "/workspace",
-            self.workspace.render(
-                &WorkspaceProps {
-                    csrf_signout: view.csrf_signout.clone(),
-                    csrf_signout_all: view.csrf_signout_all.clone(),
-                    has_items: !view.items.is_empty(),
-                    items: view
-                        .items
-                        .iter()
-                        .map(|item| WorkspaceItemProps {
-                            id: item.href.clone(),
-                            title: item.title.clone(),
-                            href: item.href.clone(),
-                            has_records: !item.records.is_empty(),
-                            records: item
-                                .records
-                                .iter()
-                                .map(|record| RecordLinkProps {
-                                    id: record.href.clone(),
-                                    label: record.label.clone(),
-                                    href: record.href.clone(),
-                                })
-                                .collect(),
-                        })
-                        .collect(),
-                },
-                &RenderCtx::new().with_title("Workspace"),
-            ),
-        )
-    }
-}
-
-/// A `PageResponse` sends the HTML with the policy for its nonce,
-/// `Cache-Control: no-store` and the document security headers. Forma logs
-/// nothing: a failure is counted here by code and route and answered with our
-/// own error, never an empty shell.
-fn respond(route: &str, rendered: Result<PageResponse, RenderError>) -> Response {
-    match rendered {
-        Ok(page) => page.into_response(),
-        Err(error) => {
-            tracing::error!(code = error.code(), route, "{error}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [
-                    (header::CACHE_CONTROL, "no-store"),
-                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-                ],
-                "Internal Server Error",
-            )
-                .into_response()
-        }
-    }
 }
 
 fn refuse(message: impl std::fmt::Display) -> ! {
@@ -438,6 +136,7 @@ async fn main() {
         "/workspace",
         "/record",
         "/w/{app}/{work}",
+        "/canvas",
     ] {
         require_ssr(manifest.route(route).map(|entry| entry.mode))
             .unwrap_or_else(|reason| panic!("required SSR route {route}: {reason}"));
@@ -493,6 +192,21 @@ async fn main() {
             .bind::<genui::query::page::WorkProps>("work")
             .unwrap_or_else(bind_errors),
     });
+    // ADR-011 (APP-092): the pitch canvas.
+    let canvas_page = Arc::new(genui::query::canvas::SsrCanvasPages {
+        page: pages
+            .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap_or_else(bind_errors),
+    });
+    let shared_pages = Arc::new(genui::sharing::live::SsrSharedPages {
+        auth_origin: auth_config.as_ref().map(|c| c.auth_origin.clone()),
+        app: pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap_or_else(bind_errors),
+        canvas: pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap_or_else(bind_errors),
+    });
     pages.finalize().unwrap_or_else(|errors| {
         for error in errors {
             eprintln!("{error}");
@@ -510,18 +224,17 @@ async fn main() {
     // binds (where the APP-006 harness was constructed): a release binary
     // refuses the operator qualification configuration here.
     let qualification = qualification_router();
+    let shared_broker = std::env::var_os(auth::shared_broker::CONFIG_ENV).map(|path| {
+        auth::shared_broker::Client::load(std::path::Path::new(&path))
+            .unwrap_or_else(|reason| refuse(reason))
+    });
     let auth = Arc::new(
         Auth::new(auth_config, stores.clone(), auth_pages.clone())
             .unwrap_or_else(|reason| refuse(reason))
             .with_trusted_proxies(proxies)
-            .with_invitations(invitations),
+            .with_invitations(invitations)
+            .with_shared_broker(shared_broker),
     );
-    // APP-013: the command route and the record page share the session,
-    // vault and synchronizer key with the ADR-006 routes.
-    let command_routes = Arc::new(commands::routes::Commands {
-        auth: auth.clone(),
-        page: auth_pages,
-    });
     // APP-012 (ADR-007 D7.10): the confined query engine beside the data
     // store, in the image's private cache and scratch under /run/genui.
     let engine = stores.as_ref().map(|_| {
@@ -530,11 +243,57 @@ async fn main() {
                 .unwrap_or_else(|_| refuse("query engine directories refused")),
         ) as Arc<dyn genui::query::Executor>
     });
-    let work_routes = genui::query::routes::router(Arc::new(genui::query::Work::new(
-        auth.clone(),
-        engine,
-        work_page,
-    )));
+    let work = Arc::new(
+        genui::query::Work::new(auth.clone(), engine, work_page).with_shared_pages(shared_pages),
+    );
+    // APP-108 (ADR-011 pitch): folders. Objects through the credentialed
+    // `runtime.py object` child under the tenant role, the normalizer child,
+    // the engine cache, and the sealed parser the image verified at start.
+    let box_state = Arc::new(genui::boxes::routes::Boxes {
+        auth: auth.clone(),
+        work: work.clone(),
+        composer: genui::composer::Composer::from_env(),
+        store: genui::boxes::store::ObjectStore::image(),
+        normalizer: genui::boxes::register::Normalizer::image(),
+        parser: if std::env::var_os(genui::imports::sandbox::MANIFEST_ENV).is_some() {
+            genui::imports::sandbox::verify_manifest().ok()
+        } else {
+            None
+        },
+    });
+    genui::boxes::intent::install(box_state.clone());
+    // APP-100 (ADR-011 pitch): Slack, from SLACK_BOT_TOKEN and
+    // SLACK_SIGNING_SECRET alone (absent: no route is mounted, the paths are
+    // the uniform 404, and nothing posts). The approver notifier follows the
+    // event hub for the life of the process.
+    let slack = genui::slack::Slack::from_env(auth.clone());
+    if let Some(slack) = &slack {
+        genui::slack::notify::spawn(slack.clone());
+    }
+    // The product routes, composed once for the binary and the local dev
+    // stand (`genui::product`). The model keys come from the environment
+    // alone (absent: the model routes answer unavailable, nothing else
+    // changes). The organization's realtime stream is named by
+    // GENUI_CANVAS_EVENTS_URL (absent: the island subscribes to nothing).
+    let (product_routes, long_routes) = genui::product::routes(genui::product::Product {
+        auth: auth.clone(),
+        work,
+        // APP-013: the command route and the record page share the session,
+        // vault and synchronizer key with the ADR-006 routes.
+        record_page: auth_pages,
+        canvas_pages: canvas_page,
+        live_events: std::env::var("GENUI_CANVAS_EVENTS_URL")
+            .ok()
+            .filter(|url| url.starts_with("/v1/"))
+            .unwrap_or_default(),
+        demo_organizations: genui::query::canvas::demo_organizations(),
+        composer: genui::composer::Composer::from_env(),
+        parser: genui::actions::Parser::from_env(),
+        slack,
+        customizer: genui::widgets::customize::Customizer::from_env(),
+        weather: genui::widgets::weather::OpenMeteo::new(),
+        boxes: box_state,
+    });
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
         std::env::var("GENUI_HELPER_PATH")
@@ -572,14 +331,12 @@ async fn main() {
     // The operator harness (feature builds only) replaces the product routes
     // for its isolated run; the two never share a router.
     // APP-076 G8: the uniform 404 for unknown paths and method mismatches
-    // alike (no `Allow`), and the D7.14 handler deadline.
-    let app = genui::http::uniform(match qualification {
-        Some(harness) => app.merge(harness),
-        None => app
-            .merge(auth::routes::router(auth.clone()))
-            .merge(commands::routes::router(command_routes))
-            .merge(work_routes),
-    });
+    // alike (no `Allow`), and the D7.14 handler deadline; the long-deadline
+    // paths (model waits, the canvas's library reads) under their own.
+    let app = match qualification {
+        Some(harness) => genui::http::uniform(app.merge(harness)),
+        None => genui::http::uniform_with_many(app.merge(product_routes), long_routes),
+    };
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their
     // provider refresh tokens revoked.
@@ -622,12 +379,12 @@ async fn main() {
 async fn home(State(state): State<Arc<AppState>>) -> Response {
     let route = "/";
     // Route mode is fixed at startup; an SSR failure never selects a shell.
-    let ctx = RenderCtx::new().with_title("Home");
+    let ctx = RenderCtx::new().with_title("Forma Canvas");
     let rendered = match &state.home {
-        Some(home) => home.render(&HomeProps { count: 7 }, &ctx),
+        Some(home) => home.render(&HomeProps {}, &ctx),
         None => render_browser_shell(
             &PageConfig {
-                title: "Home",
+                title: "Forma Canvas",
                 route_pattern: route,
                 manifest: &state.manifest,
                 config_json: None,
@@ -681,6 +438,11 @@ mod tests {
     use super::*;
     use auth::Pages as _;
     use axum::body::to_bytes;
+    use axum::http::header;
+    use genui::auth::{
+        DeniedView, InviteView, PendingView, ResendResult, SigninView, WorkspaceView,
+    };
+    use genui::commands::{self, Notice, RecordPage as _, RecordView};
 
     #[test]
     fn required_native_routes_refuse_browser_and_missing_outputs() {
@@ -708,6 +470,41 @@ mod tests {
             .to_owned()
     }
 
+    // APP-138: the public entry is native, with no scaffold Counter island.
+    #[tokio::test]
+    async fn home_is_native_and_keeps_the_invitation_entry() {
+        let manifest = assets::try_load_manifest::<Assets>().unwrap();
+        let modules = load_ir_modules::<Assets>(&manifest).unwrap();
+        let home = modules.bind::<HomeProps>("home").unwrap();
+        modules.bind::<AboutProps>("about").unwrap();
+        modules.bind::<InviteProps>("invite").unwrap();
+        modules.bind::<SigninProps>("signin").unwrap();
+        modules.bind::<PendingProps>("pending").unwrap();
+        modules.bind::<DeniedProps>("denied").unwrap();
+        modules.bind::<WorkspaceProps>("workspace").unwrap();
+        modules.bind::<RecordProps>("record").unwrap();
+        modules
+            .bind::<genui::query::page::WorkProps>("work")
+            .unwrap();
+        modules
+            .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap();
+        modules
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        modules
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
+        modules.finalize().unwrap();
+        let ctx = RenderCtx::new().with_title("Forma Canvas");
+        let (status, headers, body) = html(respond("/", home.render(&HomeProps {}, &ctx))).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers["cache-control"], "no-store");
+        assert!(body.contains("href=\"/invite\"") && body.contains("href=\"/signin\""));
+        assert!(!body.contains("<script") && !body.contains("data-forma-island"));
+        assert!(manifest.route("/").unwrap().js.is_empty());
+    }
+
     fn pages() -> SsrPages {
         let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
         for route in [
@@ -730,10 +527,17 @@ mod tests {
             workspace: pages.bind::<WorkspaceProps>("workspace").unwrap(),
             record: pages.bind::<RecordProps>("record").unwrap(),
         };
-        // Home and about stay unbound here; finalize judges only bound routes.
+        // Bind every native owner before finalizing the complete page set.
         let _ = pages.bind::<HomeProps>("home");
         let _ = pages.bind::<AboutProps>("about");
         let _ = pages.bind::<genui::query::page::WorkProps>("work");
+        let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
+        pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
         pages.finalize().unwrap();
         ssr
     }
@@ -742,6 +546,106 @@ mod tests {
         let headers = response.headers().clone();
         let body = to_bytes(response.into_body(), 1 << 20).await.unwrap();
         (status, headers, String::from_utf8(body.to_vec()).unwrap())
+    }
+
+    /// The shared entry submits locally, then redirects to the configured
+    /// provider. The originating document must permit that exact second hop.
+    #[tokio::test]
+    async fn shared_auth_entry_keeps_the_exact_provider_form_policy() {
+        const AUTH_ORIGIN: &str = "https://localhost:7697";
+        use genui::sharing::live::{
+            SharedCanvasProps, SharedPageProps, SharedPages, SsrSharedPages,
+        };
+        let manifest = assets::try_load_manifest::<Assets>().unwrap();
+        let modules = load_ir_modules::<Assets>(&manifest).unwrap();
+        modules.bind::<HomeProps>("home").unwrap();
+        modules.bind::<AboutProps>("about").unwrap();
+        modules.bind::<InviteProps>("invite").unwrap();
+        modules.bind::<SigninProps>("signin").unwrap();
+        modules.bind::<PendingProps>("pending").unwrap();
+        modules.bind::<DeniedProps>("denied").unwrap();
+        modules.bind::<WorkspaceProps>("workspace").unwrap();
+        modules.bind::<RecordProps>("record").unwrap();
+        modules
+            .bind::<genui::query::page::WorkProps>("work")
+            .unwrap();
+        modules
+            .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap();
+        let mut pages = SsrSharedPages {
+            auth_origin: Some(AUTH_ORIGIN.into()),
+            app: modules.bind::<SharedPageProps>("shared").unwrap(),
+            canvas: modules.bind::<SharedCanvasProps>("sharedCanvas").unwrap(),
+        };
+        modules.finalize().unwrap();
+        let key = "11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222";
+        let mut entry = SharedPageProps {
+            title: "Shared app".into(),
+            share_id: key.into(),
+            needs_sign_in: true,
+            can_sign_up: true,
+            sign_in_action: format!("/auth/shared/{key}/start"),
+            sign_in_csrf: "synthetic-csrf".into(),
+            ..Default::default()
+        };
+        let mut fixtures = serde_json::Map::new();
+        for (name, signup) in [("anonymous", true), ("verification_pending", false)] {
+            entry.can_sign_up = signup;
+            let (status, headers, body) = html(pages.app(&entry)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                form_action(&headers),
+                format!("form-action 'self' {AUTH_ORIGIN}")
+            );
+            assert!(headers[header::CACHE_CONTROL]
+                .to_str()
+                .unwrap()
+                .contains("no-store"));
+            let csp = policy(&headers);
+            assert!(csp.contains("frame-ancestors 'none'") && csp.contains("nonce-"));
+            assert!(body.contains(&format!("action=\"{}\"", entry.sign_in_action)));
+            assert!(body.contains("value=\"sign_in\""));
+            assert_eq!(body.contains("value=\"sign_up\""), signup);
+            fixtures.insert(name.into(), serde_json::json!({
+                "body": body,
+                "headers": headers.iter().map(|(k,v)| (k.to_string(),v.to_str().unwrap().to_owned())).collect::<std::collections::BTreeMap<_,_>>()
+            }));
+        }
+        // Wrong-account neutral entry has the same handoff with signout too.
+        entry.can_sign_out = true;
+        assert_eq!(
+            form_action(&html(pages.app(&entry)).await.1),
+            format!("form-action 'self' {AUTH_ORIGIN}")
+        );
+        entry.needs_sign_in = false;
+        for available in [false, true] {
+            entry.available = available;
+            assert_eq!(
+                form_action(&html(pages.app(&entry)).await.1),
+                "form-action 'self'"
+            );
+        }
+        assert_eq!(
+            form_action(&html(pages.canvas(&SharedCanvasProps::default())).await.1),
+            "form-action 'self'"
+        );
+        // An absent provider cannot widen the policy. It is also the browser
+        // negative control: the same native form's external redirect is blocked.
+        pages.auth_origin = None;
+        entry.needs_sign_in = true;
+        entry.available = false;
+        entry.can_sign_up = true;
+        let (_, headers, body) = html(pages.app(&entry)).await;
+        assert_eq!(form_action(&headers), "form-action 'self'");
+        fixtures.insert("no_provider".into(), serde_json::json!({
+            "body": body,
+            "headers": headers.iter().map(|(k,v)| (k.to_string(),v.to_str().unwrap().to_owned())).collect::<std::collections::BTreeMap<_,_>>()
+        }));
+        // Invalid origins are rejected by AuthConfig before renderer wiring;
+        // shared_entry_origin_is_an_exact_trusted_configuration_value covers it.
+        if let Some(path) = std::env::var_os("GENUI_SHARED_ENTRY_FIXTURE") {
+            std::fs::write(path, serde_json::to_vec_pretty(&fixtures).unwrap()).unwrap();
+        }
     }
 
     /// APP-074: the invitation entry renders natively with no script and
@@ -830,7 +734,10 @@ mod tests {
             format!("form-action 'self' {AUTH_ORIGIN}")
         );
         assert!(policy(&headers).contains("frame-ancestors 'none'"));
-        assert!(body.contains("action=\"/signin/mrswmz3infvgw3dnnzxxa4lsom\""));
+        assert!(body.contains("action=\"/signin\""));
+        assert!(body.contains("name=\"workspace\""));
+        assert!(body.contains("value=\"mrswmz3infvgw3dnnzxxa4lsom\""));
+        assert!(body.contains("Switch workspace"));
         assert!(body.contains("method=\"post\""));
         assert!(!body.contains("<script src"));
         assert!(!body.contains("could not continue"));
@@ -839,7 +746,16 @@ mod tests {
             failed: true,
         }))
         .await;
-        assert!(body.contains("could not continue") && !body.contains("<form"));
+        assert!(body.contains("could not continue") && body.contains("<form"));
+        assert!(body.contains("action=\"/signin\"") && body.contains("name=\"workspace\""));
+        assert!(!body.contains("Switch workspace"));
+        let (_, _, entry) = html(pages.signin(&SigninView {
+            action: None,
+            failed: false,
+        }))
+        .await;
+        assert!(entry.contains("name=\"workspace\"") && entry.contains("required"));
+        assert!(!entry.contains("could not continue") && !entry.contains("<script src"));
         let (_, pending_headers, body) = html(pages.pending(&PendingView {
             csrf_resend: "R".repeat(43),
             csrf_signout: "S".repeat(43),
@@ -910,18 +826,19 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert!(!body.contains("Nothing to open yet."));
         assert!(body.contains(&format!("href=\"{work}\"")));
+        // ADR-011: each work opens on the canvas too.
+        assert!(body.contains("href=\"/canvas\"") && body.contains("Open the canvas"));
+        assert!(body.contains("href=\"/canvas#g-00000000-0000-4000-8000-0000000000f2\""));
         assert!(
             body.contains(&format!("href=\"{record}\"")) && body.contains("New decision record")
         );
         // Titles are text, never markup.
         assert!(body.contains("Northstar &lt;operations&gt;") && !body.contains("<operations>"));
-        assert_eq!(
-            body.matches(
-                "Seeded definition, retrieved from the library. Sources seeded by the operator."
-            )
-            .count(),
-            2
-        );
+        // Workspace props carry no provenance: generated or uploaded work
+        // must not be presented as an operator-seeded library definition.
+        assert_eq!(body.matches("Saved work.").count(), 2);
+        assert!(!body.contains("Seeded definition"));
+        assert!(!body.contains("Sources seeded by the operator"));
         assert!(!body.contains("<script src"));
     }
 
@@ -1013,6 +930,7 @@ mod tests {
     /// shows its message and nothing that could be read as a number.
     #[tokio::test]
     async fn work_page_renders_every_view_state_without_a_fabricated_zero() {
+        use axum::response::IntoResponse;
         use genui::query::page::{self as work, Outcome, Reason, SsrWorkPages, WorkPages as _};
         use genui::query::{QueryReceipt, WorkerResult};
         use serde_json::json;
@@ -1031,11 +949,20 @@ mod tests {
         let _ = pages.bind::<WorkspaceProps>("workspace");
         let _ = pages.bind::<InviteProps>("invite");
         let _ = pages.bind::<RecordProps>("record");
+        let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
+        let shared_page = pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
         pages.finalize().unwrap();
         let view = |id: &str, kind: &str| genui::storage::WorkView {
             id: id.into(),
             title: id.into(),
             kind: kind.into(),
+            integer_columns: Vec::new(),
+            column_types: Default::default(),
         };
         let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
             columns: columns.iter().map(|c| (*c).to_owned()).collect(),
@@ -1044,6 +971,7 @@ mod tests {
                 .filter(|c| matches!(**c, "total_bytes" | "bytes"))
                 .map(|c| (*c).to_owned())
                 .collect(),
+            column_types: Default::default(),
             result_digest: genui::query::worker::result_digest(&rows).unwrap(),
             rows,
             truncated_page: false,
@@ -1066,15 +994,40 @@ mod tests {
                 json!("60000"),
             ]],
         );
-        let (ready_receipt, empty_receipt, timeline_receipt) = (
+        // APP-093 review M4: a money column is shown as currency, its exact
+        // minor units kept as the hover title.
+        let mut spend = result(
+            &["claims", "total_amount"],
+            vec![vec![json!("240"), json!("26262004")]],
+        );
+        spend.column_types = [
+            (
+                "claims".to_owned(),
+                genui::query::worker::ColumnType::Integer,
+            ),
+            (
+                "total_amount".to_owned(),
+                genui::query::worker::ColumnType::Money {
+                    currency: "USD".into(),
+                    minor_unit_exponent: 2,
+                },
+            ),
+        ]
+        .into();
+        let (ready_receipt, empty_receipt, timeline_receipt, spend_receipt) = (
             receipt(&total, "sha256:receipt-ready"),
             receipt(&nothing, "sha256:receipt-empty"),
             receipt(&buckets, "sha256:receipt-timeline"),
+            receipt(&spend, "sha256:receipt-spend"),
         );
         let cards = vec![
             work::card(
                 &view("ready", "summary"),
                 Outcome::Released(&total, &ready_receipt),
+            ),
+            work::card(
+                &view("spend", "summary"),
+                Outcome::Released(&spend, &spend_receipt),
             ),
             work::card(
                 &view("timeline", "timeline"),
@@ -1098,7 +1051,27 @@ mod tests {
         ];
         let outline = genui::storage::WorkOutline {
             title: "Northstar egress".into(),
+            presentation: None,
+            description: String::new(),
             views: vec![],
+            parts: cards
+                .iter()
+                .enumerate()
+                .map(|(row, card)| genui::storage::WorkPart {
+                    id: card.id.clone(),
+                    title: card.title.clone(),
+                    kind: card.kind.clone(),
+                    row: row as u32,
+                    width: 12,
+                    runnable: true,
+                    ..Default::default()
+                })
+                .collect(),
+            can_window: true,
+            can_destination: true,
+            definition_digest: String::new(),
+            collections: vec![("collection".into(), "Claim".into())],
+            can_write: true,
         };
         let form = work::FormValues {
             window_start: "2026-10-22T10:00".into(),
@@ -1112,6 +1085,11 @@ mod tests {
             &form,
             false,
             cards,
+            work::WorkChrome {
+                records: Vec::new(),
+                canvas: "/canvas#g-w".into(),
+                ..Default::default()
+            },
         );
         let (status, headers, body) = html(ssr.work(&props)).await;
         // Evidence: the rendered page of every state (synthetic props).
@@ -1134,14 +1112,28 @@ mod tests {
                 .find(&format!("data-view=\"{id}\""))
                 .unwrap_or_else(|| panic!("{id}"));
             let rest = &body[start..];
-            rest[..rest.find("</section>").unwrap()].to_owned()
+            // Native interactive pages add stable text anchors. Judge the
+            // rendered badge/content independently of those hydration markers.
+            let mut tail = &rest[..rest.find("</section>").unwrap()];
+            let mut content = String::new();
+            while let Some(start) = tail.find("<!--") {
+                content.push_str(&tail[..start]);
+                let end = tail[start..].find("-->").unwrap();
+                tail = &tail[start + end + 3..];
+            }
+            content.push_str(tail);
+            content
         };
         let ready = section("ready");
         assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1,140,000<"));
         assert!(ready.contains("sha256:receipt-ready") && ready.contains("<details"));
         assert!(ready.contains(&total.result_digest));
+        let spend = section("spend");
+        assert!(spend.contains(">$262,620.04<") && spend.contains("title=\"26262004\""));
+        assert!(!spend.contains(">26,262,004<"));
         let timeline = section("timeline");
         assert!(timeline.contains("<table") && timeline.contains(">60,000<"));
+        assert!(timeline.contains("title=\"60000\""));
         assert!(timeline.contains(">minute<") && timeline.contains("sha256:receipt-timeline"));
         let empty = section("empty");
         assert!(empty.contains("data-state=\"empty\"") && empty.contains("No rows matched"));
@@ -1169,11 +1161,617 @@ mod tests {
         assert!(loading.contains("<span class=\"badge\">busy</span>"));
         assert!(!loading.contains("<span class=\"badge\">loading</span>"));
         assert!(section("idle").contains("<span class=\"badge\">idle</span>"));
+        // A records-only work has no source-query form. It offers the canvas
+        // and a new-record link (APP-135).
+        let only = work::props(
+            &outline,
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            false,
+            Vec::new(),
+            work::WorkChrome {
+                records: work::record_links(&outline, "app", "work"),
+                canvas: work::canvas_href("work"),
+                ..Default::default()
+            },
+        );
+        assert!(only.records_only && only.has_records && !only.has_query);
+        let (_, _, records_body) = html(ssr.work(&only)).await;
+        assert!(!records_body.contains("Window start"));
+        assert!(!records_body.contains("Run views"));
+        assert!(records_body.contains("Changes appear here and on your canvas."));
+        assert!(records_body.contains("Open on the canvas"));
+        assert!(records_body.contains("/canvas#g-work"));
+        assert!(records_body.contains("New Claim record"));
+        assert!(records_body.contains("/work/app/work/records/collection/"));
+        // APP-144: the admitted form and current records are real native HTML;
+        // values remain escaped and commands retain their existing route/key.
+        let mut document = only.clone();
+        document.forms = vec![genui::query::canvas::FormCardProps {
+            id: "form-claim".into(),
+            title: "File a claim".into(),
+            command: "file_claim".into(),
+            action: "/v1/work/app/work/commands/file_claim".into(),
+            idempotency_key: "a".repeat(32),
+            collection: "collection".into(),
+            fields: vec![genui::query::canvas::FormFieldProps {
+                id: "description".into(),
+                label: "Description".into(),
+                input: "value.description".into(),
+                value: "<script>untrusted()</script>".into(),
+                spec: r#"{"type":"text"}"#.into(),
+                spec_input: "spec.description".into(),
+                has_text: true,
+                writable: true,
+                ..Default::default()
+            }],
+            submit: "File claim".into(),
+            ..Default::default()
+        }];
+        document.forms[0]
+            .fields
+            .push(genui::query::canvas::FormFieldProps {
+                id: "status".into(),
+                kind: "enum".into(),
+                label: "Status".into(),
+                input: "value.status".into(),
+                value: "reviewed".into(),
+                writable: true,
+                has_choices: true,
+                spec: r#"{"type":"enum","values":["needs_context","reviewed"]}"#.into(),
+                spec_input: "spec.status".into(),
+                choices: vec![
+                    genui::query::canvas::ChoiceProps {
+                        id: "first".into(),
+                        value: "needs_context".into(),
+                        selected: false,
+                    },
+                    genui::query::canvas::ChoiceProps {
+                        id: "current".into(),
+                        value: "reviewed".into(),
+                        selected: true,
+                    },
+                ],
+                ..Default::default()
+            });
+        document.record_cards = vec![genui::query::canvas::RecordsCardProps {
+            id: "claims".into(),
+            title: "Claims".into(),
+            collection: "collection".into(),
+            has_rows: true,
+            rows: vec![genui::query::canvas::RecordRowProps {
+                id: "claim-one".into(),
+                href: "/work/app/work/records/collection/record".into(),
+                version: "1".into(),
+                commit_sequence: "7".into(),
+                cells: vec![work::CellProps {
+                    id: "description".into(),
+                    text: "Admitted saved record".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }];
+        document.parts = vec![genui::query::page::PartProps {
+            id: "form-claim".into(),
+            title: "New Claim record".into(),
+            kind: "form".into(),
+            class: "document-part document-column-0 document-width-12 document-row-1".into(),
+            is_form: true,
+            forms: document.forms.clone(),
+            ..Default::default()
+        }];
+        // Shared native HTML uses the same finite layout/data vocabulary but
+        // its props cannot carry a form, member link, selector or Ask context.
+        let shared = genui::sharing::live::SharedPageProps {
+            title: "Shared app".into(),
+            available: true,
+            parts: vec![
+                genui::sharing::live::SharedPartProps {
+                    id: "guide".into(),
+                    title: "Guide".into(),
+                    text: "<script>hostile note</script>".into(),
+                    class: "document-part document-column-0 document-width-6 document-row-1".into(),
+                    is_note: true,
+                    ..Default::default()
+                },
+                genui::sharing::live::SharedPartProps {
+                    id: "write".into(),
+                    title: "Save".into(),
+                    class: "document-part document-column-6 document-width-6 document-row-1".into(),
+                    is_form: true,
+                    message: "This form is view only in a shared app.".into(),
+                    ..Default::default()
+                },
+                genui::sharing::live::SharedPartProps {
+                    id: "ready".into(),
+                    title: "Total".into(),
+                    class: "document-part document-column-0 document-width-12 document-row-2"
+                        .into(),
+                    views: vec![props
+                        .views
+                        .iter()
+                        .find(|v| v.id == "ready")
+                        .unwrap()
+                        .clone()],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let (_, _, shared_body) = html(
+            shared_page
+                .render(&shared, &RenderCtx::new())
+                .unwrap()
+                .into_response(),
+        )
+        .await;
+        assert!(
+            shared_body.find("data-document-part=\"guide\"").unwrap()
+                < shared_body.find("data-document-part=\"write\"").unwrap()
+        );
+        assert!(shared_body.contains("document-column-6 document-width-6 document-row-1"));
+        assert!(
+            shared_body.contains("&lt;script&gt;hostile note&lt;/script&gt;")
+                && !shared_body.contains("<script>hostile")
+        );
+        assert!(
+            shared_body.contains("This form is view only")
+                && shared_body.contains("sha256:receipt-ready")
+        );
+        assert!(
+            !shared_body.contains("data-command")
+                && !shared_body.contains("data-ask-")
+                && !shared_body.contains("/work/")
+                && !shared_body.contains("<select")
+        );
+        let (_, headers, document_body) = html(ssr.work(&document)).await;
+        assert!(headers[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap()
+            .contains("require-trusted-types-for"));
+        assert!(document_body.contains("data-document-form=\"form-claim\""));
+        assert!(document_body.contains("action=\"/v1/work/app/work/commands/file_claim\""));
+        assert!(
+            document_body.contains("value=\"reviewed\" selected"),
+            "native SSR marks the existing enum value, not the first option"
+        );
+        assert!(!document_body.contains("value=\"needs_context\" selected"));
+        assert!(document_body.contains(&format!("value=\"{}\"", "a".repeat(32))));
+        assert!(!document_body.contains("<script>untrusted()"));
+        assert!(document_body.contains("&lt;script&gt;untrusted()&lt;/script&gt;"));
+        assert!(
+            document_body.contains("Admitted saved record")
+                && document_body.contains("Commit ")
+                && document_body.contains(">7<")
+        );
+        assert!(document_body.contains("/work/app/work/records/collection/record"));
+        document.forms.clear();
+        document.parts[0].forms.clear();
+        let (_, _, read_only) = html(ssr.work(&document)).await;
+        assert!(read_only.contains("Admitted saved record"));
+        assert!(!read_only.contains("data-document-form=\"form-claim\""));
+        let mut no_records = outline.clone();
+        no_records.collections.clear();
+        no_records.can_write = false;
+        let blank = work::props(
+            &no_records,
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            true,
+            Vec::new(),
+            work::WorkChrome {
+                records: Vec::new(),
+                canvas: work::canvas_href("work"),
+                ..Default::default()
+            },
+        );
+        assert!(!blank.records_only && !blank.has_query && blank.form_error);
+        let (_, _, blank_body) = html(ssr.work(&blank)).await;
+        assert!(!blank_body.contains("This work keeps records."));
+        assert!(!blank_body.contains("Window start"));
+        assert!(blank_body.contains("was not accepted"));
         // A refused window echoes the form, says nothing ran, and runs nothing.
         let mut refused = props.clone();
         refused.form_error = true;
         refused.views = vec![work::card(&view("total", "summary"), Outcome::Idle)];
+        refused.parts = vec![work::PartProps {
+            id: "total".into(),
+            class: "document-part document-column-0 document-width-12 document-row-1".into(),
+            views: refused.views.clone(),
+            ..Default::default()
+        }];
         let (_, _, body) = html(ssr.work(&refused)).await;
         assert!(body.contains("was not accepted") && !body.contains("class=\"value\""));
+    }
+
+    /// ADR-011 (APP-092, APP-094): the canvas page renders every group, its
+    /// app card, its view cards with their values and always-visible receipt
+    /// identities, and its record form, in the HTML itself (the island only
+    /// adds pan/zoom and runs views again); a failed or denied card shows no
+    /// number; the page ships the one canvas island and `no-store`.
+    #[tokio::test]
+    async fn canvas_page_renders_groups_cards_and_receipts_without_javascript() {
+        use genui::query::canvas::{self, CanvasPages as _, SsrCanvasPages};
+        use genui::query::page::{self as work, Outcome, Reason};
+        use genui::query::{QueryReceipt, WorkerResult};
+        use serde_json::json;
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        require_ssr(manifest.route("/canvas").map(|entry| entry.mode)).unwrap();
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        let ssr = SsrCanvasPages {
+            page: pages.bind::<canvas::CanvasProps>("canvas").unwrap(),
+        };
+        let _ = pages.bind::<HomeProps>("home");
+        let _ = pages.bind::<AboutProps>("about");
+        let _ = pages.bind::<SigninProps>("signin");
+        let _ = pages.bind::<PendingProps>("pending");
+        let _ = pages.bind::<DeniedProps>("denied");
+        let _ = pages.bind::<WorkspaceProps>("workspace");
+        let _ = pages.bind::<InviteProps>("invite");
+        let _ = pages.bind::<RecordProps>("record");
+        let _ = pages.bind::<work::WorkProps>("work");
+        pages
+            .bind::<genui::sharing::live::SharedPageProps>("shared")
+            .unwrap();
+        pages
+            .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+            .unwrap();
+        pages.finalize().unwrap();
+        let (app, northstar, spend) = (
+            "00000000-0000-4000-8000-000000000065",
+            "00000000-0000-4000-8000-0000000000f2",
+            "00000000-0000-4000-8000-0000000000cd",
+        );
+        let view = |id: &str, kind: &str, integers: &[&str]| genui::storage::WorkView {
+            id: id.into(),
+            title: id.into(),
+            kind: kind.into(),
+            integer_columns: integers.iter().map(|c| (*c).to_owned()).collect(),
+            column_types: Default::default(),
+        };
+        let result = |columns: &[&str], rows: Vec<Vec<serde_json::Value>>| WorkerResult {
+            columns: columns.iter().map(|c| (*c).to_owned()).collect(),
+            integer_columns: columns
+                .iter()
+                .filter(|c| matches!(**c, "total_bytes" | "bytes"))
+                .map(|c| (*c).to_owned())
+                .collect(),
+            column_types: Default::default(),
+            result_digest: genui::query::worker::result_digest(&rows).unwrap(),
+            rows,
+            truncated_page: false,
+            engine_elapsed_ms: 0,
+            wall: Duration::ZERO,
+            peak_rss_bytes: 0,
+        };
+        let receipt = |result: &WorkerResult, digest: &str| QueryReceipt {
+            digest: digest.into(),
+            document: json!({"digest": digest, "result_digest": result.result_digest,
+                "mode": "published", "principal_id": "00000000-0000-4000-8000-0000000000aa",
+                "membership_epoch": 4, "policy_epoch": 1,
+                "source_revisions": [{"input_id": "events", "source_id": "s", "source_revision_id": "r", "source_digest": "sha256:source"}],
+                "parameters": [{"field_id": "window", "value": {"type": "text", "value": "2026-10-22T10:00:00Z/2026-10-22T10:10:00Z"}}],
+                "provenance": {}}),
+        };
+        let total = result(&["total_bytes"], vec![vec![json!("1140000")]]);
+        let buckets = result(
+            &["minute", "destination", "bytes"],
+            vec![
+                vec![
+                    json!("2026-10-22T10:00:00Z"),
+                    json!("203.0.113.9"),
+                    json!("60000"),
+                ],
+                vec![
+                    json!("2026-10-22T10:10:00Z"),
+                    json!("198.51.100.99"),
+                    json!("900000"),
+                ],
+            ],
+        );
+        let (total_receipt, timeline_receipt) = (
+            receipt(&total, "sha256:receipt-total"),
+            receipt(&buckets, "sha256:receipt-timeline"),
+        );
+        let card = |v: &genui::storage::WorkView, outcome| {
+            canvas::canvas_card(app, northstar, v, work::card(v, outcome))
+        };
+        let (total_view, timeline_view, failed_view, denied_view) = (
+            view("total", "summary", &["total_bytes"]),
+            view("timeline", "timeline", &["bytes"]),
+            view("failed", "summary", &["total_bytes"]),
+            view("denied", "summary", &["total_bytes"]),
+        );
+        let field = |id: &str, kind: &str, options: &str, writable: bool| commands::FieldRow {
+            id: id.into(),
+            kind: kind.into(),
+            value: String::new(),
+            input: format!("value.{id}"),
+            spec: format!("{{\"type\":\"{kind}\"}}"),
+            spec_input: format!("spec.{id}"),
+            options: options.into(),
+            nullable: false,
+            writable,
+        };
+        let record = RecordView {
+            app: app.into(),
+            work: spend.into(),
+            collection: "00000000-0000-4000-8000-0000000000ce".into(),
+            record_id: "00000000-0000-4000-8000-0000000013b1".into(),
+            schema: "decision".into(),
+            schema_version: "1".into(),
+            publication: "00000000-0000-4000-8000-0000000000cc".into(),
+            work_version: "1".into(),
+            version: "0".into(),
+            exists: false,
+            fields: vec![
+                field("status", "enum", "needs_context | reviewed", true),
+                field("note", "text", "", true),
+            ],
+            command: "record_decision".into(),
+            action: format!("/v1/work/{app}/{spend}/commands/record_decision"),
+            can_write: true,
+            csrf: "C".repeat(43),
+            idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+            notice: None,
+        };
+        let group = |work: &str, title: &str| canvas::GroupProps {
+            id: format!("g-{work}"),
+            app: app.into(),
+            work: work.into(),
+            app_card: format!("a-{work}"),
+            title: title.into(),
+            label: canvas::SEEDED_LABEL.into(),
+            origins: canvas::seeded_origins(),
+            href: format!("/w/{app}/{work}"),
+            csrf: "Q".repeat(43),
+            ..canvas::GroupProps::default()
+        };
+        let mut first = group(northstar, "Northstar <egress>");
+        first.window_start = "2026-10-22T10:00:00".into();
+        first.restored = true;
+        first.has_cards = true;
+        first.cards = vec![
+            card(&total_view, Outcome::Released(&total, &total_receipt)),
+            card(
+                &timeline_view,
+                Outcome::Released(&buckets, &timeline_receipt),
+            ),
+            card(&failed_view, Outcome::Failed(Reason::Deadline)),
+            card(&denied_view, Outcome::Denied),
+        ];
+        let mut second = group(spend, "Spend Review");
+        second.has_forms = true;
+        second.forms = canvas::form_card(spend, &record).into_iter().collect();
+        let groups = vec![first, second];
+        let props = canvas::CanvasProps {
+            csrf_signout: "S".repeat(43),
+            has_groups: true,
+            summary: canvas::summary(&groups),
+            groups,
+            live_events: "/v1/events".into(),
+            has_live: true,
+            has_organization: true,
+            organization: "Northstar <Labs>".into(),
+            member_label: "Member ba92f4c5".into(),
+            member_initials: "BA".into(),
+            demo: true,
+            demo_mode: "on".into(),
+            ..canvas::CanvasProps::default()
+        };
+        // APP-104: the library pane, metadata only: categories, numbered
+        // apps and cards (a library app by its capability prefix; any other
+        // work under "My apps").
+        let library = canvas::library(vec![
+            canvas::LibrarySource {
+                app: app.into(),
+                work: spend.into(),
+                title: "Spend <Review>".into(),
+                grouping: None,
+                cards: vec![(
+                    format!("a-{spend}"),
+                    "App card".into(),
+                    "app".into(),
+                    "app".into(),
+                )],
+            },
+            canvas::LibrarySource {
+                app: app.into(),
+                work: northstar.into(),
+                title: "Northstar egress".into(),
+                grouping: Some((
+                    2,
+                    "outbound-traffic".into(),
+                    "security".into(),
+                    "traffic".into(),
+                )),
+                cards: vec![
+                    (
+                        format!("a-{northstar}"),
+                        "App card".into(),
+                        "app".into(),
+                        "app".into(),
+                    ),
+                    (
+                        format!("c-{northstar}-total"),
+                        "Total".into(),
+                        "number".into(),
+                        "summary".into(),
+                    ),
+                ],
+            },
+        ]);
+        let props = canvas::CanvasProps {
+            has_library: true,
+            library_summary: canvas::library_summary(&library),
+            library,
+            member_key: canvas::member_key("org", "principal"),
+            ..props
+        };
+        let response = ssr.canvas(&props);
+        let (status, headers, body) = html(response).await;
+        if let Some(path) = std::env::var_os("GENUI_CANVAS_PAGE_SNAPSHOT") {
+            std::fs::write(path, &body).unwrap();
+        }
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(headers.contains_key(header::CONTENT_SECURITY_POLICY));
+        // The content is in the HTML: everything asserted below sits in the
+        // body before the one module script (the island's).
+        let start = body.find("<body").unwrap();
+        let end = body.find("<script type=\"module\"").unwrap();
+        assert_eq!(body.matches("<script type=\"module\"").count(), 1);
+        // Text read as a person sees it: the native renderer's hydration
+        // markers (`<!--f:…-->`) are removed.
+        let mut content = String::new();
+        let mut rest = &body[start..end];
+        while let Some(open) = rest.find("<!--") {
+            content.push_str(&rest[..open]);
+            rest = &rest[open..];
+            rest = &rest[rest.find("-->").map_or(rest.len(), |close| close + 3)..];
+        }
+        content.push_str(rest);
+        let content = content.as_str();
+        assert!(content.contains("2 apps · 5 cards"));
+        assert!(content.contains("Northstar &lt;egress&gt;") && !content.contains("<egress>"));
+        // The honest provenance: origin chips, the sentence as their title and
+        // for screen readers.
+        assert_eq!(content.matches(canvas::SEEDED_LABEL).count(), 4);
+        assert_eq!(content.matches(">Retrieved from library<").count(), 2);
+        // The top bar: the organization (escaped; no picker), the member's
+        // avatar, and the live chip the island reveals once subscribed.
+        assert!(content.contains(">Northstar &lt;Labs&gt;<") && !content.contains("<Labs>"));
+        assert!(content.contains(">BA<") && content.contains("aria-label=\"Member ba92f4c5\""));
+        assert!(
+            content.contains("id=\"cv-live\"")
+                && content.contains("data-live-events=\"/v1/events\"")
+        );
+        // GENUI_DEMO_MODE: the small-print synthetic-data label and the
+        // island's demo-safe layout flag.
+        assert!(content.contains("Synthetic data") && content.contains("data-demo=\"on\""));
+        assert!(content.contains(&format!("id=\"g-{northstar}\"")));
+        assert!(content.contains(&format!("action=\"/w/{app}/{northstar}\"")));
+        assert!(content.contains("value=\"2026-10-22T10:00:00\""));
+        let section = |id: &str| -> String {
+            let start = content
+                .find(&format!("data-view=\"{id}\""))
+                .unwrap_or_else(|| panic!("{id}"));
+            let rest = &content[start..];
+            rest[..rest.find("</article>").unwrap()].to_owned()
+        };
+        let ready = section("total");
+        // One insight, compact with its unit; the exact value beside it.
+        assert!(ready.contains("data-state=\"ready\"") && ready.contains(">1.14 MB<"));
+        assert!(ready.contains(">1,140,000 bytes<") && ready.contains("title=\"1,140,000 bytes\""));
+        assert!(ready.contains(&format!(
+            "data-query=\"/v1/work/{app}/{northstar}/queries/total\""
+        )));
+        assert!(ready.contains("data-integers=\"total_bytes\""));
+        // The receipt is always on the card: its compact line (seal, digest
+        // prefix, source count, time) is the <details> summary, visible
+        // closed; opening it shows every field in full, without JavaScript.
+        let receipt = &ready[ready.find("class=\"cv-receipt\"").expect("receipt")..];
+        let line = &receipt[..receipt.find("</summary>").unwrap()];
+        assert!(
+            line.contains(">Verified<")
+                && line.contains(">receipt-<")
+                && line.contains(">1 source<")
+        );
+        assert!(line.contains("title=\"sha256:receipt-total\"") && line.contains(" UTC<"));
+        assert!(receipt.contains("Membership epoch") && receipt.contains(&total.result_digest));
+        assert!(
+            receipt.contains("Source revision (events)") && receipt.contains("Parameter window")
+        );
+        assert!(receipt.contains("Receipt document (JSON)"));
+        // The timeline is a server-rendered SVG chart, its rows folded beneath.
+        let timeline = section("timeline");
+        assert!(
+            timeline.contains("<svg class=\"cv-chart-svg\"")
+                && timeline.contains("viewBox=\"0 0 560 188\"")
+        );
+        assert!(
+            timeline.contains("class=\"cv-bar is-peak\"")
+                && timeline
+                    .contains("<title>Oct 22, 10:10 · 198.51.100.99 · 900,000 bytes</title>")
+        );
+        assert!(timeline.contains("Oct 22, 10:00–10:10 UTC. Peak 900 KB at 10:10."));
+        assert!(timeline.contains("<details class=\"cv-rows\"") && timeline.contains("<table"));
+        assert!(timeline.contains(">60 KB<") && timeline.contains("title=\"60,000 bytes\""));
+        assert!(
+            timeline.contains(">Oct 22, 10:00<") && timeline.contains("sha256:receipt-timeline")
+        );
+        for (id, state) in [("failed", "failed"), ("denied", "denied")] {
+            let html = section(id);
+            assert!(html.contains(&format!("data-state=\"{state}\"")), "{id}");
+            assert!(
+                !html.contains("value\"") && !html.contains("cv-receipt") && !html.contains("<svg"),
+                "{id}"
+            );
+            assert!(
+                !html.contains("1,140,000") && !html.contains("MB") && !html.contains(">0<"),
+                "{id}"
+            );
+        }
+        // The record form posts to the audited command route, keyed, without JS.
+        assert!(content.contains(&format!(
+            "action=\"/v1/work/{app}/{spend}/commands/record_decision\""
+        )));
+        assert_eq!(
+            content.matches("0123456789abcdef0123456789abcdef").count(),
+            1
+        );
+        assert!(content.contains("name=\"value.status\"") && content.contains(">reviewed<"));
+        assert!(content.contains("name=\"spec.note\"") && content.contains("New decision record"));
+        assert!(content.contains(">Record decision</button>"));
+        assert!(content.contains(&format!("value=\"{}\"", "C".repeat(43))));
+        assert!(content.contains("action=\"/auth/signout\"") && content.contains(&"S".repeat(43)));
+        // No organization picker; the intent bar posts nowhere but the page.
+        assert!(!content.to_lowercase().contains("organization picker"));
+        assert!(content.contains("From idea to") && content.contains("working app."));
+        // APP-124: the empty canvas's three ways to start; the third is a
+        // file picker (and a drop target) that makes a folder of the files.
+        assert!(content.contains("data-empty-describe") && content.contains("Describe an app"));
+        assert!(content.contains("Bring your files") && content.contains("data-empty-upload-pick"));
+        assert!(content.contains("type=\"file\"") && content.contains("data-empty-upload"));
+        // The library pane: categories in order, numbers, the card ids the
+        // island toggles, the command slug, and titles escaped.
+        let security = content.find(">Security<").expect("security category");
+        let mine = content.find(">My apps<").expect("my apps category");
+        assert!(security < mine);
+        assert!(content.contains(&format!("id=\"lib-{northstar}\"")));
+        assert!(content.contains(&format!("data-card=\"c-{northstar}-total\"")));
+        // The pane says "number". The drop preview sizes a summary, so the
+        // row keeps that canvas kind beside the label.
+        assert!(content.contains("data-canvas-kind=\"summary\""));
+        assert!(
+            content.contains(">1.1<")
+                && content.contains(">2.0<")
+                && content.contains(">/traffic<")
+        );
+        assert!(content.contains("Spend &lt;Review&gt;") && !content.contains("<Review>"));
+        assert!(content.contains("Apps, widgets and standalone cards you can use."));
+        assert!(!content.contains("2 apps · 3 cards"));
+        // An empty canvas offers creation intents that require no installed
+        // apps, so a new customer is not sent to an absent Expense app.
+        let empty = canvas::CanvasProps {
+            csrf_signout: "S".repeat(43),
+            summary: canvas::summary(&[]),
+            ..canvas::CanvasProps::default()
+        };
+        let (_, _, body) = html(ssr.canvas(&empty)).await;
+        assert!(body.contains("data-intent=\"/forma Create a book club reading list\""));
+        assert!(body.contains("data-intent=\"/folder new My project\""));
+        assert!(!body.contains("Review expenses over $200"));
+        assert!(!body.contains("class=\"cv-group\""));
+        // No stream configured: no live chip; no organization read: no name.
+        assert!(!body.contains("id=\"cv-live\"") && !body.contains("class=\"cv-org\""));
+        assert!(!body.contains("Synthetic data") && !body.contains("data-demo=\"on\""));
     }
 }

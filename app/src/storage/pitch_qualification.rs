@@ -1,0 +1,3155 @@
+//! ADR-011 pitch integration campaign (APP-096; the seams of APP-092–095
+//! joined). Isolated test executable only, as the canvas campaign it
+//! extends: local Docker PostgreSQL, the locked Python environments
+//! (`GENUI_NATIVE_FIXTURE_PYTHON`, DuckDB 2.0.0) and the real confined engine
+//! over the library's normalized revisions.
+//!
+//! The binary's route modules (auth, query, canvas, commands, sharing,
+//! events and the composer under its own deadline, composed as `main.rs`
+//! composes them) are served on a real loopback TCP socket; every request
+//! below travels over HTTP (reqwest), the event streams are read as bodies.
+//! The model is a loopback Messages stub reached exactly as the deployment
+//! reaches the real endpoint: `Composer::from_env()` with `ANTHROPIC_API_KEY`
+//! and `GENUI_COMPOSER_ENDPOINT` set in this process for the campaign only.
+//!
+//! The story, in order: three real members sign in through the APP-009
+//! routes (Maya and a teammate in Northstar, an outsider in the canary
+//! organization); the operator grants Maya the library and an owned authoring
+//! app (`grant-library-access`); Maya reads `GET /v1/library`; her
+//! `POST /v1/compose "review expenses over $200"` is routed by the stub to
+//! the expense-review library app (`retrieved`); her canvas lists the new
+//! work and `GET /v1/canvas/works/{app}/{work}` places it; its views run
+//! through the governed query route with contract-valid receipts; her own
+//! stream saw `app.placed`; she shares it with the teammate, whose stream
+//! receives `app.shared` and whose group route then answers; she commits a
+//! decision through the audited command route and the teammate's stream
+//! receives `record.committed`; the stub then returns a valid typed
+//! definition and a `generated` app is drafted on her dedicated authoring
+//! app (never a library app), published, saved and runs; a hostile
+//! generation is refused by admission on every attempt and places nothing;
+//! the canary member can compose an app of their own but has no authority on
+//! Northstar's apps; foreign-scoped, anonymous and forged requests get the
+//! uniform 404 and the canary stream sees no Northstar events. Timings
+//! (compose→200, compose→placed, query p50) are recorded in the report.
+use super::*;
+use crate::{
+    auth::{
+        cookies,
+        invite::Invitations,
+        synthetic_issuer::{Issuer, ISSUER as GATEWASM},
+        tests::{self as harness, Campaign, CANARY_HANDLE, NORTHSTAR_HANDLE},
+        Auth,
+    },
+    commands::{self as record_commands, RecordPage, RecordView},
+    composer::{
+        self,
+        model::{ENDPOINT_ENV, KEY_ENV},
+        routes::Compose,
+    },
+    events,
+    query::{
+        canvas::{self, CanvasProps, SsrCanvasPages},
+        routes::tests::{Counting, RecordingPages},
+        Executor, Work,
+    },
+    sharing,
+    storage::admission_qualification::FakeProvider,
+};
+use axum::http::StatusCode;
+use std::{collections::VecDeque, sync::Mutex};
+
+#[derive(rust_embed::Embed)]
+#[folder = "admin/dist/"]
+struct Assets;
+
+struct NoRecordPage;
+impl RecordPage for NoRecordPage {
+    fn record(&self, _: &RecordView) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        (StatusCode::OK, "record").into_response()
+    }
+}
+
+/// The expense-review library app (contracts/fixtures/library/catalog.json).
+const EXPENSE_APP: &str = "00000000-0000-4000-8000-000000001001";
+const EXPENSE_WORK: &str = "00000000-0000-4000-8000-000000001004";
+const EXPENSE_FIXTURE: &str = "contracts/fixtures/library/expense-review.json";
+/// Maya's dedicated authoring app (created by `grant-library-access`).
+const AUTHORING_APP: &str = "00000000-0000-4000-8000-00000000e0a1";
+const INTENT: &str = "review expenses over $200";
+const WAIT: Duration = Duration::from_secs(10);
+
+#[test]
+#[ignore = "requires Docker and GENUI_NATIVE_FIXTURE_PYTHON (DuckDB 2.0.0)"]
+fn native_pitch_campaign() {
+    std::thread::Builder::new()
+        .name("pitch-integration-campaign".into())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(4)
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(campaign());
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+/// The loopback Messages stub: scripted reply texts in order, every request
+/// body and api key header kept for the checks.
+struct Stub {
+    replies: Mutex<VecDeque<String>>,
+    bodies: Mutex<Vec<Value>>,
+    keys: Mutex<Vec<String>>,
+    pause: Mutex<Option<Arc<ModelPause>>>,
+}
+#[derive(Default)]
+struct ModelPause {
+    arrived: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+impl Stub {
+    fn script(&self, replies: Vec<String>) {
+        *self.replies.lock().unwrap() = replies.into();
+    }
+    fn calls(&self) -> usize {
+        self.bodies.lock().unwrap().len()
+    }
+}
+async fn stub_server() -> (String, Arc<Stub>) {
+    let stub = Arc::new(Stub {
+        replies: Mutex::new(VecDeque::new()),
+        bodies: Mutex::new(Vec::new()),
+        keys: Mutex::new(Vec::new()),
+        pause: Mutex::new(None),
+    });
+    let state = stub.clone();
+    let app = axum::Router::new().route(
+        "/v1/messages",
+        axum::routing::post(
+            move |headers: axum::http::HeaderMap, body: axum::body::Bytes| {
+                let state = state.clone();
+                async move {
+                    if let Some(key) = headers.get("x-api-key") {
+                        state
+                            .keys
+                            .lock()
+                            .unwrap()
+                            .push(key.to_str().unwrap_or_default().to_owned());
+                    }
+                    state
+                        .bodies
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_slice(&body).unwrap_or(Value::Null));
+                    let text = state
+                        .replies
+                        .lock()
+                        .unwrap()
+                        .pop_front()
+                        .unwrap_or_else(|| r#"{"choice":"none","confidence":"low"}"#.into());
+                    let pause = state.pause.lock().unwrap().take();
+                    if let Some(pause) = pause {
+                        pause.arrived.notify_one();
+                        pause.release.notified().await;
+                    }
+                    let reply = json!({"id": "msg", "model": "stub-model",
+                        "content": [{"type": "text", "text": text}],
+                        "usage": {"input_tokens": 5, "output_tokens": 7}});
+                    (
+                        StatusCode::OK,
+                        [("content-type", "application/json")],
+                        reply.to_string(),
+                    )
+                }
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/v1/messages", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (endpoint, stub)
+}
+
+fn router_reply(choice: &str, confidence: &str) -> String {
+    json!({"choice": choice, "confidence": confidence, "reason": "campaign", "title": "ignored"})
+        .to_string()
+}
+fn expense_content() -> Value {
+    let bundle: Value =
+        serde_json::from_slice(&std::fs::read(repository().join(EXPENSE_FIXTURE)).unwrap())
+            .unwrap();
+    bundle["definition"]["content"].clone()
+}
+/// What a good model returns for the generated path: the expense-review
+/// definition's runnable views under a new title, with `amount > $200`
+/// written directly into every data view (APP-101: the "direct run with that
+/// filter" the live transform's adapted views must match).
+fn generated_reply() -> String {
+    let mut content = composer::prompt::runnable_example(expense_content());
+    content["title"] = json!("Expenses over $200 (generated)");
+    content["description"] = json!("Synthetic generated example for the pitch campaign.");
+    let filter = json!({"type": "filter", "field": {"input_id": "expense_claims", "field_id": "amount"},
+        "comparison": "gt", "value": {"type": "money", "minor_units": "20000", "currency": "USD", "minor_unit_exponent": 2}});
+    for view in content["views"].as_array_mut().unwrap() {
+        if let Some(operations) = view
+            .get_mut("query")
+            .and_then(|query| query.get_mut("operations"))
+            .and_then(Value::as_array_mut)
+        {
+            operations.insert(0, filter.clone());
+        }
+    }
+    serde_json::to_string(&content).unwrap()
+}
+/// APP-101: what the fast model returns for "review expenses over $200".
+const TRANSFORM_REPLY: &str = r#"{"filters":[{"field":"amount","op":"gt","value":"200"}]}"#;
+
+/// The next `app.adapted` on a stream (others skipped): the adapted ids and
+/// the standard work it came from, ids and time only.
+async fn expect_adapted(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<Value>,
+    from_work: &str,
+) -> Value {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .unwrap_or_else(|_| panic!("no app.adapted within {WAIT:?}"))
+            .expect("stream closed");
+        if event["kind"] == "app.adapted" && event["from_work_id"] == from_work {
+            assert_eq!(event.as_object().unwrap().len(), 6, "ids and time only");
+            return event;
+        }
+    }
+}
+
+/// One HTTP answer over the socket.
+pub(crate) struct Answer {
+    pub(crate) status: StatusCode,
+    pub(crate) headers: reqwest::header::HeaderMap,
+    pub(crate) body: Vec<u8>,
+    pub(crate) elapsed: Duration,
+}
+impl Answer {
+    pub(crate) fn json(&self) -> Value {
+        serde_json::from_slice(&self.body).unwrap_or(Value::Null)
+    }
+    pub(crate) fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
+    /// The uniform 404 (`http::not_found`), byte for byte.
+    pub(crate) fn uniform_404(&self) -> bool {
+        self.status == StatusCode::NOT_FOUND
+            && self.body == br#"{"code":"not_found","status":404}"#
+            && self.headers[reqwest::header::CACHE_CONTROL] == "no-store"
+    }
+}
+pub(crate) struct Stand {
+    pub(crate) origin: String,
+    pub(crate) client: reqwest::Client,
+}
+impl Stand {
+    pub(crate) async fn call(
+        &self,
+        method: &str,
+        path: &str,
+        cookie: Option<&str>,
+        body: Option<&str>,
+        headers: &[(&str, &str)],
+    ) -> Answer {
+        let mut request = self.client.request(
+            reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+            format!("{}{path}", self.origin),
+        );
+        if let Some(cookie) = cookie {
+            request = request.header(
+                reqwest::header::COOKIE,
+                format!("{}={cookie}", cookies::SESSION),
+            );
+        }
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        if let Some(body) = body {
+            request = request
+                .header("sec-fetch-site", "same-origin")
+                .header("content-type", "application/json")
+                .body(body.to_owned());
+        }
+        let started = Instant::now();
+        let response = request.send().await.unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = response.bytes().await.unwrap().to_vec();
+        Answer {
+            status,
+            headers,
+            body,
+            elapsed: started.elapsed(),
+        }
+    }
+    pub(crate) async fn get(&self, path: &str, cookie: Option<&str>) -> Answer {
+        self.call("GET", path, cookie, None, &[]).await
+    }
+    pub(crate) async fn post(&self, path: &str, cookie: Option<&str>, body: &str) -> Answer {
+        self.call("POST", path, cookie, Some(body), &[]).await
+    }
+    /// Opens `GET /v1/events` for a session and parses its frames into
+    /// documents; the task ends with the stream.
+    pub(crate) async fn stream(&self, cookie: &str) -> tokio::sync::mpsc::UnboundedReceiver<Value> {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let response = self
+            .client
+            .get(format!("{}/v1/events", self.origin))
+            .header(
+                reqwest::header::COOKIE,
+                format!("{}={cookie}", cookies::SESSION),
+            )
+            .header("accept", "text/event-stream")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "event stream open");
+        assert_eq!(
+            response.headers()[reqwest::header::CONTENT_TYPE],
+            "text/event-stream"
+        );
+        tokio::spawn(async move {
+            let mut response = response;
+            let mut buffer = String::new();
+            while let Ok(Some(chunk)) = response.chunk().await {
+                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                while let Some(end) = buffer.find('\n') {
+                    let line = buffer[..end].trim_end_matches('\r').to_owned();
+                    buffer.drain(..=end);
+                    if let Some(data) = line.strip_prefix("data:") {
+                        if let Ok(document) = serde_json::from_str::<Value>(data.trim()) {
+                            if tx.send(document).is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        rx
+    }
+}
+/// The next event of a kind (others of the same stream are skipped), within
+/// `WAIT`.
+pub(crate) async fn expect_event(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<Value>,
+    kind: &str,
+    app: &str,
+    work: &str,
+) -> Value {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .unwrap_or_else(|_| panic!("no {kind} event within {WAIT:?}"))
+            .expect("stream closed");
+        if event["kind"] == kind {
+            assert_eq!(event["app_id"], app);
+            assert_eq!(event["work_id"], work);
+            assert!(event["at"].as_str().is_some_and(|at| at.ends_with('Z')));
+            assert_eq!(event.as_object().unwrap().len(), 4, "ids and time only");
+            return event;
+        }
+    }
+}
+/// Nothing arrives on a stream for `quiet`.
+async fn expect_silence(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Value>, quiet: Duration) {
+    if let Ok(Some(event)) = tokio::time::timeout(quiet, rx.recv()).await {
+        panic!("unexpected event {event}");
+    }
+}
+fn ms(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+fn p50(samples: &mut [u64]) -> u64 {
+    samples.sort_unstable();
+    samples[samples.len() / 2]
+}
+
+async fn campaign() {
+    let _ = tracing_subscriber::fmt().with_ansi(false).try_init();
+    let fixture = Fixture::new();
+    fixture.sql(
+        "ALTER ROLE genui_migration PASSWORD 'synthetic-migration'",
+        "genui",
+    );
+    let mut checks = Vec::new();
+    let mut timings = serde_json::Map::new();
+    for org in [ORG, OTHER] {
+        operator(&fixture, &["backfill", "--organization", org]);
+    }
+    // The library: seeded into Northstar, its revisions normalized into the
+    // engine cache under the pinned digests (as the query campaign).
+    let seeded = operator(&fixture, &["seed-library", "--organization", ORG]);
+    assert_eq!(seeded["apps"].as_array().unwrap().len(), 20);
+    let python = fixture_python();
+    let root = Directory::new("pitch");
+    let built = Command::new(&python)
+        .current_dir(repository().join("app/runtime"))
+        .args([
+            "-c",
+            "import json,sys,library_sources as l; print(json.dumps(l.build(sys.argv[1], sys.argv[2])))",
+            ORG,
+            root.0.join("cache").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let engine = Arc::new(real_engine(&python, &root.0));
+
+    // Sign-in: handles, bindings, the loopback issuer and the fake providers.
+    for (org, handle) in [(ORG, NORTHSTAR_HANDLE), (OTHER, CANARY_HANDLE)] {
+        operator(
+            &fixture,
+            &["issue-handle", "--organization", org, "--handle", handle],
+        );
+    }
+    fixture.sql(&format!("INSERT INTO genui.provider_tenant_bindings VALUES ('{ORG}','{GATEWASM}','{}',true),('{OTHER}','{GATEWASM}','{}',true)", harness::NORTHSTAR_TENANT, harness::CANARY_TENANT), "genui");
+    fixture.write_registry(&json!({"schema_version":1,"registry_version":"00000000-0000-4000-8000-000000000a13","bindings":[
+        {"issuer":GATEWASM,"provider_tenant_id":harness::NORTHSTAR_TENANT,"organization_id":ORG},
+        {"issuer":GATEWASM,"provider_tenant_id":harness::CANARY_TENANT,"organization_id":OTHER}]}));
+    let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
+    stores.readiness().await.unwrap();
+    let issuer = Issuer::start(harness::tenants()).await;
+    let provider = FakeProvider::start_at(
+        &fixture,
+        harness::NORTHSTAR_TENANT,
+        "pitch-northstar",
+        None,
+        None,
+    );
+    let canary_provider = FakeProvider::start_at(
+        &fixture,
+        harness::CANARY_TENANT,
+        "pitch-canary",
+        Some(&provider.capabilities),
+        Some(&provider.secret),
+    );
+    let auth = Arc::new(
+        Auth::loopback(
+            harness::config(&issuer.origin),
+            Some(stores.clone()),
+            Arc::new(harness::TestPages),
+        )
+        .with_invitations(Some(Invitations::open(&provider.capabilities).unwrap())),
+    );
+
+    // The model: the real client against the loopback stub, configured as
+    // the deployment configures it (environment only; this process, this
+    // campaign). Northstar is not a demo organization: every intent reaches
+    // the (stub) model.
+    let (endpoint, stub) = stub_server().await;
+    std::env::set_var(KEY_ENV, "sk-ant-synthetic-pitch-campaign-key");
+    std::env::set_var(ENDPOINT_ENV, &endpoint);
+    std::env::remove_var(composer::DEMO_ORGANIZATIONS_ENV);
+    let composer = composer::Composer::from_env();
+    std::env::remove_var(KEY_ENV);
+    std::env::remove_var(ENDPOINT_ENV);
+    assert!(composer.enabled());
+    assert!(!composer.demo_for(ORG));
+
+    // The binary's routes, composed as main.rs composes them.
+    let counting = Arc::new(Counting {
+        engine: Some(engine.clone() as Arc<dyn Executor>),
+        ..Counting::default()
+    });
+    let work = Arc::new(Work::new(
+        auth.clone(),
+        Some(counting.clone() as Arc<dyn Executor>),
+        Arc::new(RecordingPages::default()),
+    ));
+    let mut manifest =
+        forma_server::assets::try_load_manifest::<Assets>().expect("admin/dist built");
+    manifest.routes.retain(|route, _| route == "/canvas");
+    let pages = forma_server::load_ir_modules::<Assets>(&manifest).unwrap();
+    let canvas_pages = Arc::new(SsrCanvasPages {
+        page: pages.bind::<CanvasProps>("canvas").unwrap(),
+    });
+    pages.finalize().unwrap();
+    // APP-103 widgets on the stand too (the weather fixture, no model), so
+    // the canvas's `/` list and `/weather` can be walked here (APP-101).
+    let widgets = crate::widgets::routes::router(Arc::new(crate::widgets::routes::Widgets::new(
+        auth.clone(),
+        crate::widgets::customize::Customizer::new(None, "none"),
+        crate::widgets::weather::OpenMeteo::new(),
+    )));
+    let talk = composer::talk::router(Arc::new(composer::talk::Talk::new(
+        auth.clone(),
+        composer.clone(),
+    )));
+    let routes = crate::http::uniform_with_many(
+        axum::Router::new()
+            .route(
+                "/_assets/{*filename}",
+                axum::routing::get(forma_server::assets::serve_asset::<Assets>),
+            )
+            .merge(crate::auth::routes::router(auth.clone()))
+            .merge(record_commands::routes::router(Arc::new(
+                record_commands::routes::Commands {
+                    auth: auth.clone(),
+                    page: Arc::new(NoRecordPage),
+                },
+            )))
+            .merge(crate::query::routes::router(work.clone()))
+            .merge(sharing::router(auth.clone()))
+            .merge(composer::commands::router(auth.clone()))
+            .merge(composer::labels::router(auth.clone()))
+            // APP-123: cards made by you and pinned answers.
+            .merge(composer::cards::router(auth.clone()))
+            .merge(events::routes::router(auth.clone()))
+            // APP-109: the records listing and the member's notes work.
+            .merge(crate::actions::routes::records_router(auth.clone()))
+            .merge(canvas::router(Arc::new(canvas::Canvas {
+                work: work.clone(),
+                pages: canvas_pages,
+                live_events: "/v1/events".into(),
+                demo_organizations: Default::default(),
+            }))),
+        vec![
+            (
+                composer::routes::PATH,
+                composer::routes::router(Arc::new(Compose::new(auth.clone(), composer.clone()))),
+            ),
+            (crate::widgets::WEATHER_PATH, widgets.clone()),
+            (crate::widgets::CUSTOMIZE_PATH, widgets),
+            // APP-122: Ask and Shape, as product::routes mounts them.
+            (composer::talk::ASK_PATH, talk.clone()),
+            (composer::talk::SHAPE_PATH, talk),
+        ],
+    );
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let stand = Stand {
+        origin: format!("http://{}", listener.local_addr().unwrap()),
+        client: reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap(),
+    };
+    let served = routes.clone();
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(
+            listener,
+            served.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
+    });
+    let c = Campaign {
+        app: harness::app(auth.clone()),
+        fixture,
+        stores: stores.clone(),
+        issuer,
+        auth: auth.clone(),
+        log: Arc::default(),
+        checks: Vec::new(),
+        provider,
+        canary: Some(canary_provider),
+        codes: Default::default(),
+    };
+
+    // --- Three real members sign in ---
+    let (maya_subject, maya) = c.member("00000000e001").await;
+    let (mate_subject, mate) = c.member("00000000e002").await;
+    let (outsider_subject, outsider) = c.member_in(OTHER, "00000000e003").await;
+    let maya_id = c.principal(&maya_subject).await;
+    let mate_id = c.principal(&mate_subject).await;
+    let outsider_id = c.principal(&outsider_subject).await;
+    let maya_cookie = maya.cookie(cookies::SESSION).unwrap();
+    let mate_cookie = mate.cookie(cookies::SESSION).unwrap();
+    let outsider_cookie = outsider.cookie(cookies::SESSION).unwrap();
+
+    // APP-145: an active entitled member may create their own shell on an
+    // explicit first intent. Read-only discovery still creates nothing;
+    // an anonymous compose is refused before the model.
+    let nothing = stand
+        .post(
+            composer::routes::PATH,
+            None,
+            &json!({"intent": INTENT}).to_string(),
+        )
+        .await;
+    assert!(nothing.uniform_404(), "{}", nothing.text());
+    assert_eq!(stub.calls(), 0);
+    let empty = stand.get("/v1/library", Some(&maya_cookie)).await;
+    assert_eq!(empty.status, StatusCode::OK);
+    assert_eq!(empty.json()["apps"], json!([]));
+    assert_eq!(
+        stand
+            .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{maya_id}'")).await, 0);
+    // The invitation fixture grants discover/run on its seeded app, which
+    // are insufficient to read a work or author a definition.
+    assert_eq!(text(&c.fixture, &format!("SELECT string_agg(permission,',' ORDER BY permission) FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}'")).await, "discover,run");
+
+    // --- The operator: Maya gets the library and her own authoring app ---
+    let granted = operator(
+        &c.fixture,
+        &[
+            "grant-library-access",
+            "--organization",
+            ORG,
+            "--principal",
+            &maya_id,
+            "--record-write",
+            "--authoring-app",
+            AUTHORING_APP,
+        ],
+    );
+    assert_eq!(granted["changed"], true);
+    assert_eq!(granted["library_apps"].as_array().unwrap().len(), 20);
+    assert_eq!(granted["authoring_app"]["created"], true);
+    let library = stand.get("/v1/library", Some(&maya_cookie)).await;
+    assert_eq!(library.status, StatusCode::OK, "{}", library.text());
+    let apps = library.json()["apps"].as_array().unwrap().clone();
+    assert_eq!(apps.len(), 20);
+    let expense = apps
+        .iter()
+        .find(|app| app["library_id"] == "expense-review")
+        .expect("expense-review listed");
+    assert_eq!(expense["app_id"], EXPENSE_APP);
+    assert_eq!(expense["work_id"], EXPENSE_WORK);
+    assert_eq!(expense["title"], "Expense review queue");
+    assert_eq!(expense["can_write"], true);
+    // The composer's context prefers her unpublished shell and never a
+    // library app (review M2), with or without library ownership.
+    // Maya as storage sees her: the identity the loopback issuer signed in.
+    let maya_request = TrustedRequest {
+        organization: ORG.into(),
+        principal: maya_id.clone(),
+        epoch: 1,
+        issuer: GATEWASM.into(),
+        provider_tenant: harness::NORTHSTAR_TENANT.into(),
+        provider_subject: maya_subject.clone(),
+        registry_sha256: stores.registry_identity().sha256.clone(),
+    };
+    let context = stores
+        .workspace
+        .composer_context(&maya_request)
+        .await
+        .unwrap();
+    assert_eq!(
+        context.authoring.as_ref().map(|a| a.app.as_str()),
+        Some(AUTHORING_APP)
+    );
+    assert_eq!(context.library.len(), 20);
+    c.fixture.sql(&format!("UPDATE genui.apps SET owner_principal_id='{maya_id}' WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}'"), "genui");
+    crate::storage::definition_qualification::grant(
+        &c.fixture,
+        &maya_id,
+        "edit_definition",
+        &["--app", EXPENSE_APP],
+    );
+    let context = stores
+        .workspace
+        .composer_context(&maya_request)
+        .await
+        .unwrap();
+    assert_eq!(
+        context.authoring.as_ref().map(|a| a.app.as_str()),
+        Some(AUTHORING_APP),
+        "the dedicated shell, not the library app she now owns"
+    );
+    c.fixture.sql(&format!("DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{AUTHORING_APP}' AND principal_id='{maya_id}'"), "genui");
+    let context = stores
+        .workspace
+        .composer_context(&maya_request)
+        .await
+        .unwrap();
+    assert_eq!(
+        context.authoring, None,
+        "owning only a library app: nothing to draft on"
+    );
+    c.fixture.sql(&format!("INSERT INTO genui.app_permissions VALUES ('{ORG}','{maya_id}','{AUTHORING_APP}','discover'),('{ORG}','{maya_id}','{AUTHORING_APP}','edit_definition'),('{ORG}','{maya_id}','{AUTHORING_APP}','run')"), "genui");
+    c.fixture.sql(&format!("UPDATE genui.apps SET owner_principal_id='00000000-0000-4000-8000-000000000066' WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}'"), "genui");
+    c.fixture.sql(&format!("DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND principal_id='{maya_id}' AND permission='edit_definition'"), "genui");
+    check(
+        &mut checks,
+        "membership: before the grant Maya's library and command discovery create no app or app grant; anonymous compose is the uniform 404 with no model call; grant-library-access gives her all 20 library apps (GET /v1/library lists them with can_write) and a dedicated authoring app, which the composer context chooses over a library app she owns and never replaces with one (review M2)",
+    );
+
+    // --- Streams open: Maya's, the teammate's, the outsider's ---
+    let mut maya_stream = stand.stream(&maya_cookie).await;
+    let mut mate_stream = stand.stream(&mate_cookie).await;
+    let mut outsider_stream = stand.stream(&outsider_cookie).await;
+
+    // --- Compose: retrieved at once by the instant matcher, then adapted ---
+    stub.script(vec![TRANSFORM_REPLY.into()]);
+    let compose_sent = Instant::now();
+    let composed = stand
+        .post(
+            composer::routes::PATH,
+            Some(&maya_cookie),
+            &json!({"intent": INTENT}).to_string(),
+        )
+        .await;
+    assert_eq!(composed.status, StatusCode::OK, "{}", composed.text());
+    let composed_at = Instant::now();
+    let answer = composed.json();
+    assert_eq!(answer["origin"], "retrieved");
+    assert_eq!(answer["app_id"], EXPENSE_APP);
+    assert_eq!(answer["title"], "Expense review queue");
+    assert_eq!(answer["tailoring"], "pending");
+    assert_eq!(
+        answer.as_object().unwrap().len(),
+        6,
+        "app_id, work_id, origin, title, tailoring, duration_ms"
+    );
+    assert!(
+        answer["duration_ms"].is_u64(),
+        "APP-116: the route's duration"
+    );
+    let work_id = answer["work_id"].as_str().unwrap().to_owned();
+    assert_ne!(
+        work_id, EXPENSE_WORK,
+        "a new saved work, not the seeded one"
+    );
+    // The live transform follows on Maya's stream: placed, then adapted.
+    expect_event(&mut maya_stream, "app.placed", EXPENSE_APP, &work_id).await;
+    let adapted_event = expect_adapted(&mut maya_stream, &work_id).await;
+    let reshaped = compose_sent.elapsed();
+    assert_eq!(adapted_event["from_app_id"], EXPENSE_APP);
+    assert_eq!(
+        adapted_event["app_id"], AUTHORING_APP,
+        "drafted on her own app"
+    );
+    let adapted_work = adapted_event["work_id"].as_str().unwrap().to_owned();
+    assert_eq!(stub.calls(), 1, "no router call; the transform alone");
+    assert_eq!(
+        stub.keys.lock().unwrap().as_slice(),
+        ["sk-ant-synthetic-pitch-campaign-key"]
+    );
+    let transform_body = stub.bodies.lock().unwrap()[0].clone();
+    assert_eq!(
+        transform_body["system"].as_str().unwrap_or_default(),
+        composer::transform::TRANSFORM_SYSTEM
+    );
+    assert!(transform_body["messages"][0]["content"]
+        .as_str()
+        .unwrap()
+        .contains(INTENT));
+    assert!(
+        !transform_body.to_string().contains("sk-ant"),
+        "the key never travels in a body"
+    );
+    timings.insert("compose_retrieved_ms".into(), json!(ms(composed.elapsed)));
+    timings.insert("compose_to_reshape_ms".into(), json!(ms(reshaped)));
+    let group_path = format!("/v1/canvas/works/{EXPENSE_APP}/{work_id}");
+    let group = stand.get(&group_path, Some(&maya_cookie)).await;
+    assert_eq!(group.status, StatusCode::OK, "{}", group.text());
+    timings.insert(
+        "compose_to_placed_ms".into(),
+        json!(ms(composed.elapsed + composed_at.elapsed())),
+    );
+    let group = group.json();
+    assert_eq!(group["work"], work_id);
+    assert_eq!(group["app"], EXPENSE_APP);
+    let views: Vec<String> = group["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|card| card["view"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(views, ["totals", "queue", "by_category", "by_status"]);
+    assert_eq!(group["forms"][0]["command"], "record_decision");
+    let page = stand.get("/canvas", Some(&maya_cookie)).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(
+        page.text().contains(&format!("id=\"lib-{work_id}\"")),
+        "openable_works lists the composed work"
+    );
+    assert!(
+        page.text().contains("data-live-events=\"/v1/events\""),
+        "live updates on"
+    );
+    check(
+        &mut checks,
+        &format!(
+            "compose (APP-101 instant pick, retrieved): POST /v1/compose answered {{app_id, work_id, origin: retrieved, title, tailoring: pending}} in {} ms with no router call (the local matcher picked the expense review app); the group route placed it {} ms after the intent was sent; GET /canvas lists the new work; Maya's stream received app.placed, then app.adapted {} ms after the intent was sent, after exactly one transform call through the real client (key as the header only, the intent in the user message)",
+            ms(composed.elapsed),
+            timings["compose_to_placed_ms"],
+            ms(reshaped)
+        ),
+    );
+
+    // --- The views run with receipts ---
+    let mut samples = Vec::new();
+    let mut receipts = serde_json::Map::new();
+    for (index, view) in views.iter().enumerate() {
+        let path = format!("/v1/work/{EXPENSE_APP}/{work_id}/queries/{view}");
+        let runs = if index == 0 { 9 } else { 1 };
+        for _ in 0..runs {
+            let run = stand
+                .post(
+                    &path,
+                    Some(&maya_cookie),
+                    &json!({"parameters": {}}).to_string(),
+                )
+                .await;
+            assert_eq!(run.status, StatusCode::OK, "{view}: {}", run.text());
+            let (rows, receipt) = receipted(&run.text());
+            assert!(receipt["digest"]
+                .as_str()
+                .is_some_and(|d| d.starts_with("sha256:")));
+            assert!(receipt["result_digest"].as_str().is_some());
+            assert_eq!(receipt["work_id"], work_id);
+            if index == 0 {
+                samples.push(ms(run.elapsed));
+                let cells = rows[0].as_array().unwrap();
+                assert!(
+                    cells.contains(&json!("240")) && cells.contains(&json!("26262004")),
+                    "count 240 and sum 26,262,004 minor units of the synthetic claims: {rows}"
+                );
+            }
+            receipts.insert(view.clone(), receipt);
+        }
+    }
+    timings.insert("query_totals_p50_ms".into(), json!(p50(&mut samples)));
+    timings.insert("query_totals_samples".into(), json!(samples.len()));
+    check(
+        &mut checks,
+        &format!(
+            "governed data: the four views of the placed app ran through POST /v1/work/{{app}}/{{work}}/queries/{{view}} on the confined engine over the normalized library revision, each 200 carrying a contract-valid receipt with digest and result_digest; totals p50 {} ms over {} runs",
+            timings["query_totals_p50_ms"],
+            samples.len()
+        ),
+    );
+
+    // --- APP-101: the adapted work: chips, filtered views, receipts ---
+    let adapted_path = format!("/v1/canvas/works/{AUTHORING_APP}/{adapted_work}");
+    let adapted_group = stand.get(&adapted_path, Some(&maya_cookie)).await;
+    assert_eq!(
+        adapted_group.status,
+        StatusCode::OK,
+        "{}",
+        adapted_group.text()
+    );
+    let adapted_group = adapted_group.json();
+    let chips: Vec<&str> = adapted_group["origins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|origin| origin["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(chips, ["Adapted to your request", "Amount > $200"]);
+    let adapted_views: Vec<String> = adapted_group["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|card| card["view"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(adapted_views, views, "the same views, reshaped");
+    let adapted_run = stand
+        .post(
+            &format!("/v1/work/{AUTHORING_APP}/{adapted_work}/queries/totals"),
+            Some(&maya_cookie),
+            &json!({"parameters": {}}).to_string(),
+        )
+        .await;
+    assert_eq!(adapted_run.status, StatusCode::OK, "{}", adapted_run.text());
+    let (adapted_rows, adapted_receipt) = receipted(&adapted_run.text());
+    assert!(
+        !adapted_rows[0].as_array().unwrap().contains(&json!("240")),
+        "fewer claims than the unfiltered 240: {adapted_rows}"
+    );
+    // The standard work stays openable ("back to standard"), and the
+    // adapted revision is a new publication of her own app.
+    let standard_again = stand.get(&group_path, Some(&maya_cookie)).await;
+    assert_eq!(standard_again.status, StatusCode::OK);
+    let own_publications = scalar(
+        &c.fixture,
+        &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{AUTHORING_APP}'"),
+    )
+    .await;
+    assert_eq!(own_publications, 1);
+    check(
+        &mut checks,
+        "live transform: the adapted work (drafted on Maya's own app, owner-published, admitted whole) carries the chips Adapted to your request · Amount > $200 on its group route, runs the same four views with the filter and a contract-valid receipt (fewer than the 240 claims), and the standard work stays openable for back to standard",
+    );
+
+    // --- APP-101: the near-tie chooser and the pinned compose ---
+    let calls_before = stub.calls();
+    let works_before_choice = scalar(
+        &c.fixture,
+        &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    let chooser = stand
+        .post(
+            composer::routes::PATH,
+            Some(&maya_cookie),
+            &json!({"intent": "expenses"}).to_string(),
+        )
+        .await;
+    assert_eq!(chooser.status, StatusCode::OK, "{}", chooser.text());
+    let choices = chooser.json()["choices"].as_array().unwrap().clone();
+    assert!((2..=3).contains(&choices.len()), "{choices:?}");
+    let offered: Vec<&str> = choices
+        .iter()
+        .map(|c| c["title"].as_str().unwrap())
+        .collect();
+    assert!(
+        offered.contains(&"Expense review queue") && offered.contains(&"Expense claims"),
+        "{offered:?}"
+    );
+    assert_eq!(stub.calls(), calls_before, "no model call for a chooser");
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'")
+        )
+        .await,
+        works_before_choice,
+        "nothing written until the member picks"
+    );
+    let picked = stand
+        .post(
+            composer::routes::PATH,
+            Some(&maya_cookie),
+            &json!({"intent": "expenses", "app_id": EXPENSE_APP}).to_string(),
+        )
+        .await;
+    assert_eq!(picked.status, StatusCode::OK, "{}", picked.text());
+    assert_eq!(picked.json()["app_id"], EXPENSE_APP);
+    assert_eq!(picked.json()["origin"], "retrieved");
+    assert_eq!(picked.json()["tailoring"], "none");
+    assert_eq!(stub.calls(), calls_before, "a pinned app needs no model");
+    let foreign_pin = stand
+        .post(
+            composer::routes::PATH,
+            Some(&maya_cookie),
+            &json!({"intent": "expenses", "app_id": "00000000-0000-4000-8000-0000000fffff"})
+                .to_string(),
+        )
+        .await;
+    assert!(
+        foreign_pin.uniform_404(),
+        "an app outside her library is the uniform 404"
+    );
+    timings.insert("chooser_ms".into(), json!(ms(chooser.elapsed)));
+    timings.insert("pinned_compose_ms".into(), json!(ms(picked.elapsed)));
+    check(
+        &mut checks,
+        &format!(
+            "chooser: an ambiguous sentence (\"expenses\") answered {} choices ({}) in {} ms with no model call and no row written; the click (a pinned app_id) placed the chosen app in {} ms with no model call; a pin outside her library is the uniform 404",
+            choices.len(),
+            offered.join(", "),
+            ms(chooser.elapsed),
+            ms(picked.elapsed)
+        ),
+    );
+
+    // --- APP-101: slash commands and "save as /name" ---
+    let listed = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+        .await;
+    assert_eq!(listed.status, StatusCode::OK, "{}", listed.text());
+    let commands = listed.json()["commands"].as_array().unwrap().clone();
+    let slug_of = |app: &str| {
+        commands
+            .iter()
+            .find(|c| c["app_id"] == app && c["kind"] == "library")
+            .map(|c| c["slug"].as_str().unwrap().to_owned())
+    };
+    assert_eq!(slug_of(EXPENSE_APP).as_deref(), Some("expense-review"));
+    assert_eq!(
+        commands.iter().filter(|c| c["kind"] == "library").count(),
+        20
+    );
+    let named = stand
+        .post(
+            &format!("/v1/work/{AUTHORING_APP}/{adapted_work}/name"),
+            Some(&maya_cookie),
+            &json!({"slug": "big-claims"}).to_string(),
+        )
+        .await;
+    assert_eq!(named.status, StatusCode::OK, "{}", named.text());
+    let named_work = named.json()["work_id"].as_str().unwrap().to_owned();
+    assert_ne!(named_work, adapted_work);
+    let listed = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+        .await;
+    let saved: Vec<Value> = listed.json()["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["kind"] == "saved")
+        .cloned()
+        .collect();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0]["slug"], "big-claims");
+    assert_eq!(saved[0]["work_id"], named_work);
+    for (slug, code) in [
+        ("big-claims", "name_taken"),
+        ("expense", "name_taken"),
+        ("apps", "name_taken"),
+        ("Big Claims", "invalid_name"),
+    ] {
+        let again = stand
+            .post(
+                &format!("/v1/work/{AUTHORING_APP}/{adapted_work}/name"),
+                Some(&maya_cookie),
+                &json!({"slug": slug}).to_string(),
+            )
+            .await;
+        assert_eq!(again.status, StatusCode::UNPROCESSABLE_ENTITY, "{slug}");
+        assert_eq!(again.json()["code"], code, "{slug}");
+    }
+    let mate_commands = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+        .await;
+    assert!(
+        !mate_commands.text().contains("big-claims"),
+        "a named work is listed only to members who can open it"
+    );
+    let named_run = stand
+        .post(
+            &format!("/v1/work/{AUTHORING_APP}/{named_work}/queries/totals"),
+            Some(&maya_cookie),
+            &json!({"parameters": {}}).to_string(),
+        )
+        .await;
+    assert_eq!(named_run.status, StatusCode::OK, "{}", named_run.text());
+    assert_eq!(
+        receipted(&named_run.text()).0,
+        adapted_rows,
+        "the named copy runs the same views"
+    );
+    check(
+        &mut checks,
+        "slash commands: GET /v1/commands lists the 20 library apps she may compose with their slugs (/expense-review for the expense review queue); POST /v1/work/{app}/{work}/name saved the adapted app as /big-claims (a new saved work of the same publication, slug on its context, no migration), listed as her saved command and running the same views; a taken name, a library slug, the reserved /apps and a malformed name are refused (422); the teammate, who cannot open it, does not see it",
+    );
+
+    // --- Share with the teammate ---
+    let unshared = stand.get(&group_path, Some(&mate_cookie)).await;
+    assert!(unshared.uniform_404());
+    let share = stand
+        .post(
+            &format!("/v1/work/{EXPENSE_APP}/{work_id}/share"),
+            Some(&maya_cookie),
+            &json!({"grantee_principal_id": mate_id, "record_write": true}).to_string(),
+        )
+        .await;
+    assert_eq!(share.status, StatusCode::OK, "{}", share.text());
+    let shared = share.json();
+    assert_eq!(shared["grantee_principal_id"], mate_id);
+    assert!(shared["granted"].as_array().unwrap().len() >= 4);
+    expect_event(&mut mate_stream, "app.shared", EXPENSE_APP, &work_id).await;
+    // APP-101: the composing member's share of the standard work carries its
+    // adaptation, so the teammate's canvas reshapes live.
+    let mate_adapted = expect_adapted(&mut mate_stream, &work_id).await;
+    assert_eq!(mate_adapted["work_id"], adapted_work);
+    let mate_view = stand.get(&adapted_path, Some(&mate_cookie)).await;
+    assert_eq!(mate_view.status, StatusCode::OK, "{}", mate_view.text());
+    let placed = stand.get(&group_path, Some(&mate_cookie)).await;
+    assert_eq!(placed.status, StatusCode::OK, "{}", placed.text());
+    assert_eq!(placed.json()["work"], work_id);
+    let mate_page = stand.get("/canvas", Some(&mate_cookie)).await;
+    assert!(mate_page.text().contains(&format!("id=\"lib-{work_id}\"")));
+    let mate_run = stand
+        .post(
+            &format!("/v1/work/{EXPENSE_APP}/{work_id}/queries/totals"),
+            Some(&mate_cookie),
+            &json!({"parameters": {}}).to_string(),
+        )
+        .await;
+    assert_eq!(mate_run.status, StatusCode::OK, "{}", mate_run.text());
+    receipted(&mate_run.text());
+    check(
+        &mut checks,
+        "sharing: the teammate's group route was the uniform 404 before the share; POST /v1/work/{app}/{work}/share wrote the sharer's subset, the teammate's stream received app.shared with the ids and then app.adapted naming the adapted work (shared too, through the same share path under Maya's authority), and their group routes (standard and adapted), canvas and totals view (with a receipt) answer under their own grants",
+    );
+
+    // --- Commit a decision; the teammate sees record.committed ---
+    let form = group["forms"][0].clone();
+    let document = json!({
+        "kind": "command_request",
+        "schema_version": 1,
+        "app_id": EXPENSE_APP,
+        "work_id": work_id,
+        "publication_id": form["publication"],
+        "command_id": "record_decision",
+        "schema_id": form["schema"],
+        "schema_version_expected": form["schema_version"].as_str().unwrap().parse::<i64>().unwrap(),
+        "record_id": form["record"],
+        "expected_record_version": form["record_version"].as_str().unwrap().parse::<i64>().unwrap(),
+        "expected_work_version": form["work_version"].as_str().unwrap().parse::<i64>().unwrap(),
+        "values": [
+            {"field_id": "status", "value": {"type": "enum", "value": "needs_context"}},
+            {"field_id": "note", "value": {"type": "text", "value": "Pitch campaign: synthetic decision"}},
+        ],
+    });
+    let key = form["idempotency_key"].as_str().unwrap().to_owned();
+    let committed = stand
+        .call(
+            "POST",
+            form["action"].as_str().unwrap(),
+            Some(&maya_cookie),
+            Some(&document.to_string()),
+            &[("idempotency-key", key.as_str())],
+        )
+        .await;
+    assert_eq!(committed.status, StatusCode::OK, "{}", committed.text());
+    let outcome = committed.json();
+    assert_eq!(outcome["state"], "committed", "{outcome}");
+    assert_eq!(outcome["record_version"], 1);
+    assert!(outcome["audit_event_id"].as_str().is_some());
+    expect_event(&mut mate_stream, "record.committed", EXPENSE_APP, &work_id).await;
+    expect_event(&mut maya_stream, "record.committed", EXPENSE_APP, &work_id).await;
+    let replayed = stand
+        .call(
+            "POST",
+            form["action"].as_str().unwrap(),
+            Some(&maya_cookie),
+            Some(&document.to_string()),
+            &[("idempotency-key", key.as_str())],
+        )
+        .await;
+    assert_eq!(replayed.status, StatusCode::OK);
+    assert_eq!(
+        replayed.json(),
+        outcome,
+        "the same outcome (audit event, record version): replayed, not duplicated"
+    );
+    timings.insert("command_commit_ms".into(), json!(ms(committed.elapsed)));
+    check(
+        &mut checks,
+        &format!(
+            "commands: Maya's decision committed once through the audited command route ({} ms) with the group's server-minted key; the identical retry is replayed, not duplicated; the teammate's and Maya's streams received record.committed",
+            ms(committed.elapsed)
+        ),
+    );
+
+    // --- Generated: a valid typed definition on her dedicated app ---
+    let works_before = scalar(
+        &c.fixture,
+        &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    stub.script(vec![generated_reply()]);
+    let calls_before = stub.calls();
+    let generated = stand
+        .post(
+            composer::routes::PATH,
+            Some(&maya_cookie),
+            &json!({"intent": "a queue of expense claims over $200 with totals and a decision form", "generate": true})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(generated.status, StatusCode::OK, "{}", generated.text());
+    let generated_answer = generated.json();
+    assert_eq!(generated_answer["origin"], "generated");
+    assert_eq!(
+        generated_answer["app_id"], AUTHORING_APP,
+        "drafted on the dedicated app"
+    );
+    assert_eq!(generated_answer["title"], "Expenses over $200 (generated)");
+    assert_eq!(
+        stub.calls(),
+        calls_before + 1,
+        "\"build something new\": one generation, no router"
+    );
+    let generated_work = generated_answer["work_id"].as_str().unwrap().to_owned();
+    let generated_group = stand
+        .get(
+            &format!("/v1/canvas/works/{AUTHORING_APP}/{generated_work}"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(
+        generated_group.status,
+        StatusCode::OK,
+        "{}",
+        generated_group.text()
+    );
+    expect_event(
+        &mut maya_stream,
+        "app.placed",
+        AUTHORING_APP,
+        &generated_work,
+    )
+    .await;
+    let generated_run = stand
+        .post(
+            &format!("/v1/work/{AUTHORING_APP}/{generated_work}/queries/totals"),
+            Some(&maya_cookie),
+            &json!({"parameters": {}}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        generated_run.status,
+        StatusCode::OK,
+        "{}",
+        generated_run.text()
+    );
+    let (rows, direct_receipt) = receipted(&generated_run.text());
+    // APP-101: the live transform's filtered view equals a direct run with
+    // that filter: the same rows, result digest, query and source revisions.
+    assert_eq!(rows, adapted_rows);
+    assert_eq!(
+        direct_receipt["result_digest"],
+        adapted_receipt["result_digest"]
+    );
+    assert_eq!(
+        direct_receipt["provenance"]["query_digest"],
+        adapted_receipt["provenance"]["query_digest"]
+    );
+    assert_eq!(
+        direct_receipt["source_revisions"],
+        adapted_receipt["source_revisions"]
+    );
+    // The library app's newest publication is untouched (review M2).
+    let newest = text(&c.fixture, &format!("SELECT definition_digest::text FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' ORDER BY publication_sequence DESC LIMIT 1")).await;
+    assert_eq!(newest, expense["definition_digest"]);
+    timings.insert("compose_generated_ms".into(), json!(ms(generated.elapsed)));
+    check(
+        &mut checks,
+        &format!(
+            "compose (generated, \"build something new\"): with the stub returning a valid typed definition with amount > $200 written directly, the composition was admitted, drafted on Maya's dedicated authoring app, owner-published and saved as origin generated in {} ms (one generation call, no router); its group route places it, app.placed reached her stream, and its totals view's rows, result digest, query digest and source revisions equal the live transform's adapted totals (the transform's filter is the direct filter); the library app's newest publication is unchanged",
+            ms(generated.elapsed)
+        ),
+    );
+
+    // --- Hostile generation: refused on every attempt, nothing placed ---
+    let hostile = r#"{"title":"<script>alert(1)</script>","description":"x","inputs":[{"id":"expense_claims","kind":"source"}],"views":[{"id":"v","kind":"html","title":"<img onerror=x>","markup":"<b>"}],"grants":["admin"]}"#;
+    stub.script(vec![
+        router_reply("none", "low"),
+        hostile.into(),
+        hostile.into(),
+        hostile.into(),
+    ]);
+    let calls_before = stub.calls();
+    let works_after_generated = scalar(
+        &c.fixture,
+        &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    assert_eq!(works_after_generated, works_before + 1);
+    let refused = stand
+        .post(
+            composer::routes::PATH,
+            Some(&maya_cookie),
+            &json!({"intent": "something the library does not have"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        refused.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        refused.text()
+    );
+    assert_eq!(refused.json()["code"], "could_not_compose");
+    assert_eq!(
+        stub.calls(),
+        calls_before + 1 + composer::MAX_GENERATION_ATTEMPTS
+    );
+    assert!(
+        !refused.text().contains("script"),
+        "nothing of the refused output is disclosed"
+    );
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{ORG}'")
+        )
+        .await,
+        works_after_generated
+    );
+    check(
+        &mut checks,
+        "compose (hostile): a model output with markup, an executable view and a grant member is refused by admission on each of the three attempts, answered 422 could_not_compose without disclosing it, and no work is saved",
+    );
+
+    // --- APP-101: with no model, the instant pick works and the transform is kept ---
+    let keyless = composer::Composer::new(None, "r", "g");
+    let kept = composer::routes::compose_for(&stores, &keyless, &maya_request, INTENT)
+        .await
+        .unwrap();
+    assert_eq!(kept.origin, composer::Origin::Retrieved);
+    assert_eq!(kept.app, EXPENSE_APP);
+    assert_eq!(kept.tailoring, composer::routes::Tailoring::Kept);
+    check(
+        &mut checks,
+        "model unavailable: with no key, the same sentence is still picked and retrieved at once (no model call) and the transform is skipped with the neutral kept state",
+    );
+
+    // APP-145: a signed-in, entitled member of another tenant has authority
+    // to author their own first app, without acquiring any existing work or
+    // source. This is a real HTTP compose through admission/publish/save;
+    // only the model's typed definition is the deterministic test fixture.
+    // Preserve the whole queued Northstar history: none may be discarded
+    // while waiting for the member's own event below.
+    expect_silence(&mut outsider_stream, Duration::from_millis(1500)).await;
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{OTHER}' AND owner_principal_id='{outsider_id}'")).await, 0);
+    let existing_grants = text(&c.fixture, &format!("SELECT string_agg(organization_id::text||':'||app_id::text||':'||permission,',' ORDER BY organization_id,app_id,permission) FROM genui.app_permissions WHERE principal_id='{outsider_id}'")).await;
+    assert_eq!(
+        existing_grants,
+        format!("{OTHER}:{APP}:discover,{OTHER}:{APP}:run")
+    );
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!(
+                "SELECT count(*) FROM genui.source_permissions WHERE principal_id='{outsider_id}'"
+            )
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!(
+                "SELECT count(*) FROM genui.work_permissions WHERE principal_id='{outsider_id}'"
+            )
+        )
+        .await,
+        0
+    );
+    let grant_audits = scalar(&c.fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{OTHER}' AND writer_role='admission' AND kind='permission.granted'")).await;
+    let time_off: Value = serde_json::from_str(include_str!(
+        "../../../contracts/fixtures/library/time-off.json"
+    ))
+    .unwrap();
+    let mut own_content =
+        composer::prompt::records_example(time_off["definition"]["content"].clone());
+    own_content["title"] = json!("Private clean-member requests");
+    stub.script(vec![own_content.to_string()]);
+    let own_calls = stub.calls();
+    let own = stand
+        .post(
+            composer::routes::PATH,
+            Some(&outsider_cookie),
+            &json!({"intent": "Track my team's time-off requests"}).to_string(),
+        )
+        .await;
+    assert_eq!(own.status, StatusCode::OK, "{}", own.text());
+    let own = own.json();
+    assert_eq!(own["origin"], "generated");
+    assert_eq!(
+        stub.calls(),
+        own_calls + 1,
+        "one generation; an empty library needs no router"
+    );
+    let own_app = own["app_id"].as_str().unwrap();
+    let own_work = own["work_id"].as_str().unwrap();
+    assert_ne!(own_app, AUTHORING_APP);
+    assert_ne!(own_app, EXPENSE_APP);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{OTHER}' AND owner_principal_id='{outsider_id}'")).await, 1);
+    assert_eq!(text(&c.fixture, &format!("SELECT string_agg(permission,',' ORDER BY permission) FROM genui.app_permissions WHERE organization_id='{OTHER}' AND principal_id='{outsider_id}' AND app_id='{own_app}'")).await, "discover,edit_definition,run");
+    assert_eq!(text(&c.fixture, &format!("SELECT string_agg(organization_id::text||':'||app_id::text||':'||permission,',' ORDER BY organization_id,app_id,permission) FROM genui.app_permissions WHERE principal_id='{outsider_id}' AND (organization_id<>'{OTHER}' OR app_id<>'{own_app}')")).await, existing_grants, "the invitation's discover/run are the only pre-existing app grants; no new authority on any other app");
+    assert_eq!(
+        scalar(
+            &c.fixture,
+            &format!(
+                "SELECT count(*) FROM genui.source_permissions WHERE principal_id='{outsider_id}'"
+            )
+        )
+        .await,
+        0
+    );
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE principal_id='{outsider_id}' AND (organization_id<>'{OTHER}' OR app_id<>'{own_app}')")).await, 0);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.saved_work WHERE organization_id='{OTHER}' AND app_id='{own_app}' AND work_id='{own_work}' AND created_by='{outsider_id}'")).await, 1);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.work_source_dependencies WHERE organization_id='{OTHER}' AND app_id='{own_app}' AND work_id='{own_work}'")).await, 0);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{OTHER}' AND writer_role='admission' AND kind='permission.granted'")).await, grant_audits + 1);
+    let own_event = tokio::time::timeout(WAIT, outsider_stream.recv())
+        .await
+        .expect("the member's own app.placed event")
+        .expect("the member's event stream remains open");
+    assert_eq!(own_event["kind"], "app.placed", "no other event is skipped");
+    assert_eq!(own_event["app_id"], own_app);
+    assert_eq!(own_event["work_id"], own_work);
+    assert!(own_event["at"].as_str().is_some_and(|at| at.ends_with('Z')));
+    assert_eq!(own_event.as_object().unwrap().len(), 4, "ids and time only");
+    assert_eq!(
+        stand
+            .get(
+                &format!("/v1/canvas/works/{own_app}/{own_work}"),
+                Some(&outsider_cookie)
+            )
+            .await
+            .status,
+        StatusCode::OK
+    );
+    check(
+        &mut checks,
+        "APP-145: an entitled canary member with no authoring app, edit_definition, source or work grant explicitly composes a valid records-only definition through HTTP; exactly one owned app receives discover/edit_definition/run and one permission.granted audit, the work is published/saved in their tenant with no source dependency, the invitation's existing discover/run on its seeded app are unchanged and no source grant or new grant on existing/foreign apps or works is acquired, and the member can open it and receives their own app.placed event",
+    );
+
+    // --- Isolation: the outsider, anonymous and forged callers ---
+    let before_dispatch = counting.calls();
+    let before_model = stub.calls();
+    let mut denials = 0;
+    let outsider_requests: Vec<(&str, String, Option<String>)> = vec![
+        ("GET", group_path.clone(), None),
+        (
+            "GET",
+            format!("/v1/canvas/works/{AUTHORING_APP}/{generated_work}"),
+            None,
+        ),
+        (
+            "POST",
+            composer::routes::PATH.to_owned(),
+            Some(json!({"intent": INTENT, "app_id": EXPENSE_APP}).to_string()),
+        ),
+        (
+            "POST",
+            format!("/v1/work/{EXPENSE_APP}/{work_id}/queries/totals"),
+            Some(json!({"parameters": {}}).to_string()),
+        ),
+        (
+            "POST",
+            format!("/v1/work/{EXPENSE_APP}/{work_id}/share"),
+            Some(json!({"grantee_principal_id": mate_id}).to_string()),
+        ),
+        (
+            "POST",
+            format!("/v1/work/{AUTHORING_APP}/{adapted_work}/name"),
+            Some(json!({"slug": "outsider-copy"}).to_string()),
+        ),
+        (
+            "POST",
+            form["action"].as_str().unwrap().to_owned(),
+            Some(document.to_string()),
+        ),
+    ];
+    for (method, path, body) in &outsider_requests {
+        let reply = stand
+            .call(
+                method,
+                path,
+                Some(&outsider_cookie),
+                body.as_deref(),
+                &[("idempotency-key", key.as_str())],
+            )
+            .await;
+        assert!(
+            reply.uniform_404(),
+            "outsider {method} {path}: {} {}",
+            reply.status,
+            reply.text()
+        );
+        denials += 1;
+    }
+    let outsider_library = stand.get("/v1/library", Some(&outsider_cookie)).await;
+    assert_eq!(outsider_library.status, StatusCode::OK);
+    assert_eq!(
+        outsider_library.json()["apps"],
+        json!([]),
+        "nothing of Northstar's library"
+    );
+    let outsider_page = stand.get("/canvas", Some(&outsider_cookie)).await;
+    assert_eq!(outsider_page.status, StatusCode::OK);
+    assert!(
+        !outsider_page.text().contains(&work_id) && !outsider_page.text().contains(&generated_work)
+    );
+    for cookie in [
+        None,
+        Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+    ] {
+        for path in [
+            "/canvas",
+            group_path.as_str(),
+            "/v1/library",
+            "/v1/events",
+            "/v1/members",
+            composer::commands::COMMANDS_PATH,
+        ] {
+            let reply = stand.get(path, cookie).await;
+            assert!(reply.uniform_404(), "{cookie:?} {path}: {}", reply.status);
+            denials += 1;
+        }
+        let reply = stand
+            .post(
+                composer::routes::PATH,
+                cookie,
+                &json!({"intent": INTENT}).to_string(),
+            )
+            .await;
+        assert!(reply.uniform_404());
+        denials += 1;
+    }
+    assert_eq!(
+        counting.calls(),
+        before_dispatch,
+        "no denial reached the engine"
+    );
+    assert_eq!(stub.calls(), before_model, "no denial reached the model");
+    expect_silence(&mut outsider_stream, Duration::from_millis(1500)).await;
+    check(
+        &mut checks,
+        &format!(
+            "isolation: {denials} requests by the canary member (both Northstar groups, compose pinned to Northstar's app, the query route, share and the command route), anonymous and forged sessions (canvas, group, library, events, members, compose) got the uniform 404; the engine and the model saw none; the outsider's library is empty, their canvas shows neither Northstar work and their event stream stayed silent through every Northstar event"
+        ),
+    );
+
+    // --- The local stand for the pitch screenshots (scratch only) ---
+    // With `GENUI_PITCH_STAND_SECONDS`, the composed routes stay served on the
+    // socket for that long (or until `<stand file>.stop` exists), and the
+    // origin with Maya's synthetic session cookie is written to
+    // `GENUI_PITCH_STAND_FILE` (never evidence), so a local browser can show
+    // her canvas with the retrieved and generated apps and their receipts.
+    if let Some(seconds) = std::env::var("GENUI_PITCH_STAND_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        let file = std::env::var("GENUI_PITCH_STAND_FILE").unwrap_or_default();
+        if !file.is_empty() {
+            std::fs::write(
+                &file,
+                serde_json::to_vec(&json!({
+                    "origin": stand.origin, "cookie": cookies::SESSION, "value": maya_cookie,
+                    "app": EXPENSE_APP, "work": work_id, "generated_app": AUTHORING_APP, "generated_work": generated_work,
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+        // APP-101: the stand's transform answers (scratch screenshots only).
+        stub.script(vec![TRANSFORM_REPLY.into(); 16]);
+        println!("PITCH_STAND {}", stand.origin);
+        let deadline = Instant::now() + Duration::from_secs(seconds);
+        let stopped = || !file.is_empty() && std::path::Path::new(&format!("{file}.stop")).exists();
+        while Instant::now() < deadline && !stopped() {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+    }
+
+    // --- APP-113: the canvas page's reads, batched ---
+    // Maya now holds the whole library, her authoring app and her
+    // compositions; the teammate holds what was shared with her.
+    let mate_request = TrustedRequest {
+        organization: ORG.into(),
+        principal: mate_id.clone(),
+        epoch: 1,
+        issuer: GATEWASM.into(),
+        provider_tenant: harness::NORTHSTAR_TENANT.into(),
+        provider_subject: mate_subject.clone(),
+        registry_sha256: stores.registry_identity().sha256.clone(),
+    };
+    let compared = super::canvas_campaign::equivalent_reads(&stores, &maya_request).await;
+    let mate_compared = super::canvas_campaign::equivalent_reads(&stores, &mate_request).await;
+    let hooks = stores.hooks();
+    let delta = |before: (usize, usize)| {
+        let after = hooks.counts();
+        (after.0 - before.0, after.1 - before.1)
+    };
+    // Before: the listing judged one work at a time, then each work's
+    // outline and records listing in their own transactions.
+    let (before, started) = (hooks.counts(), Instant::now());
+    let listed = stores
+        .data
+        .openable_works_serial(&maya_request)
+        .await
+        .unwrap();
+    for work in &listed {
+        stores
+            .data
+            .work_outline(&maya_request, &work.app, &work.work)
+            .await
+            .unwrap();
+        if !work.collections.is_empty() {
+            let _ = stores
+                .data
+                .list_records(&maya_request, &work.app, &work.work)
+                .await;
+        }
+    }
+    let (serial_ms, (serial_transactions, serial_statements)) =
+        (ms(started.elapsed()), delta(before));
+    // After: the batched listing and the batched reads.
+    let (before, started) = (hooks.counts(), Instant::now());
+    let batched = stores.data.openable_works(&maya_request).await.unwrap();
+    let works: Vec<(&str, &str, bool)> = batched
+        .iter()
+        .map(|w| (w.app.as_str(), w.work.as_str(), !w.collections.is_empty()))
+        .collect();
+    let reads = stores.data.work_reads(&maya_request, &works).await.unwrap();
+    let (batched_ms, (batched_transactions, batched_statements)) =
+        (ms(started.elapsed()), delta(before));
+    assert_eq!(batched, listed);
+    assert!(reads.iter().all(|read| read.outline.is_ok()));
+    assert!(
+        listed.len() >= 24,
+        "the whole library and her own works: {}",
+        listed.len()
+    );
+    assert_eq!(
+        batched_transactions, 2,
+        "one listing and one read transaction"
+    );
+    assert!(
+        batched_statements <= 40,
+        "a fixed number of statements: {batched_statements}"
+    );
+    // The page itself, end to end over the stand.
+    let mut page_samples = Vec::new();
+    let before = hooks.counts();
+    const PAGES: usize = 5;
+    for _ in 0..PAGES {
+        let started = Instant::now();
+        let page = stand.get("/canvas", Some(&maya_cookie)).await;
+        page_samples.push(ms(started.elapsed()));
+        assert_eq!(page.status, StatusCode::OK);
+        assert!(page.text().contains(&format!("id=\"lib-{work_id}\"")));
+    }
+    let (page_transactions, page_statements) = delta(before);
+    let page_ms = p50(&mut page_samples);
+    timings.insert("canvas_serial_reads_ms".into(), json!(serial_ms));
+    timings.insert("canvas_batched_reads_ms".into(), json!(batched_ms));
+    timings.insert("canvas_page_p50_ms".into(), json!(page_ms));
+    println!(
+        "CANVAS_READS works={} serial: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms; batched: {batched_transactions} transactions, {batched_statements} statements, {batched_ms} ms; GET /canvas per page: {} transactions, {} statements, p50 {page_ms} ms",
+        listed.len(),
+        page_transactions / PAGES,
+        page_statements / PAGES,
+    );
+    assert!(page_ms < 1000, "GET /canvas p50 {page_ms} ms");
+    check(
+        &mut checks,
+        &format!(
+            "batched canvas reads (APP-113): for Maya ({compared} works compared) and the teammate ({mate_compared}), the batched listing and library catalog equal the serial ones, and the batched outline and records reads equal work_outline and list_records per work (an unknown work and a malformed id refused alike); for Maya's {} works the listing and reads took {batched_transactions} transactions and {batched_statements} statements in {batched_ms} ms (one work at a time: {serial_transactions} transactions, {serial_statements} statements, {serial_ms} ms); GET /canvas took {} transactions and {} statements per page, p50 {page_ms} ms over {PAGES}",
+            listed.len(),
+            page_transactions / PAGES,
+            page_statements / PAGES
+        ),
+    );
+
+    // --- APP-121: naming (organization labels, personal shortcuts) ---
+    const EXPENSES_APP: &str = "00000000-0000-4000-8000-000000001681";
+    // Maya owns Expenses here (the seed's author owns the library); the
+    // teammate gets the library as a plain member.
+    c.fixture.sql(&format!("UPDATE genui.apps SET owner_principal_id='{maya_id}' WHERE organization_id='{ORG}' AND app_id='{EXPENSES_APP}'"), "genui");
+    operator(
+        &c.fixture,
+        &[
+            "grant-library-access",
+            "--organization",
+            ORG,
+            "--principal",
+            &mate_id,
+        ],
+    );
+    let labels_path = format!("/v1/apps/{EXPENSES_APP}/labels");
+    let governed = |app: &str| {
+        format!(
+            "SELECT (SELECT count(*) FROM genui.definition_revisions WHERE app_id='{app}')*1000+(SELECT count(*) FROM genui.publications WHERE app_id='{app}')*100+(SELECT count(*) FROM genui.query_receipts)"
+        )
+    };
+    let before = scalar(&c.fixture, &governed(EXPENSES_APP)).await;
+    let labeled = "SELECT count(*) FROM genui.audit_events WHERE kind='app.labeled'";
+    let entry = |answer: &Answer| -> Value {
+        answer.json()["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["app_id"] == EXPENSES_APP && c["kind"] == "library")
+            .cloned()
+            .unwrap()
+    };
+    // A non-owner and a foreign organization's member cannot rename: the uniform 404.
+    for (who, cookie) in [("teammate", &mate_cookie), ("outsider", &outsider_cookie)] {
+        let refused = stand
+            .post(
+                &labels_path,
+                Some(cookie),
+                &json!({"scope": "organization", "name": "Mine now", "address": "mine"})
+                    .to_string(),
+            )
+            .await;
+        assert!(refused.uniform_404(), "{who}: {}", refused.text());
+    }
+    let foreign = stand
+        .post(
+            &labels_path,
+            Some(&outsider_cookie),
+            &json!({"scope": "personal", "aliases": ["exp"]}).to_string(),
+        )
+        .await;
+    assert!(foreign.uniform_404(), "{}", foreign.text());
+    assert_eq!(scalar(&c.fixture, labeled).await, 0);
+    // The app card's header and placement messages read the display name
+    // (the catalog's "Expenses"), never the stored definition's title
+    // ("Expense claims"): the group JSON's title (APP-120 gap).
+    let expenses_group = "/v1/canvas/works/00000000-0000-4000-8000-000000001681/00000000-0000-4000-8000-000000001684";
+    let group = stand.get(expenses_group, Some(&mate_cookie)).await;
+    assert_eq!(group.status, StatusCode::OK, "{}", group.text());
+    assert_eq!(group.json()["title"], "Expenses");
+    // The owner renames Expenses "Team spend" at /team-spend; a repeat writes nothing.
+    let body = json!({"scope": "organization", "name": "Team spend", "address": "/Team-Spend"})
+        .to_string();
+    let renamed = stand.post(&labels_path, Some(&maya_cookie), &body).await;
+    assert_eq!(renamed.status, StatusCode::OK, "{}", renamed.text());
+    assert_eq!(renamed.json()["saved"], true);
+    assert_eq!(renamed.json()["label"]["address"], "team-spend");
+    let again = stand.post(&labels_path, Some(&maya_cookie), &body).await;
+    assert_eq!(again.json()["saved"], false, "idempotent");
+    assert_eq!(
+        scalar(&c.fixture, labeled).await,
+        1,
+        "one app.labeled event"
+    );
+    // Every member sees it; /expenses and /expense still answer.
+    let seen = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    );
+    assert_eq!(seen["slug"], "team-spend");
+    assert_eq!(seen["namespaced"], "app:team-spend");
+    assert_eq!(seen["title"], "Team spend");
+    assert_eq!(seen["can_label"], false);
+    for alias in ["expenses", "expense"] {
+        assert!(
+            seen["aliases"].as_array().unwrap().contains(&json!(alias)),
+            "{alias}"
+        );
+    }
+    let group = stand.get(expenses_group, Some(&mate_cookie)).await;
+    assert_eq!(
+        group.json()["title"],
+        "Team spend",
+        "the card header reads the label"
+    );
+    let vendor = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+        .await
+        .json()["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["slug"] == "vendor-spend-breakdown")
+        .cloned()
+        .unwrap();
+    assert!(
+        vendor["aliases"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("spend")),
+        "catalog names always stay with their app"
+    );
+    assert_eq!(
+        entry(
+            &stand
+                .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+                .await
+        )["can_label"],
+        true
+    );
+    // Names already taken or naming a verb are refused: never a name another
+    // app answers to (its address or any alias, hidden or not; a saved
+    // work's /name), never a verb or verb alias, and a display name is never
+    // another app's name or display title (APP-121 review findings 1, 2, 4, 5).
+    for (change, code) in [
+        (json!({"address": "time-off"}), "name_taken"),
+        (json!({"address": "spend"}), "name_taken"),
+        (json!({"address": "vendors"}), "name_taken"),
+        (json!({"address": "big-claims"}), "name_taken"),
+        // No editable organization aliases (2026-10-31 decision).
+        (json!({"aliases": ["team"]}), "invalid_label"),
+        (json!({"name": "Time off"}), "name_taken"),
+        (json!({"name": "Vendor-Spend"}), "name_taken"),
+        (json!({"address": "card"}), "verb_name"),
+        (json!({"address": "weather"}), "verb_name"),
+        (json!({"address": "agents"}), "verb_name"),
+        (json!({"address": "Team Spend"}), "invalid_name"),
+    ] {
+        let mut body = change.clone();
+        body["scope"] = json!("organization");
+        let refused = stand
+            .post(&labels_path, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{change}");
+        assert_eq!(refused.json()["code"], code, "{change}");
+    }
+    // Renaming the address again keeps /team-spend automatically (the only
+    // organization alias there is).
+    let again = stand
+        .post(
+            &labels_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "address": "spend-team"}).to_string(),
+        )
+        .await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.text());
+    assert_eq!(again.json()["label"]["kept"], json!(["team-spend"]));
+    let seen = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    );
+    assert_eq!(seen["slug"], "spend-team");
+    assert_eq!(seen["kept"], json!(["team-spend"]));
+    assert!(seen["aliases"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("team-spend")));
+    // A personal shortcut works for its member only.
+    let mine = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "aliases": ["/exp"]}).to_string(),
+        )
+        .await;
+    assert_eq!(mine.status, StatusCode::OK, "{}", mine.text());
+    let mate_entry = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    );
+    assert!(mate_entry["aliases"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("exp")));
+    assert_eq!(mate_entry["mine"], json!(["exp"]));
+    let maya_entry = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&maya_cookie))
+            .await,
+    );
+    assert!(!maya_entry["aliases"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("exp")));
+    for (alias, code) in [
+        ("spend", "name_taken"),
+        ("team-spend", "name_taken"),
+        ("expense", "name_taken"),
+        ("pto", "name_taken"),
+        ("big-claims", "name_taken"),
+        ("card", "verb_name"),
+        ("keys", "verb_name"),
+    ] {
+        let refused = stand
+            .post(
+                &labels_path,
+                Some(&mate_cookie),
+                &json!({"scope": "personal", "aliases": ["exp", alias]}).to_string(),
+            )
+            .await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{alias}");
+        assert_eq!(refused.json()["code"], code, "{alias}");
+    }
+    // A personal shortcut may be one letter (`/e`); `/app:e` names the same app.
+    let short = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "aliases": ["exp", "/E"]}).to_string(),
+        )
+        .await;
+    assert_eq!(short.status, StatusCode::OK, "{}", short.text());
+    assert_eq!(
+        entry(
+            &stand
+                .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+                .await
+        )["mine"],
+        json!(["exp", "e"])
+    );
+    // The owner names a card; the teammate sees it; the governed rows and
+    // receipts are untouched by every label.
+    let card = stand
+        .post(
+            &labels_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "card": "totals", "name": "Q3 spend"}).to_string(),
+        )
+        .await;
+    assert_eq!(card.status, StatusCode::OK, "{}", card.text());
+    let cards = entry(
+        &stand
+            .get(composer::commands::COMMANDS_PATH, Some(&mate_cookie))
+            .await,
+    )["cards"]
+        .clone();
+    assert_eq!(cards[0]["card"], "totals");
+    assert_eq!(cards[0]["name"], "Q3 spend");
+    assert_eq!(scalar(&c.fixture, &governed(EXPENSES_APP)).await, before);
+    // The outsider's list never carries the labels; storage under RLS shows
+    // the other organization none of them.
+    let outside = stand
+        .get(composer::commands::COMMANDS_PATH, Some(&outsider_cookie))
+        .await;
+    assert!(!outside.text().contains("Team spend"));
+    let scoped = |org: &str, principal: &str| {
+        format!(
+            "SET ROLE genui_workspace; SELECT set_config('genui.organization_id','{org}',false); SELECT set_config('genui.principal_id','{principal}',false); SELECT (SELECT count(organization_id) FROM genui.app_labels)*10+(SELECT count(organization_id) FROM genui.member_labels);"
+        )
+    };
+    let last = |out: String| out.trim().lines().last().unwrap_or("").trim().to_owned();
+    assert_eq!(last(c.fixture.sql(&scoped(OTHER, &mate_id), "genui")), "0");
+    assert_eq!(last(c.fixture.sql(&scoped(ORG, &mate_id), "genui")), "21");
+    // The workspace reads only the scoped principal's own personal labels
+    // (the RESTRICTIVE member_labels_principal policy).
+    assert_eq!(last(c.fixture.sql(&scoped(ORG, &maya_id), "genui")), "20");
+    assert_eq!(last(c.fixture.sql(&scoped(ORG, ""), "genui")), "20");
+    assert_eq!(
+        c.fixture.sql("SELECT string_agg(relname||':'||relrowsecurity||relforcerowsecurity,',' ORDER BY relname) FROM pg_class WHERE relnamespace='genui'::regnamespace AND relname IN ('app_labels','member_labels')", "genui").trim(),
+        "app_labels:truetrue,member_labels:truetrue"
+    );
+    // "Save as /name" never takes a label's address or alias (judged under
+    // the naming lock in create_work; review finding 5).
+    let squat = stand
+        .post(
+            &format!("/v1/work/{AUTHORING_APP}/{adapted_work}/name"),
+            Some(&maya_cookie),
+            &json!({"slug": "team-spend"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        squat.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        squat.text()
+    );
+    assert_eq!(squat.json()["code"], "name_taken");
+    // A private app gets no address; its display name it may (review
+    // finding 3). Maya's authoring app was shared with the teammate above:
+    // its other grants are set aside to make it private, then restored, when
+    // the same address is accepted.
+    let private_path = format!("/v1/apps/{AUTHORING_APP}/labels");
+    c.fixture.sql(&format!("CREATE TABLE public.app121_grants AS SELECT * FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{AUTHORING_APP}' AND principal_id<>'{maya_id}'; DELETE FROM genui.app_permissions WHERE organization_id='{ORG}' AND app_id='{AUTHORING_APP}' AND principal_id<>'{maya_id}';"), "genui");
+    let private = stand
+        .post(
+            &private_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "address": "my-drafts"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        private.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        private.text()
+    );
+    assert_eq!(private.json()["code"], "not_shared");
+    let private_name = stand
+        .post(
+            &private_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "name": "My drafts"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        private_name.status,
+        StatusCode::OK,
+        "{}",
+        private_name.text()
+    );
+    c.fixture.sql("INSERT INTO genui.app_permissions SELECT * FROM public.app121_grants; DROP TABLE public.app121_grants;", "genui");
+    let shared = stand
+        .post(
+            &private_path,
+            Some(&maya_cookie),
+            &json!({"scope": "organization", "address": "my-drafts"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        shared.status,
+        StatusCode::OK,
+        "shared again: {}",
+        shared.text()
+    );
+    // A label names only a card the app has, and a member keeps at most 100
+    // personal labels (review finding 6).
+    for (card, status) in [
+        ("nope", StatusCode::UNPROCESSABLE_ENTITY),
+        ("total", StatusCode::UNPROCESSABLE_ENTITY),
+        ("by-status", StatusCode::OK),
+    ] {
+        let answer = stand
+            .post(
+                &labels_path,
+                Some(&mate_cookie),
+                &json!({"scope": "personal", "card": card, "name": "Mine"}).to_string(),
+            )
+            .await;
+        assert_eq!(answer.status, status, "{card}: {}", answer.text());
+        if status != StatusCode::OK {
+            assert_eq!(answer.json()["code"], "invalid_label", "{card}");
+        }
+    }
+    let filler = format!(
+        "INSERT INTO genui.member_labels(organization_id,principal_id,app_id,card,name,aliases,updated_at) SELECT '{ORG}','{mate_id}','{EXPENSES_APP}','x'||g,NULL,'{{}}',now() FROM generate_series(1,98) g"
+    );
+    c.fixture.sql(&filler, "genui");
+    let capped = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "card": "recent", "name": "Mine"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        capped.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        capped.text()
+    );
+    assert_eq!(capped.json()["code"], "too_many_labels");
+    let kept = stand
+        .post(
+            &labels_path,
+            Some(&mate_cookie),
+            &json!({"scope": "personal", "card": "by-status", "name": "Still mine"}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        kept.status,
+        StatusCode::OK,
+        "an existing label still changes: {}",
+        kept.text()
+    );
+    c.fixture.sql(&format!("DELETE FROM genui.member_labels WHERE organization_id='{ORG}' AND principal_id='{mate_id}' AND card LIKE 'x%'"), "genui");
+    check(
+        &mut checks,
+        "naming (APP-121): the group JSON (app card header, placement messages) reads \"Expenses\", then the label; the owner renamed Expenses \"Team spend\" at /team-spend (one app.labeled event; a repeat writes nothing); the teammate sees the name and address while /expenses and /expense stay aliases and Vendor spend keeps /spend (catalog names stay with their app); a teammate (non-owner) and a foreign organization's member get the uniform 404 on the label route; an organization address or alias taking another app's address or hidden alias (/time-off, /spend, /vendors) or a saved work's /big-claims, a display name equal to another app's title or address (Time off, Vendor-Spend), a verb or verb alias (/card, /weather, /agents) and a malformed name are refused (422); the teammate's personal /exp is listed for them only, and a personal alias taking /spend, /team-spend, /expense, /pto, /big-claims, /card or /keys is refused while a one-letter /e is kept; \"Save as /team-spend\" is refused; a private app gets no address (not_shared) but a name, and the same app shared again gets it; a label of a card the app does not have (nope, total) is refused and the 100th personal label is the last; the card label \"Q3 spend\" reaches every member while definitions, publications and receipts are unchanged; app_labels and member_labels are ENABLE+FORCE RLS, another organization's scope reads none and the workspace reads only the scoped principal's personal labels; organization labels take no aliases (the old address is kept automatically on a rename) and GET /v1/commands names each app's full form app:<address>",
+    );
+
+    // --- APP-122: Ask (read-only, text with receipts) and Shape (closed specs) ---
+    let ask_scope = |kind: &str, address: &str| {
+        json!({"kind": kind, "address": address,
+            "works": [{"app_id": EXPENSE_APP, "work_id": work_id, "address": "expense-review"}]})
+    };
+    let listing = stand
+        .get(
+            &format!("/v1/work/{EXPENSE_APP}/{work_id}/records"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(listing.status, StatusCode::OK, "{}", listing.text());
+    let first_record = listing.json()["records"][0]["record_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The records card's collection and its published fields (what Shape's
+    // card fields are judged against, APP-122 review).
+    let collection_id = listing.json()["collections"][0]["collection_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut schema_fields: Vec<Value> = listing.json()["collections"][0]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|field| {
+            let mut out = json!({"id": field["id"], "type": field["type"]});
+            if let Some(values) = field.get("values") {
+                out["values"] = values.clone();
+            }
+            out
+        })
+        .collect();
+    schema_fields.push(json!({"id": "filed_by", "type": "text"}));
+    let record_count = listing.json()["records"].as_array().unwrap().len();
+    // Every governed table Ask could touch, and the audit chain, counted.
+    let counts = "SELECT (SELECT count(*) FROM genui.internal_records)*1000000+(SELECT count(*) FROM genui.internal_record_revisions)*10000+(SELECT count(*) FROM genui.audit_events)*10+(SELECT count(*) FROM genui.query_receipts)";
+    let saved = "SELECT coalesce(sum(version),0)::bigint FROM genui.saved_work";
+    let (rows_before, saved_before) = (
+        scalar(&c.fixture, counts).await,
+        scalar(&c.fixture, saved).await,
+    );
+    let calls_before = stub.calls();
+    // "Where are all the red invoices?": the model (stub) cites r1; the
+    // receipts are storage's, never the model's.
+    stub.script(vec![
+        json!({"text": "One record needs attention: it is waiting on more context.", "references": ["r1"]}).to_string(),
+    ]);
+    let asked = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "where are all the red invoices?", "scope": ask_scope("card", "expense-review.records")}).to_string(),
+        )
+        .await;
+    assert_eq!(asked.status, StatusCode::OK, "{}", asked.text());
+    let answer = asked.json();
+    let mut keys: Vec<&str> = answer
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        ["receipts", "references", "text"],
+        "only text, receipts and references"
+    );
+    assert_eq!(answer["references"][0]["record_id"], first_record);
+    let receipt = &answer["receipts"][0];
+    assert_eq!(receipt["record_id"], first_record);
+    assert_eq!(receipt["app_id"], EXPENSE_APP);
+    assert_eq!(receipt["publication_id"], listing.json()["publication_id"]);
+    assert_eq!(
+        receipt["definition_digest"],
+        listing.json()["definition_digest"]
+    );
+    assert!(receipt["version"].as_i64().unwrap() >= 1);
+    assert_eq!(stub.calls(), calls_before + 1);
+    // The model saw the records as data under Ask's system prompt.
+    let sent = stub.bodies.lock().unwrap().last().cloned().unwrap();
+    assert!(
+        sent["system"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("You can only read"),
+        "{sent}"
+    );
+    assert_eq!(
+        scalar(&c.fixture, counts).await,
+        rows_before,
+        "Ask wrote no row"
+    );
+    assert_eq!(scalar(&c.fixture, saved).await, saved_before);
+    // Ask's schema rejects a view spec (server-side): nothing of it is shown.
+    stub.script(vec![
+        json!({"text": "Made the red ones red", "highlight": [{"field": "status", "op": "eq", "value": "needs_context", "color": "crimson"}]}).to_string(),
+    ]);
+    let refused = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "make the red ones red", "scope": ask_scope("canvas", "")})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(
+        refused.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        refused.text()
+    );
+    assert_eq!(refused.json()["code"], "could_not_answer");
+    assert!(!refused.text().contains("crimson"));
+    // `/ask app:expense-review …`: an app scope, by its namespaced address;
+    // a card scope names its collection, and a collection the work does not
+    // have is refused before any model call.
+    stub.script(vec![
+        json!({"text": "There is one record.", "references": ["r1"]}).to_string(),
+        json!({"text": "Its one record.", "references": ["r1"]}).to_string(),
+    ]);
+    let app_scope = json!({"kind": "app", "address": "app:expense-review",
+        "works": [{"app_id": EXPENSE_APP, "work_id": work_id, "address": "app:expense-review"}]});
+    let by_app = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "why is this high?", "scope": app_scope}).to_string(),
+        )
+        .await;
+    assert_eq!(by_app.status, StatusCode::OK, "{}", by_app.text());
+    let card_scope = json!({"kind": "card", "address": "card:expense-review.records",
+        "works": [{"app_id": EXPENSE_APP, "work_id": work_id, "address": "expense-review", "collection": collection_id}]});
+    let by_card = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "which are late?", "scope": card_scope}).to_string(),
+        )
+        .await;
+    assert_eq!(by_card.status, StatusCode::OK, "{}", by_card.text());
+    let sent = stub.bodies.lock().unwrap().last().cloned().unwrap();
+    let user_json: Value =
+        serde_json::from_str(sent["messages"][0]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        user_json["records"].as_array().unwrap().len(),
+        record_count,
+        "only the card's collection"
+    );
+    assert_eq!(user_json["partial"], false, "nothing was capped");
+    let calls_before_collection = stub.calls();
+    let mut bogus = card_scope.clone();
+    bogus["works"][0]["collection"] = json!(EXPENSE_APP);
+    let refused_collection = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "which are late?", "scope": bogus}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        refused_collection.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        refused_collection.text()
+    );
+    assert_eq!(stub.calls(), calls_before_collection);
+    // APP-143: utility scopes carry only validated presentation state. No
+    // work/record selector reaches this model call, and no receipt is invented.
+    for widget in [
+        crate::widgets::state::Widget::Weather,
+        crate::widgets::state::Widget::Clock,
+        crate::widgets::state::Widget::Calculator,
+    ] {
+        stub.script(vec![json!({"text":"Use the widget controls to inspect its current display.","references":[]}).to_string()]);
+        let reply = stand.post(composer::talk::ASK_PATH, Some(&maya_cookie), &json!({"question":"How do these controls work?", "scope":{
+            "kind":"widget", "widget_id":format!("w-{}-abc123",widget.as_str()), "widget":widget.as_str(), "state":widget.default_state()}}).to_string()).await;
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+        assert_eq!(reply.json()["receipts"], json!([]));
+        assert_eq!(reply.json()["references"], json!([]));
+        let sent = stub.bodies.lock().unwrap().last().cloned().unwrap();
+        let user: Value =
+            serde_json::from_str(sent["messages"][0]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(user.as_object().unwrap().len(), 3);
+        assert!(user.get("records").is_none() && user.get("works").is_none());
+    }
+    let calls_before_widget_denial = stub.calls();
+    let denied_widget = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question":"What is its total?", "scope":{
+        "kind":"widget","widget":"note","widget_id":"w-note-abc123","state":{}}})
+            .to_string(),
+        )
+        .await;
+    assert_eq!(denied_widget.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(denied_widget.json()["code"], "invalid_request");
+    assert_eq!(stub.calls(), calls_before_widget_denial);
+    stub.script(vec![
+        json!({"text":"The temperature is 25.","references":[]}).to_string(),
+    ]);
+    let unattested = stand.post(composer::talk::ASK_PATH, Some(&maya_cookie), &json!({"question":"What is the temperature?", "scope":{
+        "kind":"widget","widget":"weather","widget_id":"w-weather-abc123","state":crate::widgets::state::Widget::Weather.default_state()}}).to_string()).await;
+    assert_eq!(unattested.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(unattested.json()["code"], "could_not_answer");
+    assert!(!unattested.text().contains("temperature"));
+
+    // The initial read succeeds, then the model waits while the operator
+    // revokes this exact work. The answer must not release old record values.
+    let pause = Arc::new(ModelPause::default());
+    *stub.pause.lock().unwrap() = Some(pause.clone());
+    stub.script(vec![
+        json!({"text":"This record needs attention.","references":["r1"]}).to_string(),
+    ]);
+    let pending_body = json!({"question":"Explain this record", "scope":card_scope}).to_string();
+    let pending = stand.post(composer::talk::ASK_PATH, Some(&maya_cookie), &pending_body);
+    tokio::pin!(pending);
+    tokio::select! {
+        reply = &mut pending => panic!("Ask finished before the model barrier: {}", reply.status),
+        reached = tokio::time::timeout(WAIT, pause.arrived.notified()) => { reached.expect("Ask reached the held model after its record read"); },
+    }
+    c.fixture.sql(&format!("CREATE TABLE public.app143_reads AS SELECT * FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}' AND app_id='{EXPENSE_APP}' AND work_id='{work_id}' AND permission='record_read'; DELETE FROM genui.work_permissions p USING public.app143_reads r WHERE p.organization_id=r.organization_id AND p.principal_id=r.principal_id AND p.app_id=r.app_id AND p.work_id=r.work_id AND p.permission=r.permission; UPDATE genui.saved_work SET creator_revoked_at=clock_timestamp() WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND work_id='{work_id}' AND created_by='{maya_id}';"), "genui");
+    pause.release.notify_one();
+    let revoked_answer = pending.await;
+    assert!(revoked_answer.uniform_404(), "{}", revoked_answer.text());
+    c.fixture.sql(&format!("INSERT INTO genui.work_permissions SELECT * FROM public.app143_reads; DROP TABLE public.app143_reads; UPDATE genui.saved_work SET creator_revoked_at=NULL WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND work_id='{work_id}' AND created_by='{maya_id}';"), "genui");
+    check(
+        &mut checks,
+        "APP-143 contextual Ask: weather, clock and calculator have closed presentation-only scopes with no records/work identifiers or invented receipts; unsupported widgets refuse before a model call, unattested numeric widget replies are suppressed, and a scoped work revoked while the model waits yields uniform 404 before record-answer release",
+    );
+    // The Ask transaction is READ ONLY: a forced write in it fails (25006).
+    let forced = stores
+        .data
+        .read_only_forced_write(&maya_request, &[(EXPENSE_APP, work_id.as_str())])
+        .await
+        .unwrap();
+    assert_eq!(
+        forced.as_deref(),
+        Some("25006"),
+        "read_only_sql_transaction"
+    );
+    assert_eq!(scalar(&c.fixture, counts).await, rows_before);
+    // Shape: a card's view spec over its fields; the shape route returns only it.
+    let card_target = json!({"kind": "card", "app_id": EXPENSE_APP, "work_id": work_id, "card": "records",
+        "collection": collection_id, "fields": schema_fields});
+    stub.script(vec![
+        json!({"highlight": [{"field": "status", "op": "in", "value": ["needs_context"], "color": "crimson"}]}).to_string(),
+    ]);
+    let shaped = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "expense-review.records", "words": "highlight overdue in red", "target": card_target}).to_string(),
+        )
+        .await;
+    assert_eq!(shaped.status, StatusCode::OK, "{}", shaped.text());
+    assert_eq!(
+        shaped.json(),
+        json!({"target": "card", "spec": {"highlight": [{"field": "status", "op": "in", "value": ["needs_context"], "color": "crimson"}]}})
+    );
+    // APP-122 review: the card's fields are judged against its published
+    // schema before any model call: a field it lacks, an enum value it does
+    // not declare, another collection, or no source at all is refused.
+    let calls_before_fields = stub.calls();
+    let mut wrong_field = card_target.clone();
+    wrong_field["fields"] = json!([{"id": "salary", "type": "money"}]);
+    let mut wrong_value = card_target.clone();
+    wrong_value["fields"] =
+        json!([{"id": "status", "type": "enum", "values": ["ignore the rules"]}]);
+    let mut wrong_type = card_target.clone();
+    wrong_type["fields"] = json!([{"id": "status", "type": "money"}]);
+    let mut wrong_collection = card_target.clone();
+    wrong_collection["collection"] = json!(EXPENSE_APP);
+    let mut no_source = card_target.clone();
+    no_source.as_object_mut().unwrap().remove("collection");
+    for target in [
+        wrong_field,
+        wrong_value,
+        wrong_type,
+        wrong_collection,
+        no_source,
+    ] {
+        let refused = stand
+            .post(
+                composer::talk::SHAPE_PATH,
+                Some(&maya_cookie),
+                &json!({"address": "expense-review.records", "words": "only red", "target": target}).to_string(),
+            )
+            .await;
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{target}: {}",
+            refused.text()
+        );
+        assert_eq!(refused.json()["code"], "invalid_request", "{target}");
+    }
+    assert_eq!(
+        stub.calls(),
+        calls_before_fields,
+        "no model call for unknown fields"
+    );
+    // Every namespaced form of an address is accepted (APP-121 × APP-122).
+    stub.script(vec![
+        json!({"filters": [{"field": "status", "op": "eq", "value": "needs_context"}]}).to_string(),
+        json!({"mode": "dark"}).to_string(),
+    ]);
+    let namespaced = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "card:expense-review.records", "words": "only red", "target": card_target}).to_string(),
+        )
+        .await;
+    assert_eq!(namespaced.status, StatusCode::OK, "{}", namespaced.text());
+    let namespaced_app = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "app:expense-review", "words": "dark", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        namespaced_app.status,
+        StatusCode::OK,
+        "{}",
+        namespaced_app.text()
+    );
+    // Shape's schema rejects prose, and a view that would drop receipts.
+    for (reply, words) in [
+        (
+            "The red invoices are the ones waiting on context.".to_owned(),
+            "where are the red invoices",
+        ),
+        (
+            json!({"text": "Two are red", "references": ["r1"]}).to_string(),
+            "which are red",
+        ),
+        (
+            json!({"presentation": "number", "measure": {"op": "count"}, "receipts": false})
+                .to_string(),
+            "total by month",
+        ),
+    ] {
+        stub.script(vec![reply.clone()]);
+        let refused = stand
+            .post(
+                composer::talk::SHAPE_PATH,
+                Some(&maya_cookie),
+                &json!({"address": "expense-review.records", "words": words, "target": card_target}).to_string(),
+            )
+            .await;
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{reply}: {}",
+            refused.text()
+        );
+        assert_eq!(refused.json()["code"], "could_not_shape", "{reply}");
+    }
+    // An app: a closed theme; prose refused.
+    stub.script(vec![
+        json!({"mode": "dark", "accent": "green", "density": "compact"}).to_string(),
+    ]);
+    let themed = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "expense-review", "words": "dark green, compact", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string(),
+        )
+        .await;
+    assert_eq!(themed.status, StatusCode::OK, "{}", themed.text());
+    assert_eq!(
+        themed.json(),
+        json!({"target": "app", "spec": {"mode": "dark", "accent": "green", "density": "compact"}})
+    );
+    // A widget: the APP-103 customizer, reached through /shape.
+    stub.script(vec![
+        json!({"skin": "ti84", "accent": "default", "font": "lcd"}).to_string(),
+    ]);
+    let widget = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "calculator", "words": "make it a TI-84", "target": {"kind": "widget", "widget": "calculator",
+                "state": {"skin": "default", "accent": "default", "font": "default"}}}).to_string(),
+        )
+        .await;
+    assert_eq!(widget.status, StatusCode::OK, "{}", widget.text());
+    assert_eq!(widget.json()["spec"]["skin"], "ti84");
+    assert_eq!(
+        scalar(&c.fixture, counts).await,
+        rows_before,
+        "Shape wrote no row"
+    );
+    assert_eq!(scalar(&c.fixture, saved).await, saved_before);
+    // A foreign organization, an anonymous caller and a forged session get
+    // the uniform 404 on both routes, and the model is never called for them.
+    let calls = stub.calls();
+    for cookie in [Some(outsider_cookie.as_str()), None, Some("forged-session")] {
+        let asked = stand
+            .post(
+                composer::talk::ASK_PATH,
+                cookie,
+                &json!({"question": "where are the red invoices", "scope": ask_scope("card", "")})
+                    .to_string(),
+            )
+            .await;
+        assert!(asked.uniform_404(), "ask: {}", asked.text());
+        let shaped = stand
+            .post(composer::talk::SHAPE_PATH, cookie,
+                &json!({"address": "expense-review.records", "words": "only red", "target": card_target}).to_string())
+            .await;
+        assert!(shaped.uniform_404(), "shape: {}", shaped.text());
+    }
+    // An address the member cannot read: the uniform 404, before any model call.
+    for scope in [app_scope.clone(), card_scope.clone()] {
+        let asked = stand
+            .post(
+                composer::talk::ASK_PATH,
+                Some(&outsider_cookie),
+                &json!({"question": "how many", "scope": scope}).to_string(),
+            )
+            .await;
+        assert!(asked.uniform_404(), "ask {scope}: {}", asked.text());
+    }
+    let theme = stand
+        .post(composer::talk::SHAPE_PATH, Some(&outsider_cookie),
+            &json!({"address": "expense-review", "words": "dark", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}).to_string())
+        .await;
+    assert!(theme.uniform_404(), "{}", theme.text());
+    assert_eq!(stub.calls(), calls, "no model call for a refused caller");
+    // In a demo organization (APP-098), the rehearsed question is answered
+    // from the same records without a model call.
+    crate::demo::configure_for_tests(true, &[ORG]);
+    let rehearsed = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "where are all the red invoices?", "scope": ask_scope("card", "expense-review.records")}).to_string(),
+        )
+        .await;
+    let rehearsed_shape = stand
+        .post(
+            composer::talk::SHAPE_PATH,
+            Some(&maya_cookie),
+            &json!({"address": "expense-review.records", "words": "only red invoices", "target": card_target}).to_string(),
+        )
+        .await;
+    // A computed number (rehearsed, demo organization) cites every record it counted.
+    let counted = stand
+        .post(
+            composer::talk::ASK_PATH,
+            Some(&maya_cookie),
+            &json!({"question": "how many are there", "scope": card_scope}).to_string(),
+        )
+        .await;
+    crate::demo::configure_for_tests(false, &[]);
+    assert_eq!(rehearsed.status, StatusCode::OK, "{}", rehearsed.text());
+    assert!(
+        rehearsed.json()["text"]
+            .as_str()
+            .unwrap()
+            .contains("need attention")
+            || rehearsed.json()["text"]
+                .as_str()
+                .unwrap()
+                .contains("needs attention"),
+        "{}",
+        rehearsed.text()
+    );
+    assert_eq!(rehearsed.json()["receipts"][0]["record_id"], first_record);
+    assert_eq!(counted.status, StatusCode::OK, "{}", counted.text());
+    assert_eq!(
+        counted.json()["receipts"].as_array().unwrap().len(),
+        record_count,
+        "{}",
+        counted.text()
+    );
+    assert_eq!(
+        rehearsed_shape.status,
+        StatusCode::OK,
+        "{}",
+        rehearsed_shape.text()
+    );
+    assert_eq!(rehearsed_shape.json()["spec"]["filters"][0]["op"], "in");
+    assert_eq!(stub.calls(), calls, "rehearsed: no model call");
+    assert_eq!(scalar(&c.fixture, counts).await, rows_before);
+    check(
+        &mut checks,
+        "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); card fields outside the records card's published schema (an unknown field, an undeclared enum value, a wrong type, another collection, no source) were refused 422 invalid_request with no model call; namespaced addresses (card:…, app:…) were accepted on both routes; an app-scoped Ask and a card-scoped Ask (its collection only; an unknown collection 422) answered; a rehearsed count cited every record it counted; a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
+    );
+
+    // --- APP-123: cards made by you, add for everyone, pinned answers ---
+    // The member write windows are fresh for this part (one cooldown period).
+    auth.limits.clear();
+    let cards = composer::cards::CARDS_PATH;
+    let made_events =
+        |kind: &str| format!("SELECT count(*) FROM genui.audit_events WHERE kind='{kind}'");
+    let card_rows = "SELECT count(*) FROM genui.member_cards";
+    let listed = |answer: &Answer| -> Vec<Value> {
+        answer.json()["cards"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    };
+    let has = |list: &[Value], id: &str| list.iter().any(|card| card["card_id"] == id);
+    let red = json!({"highlight": [{"field": "status", "op": "in", "value": ["needs_context"], "color": "crimson"}]});
+    let made_id = "00000000-0000-4000-8000-0000000c4a01";
+    let made = json!({"card_id": made_id, "kind": "card", "app_id": EXPENSE_APP, "work_id": work_id, "card": "records",
+        "address": "expense-review.records", "title": "Red claims", "collection": collection_id, "spec": red});
+    let calls_before_cards = stub.calls();
+    let saved = stand
+        .post(cards, Some(&maya_cookie), &made.to_string())
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    assert_eq!(saved.json()["saved"], true);
+    assert_eq!(saved.json()["card"]["mine"], true);
+    assert_eq!(
+        saved.json()["card"]["spec"],
+        json!({"from": {"collection": collection_id}, "view": red})
+    );
+    // Idempotent: the same card again writes nothing.
+    let again = stand
+        .post(cards, Some(&maya_cookie), &made.to_string())
+        .await;
+    assert_eq!(again.json()["saved"], false, "{}", again.text());
+    assert_eq!(scalar(&c.fixture, &made_events("card.made")).await, 1);
+    // The same id with another card is refused.
+    let mut other = made.clone();
+    other["title"] = json!("Something else");
+    let clash = stand
+        .post(cards, Some(&maya_cookie), &other.to_string())
+        .await;
+    assert_eq!(clash.json()["code"], "card_exists", "{}", clash.text());
+    // A stored spec is judged server-side against the published schema: an
+    // unknown field, receipts:false, a client field list, a record set on a
+    // view or an unknown collection are refused, and nothing is stored.
+    let rows_before_refusals = scalar(&c.fixture, card_rows).await;
+    for (change, code) in [
+        (json!({"spec": {"columns": ["salary"]}}), "unknown_field"),
+        (
+            json!({"spec": {"presentation": "number", "receipts": false}}),
+            "drops_receipts",
+        ),
+        (
+            json!({"spec": {"filters": [{"field": "status", "op": "eq", "value": "lost"}]}}),
+            "invalid_value",
+        ),
+        (json!({"spec": {"css": "body{}"}}), "unknown_key"),
+        (
+            json!({"fields": [{"id": "salary", "type": "money"}]}),
+            "invalid_request",
+        ),
+        (json!({"collection": EXPENSE_APP}), "invalid_request"),
+    ] {
+        let mut body = made.clone();
+        body["card_id"] = json!("00000000-0000-4000-8000-0000000c4aff");
+        for (key, value) in change.as_object().unwrap() {
+            body[key] = value.clone();
+        }
+        let refused = stand
+            .post(cards, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(
+            refused.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{change}: {}",
+            refused.text()
+        );
+        assert_eq!(refused.json()["code"], code, "{change}");
+    }
+    assert_eq!(
+        scalar(&c.fixture, card_rows).await,
+        rows_before_refusals,
+        "nothing stored"
+    );
+    // It persists across sessions: a new sign-in of Maya lists it.
+    let mut later = c.browser("192.0.2.31:5000");
+    let arrived = c.sign_in(&mut later, NORTHSTAR_HANDLE, &maya_subject).await;
+    assert_eq!(arrived.location(), "/workspace");
+    let later_cookie = later.cookie(cookies::SESSION).unwrap();
+    assert_ne!(later_cookie, maya_cookie, "another session");
+    let maya_list = listed(&stand.get(cards, Some(&later_cookie)).await);
+    assert!(has(&maya_list, made_id), "{maya_list:?}");
+    // Invisible to another member; the foreign organization and anonymous
+    // or forged callers get the uniform 404 on every route.
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&mate_cookie)).await),
+        made_id
+    ));
+    assert!(listed(&stand.get(cards, Some(&outsider_cookie)).await).is_empty());
+    for cookie in [None, Some("forged-session")] {
+        assert!(stand.get(cards, cookie).await.uniform_404());
+        assert!(stand
+            .post(cards, cookie, &made.to_string())
+            .await
+            .uniform_404());
+    }
+    for (who, cookie) in [("teammate", &mate_cookie), ("outsider", &outsider_cookie)] {
+        for path in [
+            format!("/v1/cards/{made_id}/remove"),
+            format!("/v1/cards/{made_id}/everyone"),
+        ] {
+            let body = if path.ends_with("remove") {
+                "{}"
+            } else {
+                r#"{"everyone":true}"#
+            };
+            let refused = stand.post(&path, Some(cookie), body).await;
+            assert!(refused.uniform_404(), "{who} {path}: {}", refused.text());
+        }
+    }
+    let mut foreign = made.clone();
+    foreign["card_id"] = json!("00000000-0000-4000-8000-0000000c4a0f");
+    assert!(stand
+        .post(cards, Some(&outsider_cookie), &foreign.to_string())
+        .await
+        .uniform_404());
+    // The owner adds a card of their app for everyone (audited); every
+    // member who can open the app then reads it. Maya owns Expenses here
+    // (APP-121 above); the teammate reads it and owns nothing.
+    const EXPENSES_WORK: &str = "00000000-0000-4000-8000-000000001684";
+    let expenses_listing = stand
+        .get(
+            &format!("/v1/work/{EXPENSES_APP}/{EXPENSES_WORK}/records"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(
+        expenses_listing.status,
+        StatusCode::OK,
+        "{}",
+        expenses_listing.text()
+    );
+    let expenses_collection = expenses_listing.json()["collections"][0]["collection_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let shared_id = "00000000-0000-4000-8000-0000000c4a02";
+    let team = json!({"card_id": shared_id, "kind": "card", "app_id": EXPENSES_APP, "work_id": EXPENSES_WORK, "card": "ledger",
+        "address": "team-spend.ledger", "title": "Spend by month", "collection": expenses_collection,
+        "spec": {"presentation": "number", "measure": {"op": "count"}}});
+    let team_saved = stand
+        .post(cards, Some(&maya_cookie), &team.to_string())
+        .await;
+    assert_eq!(team_saved.status, StatusCode::OK, "{}", team_saved.text());
+    assert_eq!(team_saved.json()["card"]["can_share"], true);
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&mate_cookie)).await),
+            shared_id
+        ),
+        "personal until shared"
+    );
+    let everyone_path = format!("/v1/cards/{shared_id}/everyone");
+    let shared = stand
+        .post(&everyone_path, Some(&maya_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(shared.status, StatusCode::OK, "{}", shared.text());
+    assert_eq!(shared.json()["card"]["everyone"], true);
+    let repeat = stand
+        .post(&everyone_path, Some(&maya_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(repeat.json()["saved"], false);
+    assert_eq!(
+        scalar(&c.fixture, &made_events("card.shared")).await,
+        1,
+        "one audited card.shared"
+    );
+    let mate_list = listed(&stand.get(cards, Some(&mate_cookie)).await);
+    let seen = mate_list
+        .iter()
+        .find(|card| card["card_id"] == shared_id)
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(seen["everyone"], true, "{mate_list:?}");
+    assert_eq!(seen["mine"], false);
+    assert_eq!(seen["can_share"], false);
+    // Only its maker may remove it or take it back; the outsider never sees it.
+    for path in [
+        format!("/v1/cards/{shared_id}/remove"),
+        everyone_path.clone(),
+    ] {
+        let body = if path.ends_with("remove") {
+            "{}"
+        } else {
+            r#"{"everyone":false}"#
+        };
+        assert!(
+            stand
+                .post(&path, Some(&mate_cookie), body)
+                .await
+                .uniform_404(),
+            "{path}"
+        );
+    }
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&outsider_cookie)).await),
+        shared_id
+    ));
+    // A member who is not the app's owner (or an admin) cannot add for everyone.
+    let mates_id = "00000000-0000-4000-8000-0000000c4a03";
+    let mut mates = team.clone();
+    mates["card_id"] = json!(mates_id);
+    let mate_saved = stand
+        .post(cards, Some(&mate_cookie), &mates.to_string())
+        .await;
+    assert_eq!(mate_saved.status, StatusCode::OK, "{}", mate_saved.text());
+    assert_eq!(mate_saved.json()["card"]["can_share"], false);
+    assert!(stand
+        .post(
+            &format!("/v1/cards/{mates_id}/everyone"),
+            Some(&mate_cookie),
+            r#"{"everyone":true}"#
+        )
+        .await
+        .uniform_404());
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&maya_cookie)).await),
+            mates_id
+        ),
+        "the teammate's card stays theirs"
+    );
+    // A pinned answer: exactly what Ask answered (its storage receipts),
+    // checked against the record revisions; it never runs again.
+    let pin_id = "00000000-0000-4000-8000-0000000c4a04";
+    let pin = json!({"card_id": pin_id, "kind": "answer", "question": "where are all the red invoices?", "text": answer["text"],
+        "scope": {"kind": "card", "address": "expense-review.records"}, "references": answer["references"], "receipts": answer["receipts"]});
+    let calls_before_pin = stub.calls();
+    let pinned = stand
+        .post(cards, Some(&maya_cookie), &pin.to_string())
+        .await;
+    assert_eq!(pinned.status, StatusCode::OK, "{}", pinned.text());
+    assert_eq!(pinned.json()["card"]["kind"], "answer");
+    assert_eq!(
+        pinned.json()["card"]["spec"]["receipts"],
+        answer["receipts"],
+        "its receipts kept"
+    );
+    assert_eq!(stub.calls(), calls_before_pin, "pinning asks nothing");
+    assert_eq!(scalar(&c.fixture, &made_events("answer.pinned")).await, 1);
+    let mut forged = pin.clone();
+    forged["card_id"] = json!("00000000-0000-4000-8000-0000000c4a05");
+    forged["receipts"][0]["version"] =
+        json!(answer["receipts"][0]["version"].as_i64().unwrap() + 100);
+    let refused = stand
+        .post(cards, Some(&maya_cookie), &forged.to_string())
+        .await;
+    assert_eq!(
+        refused.json()["code"],
+        "unknown_receipt",
+        "{}",
+        refused.text()
+    );
+    // Review finding 7: the receipt's publication must be the one its
+    // revision was read under (the work's own), not merely a publication of
+    // the app with that definition digest.
+    let read_under = answer["receipts"][0]["publication_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let other_publication = "00000000-0000-4000-8000-0000000c4ab7";
+    c.fixture.sql(&format!("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,publication_sequence) SELECT organization_id,app_id,'{other_publication}',definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,(SELECT max(publication_sequence)+1 FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}') FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND publication_id='{read_under}'"), "genui");
+    let mut elsewhere = pin.clone();
+    elsewhere["card_id"] = json!("00000000-0000-4000-8000-0000000c4a0a");
+    for receipt in elsewhere["receipts"].as_array_mut().unwrap() {
+        receipt["publication_id"] = json!(other_publication);
+    }
+    let refused = stand
+        .post(cards, Some(&maya_cookie), &elsewhere.to_string())
+        .await;
+    assert_eq!(
+        refused.json()["code"],
+        "unknown_receipt",
+        "another publication of the app: {}",
+        refused.text()
+    );
+    c.fixture.sql(&format!("DELETE FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND publication_id='{other_publication}'"), "genui");
+    let mut outsider_pin = pin.clone();
+    outsider_pin["card_id"] = json!("00000000-0000-4000-8000-0000000c4a06");
+    assert!(stand
+        .post(cards, Some(&outsider_cookie), &outsider_pin.to_string())
+        .await
+        .uniform_404());
+    let not_shareable = stand
+        .post(
+            &format!("/v1/cards/{pin_id}/everyone"),
+            Some(&maya_cookie),
+            r#"{"everyone":true}"#,
+        )
+        .await;
+    assert_eq!(
+        not_shareable.json()["code"],
+        "not_shareable",
+        "{}",
+        not_shareable.text()
+    );
+    assert!(
+        has(
+            &listed(&stand.get(cards, Some(&later_cookie)).await),
+            pin_id
+        ),
+        "it persists"
+    );
+    assert!(
+        !has(&listed(&stand.get(cards, Some(&mate_cookie)).await), pin_id),
+        "it is Maya's alone"
+    );
+    // Review findings 1 and 2: revoking Maya's record_read on the work the
+    // answer's receipts cite hides the pinned answer, and her own made card
+    // over that work, until it is granted again.
+    assert_eq!(
+        scalar(&c.fixture, &format!("SELECT cardinality(read_apps)::bigint FROM genui.member_cards WHERE card_id='{pin_id}'")).await,
+        1,
+        "the pinned answer stores the work it read"
+    );
+    // The work Ask read (Maya's own adapted work: she holds record_read as
+    // its unrevoked creator and through any grant): both are revoked.
+    let read_work = answer["receipts"][0]["work_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(made["work_id"], read_work.as_str());
+    c.fixture.sql(&format!("CREATE TABLE public.app123_reads AS SELECT * FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}' AND app_id='{EXPENSE_APP}' AND work_id='{read_work}' AND permission='record_read'; DELETE FROM genui.work_permissions p USING public.app123_reads r WHERE p.organization_id=r.organization_id AND p.principal_id=r.principal_id AND p.app_id=r.app_id AND p.work_id=r.work_id AND p.permission=r.permission; CREATE TABLE public.app123_creator AS SELECT organization_id,app_id,work_id FROM genui.saved_work WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}' AND work_id='{read_work}' AND created_by='{maya_id}' AND creator_revoked_at IS NULL; UPDATE genui.saved_work w SET creator_revoked_at=now() FROM public.app123_creator k WHERE w.organization_id=k.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id;"), "genui");
+    assert!(
+        scalar(&c.fixture, "SELECT (SELECT count(*) FROM public.app123_reads)+(SELECT count(*) FROM public.app123_creator)").await >= 1,
+        "Maya held record_read on the work"
+    );
+    let revoked = listed(&stand.get(cards, Some(&maya_cookie)).await);
+    assert!(!has(&revoked, pin_id), "{revoked:?}");
+    assert!(!has(&revoked, made_id), "{revoked:?}");
+    assert!(has(&revoked, shared_id), "another work's card stays");
+    c.fixture.sql("INSERT INTO genui.work_permissions SELECT * FROM public.app123_reads; DROP TABLE public.app123_reads; UPDATE genui.saved_work w SET creator_revoked_at=NULL FROM public.app123_creator k WHERE w.organization_id=k.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id; DROP TABLE public.app123_creator;", "genui");
+    let restored = listed(&stand.get(cards, Some(&maya_cookie)).await);
+    assert!(has(&restored, pin_id) && has(&restored, made_id));
+    // Remove: a soft delete by its maker, audited, idempotent; one added for
+    // everyone goes for everyone.
+    for id in [pin_id, shared_id] {
+        let path = format!("/v1/cards/{id}/remove");
+        let removed = stand.post(&path, Some(&maya_cookie), "{}").await;
+        assert_eq!(removed.json()["saved"], true, "{}", removed.text());
+        assert_eq!(
+            stand.post(&path, Some(&maya_cookie), "{}").await.json()["saved"],
+            false
+        );
+    }
+    assert_eq!(scalar(&c.fixture, &made_events("card.removed")).await, 2);
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        pin_id
+    ));
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&mate_cookie)).await),
+            shared_id
+        ),
+        "gone for everyone"
+    );
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.member_cards WHERE card_id IN ('{pin_id}','{shared_id}') AND removed_at IS NOT NULL")).await, 2, "soft-deleted, kept");
+    assert_eq!(
+        stub.calls(),
+        calls_before_cards,
+        "no model call for any card route"
+    );
+    // --- APP-123 review: listing authority, the steward path, the cap lock ---
+    let shared_before = scalar(&c.fixture, &made_events("card.shared")).await;
+    let removed_before = scalar(&c.fixture, &made_events("card.removed")).await;
+    // An admin (here the teammate, for this part) adds their own card for everyone.
+    c.fixture.sql(
+        &format!(
+            "INSERT INTO genui.organization_permissions VALUES ('{ORG}','{mate_id}','admin_policy')"
+        ),
+        "genui",
+    );
+    let mates_everyone = format!("/v1/cards/{mates_id}/everyone");
+    let mate_shared = stand
+        .post(&mates_everyone, Some(&mate_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(mate_shared.status, StatusCode::OK, "{}", mate_shared.text());
+    let seen = listed(&stand.get(cards, Some(&maya_cookie)).await)
+        .into_iter()
+        .find(|card| card["card_id"] == mates_id)
+        .unwrap_or_default();
+    assert_eq!(seen["mine"], false, "Maya reads the teammate's card");
+    assert_eq!(seen["can_manage"], true, "Maya owns Expenses");
+    assert_eq!(seen["can_share"], false);
+    // Finding 1: a member with only `discover` on the app never lists it,
+    // and cannot take it back or remove it.
+    let (dee_subject, dee) = c.member("00000000e004").await;
+    let dee_id = c.principal(&dee_subject).await;
+    let dee_cookie = dee.cookie(cookies::SESSION).unwrap();
+    c.fixture.sql(&format!("INSERT INTO genui.app_permissions VALUES ('{ORG}','{dee_id}','{EXPENSES_APP}','discover')"), "genui");
+    let dee_list = stand.get(cards, Some(&dee_cookie)).await;
+    assert_eq!(dee_list.status, StatusCode::OK, "{}", dee_list.text());
+    assert!(!has(&listed(&dee_list), mates_id), "discover only");
+    assert!(stand
+        .post(&mates_everyone, Some(&dee_cookie), r#"{"everyone":false}"#)
+        .await
+        .uniform_404());
+    assert!(stand
+        .post(
+            &format!("/v1/cards/{mates_id}/remove"),
+            Some(&dee_cookie),
+            "{}"
+        )
+        .await
+        .uniform_404());
+    // Finding 1: revoking the reader's source_read on a source the work
+    // depends on hides the card; granting it again shows it.
+    c.fixture.sql(&format!("CREATE TABLE public.app123_sources AS SELECT * FROM genui.source_permissions WHERE organization_id='{ORG}' AND principal_id='{maya_id}' AND source_id IN (SELECT source_id FROM genui.work_source_dependencies WHERE organization_id='{ORG}' AND app_id='{EXPENSES_APP}' AND work_id='{EXPENSES_WORK}'); DELETE FROM genui.source_permissions p USING public.app123_sources s WHERE p.organization_id=s.organization_id AND p.principal_id=s.principal_id AND p.source_id=s.source_id AND p.permission=s.permission;"), "genui");
+    assert!(scalar(&c.fixture, "SELECT count(*) FROM public.app123_sources").await >= 1);
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&maya_cookie)).await),
+            mates_id
+        ),
+        "source_read revoked"
+    );
+    c.fixture.sql("INSERT INTO genui.source_permissions SELECT * FROM public.app123_sources; DROP TABLE public.app123_sources;", "genui");
+    assert!(has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        mates_id
+    ));
+    // Finding 6: the app's owner takes another member's card back to its
+    // maker (audited; it cannot add it for everyone), then removes it.
+    assert!(stand
+        .post(&mates_everyone, Some(&maya_cookie), r#"{"everyone":true}"#)
+        .await
+        .uniform_404());
+    let taken_back = stand
+        .post(&mates_everyone, Some(&maya_cookie), r#"{"everyone":false}"#)
+        .await;
+    assert_eq!(taken_back.status, StatusCode::OK, "{}", taken_back.text());
+    assert_eq!(taken_back.json()["saved"], true);
+    assert_eq!(taken_back.json()["card"]["everyone"], false);
+    assert_eq!(scalar(&c.fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE kind='card.shared' AND actor_principal_id='{maya_id}'")).await, 2, "Maya's own share and her take-back");
+    assert!(!has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        mates_id
+    ));
+    let mates_own = listed(&stand.get(cards, Some(&mate_cookie)).await)
+        .into_iter()
+        .find(|card| card["card_id"] == mates_id)
+        .unwrap_or_default();
+    assert_eq!(mates_own["everyone"], false, "back with its maker");
+    assert_eq!(mates_own["mine"], true);
+    // Once private again it is the maker's alone: no steward reaches it.
+    assert!(stand
+        .post(
+            &format!("/v1/cards/{mates_id}/remove"),
+            Some(&maya_cookie),
+            "{}"
+        )
+        .await
+        .uniform_404());
+    let again = stand
+        .post(&mates_everyone, Some(&mate_cookie), r#"{"everyone":true}"#)
+        .await;
+    assert_eq!(again.json()["saved"], true, "{}", again.text());
+    let steward_removed = stand
+        .post(
+            &format!("/v1/cards/{mates_id}/remove"),
+            Some(&maya_cookie),
+            "{}",
+        )
+        .await;
+    assert_eq!(
+        steward_removed.json()["saved"],
+        true,
+        "{}",
+        steward_removed.text()
+    );
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&mate_cookie)).await),
+            mates_id
+        ),
+        "removed for everyone"
+    );
+    // A maker who left the organization: their card added for everyone
+    // stops listing, and the app's owner can still remove it.
+    let left_id = "00000000-0000-4000-8000-0000000c4a08";
+    let mut left = team.clone();
+    left["card_id"] = json!(left_id);
+    left["title"] = json!("Left behind");
+    assert_eq!(
+        stand
+            .post(cards, Some(&mate_cookie), &left.to_string())
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let left_shared = stand
+        .post(
+            &format!("/v1/cards/{left_id}/everyone"),
+            Some(&mate_cookie),
+            r#"{"everyone":true}"#,
+        )
+        .await;
+    assert_eq!(left_shared.json()["saved"], true, "{}", left_shared.text());
+    assert!(has(
+        &listed(&stand.get(cards, Some(&maya_cookie)).await),
+        left_id
+    ));
+    c.fixture.sql(&format!("UPDATE genui.memberships SET status='revoked' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'"), "genui");
+    assert!(
+        !has(
+            &listed(&stand.get(cards, Some(&maya_cookie)).await),
+            left_id
+        ),
+        "its maker left"
+    );
+    let left_removed = stand
+        .post(
+            &format!("/v1/cards/{left_id}/remove"),
+            Some(&maya_cookie),
+            "{}",
+        )
+        .await;
+    assert_eq!(
+        left_removed.json()["saved"],
+        true,
+        "{}",
+        left_removed.text()
+    );
+    c.fixture.sql(&format!("UPDATE genui.memberships SET status='active' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'; DELETE FROM genui.organization_permissions WHERE organization_id='{ORG}' AND principal_id='{mate_id}' AND permission='admin_policy'"), "genui");
+    assert_eq!(
+        scalar(&c.fixture, &made_events("card.shared")).await,
+        shared_before + 4
+    );
+    assert_eq!(
+        scalar(&c.fixture, &made_events("card.removed")).await,
+        removed_before + 2
+    );
+    // Finding 3: a card write takes the member's cards lock before counting:
+    // while another session holds it, Maya's write waits, then stores.
+    let holder = c.fixture.operator().await;
+    let key = format!("genui:cards:{ORG}:{maya_id}");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_lock(hashtextextended($1::text,0))::text",
+            &[&key],
+        )
+        .await
+        .unwrap();
+    let mut queued = made.clone();
+    queued["card_id"] = json!("00000000-0000-4000-8000-0000000c4a09");
+    queued["title"] = json!("Queued");
+    let body = queued.to_string();
+    let pending = stand.post(cards, Some(&maya_cookie), &body);
+    tokio::pin!(pending);
+    // Poll the request while watching for its wait (`lock_timeout` is one
+    // second, so the lock is released as soon as the waiter shows).
+    let mut waiting = 0_i64;
+    for _ in 0..40 {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut pending)
+                .await
+                .is_err(),
+            "the write waits for the member's cards lock"
+        );
+        waiting = holder
+            .client
+            .query_one("SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname='genui')", &[])
+            .await
+            .unwrap()
+            .get(0);
+        if waiting > 0 {
+            break;
+        }
+    }
+    assert_eq!(waiting, 1, "one waiter on the advisory lock");
+    holder
+        .client
+        .query_one(
+            "SELECT pg_advisory_unlock(hashtextextended($1::text,0))::text",
+            &[&key],
+        )
+        .await
+        .unwrap();
+    let stored = pending.await;
+    assert_eq!(stored.status, StatusCode::OK, "{}", stored.text());
+    assert_eq!(stored.json()["saved"], true);
+    drop(holder);
+    check(
+        &mut checks,
+        "cards made by you (APP-123): POST /v1/cards stored a made card over the records card (its spec judged against the published schema, its record values never stored), idempotently (a repeat wrote nothing; the same id with other contents was card_exists), audited card.made; stored specs with an unknown field, receipts:false, an undeclared enum value, an unknown key, a client field list or a foreign collection were refused 422 and stored nothing; the card persisted into a new session, was invisible to the teammate, and a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on every card route (the teammate too on another member's remove and share); the app's owner added a card for everyone (one audited card.shared; a repeat wrote nothing), every reader of the app then listed it (not theirs, not shareable), a non-owner could not add theirs for everyone (404); a pinned answer stored exactly Ask's text and storage receipts (audited answer.pinned, no model call), a forged receipt version was refused 422 unknown_receipt, the outsider's pin was the uniform 404, an answer cannot be added for everyone, and it stayed Maya's alone; removing is a soft delete by the maker (two audited card.removed, idempotent), a card added for everyone left everyone's list; review fixes: a listing requires record_read on the card's work (a discover-only member never lists a card added for everyone; revoking the reader's source_read on a dependency hides it, granting it again shows it; revoking Maya's work grant hides her pinned answer and her own made card over that work), a pinned answer stores the works it read, a receipt citing another publication of the same app (same definition digest) is 422 unknown_receipt, the app's owner took an admin's card added for everyone back to its maker (audited card.shared, never to everyone) and removed it (audited card.removed), a discover-only member got the uniform 404 on both, a private card stays its maker's alone, a card added for everyone by a maker who left stops listing and the owner removed it; a card write waits on the member's cards advisory lock (one waiter while another session holds it) and stores once it is released",
+    );
+
+    // --- Chain integrity ---
+    let verified = operator(&c.fixture, &["verify", "--organization", ORG]);
+    assert_eq!(verified["verified"], true);
+    check(
+        &mut checks,
+        "audit: every Northstar chain recomputes to its head after the grants, the compositions, the share and the commit",
+    );
+
+    let report = json!({
+        "scope": "ADR-011 pitch integration (APP-096), local Docker campaign over a loopback TCP stand of the binary's routes, synthetic identities and the synthetic library, a loopback model stub",
+        "timings_ms": timings,
+        "receipt_digests": receipts.iter().map(|(view, receipt)| (view.clone(), receipt["digest"].clone())).collect::<serde_json::Map<_, _>>(),
+        "checks": checks,
+    });
+    if let Some(path) = std::env::var_os("GENUI_PITCH_CAMPAIGN_REPORT") {
+        std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+    }
+    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    server.abort();
+    drop(c);
+}
+
+async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
+    let operator = fixture.operator().await;
+    operator.client.query_one(sql, &[]).await.unwrap().get(0)
+}
+async fn text(fixture: &Fixture, sql: &str) -> String {
+    let operator = fixture.operator().await;
+    operator.client.query_one(sql, &[]).await.unwrap().get(0)
+}

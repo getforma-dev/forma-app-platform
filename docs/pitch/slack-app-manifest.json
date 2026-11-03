@@ -1,0 +1,41 @@
+{
+  "display_information": {
+    "name": "Forma",
+    "description": "File, approve and track work in your Forma canvas from Slack.",
+    "background_color": "#111827"
+  },
+  "features": {
+    "app_home": {
+      "home_tab_enabled": false,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": true
+    },
+    "bot_user": {
+      "display_name": "Forma",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/forma",
+        "url": "https://beta.getforma.dev/v1/slack/commands",
+        "description": "Tell Forma what you need: file an expense, approve one, or ask what's waiting",
+        "usage_hint": "I spent $86 on a client dinner at Nobu, Sarah approves",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["commands", "chat:write", "im:write", "users:read", "users:read.email"]
+    }
+  },
+  "settings": {
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://beta.getforma.dev/v1/slack/interactivity"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

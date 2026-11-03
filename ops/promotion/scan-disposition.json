@@ -1,0 +1,76 @@
+{
+  "deployment_contract_sha256": "ef8580511349b5f1883979d034be55f5753ea9453ff1e73390c4d2955889c9c0",
+  "evidence": "evidence/APP-167/SCAN-DISPOSITION.md",
+  "expires_at_utc": "2026-11-09T00:00:00Z",
+  "findings": [
+    {
+      "attributes": [
+        {
+          "key": "CVSS3_SCORE",
+          "value": "6.2"
+        },
+        {
+          "key": "CVSS3_VECTOR",
+          "value": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "key": "package_version",
+          "value": "12.2.0-14+deb12u1"
+        },
+        {
+          "key": "package_name",
+          "value": "gcc-12"
+        }
+      ],
+      "name": "CVE-2026-114690",
+      "severity": "MEDIUM"
+    },
+    {
+      "attributes": [
+        {
+          "key": "CVSS3_SCORE",
+          "value": "5.9"
+        },
+        {
+          "key": "CVSS3_VECTOR",
+          "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        {
+          "key": "package_version",
+          "value": "12.2.0-14+deb12u1"
+        },
+        {
+          "key": "package_name",
+          "value": "gcc-12"
+        }
+      ],
+      "name": "CVE-2026-114691",
+      "severity": "MEDIUM"
+    },
+    {
+      "attributes": [
+        {
+          "key": "CVSS3_SCORE",
+          "value": "6.5"
+        },
+        {
+          "key": "CVSS3_VECTOR",
+          "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:H"
+        },
+        {
+          "key": "package_version",
+          "value": "12.2.0-14+deb12u1"
+        },
+        {
+          "key": "package_name",
+          "value": "gcc-12"
+        }
+      ],
+      "name": "CVE-2026-115455",
+      "severity": "MEDIUM"
+    }
+  ],
+  "predecessor_manifest_digest": "sha256:d66e151ce70cc6ee6306ddc30182d22c75a530d8ae63c4c9a7c286b676774869",
+  "role": "operator",
+  "schema_version": 1
+}

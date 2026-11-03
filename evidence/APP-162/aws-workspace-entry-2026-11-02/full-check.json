@@ -1,0 +1,95 @@
+{
+  "candidate_sha": "7c3ab123f524c4e9a7b855be0a2f582c626341ae",
+  "passed": true,
+  "exit_code": 0,
+  "working_tree_clean_at_completion": true,
+  "command": "just check",
+  "steps": [
+    {
+      "name": "fmt",
+      "seconds": 3
+    },
+    {
+      "name": "admin",
+      "seconds": 12
+    },
+    {
+      "name": "clippy",
+      "seconds": 33
+    },
+    {
+      "name": "clippy-dev",
+      "seconds": 24
+    },
+    {
+      "name": "test",
+      "seconds": 8
+    },
+    {
+      "name": "http-smoke",
+      "seconds": 31
+    },
+    {
+      "name": "msrv",
+      "seconds": 18
+    },
+    {
+      "name": "catalog",
+      "seconds": 0
+    },
+    {
+      "name": "infra",
+      "seconds": 10
+    },
+    {
+      "name": "py-scripts",
+      "seconds": 7
+    },
+    {
+      "name": "py-runtime",
+      "seconds": 333
+    },
+    {
+      "name": "shared-broker",
+      "seconds": 10
+    },
+    {
+      "name": "py-qualification",
+      "seconds": 2
+    },
+    {
+      "name": "py-app-scripts",
+      "seconds": 1
+    },
+    {
+      "name": "py-ops",
+      "seconds": 27
+    },
+    {
+      "name": "py-infra",
+      "seconds": 5
+    },
+    {
+      "name": "schema-pins",
+      "seconds": 0
+    },
+    {
+      "name": "contracts",
+      "seconds": 8
+    },
+    {
+      "name": "board",
+      "seconds": 0
+    },
+    {
+      "name": "bash-n",
+      "seconds": 0
+    }
+  ],
+  "rust_library_passed": 375,
+  "rust_library_ignored": 34,
+  "rust_native_binary_passed": 8,
+  "rust_doctests_passed": 3,
+  "frontend_tests_passed": 103,
+  "log_sha256": "6571c5f2f493ba9577b87dc09d13b090dd37f22f5e0d39414c6c6adc55630fcc"
+}

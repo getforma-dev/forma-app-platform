@@ -1,0 +1,77 @@
+{
+  "scope": "Disposable headless Chrome profile; synthetic dev member, real HTTP/admission/storage. No hosted model or paid-account claim.",
+  "checks": [
+    "Create modal chooses a real admitted Reading List template; success automatically opens one united page with guide before form.",
+    "Fan out and Unite retain the same unsent form values and idempotency key.",
+    "United-app Ask sends only that work; focused form Ask sends the same work plus its exact collection.",
+    "Saved app rename updates its Library row and open frame; unchanged Save is a successful no-op.",
+    "Standalone app Ask uses exact work; unsupported static-part question refuses locally without reading unrelated records.",
+    "Clock Ask sends closed widget state without work selectors. This browser step observes request scope only; completed model/refusal behavior is qualified in the native campaign."
+  ],
+  "errors": [],
+  "asks": [
+    {
+      "question": "How many records?",
+      "scope": {
+        "kind": "app",
+        "address": "27",
+        "works": [
+          {
+            "app_id": "00000000-0000-4000-8000-00000000d0a1",
+            "work_id": "ecc553a0-f1e2-4093-9a0d-9634cf6d2f94",
+            "address": ""
+          }
+        ]
+      }
+    },
+    {
+      "question": "Which records?",
+      "scope": {
+        "kind": "card",
+        "address": "27.new",
+        "works": [
+          {
+            "app_id": "00000000-0000-4000-8000-00000000d0a1",
+            "work_id": "ecc553a0-f1e2-4093-9a0d-9634cf6d2f94",
+            "address": "",
+            "collection": "b19a8d5e-69dd-4770-8c11-3702ff4b31cd"
+          }
+        ]
+      }
+    },
+    {
+      "question": "How many records?",
+      "scope": {
+        "kind": "app",
+        "address": "",
+        "works": [
+          {
+            "app_id": "00000000-0000-4000-8000-00000000d0a1",
+            "work_id": "ecc553a0-f1e2-4093-9a0d-9634cf6d2f94",
+            "address": ""
+          }
+        ]
+      }
+    },
+    {
+      "question": "Explain the settings",
+      "scope": {
+        "kind": "widget",
+        "address": "clock",
+        "widget_id": "w-clock-17qe0he1cbgaqi",
+        "widget": "clock",
+        "state": {
+          "skin": "default",
+          "accent": "default",
+          "font": "default",
+          "zone": "local",
+          "hour12": true
+        }
+      }
+    }
+  ],
+  "work": {
+    "app": "00000000-0000-4000-8000-00000000d0a1",
+    "work": "ecc553a0-f1e2-4093-9a0d-9634cf6d2f94"
+  }
+}

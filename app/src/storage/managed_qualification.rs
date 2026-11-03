@@ -94,7 +94,7 @@ const CA: &str = "/etc/ssl/certs/rds-global-bundle.pem";
 /// bytes seeded the target, so these are declared pins the operator must
 /// match; the rest of the operator's seed environment is bound by APP-077's
 /// operator-image digest.
-const SEED_INPUTS: [(&str, &str, &str); 5] = [
+const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "fixture_setup_sha256",
         "fixtures/phase-one/v1/setup.json",
@@ -113,12 +113,19 @@ const SEED_INPUTS: [(&str, &str, &str); 5] = [
     (
         "seed_program_sha256",
         "app/runtime/tenant_seed.py",
-        "d2f8a6ea0b94b0158ac31f18fb024db9a27afe2d3790dbdcd79e767b61ab8b0d",
+        "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
     ),
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "7c9492bc55d12c818f984f7889ab5e95024699cfda11222ebafc84d982e973d5",
+        "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+    ),
+    // ADR-011 library (APP-094): the catalog pins every library fixture the
+    // `seed-library` command places (each entry's `fixture_sha256`).
+    (
+        "seed_library_sha256",
+        "contracts/fixtures/library/catalog.json",
+        "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
     ),
 ];
 /// The shared cases' checks a pass requires, in order (`qualification_cases`).
@@ -131,7 +138,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v7.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v19.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -152,12 +159,57 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 81] = [
-    ("app/Cargo.lock", include_bytes!("../../Cargo.lock")),
+const SOURCES: [(&str, &[u8]); 205] = [
+    ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
+    ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
     (
         "app/certs/rds-global-bundle.pem",
         include_bytes!("../../certs/rds-global-bundle.pem"),
+    ),
+    (
+        "app/src/actions/guard.rs",
+        include_bytes!("../actions/guard.rs"),
+    ),
+    (
+        "app/src/actions/ledger.rs",
+        include_bytes!("../actions/ledger.rs"),
+    ),
+    (
+        "app/src/actions/mod.rs",
+        include_bytes!("../actions/mod.rs"),
+    ),
+    (
+        "app/src/actions/prompt.rs",
+        include_bytes!("../actions/prompt.rs"),
+    ),
+    (
+        "app/src/actions/receipt.rs",
+        include_bytes!("../actions/receipt.rs"),
+    ),
+    (
+        "app/src/actions/receipt_tests.rs",
+        include_bytes!("../actions/receipt_tests.rs"),
+    ),
+    (
+        "app/src/actions/rehearsed.rs",
+        include_bytes!("../actions/rehearsed.rs"),
+    ),
+    (
+        "app/src/actions/resolve.rs",
+        include_bytes!("../actions/resolve.rs"),
+    ),
+    (
+        "app/src/actions/routes.rs",
+        include_bytes!("../actions/routes.rs"),
+    ),
+    (
+        "app/src/actions/tests.rs",
+        include_bytes!("../actions/tests.rs"),
+    ),
+    (
+        "app/src/actions/workflows.rs",
+        include_bytes!("../actions/workflows.rs"),
     ),
     (
         "app/src/admission/canonical.rs",
@@ -172,12 +224,20 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("../admission/mod.rs"),
     ),
     (
+        "app/src/admission/record_receipt.rs",
+        include_bytes!("../admission/record_receipt.rs"),
+    ),
+    (
         "app/src/admission/tests.rs",
         include_bytes!("../admission/tests.rs"),
     ),
     (
         "app/src/admission/validate.rs",
         include_bytes!("../admission/validate.rs"),
+    ),
+    (
+        "app/src/auth/aliases.rs",
+        include_bytes!("../auth/aliases.rs"),
     ),
     (
         "app/src/auth/capability.rs",
@@ -211,6 +271,18 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("../auth/routes.rs"),
     ),
     (
+        "app/src/auth/shared.rs",
+        include_bytes!("../auth/shared.rs"),
+    ),
+    (
+        "app/src/auth/shared_broker.rs",
+        include_bytes!("../auth/shared_broker.rs"),
+    ),
+    (
+        "app/src/auth/shared_tests.rs",
+        include_bytes!("../auth/shared_tests.rs"),
+    ),
+    (
         "app/src/auth/synthetic_issuer.rs",
         include_bytes!("../auth/synthetic_issuer.rs"),
     ),
@@ -223,6 +295,52 @@ const SOURCES: [(&str, &[u8]); 81] = [
     (
         "app/src/auth_qualification/tests.rs",
         include_bytes!("../auth_qualification/tests.rs"),
+    ),
+    (
+        "app/src/bin/genui-dev.rs",
+        include_bytes!("../bin/genui-dev.rs"),
+    ),
+    ("app/src/boxes/ask.rs", include_bytes!("../boxes/ask.rs")),
+    (
+        "app/src/boxes/brief.rs",
+        include_bytes!("../boxes/brief.rs"),
+    ),
+    (
+        "app/src/boxes/derive.rs",
+        include_bytes!("../boxes/derive.rs"),
+    ),
+    (
+        "app/src/boxes/explain.rs",
+        include_bytes!("../boxes/explain.rs"),
+    ),
+    (
+        "app/src/boxes/inspect.rs",
+        include_bytes!("../boxes/inspect.rs"),
+    ),
+    (
+        "app/src/boxes/intent.rs",
+        include_bytes!("../boxes/intent.rs"),
+    ),
+    ("app/src/boxes/mod.rs", include_bytes!("../boxes/mod.rs")),
+    (
+        "app/src/boxes/register.rs",
+        include_bytes!("../boxes/register.rs"),
+    ),
+    (
+        "app/src/boxes/routes.rs",
+        include_bytes!("../boxes/routes.rs"),
+    ),
+    (
+        "app/src/boxes/sniff.rs",
+        include_bytes!("../boxes/sniff.rs"),
+    ),
+    (
+        "app/src/boxes/store.rs",
+        include_bytes!("../boxes/store.rs"),
+    ),
+    (
+        "app/src/boxes/tests.rs",
+        include_bytes!("../boxes/tests.rs"),
     ),
     (
         "app/src/commands/mod.rs",
@@ -240,7 +358,93 @@ const SOURCES: [(&str, &[u8]); 81] = [
         "app/src/commands/tests.rs",
         include_bytes!("../commands/tests.rs"),
     ),
+    (
+        "app/src/composer/ask.rs",
+        include_bytes!("../composer/ask.rs"),
+    ),
+    (
+        "app/src/composer/cards.rs",
+        include_bytes!("../composer/cards.rs"),
+    ),
+    (
+        "app/src/composer/commands.rs",
+        include_bytes!("../composer/commands.rs"),
+    ),
+    (
+        "app/src/composer/labels.rs",
+        include_bytes!("../composer/labels.rs"),
+    ),
+    (
+        "app/src/composer/lineage.rs",
+        include_bytes!("../composer/lineage.rs"),
+    ),
+    (
+        "app/src/composer/matcher.rs",
+        include_bytes!("../composer/matcher.rs"),
+    ),
+    (
+        "app/src/composer/mod.rs",
+        include_bytes!("../composer/mod.rs"),
+    ),
+    (
+        "app/src/composer/model.rs",
+        include_bytes!("../composer/model.rs"),
+    ),
+    (
+        "app/src/composer/plan.rs",
+        include_bytes!("../composer/plan.rs"),
+    ),
+    (
+        "app/src/composer/presentation.rs",
+        include_bytes!("../composer/presentation.rs"),
+    ),
+    (
+        "app/src/composer/prompt.rs",
+        include_bytes!("../composer/prompt.rs"),
+    ),
+    (
+        "app/src/composer/routes.rs",
+        include_bytes!("../composer/routes.rs"),
+    ),
+    (
+        "app/src/composer/shape.rs",
+        include_bytes!("../composer/shape.rs"),
+    ),
+    (
+        "app/src/composer/talk.rs",
+        include_bytes!("../composer/talk.rs"),
+    ),
+    (
+        "app/src/composer/templates.rs",
+        include_bytes!("../composer/templates.rs"),
+    ),
+    (
+        "app/src/composer/tests.rs",
+        include_bytes!("../composer/tests.rs"),
+    ),
+    (
+        "app/src/composer/transform.rs",
+        include_bytes!("../composer/transform.rs"),
+    ),
     ("app/src/config.rs", include_bytes!("../config.rs")),
+    ("app/src/demo.rs", include_bytes!("../demo.rs")),
+    ("app/src/dev/db.rs", include_bytes!("../dev/db.rs")),
+    ("app/src/dev/mod.rs", include_bytes!("../dev/mod.rs")),
+    (
+        "app/src/dev/personas.rs",
+        include_bytes!("../dev/personas.rs"),
+    ),
+    ("app/src/dev/seed.rs", include_bytes!("../dev/seed.rs")),
+    ("app/src/directory.rs", include_bytes!("../directory.rs")),
+    ("app/src/events/mod.rs", include_bytes!("../events/mod.rs")),
+    (
+        "app/src/events/routes.rs",
+        include_bytes!("../events/routes.rs"),
+    ),
+    (
+        "app/src/events/tests.rs",
+        include_bytes!("../events/tests.rs"),
+    ),
     (
         "app/src/http/limits.rs",
         include_bytes!("../http/limits.rs"),
@@ -256,11 +460,48 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("../imports/sandbox.rs"),
     ),
     ("app/src/lib.rs", include_bytes!("../lib.rs")),
+    ("app/src/mcp/drafts.rs", include_bytes!("../mcp/drafts.rs")),
+    (
+        "app/src/mcp/governance.rs",
+        include_bytes!("../mcp/governance.rs"),
+    ),
+    ("app/src/mcp/mod.rs", include_bytes!("../mcp/mod.rs")),
+    ("app/src/mcp/scope.rs", include_bytes!("../mcp/scope.rs")),
+    ("app/src/mcp/tests.rs", include_bytes!("../mcp/tests.rs")),
+    ("app/src/mcp/tokens.rs", include_bytes!("../mcp/tokens.rs")),
+    ("app/src/mcp/tools.rs", include_bytes!("../mcp/tools.rs")),
+    ("app/src/origins.rs", include_bytes!("../origins.rs")),
+    ("app/src/pages.rs", include_bytes!("../pages.rs")),
+    ("app/src/product.rs", include_bytes!("../product.rs")),
+    (
+        "app/src/query/canvas.rs",
+        include_bytes!("../query/canvas.rs"),
+    ),
+    (
+        "app/src/query/canvas_display.rs",
+        include_bytes!("../query/canvas_display.rs"),
+    ),
+    (
+        "app/src/query/canvas_ledger.rs",
+        include_bytes!("../query/canvas_ledger.rs"),
+    ),
+    (
+        "app/src/query/canvas_tests.rs",
+        include_bytes!("../query/canvas_tests.rs"),
+    ),
     ("app/src/query/mod.rs", include_bytes!("../query/mod.rs")),
     ("app/src/query/page.rs", include_bytes!("../query/page.rs")),
     (
         "app/src/query/receipt.rs",
         include_bytes!("../query/receipt.rs"),
+    ),
+    (
+        "app/src/query/record_components.rs",
+        include_bytes!("../query/record_components.rs"),
+    ),
+    (
+        "app/src/query/record_routes.rs",
+        include_bytes!("../query/record_routes.rs"),
     ),
     (
         "app/src/query/route_tests.rs",
@@ -281,6 +522,39 @@ const SOURCES: [(&str, &[u8]); 81] = [
     ("app/src/readiness.rs", include_bytes!("../readiness.rs")),
     ("app/src/roles.rs", include_bytes!("../roles.rs")),
     (
+        "app/src/sharing/live.rs",
+        include_bytes!("../sharing/live.rs"),
+    ),
+    (
+        "app/src/sharing/mod.rs",
+        include_bytes!("../sharing/mod.rs"),
+    ),
+    ("app/src/slack/api.rs", include_bytes!("../slack/api.rs")),
+    (
+        "app/src/slack/flows.rs",
+        include_bytes!("../slack/flows.rs"),
+    ),
+    ("app/src/slack/link.rs", include_bytes!("../slack/link.rs")),
+    ("app/src/slack/mod.rs", include_bytes!("../slack/mod.rs")),
+    (
+        "app/src/slack/notify.rs",
+        include_bytes!("../slack/notify.rs"),
+    ),
+    (
+        "app/src/slack/signature.rs",
+        include_bytes!("../slack/signature.rs"),
+    ),
+    (
+        "app/src/slack/tests.rs",
+        include_bytes!("../slack/tests.rs"),
+    ),
+    ("app/src/slack/text.rs", include_bytes!("../slack/text.rs")),
+    ("app/src/storage/actions.rs", include_bytes!("actions.rs")),
+    (
+        "app/src/storage/actions_campaign.rs",
+        include_bytes!("actions_campaign.rs"),
+    ),
+    (
         "app/src/storage/admission.rs",
         include_bytes!("admission.rs"),
     ),
@@ -288,16 +562,32 @@ const SOURCES: [(&str, &[u8]); 81] = [
         "app/src/storage/admission_qualification.rs",
         include_bytes!("admission_qualification.rs"),
     ),
+    ("app/src/storage/agents.rs", include_bytes!("agents.rs")),
     (
         "app/src/storage/authorization.rs",
         include_bytes!("authorization.rs"),
     ),
+    (
+        "app/src/storage/box_campaign.rs",
+        include_bytes!("box_campaign.rs"),
+    ),
+    ("app/src/storage/boxes.rs", include_bytes!("boxes.rs")),
+    (
+        "app/src/storage/canvas_campaign.rs",
+        include_bytes!("canvas_campaign.rs"),
+    ),
+    ("app/src/storage/cards.rs", include_bytes!("cards.rs")),
     ("app/src/storage/catalog.rs", include_bytes!("catalog.rs")),
     (
         "app/src/storage/command_qualification.rs",
         include_bytes!("command_qualification.rs"),
     ),
     ("app/src/storage/commands.rs", include_bytes!("commands.rs")),
+    ("app/src/storage/composer.rs", include_bytes!("composer.rs")),
+    (
+        "app/src/storage/composer_qualification.rs",
+        include_bytes!("composer_qualification.rs"),
+    ),
     (
         "app/src/storage/definition_qualification.rs",
         include_bytes!("definition_qualification.rs"),
@@ -307,6 +597,11 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("definitions.rs"),
     ),
     (
+        "app/src/storage/governance.rs",
+        include_bytes!("governance.rs"),
+    ),
+    ("app/src/storage/labels.rs", include_bytes!("labels.rs")),
+    (
         "app/src/storage/managed_qualification.rs",
         include_bytes!("managed_qualification.rs"),
     ),
@@ -314,7 +609,15 @@ const SOURCES: [(&str, &[u8]); 81] = [
         "app/src/storage/managed_qualification/tests.rs",
         include_bytes!("managed_qualification/tests.rs"),
     ),
+    (
+        "app/src/storage/mcp_campaign.rs",
+        include_bytes!("mcp_campaign.rs"),
+    ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
+    (
+        "app/src/storage/pitch_qualification.rs",
+        include_bytes!("pitch_qualification.rs"),
+    ),
     ("app/src/storage/pool.rs", include_bytes!("pool.rs")),
     (
         "app/src/storage/qualification.rs",
@@ -333,10 +636,84 @@ const SOURCES: [(&str, &[u8]); 81] = [
         "app/src/storage/race_qualification.rs",
         include_bytes!("race_qualification.rs"),
     ),
+    (
+        "app/src/storage/record_components.rs",
+        include_bytes!("record_components.rs"),
+    ),
+    (
+        "app/src/storage/record_components_campaign.rs",
+        include_bytes!("record_components_campaign.rs"),
+    ),
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
+    ("app/src/storage/rules.rs", include_bytes!("rules.rs")),
     ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
+    (
+        "app/src/storage/shared_access.rs",
+        include_bytes!("shared_access.rs"),
+    ),
+    (
+        "app/src/storage/shared_campaign.rs",
+        include_bytes!("shared_campaign.rs"),
+    ),
+    (
+        "app/src/storage/shared_identity.rs",
+        include_bytes!("shared_identity.rs"),
+    ),
+    (
+        "app/src/storage/shared_reads.rs",
+        include_bytes!("shared_reads.rs"),
+    ),
+    ("app/src/storage/sharing.rs", include_bytes!("sharing.rs")),
+    (
+        "app/src/storage/sharing_qualification.rs",
+        include_bytes!("sharing_qualification.rs"),
+    ),
+    (
+        "app/src/storage/slack_campaign.rs",
+        include_bytes!("slack_campaign.rs"),
+    ),
     ("app/src/storage/tests.rs", include_bytes!("tests.rs")),
+    (
+        "app/src/storage/work_labels.rs",
+        include_bytes!("work_labels.rs"),
+    ),
+    (
+        "app/src/storage/work_presentation.rs",
+        include_bytes!("work_presentation.rs"),
+    ),
+    (
+        "app/src/storage/work_presentation_checks.rs",
+        include_bytes!("work_presentation_checks.rs"),
+    ),
+    (
+        "app/src/storage/workflows_campaign.rs",
+        include_bytes!("workflows_campaign.rs"),
+    ),
     ("app/src/supervise.rs", include_bytes!("../supervise.rs")),
+    (
+        "app/src/widgets/customize.rs",
+        include_bytes!("../widgets/customize.rs"),
+    ),
+    (
+        "app/src/widgets/mod.rs",
+        include_bytes!("../widgets/mod.rs"),
+    ),
+    (
+        "app/src/widgets/routes.rs",
+        include_bytes!("../widgets/routes.rs"),
+    ),
+    (
+        "app/src/widgets/state.rs",
+        include_bytes!("../widgets/state.rs"),
+    ),
+    (
+        "app/src/widgets/tests.rs",
+        include_bytes!("../widgets/tests.rs"),
+    ),
+    (
+        "app/src/widgets/weather.rs",
+        include_bytes!("../widgets/weather.rs"),
+    ),
     (
         "contracts/fixtures/canonical-vectors.json",
         include_bytes!("../../../contracts/fixtures/canonical-vectors.json"),
@@ -378,6 +755,34 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("../../../contracts/fixtures/impl-2026-10-29.2/spend-review.json"),
     ),
     (
+        "contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-10-29.3/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/library/catalog.json",
+        include_bytes!("../../../contracts/fixtures/library/catalog.json"),
+    ),
+    (
+        "contracts/fixtures/library/time-off.json",
+        include_bytes!("../../../contracts/fixtures/library/time-off.json"),
+    ),
+    (
         "contracts/fixtures/negative-vectors.json",
         include_bytes!("../../../contracts/fixtures/negative-vectors.json"),
     ),
@@ -386,8 +791,16 @@ const SOURCES: [(&str, &[u8]); 81] = [
         include_bytes!("../../../contracts/fixtures/northstar.json"),
     ),
     (
+        "contracts/fixtures/shared-v1/query-receipt.json",
+        include_bytes!("../../../contracts/fixtures/shared-v1/query-receipt.json"),
+    ),
+    (
         "contracts/fixtures/spend-review.json",
         include_bytes!("../../../contracts/fixtures/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/stored/expense-claims-d70710d3.json",
+        include_bytes!("../../../contracts/fixtures/stored/expense-claims-d70710d3.json"),
     ),
     (
         "contracts/implementation-lock.json",
@@ -416,6 +829,7 @@ struct Pins {
     seed_spend_review_sha256: String,
     seed_program_sha256: String,
     seed_validator_sha256: String,
+    seed_library_sha256: String,
     catalog_query_sha256: String,
     database_version: u32,
     catalog_sha256: String,
@@ -549,6 +963,7 @@ fn expected_pins() -> Pins {
         seed_spend_review_sha256: SEED_INPUTS[2].2.into(),
         seed_program_sha256: SEED_INPUTS[3].2.into(),
         seed_validator_sha256: SEED_INPUTS[4].2.into(),
+        seed_library_sha256: SEED_INPUTS[5].2.into(),
         catalog_query_sha256: digest(QUERY),
         database_version: database_version(),
         catalog_sha256: digest(CATALOG),

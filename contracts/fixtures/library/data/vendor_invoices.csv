@@ -1,0 +1,181 @@
+invoice_id,time,vendor,category,amount,due,paid
+INV-20261,2026-10-01T08:17:00Z,Granite Facilities,meals,7362.98,2026-10-31,false
+INV-20262,2026-10-02T10:53:49Z,Granite Facilities,travel,8756.44,2026-11-01,true
+INV-20263,2026-10-02T11:20:09Z,Harbor Catering,software,4746.19,2026-11-01,true
+INV-20264,2026-10-02T11:57:18Z,Beacon Legal LLP,facilities,347.37,2026-11-01,false
+INV-20265,2026-10-02T15:09:40Z,Harbor Catering,equipment,2030.92,2026-11-01,true
+INV-20266,2026-10-02T15:55:59Z,Beacon Legal LLP,travel,9645.99,2026-11-01,false
+INV-20267,2026-10-02T19:41:11Z,Meridian Analytics,equipment,3669.28,2026-11-01,true
+INV-20268,2026-10-03T10:02:01Z,Northwind Travel,meals,9793.27,2026-11-02,false
+INV-20269,2026-10-03T16:48:12Z,Summit Telecom,services,8603.95,2026-11-02,true
+INV-20270,2026-10-03T19:24:52Z,Pinecrest Insurance,facilities,8778.38,2026-11-02,false
+INV-20271,2026-10-04T08:37:43Z,Vertex Recruiting,travel,742.66,2026-11-03,true
+INV-20272,2026-10-04T11:02:31Z,Lumen Software,facilities,7927.25,2026-11-03,false
+INV-20273,2026-10-05T07:46:30Z,Vertex Recruiting,equipment,621.09,2026-11-04,false
+INV-20274,2026-10-05T08:12:25Z,Granite Facilities,facilities,5226.72,2026-11-04,false
+INV-20275,2026-10-05T13:56:41Z,Meridian Analytics,facilities,9797.76,2026-11-04,true
+INV-20276,2026-10-06T07:48:20Z,Summit Telecom,travel,9085.99,2026-11-05,false
+INV-20277,2026-10-06T17:30:54Z,Beacon Legal LLP,equipment,6057.00,2026-11-05,true
+INV-20278,2026-10-07T19:21:07Z,Atlas Office Supply,facilities,2971.12,2026-11-06,false
+INV-20279,2026-10-08T10:50:45Z,Orchard Print,meals,2406.94,2026-11-07,false
+INV-20280,2026-10-09T10:51:20Z,Harbor Catering,travel,1789.09,2026-11-08,true
+INV-20281,2026-10-09T15:44:03Z,Pinecrest Insurance,services,5515.75,2026-11-08,true
+INV-20282,2026-10-10T08:42:37Z,Cloudline Hosting,travel,2646.07,2026-11-09,true
+INV-20283,2026-10-10T10:24:22Z,Lumen Software,facilities,6862.16,2026-11-09,true
+INV-20284,2026-10-10T11:19:41Z,Cloudline Hosting,software,4032.29,2026-11-09,true
+INV-20285,2026-10-10T14:22:44Z,Lumen Software,travel,6211.28,2026-11-09,true
+INV-20286,2026-10-10T14:31:52Z,Pinecrest Insurance,services,2268.99,2026-11-09,true
+INV-20287,2026-10-10T16:06:15Z,Lumen Software,services,9475.72,2026-11-09,false
+INV-20288,2026-10-11T12:16:29Z,Northwind Travel,meals,678.08,2026-11-10,false
+INV-20289,2026-10-11T13:06:54Z,Summit Telecom,software,7621.36,2026-11-10,false
+INV-20290,2026-10-11T14:48:14Z,Meridian Analytics,meals,3677.62,2026-11-10,true
+INV-20291,2026-10-12T16:16:40Z,Granite Facilities,facilities,4520.68,2026-11-11,false
+INV-20292,2026-10-12T16:29:21Z,Cloudline Hosting,travel,6995.79,2026-11-11,false
+INV-20293,2026-10-13T07:16:49Z,Lumen Software,meals,2097.38,2026-11-12,false
+INV-20294,2026-10-13T16:24:40Z,Lumen Software,services,3734.94,2026-11-12,false
+INV-20295,2026-10-14T17:30:53Z,Orchard Print,software,6761.10,2026-11-13,false
+INV-20296,2026-10-15T17:07:41Z,Pinecrest Insurance,software,1351.82,2026-11-14,false
+INV-20297,2026-10-16T12:04:25Z,Pinecrest Insurance,services,6513.60,2026-11-15,true
+INV-20298,2026-10-16T12:30:52Z,Pinecrest Insurance,facilities,7057.11,2026-11-15,true
+INV-20299,2026-10-16T13:52:56Z,Orchard Print,services,6387.76,2026-11-15,true
+INV-20300,2026-10-16T17:18:58Z,Lumen Software,facilities,1014.29,2026-11-15,true
+INV-20301,2026-10-17T07:04:45Z,Granite Facilities,facilities,1817.50,2026-11-16,true
+INV-20302,2026-10-17T12:09:45Z,Lumen Software,software,7678.54,2026-11-16,true
+INV-20303,2026-10-17T19:45:48Z,Pinecrest Insurance,meals,6327.19,2026-11-16,true
+INV-20304,2026-10-18T08:44:03Z,Cloudline Hosting,software,3590.94,2026-11-17,false
+INV-20305,2026-10-18T14:33:20Z,Summit Telecom,meals,9257.79,2026-11-17,false
+INV-20306,2026-10-18T14:38:58Z,Meridian Analytics,equipment,7785.66,2026-11-17,true
+INV-20307,2026-10-18T17:00:03Z,Granite Facilities,equipment,2342.01,2026-11-17,true
+INV-20308,2026-10-18T18:09:46Z,Beacon Legal LLP,travel,8028.19,2026-11-17,true
+INV-20309,2026-10-19T08:36:45Z,Vertex Recruiting,travel,3835.12,2026-11-18,false
+INV-20310,2026-10-19T15:38:47Z,Meridian Analytics,software,7430.40,2026-11-18,true
+INV-20311,2026-10-19T19:07:39Z,Meridian Analytics,travel,9423.82,2026-11-18,false
+INV-20312,2026-10-20T08:00:56Z,Summit Telecom,facilities,9758.10,2026-11-19,false
+INV-20313,2026-10-20T09:58:36Z,Granite Facilities,services,8829.40,2026-11-19,true
+INV-20314,2026-10-20T10:35:34Z,Meridian Analytics,facilities,1142.39,2026-11-19,true
+INV-20315,2026-10-20T12:59:44Z,Meridian Analytics,services,8759.35,2026-11-19,false
+INV-20316,2026-10-20T14:17:26Z,Granite Facilities,equipment,3176.17,2026-11-19,false
+INV-20317,2026-10-20T16:41:02Z,Granite Facilities,equipment,1961.41,2026-11-19,false
+INV-20318,2026-10-21T08:08:17Z,Lumen Software,equipment,1889.81,2026-11-20,false
+INV-20319,2026-10-21T12:54:26Z,Northwind Travel,travel,7267.64,2026-11-20,false
+INV-20320,2026-10-21T14:21:54Z,Meridian Analytics,meals,6427.42,2026-11-20,true
+INV-20321,2026-10-22T08:46:30Z,Harbor Catering,facilities,7822.92,2026-11-21,true
+INV-20322,2026-10-22T10:55:55Z,Lumen Software,equipment,1984.01,2026-11-21,true
+INV-20323,2026-10-22T11:35:56Z,Northwind Travel,facilities,5317.30,2026-11-21,false
+INV-20324,2026-10-22T13:50:44Z,Orchard Print,travel,2749.45,2026-11-21,false
+INV-20325,2026-10-22T16:41:52Z,Vertex Recruiting,meals,4199.59,2026-11-21,true
+INV-20326,2026-10-22T17:59:32Z,Cloudline Hosting,travel,5846.47,2026-11-21,true
+INV-20327,2026-10-22T18:41:32Z,Northwind Travel,travel,8487.53,2026-11-21,true
+INV-20328,2026-10-22T19:23:25Z,Granite Facilities,meals,5475.67,2026-11-21,true
+INV-20329,2026-10-22T19:36:32Z,Harbor Catering,travel,2432.13,2026-11-21,true
+INV-20330,2026-10-23T10:12:51Z,Meridian Analytics,equipment,5761.27,2026-11-22,true
+INV-20331,2026-10-24T10:12:56Z,Atlas Office Supply,equipment,8563.35,2026-11-23,true
+INV-20332,2026-10-24T18:03:22Z,Beacon Legal LLP,software,5025.76,2026-11-23,false
+INV-20333,2026-10-25T11:36:29Z,Northwind Travel,services,6242.13,2026-11-24,false
+INV-20334,2026-10-25T14:21:19Z,Harbor Catering,services,7426.22,2026-11-24,true
+INV-20335,2026-10-25T18:34:10Z,Granite Facilities,services,7978.01,2026-11-24,false
+INV-20336,2026-10-26T12:57:54Z,Granite Facilities,meals,5113.08,2026-11-25,false
+INV-20337,2026-10-26T18:52:32Z,Granite Facilities,equipment,1705.55,2026-11-25,true
+INV-20338,2026-10-27T15:10:24Z,Meridian Analytics,equipment,9024.30,2026-11-26,false
+INV-20339,2026-10-28T08:04:59Z,Granite Facilities,travel,6562.75,2026-11-27,true
+INV-20340,2026-10-28T15:16:35Z,Atlas Office Supply,facilities,6213.71,2026-11-27,true
+INV-20341,2026-10-28T18:42:37Z,Harbor Catering,services,5645.37,2026-11-27,true
+INV-20342,2026-10-28T19:44:25Z,Summit Telecom,equipment,6116.62,2026-11-27,true
+INV-20343,2026-10-29T09:35:19Z,Atlas Office Supply,services,1628.84,2026-11-28,true
+INV-20344,2026-10-29T14:29:24Z,Summit Telecom,equipment,5652.18,2026-11-28,true
+INV-20345,2026-10-30T08:52:34Z,Atlas Office Supply,services,8060.51,2026-11-29,true
+INV-20346,2026-10-31T19:17:12Z,Northwind Travel,software,1469.50,2026-11-30,true
+INV-20347,2026-11-01T11:07:12Z,Beacon Legal LLP,services,3713.24,2026-12-01,false
+INV-20348,2026-11-01T12:29:10Z,Summit Telecom,travel,1023.58,2026-12-01,true
+INV-20349,2026-11-01T12:38:36Z,Northwind Travel,services,9129.52,2026-12-01,true
+INV-20350,2026-11-01T14:14:19Z,Pinecrest Insurance,facilities,4721.26,2026-12-01,false
+INV-20351,2026-11-01T18:04:58Z,Summit Telecom,services,5225.09,2026-12-01,true
+INV-20352,2026-11-02T08:05:52Z,Vertex Recruiting,services,6408.88,2026-12-02,true
+INV-20353,2026-11-03T07:32:38Z,Pinecrest Insurance,services,2471.02,2026-12-03,true
+INV-20354,2026-11-03T08:01:43Z,Lumen Software,facilities,3861.08,2026-12-03,true
+INV-20355,2026-11-03T16:55:25Z,Northwind Travel,meals,1539.21,2026-12-03,false
+INV-20356,2026-11-03T17:17:19Z,Cloudline Hosting,facilities,5479.49,2026-12-03,true
+INV-20357,2026-11-04T07:28:13Z,Pinecrest Insurance,travel,5300.41,2026-12-04,false
+INV-20358,2026-11-04T11:05:13Z,Vertex Recruiting,travel,3063.58,2026-12-04,true
+INV-20359,2026-11-04T16:25:12Z,Lumen Software,software,2330.60,2026-12-04,false
+INV-20360,2026-11-05T09:09:41Z,Pinecrest Insurance,travel,7464.41,2026-12-05,false
+INV-20361,2026-11-05T15:39:43Z,Vertex Recruiting,software,6898.77,2026-12-05,true
+INV-20362,2026-11-05T15:51:23Z,Summit Telecom,equipment,7133.62,2026-12-05,true
+INV-20363,2026-11-06T08:12:08Z,Beacon Legal LLP,services,3152.73,2026-12-06,true
+INV-20364,2026-11-06T09:41:17Z,Orchard Print,facilities,848.11,2026-12-06,true
+INV-20365,2026-11-06T12:08:05Z,Cloudline Hosting,equipment,8859.69,2026-12-06,false
+INV-20366,2026-11-06T13:23:03Z,Lumen Software,services,4311.79,2026-12-06,true
+INV-20367,2026-11-06T13:25:24Z,Pinecrest Insurance,travel,2709.13,2026-12-06,true
+INV-20368,2026-11-06T13:37:21Z,Meridian Analytics,software,7009.23,2026-12-06,false
+INV-20369,2026-11-06T18:52:43Z,Beacon Legal LLP,software,882.62,2026-12-06,true
+INV-20370,2026-11-07T08:13:09Z,Pinecrest Insurance,software,3824.08,2026-12-07,true
+INV-20371,2026-11-07T11:17:00Z,Summit Telecom,facilities,6600.23,2026-12-07,true
+INV-20372,2026-11-07T14:01:06Z,Pinecrest Insurance,facilities,7515.54,2026-12-07,true
+INV-20373,2026-11-07T14:54:13Z,Summit Telecom,software,7610.21,2026-12-07,false
+INV-20374,2026-11-07T15:10:25Z,Orchard Print,travel,3164.42,2026-12-07,false
+INV-20375,2026-11-07T19:37:12Z,Vertex Recruiting,travel,352.36,2026-12-07,false
+INV-20376,2026-11-08T11:46:27Z,Meridian Analytics,software,5533.54,2026-12-08,true
+INV-20377,2026-11-08T12:29:34Z,Meridian Analytics,equipment,7781.67,2026-12-08,true
+INV-20378,2026-11-08T17:02:02Z,Vertex Recruiting,travel,911.35,2026-12-08,false
+INV-20379,2026-11-09T08:33:26Z,Orchard Print,services,9298.91,2026-12-09,true
+INV-20380,2026-11-09T09:06:26Z,Cloudline Hosting,travel,8014.32,2026-12-09,true
+INV-20381,2026-11-09T10:55:35Z,Cloudline Hosting,services,5130.93,2026-12-09,false
+INV-20382,2026-11-10T08:40:17Z,Harbor Catering,travel,1051.22,2026-12-10,true
+INV-20383,2026-11-10T14:22:04Z,Granite Facilities,meals,3873.71,2026-12-10,false
+INV-20384,2026-11-10T14:36:36Z,Beacon Legal LLP,equipment,9680.58,2026-12-10,false
+INV-20385,2026-11-10T16:14:07Z,Pinecrest Insurance,equipment,7121.24,2026-12-10,false
+INV-20386,2026-11-10T17:13:56Z,Meridian Analytics,software,9271.86,2026-12-10,true
+INV-20387,2026-11-10T19:58:00Z,Cloudline Hosting,equipment,8580.53,2026-12-10,true
+INV-20388,2026-11-11T08:24:44Z,Beacon Legal LLP,services,1830.89,2026-12-11,false
+INV-20389,2026-11-11T09:10:26Z,Summit Telecom,facilities,5305.04,2026-12-11,true
+INV-20390,2026-11-11T11:26:28Z,Atlas Office Supply,equipment,6068.38,2026-12-11,true
+INV-20391,2026-11-12T12:04:55Z,Northwind Travel,facilities,8970.85,2026-12-12,true
+INV-20392,2026-11-12T18:07:09Z,Cloudline Hosting,services,6741.41,2026-12-12,false
+INV-20393,2026-11-13T09:56:01Z,Beacon Legal LLP,services,8074.60,2026-12-13,false
+INV-20394,2026-11-13T12:46:20Z,Harbor Catering,equipment,7616.28,2026-12-13,false
+INV-20395,2026-11-14T09:25:43Z,Northwind Travel,services,4178.61,2026-12-14,true
+INV-20396,2026-11-14T16:14:12Z,Northwind Travel,software,8972.25,2026-12-14,false
+INV-20397,2026-11-14T18:58:49Z,Lumen Software,software,2349.35,2026-12-14,true
+INV-20398,2026-11-15T12:24:29Z,Cloudline Hosting,meals,2138.74,2026-12-15,true
+INV-20399,2026-11-15T13:10:35Z,Orchard Print,facilities,885.35,2026-12-15,true
+INV-20400,2026-11-15T14:36:02Z,Lumen Software,facilities,3599.01,2026-12-15,true
+INV-20401,2026-11-16T07:24:37Z,Northwind Travel,equipment,9473.59,2026-12-16,true
+INV-20402,2026-11-16T17:44:51Z,Granite Facilities,equipment,5158.25,2026-12-16,true
+INV-20403,2026-11-16T19:22:55Z,Vertex Recruiting,facilities,8368.43,2026-12-16,true
+INV-20404,2026-11-17T08:45:33Z,Orchard Print,equipment,8719.88,2026-12-17,true
+INV-20405,2026-11-17T15:20:17Z,Orchard Print,travel,3193.04,2026-12-17,true
+INV-20406,2026-11-17T15:29:34Z,Granite Facilities,meals,7783.37,2026-12-17,true
+INV-20407,2026-11-17T17:57:15Z,Granite Facilities,meals,1165.84,2026-12-17,true
+INV-20408,2026-11-18T11:05:45Z,Northwind Travel,facilities,3759.21,2026-12-18,true
+INV-20409,2026-11-19T08:14:09Z,Beacon Legal LLP,facilities,9632.50,2026-12-19,true
+INV-20410,2026-11-19T11:12:16Z,Northwind Travel,travel,9045.43,2026-12-19,true
+INV-20411,2026-11-19T12:58:43Z,Pinecrest Insurance,travel,1537.99,2026-12-19,true
+INV-20412,2026-11-19T15:07:37Z,Harbor Catering,meals,3654.22,2026-12-19,false
+INV-20413,2026-11-19T19:11:16Z,Atlas Office Supply,meals,5927.47,2026-12-19,false
+INV-20414,2026-11-20T11:34:39Z,Northwind Travel,equipment,5916.88,2026-12-20,true
+INV-20415,2026-11-20T16:59:34Z,Summit Telecom,meals,1854.97,2026-12-20,true
+INV-20416,2026-11-21T10:07:37Z,Summit Telecom,equipment,2996.39,2026-12-21,true
+INV-20417,2026-11-22T07:51:51Z,Summit Telecom,services,6122.91,2026-12-22,false
+INV-20418,2026-11-22T10:06:23Z,Beacon Legal LLP,travel,5417.03,2026-12-22,true
+INV-20419,2026-11-22T15:04:25Z,Meridian Analytics,facilities,3172.17,2026-12-22,true
+INV-20420,2026-11-22T15:37:02Z,Beacon Legal LLP,equipment,4437.33,2026-12-22,true
+INV-20421,2026-11-22T17:18:44Z,Atlas Office Supply,travel,8459.11,2026-12-22,true
+INV-20422,2026-11-22T19:03:16Z,Harbor Catering,equipment,1719.78,2026-12-22,true
+INV-20423,2026-11-23T08:19:35Z,Beacon Legal LLP,travel,6697.69,2026-12-23,false
+INV-20424,2026-11-23T15:12:46Z,Harbor Catering,facilities,9522.25,2026-12-23,false
+INV-20425,2026-11-23T17:16:47Z,Orchard Print,services,4509.21,2026-12-23,false
+INV-20426,2026-11-23T18:46:43Z,Granite Facilities,services,7835.77,2026-12-23,false
+INV-20427,2026-11-23T18:51:06Z,Vertex Recruiting,meals,9308.40,2026-12-23,true
+INV-20428,2026-11-24T11:01:35Z,Lumen Software,software,6990.35,2026-12-24,false
+INV-20429,2026-11-24T11:43:36Z,Beacon Legal LLP,services,6039.87,2026-12-24,true
+INV-20430,2026-11-24T12:24:35Z,Northwind Travel,software,8485.07,2026-12-24,true
+INV-20431,2026-11-24T14:09:56Z,Pinecrest Insurance,facilities,1182.09,2026-12-24,false
+INV-20432,2026-11-25T10:04:05Z,Orchard Print,software,3656.15,2026-12-25,true
+INV-20433,2026-11-25T17:26:44Z,Summit Telecom,software,3705.92,2026-12-25,true
+INV-20434,2026-11-27T17:28:09Z,Pinecrest Insurance,travel,410.11,2026-12-27,false
+INV-20435,2026-11-27T18:04:30Z,Pinecrest Insurance,software,4528.63,2026-12-27,false
+INV-20436,2026-11-28T07:32:05Z,Cloudline Hosting,facilities,5470.20,2026-12-28,true
+INV-20437,2026-11-28T07:58:45Z,Granite Facilities,meals,8870.15,2026-12-28,true
+INV-20438,2026-11-28T09:51:33Z,Lumen Software,services,5733.05,2026-12-28,true
+INV-20439,2026-11-28T16:36:36Z,Orchard Print,facilities,5278.49,2026-12-28,true
+INV-20440,2026-11-29T16:19:35Z,Beacon Legal LLP,software,4394.18,2026-12-29,true

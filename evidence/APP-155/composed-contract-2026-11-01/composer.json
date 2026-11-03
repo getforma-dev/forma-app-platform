@@ -1,0 +1,78 @@
+{
+  "campaign": "APP-093 composer",
+  "checks": [
+    {
+      "name": "the composer context names the owned authoring app, the owner_publish policy, the two readable source revisions and the one bindable library app; a foreign organization's apps are never offered",
+      "passed": true
+    },
+    {
+      "name": "a revoked member and a principal with no row get the uniform refusal before any model call and no app row is inserted; without a key the composer answers composer_unavailable and writes nothing",
+      "passed": true
+    },
+    {
+      "name": "a high-confidence router choice saves a new work of the library app's publication bound under the member's own source_read, labeled retrieved, with work.saved and work.bound events and no generation call; the creator opens it and an ungranted teammate is denied",
+      "passed": true
+    },
+    {
+      "name": "a generated definition passes admission, is drafted on the member's owned app, owner-published (author and approver the member) and saved bound to the registered source revisions, labeled generated, with definition.drafted, publication.published, work.saved and work.bound events and no new app, permission or grant row",
+      "passed": true
+    },
+    {
+      "name": "script, grant and SQL attempts in model output are refused by admission on every attempt (codes executable_content, client_grant, executable_content), the retries carry the code alone, the member gets the neutral could_not_compose and no row is written",
+      "passed": true
+    },
+    {
+      "name": "a medium-confidence router choice becomes an adapted definition (title and description patched, re-admitted whole), owner-published on the member's app and saved, still labeled adapted from the persisted definition on reload",
+      "passed": true
+    },
+    {
+      "name": "APP-132/APP-135: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, still labeled generated from the persisted definition on reload, with no source dependency, app, permission or grant row",
+      "passed": true
+    },
+    {
+      "name": "a model failure after the router is the neutral could_not_compose with no row written; a revoked member stays refused and no row is written",
+      "passed": true
+    },
+    {
+      "name": "APP-145: read-only command discovery creates nothing; two overlapping first composes wait on the member shell lock and receive the same empty shell (edit_definition, run, discover, one permission.granted naming that app); a second compose reuses it; a hostile reply is refused and does not draft; a records-only definition is admitted and published on that shell and not as a second app; a member who already owns an eligible app gains no shell and no publication policy is inserted",
+      "passed": true
+    },
+    {
+      "name": "APP-145: a queued first compose re-reads the owned apps after the shell lock, reusing a shell published while it waited; one app and one grant audit remain",
+      "passed": true
+    },
+    {
+      "name": "APP-145: entitlement expiry while waiting for the authoring lock is rechecked before any app, permission or audit write",
+      "passed": true
+    },
+    {
+      "name": "APP-145: an organization with no owner_publish policy still refuses no_owner_publish_policy; the shell is created and nothing is drafted or published",
+      "passed": true
+    },
+    {
+      "name": "APP-141: an unseeded member discovers without creating a shell, then confirms two exact admitted templates without a model; one authoring shell, two distinct empty works, declared guide-first layout and honest adapted provenance",
+      "passed": true
+    },
+    {
+      "name": "APP-141: renaming the second work leaves its sibling's title, definition and layout unchanged; names survive authorized reads; stale and concurrent versions conflict, foreign/ungranted callers deny, and the saved-work authority version stays unchanged",
+      "passed": true
+    },
+    {
+      "name": "APP-155/157: two admitted presentation publications race for one exact work; one adoption wins, one remains unused, stale/sibling/foreign premises refuse; collections, bindings, source dependencies, sibling and record identity remain unchanged",
+      "passed": true
+    },
+    {
+      "name": "APP-156: admission alone never authorizes adopting changed data/schema content; current publication policy change after publishing refuses adoption and hides the editor without modifying saved work",
+      "passed": true
+    },
+    {
+      "name": "APP-155: actual row-lock wait followed by entitlement expiry denies presentation adoption and leaves work unchanged",
+      "passed": true
+    },
+    {
+      "name": "APP-141: entitlement expiry while a rename waits for its work row denies the mutation, preserving both name/version and the audit count",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

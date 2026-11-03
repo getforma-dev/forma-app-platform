@@ -1,0 +1,112 @@
+{
+  "candidate_sha": "1d884707223765c782fc16ab00ec1c89f771ec24",
+  "command": "just check",
+  "required_steps": 20,
+  "passed_steps": 20,
+  "skipped_steps": 0,
+  "failed_steps": 0,
+  "steps": [
+    {
+      "status": "ok",
+      "step": "fmt",
+      "duration": "1s"
+    },
+    {
+      "status": "ok",
+      "step": "admin",
+      "duration": "8s"
+    },
+    {
+      "status": "ok",
+      "step": "clippy",
+      "duration": "0s"
+    },
+    {
+      "status": "ok",
+      "step": "clippy-dev",
+      "duration": "1s"
+    },
+    {
+      "status": "ok",
+      "step": "test",
+      "duration": "7s"
+    },
+    {
+      "status": "ok",
+      "step": "http-smoke",
+      "duration": "1s"
+    },
+    {
+      "status": "ok",
+      "step": "msrv",
+      "duration": "0s"
+    },
+    {
+      "status": "ok",
+      "step": "catalog",
+      "duration": "0s"
+    },
+    {
+      "status": "ok",
+      "step": "infra",
+      "duration": "8s"
+    },
+    {
+      "status": "ok",
+      "step": "py-scripts",
+      "duration": "5s"
+    },
+    {
+      "status": "ok",
+      "step": "py-runtime",
+      "duration": "228s"
+    },
+    {
+      "status": "ok",
+      "step": "shared-broker",
+      "duration": "11s"
+    },
+    {
+      "status": "ok",
+      "step": "py-qualification",
+      "duration": "2s"
+    },
+    {
+      "status": "ok",
+      "step": "py-app-scripts",
+      "duration": "1s"
+    },
+    {
+      "status": "ok",
+      "step": "py-ops",
+      "duration": "8s"
+    },
+    {
+      "status": "ok",
+      "step": "py-infra",
+      "duration": "5s"
+    },
+    {
+      "status": "ok",
+      "step": "schema-pins",
+      "duration": "0s"
+    },
+    {
+      "status": "ok",
+      "step": "contracts",
+      "duration": "5s"
+    },
+    {
+      "status": "ok",
+      "step": "board",
+      "duration": "0s"
+    },
+    {
+      "status": "ok",
+      "step": "bash-n",
+      "duration": "0s"
+    }
+  ],
+  "private_log_sha256": "1d7927ab9bf96727b9b374face0e30b159736bd5fe5e46f4e39d27bf0656a477",
+  "limitation": "Full local gate; image qualification, exact-head CI and live deployment remain separate."
+}

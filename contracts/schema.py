@@ -62,13 +62,18 @@ OPERATORS = [
     tagged("ratio", {"numerator": ID, "denominator": {"oneOf": [tagged("measure", {"id": ID}), tagged("constant", {"value": {"type": "string", "pattern": "^[1-9][0-9]{0,17}(?![\\s\\S])"}, "unit": ID})]}, "output_field": ID, "output_unit": ID, "zero_denominator": {"const": "error"}, "rounding": {"const": "exact_rational"}}),
     tagged("lookup", {"left": FIELD_REF, "right": FIELD_REF, "rule": enum("exact", "cidr_exact_then_longest"), "cardinality": {"const": "at_most_one"}}),
 ]
-RENDERERS = ("summary", "table", "detail", "timeline", "chart", "filter", "form", "note", "status")
+RENDERERS = ("summary", "table", "detail", "timeline", "chart", "filter", "form", "note", "status",
+             "records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
 DEFS = {
     "value": {"oneOf": VALUES},
     "field": obj({"id": ID, "value_type": {"oneOf": VALUE_TYPES}, "nullable": {"type": "boolean"}}),
     "input_contract": obj({"id": ID, "contract_id": ID, "contract_version": VERSION, "kind": enum("source", "records"), "fields": arr(ref("field"), 32, 1)}),
     "record_schema": obj({"id": ID, "version": VERSION, "fields": arr(ref("field"), 32, 1)}),
-    "command_declaration": obj({"id": ID, "record_schema_id": ID, "operation": enum("create", "update"), "writable_fields": {**arr(ID, 32, 1), "uniqueItems": True}, "transitions": arr(obj({"field_id": ID, "from": ID, "to": ID}), 32)}),
+    # Edition impl-2026-10-31.4 (APP-129) records the APP-107 amendment (additive, optional): a declared guard on a transition (`when`, a typed comparison over a field of
+    # the same record schema, judged on the record as the command composes it) and `initial`, the starting value of an
+    # enum field on a create (the first entry whose guard holds; an entry without a guard always holds).
+    "guard": obj({"field_id": ID, "comparison": enum("eq", "ne", "lt", "lte", "gt", "gte"), "value": ref("value")}),
+    "command_declaration": obj({"id": ID, "record_schema_id": ID, "operation": enum("create", "update"), "writable_fields": {**arr(ID, 32, 1), "uniqueItems": True}, "transitions": arr(obj({"field_id": ID, "from": ID, "to": ID, "when": ref("guard")}, optional=("when",)), 32), "initial": arr(obj({"field_id": ID, "value": ID, "when": ref("guard")}, optional=("when",)), 8, 1)}, optional=("initial",)),
     "query": obj({"operator_version": VERSION, "inputs": {**arr(ID, 8, 1), "uniqueItems": True}, "operations": arr({"oneOf": OPERATORS}, 8, 1), "null_policy": {"const": "unknown"}, "window": obj({"start": TIME, "end": TIME, "bounds": {"const": "half_open"}})}, optional=("window",)),
     "view": obj({"id": ID, "kind": enum(*RENDERERS), "renderer_version": VERSION, "title": TEXT, "query": ref("query"), "command_id": ID, "text": TEXT}, optional=("query", "command_id", "text")),
     "definition_content": obj({"title": TEXT, "description": TEXT, "inputs": arr(ref("input_contract"), 8), "views": arr(ref("view"), 24, 1), "record_schemas": arr(ref("record_schema"), 8), "commands": arr(ref("command_declaration"), 16), "links": arr(obj({"from_view": ID, "to_view": ID, "input_id": ID}), 48), "default_layout": arr(obj({"view_id": ID, "column": {"type": "integer", "minimum": 0, "maximum": 11}, "row": {"type": "integer", "minimum": 0, "maximum": 100}, "width": {"type": "integer", "minimum": 1, "maximum": 12}}), 24, 1)}),
@@ -80,6 +85,42 @@ DEFS = {
     "source_coordinate": {"oneOf": [tagged("csv", {"logical_record": POS, "physical_line_start": POS, "physical_line_end": POS}), tagged("xlsx", {"sheet": TEXT, "row": POS, "column": POS})]},
 }
 
+
+# Edition impl-2026-11-01.2: optional immutable app presentation. Existing
+# definitions keep their bytes, digest domains, and deterministic layout fallback.
+DEFS.update({
+    "app_theme": obj({"mode": enum("default", "light", "dark"),
+                      "accent": enum("default", "green", "crimson", "amber", "cyan", "violet", "rose", "ice", "slate"),
+                      "density": enum("default", "compact", "comfortable", "spacious"),
+                      "font": enum("default", "mono")}, optional=("font",)),
+    "app_section": obj({"id": ID, "title": {"type": "string", "maxLength": 120},
+                        "components": {**arr(ID, 24, 1), "uniqueItems": True}}, optional=("title",)),
+    "app_action": obj({"id": ID, "label": {"type": "string", "minLength": 1, "maxLength": 80},
+                       "behavior": enum("navigate", "dialog"), "target": ID}),
+    "app_presentation": obj({"version": VERSION, "description": {"type": "string", "maxLength": 1000},
+                             "sections": arr(ref("app_section"), 8), "actions": arr(ref("app_action"), 8),
+                             "theme": ref("app_theme")}, optional=("description", "sections", "actions", "theme")),
+})
+DEFS["definition_content"]["properties"]["presentation"] = ref("app_presentation")
+
+
+
+RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
+DEFS.update({
+    "record_measure": {"oneOf": [obj({"op": {"const": "count"}}), obj({"op": {"const": "sum"}, "field": ID})]},
+    "record_component": obj({"version": VERSION, "input_id": ID, "schema_id": ID,
+                             "columns": {**arr(ID, 16, 1), "uniqueItems": True},
+                             "measure": ref("record_measure"), "group_field": ID, "date_field": ID,
+                             "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+                             "order": obj({"field": ID, "direction": enum("asc", "desc")}),
+                             "budget": obj({"origin": {"const": "preset"}, "minor_units": {"type": "string", "pattern": r"^(0|[1-9][0-9]{0,37})(?![\s\S])"}, "currency": {"const": "USD"}, "minor_unit_exponent": {"const": 2}})},
+                            optional=("columns", "measure", "group_field", "date_field", "limit", "order", "budget")),
+    "record_filter": obj({"id": ID, "input_id": ID, "field": ID,
+                          "kind": enum("text_contains", "enum", "date_range"),
+                          "targets": {**arr(ID, 16, 1), "uniqueItems": True}}),
+})
+DEFS["view"]["properties"]["records"] = ref("record_component")
+DEFS["definition_content"]["properties"]["record_filters"] = arr(ref("record_filter"), 8)
 
 def entity(kind, fields, optional=()):
     return obj({"kind": {"const": kind}, "schema_version": VERSION, **fields}, optional)
@@ -156,8 +197,8 @@ DEFS.update({
     "current_revision": obj({"publication_id": NULLABLE(UUID), "definition_revision_id": NULLABLE(UUID), "definition_digest": NULLABLE(DIGEST),
                              "work_version": NULLABLE(POS)}),
 })
-DEFS["view_v2"] = obj({**DEFS["view"]["properties"], "query": ref("query_v2")}, optional=("query", "command_id", "text"))
-DEFS["definition_content_v2"] = obj({**DEFS["definition_content"]["properties"], "inputs": arr(ref("input_contract_v2"), 8), "views": arr(ref("view_v2"), 24, 1)})
+DEFS["view_v2"] = obj({**DEFS["view"]["properties"], "query": ref("query_v2")}, optional=("query", "command_id", "text", "records"))
+DEFS["definition_content_v2"] = obj({**DEFS["definition_content"]["properties"], "inputs": arr(ref("input_contract_v2"), 8), "views": arr(ref("view_v2"), 24, 1)}, optional=("presentation", "record_filters"))
 DEFS.update({
     "app_definition_v2": entity_v2("app_definition", {**SCOPE, "revision_id": UUID, "content": ref("definition_content_v2"), "digest": DIGEST}),
     "publication_v2": entity_v2("publication", {**{k: v for k, v in DEFS["publication"]["properties"].items() if k not in ("kind", "schema_version")},
@@ -175,10 +216,13 @@ DEFS.update({
                                            "result_digest": DIGEST, "failure_code": ID},
                               optional=("queue_position", "expected_wait_seconds", "result_digest", "failure_code")),
 })
-ENTITIES = ("app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state",
+from record_components_contract import receipt_schema
+DEFS["record_components_receipt"] = receipt_schema(UUID, DIGEST, ID, INT, POS)
+
+ENTITIES = ("record_components_receipt", "app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state",
             "app_definition_v2", "publication_v2", "source_revision_v2", "query_receipt_v2", "job_state_v2",
             "recovery_view", "command_claim")
-SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-10-29.3/schema.json", "$defs": DEFS,
+SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-11-01.2/schema.json", "$defs": DEFS,
           "oneOf": [ref(n) for n in ENTITIES]}
 
 if __name__ == "__main__":

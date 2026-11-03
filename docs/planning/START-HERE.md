@@ -1,4 +1,8 @@
-# First implementation session
+# Current entry point
+
+As of November 1, implementation already exists. Start with [DIRECTION.md](DIRECTION.md), [first-run](first-run/README.md), the [pivot review](PIVOT-REVIEW-2026-11-01.md), and [DEVELOPMENT.md](../DEVELOPMENT.md). The original preparation instructions below are retained as history, not the current execution queue.
+
+# Original first implementation session
 
 This preparation checkpoint intentionally stops before application code. Begin with **PH01 — Foundations and first saved workflow**, starting at **APP-001**, when implementation is requested. Read the [phase plan](../../Tickets/PHASES.md) and [quality gates](QUALITY-GATES.md).
 

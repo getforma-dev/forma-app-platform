@@ -1,0 +1,46 @@
+# The dev database (ADR-012 D12.1): PostgreSQL 16 for one dev instance of one
+# checkout. Started and stopped by process-compose (process-compose.yaml) via
+# scripts/dev/dev.sh, which sets every variable below (scripts/dev/env.sh);
+# never run it by hand without them.
+#
+# - One Compose project per checkout and profile (genui-dev-<checkout>-<profile>),
+#   so two checkouts, or the pitch and clean instances, run side by side.
+# - Data lives in the named volume and survives restarts; `just dev [clean]
+#   reset` drops it. `just dev stop` removes the container, never the volume.
+# - Published on loopback only, at the instance's port (port base + 20 for
+#   pitch, + 21 for clean). The dev binary turns on TLS, creates the roles and
+#   switches TCP to password authentication on its first start; every
+#   password is a synthetic dev value (app/src/dev/db.rs).
+# - Image pinned by digest, the same PostgreSQL 16.13 the campaign fixtures
+#   use (app/src/storage/qualification.rs IMAGE).
+name: ${GENUI_DEV_PROJECT:?set by scripts/dev/dev.sh}
+
+services:
+  db:
+    image: postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59
+    container_name: ${GENUI_DEV_DB_CONTAINER:?set by scripts/dev/dev.sh}
+    environment:
+      # Only for the first initdb; the dev binary replaces pg_hba.conf with
+      # socket trust plus password-only TCP before the product connects.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:${GENUI_DEV_DB_PORT:?set by scripts/dev/dev.sh}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    mem_limit: 1g
+    labels:
+      genui.scope: dev
+      genui.profile: ${GENUI_DEV_PROFILE:?set by scripts/dev/dev.sh}
+      genui.checkout: ${GENUI_DEV_ROOT:?set by scripts/dev/dev.sh}
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--username=postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+    labels:
+      genui.scope: dev
+      genui.profile: ${GENUI_DEV_PROFILE}
+      genui.checkout: ${GENUI_DEV_ROOT}

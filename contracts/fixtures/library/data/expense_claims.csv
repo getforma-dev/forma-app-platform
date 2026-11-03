@@ -1,0 +1,241 @@
+expense_id,time,employee,vendor,category,amount,status
+EXP-1001,2026-10-01T14:22:59Z,Tomás Herrera,Northwind Travel,travel,832.49,needs_receipt
+EXP-1002,2026-10-01T16:20:52Z,Maya Chen,Beacon Legal LLP,services,1285.59,approved
+EXP-1003,2026-10-01T18:23:56Z,Grace Park,Harbor Catering,equipment,300.59,approved
+EXP-1004,2026-10-02T10:39:23Z,Elena Petrova,Harbor Catering,travel,468.29,approved
+EXP-1005,2026-10-02T11:25:56Z,Priya Natarajan,Atlas Office Supply,facilities,1026.84,rejected
+EXP-1006,2026-10-02T13:39:54Z,Grace Park,Vertex Recruiting,meals,70.65,approved
+EXP-1007,2026-10-02T13:41:05Z,Diego Ramos,Summit Telecom,equipment,2767.31,approved
+EXP-1008,2026-10-02T14:44:40Z,Jordan Alvarez,Beacon Legal LLP,equipment,2321.41,submitted
+EXP-1009,2026-10-02T15:09:33Z,Maya Chen,Northwind Travel,services,1047.02,submitted
+EXP-1010,2026-10-02T16:01:18Z,Tomás Herrera,Lumen Software,equipment,2189.70,submitted
+EXP-1011,2026-10-02T17:05:06Z,Priya Natarajan,Cloudline Hosting,software,74.25,needs_receipt
+EXP-1012,2026-10-02T17:31:06Z,Grace Park,Summit Telecom,services,4023.98,approved
+EXP-1013,2026-10-02T18:01:39Z,Grace Park,Beacon Legal LLP,services,407.99,submitted
+EXP-1014,2026-10-02T19:53:41Z,Tomás Herrera,Beacon Legal LLP,software,1149.43,submitted
+EXP-1015,2026-10-03T08:28:18Z,Ingrid Solberg,Lumen Software,facilities,667.87,approved
+EXP-1016,2026-10-03T08:36:01Z,Ravi Shankar,Granite Facilities,services,4049.51,submitted
+EXP-1017,2026-10-03T08:38:08Z,Kwame Mensah,Meridian Analytics,travel,2209.60,needs_receipt
+EXP-1018,2026-10-03T09:59:13Z,Ingrid Solberg,Vertex Recruiting,equipment,162.61,submitted
+EXP-1019,2026-10-03T11:42:06Z,Lena Fischer,Vertex Recruiting,facilities,1460.51,approved
+EXP-1020,2026-10-03T11:51:54Z,Elena Petrova,Granite Facilities,facilities,1119.74,needs_receipt
+EXP-1021,2026-10-03T16:39:11Z,Ravi Shankar,Beacon Legal LLP,services,1103.09,approved
+EXP-1022,2026-10-03T18:31:01Z,Samuel Okafor,Orchard Print,facilities,1068.39,submitted
+EXP-1023,2026-10-04T07:42:11Z,Jordan Alvarez,Granite Facilities,facilities,712.16,needs_receipt
+EXP-1024,2026-10-04T09:14:09Z,Samuel Okafor,Meridian Analytics,meals,177.73,submitted
+EXP-1025,2026-10-04T19:36:25Z,Lena Fischer,Atlas Office Supply,services,1760.34,approved
+EXP-1026,2026-10-05T07:59:19Z,Aisha Bello,Beacon Legal LLP,software,462.78,submitted
+EXP-1027,2026-10-05T09:05:25Z,Noah Williams,Orchard Print,facilities,995.33,submitted
+EXP-1028,2026-10-05T19:07:26Z,Ingrid Solberg,Lumen Software,services,873.07,submitted
+EXP-1029,2026-10-06T07:28:47Z,Kwame Mensah,Atlas Office Supply,travel,150.05,submitted
+EXP-1030,2026-10-06T07:52:25Z,Tomás Herrera,Meridian Analytics,facilities,757.04,submitted
+EXP-1031,2026-10-06T09:46:28Z,Kwame Mensah,Meridian Analytics,equipment,2627.53,submitted
+EXP-1032,2026-10-06T12:58:18Z,Jordan Alvarez,Beacon Legal LLP,facilities,445.53,submitted
+EXP-1033,2026-10-06T17:45:22Z,Kwame Mensah,Pinecrest Insurance,facilities,1139.41,approved
+EXP-1034,2026-10-06T18:31:30Z,Ravi Shankar,Summit Telecom,equipment,3172.75,needs_receipt
+EXP-1035,2026-10-07T08:17:50Z,Samuel Okafor,Granite Facilities,services,1432.35,submitted
+EXP-1036,2026-10-07T11:05:41Z,Grace Park,Meridian Analytics,meals,84.15,needs_receipt
+EXP-1037,2026-10-07T12:36:12Z,Jordan Alvarez,Cloudline Hosting,equipment,2475.19,needs_receipt
+EXP-1038,2026-10-07T13:34:35Z,Lena Fischer,Orchard Print,facilities,783.04,rejected
+EXP-1039,2026-10-07T13:47:27Z,Sofia Rossi,Atlas Office Supply,software,413.04,approved
+EXP-1040,2026-10-07T15:42:32Z,Tomás Herrera,Lumen Software,facilities,448.27,approved
+EXP-1041,2026-10-07T16:36:26Z,Jordan Alvarez,Meridian Analytics,services,1177.53,needs_receipt
+EXP-1042,2026-10-07T17:15:40Z,Liam O'Connor,Lumen Software,travel,2143.39,approved
+EXP-1043,2026-10-07T17:32:14Z,Jordan Alvarez,Vertex Recruiting,travel,1340.11,needs_receipt
+EXP-1044,2026-10-07T18:52:57Z,Sofia Rossi,Northwind Travel,travel,861.20,submitted
+EXP-1045,2026-10-07T19:48:53Z,Elena Petrova,Northwind Travel,facilities,499.37,approved
+EXP-1046,2026-10-07T19:54:59Z,Elena Petrova,Atlas Office Supply,facilities,1112.44,submitted
+EXP-1047,2026-10-07T19:59:25Z,Ravi Shankar,Harbor Catering,software,708.36,approved
+EXP-1048,2026-10-08T08:55:33Z,Noah Williams,Orchard Print,services,4105.05,approved
+EXP-1049,2026-10-08T12:07:37Z,Sofia Rossi,Orchard Print,software,730.71,approved
+EXP-1050,2026-10-08T13:06:01Z,Samuel Okafor,Cloudline Hosting,equipment,1000.28,approved
+EXP-1051,2026-10-08T14:26:57Z,Ravi Shankar,Pinecrest Insurance,software,603.77,approved
+EXP-1052,2026-10-08T14:52:39Z,Diego Ramos,Lumen Software,services,873.87,approved
+EXP-1053,2026-10-08T14:59:32Z,Liam O'Connor,Vertex Recruiting,services,2169.79,needs_receipt
+EXP-1054,2026-10-09T11:00:17Z,Maya Chen,Northwind Travel,software,536.34,submitted
+EXP-1055,2026-10-09T12:07:36Z,Aisha Bello,Meridian Analytics,travel,1836.05,approved
+EXP-1056,2026-10-09T12:16:28Z,Kwame Mensah,Cloudline Hosting,software,564.06,approved
+EXP-1057,2026-10-09T13:09:34Z,Ingrid Solberg,Meridian Analytics,equipment,804.76,submitted
+EXP-1058,2026-10-09T14:31:32Z,Sofia Rossi,Summit Telecom,software,308.35,submitted
+EXP-1059,2026-10-09T16:25:26Z,Ingrid Solberg,Lumen Software,services,3438.41,approved
+EXP-1060,2026-10-10T08:10:16Z,Liam O'Connor,Meridian Analytics,facilities,909.33,submitted
+EXP-1061,2026-10-10T08:32:37Z,Noah Williams,Harbor Catering,software,1033.77,rejected
+EXP-1062,2026-10-10T09:31:12Z,Jordan Alvarez,Vertex Recruiting,travel,958.37,submitted
+EXP-1063,2026-10-10T10:57:13Z,Lena Fischer,Vertex Recruiting,meals,153.22,submitted
+EXP-1064,2026-10-10T11:17:09Z,Maya Chen,Beacon Legal LLP,equipment,3153.21,rejected
+EXP-1065,2026-10-10T14:09:34Z,Diego Ramos,Meridian Analytics,equipment,130.37,approved
+EXP-1066,2026-10-10T18:13:12Z,Samuel Okafor,Atlas Office Supply,equipment,457.54,submitted
+EXP-1067,2026-10-10T18:59:32Z,Tomás Herrera,Meridian Analytics,software,139.55,submitted
+EXP-1068,2026-10-10T19:06:18Z,Ravi Shankar,Cloudline Hosting,software,971.26,submitted
+EXP-1069,2026-10-10T19:50:10Z,Noah Williams,Beacon Legal LLP,facilities,154.16,approved
+EXP-1070,2026-10-11T15:52:58Z,Kwame Mensah,Cloudline Hosting,meals,164.78,submitted
+EXP-1071,2026-10-11T16:34:32Z,Tomás Herrera,Cloudline Hosting,facilities,1437.80,submitted
+EXP-1072,2026-10-11T17:43:34Z,Sofia Rossi,Northwind Travel,software,52.64,approved
+EXP-1073,2026-10-11T17:51:10Z,Ingrid Solberg,Beacon Legal LLP,meals,61.69,submitted
+EXP-1074,2026-10-11T19:19:39Z,Samuel Okafor,Granite Facilities,meals,166.81,needs_receipt
+EXP-1075,2026-10-11T19:43:15Z,Lena Fischer,Cloudline Hosting,equipment,2270.31,approved
+EXP-1076,2026-10-11T19:49:45Z,Grace Park,Granite Facilities,equipment,103.29,submitted
+EXP-1077,2026-10-12T11:31:45Z,Lena Fischer,Lumen Software,facilities,1054.19,approved
+EXP-1078,2026-10-12T13:11:52Z,Liam O'Connor,Northwind Travel,meals,106.40,submitted
+EXP-1079,2026-10-12T14:21:11Z,Kwame Mensah,Meridian Analytics,software,726.51,rejected
+EXP-1080,2026-10-12T18:44:06Z,Jordan Alvarez,Beacon Legal LLP,software,130.45,submitted
+EXP-1081,2026-10-12T18:57:27Z,Lena Fischer,Beacon Legal LLP,services,4009.62,approved
+EXP-1082,2026-10-13T07:23:21Z,Grace Park,Granite Facilities,meals,141.23,approved
+EXP-1083,2026-10-13T08:45:47Z,Jordan Alvarez,Harbor Catering,facilities,1476.91,approved
+EXP-1084,2026-10-13T09:32:27Z,Noah Williams,Harbor Catering,facilities,1172.35,submitted
+EXP-1085,2026-10-13T12:27:01Z,Noah Williams,Vertex Recruiting,facilities,241.14,approved
+EXP-1086,2026-10-13T13:00:09Z,Samuel Okafor,Lumen Software,facilities,1362.62,submitted
+EXP-1087,2026-10-13T13:10:55Z,Lena Fischer,Granite Facilities,software,715.22,approved
+EXP-1088,2026-10-13T13:42:29Z,Priya Natarajan,Vertex Recruiting,equipment,2534.98,submitted
+EXP-1089,2026-10-13T17:59:24Z,Kwame Mensah,Pinecrest Insurance,software,682.79,submitted
+EXP-1090,2026-10-13T18:45:43Z,Grace Park,Vertex Recruiting,meals,64.02,approved
+EXP-1091,2026-10-14T09:25:05Z,Kwame Mensah,Granite Facilities,equipment,1262.50,submitted
+EXP-1092,2026-10-14T11:01:42Z,Aisha Bello,Lumen Software,services,3008.71,rejected
+EXP-1093,2026-10-14T12:30:27Z,Noah Williams,Granite Facilities,travel,991.73,approved
+EXP-1094,2026-10-14T17:33:35Z,Priya Natarajan,Meridian Analytics,travel,356.51,approved
+EXP-1095,2026-10-14T19:02:58Z,Tomás Herrera,Pinecrest Insurance,meals,29.69,submitted
+EXP-1096,2026-10-15T07:37:58Z,Kwame Mensah,Harbor Catering,facilities,454.16,submitted
+EXP-1097,2026-10-15T07:39:58Z,Maya Chen,Harbor Catering,meals,91.45,approved
+EXP-1098,2026-10-15T07:46:32Z,Elena Petrova,Northwind Travel,meals,56.17,approved
+EXP-1099,2026-10-15T08:15:27Z,Maya Chen,Lumen Software,software,1004.18,approved
+EXP-1100,2026-10-15T09:42:39Z,Sofia Rossi,Meridian Analytics,meals,54.64,rejected
+EXP-1101,2026-10-15T09:55:45Z,Maya Chen,Meridian Analytics,services,3418.25,approved
+EXP-1102,2026-10-15T12:19:27Z,Sofia Rossi,Cloudline Hosting,travel,652.63,submitted
+EXP-1103,2026-10-15T12:58:54Z,Tomás Herrera,Northwind Travel,travel,407.56,submitted
+EXP-1104,2026-10-15T15:56:32Z,Kwame Mensah,Harbor Catering,travel,602.49,approved
+EXP-1105,2026-10-15T15:57:58Z,Ingrid Solberg,Northwind Travel,equipment,1667.02,submitted
+EXP-1106,2026-10-15T16:13:25Z,Diego Ramos,Pinecrest Insurance,travel,911.59,approved
+EXP-1107,2026-10-15T16:20:51Z,Noah Williams,Cloudline Hosting,travel,380.44,submitted
+EXP-1108,2026-10-15T16:43:45Z,Samuel Okafor,Orchard Print,equipment,2141.49,submitted
+EXP-1109,2026-10-15T17:42:14Z,Elena Petrova,Atlas Office Supply,facilities,1029.22,submitted
+EXP-1110,2026-10-15T18:50:19Z,Maya Chen,Granite Facilities,facilities,765.89,approved
+EXP-1111,2026-10-15T19:41:51Z,Noah Williams,Beacon Legal LLP,services,1860.84,submitted
+EXP-1112,2026-10-16T09:40:54Z,Grace Park,Orchard Print,equipment,2958.15,submitted
+EXP-1113,2026-10-16T11:49:16Z,Samuel Okafor,Orchard Print,facilities,1293.23,submitted
+EXP-1114,2026-10-16T13:02:04Z,Grace Park,Cloudline Hosting,meals,127.50,submitted
+EXP-1115,2026-10-16T14:55:39Z,Priya Natarajan,Harbor Catering,equipment,1854.80,approved
+EXP-1116,2026-10-16T15:42:50Z,Liam O'Connor,Beacon Legal LLP,meals,163.73,submitted
+EXP-1117,2026-10-16T16:09:58Z,Priya Natarajan,Orchard Print,services,828.13,submitted
+EXP-1118,2026-10-16T16:42:27Z,Sofia Rossi,Northwind Travel,software,904.84,approved
+EXP-1119,2026-10-16T17:08:27Z,Jordan Alvarez,Orchard Print,facilities,598.09,rejected
+EXP-1120,2026-10-16T17:14:19Z,Liam O'Connor,Orchard Print,travel,714.52,approved
+EXP-1121,2026-10-16T18:33:58Z,Sofia Rossi,Meridian Analytics,equipment,1565.27,approved
+EXP-1122,2026-10-17T08:38:44Z,Jordan Alvarez,Meridian Analytics,software,301.17,submitted
+EXP-1123,2026-10-17T09:12:07Z,Priya Natarajan,Cloudline Hosting,equipment,3183.70,submitted
+EXP-1124,2026-10-17T09:34:08Z,Sofia Rossi,Orchard Print,equipment,1025.93,submitted
+EXP-1125,2026-10-17T09:52:09Z,Grace Park,Meridian Analytics,meals,158.42,approved
+EXP-1126,2026-10-17T11:18:24Z,Aisha Bello,Cloudline Hosting,meals,17.07,rejected
+EXP-1127,2026-10-17T12:15:09Z,Elena Petrova,Beacon Legal LLP,facilities,659.38,submitted
+EXP-1128,2026-10-17T15:30:53Z,Samuel Okafor,Pinecrest Insurance,software,931.67,rejected
+EXP-1129,2026-10-17T16:29:12Z,Jordan Alvarez,Atlas Office Supply,meals,155.09,submitted
+EXP-1130,2026-10-17T18:46:21Z,Sofia Rossi,Orchard Print,services,1514.64,submitted
+EXP-1131,2026-10-17T19:17:23Z,Sofia Rossi,Pinecrest Insurance,travel,657.86,approved
+EXP-1132,2026-10-18T10:14:44Z,Noah Williams,Orchard Print,software,502.53,approved
+EXP-1133,2026-10-18T10:19:14Z,Maya Chen,Atlas Office Supply,meals,40.81,approved
+EXP-1134,2026-10-18T10:20:35Z,Aisha Bello,Meridian Analytics,services,581.21,submitted
+EXP-1135,2026-10-18T13:10:14Z,Ingrid Solberg,Vertex Recruiting,travel,1740.97,submitted
+EXP-1136,2026-10-18T13:36:51Z,Ingrid Solberg,Northwind Travel,software,557.53,submitted
+EXP-1137,2026-10-18T14:46:44Z,Jordan Alvarez,Lumen Software,equipment,1758.60,needs_receipt
+EXP-1138,2026-10-18T16:20:23Z,Elena Petrova,Cloudline Hosting,services,3964.48,approved
+EXP-1139,2026-10-18T19:19:00Z,Elena Petrova,Vertex Recruiting,meals,158.97,submitted
+EXP-1140,2026-10-19T07:06:01Z,Noah Williams,Vertex Recruiting,equipment,2646.49,submitted
+EXP-1141,2026-10-19T07:42:34Z,Ingrid Solberg,Cloudline Hosting,travel,1645.00,needs_receipt
+EXP-1142,2026-10-19T08:24:40Z,Grace Park,Meridian Analytics,travel,1093.75,submitted
+EXP-1143,2026-10-19T09:42:06Z,Lena Fischer,Atlas Office Supply,facilities,572.10,submitted
+EXP-1144,2026-10-19T09:58:51Z,Jordan Alvarez,Summit Telecom,equipment,2708.84,submitted
+EXP-1145,2026-10-19T12:31:15Z,Sofia Rossi,Atlas Office Supply,services,2886.66,needs_receipt
+EXP-1146,2026-10-19T12:42:30Z,Samuel Okafor,Cloudline Hosting,services,3404.13,rejected
+EXP-1147,2026-10-19T15:04:27Z,Ravi Shankar,Granite Facilities,software,429.81,approved
+EXP-1148,2026-10-19T15:34:27Z,Jordan Alvarez,Cloudline Hosting,software,883.31,approved
+EXP-1149,2026-10-19T17:24:07Z,Kwame Mensah,Granite Facilities,equipment,721.42,submitted
+EXP-1150,2026-10-20T08:18:56Z,Liam O'Connor,Northwind Travel,equipment,2015.11,approved
+EXP-1151,2026-10-20T08:42:14Z,Kwame Mensah,Orchard Print,travel,548.63,submitted
+EXP-1152,2026-10-20T13:25:25Z,Jordan Alvarez,Orchard Print,travel,552.64,submitted
+EXP-1153,2026-10-20T19:22:37Z,Jordan Alvarez,Cloudline Hosting,software,516.77,submitted
+EXP-1154,2026-10-21T07:05:14Z,Jordan Alvarez,Summit Telecom,services,2378.06,approved
+EXP-1155,2026-10-21T09:07:26Z,Maya Chen,Lumen Software,equipment,1834.40,needs_receipt
+EXP-1156,2026-10-21T12:03:23Z,Aisha Bello,Orchard Print,travel,1864.58,approved
+EXP-1157,2026-10-21T12:31:06Z,Noah Williams,Orchard Print,facilities,619.28,needs_receipt
+EXP-1158,2026-10-21T13:08:11Z,Ingrid Solberg,Vertex Recruiting,equipment,2961.17,needs_receipt
+EXP-1159,2026-10-21T15:01:48Z,Diego Ramos,Pinecrest Insurance,equipment,3127.93,needs_receipt
+EXP-1160,2026-10-21T16:56:07Z,Ingrid Solberg,Lumen Software,meals,123.79,submitted
+EXP-1161,2026-10-21T16:57:10Z,Maya Chen,Granite Facilities,meals,95.73,approved
+EXP-1162,2026-10-22T07:34:27Z,Aisha Bello,Lumen Software,equipment,1466.67,approved
+EXP-1163,2026-10-22T08:05:23Z,Noah Williams,Atlas Office Supply,services,3783.94,approved
+EXP-1164,2026-10-22T08:15:45Z,Ingrid Solberg,Vertex Recruiting,facilities,589.10,submitted
+EXP-1165,2026-10-22T09:18:34Z,Maya Chen,Atlas Office Supply,software,904.97,submitted
+EXP-1166,2026-10-22T10:06:29Z,Diego Ramos,Northwind Travel,equipment,1255.79,approved
+EXP-1167,2026-10-22T13:32:49Z,Tomás Herrera,Lumen Software,software,864.35,submitted
+EXP-1168,2026-10-22T15:58:50Z,Priya Natarajan,Lumen Software,services,2703.26,submitted
+EXP-1169,2026-10-22T17:16:51Z,Diego Ramos,Cloudline Hosting,facilities,656.88,approved
+EXP-1170,2026-10-23T09:49:59Z,Liam O'Connor,Beacon Legal LLP,software,698.23,approved
+EXP-1171,2026-10-23T10:01:05Z,Maya Chen,Granite Facilities,facilities,1074.68,submitted
+EXP-1172,2026-10-23T11:04:21Z,Diego Ramos,Northwind Travel,services,2409.27,submitted
+EXP-1173,2026-10-23T13:09:21Z,Maya Chen,Harbor Catering,equipment,870.10,rejected
+EXP-1174,2026-10-23T13:27:06Z,Grace Park,Meridian Analytics,services,1758.57,submitted
+EXP-1175,2026-10-23T17:28:22Z,Maya Chen,Pinecrest Insurance,services,1443.73,submitted
+EXP-1176,2026-10-23T17:56:19Z,Diego Ramos,Harbor Catering,software,604.89,submitted
+EXP-1177,2026-10-23T18:12:21Z,Lena Fischer,Granite Facilities,software,363.51,submitted
+EXP-1178,2026-10-23T19:27:58Z,Ravi Shankar,Orchard Print,services,1121.37,approved
+EXP-1179,2026-10-23T19:31:48Z,Ravi Shankar,Vertex Recruiting,facilities,1477.62,submitted
+EXP-1180,2026-10-24T08:18:16Z,Lena Fischer,Beacon Legal LLP,services,2662.74,submitted
+EXP-1181,2026-10-24T08:47:32Z,Kwame Mensah,Northwind Travel,services,1896.21,submitted
+EXP-1182,2026-10-24T10:19:21Z,Tomás Herrera,Summit Telecom,services,1426.86,rejected
+EXP-1183,2026-10-24T12:27:32Z,Jordan Alvarez,Summit Telecom,meals,63.31,approved
+EXP-1184,2026-10-24T13:33:18Z,Tomás Herrera,Meridian Analytics,meals,78.65,submitted
+EXP-1185,2026-10-24T14:59:30Z,Grace Park,Orchard Print,services,1513.56,approved
+EXP-1186,2026-10-24T17:05:24Z,Grace Park,Atlas Office Supply,facilities,1132.58,needs_receipt
+EXP-1187,2026-10-24T18:38:20Z,Jordan Alvarez,Vertex Recruiting,services,2116.47,needs_receipt
+EXP-1188,2026-10-24T19:18:39Z,Noah Williams,Harbor Catering,equipment,593.39,submitted
+EXP-1189,2026-10-25T17:27:23Z,Jordan Alvarez,Harbor Catering,travel,1301.06,submitted
+EXP-1190,2026-10-25T17:34:00Z,Ravi Shankar,Summit Telecom,services,542.83,approved
+EXP-1191,2026-10-25T17:54:26Z,Liam O'Connor,Cloudline Hosting,facilities,646.13,submitted
+EXP-1192,2026-10-25T18:25:18Z,Kwame Mensah,Lumen Software,software,478.41,submitted
+EXP-1193,2026-10-25T18:28:09Z,Priya Natarajan,Atlas Office Supply,travel,732.00,rejected
+EXP-1194,2026-10-26T08:18:41Z,Grace Park,Atlas Office Supply,travel,666.36,approved
+EXP-1195,2026-10-26T08:30:54Z,Jordan Alvarez,Vertex Recruiting,meals,157.52,approved
+EXP-1196,2026-10-26T09:01:15Z,Sofia Rossi,Summit Telecom,meals,145.03,submitted
+EXP-1197,2026-10-26T09:03:51Z,Lena Fischer,Granite Facilities,equipment,1713.23,submitted
+EXP-1198,2026-10-26T09:22:49Z,Maya Chen,Atlas Office Supply,equipment,940.30,approved
+EXP-1199,2026-10-26T14:11:13Z,Diego Ramos,Pinecrest Insurance,equipment,1956.87,submitted
+EXP-1200,2026-10-26T16:11:45Z,Maya Chen,Harbor Catering,equipment,1074.69,rejected
+EXP-1201,2026-10-27T07:35:56Z,Tomás Herrera,Meridian Analytics,software,466.64,submitted
+EXP-1202,2026-10-27T07:44:45Z,Kwame Mensah,Cloudline Hosting,meals,58.90,approved
+EXP-1203,2026-10-27T08:30:45Z,Lena Fischer,Granite Facilities,meals,170.02,submitted
+EXP-1204,2026-10-27T09:40:21Z,Elena Petrova,Northwind Travel,travel,224.83,rejected
+EXP-1205,2026-10-27T10:11:11Z,Priya Natarajan,Northwind Travel,meals,74.72,rejected
+EXP-1206,2026-10-27T10:46:42Z,Grace Park,Summit Telecom,travel,588.22,approved
+EXP-1207,2026-10-27T11:24:32Z,Priya Natarajan,Meridian Analytics,equipment,1353.51,needs_receipt
+EXP-1208,2026-10-27T13:36:37Z,Priya Natarajan,Northwind Travel,software,165.74,submitted
+EXP-1209,2026-10-27T14:46:46Z,Liam O'Connor,Summit Telecom,meals,132.09,approved
+EXP-1210,2026-10-27T15:31:28Z,Tomás Herrera,Cloudline Hosting,travel,2354.64,approved
+EXP-1211,2026-10-27T17:44:24Z,Diego Ramos,Vertex Recruiting,travel,1534.17,rejected
+EXP-1212,2026-10-27T19:52:30Z,Maya Chen,Northwind Travel,facilities,199.58,submitted
+EXP-1213,2026-10-28T08:15:00Z,Jordan Alvarez,Meridian Analytics,meals,124.86,approved
+EXP-1214,2026-10-28T13:08:41Z,Lena Fischer,Beacon Legal LLP,facilities,1449.94,submitted
+EXP-1215,2026-10-28T13:37:00Z,Sofia Rossi,Harbor Catering,travel,1591.03,submitted
+EXP-1216,2026-10-28T14:53:34Z,Sofia Rossi,Atlas Office Supply,software,641.83,submitted
+EXP-1217,2026-10-28T17:46:48Z,Tomás Herrera,Beacon Legal LLP,travel,335.51,approved
+EXP-1218,2026-10-29T07:18:13Z,Aisha Bello,Pinecrest Insurance,software,270.69,approved
+EXP-1219,2026-10-29T07:59:31Z,Diego Ramos,Meridian Analytics,facilities,784.69,approved
+EXP-1220,2026-10-29T09:49:45Z,Kwame Mensah,Northwind Travel,services,4778.66,approved
+EXP-1221,2026-10-29T09:51:41Z,Jordan Alvarez,Northwind Travel,meals,159.29,submitted
+EXP-1222,2026-10-29T10:28:48Z,Ravi Shankar,Cloudline Hosting,meals,158.92,rejected
+EXP-1223,2026-10-29T13:02:10Z,Grace Park,Cloudline Hosting,equipment,393.90,submitted
+EXP-1224,2026-10-29T13:21:59Z,Elena Petrova,Meridian Analytics,equipment,3186.15,approved
+EXP-1225,2026-10-29T13:43:25Z,Ingrid Solberg,Summit Telecom,services,530.97,submitted
+EXP-1226,2026-10-29T14:04:49Z,Maya Chen,Beacon Legal LLP,facilities,771.28,approved
+EXP-1227,2026-10-29T14:41:43Z,Kwame Mensah,Vertex Recruiting,travel,645.19,needs_receipt
+EXP-1228,2026-10-29T15:00:08Z,Tomás Herrera,Pinecrest Insurance,facilities,519.88,approved
+EXP-1229,2026-10-29T16:42:44Z,Noah Williams,Vertex Recruiting,travel,1672.33,approved
+EXP-1230,2026-10-29T17:04:33Z,Ravi Shankar,Lumen Software,services,1924.61,needs_receipt
+EXP-1231,2026-10-29T17:23:23Z,Diego Ramos,Atlas Office Supply,services,537.50,submitted
+EXP-1232,2026-10-30T12:08:57Z,Ravi Shankar,Lumen Software,facilities,533.54,approved
+EXP-1233,2026-10-30T12:31:01Z,Samuel Okafor,Lumen Software,facilities,659.98,submitted
+EXP-1234,2026-10-30T13:35:48Z,Aisha Bello,Pinecrest Insurance,equipment,1160.49,needs_receipt
+EXP-1235,2026-10-30T14:07:03Z,Elena Petrova,Lumen Software,meals,104.51,approved
+EXP-1236,2026-10-30T14:22:04Z,Jordan Alvarez,Lumen Software,travel,667.63,submitted
+EXP-1237,2026-10-30T16:12:56Z,Diego Ramos,Northwind Travel,meals,101.73,approved
+EXP-1238,2026-10-30T16:44:25Z,Sofia Rossi,Atlas Office Supply,meals,138.82,submitted
+EXP-1239,2026-10-30T17:50:42Z,Diego Ramos,Summit Telecom,equipment,597.67,submitted
+EXP-1240,2026-10-30T18:17:20Z,Kwame Mensah,Orchard Print,travel,1008.21,submitted

@@ -1,0 +1,11 @@
+deal,stage,amount,close_date,owner
+Acme Retail,won,33000.00,2026-07-03,Diego
+Birch Labs,lost,20000.00,2026-08-06,Diego
+Cobalt Health,proposal,94500.00,2026-08-24,Sarah
+Delta Freight,prospect,51000.00,2026-07-08,Sarah
+Ember Foods,negotiation,76500.00,2026-07-01,Maya
+Fjord Media,lost,107000.00,2026-08-28,Diego
+Granite Bank,proposal,19500.00,2026-09-21,Maya
+Helio Energy,prospect,99500.00,2026-09-06,Sarah
+Iris Travel,proposal,49500.00,2026-08-01,Maya
+Juniper Schools,negotiation,24000.00,2026-08-24,Maya
