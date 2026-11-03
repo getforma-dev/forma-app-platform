@@ -32,7 +32,7 @@ class ExpiryPolicyTests(unittest.TestCase):
         environment.start(); self.addCleanup(environment.stop)
         manifest = {'source': {'schema_manifest_sha256': 'a' * 64, 'deployment_contract_sha256': 'b' * 64}}
         self.state = fixture(manifest)
-        self.state['policy'].update(budget_genui_cents=17000, budget_total_cents=20800)
+        self.state['policy'].update(budget_genui_cents=18000, budget_total_cents=21800)
         self.s3 = TracedS3(self.state)
         self.store = Store(self.s3, 'bucket', 'beta')
         self.aws = FakeAWS(self.state, self.s3, manifest)
@@ -58,7 +58,7 @@ class ExpiryPolicyTests(unittest.TestCase):
         self.assert_unchanged()
         public = result['public']
         self.assertEqual(public['status'], 'planned')
-        self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (17000, 20800))
+        self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (18000, 21800))
         self.assertEqual(public['shortening_hours'], 18)
         self.assertFalse(public['ledger_changed']); self.assertFalse(public['live_changed'])
         self.assertEqual(result['receipt']['prospective_config']['supersedes_window_id'], self.state['live']['window_id'])

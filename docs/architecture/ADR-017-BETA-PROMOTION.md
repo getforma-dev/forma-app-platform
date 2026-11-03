@@ -1,6 +1,6 @@
 # ADR-017: One-approval GitHub-to-beta promotion
 
-Status: accepted direction; implementation and live acceptance tracked by [APP-167](../../Tickets/2-in-progress/APP-167.md).
+Status: accepted direction; implementation and live acceptance tracked by [APP-167](../../Tickets/2-in-progress/APP-167.md). The deploy branch in the paragraph below is superseded by [ADR-019](ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md): `main` is now the only branch whose push starts this pipeline.
 
 Victor authorized implementing, testing, reviewing and operating a merge-triggered Promote to beta stage. This supersedes ADR-013's local-build/manual-only sequencing for the bounded promotion path. It does not unfreeze product `main`, create production, broaden application authority or waive qualification.
 

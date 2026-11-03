@@ -47,7 +47,7 @@ class CandidateTests(unittest.TestCase):
                 c.ci_status(rows, SHA)
 
     def test_foreign_repo_or_branch_is_refused(self):
-        for field, value in (("repository", {"id": 12}), ("head_branch", "main")):
+        for field, value in (("repository", {"id": 12}), ("head_branch", "pivot/pitch-mvp")):
             rows = runs()
             rows[0][field] = value
             with self.assertRaises(ValueError):
@@ -109,7 +109,7 @@ class CandidateTests(unittest.TestCase):
         pr = {"number": 55, "merged_at": "2026-11-02T00:00:00Z", "merge_commit_sha": SHA,
             "base": {"ref": c.BRANCH, "repo": {"id": c.REPOSITORY_ID}}}
         self.assertEqual(c.merged_pr([pr], SHA), 55)
-        for altered in (dict(pr, merged_at=None), dict(pr, merge_commit_sha="b" * 40), dict(pr, base={"ref": "main"})):
+        for altered in (dict(pr, merged_at=None), dict(pr, merge_commit_sha="b" * 40), dict(pr, base={"ref": "pivot/pitch-mvp"})):
             with self.assertRaises(ValueError):
                 c.merged_pr([altered], SHA)
 

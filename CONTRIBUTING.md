@@ -1,6 +1,6 @@
 # Contributing
 
-This repository implements the Forma company app platform from its delivered design. The current pitch trunk is `pivot/pitch-mvp`; [DEVELOPMENT.md](docs/DEVELOPMENT.md) is the entry point for setup, running, checks and delivery. The November 2 pivot and November 3 landing decision are recorded in ADR-011 and ADR-013. Select work from the current board and current user direction; keep unfinished acceptance and upstream integration gates explicit.
+This repository implements the Forma company app platform from its delivered design. The trunk is `main`; [DEVELOPMENT.md](docs/DEVELOPMENT.md) is the entry point for setup, running, checks and delivery. The November 3 landing is [ADR-019](docs/architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md). Select work from the current board and current user direction; keep unfinished acceptance and upstream integration gates explicit.
 
 Read [Tickets](Tickets/README.md), the [source guide](docs/planning/SOURCE-GUIDE.md) and [existing work](docs/planning/EXISTING-WORK.md) before choosing work. The platform's architecture is typed `AppDefinition` interpreted by trusted first-party renderers, immutable Parquet/DuckDB source revisions, and PostgreSQL for work, records, publication and audit. Northstar and Spend Review prove the same platform, not separate product codebases.
 

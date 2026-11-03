@@ -20,6 +20,7 @@ import zipfile
 
 from .artifacts import NAMES, REPORTS, sha, validate_bundle
 from .candidate import BRANCH, OWNER_ID, REPOSITORY, REPOSITORY_ID, WORKFLOW, api, require
+from .runner import preflight
 
 REVIEWER_ID = 15230422
 
@@ -186,7 +187,8 @@ def validate_summary(value, candidate):
     require(re.fullmatch(r"[A-Za-z0-9_-]{1,96}", value["promotion_id"])
         and re.fullmatch(r"[0-9a-f]{64}", value["packet_sha256"]), "invalid packet identity")
     if value["status"] == "prepared":
-        for key, cap in (("cost_genui_cents", 17000), ("cost_total_cents", 20800)):
+        plans = preflight().PLANS['always-on-beta']
+        for key, cap in (("cost_genui_cents", plans['genui_cap_cents']), ("cost_total_cents", plans['project_cap_cents'])):
             require(type(value[key]) is int and 0 <= value[key] <= cap, "summary cost out of bounds")
         require(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value["expires_at_utc"]), "invalid expiry")
         review = value["review"]

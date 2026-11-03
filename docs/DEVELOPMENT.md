@@ -6,7 +6,7 @@ This is the working guide for the pitch application: setup, local development, c
 
 The product is a modular monolith: a Rust service renders typed FMIR pages with registered Forma canvas islands; PostgreSQL holds identity, grants, work, records and audit; confined Python children run the DuckDB queries; a separate sealed Rust/WASM parser handles imports. Model output is typed data admitted by the service, never executable code, SQL or a permission grant. The [module map](architecture/MODULE-MAP.md) records dependencies, known leaks and their owners. Dependency enforcement and a Python-to-Rust engine decision remain APP-097 work; neither is part of setup.
 
-`pivot/pitch-mvp` is the trunk and beta candidate branch until the November 3 revisit. Work on `pivot/<topic>` branches from it, review the change and its CI, then merge back. `main` stays frozen at the Phase 1 go-live record; the landing PR and future production policy are decisions for APP-097. Both branches are protected against force-push and deletion. There is one clone plus worktrees; do not revive the archived second clone or borrow its environment.
+`main` is the trunk and the only beta deploy branch ([ADR-019](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). Work on a topic branch, review the change and its CI, then merge back to `main`. A merge prepares one beta packet; it deploys only after the protected approval. `pivot/pitch-mvp` is the pitch history through that landing. There is one clone plus worktrees; do not revive the archived second clone or borrow its environment.
 
 | Path | Responsibility |
 | --- | --- |
@@ -127,7 +127,7 @@ The three images are separate trust boundaries: the service has no qualification
 
 ```text
 edit → just check / focused campaigns → push topic → exact-commit GitHub CI
-  → reviewed merge into pivot/pitch-mvp → pushed, clean candidate
+  → reviewed merge into main → pushed, clean candidate
   → just images <sha> (local ARM64 images + build.json)
   → just deploy new → observe → push → preflight → synth → diff
   → change-set → review → execute → snapshot/migrate when needed

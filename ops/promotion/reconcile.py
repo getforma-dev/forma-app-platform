@@ -89,7 +89,7 @@ def assessed_ledger(state, assessment, observation, clock):
     closed(assessment['amounts'], MONEY, 'assessed amounts')
     for field in MONEY:
         proposed = assessment['amounts'][field]
-        require(type(proposed) is int and ledger['months'][month][field] <= proposed <= 20800,
+        require(type(proposed) is int and ledger['months'][month][field] <= proposed <= 21800,
                 'cannot reduce recorded money or exceed the existing cap')
     updated = copy.deepcopy(ledger)
     updated['months'][month].update(assessment['amounts'],
