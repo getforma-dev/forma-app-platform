@@ -61,6 +61,33 @@ class FoundationCheckTests(unittest.TestCase):
             self.assertEqual([r['exit'] for r in report], [0, 0])
             self.assertEqual([r['timeout_seconds'] for r in report], [300, 300])
 
+    def test_npm_ci_timeout_retries_once_and_a_second_timeout_stops(self):
+        command = ['npm', 'ci']
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with mock.patch.object(foundation.subprocess, 'run', side_effect=[
+                    subprocess.TimeoutExpired(command, 300, output=b''),
+                    subprocess.CompletedProcess(command, 0, stdout='added'),
+                    subprocess.CompletedProcess(['later'], 0, stdout='ok')]), \
+                    contextlib.redirect_stdout(io.StringIO()) as console:
+                code = foundation.run_checks([('infra', command), ('.', ['later'])], ROOT, output)
+            self.assertEqual(code, 0)
+            report = json.loads((output / 'local-preparation.json').read_text())['steps']
+            self.assertEqual([r['command'][0] for r in report], ['npm', 'npm', 'later'])
+            self.assertEqual([r['attempt'] for r in report], [1, 2, 1])
+            self.assertTrue(report[0]['timed_out'])
+            self.assertFalse(report[1]['timed_out'])
+            self.assertIn('Retrying npm ci once', console.getvalue())
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with mock.patch.object(foundation.subprocess, 'run', side_effect=subprocess.TimeoutExpired(
+                    command, 300, output=b'')), contextlib.redirect_stdout(io.StringIO()):
+                code = foundation.run_checks([('infra', command), ('.', ['later'])], ROOT, output)
+            self.assertEqual(code, 124)
+            report = json.loads((output / 'local-preparation.json').read_text())['steps']
+            self.assertEqual(len(report), 2)
+            self.assertEqual([r['attempt'] for r in report], [1, 2])
+
 
 if __name__ == '__main__':
     unittest.main()

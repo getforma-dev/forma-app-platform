@@ -26,30 +26,38 @@ def run_checks(steps, working_root, output_directory):
         # The expanded TLS/database runtime suite takes ~227s locally. Keep
         # its CI budget bounded, without changing tests or other step budgets.
         timeout = 600 if args[1:] == ['-m', 'unittest', 'discover', '-s', 'app/runtime', '-v'] else 300
-        print('RUN: ' + ' '.join(args), flush=True)
-        started = time.monotonic()
-        timed_out = False
-        try:
-            result = subprocess.run(args, cwd=working_root/directory,
-                                    env={**os.environ, 'CARGO_BUILD_JOBS': '2'},
-                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, timeout=timeout)
-            code, output = result.returncode, result.stdout
-        except subprocess.TimeoutExpired as error:
-            # TimeoutExpired.output may be bytes even when text=True. Retain
-            # the last named test instead of losing all buffered diagnostics.
-            output = error.output or ''
-            if isinstance(output, bytes):
-                output = output.decode('utf-8', errors='replace')
-            code, timed_out = 124, True
-        reports.append({'cwd': directory, 'command': args, 'exit': code, 'output': output,
-                        'timeout_seconds': timeout, 'timed_out': timed_out,
-                        'elapsed_seconds': round(time.monotonic() - started, 3)})
-        (output_directory/'local-preparation.json').write_text(json.dumps({
-            'scope': 'Local scaffold only; managed acceptance pending', 'steps': reports}, indent=2)+'\n')
-        print(('PASS' if code == 0 else 'FAIL') + ': ' + ' '.join(args), flush=True)
-        if code:
+        # npm ci talks to the registry and can sit silent until the step budget.
+        # One retry covers that stall. A second timeout still fails the check.
+        attempts = 2 if args[:2] == ['npm', 'ci'] else 1
+        for attempt in range(attempts):
+            print('RUN: ' + ' '.join(args), flush=True)
+            started = time.monotonic()
+            timed_out = False
+            try:
+                result = subprocess.run(args, cwd=working_root/directory,
+                                        env={**os.environ, 'CARGO_BUILD_JOBS': '2'},
+                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                        text=True, timeout=timeout)
+                code, output = result.returncode, result.stdout
+            except subprocess.TimeoutExpired as error:
+                # TimeoutExpired.output may be bytes even when text=True. Retain
+                # the last named test instead of losing all buffered diagnostics.
+                output = error.output or ''
+                if isinstance(output, bytes):
+                    output = output.decode('utf-8', errors='replace')
+                code, timed_out = 124, True
+            reports.append({'cwd': directory, 'command': args, 'exit': code, 'output': output,
+                            'timeout_seconds': timeout, 'timed_out': timed_out, 'attempt': attempt + 1,
+                            'elapsed_seconds': round(time.monotonic() - started, 3)})
+            (output_directory/'local-preparation.json').write_text(json.dumps({
+                'scope': 'Local scaffold only; managed acceptance pending', 'steps': reports}, indent=2)+'\n')
+            print(('PASS' if code == 0 else 'FAIL') + ': ' + ' '.join(args), flush=True)
+            if code == 0:
+                break
             print(output, flush=True)
+            if timed_out and attempt + 1 < attempts:
+                print('Retrying npm ci once after the %d-second budget.' % timeout, flush=True)
+                continue
             if timed_out:
                 print('Step exceeded its %d-second budget; dependent steps were not run.' % timeout, flush=True)
             return code
