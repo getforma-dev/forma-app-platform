@@ -30,6 +30,13 @@ def template(inventory):
     require(inventory['account'] == ACCOUNT and inventory['region'] == REGION, 'bootstrap account/region differs')
     require(inventory['stack_id'].startswith(f'arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/GenuiSyntheticFoundation/'), 'stack differs')
     require(set(inventory['definitions']) == set(ROLE_KEYS) and len(inventory['services']) == 2 and len(inventory['schedules']) == 2, 'incomplete runtime boundary')
+    database = inventory['database_arn']
+    attribute_roles = sorted(set(inventory['attribute_role_arns']))
+    describe_keys = sorted(set(inventory['describe_key_arns']))
+    require(isinstance(database, str) and database.startswith(f'arn:aws:rds:{REGION}:{ACCOUNT}:db:'), 'database attribute scope differs')
+    require(attribute_roles and describe_keys, 'task-definition attribute reads are incomplete')
+    require(all(role.startswith(f'arn:aws:iam::{ACCOUNT}:role/') for role in attribute_roles), 'attribute role scope differs')
+    require(all(key.startswith(f'arn:aws:kms:{REGION}:{ACCOUNT}:key/') for key in describe_keys), 'key attribute scope differs')
     bucket_name = f'forma-beta-promotion-{ACCOUNT}-{REGION}'
     bucket = 'arn:aws:s3:::' + bucket_name
     objects = bucket + '/' + PREFIX + '/*'
@@ -70,7 +77,11 @@ def template(inventory):
         statement(['scheduler:GetSchedule', 'scheduler:UpdateSchedule'], schedule_arns),
         statement(['iam:PassRole'], ecs_task_roles, Condition={'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}),
         statement(['iam:PassRole'], scheduler_roles, Condition={'StringEquals': {'iam:PassedToService': 'scheduler.amazonaws.com'}}),
-        statement(['iam:GetRole'], ecs_task_roles + scheduler_roles),
+        statement(['iam:GetRole'], sorted(set(ecs_task_roles + scheduler_roles + attribute_roles))),
+        # Task definitions embed these attributes. CloudFormation resolves them
+        # while replacing a task definition; the role still cannot modify them.
+        statement(['rds:DescribeDBInstances'], database),
+        statement(['kms:DescribeKey'], describe_keys),
         # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
         # while creating the change set (before resource handlers execute).
         statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),

@@ -13,7 +13,10 @@ def inventory():
             'definitions': {k: {'taskDefinitionArn': f'arn:aws:ecs:{REGION}:{ACCOUNT}:task-definition/{k}:1',
                                'taskRoleArn': f'arn:aws:iam::{ACCOUNT}:role/{k}',
                                'executionRoleArn': f'arn:aws:iam::{ACCOUNT}:role/{k}-execution'} for k in ROLE_KEYS},
-            'target_groups': [f'arn:aws:elasticloadbalancing:{REGION}:{ACCOUNT}:targetgroup/main/a']}
+            'target_groups': [f'arn:aws:elasticloadbalancing:{REGION}:{ACCOUNT}:targetgroup/main/a'],
+            'database_arn': f'arn:aws:rds:{REGION}:{ACCOUNT}:db:genui',
+            'attribute_role_arns': [f'arn:aws:iam::{ACCOUNT}:role/db-access', f'arn:aws:iam::{ACCOUNT}:role/tenant-access'],
+            'describe_key_arns': [f'arn:aws:kms:{REGION}:{ACCOUNT}:key/11111111-1111-1111-1111-111111111111']}
 
 
 def statements(document, logical):
@@ -38,8 +41,13 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn('cloudformation:CreateChangeSet',actions(execute));self.assertNotIn('iam:PassRole',actions(execute))
         for rows in [prep,execute,cf]:
             self.assertNotIn('*',actions(rows))
-            self.assertFalse(any(a.startswith(('rds:','secretsmanager:')) for a in actions(rows)))
+            self.assertFalse(any(a.startswith('secretsmanager:') or a.startswith('rds:') and a != 'rds:DescribeDBInstances' or a.startswith('kms:') and a != 'kms:DescribeKey' for a in actions(rows)))
             self.assertNotIn('s3:DeleteObject',actions(rows));self.assertNotIn('iam:CreateRole',actions(rows))
+        cf_actions=actions(cf)
+        self.assertIn('rds:DescribeDBInstances', cf_actions)
+        self.assertIn('kms:DescribeKey', cf_actions)
+        self.assertNotIn('rds:DescribeDBInstances', actions(prep))
+        self.assertNotIn('kms:DescribeKey', actions(execute))
         create=next(r for r in prep if 'cloudformation:CreateChangeSet' in r['Action'])
         self.assertEqual(create['Condition']['StringEquals']['cloudformation:RoleArn'],f'arn:aws:iam::{ACCOUNT}:role/forma-beta-runtime-cloudformation')
 
