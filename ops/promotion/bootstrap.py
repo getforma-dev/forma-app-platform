@@ -37,6 +37,8 @@ def template(inventory):
     require(attribute_roles and describe_keys, 'task-definition attribute reads are incomplete')
     require(all(role.startswith(f'arn:aws:iam::{ACCOUNT}:role/') for role in attribute_roles), 'attribute role scope differs')
     require(all(key.startswith(f'arn:aws:kms:{REGION}:{ACCOUNT}:key/') for key in describe_keys), 'key attribute scope differs')
+    cluster = inventory['cluster_arn']
+    require(isinstance(cluster, str) and cluster.startswith(f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/'), 'cluster attribute scope differs')
     bucket_name = f'forma-beta-promotion-{ACCOUNT}-{REGION}'
     bucket = 'arn:aws:s3:::' + bucket_name
     objects = bucket + '/' + PREFIX + '/*'
@@ -82,6 +84,10 @@ def template(inventory):
         # while replacing a task definition; the role still cannot modify them.
         statement(['rds:DescribeDBInstances'], database),
         statement(['kms:DescribeKey'], describe_keys),
+        statement(['ecs:DescribeClusters'], cluster),
+        # DescribeSecurityGroups does not accept a group ARN. The service
+        # update resolves GroupId, and this remains a read.
+        statement(['ec2:DescribeSecurityGroups'], '*'),
         # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
         # while creating the change set (before resource handlers execute).
         statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),

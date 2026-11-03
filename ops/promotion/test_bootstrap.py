@@ -46,8 +46,12 @@ class BootstrapTests(unittest.TestCase):
         cf_actions=actions(cf)
         self.assertIn('rds:DescribeDBInstances', cf_actions)
         self.assertIn('kms:DescribeKey', cf_actions)
+        self.assertIn('ec2:DescribeSecurityGroups', cf_actions)
+        self.assertIn('ecs:DescribeClusters', cf_actions)
+        self.assertEqual(next(s for s in cf if s['Action'] == ['ec2:DescribeSecurityGroups'])['Resource'], '*')
+        self.assertEqual(next(s for s in cf if s['Action'] == ['ecs:DescribeClusters'])['Resource'], inventory()['cluster_arn'])
         self.assertNotIn('rds:DescribeDBInstances', actions(prep))
-        self.assertNotIn('kms:DescribeKey', actions(execute))
+        self.assertNotIn('ec2:DescribeSecurityGroups', actions(execute))
         create=next(r for r in prep if 'cloudformation:CreateChangeSet' in r['Action'])
         self.assertEqual(create['Condition']['StringEquals']['cloudformation:RoleArn'],f'arn:aws:iam::{ACCOUNT}:role/forma-beta-runtime-cloudformation')
 
