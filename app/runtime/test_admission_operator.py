@@ -1,6 +1,6 @@
 """APP-073 operator command tests (ADR-007 D7.17, D7.19). No AWS/RDS use.
 
-PureTests need nothing. DatabaseTests start one disposable PostgreSQL 16.13
+PureTests need nothing. DatabaseTests start one disposable PostgreSQL 16.15
 container on a random loopback port with a throwaway TLS certificate, apply the
 reviewed migrations and drive the real command line as genui_migration over
 verify-full TLS, exactly as an operator would; they are skipped when Docker or
@@ -24,7 +24,7 @@ import admission_operator as op
 import runtime
 
 HERE = Path(__file__).resolve().parent
-IMAGE = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+IMAGE = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 # Shared with app/src/storage/admission.rs unit tests: the Rust storage digest
 # and this operator digest must agree byte for byte.
 VECTOR_RAW = bytes(range(32))
@@ -288,7 +288,7 @@ def run(args, check=True, **kw):
 
 
 class OperatorDatabase:
-    """One disposable PostgreSQL 16.13 container with a throwaway TLS CA, shared by a TestCase class.
+    """One disposable PostgreSQL 16.15 container with a throwaway TLS CA, shared by a TestCase class.
 
     A mixin, not a TestCase, so other test modules (test_provider_invitations)
     reuse the fixture without collecting these tests twice.
@@ -324,7 +324,7 @@ class OperatorDatabase:
             run(["docker", "exec", "--user=0", cls.name, "chown", "postgres:postgres", "/var/lib/postgresql/server.key", "/var/lib/postgresql/server.pem"])
             run(["docker", "exec", "--user=0", cls.name, "chmod", "600", "/var/lib/postgresql/server.key"])
             with cls.connect("postgres", "postgres", autocommit=True) as c:
-                assert c.execute("SHOW server_version").fetchone()[0].split()[0] == "16.13"
+                assert c.execute("SHOW server_version").fetchone()[0].split()[0] == "16.15"
                 c.execute("ALTER SYSTEM SET ssl='on'")
                 c.execute("ALTER SYSTEM SET ssl_cert_file='/var/lib/postgresql/server.pem'")
                 c.execute("ALTER SYSTEM SET ssl_key_file='/var/lib/postgresql/server.key'")

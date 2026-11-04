@@ -19,7 +19,7 @@ path; every documented override (size, container, command parsed inside the
 image); fixed refusals; `upload-sources` through the image's own parser,
 DuckDB and boto3 against an in-container S3 stub; and the full database
 sequence (migrate twice, verify-catalog, seed twice, admission) against a
-disposable PostgreSQL 16.13 with TLS on an internal Docker network.
+disposable PostgreSQL 16.15 with TLS on an internal Docker network.
 
 Usage: python3 -P app/operator/check_image.py --image IMAGE --output REPORT [--base-revision REV]
 (-P: this directory's operator.py must never shadow the standard library's `operator`.)
@@ -45,7 +45,7 @@ import uuid
 HERE = Path(__file__).resolve().parent
 REPOSITORY = HERE.parents[1]
 REVIEWED_CA_SHA256 = "90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b"
-POSTGRES = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+POSTGRES = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 CONFINED = ["--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64", "--memory=512m",
             "--memory-swap=512m", "--cpus=1", "--tmpfs=/run/operator:rw,noexec,nosuid,size=16m,uid=65532,gid=65532,mode=0700"]
 NORTHSTAR, CANARY = "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"

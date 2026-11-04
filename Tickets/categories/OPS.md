@@ -31,3 +31,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 137 | [APP-137: One private beta ledger across repository worktrees](../0-backlog/APP-137.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |
 | 161 | [APP-161: Spike — measure idle app costs and decide safe sleep/wake architecture](../0-backlog/APP-161.md) | [PH09](../phases/PH09.md) | S15 | OPS | P2 | M | Backlog | APP-140, APP-154 |
 | 167 | [APP-167: Promote merged beta releases through GitHub Actions](../2-in-progress/APP-167.md) | [PH08](../phases/PH08.md) | S14 | OPS | P0 | L | In progress | None |
+| 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](../0-backlog/APP-172.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | L | Backlog | APP-167 |

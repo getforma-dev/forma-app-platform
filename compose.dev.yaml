@@ -11,13 +11,13 @@
 #   pitch, + 21 for clean). The dev binary turns on TLS, creates the roles and
 #   switches TCP to password authentication on its first start; every
 #   password is a synthetic dev value (app/src/dev/db.rs).
-# - Image pinned by digest, the same PostgreSQL 16.13 the campaign fixtures
+# - Image pinned by digest, the same PostgreSQL 16.15 the campaign fixtures
 #   use (app/src/storage/qualification.rs IMAGE).
 name: ${GENUI_DEV_PROJECT:?set by scripts/dev/dev.sh}
 
 services:
   db:
-    image: postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59
+    image: postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a
     container_name: ${GENUI_DEV_DB_CONTAINER:?set by scripts/dev/dev.sh}
     environment:
       # Only for the first initdb; the dev binary replaces pg_hba.conf with

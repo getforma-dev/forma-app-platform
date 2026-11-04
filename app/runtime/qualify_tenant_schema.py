@@ -1,4 +1,4 @@
-"""Bounded local PostgreSQL 16.13 schema qualification; no AWS/IAM acceptance.
+"""Bounded local PostgreSQL 16.15 schema qualification; no AWS/IAM acceptance.
 
 Run with the existing locked runtime + contract validator environments. A unique
 Docker database publishes only a random loopback port and is removed in finally.
@@ -21,7 +21,7 @@ from psycopg import sql
 import runtime
 from tenant_seed import ORGANIZATIONS, OWNER_PUBLISH_POLICY, make_bundles, seed, canonical
 
-IMAGE = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+IMAGE = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 MIGRATIONS = Path(__file__).resolve().parents[1] / 'migrations'
 P = '00000000-0000-4000-8000-000000000066'
 APP = '00000000-0000-4000-8000-000000000065'
@@ -1409,7 +1409,7 @@ class LocalPostgres:
                 time.sleep(.25)
             else: raise RuntimeError('local PostgreSQL startup deadline')
             with self.connect('postgres','postgres',autocommit=True) as c:
-                assert c.execute('SHOW server_version').fetchone()[0].split()[0] == '16.13'
+                assert c.execute('SHOW server_version').fetchone()[0].split()[0] == '16.15'
                 c.execute('CREATE ROLE genui_migration LOGIN INHERIT CREATEDB CREATEROLE NOSUPERUSER NOBYPASSRLS')
                 c.execute('CREATE ROLE rds_iam NOLOGIN')
                 c.execute('GRANT rds_iam TO genui_migration WITH ADMIN TRUE')
@@ -1439,7 +1439,7 @@ def scope(c, org=ORGANIZATIONS[0], principal=P, epoch=1):
 
 def qualify():
     report={'schema_version':1,'scope':'APP-008/APP-073/APP-010/APP-009/APP-013 real local PostgreSQL schema/ACL, admission-function, definition/work, session and command grant qualification',
-            'managed_acceptance':False,'image':IMAGE,'server_version':'16.13','network':'random loopback-only published port',
+            'managed_acceptance':False,'image':IMAGE,'server_version':'16.15','network':'random loopback-only published port',
             'checks':[],'passed':False,'limits':['Local trust authentication is not RDS IAM/TLS qualification.',
             'Operator-seeded contract shapes are not source import, hosted identity or successful application business writes.',
             'Admission functions are exercised directly as genui_workspace with fixture codes written as the operator channel would; '
