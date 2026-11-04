@@ -1,4 +1,4 @@
-"""Preserved migration0001 regression on local PostgreSQL16.13.
+"""Preserved migration0001 regression on local PostgreSQL16.15.
 
 The complete checksummed version2 transition is qualify_tenant_schema.py.
 Simulated rds_iam and local trust authentication are not managed evidence.
@@ -12,7 +12,7 @@ import time
 import uuid
 
 
-DEFAULT_IMAGE = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+DEFAULT_IMAGE = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations/0001_role_foundation.sql"
 ROLES = ("genui_workspace", "genui_control", "genui_data", "genui_worker")
 
@@ -65,7 +65,7 @@ def qualify(image):
         else:
             raise RuntimeError("Local PostgreSQL startup timeout")
         report["server_version"] = sql("SHOW server_version;", user="postgres", database="postgres").stdout.strip()
-        assert report["server_version"].split()[0] == "16.13", report["server_version"]
+        assert report["server_version"].split()[0] == "16.15", report["server_version"]
         sql("""CREATE ROLE genui_migration LOGIN INHERIT CREATEDB CREATEROLE NOSUPERUSER NOBYPASSRLS;
           CREATE ROLE rds_iam NOLOGIN;
           GRANT rds_iam TO genui_migration WITH ADMIN TRUE;

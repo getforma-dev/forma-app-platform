@@ -22,7 +22,7 @@ use std::{
 use tokio::time::{timeout, Instant};
 
 pub(super) const IMAGE: &str =
-    "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59";
+    "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a";
 
 fn command(mut command: Command, input: &[u8], label: &str) -> String {
     let mut child = command
@@ -283,7 +283,7 @@ impl Fixture {
             .to_owned();
         assert_eq!(
             fixture.server_version.split_whitespace().next(),
-            Some("16.13")
+            Some("16.15")
         );
         for file in ["server.key", "server.pem"] {
             docker(

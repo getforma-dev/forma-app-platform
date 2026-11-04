@@ -1,4 +1,4 @@
-"""Exact PostgreSQL16.13 catalog-query regression; no TLS/RDS/restore assertion."""
+"""Exact PostgreSQL16.15 catalog-query regression; no TLS/RDS/restore assertion."""
 import argparse
 import hashlib
 import importlib.util
@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output-dir', type=Path, default=ROOT / '.cache/APP-007/restore-sql')
 OUT = parser.parse_args().output_dir
 OUT.mkdir(parents=True, exist_ok=True)
-IMAGE = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+IMAGE = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 SOURCE = ROOT / "infra/scripts/foundation_restore_manifest.py"
 MIGRATION = ROOT / "app/migrations/0001_role_foundation.sql"
 name = "genui-app007-restore-sql-" + uuid.uuid4().hex[:12]

@@ -7,7 +7,7 @@ The Linux cfg(test) executable is taken from a locally built qualification
 image (app/qualification/Dockerfile builds it in rust:1.93.1-bookworm with
 `cargo test --no-run --locked --lib`, selecting the path from Cargo's JSON
 artifact metadata) and checked against the image's build identity.
-PostgreSQL 16.13 runs with ssl=on and an owned synthetic CA/server
+PostgreSQL 16.15 runs with ssl=on and an owned synthetic CA/server
 certificate whose only SAN is the exact RDS hostname; it is attached to an
 internal Docker network under that hostname as a network alias. The current
 migrations and validated seed are applied through the locked Python
@@ -45,7 +45,7 @@ import uuid
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 APP = REPOSITORY / "app"
-PG_IMAGE = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+PG_IMAGE = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 HOST = "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg.cg58i06y2r4e.us-east-1.rds.amazonaws.com"
 RESOURCE_ID = "db-KW4LRMTPI5YXHZXF4LELQZKTAU"
 SCOPE = "APP-008 isolated application-data-read-only qualification"
@@ -258,7 +258,7 @@ class Harness:
                 raise RuntimeError("PostgreSQL TCP deadline")
             time.sleep(0.2)
         version = self.sql("SHOW server_version", "postgres").strip()
-        if version.split()[0] != "16.13":
+        if version.split()[0] != "16.15":
             raise RuntimeError("PostgreSQL version refused")
         self.report["postgres"] = {"image": PG_IMAGE, "server_version": version}
         self.server_certificate("rds")

@@ -308,10 +308,11 @@
         "APP-163",
         "APP-164",
         "APP-165",
-        "APP-167"
+        "APP-167",
+        "APP-172"
       ],
-      "ticket_count": 68,
-      "done_count": 3,
+      "ticket_count": 69,
+      "done_count": 4,
       "blocked_count": 0
     },
     {
@@ -5364,6 +5365,34 @@
       "Unblock evidence": "Explicit user direction; deployment held while redesign is implemented.",
       "dependencies": [
         "APP-168"
+      ]
+    },
+    {
+      "id": "APP-172",
+      "title": "Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release",
+      "path": "4-done/APP-172.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Done",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "172",
+      "Size": "L",
+      "Repos": "forma-app-platform, gatewasm",
+      "Decision": "Victor, 2026-11-03: do the PostgreSQL upgrade immediately after the current image release, as its own change, and include the GateWasm staging database. Do not stop that release and do not chase either database by editing pins first.",
+      "Requirements": "SR1",
+      "Depends on": "APP-167",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "`pivot/postgres-16-15-pins`",
+      "Team": "GenUI",
+      "Blocked by": "None",
+      "Unblock evidence": "Not applicable. Select only after the current promotion has sealed and the deployment lease is idle.",
+      "dependencies": [
+        "APP-167"
       ]
     }
   ]

@@ -5,7 +5,7 @@ the real boto3 client against local_s3.Stub on loopback. AdapterTests run the
 real parser-host and WASM guest when a local parser build is named by
 GENUI_OPERATOR_TEST_PARSER (a directory holding release/parser-host and
 wasm32-unknown-unknown/release/parser_guest.wasm, i.e. parser/target), else
-skip. DatabaseTests start one disposable PostgreSQL 16.13 container with a
+skip. DatabaseTests start one disposable PostgreSQL 16.15 container with a
 throwaway TLS CA and drive the real command line as genui_migration over
 verify-full TLS; they skip without Docker and OpenSSL and remove the container.
 
@@ -51,7 +51,7 @@ OPERATOR_KMS = ("kms:Decrypt", "kms:GenerateDataKey")
 SEEDED_REVISION = "00000000-0000-4000-8000-00000000006f"
 REGISTRATION_KEYS = ["content_digest", "contract_digest", "normalized_digest", "object_digest", "organization_id", "revision_id",
                      "row_count", "source_id"]
-POSTGRES = "postgres@sha256:5d143123fdf80462d1778cd4f24b9f7ca13c87174bca19141fb194c5a1ebca59"
+POSTGRES = "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a"
 
 
 def tenants_json(keys=KEYS):
@@ -672,7 +672,7 @@ def run(args, check=True, **kw):
 
 @unittest.skipUnless(shutil.which("docker") and shutil.which("openssl"), "requires local Docker and OpenSSL")
 class DatabaseTests(unittest.TestCase):
-    """Fresh PostgreSQL 16.13 with TLS and the bare migration identity; tests run in name order."""
+    """Fresh PostgreSQL 16.15 with TLS and the bare migration identity; tests run in name order."""
 
     @classmethod
     def setUpClass(cls):
@@ -705,7 +705,7 @@ class DatabaseTests(unittest.TestCase):
             run(["docker", "exec", "--user=0", cls.name, "chown", "postgres:postgres", "/var/lib/postgresql/server.key", "/var/lib/postgresql/server.pem"])
             run(["docker", "exec", "--user=0", cls.name, "chmod", "600", "/var/lib/postgresql/server.key"])
             with cls.connect("postgres", "postgres", autocommit=True) as c:
-                assert c.execute("SHOW server_version").fetchone()[0].split()[0] == "16.13"
+                assert c.execute("SHOW server_version").fetchone()[0].split()[0] == "16.15"
                 c.execute("ALTER SYSTEM SET ssl='on'")
                 c.execute("ALTER SYSTEM SET ssl_cert_file='/var/lib/postgresql/server.pem'")
                 c.execute("ALTER SYSTEM SET ssl_key_file='/var/lib/postgresql/server.key'")
