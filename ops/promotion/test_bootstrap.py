@@ -16,7 +16,10 @@ def inventory():
             'target_groups': [f'arn:aws:elasticloadbalancing:{REGION}:{ACCOUNT}:targetgroup/main/a'],
             'database_arn': f'arn:aws:rds:{REGION}:{ACCOUNT}:db:genui',
             'attribute_role_arns': [f'arn:aws:iam::{ACCOUNT}:role/db-access', f'arn:aws:iam::{ACCOUNT}:role/tenant-access'],
-            'describe_key_arns': [f'arn:aws:kms:{REGION}:{ACCOUNT}:key/11111111-1111-1111-1111-111111111111']}
+            'describe_key_arns': [f'arn:aws:kms:{REGION}:{ACCOUNT}:key/11111111-1111-1111-1111-111111111111'],
+            'log_group_arn': f'arn:aws:logs:{REGION}:{ACCOUNT}:log-group:beta',
+            'schedule_group_arn': f'arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule-group/beta',
+            'evidence_bucket_arn': 'arn:aws:s3:::genui-evidence'}
 
 
 def statements(document, logical):
@@ -48,6 +51,11 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(next(s for s in cf if s['Action']==['kms:DescribeKey'])['Resource'], inventory()['describe_key_arns'])
         self.assertEqual(next(s for s in cf if s['Action']==['ecs:DescribeClusters'])['Resource'], inventory()['cluster_arn'])
         self.assertEqual(next(s for s in cf if s['Action']==['ec2:DescribeSecurityGroups'])['Resource'], '*')
+        self.assertEqual(next(s for s in cf if s['Action']==['elasticloadbalancing:DescribeLoadBalancers'])['Resource'], '*')
+        self.assertEqual(next(s for s in cf if s['Action']==['logs:DescribeLogGroups'])['Resource'], inventory()['log_group_arn'])
+        self.assertNotIn('elasticloadbalancing:CreateLoadBalancer', actions(cf))
+        self.assertNotIn('logs:GetLogEvents', actions(cf))
+        self.assertNotIn('s3:GetObject', [a for s in cf if s.get('Resource')==inventory()['evidence_bucket_arn'] for a in s['Action']])
         self.assertFalse(any(a.startswith(('rds:','kms:','ec2:')) for a in actions(prep)))
         self.assertFalse(any(a.startswith(('rds:','kms:','ec2:')) for a in actions(execute)))
         for bad in ('*', 'arn:aws:rds:us-east-1:123:db:*', 'arn:aws:iam::123:role/*'):

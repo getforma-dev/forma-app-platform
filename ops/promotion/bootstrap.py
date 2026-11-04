@@ -40,6 +40,9 @@ def template(inventory):
     describe_keys = sorted(concrete(key, f'arn:aws:kms:{REGION}:{ACCOUNT}:key/', 'key attribute scope differs') for key in inventory['describe_key_arns'])
     require(attribute_roles and describe_keys, 'task-definition attribute reads are incomplete')
     cluster = concrete(inventory['cluster_arn'], f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/', 'cluster attribute scope differs')
+    log_group = concrete(inventory['log_group_arn'], f'arn:aws:logs:{REGION}:{ACCOUNT}:log-group:', 'log group attribute scope differs')
+    schedule_group = concrete(inventory['schedule_group_arn'], f'arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule-group/', 'schedule group attribute scope differs')
+    evidence_bucket = concrete(inventory['evidence_bucket_arn'], 'arn:aws:s3:::', 'evidence bucket attribute scope differs')
     bucket_name = f'forma-beta-promotion-{ACCOUNT}-{REGION}'
     bucket = 'arn:aws:s3:::' + bucket_name
     objects = bucket + '/' + PREFIX + '/*'
@@ -86,7 +89,12 @@ def template(inventory):
         statement(['rds:DescribeDBInstances'], database),
         statement(['kms:DescribeKey'], describe_keys),
         statement(['ecs:DescribeClusters'], cluster),
+        statement(['logs:DescribeLogGroups'], log_group),
+        statement(['scheduler:GetScheduleGroup'], schedule_group),
+        statement(['s3:GetBucketLocation', 's3:ListBucket'], evidence_bucket),
+        # These two describe calls reject a resource ARN. They cannot change the resource.
         statement(['ec2:DescribeSecurityGroups'], '*'),
+        statement(['elasticloadbalancing:DescribeLoadBalancers'], '*'),
         # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
         # while creating the change set (before resource handlers execute).
         statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),
