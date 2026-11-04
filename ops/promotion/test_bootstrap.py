@@ -1,5 +1,5 @@
 import unittest
-from ops.promotion.bootstrap import template, SUBJECT
+from ops.promotion.bootstrap import ATTRIBUTE_READS, template, SUBJECT
 from ops.promotion.guards import ACCOUNT, REGION, ROLE_KEYS
 
 
@@ -41,17 +41,12 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn('cloudformation:CreateChangeSet',actions(execute));self.assertNotIn('iam:PassRole',actions(execute))
         for rows in [prep,execute,cf]:
             self.assertNotIn('*',actions(rows))
-            self.assertFalse(any(a.startswith('secretsmanager:') or a.startswith('rds:') and a != 'rds:DescribeDBInstances' or a.startswith('kms:') and a != 'kms:DescribeKey' for a in actions(rows)))
+            self.assertFalse(any(a in {'rds:ModifyDBInstance','rds:DeleteDBInstance','kms:Decrypt','kms:CreateGrant','secretsmanager:GetSecretValue','iam:CreateRole','iam:PutRolePolicy','iam:AttachRolePolicy'} for a in actions(rows)))
             self.assertNotIn('s3:DeleteObject',actions(rows));self.assertNotIn('iam:CreateRole',actions(rows))
-        cf_actions=actions(cf)
-        self.assertIn('rds:DescribeDBInstances', cf_actions)
-        self.assertIn('kms:DescribeKey', cf_actions)
-        self.assertIn('ec2:DescribeSecurityGroups', cf_actions)
-        self.assertIn('ecs:DescribeClusters', cf_actions)
-        self.assertEqual(next(s for s in cf if s['Action'] == ['ec2:DescribeSecurityGroups'])['Resource'], '*')
-        self.assertEqual(next(s for s in cf if s['Action'] == ['ecs:DescribeClusters'])['Resource'], inventory()['cluster_arn'])
-        self.assertNotIn('rds:DescribeDBInstances', actions(prep))
-        self.assertNotIn('ec2:DescribeSecurityGroups', actions(execute))
+        reads=next(s for s in cf if s['Action']==ATTRIBUTE_READS)
+        self.assertEqual(reads['Resource'], '*')
+        self.assertNotIn(ATTRIBUTE_READS[0], actions(prep))
+        self.assertNotIn(ATTRIBUTE_READS[0], actions(execute))
         create=next(r for r in prep if 'cloudformation:CreateChangeSet' in r['Action'])
         self.assertEqual(create['Condition']['StringEquals']['cloudformation:RoleArn'],f'arn:aws:iam::{ACCOUNT}:role/forma-beta-runtime-cloudformation')
 

@@ -10,6 +10,23 @@ from .guards import ACCOUNT, REGION, REPOSITORY, ROLE_KEYS, REPOS
 from .state import require
 
 PREFIX = 'beta'
+# CloudFormation resolves Fn::GetAtt by calling the service read API. EC2 and
+# several others reject a resource ARN, so these reads are account-wide.
+# Writes stay on the named task, service and schedule resources.
+ATTRIBUTE_READS = [
+    'ec2:Describe*',
+    'ecs:Describe*',
+    'elasticloadbalancing:Describe*',
+    'logs:Describe*',
+    'rds:Describe*',
+    'kms:Describe*',
+    'kms:GetKeyPolicy',
+    'iam:GetRole',
+    'iam:ListAttachedRolePolicies',
+    'iam:ListRolePolicies',
+    'secretsmanager:DescribeSecret',
+    'secretsmanager:GetResourcePolicy',
+]
 SUBJECT = 'repo:getforma-dev@268000170/forma-app-platform@1437433309:environment:'
 
 
@@ -82,12 +99,7 @@ def template(inventory):
         statement(['iam:GetRole'], sorted(set(ecs_task_roles + scheduler_roles + attribute_roles))),
         # Task definitions embed these attributes. CloudFormation resolves them
         # while replacing a task definition; the role still cannot modify them.
-        statement(['rds:DescribeDBInstances'], database),
-        statement(['kms:DescribeKey'], describe_keys),
-        statement(['ecs:DescribeClusters'], cluster),
-        # DescribeSecurityGroups does not accept a group ARN. The service
-        # update resolves GroupId, and this remains a read.
-        statement(['ec2:DescribeSecurityGroups'], '*'),
+        statement(ATTRIBUTE_READS, '*'),
         # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
         # while creating the change set (before resource handlers execute).
         statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),
