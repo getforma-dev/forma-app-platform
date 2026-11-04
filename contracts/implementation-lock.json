@@ -38,7 +38,7 @@
     }
   },
   "artifacts": {
-    ".github/workflows/contracts.yml": "6975e09e05405b54dbb95509c1568ff71c5fa59a1db7d996f181725b6a9a7bb9",
+    ".github/workflows/contracts.yml": "802f0f664e20a7bae03da33f78507a92328f0c2662154369bc967efd76f6e2d1",
     "contracts/.gitignore": "57a8ad0e62346f7b0f2e261d59a7b90f1310043424bcb9d229208f183f1940d9",
     "contracts/README.md": "c343cb61974fcd500cabcff9cb4ac9ba551be5272d5cd412d418cc6db52c7735",
     "contracts/fixtures/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
