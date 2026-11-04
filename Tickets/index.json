@@ -312,7 +312,7 @@
         "APP-172"
       ],
       "ticket_count": 69,
-      "done_count": 3,
+      "done_count": 4,
       "blocked_count": 0
     },
     {
@@ -357,8 +357,7 @@
     "APP-088",
     "APP-125",
     "APP-163",
-    "APP-166",
-    "APP-172"
+    "APP-166"
   ],
   "tickets": [
     {
@@ -5371,11 +5370,11 @@
     {
       "id": "APP-172",
       "title": "Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release",
-      "path": "0-backlog/APP-172.md",
+      "path": "4-done/APP-172.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Task",
       "Sprint": "S14",

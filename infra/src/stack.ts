@@ -212,7 +212,7 @@ export class GenuiFoundation extends Stack {
     const migrationSecret = new rds.DatabaseSecret(this, 'MigrationSecret', { username: 'genui_migration' });
     migrationSecret.applyRemovalPolicy(RemovalPolicy.RETAIN);
     const database = new rds.DatabaseInstance(this, 'Database', {
-      engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.of('16.15', '16') }),
+      engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.VER_16_13 }),
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.SMALL),
       vpc, vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED }, securityGroups: [databaseSecurity],
       credentials: rds.Credentials.fromSecret(migrationSecret), databaseName: 'genui',
