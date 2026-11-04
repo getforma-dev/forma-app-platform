@@ -80,9 +80,7 @@ class Runner:
         require(stack.get('RoleARN') == expected_role, 'stack execution role differs')
         template = body(self.read('cloudformation', 'get_template', StackName=stack['StackId'], TemplateStage='Original')['TemplateBody'])
         require(template == state['baseline']['template'], 'runtime promotion cannot change template')
-        for key, value in state['live']['outputs'].items():
-            if key not in guards.ROLE_KEYS:
-                require(outputs.get(key) == value, 'retained output changed: ' + key)
+        guards.retained_outputs(state['live']['outputs'], outputs, expected)
         definitions = {}
         for key, role in guards.ROLE_KEYS.items():
             td = self.read('ecs', 'describe_task_definition', taskDefinition=outputs[key])['taskDefinition']

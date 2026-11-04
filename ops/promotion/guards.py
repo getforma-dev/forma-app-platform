@@ -41,6 +41,17 @@ def outputs(stack):
     return {p['OutputKey']: p['OutputValue'] for p in stack['Outputs']}
 
 
+def retained_outputs(previous, current, expected):
+    """Stable stack outputs must not move. The scheduled stop time is the approved parameter."""
+    for key, value in previous.items():
+        if key in ROLE_KEYS:
+            continue
+        if key == 'ScheduledExpiryUtc':
+            require(current.get(key) == expected['DeploymentExpiresAtUtc'], 'scheduled expiry output does not match the approved parameter')
+            continue
+        require(current.get(key) == value, 'retained output changed: ' + key)
+
+
 def parameters(stack):
     return {p['ParameterKey']: p['ParameterValue'] for p in stack['Parameters']}
 
