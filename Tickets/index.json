@@ -311,7 +311,7 @@
         "APP-167"
       ],
       "ticket_count": 68,
-      "done_count": 2,
+      "done_count": 3,
       "blocked_count": 0
     },
     {
@@ -5231,11 +5231,11 @@
     {
       "id": "APP-167",
       "title": "Promote merged beta releases through GitHub Actions",
-      "path": "2-in-progress/APP-167.md",
+      "path": "4-done/APP-167.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "In progress",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S14",
