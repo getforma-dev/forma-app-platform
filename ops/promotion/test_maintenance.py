@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from ops.promotion.maintenance import abandon, terminal_proof
+from ops.promotion.maintenance import abandon, release_rolled_back_execution, terminal_proof
 from ops.promotion.state import digest, encoded, Refused
 from ops.promotion import test_runner
 from ops.promotion.guards import ACCOUNT, REGION
@@ -58,6 +58,29 @@ class MaintenanceTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):abandon(self.runner,digest(self.state),read_run=lambda _:self.run)
         state=self.store.load();self.assertIsNotNone(state['active']);self.assertEqual(state['ledger'],self.state['ledger'])
         self.assertEqual(state['active']['journal'][-1]['status'],'intent')
+
+    def test_rolled_back_execution_releases_only_a_healthy_previous_release(self):
+        self.aws.cs['ExecutionStatus'] = 'EXECUTE_FAILED'
+        original = self.aws.stack
+        authority = self.state['authority']['execution_role_arn']
+        def stack():
+            value = original()
+            value['StackStatus'] = 'UPDATE_ROLLBACK_COMPLETE'
+            value['RoleARN'] = authority
+            return value
+        self.aws.stack = stack
+        self.store.change(lambda d: d['active'].update(phase='executing'))
+        for name in ('stop-main', 'stop-broker', 'changeset-execute'):
+            self.store.change(lambda d, name=name: d['active']['journal'].append({'name': name, 'status': 'confirmed'}))
+        before = len(self.aws.calls)
+        result = release_rolled_back_execution(self.runner, digest(self.store.load()), read_run=lambda _: self.run)
+        state = self.store.load()
+        self.assertEqual(result['status'], 'rolled-back')
+        self.assertIsNone(state['active'])
+        self.assertEqual(state['live']['stack_execution_role_arn'], authority)
+        self.assertEqual(state['completed'][result['promotion_id']]['status'], 'rolled-back')
+        self.assertTrue(state['ledger']['windows'][result['promotion_id']]['abandoned_at_utc'])
+        self.assertFalse(any(o in ['update_service', 'execute_change_set', 'delete_change_set'] for _, o, _ in self.aws.calls[before:]))
 
 
 class RegistryOnlyAbandonTests(unittest.TestCase):

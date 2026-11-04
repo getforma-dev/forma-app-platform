@@ -11,12 +11,12 @@ import hashlib
 import json
 import re
 import sys
-from .aws import AWS
+from .aws import AWS, body
 from .candidate import api
 from .github import run_identity
 from .runner import Runner, preflight
 from .state import Store, closed, digest, encoded, no_duplicates, now, require
-from .guards import ACCOUNT, REGION, REPOSITORY, REPOS, runtime_parameters
+from .guards import ACCOUNT, IMAGE_KEYS, REGION, REPOSITORY, REPOS, ROLE_KEYS, definition, parameters, runtime_parameters, schedule, service
 
 
 def terminal_proof(run, active, clock):
@@ -222,6 +222,72 @@ def rejected_bootstrap_create(runner, active, state, run):
         'exact_absence':absent,'change_set_name':arguments['ChangeSetName']}
 
 
+def release_rolled_back_execution(runner, expected_state_sha256, read_run=api):
+    """Release a lease whose change set executed and CloudFormation rolled it back.
+
+    Activation must not have started. The app services must already be healthy on
+    the previous images. This records the stack role the failed execution left
+    behind and does not start, stop, or execute anything.
+    """
+    store = runner.store
+    state = store.load()
+    require(digest(state) == expected_state_sha256, 'state changed since operator review')
+    active = state.get('active')
+    require(active and active['phase'] == 'executing', 'only an executing promotion can be released after rollback')
+    journal = active['journal']
+    require(journal and all(x['status'] == 'confirmed' for x in journal), 'unknown operation must be reconciled')
+    names = {x['name'] for x in journal}
+    require({'stop-main', 'stop-broker', 'changeset-execute'} <= names, 'rollback release requires the stopped execution')
+    require(not any(name.startswith('activate-') for name in names), 'activation started; release is refused')
+    identity = runner.aws.identity()
+    require(not any('/' + state['authority'][key].rsplit('/', 1)[-1] + '/' in identity['Arn']
+                    for key in ('prepare_role_arn', 'execute_role_arn')),
+            'rollback release is an operator recovery command, not a workflow permission')
+    run = read_run(f'repos/{REPOSITORY}/actions/runs/{active["authorization"]["run_id"]}')
+    terminal_proof(run, active, runner.clock())
+    store.resume(active['promotion_id'], active['authorization'])
+    require(digest(store.document) == expected_state_sha256, 'state changed during fencing proof')
+    stack = runner.stack()
+    require(stack['StackStatus'] == 'UPDATE_ROLLBACK_COMPLETE', 'stack is not a completed rollback')
+    authority_role = state['authority']['execution_role_arn']
+    require(stack.get('RoleARN') == authority_role, 'stack role is not the promotion execution role')
+    described = runner.read('cloudformation', 'describe_change_set', ChangeSetName=active['packet']['change_set_arn'], StackName=stack['StackId'])
+    require(described.get('ExecutionStatus') in ['EXECUTE_FAILED', 'OBSOLETE', 'UNAVAILABLE'], 'change set is not a failed execution')
+    state = store.document
+    require(parameters(stack) == state['live']['parameters'], 'live stack parameters drifted')
+    template = body(runner.read('cloudformation', 'get_template', StackName=stack['StackId'], TemplateStage='Original')['TemplateBody'])
+    require(template == state['baseline']['template'], 'rollback did not restore the previous template')
+    outputs = {p['OutputKey']: p['OutputValue'] for p in stack['Outputs']}
+    for key, value in state['live']['outputs'].items():
+        if key not in ROLE_KEYS:
+            require(outputs.get(key) == value, 'retained output changed: ' + key)
+    for key, role in ROLE_KEYS.items():
+        current = runner.read('ecs', 'describe_task_definition', taskDefinition=outputs[key])['taskDefinition']
+        definition(state['baseline']['definitions'][key], current, state['live']['parameters'][IMAGE_KEYS[role]])
+    services = runner.read('ecs', 'describe_services', cluster=outputs['ClusterName'], services=[outputs['ServiceName'], outputs['SharedBrokerServiceName']])
+    require(not services.get('failures') and len(services.get('services', [])) == 2, 'service lookup incomplete')
+    cluster = f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/{outputs["ClusterName"]}'
+    for item in services['services']:
+        broker = item['serviceName'] == outputs['SharedBrokerServiceName']
+        name = outputs['SharedBrokerServiceName' if broker else 'ServiceName']
+        arn = f'arn:aws:ecs:{REGION}:{ACCOUNT}:service/{outputs["ClusterName"]}/{name}'
+        service(item, arn, cluster, outputs['SharedBrokerTaskDefinition' if broker else 'TaskDefinition'], 1)
+    for previous in state['baseline']['schedules'].values():
+        current = runner.read('scheduler', 'get_schedule', GroupName=previous['GroupName'], Name=previous['Name'])
+        schedule(previous, current, state['live']['parameters']['DeploymentExpiresAtUtc'])
+    ledger, receipt = preflight().abandon(store.document['ledger'], active['promotion_id'], runner.clock())
+    receipt.update(reason='cloudformation update rolled back before activation', stack_status=stack['StackStatus'],
+                   change_set_execution_status=described.get('ExecutionStatus'))
+    store.immutable('promotions/' + active['promotion_id'] + '/rolled-back.json', receipt)
+    def finish(document):
+        document['ledger'] = ledger
+        document['live']['stack_execution_role_arn'] = authority_role
+        document['completed'][active['promotion_id']] = {'status': 'rolled-back', 'candidate_sha': active['candidate_sha'], 'observed_at_utc': now()}
+        document['active'] = None
+    store.change(finish)
+    return {'status': 'rolled-back', 'promotion_id': active['promotion_id'], 'windows_preserved': len(ledger['windows'])}
+
+
 def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create=False):
     store=runner.store;state=store.load()
     require(digest(state)==expected_state_sha256, 'state changed since operator review')
@@ -289,7 +355,7 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['inspect','abandon'])
+    parser.add_argument('command',choices=['inspect','abandon','release-rolled-back'])
     parser.add_argument('--state-bucket',required=True);parser.add_argument('--state-prefix',default='beta')
     parser.add_argument('--expected-state-sha256')
     parser.add_argument('--reconcile-bootstrap-create-rejection',action='store_true',help='Only the verified bootstrap-SSM CreateChangeSet rejection; no replay or general unknown-outcome bypass')
@@ -303,7 +369,11 @@ def main():
                 'unresolved_operations':sum(x['status']=='intent' for x in active['journal'])}}
         else:
             require(args.expected_state_sha256,'reviewed state digest required')
-            result=abandon(Runner(aws,store),args.expected_state_sha256,reconcile_failed_create=args.reconcile_bootstrap_create_rejection)
+            runner=Runner(aws,store)
+            if args.command=='release-rolled-back':
+                result=release_rolled_back_execution(runner,args.expected_state_sha256)
+            else:
+                result=abandon(runner,args.expected_state_sha256,reconcile_failed_create=args.reconcile_bootstrap_create_rejection)
         print(json.dumps(result));return 0
     except Exception:
         print('Maintenance refused or outcome unresolved. Keep the lock and inspect private receipts.',file=sys.stderr);return 1

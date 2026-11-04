@@ -1,0 +1,54 @@
+{
+  "reported_run": "https://github.com/getforma-dev/forma-app-platform/actions/runs/41479098807",
+  "candidate_sha": "e9692f2d793710804adcc63108c965ed5700fd69",
+  "candidate_and_qualification": "passed",
+  "prepare": "failed before acquiring the earlier prepared lease",
+  "previous_candidate_sha": "60fd6bd29348e7b7cbb84e3a5b818c1e94385933",
+  "before": {
+    "revision": 1454,
+    "state_sha256": "cc56774a2e8848050eb48517692e95b52197aae3f79dcb8f87cfbecaf6357d6d",
+    "phase": "prepared",
+    "unresolved_operations": 0
+  },
+  "abandonment": {
+    "status": "abandoned",
+    "windows_preserved": 20,
+    "after_revision": 1457,
+    "after_state_sha256": "ef4d14b9543dead656e032b56a2b4d6783a5980151628a2d33dffec601a5193f",
+    "active": null
+  },
+  "expiry_policy": {
+    "before_revision": 1457,
+    "before_state_sha256": "ef4d14b9543dead656e032b56a2b4d6783a5980151628a2d33dffec601a5193f",
+    "cost_by_month": {
+      "2026-11": {
+        "genui_total_cents": 16988,
+        "project_total_cents": 20788
+      }
+    },
+    "expected_after_state_sha256": "67d2190258390a8cb5376b72ba51725f50528281a761fbfef2170bd7cb475cca",
+    "genui_cap_cents": 17000,
+    "ledger_changed": false,
+    "live_changed": false,
+    "next_prospective_expiry": "2026-11-29T20:00:00Z",
+    "previous_shortening_hours": 14,
+    "project_cap_cents": 20800,
+    "revision": 1458,
+    "shortening_hours": 18,
+    "state_sha256": "67d2190258390a8cb5376b72ba51725f50528281a761fbfef2170bd7cb475cca",
+    "status": "applied",
+    "windows_preserved": 20
+  },
+  "policy_receipt_sha256": "51a8209dd8b0326d16f72014566e34366e1a098ffcad58eae99a17df9b025ead",
+  "final_readback": {
+    "revision": 1458,
+    "state_sha256": "67d2190258390a8cb5376b72ba51725f50528281a761fbfef2170bd7cb475cca",
+    "active": null
+  },
+  "runtime_deployment_performed": false,
+  "local_checks": {
+    "promotion_tests_passed": 116,
+    "independent_source_review": "clear; fixed public diagnostic only, unchanged refusal and mutation semantics"
+  },
+  "next_action": "Fresh reviewed and qualified merge, then Victor reviews and approves the new beta packet. Do not rerun the failed workflow."
+}

@@ -7,7 +7,7 @@ ACCOUNT = '877573132739'
 REGION = 'us-east-1'
 STACK = 'GenuiSyntheticFoundation'
 REPOSITORY = 'getforma-dev/forma-app-platform'
-WORKFLOW = REPOSITORY + '/.github/workflows/beta-promote.yml@refs/heads/pivot/pitch-mvp'
+WORKFLOW = REPOSITORY + '/.github/workflows/beta-promote.yml@refs/heads/main'
 IMAGE_KEYS = {'service': 'ImageDigest', 'qualification': 'QualificationImageDigest', 'operator': 'OperatorImageDigest'}
 REPOS = {'service': 'genui-synthetic', 'qualification': 'genui-qualification', 'operator': 'genui-operator'}
 ROLE_KEYS = {'TaskDefinition': 'service', 'RollbackTaskDefinition': 'service', 'MigrationTaskDefinition': 'service',
@@ -35,8 +35,21 @@ def request(value, phase):
 
 
 def outputs(stack):
-    require(stack['StackName'] == STACK and stack['StackStatus'] == 'UPDATE_COMPLETE', 'stack not ready')
+    # A completed rollback is the previous template at rest. An in-progress
+    # rollback is not ready for a new change set.
+    require(stack['StackName'] == STACK and stack['StackStatus'] in {'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'}, 'stack not ready')
     return {p['OutputKey']: p['OutputValue'] for p in stack['Outputs']}
+
+
+def retained_outputs(previous, current, expected):
+    """Stable stack outputs must not move. The scheduled stop time is the approved parameter."""
+    for key, value in previous.items():
+        if key in ROLE_KEYS:
+            continue
+        if key == 'ScheduledExpiryUtc':
+            require(current.get(key) == expected['DeploymentExpiresAtUtc'], 'scheduled expiry output does not match the approved parameter')
+            continue
+        require(current.get(key) == value, 'retained output changed: ' + key)
 
 
 def parameters(stack):

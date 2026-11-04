@@ -80,9 +80,7 @@ class Runner:
         require(stack.get('RoleARN') == expected_role, 'stack execution role differs')
         template = body(self.read('cloudformation', 'get_template', StackName=stack['StackId'], TemplateStage='Original')['TemplateBody'])
         require(template == state['baseline']['template'], 'runtime promotion cannot change template')
-        for key, value in state['live']['outputs'].items():
-            if key not in guards.ROLE_KEYS:
-                require(outputs.get(key) == value, 'retained output changed: ' + key)
+        guards.retained_outputs(state['live']['outputs'], outputs, expected)
         definitions = {}
         for key, role in guards.ROLE_KEYS.items():
             td = self.read('ecs', 'describe_task_definition', taskDefinition=outputs[key])['taskDefinition']
@@ -201,12 +199,34 @@ class Runner:
                 'cost_genui_cents': cost['genui_total_cents'],
                 'cost_total_cents': cost['project_total_cents'], 'expires_at_utc': config['deployment_expires_at_utc']}
 
-    def settle_services(self, outputs):
+    def settle_services(self, outputs, require_healthy=False):
+        names = [outputs['ServiceName'], outputs['SharedBrokerServiceName']]
         self.aws.wait('ecs', 'describe_services', lambda r: not r.get('failures') and len(r.get('services', [])) == 2
                       and all(s['runningCount'] == s['desiredCount'] and s['pendingCount'] == 0
                               and len(s['deployments']) == 1 and s['deployments'][0].get('rolloutState') == 'COMPLETED'
                               for s in r['services']),
-                      timeout=900, cluster=outputs['ClusterName'], services=[outputs['ServiceName'], outputs['SharedBrokerServiceName']])
+                      timeout=900, cluster=outputs['ClusterName'], services=names)
+        if not require_healthy:
+            return
+        # A stopped service has no container to become healthy. Wait only after activation.
+        deadline = time.monotonic() + 900
+        while True:
+            ready = True
+            for name in names:
+                listed = self.read('ecs', 'list_tasks', cluster=outputs['ClusterName'], serviceName=name, desiredStatus='RUNNING')
+                tasks = listed.get('taskArns') or []
+                if listed.get('nextToken') or len(tasks) != 1:
+                    ready = False
+                    break
+                described = self.read('ecs', 'describe_tasks', cluster=outputs['ClusterName'], tasks=tasks)
+                containers = ((described.get('tasks') or [{}])[0].get('containers') or [{}])
+                if described.get('failures') or containers[0].get('healthStatus') != 'HEALTHY':
+                    ready = False
+                    break
+            if ready:
+                return
+            require(time.monotonic() < deadline, 'bounded wait expired; retain lease and reconcile')
+            time.sleep(10)
 
     def execute(self, request, directory, approval):
         guards.request(request, 'execute')
@@ -257,7 +277,7 @@ class Runner:
         outputs = after['outputs']
         for label, key in [('broker', 'SharedBrokerServiceName'), ('main', 'ServiceName')]:
             self.mutate('activate-' + label, 'ecs', 'update_service', cluster=outputs['ClusterName'], service=outputs[key], desiredCount=1)
-        self.settle_services(outputs)
+        self.settle_services(outputs, require_healthy=True)
         healthy = self.boundary(1, packet['parameters'], after=True)
         probes = self.probes()
         tag = 'beta/' + self.clock().strftime('%Y%m%d') + '-' + request['candidate_sha'][:7]

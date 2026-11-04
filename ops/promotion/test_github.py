@@ -41,7 +41,7 @@ class GithubTests(unittest.TestCase):
             "workflow_ref": g.REPOSITORY + "/" + g.WORKFLOW + "@refs/heads/" + g.BRANCH,
             "sha": SHA, "run_id": "42", "run_attempt": "1"}
         g.oidc_claims(claims, "beta", SHA, "42", "1")
-        for key, wrong in (("sub", "repo:" + g.REPOSITORY + ":environment:beta"), ("ref", "refs/heads/main"),
+        for key, wrong in (("sub", "repo:" + g.REPOSITORY + ":environment:beta"), ("ref", "refs/heads/pivot/pitch-mvp"),
                 ("run_attempt", "2"), ("sha", "b" * 40), ("aud", "other"), ("event_name", "pull_request")):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 g.oidc_claims(dict(claims, **{key: wrong}), "beta", SHA, "42", "1")
@@ -74,7 +74,7 @@ class GithubTests(unittest.TestCase):
         for mutate in (lambda v: v.update(private_arn="secret"), lambda v: v.pop("review"),
                 lambda v: v["review"]["changes"][0].update(logical_id="arn:aws:private"),
                 lambda v: v["review"]["scan"]["service"].update(introduced=1),
-                lambda v: v["review"].update(outage_required=False), lambda v: v.update(cost_genui_cents=17001)):
+                lambda v: v["review"].update(outage_required=False), lambda v: v.update(cost_genui_cents=18001)):
             changed = copy.deepcopy(value)
             mutate(changed)
             with self.assertRaises(ValueError):
@@ -104,7 +104,7 @@ class GithubTests(unittest.TestCase):
 
     def test_run_from_fork_pr_other_workflow_or_rerun_is_refused(self):
         g.run_identity(run(), "42", SHA)
-        for key, wrong in (("event", "pull_request"), ("head_branch", "main"), ("run_attempt", 2),
+        for key, wrong in (("event", "pull_request"), ("head_branch", "pivot/pitch-mvp"), ("run_attempt", 2),
                 ("path", ".github/workflows/foundation.yml"), ("repository", {"id": 123})):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 g.run_identity(dict(run(), **{key: wrong}), "42", SHA)

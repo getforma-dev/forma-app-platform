@@ -1,7 +1,7 @@
 name: Promote to beta
 on:
   push:
-    branches: [pivot/pitch-mvp]
+    branches: [main]
 # Intentionally no PR, workflow_run or dispatch trigger. A required reviewer
 # approves the actual prepared packet; no AWS identity exists in the build job.
 permissions:
@@ -16,7 +16,7 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
 jobs:
   candidate:
-    if: github.repository == 'getforma-dev/forma-app-platform' && github.ref == 'refs/heads/pivot/pitch-mvp' && github.run_attempt == 1 && vars.PROMOTION_ENABLED == 'true'
+    if: github.repository == 'getforma-dev/forma-app-platform' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && vars.PROMOTION_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     permissions:

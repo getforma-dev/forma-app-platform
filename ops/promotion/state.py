@@ -17,6 +17,10 @@ class Refused(RuntimeError):
     pass
 
 
+class LeaseHeld(Refused):
+    """A read confirmed another active promotion; acquisition made no write."""
+
+
 def require(condition, reason):
     if not condition:
         raise Refused(reason)
@@ -88,7 +92,8 @@ class Store:
 
     def acquire(self, promotion_id, authorization, candidate):
         self.load()
-        require(self.document.get('active') is None, 'another promotion or unresolved outcome holds the lease')
+        if self.document.get('active') is not None:
+            raise LeaseHeld('another promotion or unresolved outcome holds the lease')
         owner = secrets.token_hex(32)
         self.change(lambda d: d.update(active={'promotion_id': promotion_id, 'owner': owner,
                     'authorization': authorization, 'candidate_sha': candidate, 'started_at_utc': now(),
