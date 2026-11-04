@@ -199,14 +199,16 @@ class Runner:
                 'cost_genui_cents': cost['genui_total_cents'],
                 'cost_total_cents': cost['project_total_cents'], 'expires_at_utc': config['deployment_expires_at_utc']}
 
-    def settle_services(self, outputs):
+    def settle_services(self, outputs, require_healthy=False):
         names = [outputs['ServiceName'], outputs['SharedBrokerServiceName']]
         self.aws.wait('ecs', 'describe_services', lambda r: not r.get('failures') and len(r.get('services', [])) == 2
                       and all(s['runningCount'] == s['desiredCount'] and s['pendingCount'] == 0
                               and len(s['deployments']) == 1 and s['deployments'][0].get('rolloutState') == 'COMPLETED'
                               for s in r['services']),
                       timeout=900, cluster=outputs['ClusterName'], services=names)
-        # Rollout can complete while the container health check is still unknown.
+        if not require_healthy:
+            return
+        # A stopped service has no container to become healthy. Wait only after activation.
         deadline = time.monotonic() + 900
         while True:
             ready = True
@@ -275,7 +277,7 @@ class Runner:
         outputs = after['outputs']
         for label, key in [('broker', 'SharedBrokerServiceName'), ('main', 'ServiceName')]:
             self.mutate('activate-' + label, 'ecs', 'update_service', cluster=outputs['ClusterName'], service=outputs[key], desiredCount=1)
-        self.settle_services(outputs)
+        self.settle_services(outputs, require_healthy=True)
         healthy = self.boundary(1, packet['parameters'], after=True)
         probes = self.probes()
         tag = 'beta/' + self.clock().strftime('%Y%m%d') + '-' + request['candidate_sha'][:7]
