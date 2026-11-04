@@ -161,6 +161,21 @@ class LifecycleTests(unittest.TestCase):
         return approval()
     def run_execute(self):
         return self.runner.execute(self.execute,self.directory,approval())
+    def test_predecessor_may_be_unsettled_until_activation(self):
+        from ops.promotion.state import Refused
+        self.store.load()
+        def unsettled():
+            rows = FakeAWS.services(self.aws)
+            for row in rows:
+                row['runningCount'] = 0
+                row['pendingCount'] = 1
+                row['deployments'] = [{'rolloutState': 'IN_PROGRESS'}]
+            return rows
+        self.aws.services = unsettled
+        self.runner.boundary(1, require_settled=False)
+        with self.assertRaises(Refused):
+            self.runner.boundary(1)
+
     def test_real_prepare_packet_execute_summary_and_root_manifest_publish(self):
         self.prepared();result=self.run_execute();validate_summary(result,self.request['candidate_sha'])
         final=self.store.load();self.assertIsNone(final['active']);self.assertEqual(final['live']['candidate_sha'],self.request['candidate_sha'])
@@ -231,10 +246,12 @@ class LifecycleTests(unittest.TestCase):
         self.execute['packet_sha256']=self.store.load()['active']['packet_sha256']
         with self.assertRaises(ValueError):self.runner.execute(self.execute,self.directory,{})
         self.assertFalse(any(o=='update_service' for _,o,_ in self.aws.calls));self.assertEqual(self.aws.counts,{'main':1,'broker':1})
-    def test_missing_running_health_refuses_before_prepare_mutations(self):
+    def test_unhealthy_predecessor_can_prepare_and_strict_boundary_still_refuses(self):
         self.aws.running_health=None
-        with self.assertRaises(Refused):self.runner.prepare(self.request,self.directory)
-        self.assertFalse(any(o in ['put_image','create_change_set','update_service'] for _,o,_ in self.aws.calls))
+        result=self.runner.prepare(self.request,self.directory)
+        self.assertEqual(result['status'],'prepared')
+        self.assertFalse(any(o=='update_service' for _,o,_ in self.aws.calls))
+        with self.assertRaises(Refused):self.runner.boundary(1)
     def test_lost_ack_after_stop_cf_or_activation_holds_lease_and_never_replays(self):
         for fault in [('update_service','main',0),'execute_change_set',('update_service','broker',1)]:
             with self.subTest(fault=fault):

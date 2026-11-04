@@ -1,5 +1,5 @@
 import unittest
-from ops.promotion.guards import STACK, outputs, retained_outputs
+from ops.promotion.guards import STACK, outputs, retained_outputs, service
 from ops.promotion.state import Refused
 
 
@@ -21,3 +21,14 @@ class GuardOutputTests(unittest.TestCase):
             retained_outputs(previous, {'RetainedIdentity': 'changed', 'ScheduledExpiryUtc': approved['DeploymentExpiresAtUtc']}, approved)
         with self.assertRaises(Refused):
             retained_outputs(previous, {'RetainedIdentity': 'same', 'ScheduledExpiryUtc': '2026-01-01T00:00:00Z'}, approved)
+
+    def test_unsettled_predecessor_keeps_desired_count_and_task(self):
+        value = {'serviceArn': 'svc', 'clusterArn': 'cluster', 'taskDefinition': 'task:1', 'status': 'ACTIVE',
+                 'desiredCount': 1, 'runningCount': 0, 'pendingCount': 1,
+                 'deployments': [{'rolloutState': 'IN_PROGRESS'}]}
+        service(value, 'svc', 'cluster', 'task:1', 1, settled=False)
+        with self.assertRaises(Refused):
+            service(value, 'svc', 'cluster', 'task:1', 1)
+        value['desiredCount'] = 0
+        with self.assertRaises(Refused):
+            service(value, 'svc', 'cluster', 'task:1', 1, settled=False)

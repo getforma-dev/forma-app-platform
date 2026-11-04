@@ -97,10 +97,13 @@ def definition(previous, current, image):
     require(old == new, 'container configuration, alias or secret reference changed')
 
 
-def service(value, expected_arn, expected_cluster, task, count):
+def service(value, expected_arn, expected_cluster, task, count, settled=True):
     require(value.get('serviceArn') == expected_arn and value.get('clusterArn') == expected_cluster,
             'service identity differs')
     require(value.get('taskDefinition') == task and value.get('status') == 'ACTIVE', 'service task/status differs')
+    require(value.get('desiredCount') == count, 'service desired count differs')
+    if not settled:
+        return
     require(tuple(value.get(k) for k in ['desiredCount', 'runningCount', 'pendingCount']) == (count, count, 0), 'service counts not settled')
     require(len(value['deployments']) == 1 and value['deployments'][0].get('rolloutState') == 'COMPLETED', 'service rollout not complete')
 
