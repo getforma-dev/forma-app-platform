@@ -64,8 +64,9 @@ class BootstrapTests(unittest.TestCase):
         doc=template(inventory());cf=statements(doc,'RuntimeExecution')
         register=next(r for r in cf if 'ecs:RegisterTaskDefinition' in r['Action'])
         self.assertEqual(len(register['Resource']),6);self.assertTrue(all('/' in r and r.endswith(':*') for r in register['Resource']))
-        for action in ['ecs:DescribeTaskDefinition','ecs:DeregisterTaskDefinition']:
-            self.assertEqual(next(r for r in cf if action in r['Action'])['Resource'],'*')
+        described=next(r for r in cf if 'ecs:DeregisterTaskDefinition' in r['Action'])
+        self.assertEqual(described['Resource'], register['Resource'])
+        self.assertNotIn('*', described['Resource'])
         target_health=next(r for r in statements(doc,'Execute') if 'elasticloadbalancing:DescribeTargetHealth' in r['Action'])
         self.assertEqual(target_health['Resource'],'*')
         update=next(r for r in statements(doc,'Execute') if 'ecs:UpdateService' in r['Action'])
