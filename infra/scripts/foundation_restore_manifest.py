@@ -86,7 +86,7 @@ def canonical(value):
 
 
 def validate(manifest):
-    require(manifest["server_version_num"] == 160013)
+    require(manifest["server_version_num"] == 160015)
     require(manifest["schema_version"] == [{"singleton": True, "version": 1}])
     require(len(manifest["roles"]) == 5 and {r["name"] for r in manifest["roles"]} == set(ROLES))
     for role in manifest["roles"]:

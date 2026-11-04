@@ -83,7 +83,7 @@ try:
     def manifest_from_sql():
         records = [json.loads(line) for line in sql(queries).splitlines() if line.strip()]
         identity = records[0]["identity"]
-        assert identity == {"session_user": "genui_migration", "current_user": "genui_migration", "database": "genui", "read_only": "on", "server_version_num": 160013}
+        assert identity == {"session_user": "genui_migration", "current_user": "genui_migration", "database": "genui", "read_only": "on", "server_version_num": 160015}
         assert {r["name"] for r in records[1:]} == set(module.QUERIES)
         manifest = {"manifest_version": 1, "server_version_num": identity["server_version_num"]}
         manifest.update({r["name"]: sorted(r["rows"], key=module.canonical) for r in records[1:]})
@@ -114,7 +114,7 @@ try:
     restored = manifest_from_sql()
     module.validate(restored)
     assert restored == manifests[0]
-    report.update(passed=True, server_version_num=160013, actual_query_count=len(module.QUERIES), repeated_manifest_equal=True,
+    report.update(passed=True, server_version_num=160015, actual_query_count=len(module.QUERIES), repeated_manifest_equal=True,
                   manifest_sha256=original_digest, manifest=manifests[0], null_column_acl_count=2,
                   column_update_trial={"query_reported_grant": True, "validation_refused": True, "changed_manifest_sha256": changed_digest,
                                        "grant": changed["column_grants"], "all_queries_pass_after_revoke": True, "restored_original_manifest": True},
