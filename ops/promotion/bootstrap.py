@@ -10,28 +10,16 @@ from .guards import ACCOUNT, REGION, REPOSITORY, ROLE_KEYS, REPOS
 from .state import require
 
 PREFIX = 'beta'
-# CloudFormation resolves Fn::GetAtt by calling the service read API. EC2 and
-# several others reject a resource ARN, so these reads are account-wide.
-# Writes stay on the named task, service and schedule resources.
-ATTRIBUTE_READS = [
-    'ec2:Describe*',
-    'ecs:Describe*',
-    'elasticloadbalancing:Describe*',
-    'logs:Describe*',
-    'rds:Describe*',
-    'kms:Describe*',
-    'kms:GetKeyPolicy',
-    'iam:GetRole',
-    'iam:ListAttachedRolePolicies',
-    'iam:ListRolePolicies',
-    'secretsmanager:DescribeSecret',
-    'secretsmanager:GetResourcePolicy',
-]
 SUBJECT = 'repo:getforma-dev@268000170/forma-app-platform@1437433309:environment:'
 
 
 def statement(actions, resources, **extra):
     return {'Effect': 'Allow', 'Action': actions, 'Resource': resources, **extra}
+
+
+def concrete(value, prefix, label):
+    require(isinstance(value, str) and value.startswith(prefix) and '*' not in value and '?' not in value, label)
+    return value
 
 
 def policy(statements):
@@ -47,15 +35,11 @@ def template(inventory):
     require(inventory['account'] == ACCOUNT and inventory['region'] == REGION, 'bootstrap account/region differs')
     require(inventory['stack_id'].startswith(f'arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/GenuiSyntheticFoundation/'), 'stack differs')
     require(set(inventory['definitions']) == set(ROLE_KEYS) and len(inventory['services']) == 2 and len(inventory['schedules']) == 2, 'incomplete runtime boundary')
-    database = inventory['database_arn']
-    attribute_roles = sorted(set(inventory['attribute_role_arns']))
-    describe_keys = sorted(set(inventory['describe_key_arns']))
-    require(isinstance(database, str) and database.startswith(f'arn:aws:rds:{REGION}:{ACCOUNT}:db:'), 'database attribute scope differs')
+    database = concrete(inventory['database_arn'], f'arn:aws:rds:{REGION}:{ACCOUNT}:db:', 'database attribute scope differs')
+    attribute_roles = sorted(concrete(role, f'arn:aws:iam::{ACCOUNT}:role/', 'attribute role scope differs') for role in inventory['attribute_role_arns'])
+    describe_keys = sorted(concrete(key, f'arn:aws:kms:{REGION}:{ACCOUNT}:key/', 'key attribute scope differs') for key in inventory['describe_key_arns'])
     require(attribute_roles and describe_keys, 'task-definition attribute reads are incomplete')
-    require(all(role.startswith(f'arn:aws:iam::{ACCOUNT}:role/') for role in attribute_roles), 'attribute role scope differs')
-    require(all(key.startswith(f'arn:aws:kms:{REGION}:{ACCOUNT}:key/') for key in describe_keys), 'key attribute scope differs')
-    cluster = inventory['cluster_arn']
-    require(isinstance(cluster, str) and cluster.startswith(f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/'), 'cluster attribute scope differs')
+    cluster = concrete(inventory['cluster_arn'], f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/', 'cluster attribute scope differs')
     bucket_name = f'forma-beta-promotion-{ACCOUNT}-{REGION}'
     bucket = 'arn:aws:s3:::' + bucket_name
     objects = bucket + '/' + PREFIX + '/*'
@@ -97,9 +81,12 @@ def template(inventory):
         statement(['iam:PassRole'], ecs_task_roles, Condition={'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}),
         statement(['iam:PassRole'], scheduler_roles, Condition={'StringEquals': {'iam:PassedToService': 'scheduler.amazonaws.com'}}),
         statement(['iam:GetRole'], sorted(set(ecs_task_roles + scheduler_roles + attribute_roles))),
-        # Task definitions embed these attributes. CloudFormation resolves them
-        # while replacing a task definition; the role still cannot modify them.
-        statement(ATTRIBUTE_READS, '*'),
+        # Only the attributes this stack's task definitions and services embed.
+        # DescribeSecurityGroups cannot take a group ARN; every other read is one resource.
+        statement(['rds:DescribeDBInstances'], database),
+        statement(['kms:DescribeKey'], describe_keys),
+        statement(['ecs:DescribeClusters'], cluster),
+        statement(['ec2:DescribeSecurityGroups'], '*'),
         # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
         # while creating the change set (before resource handlers execute).
         statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),

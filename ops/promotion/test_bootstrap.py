@@ -1,5 +1,5 @@
 import unittest
-from ops.promotion.bootstrap import ATTRIBUTE_READS, template, SUBJECT
+from ops.promotion.bootstrap import template, SUBJECT
 from ops.promotion.guards import ACCOUNT, REGION, ROLE_KEYS
 
 
@@ -39,14 +39,24 @@ class BootstrapTests(unittest.TestCase):
         actions=lambda rows:{a for r in rows for a in r['Action']}
         self.assertNotIn('ecs:UpdateService',actions(prep));self.assertNotIn('cloudformation:ExecuteChangeSet',actions(prep))
         self.assertNotIn('cloudformation:CreateChangeSet',actions(execute));self.assertNotIn('iam:PassRole',actions(execute))
+        forbidden = {'kms:Decrypt','kms:GetKeyPolicy','kms:CreateGrant','secretsmanager:GetSecretValue','secretsmanager:DescribeSecret','iam:CreateRole','iam:PutRolePolicy','iam:AttachRolePolicy','iam:ListRolePolicies','iam:ListAttachedRolePolicies','rds:Describe*','ec2:Describe*','kms:Describe*'}
         for rows in [prep,execute,cf]:
             self.assertNotIn('*',actions(rows))
-            self.assertFalse(any(a in {'rds:ModifyDBInstance','rds:DeleteDBInstance','kms:Decrypt','kms:CreateGrant','secretsmanager:GetSecretValue','iam:CreateRole','iam:PutRolePolicy','iam:AttachRolePolicy'} for a in actions(rows)))
+            self.assertFalse(any(a in forbidden or a.startswith('rds:') and a != 'rds:DescribeDBInstances' or a.startswith('kms:') and a != 'kms:DescribeKey' for a in actions(rows)))
             self.assertNotIn('s3:DeleteObject',actions(rows));self.assertNotIn('iam:CreateRole',actions(rows))
-        reads=next(s for s in cf if s['Action']==ATTRIBUTE_READS)
-        self.assertEqual(reads['Resource'], '*')
-        self.assertNotIn(ATTRIBUTE_READS[0], actions(prep))
-        self.assertNotIn(ATTRIBUTE_READS[0], actions(execute))
+        self.assertEqual(next(s for s in cf if s['Action']==['rds:DescribeDBInstances'])['Resource'], inventory()['database_arn'])
+        self.assertEqual(next(s for s in cf if s['Action']==['kms:DescribeKey'])['Resource'], inventory()['describe_key_arns'])
+        self.assertEqual(next(s for s in cf if s['Action']==['ecs:DescribeClusters'])['Resource'], inventory()['cluster_arn'])
+        self.assertEqual(next(s for s in cf if s['Action']==['ec2:DescribeSecurityGroups'])['Resource'], '*')
+        self.assertFalse(any(a.startswith(('rds:','kms:','ec2:')) for a in actions(prep)))
+        self.assertFalse(any(a.startswith(('rds:','kms:','ec2:')) for a in actions(execute)))
+        for bad in ('*', 'arn:aws:rds:us-east-1:123:db:*', 'arn:aws:iam::123:role/*'):
+            broken = inventory()
+            if bad.startswith('arn:aws:rds'): broken['database_arn'] = bad
+            elif 'role' in bad: broken['attribute_role_arns'] = [bad]
+            else: broken['cluster_arn'] = bad
+            with self.assertRaises(Exception):
+                template(broken)
         create=next(r for r in prep if 'cloudformation:CreateChangeSet' in r['Action'])
         self.assertEqual(create['Condition']['StringEquals']['cloudformation:RoleArn'],f'arn:aws:iam::{ACCOUNT}:role/forma-beta-runtime-cloudformation')
 
