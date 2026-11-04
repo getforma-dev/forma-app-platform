@@ -1,6 +1,6 @@
 # Promote to beta
 
-[APP-167](../../Tickets/2-in-progress/APP-167.md) tracks implementation and live acceptance. [ADR-017](../architecture/ADR-017-BETA-PROMOTION.md) records the decision. A configured environment or successful local test alone does not establish an operational pipeline; see the ticket's recorded live run before relying on it.
+[APP-167](../../Tickets/4-done/APP-167.md) records the implementation and the sealed live acceptance. [ADR-017](../architecture/ADR-017-BETA-PROMOTION.md) records the decision. A configured environment or successful local test alone does not establish an operational pipeline; see the ticket's recorded live run before relying on it.
 
 ## Normal release
 
