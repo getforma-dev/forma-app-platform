@@ -36,9 +36,10 @@ async function fixture() {
 test('one authorized inventory populates exact saved-card IDs, and Show reauthorizes without duplicate placement', async () => {
   const f = await fixture(), first = card('1'), answer = card('2', 'answer');
   try {
-    f.queue.push({ok: true, cards: [first, answer]}); assert.equal(await f.api.placeMemberCards(), 2); assert.equal(await f.api.placeMemberCards(), 2); assert.equal(f.reads(), 1);
+    f.queue.push({ok: true, cards: [first, answer]}); assert.equal(await f.api.placeMemberCards(), 1); assert.equal(await f.api.placeMemberCards(), 1); assert.deepEqual(f.rendered, [first.card_id], "app answers stay filed until explicitly placed"); assert.equal(f.reads(), 1);
     const list = f.snapshots.at(-1)!; assert.deepEqual(list.entries.map(row => row.id), [first.card_id, answer.card_id]); assert.equal(list.entries[1].kind, 'answer'); assert.equal('spec' in list.entries[1], false);
-    f.queue.push({ok: true, cards: [{...first}, {...answer}]}); assert.match(await list.show(answer.card_id), /on your canvas/); assert.equal(f.reads(), 2); assert.equal(f.rendered.length, 2); assert.equal(f.centered.length, 1);
+    f.queue.push({ok: true, cards: [{...first}, {...answer}]}); assert.match(await list.show(answer.card_id), /on your canvas/); assert.equal(f.reads(), 2); assert.equal(f.rendered.length, 2);
+    f.queue.push({ok: true, cards: [first, answer]}); await list.show(answer.card_id); assert.equal(f.rendered.length, 2); assert.equal(f.centered.length, 2);
   } finally {f.cleanup();}
 });
 
@@ -85,7 +86,8 @@ test('a broken view listener cannot change confirmed store/share/remove outcomes
 test('successful inventory absence withdraws a displayed answer, while an outage does not', async () => {
   const f = await fixture(), value = card('8', 'answer');
   try {
-    f.queue.push({ok: true, cards: [value]}); await f.api.placeMemberCards(); const node = [...f.nodes.values()][0];
+    f.queue.push({ok: true, cards: [value]}); await f.api.placeMemberCards(); assert.equal(f.nodes.size, 0);
+    f.queue.push({ok: true, cards: [value]}); await f.snapshots.at(-1)!.show(value.card_id); const node = [...f.nodes.values()][0];
     f.queue.push({ok: false, message: 'Unavailable'}); await f.snapshots.at(-1)!.refresh(); assert.equal(f.nodes.size, 1); assert.equal(f.removed.length, 0);
     f.queue.push({ok: true, cards: []}); await f.snapshots.at(-1)!.refresh(); assert.equal(f.nodes.size, 0); assert.deepEqual(f.removed, [node]); assert.equal(f.snapshots.at(-1)!.entries.length, 0);
   } finally {f.cleanup();}

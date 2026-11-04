@@ -82,3 +82,16 @@ test('Shape refuses hidden or unavailable components without placement or a mode
     try {await f.api.runShape('app.summary', 'make a total', (message: string) => f.messages.push(message)); assert.deepEqual(f.calls, [['load', APP, WORK]]); assert.match(f.messages[0]!, options.hidden ? /hidden in your views/ : /could not be placed/);} finally {f.cleanup();}
   }
 });
+
+
+test('Summary receipt navigation stops if its owning panel closes during lookup', async () => {
+  const f = await fixture('explain');
+  let current = true;
+  try {
+    const navigation = f.api.showValue(APP, WORK, 'summary', () => current);
+    current = false;
+    await navigation;
+    assert.deepEqual(f.calls, [['load', APP, WORK]]);
+    assert.equal(f.receipt.open, false);
+  } finally {f.cleanup();}
+});

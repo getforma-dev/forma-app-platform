@@ -589,6 +589,22 @@ async fn draft_publish_save(
     started: Instant,
     announce: bool,
 ) -> Result<Composed, Refused> {
+    draft_publish_save_initialized(
+        stores, member, context, planned, intent, started, announce, None,
+    )
+    .await
+}
+#[allow(clippy::too_many_arguments)]
+async fn draft_publish_save_initialized(
+    stores: &Stores,
+    member: &TrustedRequest,
+    context: &ComposerContext,
+    planned: super::plan::Planned,
+    intent: &str,
+    started: Instant,
+    announce: bool,
+    initial: Option<&crate::storage::DataCopyInit>,
+) -> Result<Composed, Refused> {
     let origin = planned.origin;
     let refused = |code: &'static str, refusal: Refused| {
         log_refused(member, code, Some(origin), started);
@@ -657,7 +673,7 @@ async fn draft_publish_save(
     let Some(bindings) = composer_bindings(&inputs, &schemas, &context.sources) else {
         return refused("unbindable", Refused::CouldNotCompose("unbindable"));
     };
-    let saved = save(
+    let saved = save_initialized(
         stores,
         member,
         &authoring.app,
@@ -668,6 +684,7 @@ async fn draft_publish_save(
         intent,
         started,
         announce,
+        initial,
     )
     .await;
     if saved.is_ok() {
@@ -695,6 +712,28 @@ pub(crate) async fn publish_planned(
         intent,
         Instant::now(),
         true,
+    )
+    .await
+}
+
+/// Source-derived apps are saved together with their full editable data copy.
+pub(crate) async fn publish_initialized(
+    stores: &Stores,
+    member: &TrustedRequest,
+    context: &ComposerContext,
+    planned: super::plan::Planned,
+    intent: &str,
+    initial: &crate::storage::DataCopyInit,
+) -> Result<Composed, Refused> {
+    draft_publish_save_initialized(
+        stores,
+        member,
+        context,
+        planned,
+        intent,
+        Instant::now(),
+        false,
+        Some(initial),
     )
     .await
 }
@@ -741,9 +780,38 @@ async fn save(
     started: Instant,
     announce: bool,
 ) -> Result<Composed, Refused> {
+    save_initialized(
+        stores,
+        member,
+        app,
+        publication,
+        bindings,
+        origin,
+        title,
+        intent,
+        started,
+        announce,
+        None,
+    )
+    .await
+}
+#[allow(clippy::too_many_arguments)]
+async fn save_initialized(
+    stores: &Stores,
+    member: &TrustedRequest,
+    app: &str,
+    publication: &str,
+    bindings: &[WorkBinding],
+    origin: Origin,
+    title: &str,
+    intent: &str,
+    started: Instant,
+    announce: bool,
+    initial: Option<&crate::storage::DataCopyInit>,
+) -> Result<Composed, Refused> {
     match stores
         .workspace
-        .create_work(member, app, publication, intent, bindings)
+        .create_work_initialized(member, app, publication, intent, bindings, initial)
         .await
     {
         Ok(work) => {

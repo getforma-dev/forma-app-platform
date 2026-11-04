@@ -203,7 +203,14 @@ impl ObjectStore {
             Self::Local { root } => {
                 let path = root.join(key);
                 let metadata = fs::symlink_metadata(&path).map_err(|_| StoreError::Unavailable)?;
-                if !metadata.is_file() || metadata.len() > crate::boxes::MAX_FILE_BYTES as u64 * 2 {
+                if !metadata.is_file()
+                    || metadata.len()
+                        > if key.ends_with("/part.parquet") {
+                            64 * 1024 * 1024
+                        } else {
+                            crate::boxes::MAX_FILE_BYTES as u64 * 2
+                        }
+                {
                     return Err(StoreError::Unavailable);
                 }
                 fs::read(&path).map_err(|_| StoreError::Unavailable)?

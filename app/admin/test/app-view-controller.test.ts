@@ -40,7 +40,7 @@ class E extends N {
   }
   querySelectorAll(s:string):E[]{const selectors=s.split(',').map(s=>s.trim()),out:E[]=[];const walk=(p:E)=>{for(const c of p.children)if(c instanceof E){if(selectors.some(s=>s.startsWith(':scope > ')?p===this&&c.matches(s.slice(9)):c.matches(s)))out.push(c);walk(c);}};walk(this);return out;}
   querySelector(s:string):E|null{return this.querySelectorAll(s)[0]??null;}
-  closest(s:string):E|null{return s.split(',').some(v=>this.matches(v))?this:this.parentElement?.closest(s)??null;}
+  closest(s:string):E|null{return s.split(',').some(v=>this.matches(v.trim()))?this:this.parentElement?.closest(s)??null;}
   addEventListener(t:string,f:(e:any)=>void){this.listeners.set(t,[...(this.listeners.get(t)??[]),f]);}
   removeEventListener(t:string,f:(e:any)=>void){this.listeners.set(t,(this.listeners.get(t)??[]).filter(v=>v!==f));}
   emit(t:string,target:E=this,extra:Record<string,unknown>={}){const event={target,defaultPrevented:false,...extra,preventDefault(){this.defaultPrevented=true;},stopPropagation(){}};for(const f of [...(this.listeners.get(t)??[])])f(event);return event;}
@@ -51,7 +51,7 @@ class E extends N {
 const data=(s:string)=>s.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase());
 class D{
  root=new E(this,'main');activeElement:E|null=null;listeners=new Map<string,((e:any)=>void)[]>();
- createElement(t:string){return new E(this,t);}createComment(_t:string){return new N(this);}
+ createElement(t:string){return new E(this,t);}createElementNS(_ns:string,t:string){return new E(this,t);}createComment(_t:string){return new N(this);}
  querySelector(s:string){return this.root.querySelector(s);}getElementById(){return null;}
  addEventListener(t:string,f:(e:any)=>void){this.listeners.set(t,[...(this.listeners.get(t)??[]),f]);}
  removeEventListener(t:string,f:(e:any)=>void){this.listeners.set(t,(this.listeners.get(t)??[]).filter(v=>v!==f));}
@@ -76,8 +76,9 @@ async function fixture(options:{defer?:boolean;standalone?:boolean}={}) {
  const store=new Map<string,string>();
  Object.assign(globalThis,{HTMLElement:E,document:d,matchMedia:()=>({matches:false}),localStorage:{getItem:(k:string)=>store.get(k)??null,setItem:(k:string,v:string)=>store.set(k,v)},__view:{board,ensure:async(_app:string,work:string)=>{loads++;await gate;return groups.get(work)??null;},remember:()=>remembered++,standalone:()=>!!options.standalone,removeWork:()=>0,hooks:null}});
  const stubs:Record<string,string>={
-  './board':`const f=globalThis.__view;export const stackBoard=f.board;export const ensureAppGroup=f.ensure;export const rememberAppPlacement=f.remember;export const isStandaloneWork=f.standalone;export const removeWork=f.removeWork;export const refreshGroupPresentation=async()=>true;export const runGroup=()=>{};export const onLayoutSaved=()=>{};export const setUniteHooks=h=>f.hooks=h;`,
-  './library':`export const findApps=()=>[];`, './slash':`export const registerCommands=()=>{};export const registerCompleter=()=>{};`,
+  './board':`const f=globalThis.__view;export const stackBoard=f.board;export const ensureAppGroup=f.ensure;export const rememberAppPlacement=f.remember;export const isStandaloneWork=f.standalone;export const removeWork=f.removeWork;export const refreshGroupPresentation=async()=>true;export const refreshGroupCapabilities=(...args)=>f.refreshCapabilities?.(...args)??Promise.resolve(true);export const runGroup=()=>{};export const onLayoutSaved=()=>{};export const setUniteHooks=h=>f.hooks=h;`,
+  './app-assistant':`export const showAppAssistant=(_host,options)=>{globalThis.__view.assistant=options;};export const disposeAppAssistant=()=>{};`,
+  './library':`export const findApps=()=>[];`, './shape':`export const addressOfWork=()=>"whole-app";`, './slash':`export const registerCommands=()=>{};export const registerCompleter=()=>{};`,
   './stacks':`export const releaseCards=()=>[];`, '../sharing/dialog':`export const dismissSharing=()=>false;export const openSharing=()=>{};`,
   './render':`export const originKind=()=>'';export function el(d,t,a={},...children){const n=d.createElement(t);for(const[k,v]of Object.entries(a))n.setAttribute(k,v);n.append(...children.filter(c=>c!==null&&c!==undefined&&c!==false));return n;}`,
   '../canvas-vendor/index':`export function createCanvasItem(o){const item=o.content.ownerDocument.createElement('article');item.dataset.instanceId=o.instanceId;item.className='widget-instance';item.append(o.content);return item;}`,
@@ -90,13 +91,62 @@ async function fixture(options:{defer?:boolean;standalone?:boolean}={}) {
 
 test('Card → Stack → Open retains one outer item and exact component/form/receipt nodes',async()=>{
  const f=await fixture();await f.api.setAppView(APP,WORK,'face');const item=f.api.appViewForWork(WORK).item;
- assert.equal(f.mounts(),1);assert.ok(item.querySelector('[data-app-view-face]').contains(f.face));
- assert.equal(item.querySelector('[data-app-view-mode="face"]').textContent,'App Card');
+ assert.equal(f.mounts(),1);assert.ok(item.querySelector('[data-app-view-parking]').contains(f.face));
+ assert.equal(item.querySelectorAll('[data-app-assistant]').length,1);
+ assert.ok(f.group.cards.every((card:E)=>card.dataset.appComponent==='true'));
+ assert.equal(item.querySelector('.cv-app-view-picker').querySelector('[data-app-view-mode="face"]').textContent,'Card');
  assert.equal(item.querySelector('.cv-app-face-summary').textContent,'Track real requests and their progress.');
  const link=item.querySelector('a');assert.equal(link.getAttribute('target'),'_blank');assert.equal(link.getAttribute('rel'),'noopener');
  for(const mode of ['stack','open','face','open']){await f.api.setAppView(APP,WORK,mode);assert.equal(f.api.appViewForWork(WORK).item,item);assert.equal(f.input.value,'Unsent draft');assert.equal(f.key.value,'same-command-key');assert.ok(item.contains(f.receipt));}
  assert.equal(f.mounts(),1);assert.equal(f.removed(),0);assert.equal(f.group.cards.filter((card:E)=>item.contains(card)).length,3);
  const before=f.canvas.getItemState(item);await f.api.setAppView(APP,WORK,'open');assert.deepEqual(f.canvas.getItemState(item),before);
+});
+
+test('Summary open and close preserve custom Open dimensions, one item and drafts across all app views',async()=>{
+ const f=await fixture(), storageKey='forma.canvas.united.v1:0123456789abcdef';
+ f.store.set(storageKey,JSON.stringify([{app:APP,work:WORK,x:95,y:130,previous:{},mode:'open',width:820,height:550}]));
+ await f.api.restoreAppViews();
+ const item=f.api.appViewForWork(WORK).item, root=item.querySelector('.cv-unite'), host=item.querySelector('[data-app-companion]');
+ const original=f.canvas.getItemState(item);
+ const summary=(open:boolean)=>{host.hidden=!open;f.d.emit('forma:app-companion',{app:APP,work:WORK,open});};
+ const stored=()=>JSON.parse(f.store.get(storageKey)!)[0];
+ assert.deepEqual(original,{x:95,y:130,width:820,height:550});
+ summary(true);
+ assert.equal(f.canvas.getItemState(item).width,1000,'the companion is clamped to the available viewport');
+ assert.equal(root.classList.contains('has-companion'),true);
+ assert.equal(item.querySelector('[data-app-assistant]').getAttribute('aria-expanded'),'true');
+ for(const mode of ['face','stack','open']){
+  await f.api.setAppView(APP,WORK,mode,{focus:false});
+  assert.equal(f.api.appViewForWork(WORK).item,item);
+  assert.equal(item.querySelector('[data-app-companion]'),host);assert.equal(host.hidden,false);
+  assert.equal(f.form.querySelector('input'),f.input);assert.equal(f.input.value,'Unsent draft');
+  assert.equal(f.key.value,'same-command-key');assert.ok(item.contains(f.receipt));
+  assert.equal(stored().mode,mode);assert.equal(stored().width,820);assert.equal(stored().height,550);
+ }
+ summary(false);
+ assert.deepEqual(f.canvas.getItemState(item),original,'closing restores the window size instead of persisting companion geometry');
+ assert.equal(root.classList.contains('has-companion'),false);
+ assert.equal(item.querySelector('[data-app-assistant]').getAttribute('aria-expanded'),'false');
+ summary(true);summary(false);
+ assert.deepEqual(f.canvas.getItemState(item),original,'repeated opening never accumulates extra width');
+ assert.equal(f.mounts(),1);assert.equal(f.removed(),0);
+});
+
+test('resizing a clamped Summary window starts at its rendered width without a dead drag range',async()=>{
+ const f=await fixture();await f.api.restoreAppViews();await f.api.setAppView(APP,WORK,'open');
+ const item=f.api.appViewForWork(WORK).item, host=item.querySelector('[data-app-companion]');
+ host.hidden=false;f.d.emit('forma:app-companion',{app:APP,work:WORK,open:true});
+ assert.equal(f.canvas.getItemState(item).width,1000);
+ const event=(target:E,x:number)=>({target,pointerId:1,button:0,clientX:x,clientY:550,preventDefault(){},stopPropagation(){}});
+ const handle=item.querySelector('[data-unite-resize]');
+ for(const listener of [...(f.d.listeners.get('pointerdown')??[])])listener(event(handle,664));
+ for(const listener of [...(f.d.listeners.get('pointermove')??[])])listener(event(handle,614));
+ assert.equal(f.canvas.getItemState(item).width,950,'a 50px drag immediately changes the visible window by 50px');
+ for(const listener of [...(f.d.listeners.get('pointerup')??[])])listener(event(handle,614));
+ host.hidden=true;f.d.emit('forma:app-companion',{app:APP,work:WORK,open:false});
+ assert.equal(f.canvas.getItemState(item).width,614,'closing retains the explicit resize, excluding companion width');
+ assert.equal(JSON.parse(f.store.get('forma.canvas.united.v1:0123456789abcdef')!)[0].width,614);
+ assert.equal(f.input.value,'Unsent draft');assert.equal(f.mounts(),1);
 });
 
 test('changing mode while a component dialog is open returns its original form before parking',async()=>{
@@ -112,6 +162,14 @@ test('overlapping mode requests serialize one placement and a removal cancels pe
  await new Promise(resolve=>setTimeout(resolve,0));assert.equal(f.mounts(),0);f.release();await Promise.all([a,b,c]);assert.equal(f.mounts(),1);assert.equal(f.api.appViewForWork(WORK).mode,'open');
  const g=await fixture({defer:true});const pending=g.api.setAppView(APP,WORK,'face');await new Promise(resolve=>setTimeout(resolve,0));g.api.removeAppView(WORK);g.release();
  assert.match(await pending,/cancelled/);assert.equal(g.mounts(),0);assert.equal(g.remembered(),0);
+});
+
+test('a dismissed file conversion cannot place an app after acquisition resolves',async()=>{
+ const f=await fixture({defer:true});let current=true;
+ const pending=f.api.setAppView(APP,WORK,'face',{isCurrent:()=>current});
+ await new Promise(resolve=>setTimeout(resolve,0));current=false;f.release();
+ assert.match(await pending,/cancelled/);assert.equal(f.mounts(),0);assert.equal(f.remembered(),0);
+ assert.equal(f.api.appViewForWork(WORK),null);
 });
 
 test('atomic independent card suppresses alternate modes and all app split entry points refuse',async()=>{
@@ -137,10 +195,10 @@ test('changing an existing Open app to independent Card updates labels and selec
  f.setStandalone(true);await f.api.setAppView(APP,WORK,'open');
  assert.equal(item.querySelector('.cv-unite').dataset.placementKind,'card');
  assert.equal(item.querySelector('.cv-app-view-picker').hidden,true);
- assert.equal(item.querySelector('[data-unite-ask]').textContent,'Ask about this card');
- assert.equal(item.querySelector('[data-edit-presentation]').textContent,'Edit card');
+ assert.equal(item.querySelector('[data-app-assistant]').getAttribute('aria-label'),'Card assistant');
+ assert.equal(item.querySelector('[data-edit-presentation]').getAttribute('aria-label'),'Card settings');
  f.setStandalone(false);await f.api.setAppView(APP,WORK,'open');
- assert.equal(item.querySelector('.cv-app-view-picker').hidden,false);assert.equal(item.querySelector('[data-edit-presentation]').textContent,'Edit app');assert.equal(f.mounts(),1);
+ assert.equal(item.querySelector('.cv-app-view-picker').hidden,false);assert.equal(item.querySelector('[data-edit-presentation]').getAttribute('aria-label'),'App settings');assert.equal(f.mounts(),1);
 });
 
 test('hidden components leave Stack and Focus sequences but retain the same draft for later restoration',async()=>{
@@ -177,7 +235,7 @@ test('Arrange moves whole frames into rows and persists positions without changi
 
 test('Face without an admitted description has a useful inert summary',async()=>{
  const f=await fixture();f.group.presentation='{}';await f.api.setAppView(APP,WORK,'face');
- assert.equal(f.api.appViewForWork(WORK).item.querySelector('.cv-app-face-summary').textContent,'Open this app to use its components.');
+ assert.equal(f.api.appViewForWork(WORK).item.querySelector('.cv-app-face-summary').textContent,'Open your workspace to explore the data and use its tools.');
 });
 
 
@@ -251,4 +309,33 @@ test('Focus starts a parked component read only after the original node and dial
     assert.equal(api.openFocus('second'), true);
     assert.deepEqual(reads, ['first', 'second']); assert.equal(cards[0]!.parentElement, parked);
   } finally {delete (globalThis as any)[key];}
+});
+
+
+test('enabling data adds components to the same app window without losing drafts or layout',async()=>{
+ const f=await fixture();await f.api.setAppView(APP,WORK,'open',{at:{x:180,y:240}});
+ const original=f.api.appViewForWork(WORK),item=original.item,geometry=f.canvas.getItemState(item);
+ await f.api.openAppAssistant(APP,WORK);
+ const extra=f.d.createElement('article');extra.className='cv-card';extra.dataset.card='new-data-form';extra.dataset.kind='form';
+ f.group.cards.push(extra);f.parked.append(extra);
+ assert.equal(await (globalThis as any).__view.assistant.onDataEnabled(),true);
+ assert.equal(f.api.appViewForWork(WORK).item,item);assert.equal(f.api.appViewForWork(WORK).mode,'open');
+ assert.deepEqual(f.canvas.getItemState(item),geometry);assert.equal(f.input.value,'Unsent draft');assert.equal(f.key.value,'same-command-key');
+ assert.ok(item.contains(extra));assert.ok(item.contains(f.receipt));assert.equal(f.mounts(),1);assert.equal(f.removed(),0);
+});
+
+test('an upgrade finishing after app removal cannot refresh or restore its canvas placement',async()=>{
+ const f=await fixture();await f.api.restoreAppViews();await f.api.setAppView(APP,WORK,'open');await f.api.openAppAssistant(APP,WORK);
+ const state=(globalThis as any).__view,finished=state.assistant.onDataEnabled;
+ let resolve!:(result:boolean)=>void,current!:()=>boolean,reads=0;
+ state.refreshCapabilities=async(app:string,work:string,isCurrent:()=>boolean)=>{
+  assert.equal(app,APP);assert.equal(work,WORK);reads++;current=isCurrent;
+  return new Promise<boolean>(done=>resolve=done);
+ };
+ const pending=finished();assert.equal(reads,1);assert.equal(current(),true);
+ f.api.removeAppView(WORK);const remembered=f.remembered();assert.equal(current(),false);
+ resolve(true);assert.equal(await pending,false);assert.equal(f.api.appViewForWork(WORK),null);
+ assert.equal(f.remembered(),remembered);assert.equal(f.mounts(),1);assert.equal(f.removed(),1);
+ assert.equal(await finished(),false);assert.equal(reads,1,'a late callback does not even start a new capability read');
+ assert.deepEqual(JSON.parse(f.store.get('forma.canvas.united.v1:0123456789abcdef')!),[]);
 });

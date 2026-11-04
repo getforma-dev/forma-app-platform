@@ -37,6 +37,9 @@ pub const MANIFEST_SCHEMA: &str = "genui-parser-manifest/1";
 /// The job slot's RSS line: `parser-host` (2 GiB guest plus host) or the
 /// normalize child, never both (ADR-009 D9.2).
 pub const SLOT_RSS_LIMIT_BYTES: u64 = 2560 * 1024 * 1024;
+/// Original-file view jobs use a 512 MiB guest plus bounded host overhead.
+/// Two admitted viewers therefore fit within a 1.5 GiB RSS envelope.
+pub const VIEW_RSS_LIMIT_BYTES: u64 = 768 * 1024 * 1024;
 pub const GUEST_DEADLINE: Duration = Duration::from_secs(120);
 pub const BACKSTOP: Duration = Duration::from_secs(5);
 pub const CONFIG_LIMIT_BYTES: usize = 4096;
@@ -56,6 +59,23 @@ pub enum Format {
 pub struct ParseConfig {
     pub format: Format,
     pub sheet: Option<String>,
+}
+
+/// A bounded original-file viewport. This selects the read-only viewer profile;
+/// normalization continues to use its separately qualified demo profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViewWindow {
+    pub row_offset: usize,
+    pub column_offset: usize,
+}
+
+impl ViewWindow {
+    pub fn valid(self) -> bool {
+        self.row_offset < 1_048_576
+            && self.row_offset % 50 == 0
+            && self.column_offset < 16_384
+            && self.column_offset % 32 == 0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,13 +235,22 @@ pub async fn parse(
 }
 
 fn frame_config(config: &ParseConfig) -> Vec<u8> {
+    frame_profile(config, None)
+}
+
+fn frame_profile(config: &ParseConfig, window: Option<ViewWindow>) -> Vec<u8> {
     let format = match config.format {
         Format::Csv => "csv",
         Format::Xlsx => "xlsx",
     };
-    let mut value = json!({"profile": "demo", "format": format});
+    let mut value =
+        json!({"profile": if window.is_some() { "view" } else { "demo" }, "format": format});
     if let Some(sheet) = &config.sheet {
         value["sheet"] = json!(sheet);
+    }
+    if let Some(window) = window {
+        value["window"] =
+            json!({"row_offset": window.row_offset, "column_offset": window.column_offset});
     }
     serde_json::to_vec(&value).expect("a JSON object serializes")
 }
@@ -259,7 +288,49 @@ pub async fn parse_with(
     config: &ParseConfig,
     deadline: Duration,
 ) -> Result<ParseOutput, ParseRefusal> {
-    let config = frame_config(config);
+    parse_framed(
+        identity,
+        input,
+        expected,
+        frame_config(config),
+        deadline,
+        SLOT_RSS_LIMIT_BYTES,
+    )
+    .await
+}
+
+/// Read one original-file page without loosening the typed-import contract.
+/// The same child confinement, digest binding and response checks apply.
+pub async fn parse_view_with(
+    identity: &ParserIdentity,
+    input: impl AsyncRead + Unpin + Send + 'static,
+    expected: &ExpectedInput,
+    config: &ParseConfig,
+    window: ViewWindow,
+    deadline: Duration,
+) -> Result<ParseOutput, ParseRefusal> {
+    if !window.valid() {
+        return Err(ParseRefusal::Failure("view_window_invalid"));
+    }
+    parse_framed(
+        identity,
+        input,
+        expected,
+        frame_profile(config, Some(window)),
+        deadline,
+        VIEW_RSS_LIMIT_BYTES,
+    )
+    .await
+}
+
+async fn parse_framed(
+    identity: &ParserIdentity,
+    input: impl AsyncRead + Unpin + Send + 'static,
+    expected: &ExpectedInput,
+    config: Vec<u8>,
+    deadline: Duration,
+    rss_limit_bytes: u64,
+) -> Result<ParseOutput, ParseRefusal> {
     if config.len() > CONFIG_LIMIT_BYTES {
         return Err(ParseRefusal::Refused {
             reason: "config_limit".into(),
@@ -276,7 +347,7 @@ pub async fn parse_with(
         .arg("--wasm-sha256")
         .arg(&identity.wasm_sha256);
     let confinement = Confinement {
-        rss_limit_bytes: SLOT_RSS_LIMIT_BYTES,
+        rss_limit_bytes,
         deadline: deadline.min(GUEST_DEADLINE) + BACKSTOP,
         nofile: 64,
         core: 0,
@@ -503,6 +574,68 @@ printf '{"status":"parsed","wasm_sha256":"sha256:%s","input_sha256":"sha256:%s"}
             output.document["result"]["config"],
             json!({"format":"xlsx","profile":"demo","sheet":"Inventory"})
         );
+    }
+
+    #[tokio::test]
+    async fn view_frame_names_only_the_fixed_profile_and_bounded_window() {
+        let fixture = stub_seeing(
+            r#"config=$(/usr/bin/tail -c +5)
+printf '{"status":"parsed","result":{"config":%s}}' "$config"
+printf '{"status":"parsed","wasm_sha256":"sha256:%s","input_sha256":"sha256:%s"}\n' "$WASM_HEX" "$INPUT_HEX" >&2"#,
+            b"",
+        );
+        let output = parse_view_with(
+            &fixture.identity,
+            std::io::Cursor::new(Vec::new()),
+            &expect(b""),
+            &ParseConfig {
+                format: Format::Xlsx,
+                sheet: Some("Inventory".into()),
+            },
+            ViewWindow {
+                row_offset: 1_048_550,
+                column_offset: 16_352,
+            },
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            output.document["result"]["config"],
+            json!({"format":"xlsx","profile":"view","sheet":"Inventory","window":{"row_offset":1_048_550,"column_offset":16_352}})
+        );
+        for window in [
+            ViewWindow {
+                row_offset: 1,
+                column_offset: 0,
+            },
+            ViewWindow {
+                row_offset: 0,
+                column_offset: 1,
+            },
+            ViewWindow {
+                row_offset: 1_048_600,
+                column_offset: 0,
+            },
+            ViewWindow {
+                row_offset: 0,
+                column_offset: 16_384,
+            },
+        ] {
+            assert_eq!(
+                parse_view_with(
+                    &fixture.identity,
+                    std::io::Cursor::new(Vec::new()),
+                    &expect(b""),
+                    &csv(),
+                    window,
+                    Duration::from_secs(10)
+                )
+                .await
+                .unwrap_err(),
+                ParseRefusal::Failure("view_window_invalid")
+            );
+        }
     }
 
     #[tokio::test]

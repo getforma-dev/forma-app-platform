@@ -32,12 +32,13 @@
 // references}`, each reference a row with its file (name, SHA-256), sheet
 // and row number, from the server. A folder answer has no Pin or Make it a
 // card (those keep record receipts); **Make a card** is on the folder.
-import { activeCanvasItem, boardWorks, focusCard, placeUtilityCard, workCard } from './board';
+import { activeCanvasItem, canvasApi, boardWorks, focusCard, placeUtilityCard, workCard } from './board';
 import { answeredLine, newCardId, pinnedAnswer, pinRequest, storeCard, type Answer, type StoredCard } from './cards';
 import { selectedCanvasItem } from './controls';
 import { cardAddress, findCardRow, findCards, findApps, type CardRow } from './library';
-import { onPaneTab, openPane } from './pane';
-import { el, isUuid } from './render';
+import { closePane } from './pane';
+import { appViewForWork, openAppAssistant } from './unite';
+import { announce, el, isUuid } from './render';
 import { addressOfItem, addressOfWork, previewNewCard, removeButton, resolveTarget, type Target } from './shape';
 import type { Completion } from './slash';
 import { firstWord, MAX_RECORD_SET, mentionsOf, splitAddress } from './talk-view';
@@ -195,7 +196,7 @@ let busy = false;
 /** Questions sent while one is being answered: asked next, in order, each with the scope it was asked in. */
 const queued: { text: string; scope: Scope }[] = [];
 /** Set by `openAsk`: the next showing keeps its scope instead of reading the selection. */
-let pinned = false;
+let workspacePanel: HTMLElement | null = null;
 
 const REFUSALS: Record<string, string> = {
   composer_unavailable: 'That question needs the AI model, and none is configured here. Try: “where are the red invoices”, “how many”, “what’s the total”.',
@@ -455,9 +456,19 @@ function answerActions(document_: Document, answer: Answer): HTMLElement {
  * it never runs again, and its text is what Ask said then (never derived
  * again). Its maker's **Remove** deletes it (audited).
  */
+function savedFileAnswer(card: StoredCard): {box: string; references: RowReference[]} | null {
+  if (!card.spec || typeof card.spec !== 'object') return null;
+  const spec = card.spec as Record<string, unknown>, source = spec.file_source as Record<string, unknown> | undefined;
+  if (!source || !isUuid(source.box_id) || !isUuid(source.file_id) || typeof source.name !== 'string' || typeof source.sha256 !== 'string') return null;
+  const judged = folderAnswer({text: 'Saved source references.', references: spec.file_references});
+  if (!judged || judged.references.some(ref => ref.file_id !== source.file_id || ref.sha256 !== source.sha256)) return null;
+  return {box: source.box_id, references: judged.references};
+}
 export function placePinnedAnswer(card: StoredCard): boolean {
   const answer = pinnedAnswer(card);
   if (!answer) return false;
+  const original = savedFileAnswer(card);
+  if (card.spec && typeof card.spec === 'object' && 'file_source' in card.spec && !original) return false;
   const document_ = document;
   const placed = `pin-${card.card_id}`;
   const references = answer.references.filter((r) => typeof r.record_id === 'string').slice(0, MAX_WORKS * 200) as Reference[];
@@ -466,19 +477,52 @@ export function placePinnedAnswer(card: StoredCard): boolean {
     el(document_, 'p', { class: 'cv-pinned-question' }, `“${answer.question}”`),
     el(document_, 'p', { class: 'cv-pinned-text' }, answer.text),
     ...(references.length ? [referenceList(document_, references, answer.receipts)] : []));
+  // Saved app answers remain associated with their owner, even when laid out.
+  if (card.app_id && card.work_id) {
+    const owner = el(document_, 'button', {type: 'button', class: 'cv-secondary cv-pinned-owner'}, `Saved in /${card.address || card.work_id}`);
+    owner.addEventListener('click', () => {void openAppAssistant(card.app_id!, card.work_id!, 'saved');});
+    body.prepend(owner); body.dataset.answerApp = card.app_id; body.dataset.answerWork = card.work_id;
+  }
+  if (original) {
+    const refs = el(document_, 'details', {class: 'cv-pinned-file-sources'}, el(document_, 'summary', {}, `Source rows (${original.references.length})`),
+      el(document_, 'ul', {class: 'cv-ask-refs'}, ...original.references.map(reference => rowItem(document_, reference, original.box))));
+    body.append(refs);
+  }
   if (card.mine) body.append(el(document_, 'p', { class: 'cv-made-actions' }, removeButton(document_, card, placed, (message) => entry(document_, 'note', message))));
   placeUtilityCard(placed, card.title, body);
+  if (card.app_id && card.work_id && body.isConnected) {
+    const item = body.closest<HTMLElement>('.cv-item-utility');
+    item?.querySelector('[data-utility-close]')?.addEventListener('click', () => {
+      const owner = appViewForWork(card.work_id!);
+      if (owner?.app === card.app_id && owner.item.isConnected) canvasApi()?.centerItem(owner.item);
+    });
+  }
   return true;
 }
 
 /** Opens the Ask tab (scoped to `explicit`, else the selected card, else the canvas) and asks `question` when given. */
 export function openAsk(question = '', explicit: Scope | null = null): void {
   scope = explicit ?? currentScope();
-  pinned = true;
-  openPane('ask', { focus: !question });
-  pinned = false;
+  const mentioned = mentionsOf(question.trim().replace(/^\?\s*/, ''));
+  let unresolvedMention = mentioned.mentions.length > 1;
+  if (mentioned.mentions.length === 1) {
+    const target = mentionScope(mentioned.mentions[0]!);
+    if (typeof target === 'string') unresolvedMention = true;
+    else {scope = target; question = mentioned.question;}
+  }
+  if (!unresolvedMention && (scope.kind === 'app' || scope.kind === 'card') && scope.works.length === 1) {
+    const work = scope.works[0]!;
+    closePane(false);
+    void openAppAssistant(work.app_id, work.work_id, 'ask', question, scope.kind === 'card' ? scope : null).then(opened => {
+      if (!opened) announce('This app could not be opened. Choose an available app from the Library.');
+    }).catch(() => announce('This app could not be opened right now. Try again.'));
+    return;
+  }
+  // Cross-app, folder and widget questions retain their original capabilities
+  // on a canvas panel; the Library no longer owns a second Ask destination.
+  if (workspacePanel) placeUtilityCard('workspace-ask', scope.kind === 'folder' ? 'Folder assistant' : 'Workspace assistant', workspacePanel);
   showScope();
-  if (question.trim()) void ask(question);
+  if (question.trim()) void ask(question); else input?.focus({preventScroll: true});
 }
 
 /** ⋯ → Ask about this: the selected card's scope. */
@@ -491,8 +535,9 @@ export function askAboutItem(item: HTMLElement | null = activeCanvasItem()): boo
 
 /** Builds the Ask tab's panel (once). */
 export function startAsk(document_: Document): void {
-  const panel = document_.getElementById('cv-panel-ask');
-  if (!panel || thread) return;
+  if (thread) return;
+  const panel = el(document_, 'section', {class: 'cv-ask cv-workspace-assistant', 'aria-label': 'Workspace questions and answers'});
+  workspacePanel = panel;
   chipText = el(document_, 'span', { class: 'cv-ask-chip-text' }, '');
   chipRemove = el(document_, 'button', { type: 'button', class: 'cv-ask-chip-x', 'aria-label': 'Remove the scope: ask about the canvas', title: 'Ask about the canvas instead' }, '×');
   chipRemove.addEventListener('click', () => {
@@ -507,19 +552,12 @@ export function startAsk(document_: Document): void {
     event.preventDefault();
     const value = input?.value ?? '';
     if (input) input.value = '';
-    void ask(value);
+    openAsk(value, scope);
   });
   form.addEventListener('keydown', (event) => event.stopPropagation());
   panel.replaceChildren(
-    el(document_, 'p', { class: 'cv-ask-sub' }, 'Ask reads; it never changes records, cards or the canvas. To change how something looks, use /shape.'),
+    el(document_, 'p', { class: 'cv-ask-sub' }, 'Ask about a folder, widget or several apps. Answers keep their sources; building and design stay in the builder.'),
     chip, thread, form);
-  onPaneTab('ask', {
-    show: (focus) => {
-      if (!pinned) scope = currentScope();
-      showScope();
-      if (focus) input?.focus({ preventScroll: true });
-    },
-  });
   // Selecting another object changes the next question, never a question
   // already queued with its captured scope. Draft text stays untouched.
   document_.getElementById('cv-canvas')?.addEventListener('pointerdown', () => {
@@ -527,7 +565,7 @@ export function startAsk(document_: Document): void {
   });
   document_.addEventListener('click', event => {
     const target = event.target as Element | null;
-    if (target?.closest('[data-unite-ask], [data-widget-ask]')) askAboutItem(target.closest<HTMLElement>('.widget-instance'));
+    if (target?.closest('[data-widget-ask]')) askAboutItem(target.closest<HTMLElement>('.widget-instance'));
   });
   let focusedPanel: AskPanel | null = null;
   setFocusAsk((card, host, focus) => {

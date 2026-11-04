@@ -15,7 +15,7 @@
 //!
 //! The guest bytes are read from `--wasm` and must hash to `--wasm-sha256`,
 //! the digest the caller verified against the image's parser-manifest.json.
-//! The demo profile is fixed and no limit can be passed: the guest's
+//! The demo and read-only view profiles are fixed and no limit can be passed: the guest's
 //! lower-only `limits` test channel is not reachable from a job.
 use crate::{sha, Limits, Sandbox};
 use serde::Deserialize;
@@ -40,6 +40,20 @@ struct JobConfig {
     format: String,
     #[serde(default)]
     sheet: Option<String>,
+    #[serde(default, deserialize_with = "read_window")]
+    window: Option<Window>,
+}
+
+#[derive(Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct Window {
+    row_offset: usize,
+    column_offset: usize,
+}
+fn read_window<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Window>, D::Error> {
+    Window::deserialize(deserializer).map(Some)
 }
 
 struct Failure(&'static str);
@@ -107,21 +121,34 @@ fn read_config(stdin: &mut dyn Read) -> Result<Value, Failure> {
     stdin.read_exact(&mut bytes).map_err(truncated)?;
     let config: JobConfig =
         serde_json::from_slice(&bytes).map_err(|_| Failure("config_invalid"))?;
-    if config.profile != "demo" {
+    if config.profile != "demo" && config.profile != "view" {
         return Err(Failure("profile_not_demo"));
+    }
+    if let Some(window) = &config.window {
+        if config.profile != "view"
+            || window.row_offset >= 1_048_576
+            || window.column_offset >= 16_384
+        {
+            return Err(Failure("config_invalid"));
+        }
     }
     if config.format != "csv" && config.format != "xlsx" {
         return Err(Failure("format_unsupported"));
     }
-    let mut guest = json!({"profile": "demo", "format": config.format});
+    let mut guest = json!({"profile": config.profile, "format": config.format});
     if let Some(sheet) = config.sheet {
         guest["sheet"] = json!(sheet);
+    }
+    if let Some(window) = config.window {
+        guest["window"] = json!(window);
     }
     Ok(guest)
 }
 
 fn input_cap(config: &Value) -> usize {
-    if config["format"] == "csv" {
+    if config["profile"] == "view" {
+        20 * MIB
+    } else if config["format"] == "csv" {
         10 * MIB
     } else {
         5 * MIB

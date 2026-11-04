@@ -1,8 +1,9 @@
 //! The dev binary's database (ADR-012 D12.1): this instance's Compose
 //! PostgreSQL (`compose.dev.yaml`), made into the shape the product's role
 //! pools require (verified TLS, the four roles, the canonical migrations and
-//! the validated seed) by idempotent steps at every start, so a restart
-//! keeps the data and a new volume is ready in seconds.
+//! the validated initial seed). Migrations run at every start; the durable
+//! volume epoch keeps subsequent starts from replaying fixture authority.
+//! A restart preserves account changes and data.
 //!
 //! The local superuser is reached only through `docker exec` (socket trust
 //! inside the container); TCP needs a password once the first start has
@@ -269,7 +270,7 @@ impl Database {
 
     /// Everything the product needs from the database, idempotently: TLS on,
     /// the migration role, the `genui` database, migrations and the
-    /// validated seed (both no-ops when current), role passwords and
+    /// validated seed on a new volume, role passwords and
     /// password-only TCP authentication.
     pub fn bootstrap(&self) -> Result<(), String> {
         let started = Instant::now();
@@ -303,6 +304,10 @@ impl Database {
              ALTER ROLE genui_migration PASSWORD 'synthetic-migration';",
             "postgres",
         )?;
+        // The durable epoch is written only after initial seeding succeeds.
+        // A restart must preserve subsequent account changes (including the
+        // membership epoch advanced by sign-out), not replay fixture authority.
+        let initialize_seed = self.marked("epoch")?.is_none();
         if self
             .sql(
                 "SELECT 1 FROM pg_database WHERE datname='genui'",
@@ -311,10 +316,13 @@ impl Database {
             .trim()
             .is_empty()
         {
+            if !initialize_seed {
+                return Err("the initialized development volume is missing its application database; refusing to replace saved state".into());
+            }
             self.sql("CREATE DATABASE genui OWNER genui_migration;", "postgres")?;
             println!("genui-dev: new database (first start of this volume)");
         }
-        let script = "import sys\nfrom pathlib import Path\nimport psycopg\nimport runtime\nfrom tenant_seed import make_bundles,seed\nwith psycopg.connect(host='127.0.0.1',port=int(sys.argv[1]),user='genui_migration',password=sys.argv[3],dbname='genui',sslmode='require',connect_timeout=5) as c:\n runtime.apply_migrations(c,Path(sys.argv[2]))\n seed(c,make_bundles())\n";
+        let script = "import sys\nfrom pathlib import Path\nimport psycopg\nimport runtime\nfrom tenant_seed import make_bundles,seed\nwith psycopg.connect(host='127.0.0.1',port=int(sys.argv[1]),user='genui_migration',password=sys.argv[3],dbname='genui',sslmode='require',connect_timeout=5) as c:\n runtime.apply_migrations(c,Path(sys.argv[2]))\n if sys.argv[4] == 'initialize':\n  seed(c,make_bundles())\n";
         let app = repository().join("app");
         let mut command = Command::new(&self.python);
         command.current_dir(app.join("runtime")).args([
@@ -323,8 +331,13 @@ impl Database {
             &self.port.to_string(),
             app.join("migrations").to_str().expect("UTF-8 path"),
             MIGRATION_PASSWORD,
+            if initialize_seed {
+                "initialize"
+            } else {
+                "preserve"
+            },
         ]);
-        run(command, b"", "migrations and the validated seed")?;
+        run(command, b"", "migrations and initial validated seed")?;
         self.sql(
             "ALTER ROLE postgres PASSWORD 'synthetic-postgres'; \
              ALTER ROLE genui_workspace PASSWORD 'synthetic-workspace'; \

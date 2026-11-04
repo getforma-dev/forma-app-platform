@@ -310,13 +310,14 @@ function body(document_: Document, shaped: Shaped, table: Table, view: CardView)
     const rows = shaped.groups.map((g) => el(document_, 'tr', {},
       el(document_, 'th', { scope: 'row' }, g.label),
       el(document_, 'td', { class: 'value num' }, g.measured.text),
-      el(document_, 'td', {}, table.source === 'records' ? receiptList(document_, g.receipts, table) : `${g.count} rows`)));
+      el(document_, 'td', table.source === 'records' ? { class: 'cv-shaped-evidence-column' } : {},
+        table.source === 'records' ? receiptList(document_, g.receipts, table) : `${g.count} rows`)));
     box.append(
       el(document_, 'div', { class: 'cv-table' }, el(document_, 'table', {},
         el(document_, 'thead', {}, el(document_, 'tr', {},
           el(document_, 'th', { scope: 'col' }, shaped.by.replace(/_/g, ' ')),
           el(document_, 'th', { scope: 'col' }, shaped.measure),
-          el(document_, 'th', { scope: 'col' }, 'Receipts'))),
+          el(document_, 'th', { scope: 'col', ...(table.source === 'records' ? { class: 'cv-shaped-evidence-column' } : {}) }, table.source === 'records' ? 'Receipts' : 'Rows'))),
         el(document_, 'tbody', {}, ...rows))),
       el(document_, 'p', { class: 'cv-shaped-meta' }, metaText(shaped, table)));
     if (table.source === 'query' && table.receipt) box.append(receiptSection(document_, table.receipt));
@@ -475,7 +476,7 @@ export async function refreshShaped(work: string | null): Promise<void> {
 }
 
 function head(card: HTMLElement): HTMLElement | null {
-  return card.querySelector<HTMLElement>(':scope > .cv-card-head, :scope > header, :scope > h2');
+  return card.querySelector<HTMLElement>(':scope > .cv-app-window > .cv-unite-head, :scope > .cv-card-head, :scope > header, :scope > h2');
 }
 
 /** Hides the card's own content (it keeps running underneath) and shows `section` instead. */

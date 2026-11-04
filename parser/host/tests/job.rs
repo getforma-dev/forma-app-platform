@@ -333,3 +333,37 @@ fn job_process_runs_exactly_one_job() {
         format!("sha256:{}", hex(&stdin[4 + c.len()..]))
     );
 }
+
+#[test]
+fn view_job_has_closed_window_and_keeps_demo_strict() {
+    let input = b"a,b\n001,002\n";
+    let job = run(&frame(
+        &config(
+            json!({"profile":"view","format":"csv","window":{"row_offset":1,"column_offset":1}}),
+        ),
+        input,
+    ));
+    assert_eq!(job.code, 0, "{}", job.stderr);
+    let document = job.document();
+    assert_eq!(document["profile"], "view");
+    assert_eq!(document["result"]["cells"].as_array().unwrap().len(), 1);
+    assert_eq!(document["result"]["cells"][0]["original"], "002");
+    assert_eq!(
+        job.report()["resource_limits"]["input_bytes"],
+        20 * 1024 * 1024
+    );
+    for c in [
+        json!({"profile":"demo","format":"csv","window":null}),
+        json!({"profile":"view","format":"csv","window":null}),
+        json!({"profile":"demo","format":"csv","window":{"row_offset":0,"column_offset":0}}),
+        json!({"profile":"view","format":"csv","window":{"row_offset":0,"column_offset":0,"extra":0}}),
+        json!({"profile":"view","format":"csv","window":{"row_offset":0}}),
+        json!({"profile":"view","format":"csv","window":{"row_offset":0,"column_offset":16384}}),
+        json!({"profile":"view","format":"csv","limits":{"columns":200}}),
+    ] {
+        let job = run(&frame(&config(c), input));
+        assert_eq!(job.code, 1, "{}", job.stderr);
+        assert!(job.stdout.is_empty());
+        assert_eq!(job.report()["reason"], "config_invalid");
+    }
+}

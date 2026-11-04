@@ -140,6 +140,17 @@ impl<'a> Transaction<'a> {
         )
         .await
     }
+    /// A bounded bulk initialization only. Ordinary member operations retain
+    /// their three-second lease and two-second statement budget.
+    pub(super) async fn begin_import(
+        pool: &Arc<RolePool>,
+        request: &'a TrustedRequest,
+    ) -> Result<Self> {
+        let mut tx = Self::begin(pool, request).await?;
+        tx.deadline = tx.lease.import_deadline()?;
+        tx.batch("SET LOCAL statement_timeout=55000; SET LOCAL idle_in_transaction_session_timeout=60000").await?;
+        Ok(tx)
+    }
     /// As `begin`, with lease acquisition and the transaction deadline both
     /// bounded by `cap` (a caller's handler deadline, D7.14).
     pub async fn begin_until(

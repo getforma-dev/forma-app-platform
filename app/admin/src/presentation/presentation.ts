@@ -67,7 +67,7 @@ export function applyPresentationTheme(root: HTMLElement, raw: string): void {
     delete root.dataset.theme;
     delete root.dataset.themeDensity;
     delete root.dataset.themePreview;
-    root.querySelector(':scope > .cv-unite-head > .cv-shaped-label[data-app-theme], :scope > h2 > .cv-shaped-label[data-app-theme], :scope > .cv-card-head > .cv-shaped-label[data-app-theme]')?.remove();
+    root.querySelector(':scope > .cv-app-window > .cv-unite-head > .cv-shaped-label[data-app-theme], :scope > .cv-unite-head > .cv-shaped-label[data-app-theme], :scope > h2 > .cv-shaped-label[data-app-theme], :scope > .cv-card-head > .cv-shaped-label[data-app-theme]')?.remove();
   }
   root.dataset.appMode = definition.theme?.mode ?? 'default'; root.dataset.appAccent = definition.theme?.accent ?? 'default';
   root.dataset.appDensity = definition.theme?.density ?? 'default'; root.dataset.appFont = definition.theme?.font ?? 'default';

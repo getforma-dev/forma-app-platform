@@ -42,7 +42,7 @@ export const ASK_COMMAND: CanvasCommand = {
     if (input) input.value = '';
     openAsk(line.question, line.scope);
     const where = line.scope ? ` about /${line.scope.address}` : '';
-    report?.(line.question.trim() ? `Asked${where}. The answer is in the Ask tab.` : `Type your question${where} in the Ask tab.`);
+    report?.(line.question.trim() ? `Asked${where}. The answer is in the assistant.` : `Type your question${where} in the assistant.`);
   },
 };
 
@@ -158,7 +158,11 @@ export function placeMemberCards(): Promise<number> {
   initialCards = (async () => {
     if (!await refreshSavedCards()) return 0;
     let placed = 0;
-    for (const id of [...savedCards.keys()]) if ((await placeSavedCard(id, false)).shown) placed += 1;
+    for (const card of savedCards.values()) {
+      // App-owned answers are filed by default; only an explicit placement lays them out.
+      if (card.kind === 'answer' && card.app_id && card.work_id) continue;
+      if ((await placeSavedCard(card.card_id, false)).shown) placed += 1;
+    }
     return placed;
   })();
   return initialCards;
@@ -172,7 +176,7 @@ export async function routeTalk(text: string, report: (message: string) => void)
     const input = document.getElementById('intent-input') as HTMLInputElement | null;
     if (input) input.value = '';
     openAsk(intent.question);
-    report(intent.question ? 'Asked. The answer is in the Ask tab; nothing on the canvas changes.' : 'Type your question in the Ask tab.');
+    report(intent.question ? 'Asked. The answer is in the assistant.' : 'Type your question in the assistant.');
     return true;
   }
   await runDot(intent.target, intent.words, report);

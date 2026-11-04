@@ -47,8 +47,8 @@ use sha2::{Digest as _, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fs,
-    io::{Cursor, Read},
-    os::unix::fs::{DirBuilderExt, MetadataExt},
+    io::{Cursor, Read, Write},
+    os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime},
@@ -354,7 +354,9 @@ impl Engine {
 
     /// The cached path of a run's revision (inside its organization's cache).
     pub fn cached_path(&self, run: &QueryRun) -> PathBuf {
-        let source = run.source();
+        let source = run
+            .source()
+            .expect("only immutable sources use the revision cache");
         self.settings
             .cache_root
             .join("o")
@@ -430,7 +432,9 @@ impl Engine {
     /// remaining budget and verified again before any engine reads it.
     async fn ensure_cached(&self, run: &QueryRun, until: Instant) -> Result<PathBuf, QueryError> {
         let path = self.cached_path(run);
-        let source = run.source();
+        let source = run
+            .source()
+            .expect("only immutable sources use the revision cache");
         let present = |path: &Path| {
             fs::symlink_metadata(path).is_ok_and(|m| {
                 m.is_file() && m.len() <= MAX_REVISION_BYTES && m.mode() & 0o077 == 0
@@ -507,14 +511,42 @@ impl Engine {
             .admit(run.organization(), until)
             .await
             .map_err(refused)?;
-        self.ensure_cached(run, until).await.map_err(refused)?;
+        if run.source().is_some() {
+            self.ensure_cached(run, until).await.map_err(refused)?;
+        }
         let remaining = until.saturating_duration_since(Instant::now());
         if remaining < Duration::from_millis(1) {
             return Err(refused(QueryError::Failed(Failure::QueueExpired)));
         }
         let scratch = Scratch::new(&self.settings.scratch_root)
             .map_err(|_| refused(QueryError::Failed(Failure::Engine)))?;
-        let source = run.source();
+        let source = if let Some(source) = run.source() {
+            json!({"source_id":source.source(),"revision_id":source.revision(),"normalized_digest":source.normalized_digest(),
+                "s3_key":source.object_key(run.organization()),"input_id":source.input(),"fields":run.fields()})
+        } else if let Some(records) = run.records() {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(scratch.0.join("records.ndjson"))
+                .map_err(|_| refused(QueryError::Failed(Failure::Engine)))?;
+            file.write_all(records.bytes())
+                .map_err(|_| refused(QueryError::Failed(Failure::Engine)))?;
+            let digest = format!(
+                "sha256:{}",
+                Sha256::digest(records.bytes())
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            );
+            json!({"kind":"records","input_id":records.input(),"fields":run.fields(),"digest":digest})
+        } else {
+            return Err(refused(QueryError::Refused("query_refused".into())));
+        };
+        let remaining = until.saturating_duration_since(Instant::now());
+        if remaining < Duration::from_millis(1) {
+            return Err(refused(QueryError::Failed(Failure::QueueExpired)));
+        }
         // The child measures its deadline from its own `main()`, after
         // interpreter start-up, so it is given the remaining budget less an
         // allowance for that start-up (at least 1 ms; review m1).
@@ -523,16 +555,7 @@ impl Engine {
             .max(Duration::from_millis(1));
         let request = json!({
             "organization_id": run.organization(),
-            "source": {
-                "source_id": source.source(),
-                "revision_id": source.revision(),
-                "normalized_digest": source.normalized_digest(),
-                "s3_key": source.object_key(run.organization()),
-                // ADR-011 library: the input and its contract fields, from the
-                // re-admitted definition; the child types columns from them.
-                "input_id": source.input(),
-                "fields": run.fields(),
-            },
+            "source": source,
             "query": run.query(),
             "deadline_ms": u64::try_from(child_deadline.as_millis()).unwrap_or(u64::MAX).min(1800),
             "cache_root": self.settings.cache_root,

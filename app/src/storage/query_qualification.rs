@@ -514,7 +514,7 @@ async fn campaign() {
         .run_query(&member, APP, BOUND, "total", &window())
         .await
         .unwrap();
-    assert_eq!(run.source().normalized_digest(), NORMALIZED);
+    assert_eq!(run.source().unwrap().normalized_digest(), NORMALIZED);
     assert_eq!(run.view_query(), &seeded_query("total"));
     let result = engine.execute(&run, DEADLINE).await.unwrap();
     assert_eq!(numbers(&result), vec![vec![json!("1140000")]]);
@@ -985,7 +985,10 @@ async fn campaign() {
         .run_query(&member, APP, WORK, "total", &window())
         .await
         .unwrap();
-    assert_eq!(placeholder.source().normalized_digest(), PLACEHOLDER);
+    assert_eq!(
+        placeholder.source().unwrap().normalized_digest(),
+        PLACEHOLDER
+    );
     assert_eq!(
         engine.execute(&placeholder, DEADLINE).await,
         Err(QueryError::SourceUnavailable)

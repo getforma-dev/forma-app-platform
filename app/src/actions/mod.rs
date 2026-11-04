@@ -31,10 +31,12 @@
 //! nothing canned applies. Everything after the parse is identical and real:
 //! the typed draft, the storage dry run, the member's Confirm, the audited
 //! commit, the share and the live events.
+pub mod assistant;
 pub mod guard;
 pub mod ledger;
 pub mod prompt;
 pub mod receipt;
+mod record_search;
 pub mod rehearsed;
 pub mod resolve;
 pub mod routes;

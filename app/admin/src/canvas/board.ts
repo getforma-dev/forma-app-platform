@@ -964,6 +964,39 @@ export async function refreshGroupPresentation(app: string, work: string): Promi
   return true;
 }
 
+/** Enabling an imported app's data adds capabilities without replacing its retained views or drafts. */
+export async function refreshGroupCapabilities(app: string, work: string, isCurrent: () => boolean = () => true): Promise<boolean> {
+  const group = groups.get(work); if (!group || group.app !== app || !isCurrent()) return false;
+  const fresh = await fetchGroup(app, work); if (!fresh || groups.get(work) !== group || !isCurrent()) return false;
+  const section = buildGroup(group.section.ownerDocument, fresh, []);
+  const incoming = Array.from(section.querySelectorAll<HTMLElement>(':scope > .cv-card'));
+  const ids = new Set(incoming.map(card => card.dataset.card));
+  // This is an additive data upgrade, never a general builder replacement.
+  if (group.cards.some(card => !ids.has(card.dataset.card))) return false;
+  group.section.dataset.presentation = fresh.presentation?.json ?? '{}';
+  group.section.dataset.canEditPresentation = String(fresh.can_edit_presentation === true);
+  group.section.dataset.partLayout = fresh.part_layout ?? '';
+  for (const card of incoming) {
+    if (group.cards.some(existing => existing.dataset.card === card.dataset.card)) continue;
+    card.dataset.app = app; card.dataset.work = work;
+    decorateCard(card); group.cards.push(card); group.section.append(card);
+  }
+  for (const card of group.cards) {
+    applyPresentationTheme(card, group.section.dataset.presentation);
+    const form = card.querySelector<HTMLFormElement>('form.cv-command');
+    const publication = form?.querySelector<HTMLInputElement>('input[name="publication_id"]')?.value;
+    if (form && publication !== fresh.forms.find(value => value.id === card.dataset.card)?.publication) {
+      form.dataset.commandInvalidated = 'true';
+      for (const control of form.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('input,button,select')) control.disabled = true;
+      if (!card.querySelector('[data-presentation-stale]')) form.append(el(card.ownerDocument, 'p', {role: 'status', 'data-presentation-stale': ''}, 'This app changed. Your draft is kept; reload the app before saving.'));
+    }
+  }
+  if (!recordControllers.has(work) && group.cards.some(card => card.querySelector('[data-record-component]')))
+    recordControllers.set(work, recordComponentsFor(group.section.ownerDocument.body, {app, work}));
+  decorate(group); rememberAppPlacement(work); emitCanvasChanged();
+  return true;
+}
+
 async function fetchGroup(app: string, work: string) {
   try {
     const response = await fetch(`/v1/canvas/works/${app}/${work}`, { credentials: 'same-origin', cache: 'no-store' });

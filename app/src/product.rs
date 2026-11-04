@@ -86,8 +86,9 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
     )));
     // ADR-011 scenarios: the action path (`POST /v1/act`, under the long
     // deadline: it waits on the model) and the records listing.
-    let act_routes =
-        actions::routes::router(Arc::new(actions::routes::Act::new(auth.clone(), parser)));
+    let act = Arc::new(actions::routes::Act::new(auth.clone(), parser));
+    let act_routes = actions::routes::router(act.clone());
+    let assistant_routes = actions::assistant::router(act);
     let records_routes = actions::routes::records_router(auth.clone());
     let slack_routes = slack::router(slack);
     // APP-103: the canvas widgets' weather and customize routes, under the
@@ -97,6 +98,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         customizer,
         weather,
     )));
+    let card_routes = composer::cards::router_with_boxes(boxes.clone());
     let router = Router::new()
         .merge(composer::routes::catalog_router(auth.clone()))
         .merge(crate::auth::routes::router(auth.clone()))
@@ -110,6 +112,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         .merge(events::routes::router(auth.clone()))
         .merge(canvas_routes.clone())
         .merge(records_routes)
+        .merge(assistant_routes)
         // APP-099: the canvas's "Connect an agent" token routes.
         .merge(mcp::tokens::router(auth.clone()))
         .merge(mcp::governance::router(auth.clone()))
@@ -120,7 +123,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         .merge(composer::labels::router(auth.clone()))
         .merge(composer::presentation::router(auth.clone()))
         // APP-123: cards made by you and pinned answers.
-        .merge(composer::cards::router(auth))
+        .merge(card_routes.clone())
         .merge(boxes::routes::router(boxes));
     let long = vec![
         // The canvas page reads every openable work (library pane).
@@ -132,6 +135,9 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         (widgets::CUSTOMIZE_PATH, widget_routes),
         (composer::talk::ASK_PATH, talk_routes.clone()),
         (composer::talk::SHAPE_PATH, talk_routes),
+        // Saving file citations verifies their immutable sheet/rows with the
+        // same bounded sealed parser used by the original file viewer.
+        (composer::cards::CARDS_PATH, card_routes),
     ];
     (router, long)
 }

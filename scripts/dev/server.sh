@@ -13,6 +13,9 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 : "${GENUI_DEV_STATE:?run through scripts/dev/dev.sh}"
 cd "$root"
+# A supervisor restart inherits its original environment. Re-read only the
+# whitelisted nonsecret dev settings so the listener opt-in follows .env.dev.
+source "$root/scripts/dev/env.sh" "${GENUI_DEV_PROFILE:-pitch}"
 if ! cargo build --locked -p forma-app-platform --features dev-stand --bin genui-dev; then
   echo "genui-dev: the build failed; fix it, then run 'just restart'" >&2
   exit 0

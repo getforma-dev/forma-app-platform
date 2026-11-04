@@ -13,8 +13,8 @@
 // The markup is the page's (`app.tsx`, `#cv-library`); this module only
 // wires it.
 
-export type PaneTab = 'library' | 'commands' | 'ask' | 'shortcuts';
-export const PANE_TABS: readonly PaneTab[] = ['library', 'commands', 'ask', 'shortcuts'];
+export type PaneTab = 'library' | 'commands' | 'shortcuts';
+export const PANE_TABS: readonly PaneTab[] = ['library', 'commands', 'shortcuts'];
 
 type TabHooks = {
   /** The tab became visible (`focus`: move focus into it). */

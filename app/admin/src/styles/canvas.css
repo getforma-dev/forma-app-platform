@@ -852,22 +852,26 @@
 /* --- APP-104: performance on a full board ---
    A parked card (far outside the viewport) skips rendering and keeps its
    last laid-out height for the re-flow; cards contain their own layout and
-   paint; while the camera moves, cards neither animate nor take the pointer. */
+   paint; while the camera moves, cards do not animate. */
 .cv-canvas [data-forma-canvas] .widget-instance > .cv-card { contain: layout paint style; }
 .cv-canvas [data-forma-canvas] .widget-instance[data-attention-state="parked"] > .cv-card {
   content-visibility: hidden;
   contain-intrinsic-block-size: auto var(--cv-card-height, 300px);
 }
 .cv-canvas [data-forma-canvas] .forma-canvas-viewport:is(.is-panning, .is-camera-moving) .widget-instance { transition: none; }
-.cv-canvas [data-forma-canvas] .forma-canvas-viewport:is(.is-panning, .is-camera-moving, .is-pan-ready, .is-hand-tool) .widget-instance > .cv-card { pointer-events: none; }
 
 /* --- APP-104: Figma-style controls: tools, selection, zoom menu --- */
-.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-hand-tool,
-.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-hand-tool .widget-instance { cursor: grab; }
-.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-hand-tool.is-panning,
-.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-hand-tool.is-panning .widget-instance { cursor: grabbing; }
-.cv-canvas [data-forma-canvas] [data-canvas-drag-handle] { cursor: grab; }
-.cv-canvas [data-forma-canvas] .widget-instance.is-dragging [data-canvas-drag-handle] { cursor: grabbing; }
+.cv-canvas [data-forma-canvas] [data-canvas-drag-handle] { cursor: default; }
+/* Keep native scroll targets; the engine arbitrates Hand gestures in capture. */
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport:is(.is-hand-tool, .is-pan-ready),
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport:is(.is-hand-tool, .is-pan-ready) .widget-instance,
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport:is(.is-hand-tool, .is-pan-ready) .widget-instance * { cursor: grab; }
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-panning,
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-panning .widget-instance,
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-panning .widget-instance * { cursor: grabbing; }
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-dragging-widget,
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-dragging-widget .widget-instance,
+.cv-canvas [data-forma-canvas] .forma-canvas-viewport.is-dragging-widget .widget-instance * { cursor: move; }
 .cv-canvas [data-forma-canvas] .widget-instance.is-selected > .cv-card {
   border-color: var(--cv-accent);
   box-shadow: var(--cv-shadow-lift), 0 0 0 2px var(--cv-accent);
@@ -1001,7 +1005,7 @@
   padding: 0 0.15rem 0 0.35rem;
   color: var(--cv-muted);
   font-size: 0.8rem;
-  cursor: grab;
+  cursor: default;
 }
 .cv-stack-title { min-width: 0; overflow: hidden; color: var(--cv-text); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .cv-stack-rename { width: 14rem; height: 24px; padding: 0 0.4rem; border: 1px solid var(--cv-accent); border-radius: 6px; background: var(--cv-surface); color: var(--cv-text); font: inherit; font-weight: 600; }
@@ -1497,11 +1501,26 @@ body.is-library-dragging { cursor: grabbing; user-select: none; }
 .bx-icon[data-kind="pdf"] { background: rgb(180 35 24 / 10%); color: var(--cv-bad); }
 .bx-icon[data-kind="image"] { background: rgb(124 58 237 / 10%); color: #6d28d9; }
 .bx-icon[data-kind="csv"], .bx-icon[data-kind="xlsx"] { background: var(--cv-seal-soft); color: var(--cv-seal); }
-.cv-card.bx-sheet { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 160px; padding: 18px 14px 14px; text-align: center; cursor: grab; }
+.cv-card.bx-sheet { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 160px; padding: 18px 14px 14px; text-align: center; cursor: default; }
 .bx-sheet .bx-close { position: absolute; top: 6px; right: 6px; }
 .bx-sheet-icon { width: 54px; height: 66px; font-size: 0.72rem; }
 .bx-sheet-name { margin: 0; max-width: 100%; overflow: hidden; font-size: 0.9rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .bx-sheet-meta { margin: 0; color: var(--cv-faint); font-size: 0.72rem; }
+.bx-file-footer { width: 100%; min-width: 0; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--cv-line); text-align: left; }
+.bx-file-ask { display: flex; align-items: stretch; gap: 6px; }
+.bx-file-ask input { flex: 1; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid var(--cv-line); border-radius: 8px; background: var(--cv-surface); color: var(--cv-text); font: 0.8rem/1.4 var(--cv-sans); }
+.bx-file-ask input:focus-visible { outline: 2px solid var(--cv-accent); outline-offset: 2px; }
+.bx-file-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.bx-file-actions:empty { display: none; }
+.bx-file-build { color: var(--cv-accent); font-weight: 650; }
+.bx-file-answer { max-height: 220px; overflow: auto; overscroll-behavior: contain; margin-top: 10px; padding: 10px; border-radius: 8px; background: var(--cv-sunken); color: var(--cv-text); font: 0.8rem/1.5 var(--cv-sans); }
+.bx-file-answer p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bx-file-answer details { margin-top: 8px; }
+.bx-file-answer ul { margin: 6px 0 0; padding-left: 18px; }
+.bx-file-answer summary, .bx-app-sources summary { cursor: pointer; }
+.bx-app-sources { flex-shrink: 0; max-height: 180px; overflow: auto; overscroll-behavior: contain; padding: 8px 10px; border: 1px solid var(--cv-line); border-radius: 8px; color: var(--cv-muted); font: 0.78rem/1.5 var(--cv-sans); }
+.bx-app-sources > summary { overflow-wrap: anywhere; }
+.bx-app-sources > button { margin-top: 8px; }
 .cv-item-sheet.is-dragging .bx-sheet { cursor: grabbing; }
 .bx-name { max-width: 100%; overflow: hidden; font-weight: 600; font-size: 0.8rem; text-overflow: ellipsis; white-space: nowrap; }
 .bx-meta { color: var(--cv-faint); font-size: 0.72rem; }
@@ -1841,7 +1860,7 @@ body:has(.is-focus-open) .bx-backdrop { background: rgb(10 13 19 / 25%); }
 .cv-unite .cv-view .cv-receipt { margin-top: auto; }
 .cv-unite .cv-view :is(.cv-insight, .cv-rows, .cv-table) { margin-bottom: 0.85rem; }
 .cv-unite .cv-card [data-canvas-drag-handle] { cursor: default; }
-.cv-canvas [data-forma-canvas] .cv-unite-head[data-canvas-drag-handle] { cursor: grab; }
+.cv-canvas [data-forma-canvas] .cv-unite-head[data-canvas-drag-handle] { cursor: default; }
 .cv-unite .cv-card.is-flying { z-index: 2; box-shadow: var(--cv-shadow-lift); }
 .cv-unite.is-single { padding: 10px 12px 14px; }
 .cv-unite.is-single .cv-unite-head { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 0.5rem; }
@@ -2920,6 +2939,17 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 /* Original file viewer: preserve whitespace and let keyboard users scroll. */
 .bx-original-table td { white-space: pre-wrap; min-width: 8rem; max-width: 30rem; overflow-wrap: anywhere; vertical-align: top; }
 .bx-sheet-navigation { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: .75rem; }
+.bx-sheet-page-buttons, .bx-sheet-jump { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.bx-sheet-jump { margin-left: auto; }
+.bx-sheet-jump label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; }
+.bx-sheet-jump input { width: 6.5rem; min-width: 0; padding: .4rem .5rem; }
+.bx-sheet-jump label:last-of-type input { width: 4.5rem; }
+.bx-original-table { max-height: min(58vh, 42rem); }
+.bx-original-table thead th { position: sticky; top: 0; z-index: 2; background: var(--cv-surface); }
+.bx-original-table th:first-child { position: sticky; left: 0; z-index: 1; background: var(--cv-surface); }
+.bx-original-table thead th:first-child { z-index: 3; }
+.bx-formula-missing { font-style: italic; color: var(--muted); font-size: .85em; }
+.bx-original-table td[data-formula-result="saved"]::after { content: ' ƒ'; color: var(--muted); font-size: .75em; }
 .bx-sheet-selection { margin-block: .75rem; }
 .bx-sheet-selection select { max-width: 100%; }
 .bx-sheet-limit { font-size: .8rem; color: var(--muted, #596476); }

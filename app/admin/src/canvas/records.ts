@@ -184,6 +184,8 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
     }
     body.replaceChildren(el(document_, 'div', { class: 'cv-table cv-records-table' }, el(document_, 'table', {}, el(document_, 'thead', {}, head), rows)));
   }
+  if (listing.truncated) body.append(el(document_, 'p', { class: 'cv-message', role: 'status', 'data-result-notice': '' },
+    'Showing the first page of records. More records exist.'));
   if (provenance) {
     const newest = records[0];
     provenance.replaceChildren(

@@ -510,7 +510,7 @@ fn folder_table(rows: &[[&str; 3]], total: usize) -> super::ask::FolderTable {
     }
 }
 
-/// Ask on a folder: the body is exactly `{"question"}`; a rehearsed count or
+/// Ask on a folder: the body is a question and optional file id; a rehearsed count or
 /// total references every row it used and adds money exactly; a partial
 /// read says so; the answer names each row's file and row, from the server.
 #[test]
@@ -522,11 +522,22 @@ fn folder_ask_answers_with_the_rows_it_used() {
         question_of(&object(json!({"question": " how many? "}))).as_deref(),
         Some("how many?")
     );
+    assert_eq!(
+        question_of(&object(json!({"question": " how many? ", "file_id": ID}))).as_deref(),
+        Some("how many?")
+    );
     for refused in [
         json!({}),
         json!({"question": ""}),
         json!({"question": 1}),
         json!({"question": "x", "scope": {}}),
+        json!({"question": "x", "file_id": null}),
+        json!({"question": "x", "file_id": 1}),
+        json!({"question": "x", "file_id": ""}),
+        json!({"question": "x", "file_id": "not-a-file"}),
+        json!({"question": "x", "file_id": [ID]}),
+        json!({"question": "x", "file_ids": [ID]}),
+        json!({"question": "x", "file_id": ID, "scope": "all"}),
         json!({"question": "a\u{7}b"}),
     ] {
         assert!(question_of(&object(refused.clone())).is_none(), "{refused}");
@@ -596,6 +607,40 @@ fn folder_ask_answers_with_the_rows_it_used() {
         .collect();
     let (message, known) = user("q", &[folder_table(&long, 200)]);
     assert!(known.len() <= 200 && message.len() <= 60_000);
+}
+
+#[test]
+fn file_ask_selects_only_the_exact_file_from_the_authorized_snapshot() {
+    use super::ask::question_files;
+    let first = crate::storage::BoxFile {
+        box_id: ID.into(),
+        file_id: "00000000-0000-4000-8000-000000000001".into(),
+        name: "first.csv".into(),
+        kind: "csv".into(),
+        media_type: "text/csv".into(),
+        bytes: 10,
+        content_digest: format!("sha256:{}", "1".repeat(64)),
+        object_key: "first".into(),
+        created_at: "2026-11-02T00:00:00Z".into(),
+        data: None,
+    };
+    let second = crate::storage::BoxFile {
+        file_id: "00000000-0000-4000-8000-000000000002".into(),
+        name: "second.csv".into(),
+        ..first.clone()
+    };
+    let files = vec![first, second];
+    assert_eq!(question_files(&files, None), Some(files.as_slice()));
+    assert_eq!(
+        question_files(&files, Some(&files[1].file_id)),
+        Some(&files[1..2])
+    );
+    assert!(
+        question_files(&files, Some(ID)).is_none(),
+        "no fallback for an absent or unauthorized file"
+    );
+    assert!(question_files(&[], Some(ID)).is_none());
+    assert_eq!(question_files(&[], None), Some([].as_slice()));
 }
 
 /// APP-124 review: one address function for the server's judgment and the
@@ -701,4 +746,24 @@ async fn a_folder_build_key_answers_its_first_result() {
         .lock()
         .await
         .is_none());
+}
+
+#[tokio::test]
+async fn data_copy_refusals_are_distinct_from_generation_failures() {
+    for (internal, public) in [
+        ("data_copy_limit", "data_copy_limit"),
+        ("data_copy_refused", "data_copy_refused"),
+        ("private_model_failure", "could_not_compose"),
+    ] {
+        let response = super::routes::BuildRefusal::CouldNotCompose(internal).response();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value["code"], public);
+    }
 }

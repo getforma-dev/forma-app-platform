@@ -3,7 +3,7 @@
 // vendored canvas (`../canvas-vendor`, local changes listed in its README):
 // a plain wheel or two-finger scroll pans, Ctrl/Cmd + wheel and a trackpad
 // pinch zoom toward the cursor, Space + drag and middle-drag pan, a card
-// moves by its header. This module adds the rest, pitch-local:
+// moves by its header or noninteractive surface. This module adds the rest, pitch-local:
 //
 // - selection: click a card to select it, Shift + click to add or remove,
 //   Esc to clear; Delete/Backspace takes the selected cards off the canvas
@@ -19,7 +19,7 @@
 //   an app card or frame, a widget: `/shape <address> ` in the bar), through
 //   hooks the Ask and Shape modules set (`setTalkActions`);
 // - APP-106 / APP-142: F focuses the selected card (`focus.ts`), U opens its
-//   app as a page and the App Card and Stack keep the app whole (`unite.ts`); the toolbar
+//   app as a page and the Card and Browse views keep the app whole (`unite.ts`); the toolbar
 //   menu has both;
 // - a selected stack: ← / → leaf through it, Enter fans it out;
 // - touch: one finger on the empty canvas pans (the vendor's), two fingers
@@ -107,7 +107,7 @@ function setTool(next: 'move' | 'hand'): void {
   for (const button of documentRef?.querySelectorAll<HTMLElement>('[data-tool="move"], [data-tool="hand"]') ?? []) {
     button.setAttribute('aria-pressed', String(button.dataset.tool === next));
   }
-  announce(next === 'hand' ? 'Hand tool: drag anywhere to pan.' : 'Move tool.');
+  announce(next === 'hand' ? 'Hand tool: drag anywhere to pan.' : 'Move tool: drag an item’s header or background. Buttons, fields and scrolling stay interactive.');
 }
 
 /** The toolbar's two menus: zoom (`100% ▾`) and More (`⋯`, APP-112's click paths). */
@@ -239,7 +239,7 @@ export function onKey(event: KeyboardEvent): void {
   const typing = eventOriginatesInTextEntry(event);
   const mod = event.metaKey || event.ctrlKey;
   // The browser's page zoom keys zoom the canvas instead (outside text fields).
-  // Cmd/Ctrl+G changes the whole selected app to Stack; no component extraction.
+  // Cmd/Ctrl+G changes the whole selected app to Browse; no component extraction.
   if (mod && !event.altKey && event.code === 'KeyG' && !typing) {
     event.preventDefault();
     if (!event.shiftKey) stackChosen();
@@ -463,7 +463,7 @@ export function startControls(document_: Document): void {
   // Selection: a press on a card selects it (Shift adds or removes); a
   // press on the empty canvas clears it.
   host.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || tool === 'hand') return;
+    if (event.button !== 0 || tool === 'hand' || host.querySelector('.is-pan-ready')) return;
     if (preserveCanvasControlPointer(event, host)) return;
     const target = event.target as Element | null;
     const item = target?.closest<HTMLElement>('.widget-instance');

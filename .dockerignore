@@ -568,3 +568,23 @@ app/admin/src/record-components/**
 !app/admin/src/presentation/editor.ts
 !app/admin/src/presentation/presentation.ts
 !app/admin/src/presentation/header.tsx
+
+# APP-168: current compiled inputs and editable spreadsheet app data.
+!app/admin/src/canvas/app-assistant.ts
+!app/admin/src/canvas/app-chat.ts
+!app/admin/src/canvas/app-data-actions.ts
+!app/admin/src/canvas/app-data-copy.ts
+!app/admin/src/canvas/app-saved-answers.ts
+!app/admin/src/canvas/app-sources.ts
+!app/admin/src/canvas/app-window.ts
+!app/admin/src/canvas/file-card.ts
+!app/admin/src/styles/app-window.css
+!app/admin/src/styles/file-card.css
+!app/migrations/0020_work_data_copies.sql
+!app/migrations/catalog-v20.json
+!app/runtime/box_record_import.py
+!app/src/actions/assistant.rs
+!app/src/actions/record_search.rs
+!app/src/boxes/data_copy.rs
+!app/src/storage/data_copy.rs
+!app/src/storage/record_query.rs

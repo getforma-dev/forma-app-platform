@@ -68,6 +68,9 @@ export function mergeSheetPlacements(stored: unknown, mounted: SheetPlacement[],
 export type OriginalPage = {
   format: 'csv' | 'xlsx'; sheets: string[]; sheet_index: number;
   row_count: number; column_count: number; offset: number; page_size: number;
+  column_offset: number; column_page_size: number;
+  formula_count: number; missing_formula_results: number;
+  formula_cells: {row: number; column: number; cached: boolean}[];
   rows: string[][]; sha256: string;
 };
 
@@ -79,18 +82,41 @@ export function originalPage(value: unknown): OriginalPage | null {
   if (v.format !== 'csv' && v.format !== 'xlsx') return null;
   if (!Array.isArray(v.sheets) || v.sheets.length > 16 || !v.sheets.every((s) => typeof s === 'string' && s.length <= 8192)) return null;
   if (!integer(v.sheet_index, 15) || (v.format === 'xlsx' && v.sheet_index >= v.sheets.length) || (v.format === 'csv' && (v.sheet_index !== 0 || v.sheets.length !== 0))) return null;
-  if (!integer(v.row_count, 100000) || !integer(v.column_count, 32) || !integer(v.offset, 99999) || v.offset % 50 !== 0 || v.page_size !== 50 || (v.offset !== 0 && v.offset >= v.row_count)) return null;
+  if (!integer(v.row_count, 1048576) || !integer(v.column_count, 16384) || !integer(v.offset, 1048575) || v.offset % 50 !== 0 || v.page_size !== 50 || (v.offset !== 0 && v.offset >= v.row_count)) return null;
+  if (!integer(v.column_offset, 16383) || v.column_offset % 32 !== 0 || v.column_page_size !== 32 || (v.column_offset !== 0 && v.column_offset >= v.column_count)) return null;
+  if (!integer(v.formula_count, Math.min(4000000, v.row_count * v.column_count)) || !integer(v.missing_formula_results, v.formula_count)) return null;
   if (typeof v.sha256 !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(v.sha256)) return null;
   if (!Array.isArray(v.rows) || v.rows.length !== Math.min(50, v.row_count - v.offset)) return null;
-  const width = v.column_count;
-  if (!v.rows.every((row) => Array.isArray(row) && row.length === width && row.every((cell) => typeof cell === 'string' && cell.length <= 8192))) return null;
+  const width = Math.min(32, v.column_count - v.column_offset);
+  const validCell = (cell: unknown): cell is string => {
+    if (typeof cell !== 'string' || cell.length > 131072) return false;
+    let count = 0;
+    for (const _ of cell) if (++count > 65536) return false;
+    return true;
+  };
+  if (!v.rows.every((row) => Array.isArray(row) && row.length === width && row.every(validCell))) return null;
+  if (!Array.isArray(v.formula_cells) || v.formula_cells.length > Math.min(1600, v.formula_count)) return null;
+  const seen = new Set<string>();
+  let missing = 0;
+  for (const cell of v.formula_cells) {
+    if (!cell || typeof cell !== 'object' || !integer(cell.row, v.offset + v.rows.length) || cell.row <= v.offset
+      || !integer(cell.column, v.column_offset + width) || cell.column <= v.column_offset || typeof cell.cached !== 'boolean') return null;
+    const key = `${cell.row}/${cell.column}`;
+    if (seen.has(key)) return null;
+    seen.add(key);
+    if (!cell.cached) {
+      if (v.rows[cell.row - v.offset - 1][cell.column - v.column_offset - 1] !== '') return null;
+      missing++;
+    }
+  }
+  if (missing > v.missing_formula_results || (v.format === 'csv' && (v.formula_count !== 0 || v.formula_cells.length))) return null;
   return v as OriginalPage;
 }
 
-export async function fetchOriginalPage(boxId: string, fileId: string, sheetIndex: number, offset: number): Promise<OriginalPage> {
-  const value = await call('POST', `/v1/boxes/${boxId}/files/${fileId}/sheet`, { sheet_index: sheetIndex, offset });
+export async function fetchOriginalPage(boxId: string, fileId: string, sheetIndex: number, offset: number, columnOffset = 0): Promise<OriginalPage> {
+  const value = await call('POST', `/v1/boxes/${boxId}/files/${fileId}/sheet`, { sheet_index: sheetIndex, offset, column_offset: columnOffset });
   const page = originalPage(value);
-  if (!page || page.sheet_index !== sheetIndex || page.offset !== offset) throw new BoxError('malformed', 502);
+  if (!page || page.sheet_index !== sheetIndex || page.offset !== offset || page.column_offset !== columnOffset) throw new BoxError('malformed', 502);
   return page;
 }
 export type Card = { app_id: string; work_id: string; title: string };
@@ -98,7 +124,7 @@ export type Lineage = { box_id: string; box_name: string; files: { file_id: stri
 
 /** A refusal: the server's code (or a local one) and the status. */
 export class BoxError extends Error {
-  constructor(readonly code: string, readonly status: number, readonly column = '') {
+  constructor(readonly code: string, readonly status: number, readonly column = '', readonly reason = '') {
     super(code);
   }
 }
@@ -112,6 +138,8 @@ const REFUSALS: Record<string, string> = {
   data_refused: 'Those column types do not fit the file’s values. Nothing was registered.',
   not_a_folder_request: `That did not read as a request about this ${noun}.`,
   could_not_compose: `An app could not be built from this ${noun} right now. Nothing was placed.`,
+  data_copy_limit: 'This data exceeds the editable app limit of 100,000 rows or 64 MiB. No app was created. The unchanged original is still available to view or download.',
+  data_copy_refused: 'This data could not be copied into an editable app safely. No app was created. The unchanged original is still available to view or download.',
   no_data_files: `This ${noun} has no table (CSV or XLSX) to build from yet. Nothing was placed.`,
   composer_unavailable: 'Building apps is not available on this server right now.',
   cross_site: 'That request was refused.',
@@ -123,10 +151,24 @@ const REFUSALS: Record<string, string> = {
 /** The neutral sentence for a refusal. */
 export function refusalText(error: unknown): string {
   if (error instanceof BoxError) {
+    if (error.code === 'sheet_unavailable') return fileReadRefusal(error.reason);
     if (error.code === 'data_refused' && error.column) return `Column “${error.column}” does not fit its type. Nothing was registered.`;
     return REFUSALS[error.code] ?? 'That could not be done right now.';
   }
   return REFUSALS.unavailable ?? '';
+}
+
+/** Explain admission limits without exposing parser internals or blaming the upload. */
+export function fileReadRefusal(reason: string): string {
+  if (['input_limit', 'expanded_limit', 'cell_limit', 'row_limit', 'column_limit', 'dimension_limit', 'sheet_limit', 'shared_string_limit', 'text_limit', 'output_limit', 'entry_limit'].includes(reason)) {
+    return 'This file exceeds a viewing limit: 20 MB uploaded, 100 MB unpacked, 4 million cells, 16 sheets, or 64K characters per cell. A page must fit within 8 MB. The original is still available to download.';
+  }
+  if (['parse_deadline', 'parse_resource_limit', 'fuel_exhausted', 'memory_limit'].includes(reason)) return 'Reading this file exceeded the processing budget. Try a smaller sheet or split the file. The original is still available to download.';
+  if (reason.includes('macro')) return 'Macro-enabled workbooks cannot be viewed here. Save a copy as an ordinary XLSX file; the original remains available to download.';
+  if (reason.includes('external_link')) return 'This workbook links to external content. Save a self-contained copy to view it here; the original remains available to download.';
+  if (reason === 'csv_utf8_required') return 'This CSV uses an unsupported text encoding. Export it as UTF-8 CSV to view it here; the original remains available to download.';
+  if (reason === 'archive_method_or_encryption') return 'This workbook is encrypted or uses unsupported ZIP compression. Save an unencrypted XLSX copy to view it here; the original remains available to download.';
+  return 'This file could not be displayed safely. No substitute data is shown. You can download the unchanged original.';
 }
 
 const str = (value: unknown): value is string => typeof value === 'string';
@@ -224,7 +266,7 @@ export async function call(method: string, url: string, body?: unknown, key?: st
   }
   const json = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!response.ok) {
-    throw new BoxError(str(json?.code) ? json.code : 'unavailable', response.status, str(json?.column) ? json.column : '');
+    throw new BoxError(str(json?.code) ? json.code : 'unavailable', response.status, str(json?.column) ? json.column : '', str(json?.reason) ? json.reason : '');
   }
   if (!json) throw new BoxError('unavailable', response.status);
   return json;

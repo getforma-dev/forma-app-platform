@@ -262,6 +262,7 @@ test('a pinned answer is read-only: its text and receipts, labeled with the ques
     title: ANSWER.question, spec: { question: ANSWER.question, text: ANSWER.text, scope: ANSWER.scope, references: ANSWER.references, receipts: ANSWER.receipts },
     everyone: false, mine: true, can_share: false, created_at: '2026-10-31T12:00:00Z' })!;
   // No canvas host here: placing it renders nothing and calls nothing.
+  assert.equal(ask.placePinnedAnswer({...pin, spec: {...pin.spec as object, file_source: {file_id: 'invalid'}, file_references: []}}), false, 'malformed file provenance cannot render as a source-less answer');
   assert.equal(ask.placePinnedAnswer(pin), true);
   assert.equal(calls.length, 0, 'a pinned answer never asks again');
   assert.equal(document_.ids.size, 1);
@@ -385,4 +386,59 @@ test('/q3 <words> and /folder:q3 <words> run formation; verbs and apps answer fi
   await registry.findCommand('folder:q3')!.run('build a metrics app', (m) => said.push(m));
   const builds = calls.filter((c) => c.method === 'POST' && c.url === `/v1/boxes/${BOX}/apps`);
   assert.deepEqual(builds.map((c) => c.body), [{ purpose: 'build a metrics app' }, { purpose: 'build a metrics app' }]);
+});
+
+test('app query components retain receipt data and expose partial/page warnings outside evidence', async () => {
+  const document_=freshDocument();
+  const {renderReleased,renderNoValue,released}=await import('../src/canvas/render.ts');
+  const card=document_.createElement('article');card.dataset.kind='summary';card.dataset.appComponent='true';
+  const receipt={digest:`sha256:${'b'.repeat(64)}`,result_digest:`sha256:${'c'.repeat(64)}`,partial:true};
+  const result={view_id:'total',columns:['total'],rows:[['42']],truncated_page:true,receipt};
+  assert.equal(released({...result,receipt:{}}),null,'hiding evidence never admits an unreceipted result');
+  renderReleased(card as never,result);
+  const message=card.querySelector<FakeNode>('.cv-message')!;
+  assert.match(message.textContent,/Results are partial.*first page/);
+  const evidence=card.querySelector<FakeNode>('.cv-receipt')!;
+  assert.equal(evidence.contains(message),false,'warnings are outside the app-hidden inspector');
+  assert.match(evidence.textContent,new RegExp(receipt.digest));
+  renderReleased(card as never,{...result,rows:[]});
+  assert.match(card.querySelector<FakeNode>('.cv-message')!.textContent,/No rows.*partial.*first page/);
+  renderNoValue(card as never,'denied','denied','Access was removed.');
+  assert.equal(card.querySelector<FakeNode>('.cv-message')!.getAttribute('role'),'alert');
+  assert.equal(card.querySelector('.cv-receipt'),null);
+});
+
+test('record and ledger truncation warnings remain visible outside app-hidden provenance', async () => {
+  const document_=freshDocument();
+  const {renderRecords}=await import('../src/canvas/records.ts');
+  const {refreshLedger}=await import('../src/canvas/ledger.ts');
+  const card=document_.createElement('article');card.dataset.appComponent='true';card.dataset.collection=COLLECTION;
+  card.dataset.records=`/v1/work/${APP}/${WORK}/records`;
+  const body=document_.createElement('div');body.setAttribute('data-body','');
+  const provenance=document_.createElement('p');provenance.setAttribute('data-provenance','');provenance.setAttribute('class','cv-records-provenance');
+  card.append(body,provenance);
+  const listing={...LISTING,records:[],truncated:true};
+  renderRecords(card as never,listing);
+  assert.match(body.querySelector<FakeNode>('[data-result-notice]')!.textContent,/More records exist/);
+  assert.equal(provenance.contains(body.querySelector('[data-result-notice]')),false);
+  const oldFetch=globalThis.fetch;
+  try {
+    fakeFetch(()=>({status:200,body:listing}));await refreshLedger(card as never);
+    assert.match(body.querySelector<FakeNode>('[data-result-notice]')!.textContent,/Totals use only.*More records exist/);
+    fakeFetch(()=>({status:200,body:{...listing,truncated:false}}));await refreshLedger(card as never);
+    assert.equal(body.querySelector('[data-result-notice]'),null,'a complete refresh clears the warning');
+  } finally {globalThis.fetch=oldFetch;}
+});
+
+test('grouped record evidence has its own column so app windows hide the entire inspector', async () => {
+  const document_=freshDocument();
+  const {shapedSection}=await import('../src/canvas/shape.ts');
+  const {tableFromRecords,cardView}=await import('../src/canvas/talk-view.ts');
+  const view=cardView({presentation:'table',group_by:'status',measure:{op:'sum',field:'amount'}})!;
+  const section=shapedSection(document_ as never,'shaped','expenses',view,tableFromRecords(LISTING,COLLECTION)) as unknown as FakeNode;
+  const columns=section.querySelectorAll('.cv-shaped-evidence-column');
+  assert.equal(columns.length,4,'the header and every evidence cell are marked together');
+  assert.equal(columns[0]!.textContent,'Receipts');
+  for(const cell of columns.slice(1)) assert.ok(cell.querySelector('.cv-shaped-receipts'),'evidence data stays attached');
+  assert.ok(section.querySelectorAll('.num').some(cell=>cell.textContent==='$412.00'),'the data column remains separate');
 });

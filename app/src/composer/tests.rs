@@ -382,12 +382,10 @@ fn the_composers_own_codes_cover_prose_invented_inputs_and_unrunnable_views() {
     assert_eq!(refusal.code, "not_runnable");
 }
 
-/// APP-093 review m2 (probe P3): a data view over a `records` input is
-/// never listed by `outline` and `run_query` denies it, so the composer
-/// refuses it before anything is published, matching `outline`'s rule; the
-/// generation examples no longer teach it.
+/// Source and record views use the same qualified query path. Admission still
+/// checks input/schema agreement and field references before publication.
 #[test]
-fn a_view_over_a_records_input_is_not_runnable() {
+fn a_view_over_a_records_input_is_runnable_with_valid_typed_references() {
     let sources = sources(SPEND);
     let fixture = bundle(SPEND)["definition"]["content"].clone();
     let status = fixture["views"]
@@ -395,11 +393,9 @@ fn a_view_over_a_records_input_is_not_runnable() {
         .unwrap()
         .iter()
         .find(|view| view["id"] == "status")
-        .unwrap()
-        .clone();
+        .unwrap();
     assert_eq!(status["query"]["inputs"], json!(["decisions"]));
-    assert!(!prompt::runnable_view(&fixture, &status));
-    // The example the model sees keeps the source views and the form only.
+    assert!(prompt::runnable_view(&fixture, status));
     let content = runnable_content(SPEND);
     let kept: Vec<&str> = content["views"]
         .as_array()
@@ -407,18 +403,28 @@ fn a_view_over_a_records_input_is_not_runnable() {
         .iter()
         .map(|view| view["id"].as_str().unwrap())
         .collect();
-    assert_eq!(kept, ["expenses", "queue", "decision"]);
-    assert!(!prompt::generation_system().contains("\"inputs\":[\"decisions\"]"));
+    assert_eq!(kept, ["expenses", "queue", "decision", "status"]);
+    assert!(prompt::generation_system().contains("\"inputs\":[\"decisions\"]"));
     assert!(plan::plan_generated(&content.to_string(), &sources, ORG, APP).is_ok());
-    // Probe P3: a generated definition whose first data view counts the
-    // `decisions` records input is admitted by admission (it is a typed
-    // query) but refused as not runnable before anything is published.
-    let mut hostile = content.clone();
-    hostile["views"][0]["query"] = json!({"operator_version": 1, "inputs": ["decisions"], "null_policy": "unknown",
+
+    let mut records = content.clone();
+    records["views"][0]["query"] = json!({"operator_version": 1, "inputs": ["decisions"], "null_policy": "unknown",
         "operations": [{"type": "project", "fields": [{"input_id": "decisions", "field_id": "status"}, {"input_id": "decisions", "field_id": "note"}]}]});
-    assert!(!prompt::runnable_view(&hostile, &hostile["views"][0]));
-    let refusal = plan::plan_generated(&hostile.to_string(), &sources, ORG, APP).unwrap_err();
-    assert_eq!(refusal.code, "not_runnable");
+    assert!(prompt::runnable_view(&records, &records["views"][0]));
+    assert!(plan::plan_generated(&records.to_string(), &sources, ORG, APP).is_ok());
+    let mut unknown_field = records.clone();
+    unknown_field["views"][0]["query"]["operations"][0]["fields"][0]["field_id"] = json!("missing");
+    assert!(plan::plan_generated(&unknown_field.to_string(), &sources, ORG, APP).is_err());
+    let mut changed_schema = records.clone();
+    changed_schema["record_schemas"][0]["fields"][0]["value_type"] = json!({"type":"text"});
+    assert!(plan::plan_generated(&changed_schema.to_string(), &sources, ORG, APP).is_err());
+    let mut multiple_inputs = records;
+    multiple_inputs["views"][0]["query"]["inputs"] = json!(["decisions", "expenses"]);
+    assert!(!prompt::runnable_view(
+        &multiple_inputs,
+        &multiple_inputs["views"][0]
+    ));
+    assert!(plan::plan_generated(&multiple_inputs.to_string(), &sources, ORG, APP).is_err());
 }
 
 /// APP-132: what a good model returns for a sentence on a clean workspace
@@ -486,11 +492,8 @@ fn template_customization_passes_the_actual_admitted_starting_definition() {
     assert_eq!(persisted["record_schemas"][0]["fields"][3]["id"], "status");
 }
 
-/// APP-132 (the gap APP-128's log recorded): on a clean workspace the model
-/// first answers a table over its own records input, which no query can
-/// run; the retry's hint says so, and the records-only answer is admitted,
-/// labeled generated, and binds its records input to its record schema with
-/// no source at all.
+/// A clean workspace can generate a form plus a typed records table in one
+/// attempt. Its records schema supplies the binding without inventing a source.
 #[test]
 fn a_clean_workspace_generates_a_records_app_from_a_sentence() {
     let mut first = book_club();
@@ -503,31 +506,31 @@ fn a_clean_workspace_generates_a_records_app_from_a_sentence() {
         .as_array_mut()
         .unwrap()
         .push(json!({"view_id": "list", "column": 0, "row": 2, "width": 12}));
-    let script = Script::new(vec![Ok(first.to_string()), Ok(book_club().to_string())]);
+    let script = Script::new(vec![Ok(first.to_string())]);
     let intent = "Track my team's book club reading list: title, author, who suggested it and whether we've read it";
     let generated = runtime()
         .block_on(composer(&script).generate(intent, &[], ORG, APP, far()))
         .unwrap();
-    assert_eq!(generated.refused, ["not_runnable"]);
+    assert!(generated.refused.is_empty());
     assert_eq!(generated.planned.origin, Origin::Generated);
     assert_eq!(generated.planned.title, "Book club reading list");
     let requests = script.requests();
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 1);
     let first_user: Value = serde_json::from_str(&requests[0].user).unwrap();
     assert_eq!(first_user["sources"], json!([]));
     assert!(first_user["refusal"].is_null());
-    let retry: Value = serde_json::from_str(&requests[1].user).unwrap();
-    assert_eq!(retry["refusal"]["code"], "not_runnable");
-    let fix = retry["refusal"]["fix"].as_str().unwrap();
-    assert!(fix.contains("never a `records` input") && fix.contains("With no sources"));
-    assert!(
-        !requests[1].user.contains("\"list\""),
-        "the hint carries no value of the refused draft"
-    );
     // The system prompt steers a source-less request to this shape.
     assert!(requests[0].system.contains("When `sources` is EMPTY"));
     // Saved as the route saves it: one records binding, no source.
     let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+    assert_eq!(
+        content["views"].as_array().unwrap().last().unwrap()["id"],
+        "list"
+    );
+    assert!(prompt::runnable_view(
+        &content,
+        content["views"].as_array().unwrap().last().unwrap()
+    ));
     let inputs = routes::published_inputs(&content);
     let schemas = routes::record_schemas(&content);
     let bindings = crate::storage::composer_bindings(&inputs, &schemas, &[]).unwrap();

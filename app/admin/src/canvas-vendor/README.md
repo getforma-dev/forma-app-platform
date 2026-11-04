@@ -12,9 +12,10 @@ Two changes: `widget-canvas.ts` gains one public method, `moveItemTo(item, x, y)
 APP-104 local changes in `widget-canvas.ts` (DS-10), each marked "Local change (APP-104)" in the code:
 
 - `#moveItem` asks for a visibility pass through `#requestVisibilityUpdate`, so a batch of moves inside `deferDerivedUpdates` runs one pass, not one per item (the board's re-flow reads every size first, then writes).
-- Figma's input mapping: a plain wheel or two-finger scroll pans (Shift: sideways), Ctrl/Cmd + wheel and a trackpad pinch zoom toward the cursor (never a plain wheel); a scrollable region inside a card that can still scroll keeps the wheel (`scrollsNatively`). Space pans also when nothing else holds focus.
+- Figma's input mapping: a plain wheel or two-finger scroll pans (Shift: sideways), Ctrl/Cmd + wheel and a trackpad pinch zoom toward the cursor (never a plain wheel); a scrollable region inside an item keeps the wheel even at its edges (`scrollsNatively`). Space temporarily pans outside interactive controls and from the Move/Hand toolbar buttons; text entry and native control activation retain their keys.
 - The hand tool: `setPanMode(on)` makes a primary drag anywhere pan (`is-hand-tool`), and suspends selection and dragging.
-- A card's own header (`[data-canvas-drag-handle]`) moves it, like the chrome's drag handle (its interactive controls keep their clicks).
+- Move uses an arrow cursor and primary background drags do not pan. Headers and noninteractive item surfaces move the whole mounted item, including components inserted after mount. Controls and scroll regions retain their native pointer behavior. Capture starts after the drag threshold so stationary double-clicks keep their target. Touch background drag and middle-button pan remain available.
+- Hand/Space pan is captured before item controls, preserves selection and suppresses generated clicks. Cursor styling no longer hides scroll targets through pointer-event shielding. Space release restores the selected tool; an ongoing pan finishes on pointer release, cancellation or blur.
 - Public `zoomAt(factor, x, y)`, `panBy(dx, dy)` and `cancelGestures()` (the pitch's pinch and zoom keys, `../canvas/controls.ts`).
 
 APP-106 local changes in `widget-canvas.ts` (DS-10), each marked "Local change (APP-106)" in the code:

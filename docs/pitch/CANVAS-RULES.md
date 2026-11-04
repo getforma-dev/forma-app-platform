@@ -2,6 +2,10 @@
 
 This is the single reference for the canvas model and its grammar. The decisions are recorded in APP-120 (model and grammar), APP-121 (naming), APP-122 (Ask and Shape), APP-123 (cards made by you, `@` mentions, `/forma`, `/<folder>`, pinned answers), APP-124 (start from your data) and APP-119 (commands versus apps). Where this page and the code disagree, the code is wrong: file a ticket.
 
+**Decision precedence (2026-11-02):** [ADR-018: Whole apps, independent cards and presentation views](../architecture/ADR-018-WHOLE-APP-VIEWS.md) supersedes this page's older instructions for placing, separating or removing individual app components. An app is one canvas object; **App Card**, **Stack** and **Open** are views of that same app, preserving its identity, drafts, actions and permissions. The Library separates **Apps**, **Widgets** and **Cards**; app components stay inside their app. The November 2 file-card decision below extends that model for uploaded spreadsheets. Earlier APP-120–124 descriptions remain historical context where explicitly superseded; they do not override these later decisions. This records the local iteration's product rules, not a hosted release or deployment claim.
+
+**Window follow-through (2026-11-02):** [App windows and file cards](../architecture/CANVAS-WINDOWS.md) refines the shell into a title bar, toolbar, component body and footer. Its view names are **Card**, **Browse** and **Open**; Browse replaces the earlier app label Stack while keeping stored layout compatibility. One App assistant icon opens an attached, closable panel with Ask, Summary, Sources and Saved tabs. Ask reads; its explicit Change data mode prepares existing app actions for review and confirmation before saving. Building and theming stay with the builder. Sources opens originals directly in the larger viewer; component receipt hashes remain internal while partial-result notices stay visible. The whole-app identity and permissions above are unchanged.
+
 ## The one sentence
 
 **Type `/` and a verb to change the canvas, `/` and a name to tell that thing something, or just type a sentence.**
@@ -19,6 +23,8 @@ Four jobs, and where you type picks the job, never the AI:
 
 ## What a canvas holds
 
+The following table retains APP-120's component vocabulary: its “card” means an app's internal renderer. ADR-018 governs whole-app placement, and the file cards below are independent uploaded-file artifacts, not extracted app components.
+
 | Kind | What it is | Contains | Governed? | Examples |
 | --- | --- | --- | --- | --- |
 | **App** | A team tool with its own data, permissions, approvals and receipts; shareable | **Cards**, its views | Yes | Expenses, Time off, Purchase requests |
@@ -33,6 +39,25 @@ Four jobs, and where you type picks the job, never the AI:
 
 ## Start from your data (APP-124)
 
+### Uploaded spreadsheets: November 2 decision
+
+**Upload → File Card → App Card** is the direct CSV/XLSX path in this local iteration.
+
+1. **Upload keeps the original automatically.** A CSV or XLSX uploaded onto the canvas becomes its own **File Card**, showing the file's icon and name. There is no **Keep original**, **Open original file** or **Make a card** choice in a post-upload notice: the file is already kept and its canvas representation is already a card. Uploading alone creates no app or separate data card.
+2. **The file remains in Library → Cards.** Closing the File Card removes its canvas placement, not the stored file. **Add** in Cards restores it after checking current access. Saved placements contain references and layout, not a cached copy of private file contents.
+3. **Double-click opens the original.** Double-click the icon or noninteractive card face to view the original spreadsheet in a modal. Buttons, the Ask field and scrolling keep their normal interactions. The original stays available independently of any generated app.
+4. **Ask belongs to this file.** The card's footer has an Ask field and button. Its read-only request names the exact file under the folder's existing authorization; the answer carries that file's source-row references. An unavailable, hidden or unreadable file never falls back to a sibling file. Folder-wide Ask remains a separate scope.
+5. **Make an app is the explicit next step.** The card's owner action opens the column-and-purpose confirmation for this file. That confirmation offers **Cancel** and **Build the app**, with no **Keep as card**, **Make a card** or **Add to app** branch. Nothing is generated before Build. Retrying the same submitted intent reuses its creation identity rather than making another app.
+6. **Successful placement upgrades the card in place.** The resulting whole app appears at the source card's position in **App Card** view. Only successful placement removes the original File Card from the canvas; failure keeps the original available. Closing the source while work is pending must not resurrect its placement or remove a subsequently restored card. The stored file remains in Cards, and the app's source section retains original-file access and exact-file Ask through authorized lineage. Switching to Stack or Open still presents that same app. This path adds no loose **Summary** or separate data-card canvas object.
+
+The upgrade changes the canvas representation; it does not overwrite the uploaded bytes or discard their provenance. App-card visual design can evolve without changing that relationship.
+
+**Large original files (November 2 follow-up):** the viewer pages both rows and columns, with direct position jumps. Wider CSVs and ordinary XLSX workbooks with saved formula results use a separate read-only inspection profile; they are no longer restricted by the app's 32-field schema. Missing formula results are marked, and nothing is recalculated. Uploads remain capped at 20 MiB with bounded expansion, cell count, memory, concurrency and processing time. [Spreadsheet viewing](../architecture/SPREADSHEET-VIEWING.md) records the limits and rejection rules. Ask and app creation retain their separate current data contracts; viewing a file does not imply that every column can already be used to build an app.
+
+### Existing folder behavior and historical APP-124 flow
+
+Folders continue to offer **Ask**, **Make a card**, **✨ Make an app** and **Brief me** under their existing permissions. A folder's **Make a card** still creates a minimal saved app/work; it is distinct from the automatically created File Card above. Uploading into a folder and copying a File Card onto a folder keep their existing storage behavior. The earlier folder-first sequence below is retained as APP-124 history: its blanket claim that every empty-canvas upload creates a folder, and its separate card-creation step, are superseded for direct CSV/XLSX uploads by the November 2 decision.
+
 Data → card → app is one visible path, with no new concepts: a folder holds the files, Ask reads them, formation makes a card or an app.
 
 1. **Bring the files.** On an empty canvas, **Bring your files** (drop or upload) (beside **Describe an app** and **Open your library**) opens a file picker; dropping files anywhere on the empty canvas does the same. A new folder holds them, its name ready to type. "+ Folder" and dropping onto a folder work as before.
@@ -40,7 +65,7 @@ Data → card → app is one visible path, with no new concepts: a folder holds 
 
    | Button | What it does | Changes |
    | --- | --- | --- |
-   | **Ask** | Opens the Ask tab scoped to the folder ("Asking about 📁 Q3 board pack (its tables)"): a question about its CSV and XLSX files | Nothing |
+   | **Ask** | Opens the workspace assistant scoped to the folder ("Asking about 📁 Q3 board pack (its tables)"): a question about its CSV and XLSX files | Nothing |
    | **Make a card** | Formation constrained to one card: a minimal app named after the folder (or the file, for Uploads or an untitled folder) with exactly one card, the most useful view of its data, linked back to the folder ("Built from folder"); it gets an address when one is free | A new app, after the confirm |
    | **✨ Make an app** | The full formation (unchanged): an app from the folder's files, from your words | A new app, after the confirm |
 
@@ -59,7 +84,7 @@ Data → card → app is one visible path, with no new concepts: a folder holds 
 
 | Tab | Shows | Opens with |
 | --- | --- | --- |
-| **Library** | **Apps** (category → app → cards) and **Widgets** | `L`, `/apps [query]`, the Library button |
+| **Library** | **Apps**, **Widgets** and **Cards**, including uploaded File Cards; app components remain inside their app (ADR-018) | `L`, `/apps [query]`, the Library button |
 | **Commands** | Every verb, with its arguments and an example | `/commands`, `/help` |
 | **Ask** | A read-only conversation about your data (APP-122); `@` scopes it, its chip's × asks about the canvas (APP-123) | `/ask …` or `?` + text in the bar, ⋯ → Ask about this |
 | **Shortcuts** | Keys and gestures | `/shortcuts`, ⋯ → Shortcuts |
@@ -114,7 +139,7 @@ The pane always reflects the canvas.
 | | `/rename <app or app.card> <new name> [/address]` | Names an app (and gives it a new address) or a card: `/rename expenses Team spend /team-spend`, `/rename expenses.total Q3 spend` (APP-121) |
 | | `/alias <shortcut> <app or app.card>` | Your own shortcut: `/alias exp expenses`, `/alias e expenses`, `/alias q3 expenses.total`; `/alias exp` alone removes it (APP-121) |
 | Shape | `/shape <address> <words>` | Changes how a card, an app (its theme) or a widget looks or what it shows (APP-122). The address takes every form: `expenses.ledger`, `card:expenses.ledger`, `app:expenses`, `widget:calculator` |
-| Ask | `/ask [app or app.card] <question>` | Opens the Ask tab with your question; read-only (APP-122). Name an app or card first to ask about it (`/ask expenses why did spend jump in March?`, `/ask expenses.ledger which claims are overdue?`), or `@`-mention it anywhere in the question (`? @expenses.total why is it high?`, APP-123); otherwise it asks about the selected card, else the canvas. `? <question>` is the quick form |
+| Ask | `/ask [app or app.card] <question>` | Opens the assistant with your question; read-only (APP-122). Name an app or card first to ask about it (`/ask expenses why did spend jump in March?`, `/ask expenses.ledger which claims are overdue?`), or `@`-mention it anywhere in the question (`? @expenses.total why is it high?`, APP-123); otherwise it asks about the selected card, else the canvas. `? <question>` is the quick form |
 | Help | `/apps [query]` · `/commands` · `/shortcuts` · `/agent` | Library · Commands · Shortcuts · Connect an agent |
 
 Old shortcuts keep working without being listed: `/weather`, `/calculator`, `/clock`, `/note`, `/folder` on its own, `/folder <name> formation …`, and `/help`. Verbs are always bare; the space forms `/app <name>`, `/card <x>`, `/widget <kind>` are the same as the full forms `/app:<name>`, `/card:<x>`, `/widget:<kind>`.
@@ -125,7 +150,7 @@ Ask and Shape are the two AI jobs that work on things already on your canvas. **
 
 ### How to ask
 
-Ask is a conversation about your data, like talking to an analyst. Every way in opens the **Ask** tab of the right pane:
+Ask is a conversation about your data, like talking to an analyst. App-scoped questions open **Ask** in that app’s attached assistant. Folder, widget and cross-app questions open a workspace assistant on the canvas:
 
 | You type or click | It asks about |
 | --- | --- |
@@ -138,12 +163,12 @@ Ask is a conversation about your data, like talking to an analyst. Every way in 
 | `?` on the canvas | Puts `? ` in an empty bar (it only focuses the bar when you have half-typed something) |
 | A folder's **Ask** button, or `?` with a folder card selected | The folder's tables (APP-124): each row it used, with its file and row |
 | ⋯ → **Ask about this** on a card | That card |
-| The Ask tab's own input | The scope its chip shows |
+| An assistant’s own input | The app/file selector or workspace scope it shows |
 
 - **What comes back:** a short answer in text, and the records it used, each with its receipt (the record, its version and commit, the app's publication and definition). A number it computes (a count, a total) lists every record it counted.
-- **What never changes:** records, cards, the canvas. Ask runs in a read-only transaction. Asked to change something, it answers with what to type (`/shape expenses.ledger …`); it never switches jobs.
-- **The scope** shows as a chip at the top of the tab ("Asking about /expenses.ledger"). A verb is never an address here: `/ask card why…` asks "card why…". The chip is removable when it names an app or a card: its **×** makes the conversation about the whole canvas (APP-123). A mention sets the chip for the questions that follow.
-- **Pin to canvas** on an answer: a read-only answer card labeled **"As answered on <date>"**, with the question, the text and every record it used with its receipt. It never runs again, and its text is never derived again, so it never passes as a live, receipted answer: ask again for today's answer. It is yours alone (it is never added for everyone), stays across sessions while you can still read every app it cites, and has **Remove** (APP-123).
+- **What never changes:** records, cards, the canvas. Ask runs in a read-only transaction. Use existing app actions for data changes and the separate builder for design changes; Ask never switches into those jobs.
+- **The scope** is the app’s selected original file or saved records; component queries retain their collection. A verb is never an address: `/ask card why…` asks "card why…". A single `@` mention or explicit app address routes to that app’s assistant. Workspace questions retain their scope chip.
+- **Save answer** files an app-owned historical snapshot in **Saved**, with its question, answer, timestamp and sources. **Place on canvas** creates an optional linked placement. X, **Put away** and **Put all away** preserve the saved answer; **Delete saved answer** removes it. It remains private to its maker and requires current access to its app and cited sources. It never runs again; ask again for today’s answer. Workspace answers retain **Pin to canvas**.
 - **Make it a card** on an answer whose records come from one list: a Shape preview of a new card showing exactly those records (the answer's record set), each with its receipt, and a small card above the bar: **Add as new card** or **Cancel**. Nothing is added until you click; then it is a card made by you (see How to shape) (APP-123).
 
 ### How to shape
@@ -170,7 +195,7 @@ The colon always means *kind:name*: `/app:expenses`, `/card:expenses.ledger`, `/
 | | **Ask** | **Shape** |
 | --- | --- | --- |
 | What it is | A conversation about your data, like talking to an analyst | Changing how a card, an app or a widget looks or what it shows |
-| Where | `/ask [address] <question>`, `?` first in the bar, ⋯ → **Ask about this**, the Ask tab | `/shape <address> <words>`, `/<app>.<card> <words>`, ⋯ → **Shape…**, a widget's Shape field |
+| Where | `/ask [address] <question>`, `?` first in the bar, ⋯ → **Ask about this**, the app’s Ask panel | `/shape <address> <words>`, `/<app>.<card> <words>`, ⋯ → **Shape…**, a widget's Shape field |
 | Examples | "where are all the red invoices?" · "why did spend jump in March?" · "summarize Q3" | A card: `/expenses.ledger highlight overdue in red`. An app: `/shape expenses dark green, compact`. A widget: `/shape calculator make it a TI-84` |
 | What comes back | Text with receipts and links to the records it used | A preview: **Apply** (replace this card) or **Add as new card**. Nothing changes until you click |
 | Can it change anything? | **No.** It runs read-only: it cannot change records, cards or the canvas | Only the look and the view: chart type, colors, columns, filters, the math shown. **Never records** |
@@ -236,6 +261,14 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 - **Add:** the Library's **Add** button, the verbs above, or a sentence. Clicking and typing always do the same thing.
 - **Remove:** the **×** on a card or widget, **Delete** on the selection, or the Library's **Remove** button. Removing only takes something off your canvas; it never deletes data. There is no `/remove`. A card made by you or a pinned answer also has **Remove**, which deletes it for good (it holds no record; APP-123).
 
+## Move and Hand tools
+
+Move (`V`, arrow cursor) drags an item's header or noninteractive background. An app moves as one object in App Card, Stack and Open views. Dragging empty canvas with a mouse leaves it still. Buttons, links, fields, editable text, resize handles and scrollable content keep their normal behavior.
+
+Hand (`H`, open hand cursor) drags the canvas, including when the gesture starts over an item. It does not move the item or activate its controls. Hold Space for temporary Hand; release it to return to the selected tool. Space works immediately after clicking Move/Hand. Text fields and other focused controls keep their native Space behavior. The hand closes during a pan, and opening an app by double-click remains available in Move.
+
+Wheel/two-finger scrolling over the canvas pans it. Over scrollable item content it scrolls that content, including at its edges, in either tool. Ctrl/Cmd + wheel still zooms. Middle-button drag and touch drag on the background also pan.
+
 ## Shortcuts that are not obvious
 
 | Keys | Does |
@@ -255,3 +288,7 @@ An app has no look of its own; its look is its cards, so shaping an app themes t
 | Double-click a card's title | Rename the card (for everyone if you own the app, else for you); Enter saves, Esc cancels |
 
 No shortcut fires while you are typing.
+
+### App assistant and saved answers
+
+Each app owns an attached Ask/Summary/Sources/Saved panel. The Library no longer owns Ask. Sources opens the original inline or larger, and file questions stay scoped to that source. Saved answers are historical snapshots filed under their app; optionally place them as linked cards on the canvas. X, Put away and Put all away only remove placements. Deleting a saved answer is separate. Reload does not automatically lay out app-owned answers. The assistant reads existing data and links to the app's supported actions; building, theming and reshaping remain in the builder. See [the current window decision](../architecture/CANVAS-WINDOWS.md).

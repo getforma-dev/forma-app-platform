@@ -34,6 +34,17 @@ use tokio_postgres::Row;
 
 /// At most this many records are listed (newest first).
 pub const RECORDS_LIMIT: i64 = 200;
+const SEARCH_RECORDS_LIMIT: i64 = 50;
+enum RecordFilter<'a> {
+    Search {
+        collection: &'a str,
+        query: &'a str,
+    },
+    Exact {
+        collection: &'a str,
+        record: &'a str,
+    },
+}
 
 fn text(row: &Row, index: usize) -> Result<String> {
     row.try_get(index).map_err(|_| Error::Unavailable)
@@ -106,6 +117,21 @@ pub enum DryRun {
 /// each record's current revision `v`.
 const RECORD_COLUMNS: &str = "r.record_id::text,r.collection_id::text,r.current_version::bigint,v.commit_sequence::bigint,to_char(v.committed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),v.creator_id::text,v.updater_id::text,v.canonical_values";
 const RECORDS_FROM: &str = "FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version";
+// Values are trusted canonical data, while the searched text stays a SQL
+// parameter. Insert the decimal point into the canonical digits as text. Even
+// PostgreSQL numeric division can round a 38-digit coefficient before round().
+pub(super) const SEARCH_VALUE_TEXT: &str = r#"(SELECT CASE parts.kind
+ WHEN 'decimal' THEN human.number
+ WHEN 'money' THEN concat_ws(' ',field->'value'->>'currency',human.number)
+ WHEN 'reference' THEN COALESCE(field->'value'->>'record_id','')
+ WHEN 'null' THEN '—'
+ ELSE COALESCE(field->'value'->>'value','') END
+ FROM (SELECT field->'value'->>'type' AS kind,
+   CASE field->'value'->>'type' WHEN 'decimal' THEN field->'value'->>'coefficient' WHEN 'money' THEN field->'value'->>'minor_units' ELSE '0' END AS raw,
+   CASE field->'value'->>'type' WHEN 'decimal' THEN (field->'value'->>'scale')::integer WHEN 'money' THEN (field->'value'->>'minor_unit_exponent')::integer ELSE 0 END AS scale) parts
+ CROSS JOIN LATERAL (SELECT lpad(ltrim(parts.raw,'-'),greatest(length(ltrim(parts.raw,'-')),parts.scale+1),'0') AS digits) padded
+ CROSS JOIN LATERAL (SELECT (CASE WHEN left(parts.raw,1)='-' THEN '-' ELSE '' END) ||
+   (CASE WHEN parts.scale=0 THEN padded.digits ELSE left(padded.digits,length(padded.digits)-parts.scale) || '.' || right(padded.digits,parts.scale) END) AS number) human)"#;
 
 /// One collection of the listing from its published schema and commands.
 fn collection_summary(
@@ -348,6 +374,60 @@ impl Data {
         app: &str,
         work: &str,
     ) -> Result<RecordsListing> {
+        self.list_records_matching(request, app, work, None).await
+    }
+
+    /// Explicit, bounded lookup across all records of one authorized collection.
+    /// Search is a literal substring of values or a complete record identifier.
+    pub async fn search_records(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+        collection: &str,
+        query: &str,
+    ) -> Result<RecordsListing> {
+        require(
+            valid_id(collection)
+                && (2..=200).contains(&query.chars().count())
+                && !query.chars().any(char::is_control),
+        )?;
+        self.list_records_matching(
+            request,
+            app,
+            work,
+            Some(RecordFilter::Search { collection, query }),
+        )
+        .await
+    }
+
+    /// A member-selected update target, independent of the newest-records page.
+    /// Its values, publication and versions share the ordinary listing's fences.
+    pub async fn list_record_target(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+        collection: &str,
+        record: &str,
+    ) -> Result<RecordsListing> {
+        require(valid_id(collection) && valid_id(record))?;
+        self.list_records_matching(
+            request,
+            app,
+            work,
+            Some(RecordFilter::Exact { collection, record }),
+        )
+        .await
+    }
+
+    async fn list_records_matching(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+        filter: Option<RecordFilter<'_>>,
+    ) -> Result<RecordsListing> {
         require(valid_id(app) && valid_id(work))?;
         let cap = Instant::now() + COMMAND_HANDLER_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
@@ -391,11 +471,30 @@ impl Data {
                     &published,
                 ));
             }
-            let limit = RECORDS_LIMIT + 1;
-            let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4"), &[org,&app,&work,&limit]).await?;
-            let truncated = rows.len() as i64 > RECORDS_LIMIT;
+            if let Some(RecordFilter::Search {collection, ..} | RecordFilter::Exact {collection, ..}) = &filter {
+                require(collections.iter().any(|value| value.collection == *collection))?;
+                collections.retain(|value| value.collection == *collection);
+            }
+            let (rows, count) = match &filter {
+                Some(RecordFilter::Search {collection, query}) => {
+                    let limit = SEARCH_RECORDS_LIMIT + 1;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6"), &[org,&app,&work,collection,query,&limit]).await?;
+                    (rows, SEARCH_RECORDS_LIMIT)
+                }
+                Some(RecordFilter::Exact {collection, record}) => {
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid"), &[org,&app,&work,collection,record]).await?;
+                    require(rows.len() == 1)?;
+                    (rows, 1)
+                }
+                None => {
+                    let limit = RECORDS_LIMIT + 1;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4"), &[org,&app,&work,&limit]).await?;
+                    (rows, RECORDS_LIMIT)
+                }
+            };
+            let truncated = rows.len() as i64 > count;
             let mut records = Vec::with_capacity(rows.len());
-            for row in rows.iter().take(RECORDS_LIMIT as usize) {
+            for row in rows.iter().take(count as usize) {
                 records.push(record_row(row, 0, &collections)?);
             }
             Ok(RecordsListing {
@@ -612,6 +711,17 @@ impl Data {
                 &command.values,
                 creator.as_deref() == Some(request.principal.as_str()),
             )?;
+            super::commands::copy_capacity(
+                transaction,
+                org,
+                app,
+                work,
+                &collection,
+                &command.record,
+                current_version == 0,
+                bytes.len(),
+            )
+            .await?;
             let state = crate::admission::decode(&bytes).map_err(|_| Error::Unavailable)?;
             Ok(DryRun::Valid {
                 collection,

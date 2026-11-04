@@ -202,7 +202,13 @@ fn stub_receipt_reply(image: &[u8]) -> String {
     json!({"id": "msg", "model": "stub-haiku", "content": [{"type": "text", "text": text}], "usage": {"input_tokens": 1400, "output_tokens": 70}}).to_string()
 }
 fn stub_reply(utterance: &str) -> String {
-    let text = if utterance.contains("HOSTILE-SQL") {
+    let text = if utterance == "ASSISTANT add a note" {
+        json!({"values":{"title":"Assistant campaign note","body":"Synthetic draft"}}).to_string()
+    } else if utterance == "ASSISTANT update body" {
+        json!({"values":{"body":"Updated after confirmation"}}).to_string()
+    } else if utterance == "ASSISTANT hostile field" {
+        json!({"values":{"principal_id":"administrator"}}).to_string()
+    } else if utterance.contains("HOSTILE-SQL") {
         json!({"action": "create", "app_hint": FOREIGN_APP, "values": {"merchant": "'; DROP TABLE genui.apps; --", "amount": "86", "category": "meals", "spent_on": "2026-10-29", "note": "UNION SELECT * FROM genui.principals"}, "approver_name": "GRANT admin_policy TO public", "target_record_hint": null}).to_string()
     } else if utterance.contains("HOSTILE-GRANT") {
         // A member outside the closed shape: refused before any resolution.
@@ -382,6 +388,44 @@ pub(super) fn value_of<'a>(record: &'a Value, field: &str) -> &'a Value {
 async fn campaign() {
     let _ = tracing_subscriber::fmt().with_ansi(false).try_init();
     let fixture = Fixture::new();
+    // SQL lookup must match the reviewed human value exactly, including 38
+    // digits: numeric division can round before the display scale is applied.
+    {
+        let operator = fixture.operator().await;
+        let sql = format!(
+            "SELECT {} FROM (SELECT $1::text::jsonb AS field) input",
+            super::actions::SEARCH_VALUE_TEXT
+        );
+        for raw in [
+            "0",
+            "1",
+            "-1",
+            "99999999999999999999999999999999999999",
+            "-99999999999999999999999999999999999999",
+        ] {
+            for scale in [0, 2, 9, 16, 17, 18] {
+                for kind in ["decimal", "money"] {
+                    let value = if kind == "decimal" {
+                        json!({"type":kind,"coefficient":raw,"scale":scale,"unit":"count"})
+                    } else {
+                        json!({"type":kind,"minor_units":raw,"minor_unit_exponent":scale,"currency":"USD"})
+                    };
+                    let encoded = json!({"field_id":"amount","value":value}).to_string();
+                    let actual: String = operator
+                        .client
+                        .query_one(&sql, &[&encoded])
+                        .await
+                        .unwrap()
+                        .get(0);
+                    assert_eq!(
+                        actual,
+                        actions::assistant::display(&value),
+                        "{kind} {raw} scale {scale}"
+                    );
+                }
+            }
+        }
+    }
     fixture.sql(
         "ALTER ROLE genui_migration PASSWORD 'synthetic-migration'",
         "genui",
@@ -512,6 +556,10 @@ async fn campaign() {
                 page: record_page,
             })))
             .merge(actions::routes::records_router(auth.clone()))
+            .merge(actions::assistant::router(Arc::new(Act::new(
+                auth.clone(),
+                Parser::from_env(),
+            ))))
             .merge(canvas::router(Arc::new(canvas::Canvas {
                 work: work.clone(),
                 pages: canvas_pages,
@@ -703,6 +751,36 @@ async fn campaign() {
             .unwrap()
     };
     assert_eq!(value_display(&rows[0], "amount"), "$86.00");
+    assert_eq!(
+        rows[0]["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|field| field["field_id"] == "amount")
+            .unwrap()["assistant_display"],
+        "USD 86.00",
+        "the assistant receives generic currency formatting while legacy display stays unchanged"
+    );
+    let money_search = send(
+        &app,
+        "GET",
+        &format!(
+            "/v1/work/{app_id}/{work_id}/records/search?collection={}&q=86.00",
+            rows[0]["collection_id"].as_str().unwrap()
+        ),
+        Some(&diego),
+        "",
+        &[],
+    )
+    .await;
+    assert_eq!(money_search.status, StatusCode::OK, "{}", money_search.body);
+    let money_search = money_search.json();
+    assert_eq!(money_search["records"][0]["record_id"], record_id);
+    assert_eq!(
+        value_display(&money_search["records"][0], "amount"),
+        "USD 86.00",
+        "money search respects the exponent and shows the canonical currency"
+    );
     // Sarah cannot read the records yet; the group JSON carries the records card for him.
     assert_eq!(
         records(&sarah, &app_id, &work_id).await.status,
@@ -1456,6 +1534,274 @@ async fn campaign() {
         &mut checks,
         "APP-135 read guard: \"Review expenses over $200\" answers `place` with no model call (the composer picks and filters the app), and a question the model (stubbed) answered as a create (\"did Sarah approve my Nobu claim?\") answers `place`, not a confirmation card",
     );
+
+    // App assistant: exact-work, explicit target, no record writes before confirmation.
+    let notes_app = "00000000-0000-4000-8000-000000001981";
+    for principal in [EMPLOYEE, REVIEWER] {
+        for permission in ["discover", "run"] {
+            grant(&fixture, principal, permission, &["--app", notes_app]);
+        }
+        grant(
+            &fixture,
+            principal,
+            "source_read",
+            &["--source", "00000000-0000-4000-8000-000000003024"],
+        );
+    }
+    let notes_context = stores.workspace.composer_context(&employee).await.unwrap();
+    let notes = notes_context
+        .library
+        .iter()
+        .find(|a| a.app == notes_app)
+        .unwrap();
+    let bindings =
+        composer_bindings(&notes.inputs, &notes.record_schemas, &notes_context.sources).unwrap();
+    let notes_saved = stores
+        .workspace
+        .create_work(
+            &employee,
+            notes_app,
+            &notes.publication,
+            "Assistant campaign notes",
+            &bindings,
+        )
+        .await
+        .unwrap();
+    let notes_work = notes_saved.work.as_str();
+    for permission in ["record_read", "record_write"] {
+        grant(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", notes_app, "--work", notes_work],
+        );
+    }
+    let listed = records(&sarah, notes_app, notes_work).await;
+    assert_eq!(listed.status, StatusCode::OK, "{}", listed.body);
+    let listed = listed.json();
+    let endpoint = format!("/v1/work/{notes_app}/{notes_work}/assistant/proposals");
+    let create = json!({"command_id":"add","collection_id":listed["collections"][0]["collection_id"],"publication_id":listed["publication_id"],"expected_work_version":listed["work_version"],"utterance":"ASSISTANT add a note"});
+    let frozen = footprint(&fixture).await;
+    for cookie in [None, Some(outsider.as_str())] {
+        let response = send(
+            &app,
+            "POST",
+            &endpoint,
+            cookie,
+            &create.to_string(),
+            &SAME_ORIGIN,
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::NOT_FOUND, "{}", response.body);
+    }
+    let cross_site = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &[
+            ("sec-fetch-site", "cross-site"),
+            ("content-type", "application/json"),
+        ],
+    )
+    .await;
+    assert_eq!(cross_site.status, StatusCode::FORBIDDEN);
+    let wrong_work = send(
+        &app,
+        "POST",
+        &format!("/v1/work/{notes_app}/{work_id}/assistant/proposals"),
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(wrong_work.status, StatusCode::NOT_FOUND);
+    for (field, value, expected) in [
+        (
+            "command_id",
+            json!("delete"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "expected_work_version",
+            json!(999),
+            StatusCode::PRECONDITION_FAILED,
+        ),
+        (
+            "utterance",
+            json!("ASSISTANT hostile field"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "utterance",
+            json!("What is my note?"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+    ] {
+        let mut invalid = create.clone();
+        invalid[field] = value;
+        let response = send(
+            &app,
+            "POST",
+            &endpoint,
+            Some(&sarah),
+            &invalid.to_string(),
+            &SAME_ORIGIN,
+        )
+        .await;
+        assert_eq!(response.status, expected, "{}", response.body);
+    }
+    let prepared = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(prepared.status, StatusCode::OK, "{}", prepared.body);
+    let prepared = prepared.json();
+    assert_eq!(prepared["kind"], "app_action_proposal");
+    assert_eq!(prepared["operation"], "create");
+    assert_eq!(footprint(&fixture).await,frozen,"all drafts, including one abandoned by closing the assistant, write no record, audit, work or permission row");
+    let committed = confirm(&sarah, prepared.clone()).await;
+    assert_eq!(committed.status, StatusCode::OK, "{}", committed.body);
+    let after = footprint(&fixture).await;
+    let replay = confirm(&sarah, prepared.clone()).await;
+    assert_eq!(replay.status, StatusCode::OK, "{}", replay.body);
+    assert_eq!(replay.json(), committed.json());
+    assert_eq!(footprint(&fixture).await, after);
+    let created_id = prepared["record_id"].clone();
+    let current = records(&sarah, notes_app, notes_work).await.json();
+    let record = current["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["record_id"] == created_id)
+        .unwrap();
+    let update = json!({"command_id":"edit","collection_id":record["collection_id"],"publication_id":current["publication_id"],"expected_work_version":current["work_version"],"record_id":record["record_id"],"expected_record_version":record["version"],"utterance":"ASSISTANT update body"});
+    let updated = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &update.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(updated.status, StatusCode::OK, "{}", updated.body);
+    let updated = updated.json();
+    assert_eq!(updated["values"][0]["previous"], "Synthetic draft");
+    assert_eq!(
+        updated["values"][0]["display"],
+        "Updated after confirmation"
+    );
+    assert_eq!(footprint(&fixture).await, after);
+    let competing = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &update.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await
+    .json();
+    let saved = confirm(&sarah, updated.clone()).await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    let stale = confirm(&sarah, competing).await;
+    assert_eq!(stale.status, StatusCode::CONFLICT, "{}", stale.body);
+    let stale_preview = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &update.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(
+        stale_preview.status,
+        StatusCode::CONFLICT,
+        "{}",
+        stale_preview.body
+    );
+    let listed = records(&sarah, notes_app, notes_work).await.json();
+    let record = listed["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["record_id"] == created_id)
+        .unwrap();
+    assert_eq!(record["version"], 2);
+    assert_eq!(
+        value_of(record, "body")["value"],
+        "Updated after confirmation"
+    );
+    let collection = record["collection_id"].as_str().unwrap();
+    let search = format!(
+        "/v1/work/{notes_app}/{notes_work}/records/search?collection={collection}&q=Updated+after"
+    );
+    let before_search = footprint(&fixture).await;
+    let found = send(&app, "GET", &search, Some(&sarah), "", &[]).await;
+    assert_eq!(found.status, StatusCode::OK, "{}", found.body);
+    assert_eq!(found.json()["records"][0]["record_id"], created_id);
+    assert_eq!(found.json()["records"][0]["version"], 2);
+    for cookie in [None, Some(outsider.as_str())] {
+        assert_eq!(
+            send(&app, "GET", &search, cookie, "", &[]).await.status,
+            StatusCode::NOT_FOUND
+        );
+    }
+    let foreign_collection = search.replace(collection, "00000000-0000-4000-8000-000000009999");
+    assert_eq!(
+        send(&app, "GET", &foreign_collection, Some(&sarah), "", &[])
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let literal = search.replace("Updated+after", "%25_");
+    let literal = send(&app, "GET", &literal, Some(&sarah), "", &[]).await;
+    assert_eq!(literal.status, StatusCode::OK, "{}", literal.body);
+    assert!(literal.json()["records"].as_array().unwrap().is_empty());
+    assert_eq!(
+        footprint(&fixture).await,
+        before_search,
+        "record searches do not write data or authority"
+    );
+    let revoked_draft = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await
+    .json();
+    super::definition_qualification::revoke(
+        &fixture,
+        REVIEWER,
+        "record_write",
+        &["--app", notes_app, "--work", notes_work],
+    );
+    let frozen = footprint(&fixture).await;
+    let denied = confirm(&sarah, revoked_draft).await;
+    assert_eq!(denied.status, StatusCode::NOT_FOUND, "{}", denied.body);
+    let denied = send(
+        &app,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(denied.status, StatusCode::NOT_FOUND, "{}", denied.body);
+    assert_eq!(footprint(&fixture).await, frozen);
+    check(&mut checks,"APP-168 app assistant: selected work/command/record only; anonymous, cross-organization, wrong-work, cross-site, unsupported commands, hostile model fields, read questions and stale premises refuse. Drafts write no records or authority. Explicit create/update confirmation is audited; duplicate confirmation replays; competing record versions conflict; grant revocation denies both fresh draft and previously prepared confirmation.");
 
     // --- The local stand for the two-window screenshots ---
     if let Some(seconds) = stand {

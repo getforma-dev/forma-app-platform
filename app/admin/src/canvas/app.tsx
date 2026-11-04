@@ -373,14 +373,14 @@ function Canvas(props: CanvasProps) {
               <button type="button" class="cv-empty-choice cv-empty-upload" data-empty-upload-pick title="A spreadsheet can stay a file on the canvas. Other files go in a new folder">
                 <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 3h9v10H3zM12 16v-4m-3 2 3-3 3 3" /></svg><span class="cv-choice-number" aria-hidden="true">02 / CONNECT</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                 <span class="cv-choice-title">Bring your files</span>
-                <span class="cv-choice-copy">A spreadsheet can stay the file itself. Double-click it to open the sheet, or make a card or an app from it.</span>
+                <span class="cv-choice-copy">Your spreadsheet becomes a file card. Double-click to view it, ask about it, or make an app from it.</span>
               </button>
               {createShow(() => props.hasLibrary, () => (
                 <button type="button" class="cv-empty-choice cv-empty-library" data-lib-open>
                   <span class="cv-choice-top"><svg class="cv-choice-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg><span class="cv-choice-number" aria-hidden="true">03 / DISCOVER</span><span class="cv-choice-arrow" aria-hidden="true">↗</span></span>
                   <span class="cv-choice-title">Open your library</span>
                   <span class="cv-choice-copy">Your apps, cards and tools, ready when you are.</span>
-                  <span class="cv-empty-library-count">Add an app as one card, then Stack or Open it.</span>
+                  <span class="cv-empty-library-count">Add an app as a card, then Browse or Open it.</span>
                 </button>
               ))}
               <input type="file" class="sr-only" data-empty-upload multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.txt,.md" aria-label="Upload a spreadsheet or other files" />
@@ -704,7 +704,7 @@ function Canvas(props: CanvasProps) {
                   </header>
                   <div class="cv-ledger-controls" data-controls></div>
                   <div class="cv-card-body" data-body>
-                    <p class="cv-ledger-total"><span class="cv-ledger-total-value num">{ledger.total}</span> <span class="cv-muted">across {ledger.count} records · all dates · every status</span></p>
+                    <p class="cv-ledger-total"><span class="cv-ledger-total-value num">{ledger.total}</span> <span class="cv-muted">across {ledger.count} records · all dates · every status · {ledger.scope}</span></p>
                     {createShow(() => ledger.hasNoRows, () => (
                       <p class="cv-message" role="status">No records yet.</p>
                     ))}
@@ -737,12 +737,11 @@ function Canvas(props: CanvasProps) {
         </div>
         <p id="cv-activity" class="sr-only" role="status" aria-live="polite"></p>
       </main>
-      <aside id="cv-library" class="cv-library" aria-label="Library, commands, Ask and shortcuts" data-open="false" data-tab="library">
+      <aside id="cv-library" class="cv-library" aria-label="Library, commands and shortcuts" data-open="false" data-tab="library">
         <header class="cv-lib-head">
-          <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands, Ask and shortcuts">
+          <div class="cv-pane-tabs" role="tablist" aria-label="Library, commands and shortcuts">
             <button type="button" role="tab" id="cv-tab-library" class="cv-pane-tab" aria-selected="true" aria-controls="cv-panel-library" data-pane-tab="library">Library</button>
             <button type="button" role="tab" id="cv-tab-commands" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-commands" data-pane-tab="commands">Commands</button>
-            <button type="button" role="tab" id="cv-tab-ask" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-ask" data-pane-tab="ask">Ask</button>
             <button type="button" role="tab" id="cv-tab-shortcuts" class="cv-pane-tab" aria-selected="false" aria-controls="cv-panel-shortcuts" data-pane-tab="shortcuts">Shortcuts</button>
           </div>
           <button type="button" class="cv-lib-close" data-lib-close aria-label="Close the pane" title="Close (Esc)">
@@ -756,7 +755,7 @@ function Canvas(props: CanvasProps) {
           <div class="cv-lib-search">
             <input id="cv-lib-search" type="search" placeholder="Search apps, widgets and cards" aria-label="Search the library" autocomplete="off" />
           </div>
-          <p class="cv-lib-hint">Add an app’s face card, Stack it, or Open it on the canvas. Apps stay whole in every view.</p>
+          <p class="cv-lib-hint">Add an app as a card, browse its components, or open its full window. Apps stay whole in every view.</p>
           <div class="cv-lib-list" data-lib-list>
             {createList(() => props.library, category => category.id, category => (
               <section class="cv-lib-cat" data-category={category.id} aria-label={category.title}>
@@ -779,7 +778,7 @@ function Canvas(props: CanvasProps) {
                         ))}
                         <div class="cv-lib-view-actions">
                           <button type="button" class="cv-lib-all" data-lib-all title="Add the whole app as its face card">Add</button>
-                          <button type="button" class="cv-lib-stack" data-lib-stack title="Show the whole app in Stack view">Stack</button>
+                          <button type="button" class="cv-lib-stack" data-lib-stack title="Browse the app one component at a time">Browse</button>
                           <button type="button" class="cv-lib-stack cv-lib-open-view" data-lib-open-view title="Open the whole app on the canvas">Open</button>
                           <details class="cv-lib-menu">
                             <summary aria-label="Library options" title="Library options">⋯</summary>
@@ -811,17 +810,16 @@ function Canvas(props: CanvasProps) {
           </div>
         </div>
         <div id="cv-panel-commands" class="cv-pane-panel cv-commands" role="tabpanel" aria-labelledby="cv-tab-commands" hidden></div>
-        <div id="cv-panel-ask" class="cv-pane-panel cv-ask" role="tabpanel" aria-labelledby="cv-tab-ask" hidden></div>
         <div id="cv-panel-shortcuts" class="cv-pane-panel cv-shortcuts" role="tabpanel" aria-labelledby="cv-tab-shortcuts" hidden></div>
       </aside>
       <footer class="cv-dock">
         <div class="cv-tools" role="toolbar" aria-label="Canvas tools" data-tools hidden>
-          <button type="button" class="cv-tool" data-tool="move" aria-pressed="true" aria-label="Move" title="Move (V)">
+          <button type="button" class="cv-tool" data-tool="move" aria-pressed="true" aria-label="Move" title="Move items (V) · Drag an item’s header or background; controls stay interactive">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path d="M3.5 2.2l9.2 5.2-4 1.1-1.9 3.9z" />
             </svg>
           </button>
-          <button type="button" class="cv-tool" data-tool="hand" aria-pressed="false" aria-label="Hand" title="Hand (H)">
+          <button type="button" class="cv-tool" data-tool="hand" aria-pressed="false" aria-label="Hand" title="Pan canvas (H) · Hold Space for temporary Hand">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
               <path d="M5.2 8.4V3.6a1 1 0 012 0v3.6M7.2 7V2.8a1 1 0 012 0V7m0-3.2a1 1 0 012 0V7.6m0-2.4a1 1 0 012 0v4.2c0 2.6-1.8 4.6-4.4 4.6-1.6 0-2.6-.6-3.5-1.8L3 9.6a1 1 0 011.6-1.2l.6.8" />
             </svg>
@@ -854,7 +852,7 @@ function Canvas(props: CanvasProps) {
               <p class="cv-menu-label" aria-hidden="true">Selected app or card</p>
               <button type="button" role="menuitem" data-tool="focus"><span>Focus</span><span class="cv-kbd-group">F</span></button>
               <button type="button" role="menuitem" data-tool="unite"><span>Open app</span><span class="cv-kbd-group">U</span></button>
-              <button type="button" role="menuitem" data-tool="stack"><span>Stack app</span><span class="cv-kbd-group">⌘ G</span></button>
+              <button type="button" role="menuitem" data-tool="stack"><span>Browse app</span><span class="cv-kbd-group">⌘ G</span></button>
               <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
               <p class="cv-menu-label" aria-hidden="true">Ask and Shape</p>

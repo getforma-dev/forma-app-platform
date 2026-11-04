@@ -19,11 +19,16 @@ pub struct WorkPresentation {
     pub can_edit: bool,
     pub content: Value,
     /// Private optimistic premise, never supplied by the browser.
-    bindings: String,
-    scope: (String, String, String),
+    pub(super) bindings: String,
+    pub(super) scope: (String, String, String),
 }
 
-async fn bindings(t: &Transaction<'_>, org: &str, app: &str, work: &str) -> Result<String> {
+pub(super) async fn bindings(
+    t: &Transaction<'_>,
+    org: &str,
+    app: &str,
+    work: &str,
+) -> Result<String> {
     let rows=t.query("SELECT json_build_object('bindings',(SELECT coalesce(jsonb_agg(to_jsonb(b)-'publication_id' ORDER BY input_id),'[]'::jsonb) FROM genui.work_bindings b WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid),'collections',(SELECT coalesce(jsonb_agg(to_jsonb(c)-'publication_id' ORDER BY collection_id),'[]'::jsonb) FROM genui.record_collections c WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid),'dependencies',(SELECT coalesce(jsonb_agg(to_jsonb(d) ORDER BY input_id,source_id,source_revision_id),'[]'::jsonb) FROM genui.work_source_dependencies d WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid))::text", &[&org,&app,&work]).await?;
     rows.first()
         .ok_or(Error::Unavailable)?

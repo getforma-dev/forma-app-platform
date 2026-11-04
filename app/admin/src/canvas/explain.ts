@@ -1,20 +1,14 @@
-// APP-108: the Explanation card of an app built from a box. When such a work
-// is on the board (its lineage route answers), a "Summary" card labeled "AI
-// summary · numbers from receipts" sits beside it. Its findings come from
-// `GET /v1/boxes/explain/{app}/{work}` (once per page, a `POST` generates one
-// when none exists; "Regenerate" is the same `POST`). The server builds every
-// value from a released query result and names the view and receipt it came
-// from; this card shows text parts as text nodes and each value as a button
-// that brings that view card into focus and opens its receipt. Nothing is
-// stored in the browser; a reload fetches again when the work is placed.
-import { boardWorks, canvasApi, ensureAppGroup, isOnBoard, mountWidget, onBoardChange, unmountWidget } from './board';
+// Summary content for an app-owned companion. The coordinator owns the shared
+// header, tabs and visibility; showing this panel reads an authorized summary.
+// Only Generate/Regenerate asks the server to make one.
+import { ensureAppGroup, isOnBoard, onBoardChange } from './board';
 import { lineage } from './box-api';
-import { openFocus, registerFocusCard, unregisterFocusCard } from './focus';
+import { openFocus } from './focus';
 import { announce, el, isUuid } from './render';
 import { setAppView } from './unite';
 import { appComponentVisible } from '../presentation/presentation';
 
-const LABEL = 'AI summary · numbers from receipts';
+const LABEL = 'AI summary';
 type Part = { text: string } | { value: string; exact: string; view_id: string; view_title: string; receipt_digest: string };
 type Explanation = { state: 'ready' | 'none'; label: string; generated_at: string | null; findings: Part[][] };
 
@@ -24,9 +18,17 @@ class ExplainError extends Error {
   }
 }
 
-const seen = new Set<string>();
-const cards = new Map<string, { item: HTMLElement; render(explanation: Explanation): void; say(message: string): void }>();
-const attempted = new Set<string>();
+export type AppSummaryOptions = {app: string; work: string; title: string};
+export type AppSummaryController = {show(): void; hide(): void; dispose(): void};
+
+type Companion = {
+  app: string; work: string; host: HTMLElement; panel: HTMLElement;
+  list: HTMLOListElement; status: HTMLParagraphElement; when: HTMLParagraphElement;
+  action: HTMLButtonElement; label: HTMLElement; open: boolean; request: number;
+  controller: AbortController | null; actionKind: 'load' | 'generate';
+};
+const companions = new Map<HTMLElement, Companion>();
+let watching = false;
 
 function parse(value: unknown): Explanation | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -55,14 +57,15 @@ function parse(value: unknown): Explanation | null {
   };
 }
 
-async function call(method: 'GET' | 'POST', app: string, work: string): Promise<Explanation> {
+async function call(method: 'GET' | 'POST', app: string, work: string, signal: AbortSignal): Promise<Explanation> {
   let response: Response;
   try {
     response = await fetch(`/v1/boxes/explain/${app}/${work}`, {
-      method, credentials: 'same-origin', cache: 'no-store',
+      method, credentials: 'same-origin', cache: 'no-store', signal,
       ...(method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}),
     });
-  } catch {
+  } catch (error) {
+    if (signal.aborted) throw error;
     throw new ExplainError(0, 'network');
   }
   const json = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -72,21 +75,25 @@ async function call(method: 'GET' | 'POST', app: string, work: string): Promise<
   return explanation;
 }
 
-/** Brings the view card of a value into focus and opens its receipt. */
-export async function showValue(app: string, work: string, view: string): Promise<void> {
-  if (!isUuid(app) || !isUuid(work) || !/^[a-z][a-z0-9_]{0,63}$/.test(view)) return;
+/** Brings the value's app component into focus; evidence stays behind the UI. */
+export async function showValue(app: string, work: string, view: string, isCurrent?: () => boolean): Promise<void> {
+  if (!isUuid(app) || !isUuid(work) || !/^[a-z][a-z0-9_]{0,63}$/.test(view) || (isCurrent && !isCurrent())) return;
   const id = `c-${work}-${view}`;
   const group = await ensureAppGroup(app, work);
+  if (isCurrent && !isCurrent()) return;
   const card = group?.cards.find(card => card.dataset.card === id);
   if (!card) { announce('That value’s app component could not be opened.'); return; }
   if (!appComponentVisible(app, work, card)) {
     announce('That component is hidden in your views on this browser. Change your view preferences in Edit app to show it.');
     return;
   }
-  if (!isOnBoard(id)) await setAppView(app, work, 'open', { focus: false });
+  if (!isOnBoard(id)) await setAppView(app, work, 'open', { focus: false, ...(isCurrent ? {isCurrent} : {}) });
+  if (isCurrent && !isCurrent()) return;
   if (!openFocus(id)) { announce('That value’s app component could not be focused.'); return; }
-  const receipt = card.querySelector<HTMLDetailsElement>('details.cv-receipt');
-  if (receipt) receipt.open = true;
+  if (card.dataset.appComponent !== 'true') {
+    const receipt = card.querySelector<HTMLDetailsElement>('details.cv-receipt');
+    if (receipt) receipt.open = true;
+  }
 }
 
 function message(error: unknown): string {
@@ -95,119 +102,152 @@ function message(error: unknown): string {
   return 'The summary could not be made right now.';
 }
 
-function mountCard(app: string, work: string, title: string) {
-  const document_ = document;
-  const list = el(document_, 'ol', { class: 'cv-ex-findings' });
-  const status = el(document_, 'p', { class: 'cv-ex-status', role: 'status' });
-  const when = el(document_, 'p', { class: 'cv-ex-when' });
-  const regenerate = el(document_, 'button', { type: 'button', class: 'cv-ex-regen' }, 'Regenerate');
-  const close = el(document_, 'button', { type: 'button', class: 'bx-close', 'data-widget-close': '', 'aria-label': 'Remove the summary from the canvas', title: 'Remove' }, '×');
-  const head = el(document_, 'header', { class: 'cv-ex-head' },
-    el(document_, 'div', { class: 'cv-ex-id' },
-      el(document_, 'h2', {}, 'Summary'),
-      el(document_, 'p', { class: 'cv-ex-of' }, title)),
-    el(document_, 'span', { class: 'cv-origin cv-ex-label', 'data-origin': 'generated' }, LABEL));
-  const card = el(document_, 'article', { class: 'cv-card cv-ex', 'data-kind': 'explain', 'data-card': `ex-${work}`, 'aria-label': `Summary of ${title}` },
-    head,
-    list, status,
-    el(document_, 'footer', { class: 'cv-ex-foot' }, when, regenerate));
-  // Beside the app card: just left of its group, top-aligned.
-  const appItem = document_.querySelector<HTMLElement>(`.cv-item [data-card="a-${work}"]`)?.closest<HTMLElement>('.cv-item');
-  const state = appItem ? canvasApi()?.getItemState(appItem) : null;
-  const at = state ? { x: state.x - 440, y: state.y } : undefined;
-  const item = mountWidget(card, { id: `explain-${work}`, title: 'Summary', width: 420, minHeight: 220, at, focus: false });
-  if (!item) return null;
-  // APP-106 focus mode (F or the focus button), as for every card.
-  registerFocusCard(card, head, title);
-  head.append(close);
-  const render = (explanation: Explanation) => {
-    const label = card.querySelector('.cv-ex-label');
-    if (label) label.textContent = explanation.label || LABEL;
-    list.replaceChildren(...explanation.findings.map((parts) => el(document_, 'li', {}, ...parts.map((part) => {
-      if ('text' in part) return part.text;
-      const short = part.receipt_digest.replace(/^sha256:/, '').slice(0, 8);
-      const button = el(document_, 'button', {
-        type: 'button', class: 'cv-ex-value',
-        title: `${part.exact ? `Exact ${part.exact}` : part.value} · ${part.view_title}${short ? ` · receipt ${short}` : ''}`,
-      }, part.value);
-      button.addEventListener('click', () => void showValue(app, work, part.view_id));
-      return button;
-    }))));
-    const none = explanation.state === 'none' || explanation.findings.length === 0;
-    status.textContent = none ? 'No summary. The model’s answer was not used, or none was available; the numbers stay on their cards.' : '';
-    when.textContent = explanation.generated_at ? `Generated ${explanation.generated_at.replace('T', ' ').replace(/:\d\dZ$/, ' UTC')}` : '';
-  };
-  const say = (text: string) => { status.textContent = text; };
-  regenerate.addEventListener('click', () => {
-    if (regenerate.disabled) return;
-    regenerate.disabled = true;
-    say('Summarizing from the receipts…');
-    void call('POST', app, work).then(render).catch((error: unknown) => {
-      if (error instanceof ExplainError && error.status === 404) remove(work);
-      else say(message(error));
-    }).finally(() => { regenerate.disabled = false; });
-  });
-  close.addEventListener('click', () => remove(work));
-  const entry = { item, render, say };
-  cards.set(work, entry);
-  return entry;
+function currentEntry(entry: Companion): boolean {
+  return companions.get(entry.host) === entry && entry.host.isConnected;
 }
 
-function remove(work: string): void {
-  const entry = cards.get(work);
-  if (!entry) return;
-  const card = entry.item.querySelector<HTMLElement>('.cv-ex');
-  if (card) unregisterFocusCard(card);
-  unmountWidget(entry.item);
-  cards.delete(work);
+function cancel(entry: Companion): void {
+  entry.request++;
+  entry.controller?.abort();
+  entry.controller = null;
+  entry.panel.removeAttribute('aria-busy');
 }
 
-async function consider(app: string, work: string, title: string): Promise<void> {
-  const found = await lineage(app, work);
-  if (!found) return;
-  let explanation: Explanation;
-  try {
-    explanation = await call('GET', app, work);
-  } catch {
-    // Not a derived app (a data card, no route), or not now: no card.
-    return;
+function dispose(entry: Companion): void {
+  cancel(entry);
+  entry.open = false;
+  if (companions.get(entry.host) !== entry) return;
+  companions.delete(entry.host);
+  entry.host.replaceChildren();
+}
+
+function hide(entry: Companion): void {
+  cancel(entry);
+  entry.open = false;
+  // A later show reauthorizes through GET; no findings remain in hidden tabs.
+  entry.list.replaceChildren();
+  entry.when.textContent = '';
+  entry.status.textContent = '';
+  entry.action.hidden = true;
+}
+
+function render(entry: Companion, explanation: Explanation): void {
+  const document_ = entry.host.ownerDocument;
+  entry.label.textContent = LABEL;
+  entry.list.replaceChildren(...explanation.findings.map(parts => el(document_, 'li', {}, ...parts.map(part => {
+    if ('text' in part) return part.text;
+    const button = el(document_, 'button', {
+      type: 'button', class: 'cv-ex-value',
+      title: `${part.exact ? `Exact ${part.exact}` : part.value} · ${part.view_title}`,
+    }, part.value);
+    button.addEventListener('click', () => {
+      const request = entry.request;
+      void showValue(entry.app, entry.work, part.view_id,
+        () => currentEntry(entry) && entry.open && entry.request === request);
+    });
+    return button;
+  }))));
+  const none = explanation.state === 'none' || explanation.findings.length === 0;
+  entry.status.textContent = none ? 'No summary is available yet. Generate one from this app’s data.' : '';
+  entry.when.textContent = explanation.generated_at
+    ? `Generated ${explanation.generated_at.replace('T', ' ').replace(/:\d\dZ$/, ' UTC')}` : 'Select a value to see its app component.';
+  entry.actionKind = 'generate';
+  entry.action.hidden = false;
+  entry.action.textContent = none ? 'Generate summary' : 'Regenerate';
+}
+
+async function read(entry: Companion, method: 'GET' | 'POST'): Promise<void> {
+  cancel(entry);
+  const request = entry.request;
+  const controller = new AbortController();
+  entry.controller = controller;
+  const current = () => currentEntry(entry) && entry.open && entry.request === request && !controller.signal.aborted;
+  entry.action.disabled = true;
+  entry.panel.setAttribute('aria-busy', 'true');
+  entry.status.textContent = method === 'GET' ? 'Loading summary…' : 'Summarizing this app’s data…';
+  if (method === 'GET') {
+    entry.list.replaceChildren();
+    entry.when.textContent = '';
+    entry.action.hidden = true;
   }
-  if (cards.has(work)) return;
-  const entry = mountCard(app, work, title);
-  if (!entry) return;
-  entry.render(explanation);
-  if (explanation.state === 'none' && !attempted.has(work)) {
-    attempted.add(work);
-    entry.say('Summarizing from the receipts…');
-    try {
-      entry.render(await call('POST', app, work));
-    } catch (error) {
-      if (error instanceof ExplainError && error.status === 404) remove(work);
-      else entry.say(message(error));
+  try {
+    if (method === 'GET') {
+      const found = await lineage(entry.app, entry.work);
+      if (!current()) return;
+      if (!found) {
+        entry.status.textContent = 'Summaries are available for apps created from files.';
+        entry.action.hidden = true;
+        return;
+      }
+    }
+    const explanation = await call(method, entry.app, entry.work, controller.signal);
+    if (!current()) return;
+    render(entry, explanation);
+  } catch (error) {
+    if (!current()) return;
+    if (error instanceof ExplainError && [401, 403, 404].includes(error.status)) {
+      entry.list.replaceChildren();
+      entry.when.textContent = '';
+      entry.status.textContent = 'This summary is no longer available.';
+      entry.action.hidden = true;
+    } else {
+      entry.status.textContent = message(error);
+      entry.actionKind = method === 'GET' ? 'load' : 'generate';
+      entry.action.textContent = method === 'GET' ? 'Try again' : 'Regenerate';
+      entry.action.hidden = false;
+    }
+  } finally {
+    if (current()) {
+      entry.action.disabled = false;
+      entry.panel.removeAttribute('aria-busy');
+      entry.controller = null;
     }
   }
 }
 
-function scan(): void {
-  const placed = new Set<string>();
-  for (const work of boardWorks()) {
-    placed.add(work.work);
-    if (seen.has(work.work) || !isUuid(work.app) || !isUuid(work.work)) continue;
-    // Only once the app card is on the board.
-    if (!document.querySelector(`.cv-item [data-card="a-${work.work}"]`)) continue;
-    seen.add(work.work);
-    void consider(work.app, work.work, work.title);
-  }
-  // A work taken off the board takes its summary with it; placed again, it fetches again.
-  for (const work of [...seen]) {
-    if (placed.has(work) && document.querySelector(`.cv-item [data-card="a-${work}"]`)) continue;
-    seen.delete(work);
-    remove(work);
-  }
+/** Mounts content only. The owning companion controls its header and visibility. */
+export function mountAppSummary(host: HTMLElement, {app, work, title}: AppSummaryOptions): AppSummaryController {
+  const previous = companions.get(host);
+  if (previous) dispose(previous);
+  const document_ = host.ownerDocument;
+  const list = el(document_, 'ol', {class: 'cv-ex-findings'});
+  const status = el(document_, 'p', {class: 'cv-ex-status', role: 'status'});
+  const when = el(document_, 'p', {class: 'cv-ex-when'});
+  const label = el(document_, 'p', {class: 'cv-app-summary-label'}, LABEL);
+  const action = el(document_, 'button', {type: 'button', class: 'cv-ex-regen'}, 'Generate summary');
+  action.hidden = true;
+  const panel = el(document_, 'section', {class: 'cv-app-summary', 'aria-label': `Summary of ${title}`},
+    el(document_, 'div', {class: 'cv-app-summary-body'}, label, list, status),
+    el(document_, 'footer', {class: 'cv-app-summary-foot'}, when, action));
+  const entry: Companion = {app, work, host, panel, list, status, when, action, label,
+    open: false, request: 0, controller: null, actionKind: 'load'};
+  action.addEventListener('click', () => {
+    if (entry.action.disabled || !entry.open || !currentEntry(entry)) return;
+    void read(entry, entry.actionKind === 'load' ? 'GET' : 'POST');
+  });
+  host.replaceChildren(panel);
+  companions.set(host, entry);
+  watchSummaries();
+  return {
+    show() {
+      if (!currentEntry(entry) || entry.open) return;
+      if (!isUuid(app) || !isUuid(work)) {
+        entry.status.textContent = 'This summary is not available.';
+        return;
+      }
+      entry.open = true;
+      void read(entry, 'GET');
+    },
+    hide: () => hide(entry),
+    dispose: () => dispose(entry),
+  };
 }
 
-/** Watches the board for works built from a box and keeps their summary cards. */
-export function startExplain(): void {
-  onBoardChange(scan);
-  scan();
+/** Defensive removal cleanup; mounting an app never fetches or generates data. */
+function watchSummaries(): void {
+  if (watching) return;
+  watching = true;
+  onBoardChange(() => {
+    for (const entry of companions.values()) if (!entry.host.isConnected) dispose(entry);
+  });
 }

@@ -444,6 +444,16 @@ impl Lease {
         }
         Ok(Instant::now() + TRANSACTION)
     }
+    pub(super) fn import_deadline(&self) -> Result<Instant> {
+        let seconds = self
+            .connection()
+            .expires_at
+            .saturating_sub(now().saturating_add(EXPIRY_MARGIN));
+        if seconds < 60 {
+            return Err(Error::Configuration);
+        }
+        Ok(Instant::now() + Duration::from_secs(60))
+    }
     pub async fn acquire(owner: &Arc<RolePool>) -> Result<Self> {
         owner.acquire().await
     }
@@ -547,7 +557,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 19 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 20 {
         return Err(Error::Unavailable);
     }
     Ok(())

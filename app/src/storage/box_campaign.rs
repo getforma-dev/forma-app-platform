@@ -151,6 +151,8 @@ fn kind_of(body: &Value) -> &'static str {
         "summary"
     } else if system.starts_with("You answer a member's question about the tables") {
         "folder_ask"
+    } else if system.starts_with("Extract a proposed data change") {
+        "app_action"
     } else {
         "other"
     }
@@ -327,6 +329,7 @@ async fn campaign() {
     std::env::set_var(ENDPOINT_ENV, &endpoint);
     std::env::remove_var(composer::DEMO_ORGANIZATIONS_ENV);
     let composer = composer::Composer::from_env();
+    let assistant_parser = crate::actions::Parser::from_env();
     std::env::remove_var(KEY_ENV);
     std::env::remove_var(ENDPOINT_ENV);
     crate::demo::configure_for_tests(false, &[]);
@@ -379,7 +382,9 @@ async fn campaign() {
             .unwrap(),
     });
     pages.finalize().unwrap();
+    let card_routes = crate::composer::cards::router_with_boxes(state.clone());
     let long = vec![
+        (crate::composer::cards::CARDS_PATH, card_routes.clone()),
         (
             composer::routes::PATH,
             composer::routes::router(Arc::new(Compose::new(auth.clone(), composer.clone()))),
@@ -403,7 +408,17 @@ async fn campaign() {
             .merge(crate::sharing::router(auth.clone()))
             .merge(crate::events::routes::router(auth.clone()))
             .merge(crate::actions::routes::records_router(auth.clone()))
+            .merge(crate::actions::assistant::router(Arc::new(
+                crate::actions::routes::Act::new(auth.clone(), assistant_parser),
+            )))
+            .merge(crate::commands::routes::router(Arc::new(
+                crate::commands::routes::Commands {
+                    auth: auth.clone(),
+                    page: Arc::new(harness::TestPages),
+                },
+            )))
             .merge(crate::composer::commands::router(auth.clone()))
+            .merge(card_routes)
             .merge(boxes::routes::router(state.clone()))
             .merge(crate::query::canvas::router(Arc::new(
                 crate::query::canvas::Canvas {
@@ -1014,6 +1029,67 @@ async fn campaign() {
             && sent.contains("South")
     );
     assert!(!sent.contains("strongest month"), "the PDF is not a table");
+    // A file card's Ask is an exact scope, not a hint embedded in its question.
+    stub.script(
+        "folder_ask",
+        json!({"text": "South led July with the highest revenue.", "references": ["f1r2"]})
+            .to_string(),
+    );
+    let scoped = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "which region led July?", "file_id": files["q3_metrics.csv"]})
+                .to_string(),
+        )
+        .await;
+    assert_eq!(scoped.status, StatusCode::OK, "{}", scoped.text());
+    let scoped_answer = scoped.json();
+    let scoped_refs = scoped_answer["references"].as_array().unwrap();
+    assert!(!scoped_refs.is_empty());
+    assert!(scoped_refs.iter().all(|reference| {
+        reference["file_id"] == files["q3_metrics.csv"] && reference["file"] == "q3_metrics.csv"
+    }));
+    let scoped_calls = stub.calls("folder_ask");
+    let scoped_input: Value = serde_json::from_str(
+        scoped_calls.last().unwrap()["messages"][0]["content"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(scoped_input["tables"].as_array().unwrap().len(), 1);
+    assert_eq!(scoped_input["tables"][0]["file"], "q3_metrics.csv");
+    let scoped_count = scoped_calls.len();
+    let unknown_file = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "how many?", "file_id": "00000000-0000-4000-8000-00000000dead"})
+                .to_string(),
+        )
+        .await;
+    assert!(
+        unknown_file.uniform_404(),
+        "unknown file scope never falls back"
+    );
+    let not_a_table = stand
+        .post(
+            &ask_path,
+            Some(&maya_cookie),
+            &json!({"question": "how many?", "file_id": files["q3_metrics_brief.pdf"]}).to_string(),
+        )
+        .await;
+    assert_eq!(not_a_table.status, StatusCode::OK);
+    assert_eq!(not_a_table.json()["references"], json!([]));
+    assert!(not_a_table.json()["text"]
+        .as_str()
+        .unwrap()
+        .contains("Ask could not analyze this file"));
+    assert_eq!(
+        stub.calls("folder_ask").len(),
+        scoped_count,
+        "no other file or model fallback"
+    );
     // A reply citing a row it was not shown, or carrying a view, is refused.
     for hostile in [
         json!({"text": "Row nine.", "references": ["f1r99"]}),
@@ -1258,6 +1334,119 @@ async fn campaign() {
         assert!(stand.get(&path, Some(&outsider_cookie)).await.uniform_404());
     }
     check(&mut checks, "sharing: sharing the derived app gives the teammate the app, its explanation with the same governed values, and read access to exactly the folder files it was built from (the CSV opens; the PDF and the image stay the uniform 404, no other file is listed, no derived apps are listed); a foreign member gets the uniform 404 for the lineage and the explanation");
+
+    // App-owned saved answers: the same immutable original provenance on
+    // refresh, with file access checked independently from work access.
+    auth.limits.clear();
+    let cards_path = crate::composer::cards::CARDS_PATH;
+    let file_pin_id = "00000000-0000-4000-8000-0000000c4f01";
+    let pin = json!({"card_id": file_pin_id, "kind": "answer", "app_id": app, "work_id": derived,
+        "question": "Which region led July?", "text": scoped_answer["text"], "scope": {"kind": "app", "address": ""},
+        "references": [], "receipts": [], "file_source": {"box_id": box_id, "file_id": files["q3_metrics.csv"]},
+        "file_references": scoped_answer["references"]});
+    let saved = stand
+        .post(cards_path, Some(&mate_cookie), &pin.to_string())
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    assert_eq!(saved.json()["card"]["app_id"], app);
+    assert_eq!(saved.json()["card"]["work_id"], derived);
+    assert_eq!(
+        saved.json()["card"]["spec"]["file_references"],
+        scoped_answer["references"]
+    );
+    assert_eq!(
+        saved.json()["card"]["spec"]["file_source"]["sha256"],
+        scoped_answer["references"][0]["sha256"]
+    );
+    let again = stand
+        .post(cards_path, Some(&mate_cookie), &pin.to_string())
+        .await;
+    assert_eq!(again.json()["saved"], false);
+    let has_pin = |value: &Value| {
+        value["cards"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|card| card["card_id"] == file_pin_id)
+    };
+    assert!(has_pin(
+        &stand.get(cards_path, Some(&mate_cookie)).await.json()
+    ));
+    assert!(
+        !has_pin(&stand.get(cards_path, Some(&maya_cookie)).await.json()),
+        "saved answers stay private to their maker"
+    );
+    assert!(stand
+        .post(cards_path, Some(&outsider_cookie), &pin.to_string())
+        .await
+        .uniform_404());
+    let mut wrong = pin.clone();
+    wrong["card_id"] = json!("00000000-0000-4000-8000-0000000c4f02");
+    wrong["file_references"][0]["sha256"] = json!(format!("sha256:{}", "f".repeat(64)));
+    let refused = stand
+        .post(cards_path, Some(&mate_cookie), &wrong.to_string())
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(refused.json()["code"], "unknown_receipt");
+    let mut forged_label = pin.clone();
+    forged_label["card_id"] = json!("00000000-0000-4000-8000-0000000c4f05");
+    forged_label["file_references"][0]["label"] = json!("A value absent from the original");
+    let refused = stand
+        .post(cards_path, Some(&mate_cookie), &forged_label.to_string())
+        .await;
+    assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(refused.json()["code"], "unknown_receipt");
+    let mut unrelated = pin.clone();
+    unrelated["card_id"] = json!("00000000-0000-4000-8000-0000000c4f03");
+    unrelated["file_source"]["file_id"] = json!(files["q3_metrics_brief.pdf"]);
+    unrelated["file_references"] = json!([]);
+    assert!(
+        stand
+            .post(cards_path, Some(&maya_cookie), &unrelated.to_string())
+            .await
+            .uniform_404(),
+        "a readable file outside this app's lineage cannot be attached to its answer"
+    );
+    let pin_operator = c.fixture.operator().await;
+    let removed = pin_operator.client.query("DELETE FROM genui.box_file_grants WHERE organization_id=$1::text::uuid AND box_id=$2::text::uuid AND file_id=$3::text::uuid AND principal_id=$4::text::uuid AND app_id=$5::text::uuid AND work_id=$6::text::uuid RETURNING granted_by::text", &[&ORG,&box_id,&files["q3_metrics.csv"],&mate_id,&app,&derived]).await.unwrap();
+    let grantor: String = removed.first().expect("one exact file grant").get(0);
+    assert_eq!(
+        stand
+            .get(
+                &format!("/v1/canvas/works/{app}/{derived}"),
+                Some(&mate_cookie)
+            )
+            .await
+            .status,
+        StatusCode::OK,
+        "the app remains readable after only the file grant is revoked"
+    );
+    assert!(
+        !has_pin(&stand.get(cards_path, Some(&mate_cookie)).await.json()),
+        "revoked originals hide saved file text"
+    );
+    assert!(
+        stand
+            .post(cards_path, Some(&mate_cookie), &pin.to_string())
+            .await
+            .uniform_404(),
+        "idempotent pin retries also reauthorize the original"
+    );
+    pin_operator.client.execute("INSERT INTO genui.box_file_grants(organization_id,box_id,file_id,principal_id,app_id,work_id,granted_by,created_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text::uuid,$7::text::uuid,now())", &[&ORG,&box_id,&files["q3_metrics.csv"],&mate_id,&app,&derived,&grantor]).await.unwrap();
+    assert!(has_pin(
+        &stand.get(cards_path, Some(&mate_cookie)).await.json()
+    ));
+    let mut plain = pin.clone();
+    plain["card_id"] = json!("00000000-0000-4000-8000-0000000c4f04");
+    plain.as_object_mut().unwrap().remove("file_source");
+    plain.as_object_mut().unwrap().remove("file_references");
+    let saved = stand
+        .post(cards_path, Some(&mate_cookie), &plain.to_string())
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    assert_eq!(saved.json()["card"]["app_id"], app);
+    assert_eq!(saved.json()["card"]["work_id"], derived);
+    check(&mut checks, "saved app answers: no-record answers retain their authorized app/work; file answers persist exact original row references and digest, remain maker-private and idempotent, reject wrong digests and files outside lineage, disappear when only their original file grant is revoked while app access remains, and reappear only after that exact grant returns");
 
     // --- The brief: PDF statements cited by page, uncited numbers dropped ---
     stub.script("summary", json!({"overview": "The folder holds the Q3 board pack: metrics, pipeline and a brief.", "data": [], "key_points": ["Revenue and signups come from the confirmed metrics file."]}).to_string());
@@ -1678,6 +1867,10 @@ async fn campaign() {
     );
     for body in [
         json!({"sheet_index":0,"offset":1}),
+        json!({"sheet_index":0,"offset":1_048_600}),
+        json!({"sheet_index":0,"offset":0,"column_offset":1}),
+        json!({"sheet_index":0,"offset":0,"column_offset":16_384}),
+        json!({"sheet_index":0,"offset":0,"column_offset":null}),
         json!({"sheet_index":16,"offset":0}),
         json!({"sheet_index":0,"offset":0,"extra":true}),
     ] {
@@ -1721,6 +1914,55 @@ async fn campaign() {
     assert_eq!(second.status, StatusCode::OK, "{}", second.text());
     assert_eq!(second.json()["sheet_index"], 1);
     assert_ne!(first["rows"], second.json()["rows"]);
+    // Wide files remain intact even though typed app sources have fewer fields.
+    // A viewport carries only its requested cells and the complete dimensions.
+    let wide = (0..81)
+        .map(|row| {
+            (0..153)
+                .map(|column| format!("r{row}c{column}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let wide_upload = upload(
+        &stand,
+        &maya_cookie,
+        &viewer_box,
+        "wide-original.csv",
+        wide.as_bytes(),
+    )
+    .await;
+    assert_eq!(wide_upload.status, StatusCode::CREATED);
+    assert_eq!(wide_upload.json()["preview"]["refused"], "column_limit");
+    let wide_id = wide_upload.json()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let wide_path = format!("/v1/boxes/{viewer_box}/files/{wide_id}/sheet");
+    let wide_page = stand
+        .post(
+            &wide_path,
+            Some(&maya_cookie),
+            r#"{"sheet_index":0,"offset":50,"column_offset":128}"#,
+        )
+        .await;
+    assert_eq!(wide_page.status, StatusCode::OK, "{}", wide_page.text());
+    let wide_page = wide_page.json();
+    assert_eq!(wide_page["row_count"], 81);
+    assert_eq!(wide_page["column_count"], 153);
+    assert_eq!(wide_page["column_offset"], 128);
+    assert_eq!(wide_page["column_page_size"], 32);
+    assert_eq!(wide_page["rows"].as_array().unwrap().len(), 31);
+    assert_eq!(wide_page["rows"][0].as_array().unwrap().len(), 25);
+    assert_eq!(wide_page["rows"][0][0], "r50c128");
+    assert_eq!(wide_page["rows"][30][24], "r80c152");
+    assert_eq!(
+        wide_page["sha256"],
+        format!("sha256:{}", hex(wide.as_bytes()))
+    );
+    assert_eq!(wide_page["formula_count"], 0);
+    assert_eq!(wide_page["formula_cells"], json!([]));
     assert_eq!(
         stand
             .post(
@@ -1779,6 +2021,19 @@ async fn campaign() {
     );
     check(&mut checks,"PR42 original viewer: all 105 CSV records across three pages retain headers/leading zeroes/inert markup; original download byte-exact; both workbook sheets and lexical large/exponent numbers; malformed selection refused; anonymous/sibling/foreign/revoked readers denied; no source registration or saved app created by viewing");
 
+    qualify_editable_csv(
+        &stand,
+        &stub,
+        &c.fixture,
+        &c.stores,
+        &_maya_request,
+        &maya_cookie,
+        &mate_cookie,
+        &outsider_cookie,
+    )
+    .await;
+    check(&mut checks, "Editable CSV apps: full 2,505-row import, exact decimal aggregates, independent app copies, assistant proposals write nothing until confirmation, add/update refresh governed totals, stale confirmation denied, replay adds no duplicate, originals byte-identical, owner-only legacy upgrade is atomic and idempotent");
+
     // The local stand for a browser walk (scratch only, synthetic sessions).
     if let Some(seconds) = std::env::var("GENUI_BOX_STAND_SECONDS")
         .ok()
@@ -1809,6 +2064,386 @@ async fn campaign() {
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
     server.abort();
     drop(c);
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn qualify_editable_csv(
+    stand: &Stand,
+    stub: &Stub,
+    fixture: &Fixture,
+    stores: &Stores,
+    owner_request: &TrustedRequest,
+    owner: &str,
+    mate: &str,
+    outsider: &str,
+) {
+    let created = stand
+        .post(
+            "/v1/boxes",
+            Some(owner),
+            r#"{"name":"Editable CSV qualification"}"#,
+        )
+        .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.text());
+    let box_id = created.json()["box"]["box_id"].as_str().unwrap().to_owned();
+    let original = format!(
+        "item,amount,date\n{}",
+        (0..2505)
+            .map(|n| format!("Row {n},1.25,2026-11-02\n"))
+            .collect::<String>()
+    );
+    let uploaded = upload(stand, owner, &box_id, "editable.csv", original.as_bytes()).await;
+    assert_eq!(uploaded.status, StatusCode::CREATED, "{}", uploaded.text());
+    let file = uploaded.json()["file"]["file_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let columns = json!([
+        {"id":"item","type":"text","nullable":false},
+        {"id":"amount","type":"decimal","nullable":false,"scale":2},
+        {"id":"date","type":"date","nullable":false}
+    ]);
+    // This legacy data card is retained as the explicit same-work upgrade case.
+    let registered = stand
+        .post(
+            &format!("/v1/boxes/{box_id}/files/{file}/data"),
+            Some(owner),
+            &json!({"columns":columns,"card":true}).to_string(),
+        )
+        .await;
+    assert_eq!(
+        registered.status,
+        StatusCode::CREATED,
+        "{}",
+        registered.text()
+    );
+    let legacy = registered.json()["card"].clone();
+    crate::demo::configure_for_tests(true, &[ORG]);
+    let first = stand
+        .post(
+            &format!("/v1/boxes/{box_id}/apps"),
+            Some(owner),
+            r#"{"purpose":"An overview of editable data"}"#,
+        )
+        .await;
+    let second = stand
+        .post(
+            &format!("/v1/boxes/{box_id}/apps"),
+            Some(owner),
+            r#"{"purpose":"An independent overview of editable data"}"#,
+        )
+        .await;
+    crate::demo::configure_for_tests(false, &[]);
+    for built in [&first, &second] {
+        assert_eq!(built.status, StatusCode::CREATED, "{}", built.text());
+    }
+    let built = first.json();
+    let app = built["app_id"].as_str().unwrap();
+    let work = built["work_id"].as_str().unwrap();
+    let copy = second.json();
+    let records_path = format!("/v1/work/{app}/{work}/records");
+    let proposal_path = format!("/v1/work/{app}/{work}/assistant/proposals");
+    let count_sql = format!("SELECT count(*) FROM genui.internal_records WHERE organization_id='{ORG}' AND work_id='{work}'");
+    assert_eq!(
+        scalar(fixture, &count_sql).await,
+        2505,
+        "full imported data, not model/listing sample"
+    );
+    let before = editable_totals(stand, owner, app, work).await;
+    assert_totals(&before, "2505", "313125");
+    assert_eq!(before["receipt"]["partial"], false);
+    let catalog = stand.get(&records_path, Some(owner)).await.json();
+    assert_eq!(
+        catalog["truncated"], true,
+        "the bounded record picker is not a bound on the copied data"
+    );
+    let collection = &catalog["collections"][0];
+    let numeric_search = stand
+        .get(
+            &format!(
+                "{records_path}/search?collection={}&q=1.25",
+                collection["collection_id"].as_str().unwrap()
+            ),
+            Some(owner),
+        )
+        .await;
+    assert_eq!(
+        numeric_search.status,
+        StatusCode::OK,
+        "{}",
+        numeric_search.text()
+    );
+    let numeric_search = numeric_search.json();
+    assert_eq!(numeric_search["records"].as_array().unwrap().len(), 50);
+    assert_eq!(numeric_search["truncated"], true);
+    assert!(
+        numeric_search["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|record| record["values"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field["field_id"] == "amount" && field["display"] == "1.25")),
+        "decimal search and labels use the scaled human value, not coefficient 125"
+    );
+    let command = |operation: &str| {
+        collection["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["operation"] == operation)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let create_command = command("create");
+    let update_command = command("update");
+    let body = json!({"command_id":create_command,"collection_id":collection["collection_id"],"publication_id":catalog["publication_id"],"expected_work_version":catalog["work_version"],"utterance":"Add Extra for 2.25 on 2026-11-02"});
+    for cookie in [None, Some(mate), Some(outsider)] {
+        assert!(stand
+            .post(&proposal_path, cookie, &body.to_string())
+            .await
+            .uniform_404());
+    }
+    stub.script(
+        "app_action",
+        json!({"values":{"item":"Extra","amount":"2.25","date":"2026-11-02"}}).to_string(),
+    );
+    let draft = stand
+        .post(&proposal_path, Some(owner), &body.to_string())
+        .await;
+    assert_eq!(draft.status, StatusCode::OK, "{}", draft.text());
+    let draft = draft.json();
+    assert_eq!(
+        scalar(fixture, &count_sql).await,
+        2505,
+        "preparing leaves records unchanged"
+    );
+    assert_totals(
+        &editable_totals(stand, owner, app, work).await,
+        "2505",
+        "313125",
+    );
+    let saved = confirm_csv_action(stand, owner, &draft).await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+    let replay = confirm_csv_action(stand, owner, &draft).await;
+    assert_eq!(replay.status, StatusCode::OK, "{}", replay.text());
+    assert_eq!(scalar(fixture, &count_sql).await, 2506);
+    let added = editable_totals(stand, owner, app, work).await;
+    assert_totals(&added, "2506", "313350");
+    assert_ne!(
+        added["receipt"]["record_snapshot_sequence"],
+        before["receipt"]["record_snapshot_sequence"]
+    );
+    let catalog = stand.get(&records_path, Some(owner)).await.json();
+    let record = catalog["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["record_id"] == draft["record_id"])
+        .unwrap();
+    let update = json!({"command_id":update_command,"collection_id":record["collection_id"],"publication_id":catalog["publication_id"],"expected_work_version":catalog["work_version"],"record_id":record["record_id"],"expected_record_version":record["version"],"utterance":"Update amount to 5.75"});
+    let mut drafts = Vec::new();
+    for _ in 0..2 {
+        stub.script(
+            "app_action",
+            json!({"values":{"amount":"5.75"}}).to_string(),
+        );
+        let proposed = stand
+            .post(&proposal_path, Some(owner), &update.to_string())
+            .await;
+        assert_eq!(proposed.status, StatusCode::OK, "{}", proposed.text());
+        drafts.push(proposed.json());
+    }
+    assert_totals(
+        &editable_totals(stand, owner, app, work).await,
+        "2506",
+        "313350",
+    );
+    let updated = confirm_csv_action(stand, owner, &drafts[0]).await;
+    assert_eq!(updated.status, StatusCode::OK, "{}", updated.text());
+    let conflict = confirm_csv_action(stand, owner, &drafts[1]).await;
+    assert_eq!(conflict.status, StatusCode::CONFLICT);
+    assert_eq!(conflict.json()["code"], "conflict");
+    assert_totals(
+        &editable_totals(stand, owner, app, work).await,
+        "2506",
+        "313700",
+    );
+    assert_totals(
+        &editable_totals(
+            stand,
+            owner,
+            copy["app_id"].as_str().unwrap(),
+            copy["work_id"].as_str().unwrap(),
+        )
+        .await,
+        "2505",
+        "313125",
+    );
+    let current = stand.get(&records_path, Some(owner)).await.json();
+    let older = (2000..2505)
+        .map(|n| format!("Row {n}"))
+        .find(|name| {
+            !current["records"].as_array().unwrap().iter().any(|r| {
+                r["values"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|v| v["field_id"] == "item" && v["display"] == *name)
+            })
+        })
+        .unwrap();
+    let collection_id = collection["collection_id"].as_str().unwrap();
+    let search_path = format!(
+        "{records_path}/search?collection={collection_id}&q={}",
+        older.replace(' ', "%20")
+    );
+    for cookie in [None, Some(mate), Some(outsider)] {
+        assert!(stand.get(&search_path, cookie).await.uniform_404());
+    }
+    let searched = stand.get(&search_path, Some(owner)).await;
+    assert_eq!(searched.status, StatusCode::OK, "{}", searched.text());
+    let searched = searched.json();
+    assert_eq!(searched["records"].as_array().unwrap().len(), 1);
+    let target = &searched["records"][0];
+    assert!(
+        !current["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["record_id"] == target["record_id"]),
+        "searched target is outside newest 200"
+    );
+    let update_old = json!({"command_id":update_command,"collection_id":target["collection_id"],"publication_id":searched["publication_id"],"expected_work_version":searched["work_version"],"record_id":target["record_id"],"expected_record_version":target["version"],"utterance":"Update amount to 2.25"});
+    stub.script(
+        "app_action",
+        json!({"values":{"amount":"2.25"}}).to_string(),
+    );
+    let proposed = stand
+        .post(&proposal_path, Some(owner), &update_old.to_string())
+        .await;
+    assert_eq!(proposed.status, StatusCode::OK, "{}", proposed.text());
+    assert_totals(
+        &editable_totals(stand, owner, app, work).await,
+        "2506",
+        "313700",
+    );
+    let changed = confirm_csv_action(stand, owner, &proposed.json()).await;
+    assert_eq!(changed.status, StatusCode::OK, "{}", changed.text());
+    assert_totals(
+        &editable_totals(stand, owner, app, work).await,
+        "2506",
+        "313800",
+    );
+    let original_after = stand
+        .get(
+            &format!("/v1/boxes/{box_id}/files/{file}/content"),
+            Some(owner),
+        )
+        .await;
+    assert_eq!(
+        original_after.body,
+        original.as_bytes(),
+        "app edits never rewrite the uploaded original"
+    );
+    let source_after = stand
+        .get(&format!("/v1/boxes/{box_id}"), Some(owner))
+        .await
+        .json();
+    let original_file = source_after["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["file_id"] == file)
+        .unwrap();
+    assert_eq!(
+        original_file["sha256"],
+        format!("sha256:{}", hex(original.as_bytes()))
+    );
+
+    let legacy_app = legacy["app_id"].as_str().unwrap();
+    let legacy_work = legacy["work_id"].as_str().unwrap();
+    let path = format!("/v1/work/{legacy_app}/{legacy_work}/data-copy");
+    let eligibility = stand.get(&path, Some(owner)).await;
+    assert_eq!(eligibility.status, StatusCode::OK, "{}", eligibility.text());
+    let eligibility = eligibility.json();
+    assert_eq!(eligibility["can_enable"], true);
+    assert_eq!(eligibility["total_rows"], 2505);
+    let enable = json!({"publication_id":eligibility["publication_id"],"expected_work_version":eligibility["work_version"],"idempotency_key":"01010101010101010101010101010101"});
+    for cookie in [None, Some(mate), Some(outsider)] {
+        assert!(stand
+            .post(&path, cookie, &enable.to_string())
+            .await
+            .uniform_404());
+    }
+    let mut stale = enable.clone();
+    stale["expected_work_version"] = json!(999);
+    assert_eq!(
+        stand
+            .post(&path, Some(owner), &stale.to_string())
+            .await
+            .status,
+        StatusCode::CONFLICT
+    );
+    let enabled = stand.post(&path, Some(owner), &enable.to_string()).await;
+    assert_eq!(enabled.status, StatusCode::OK, "{}", enabled.text());
+    assert_eq!(enabled.json()["editable"], true);
+    let replay = stand.post(&path, Some(owner), &enable.to_string()).await;
+    assert_eq!(replay.status, StatusCode::OK, "{}", replay.text());
+    assert_totals(
+        &editable_totals(stand, owner, legacy_app, legacy_work).await,
+        "2505",
+        "313125",
+    );
+    assert_eq!(scalar(fixture, &format!("SELECT count(*) FROM genui.internal_records WHERE organization_id='{ORG}' AND work_id='{legacy_work}'")).await, 2505);
+    super::record_query_campaign::qualify(fixture, stores, owner_request, app, work).await;
+}
+
+async fn editable_totals(stand: &Stand, owner: &str, app: &str, work: &str) -> Value {
+    let run = stand
+        .post(
+            &format!("/v1/work/{app}/{work}/queries/editable_kpis"),
+            Some(owner),
+            r#"{"parameters":{}}"#,
+        )
+        .await;
+    assert_eq!(run.status, StatusCode::OK, "{}", run.text());
+    run.json()
+}
+fn assert_totals(result: &Value, count: &str, amount: &str) {
+    for (column, expected) in [("rows", count), ("total_amount", amount)] {
+        let index = result["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|v| v == column)
+            .unwrap();
+        assert_eq!(result["rows"][0][index], expected, "{result}");
+    }
+}
+async fn confirm_csv_action(stand: &Stand, owner: &str, draft: &Value) -> Answer {
+    let request = &draft["command_request"];
+    stand
+        .call(
+            "POST",
+            &format!(
+                "/v1/work/{}/{}/commands/{}",
+                request["app_id"].as_str().unwrap(),
+                request["work_id"].as_str().unwrap(),
+                request["command_id"].as_str().unwrap()
+            ),
+            Some(owner),
+            Some(&request.to_string()),
+            &[(
+                "idempotency-key",
+                request["idempotency_key"].as_str().unwrap(),
+            )],
+        )
+        .await
 }
 
 fn walk(root: &std::path::Path) -> usize {
