@@ -75,7 +75,9 @@ def template(inventory):
     execute = common + [ecr_read, statement(['cloudformation:ExecuteChangeSet'], stack, Condition={'StringLike': {'cloudformation:ChangeSetName': ['forma-promotion-*', change_sets]}}),
         statement(['ecs:UpdateService'], service_arns)]
     execution_rules = [statement(['ecs:RegisterTaskDefinition', 'ecs:TagResource', 'ecs:UntagResource'], families),
-        statement(['ecs:DescribeTaskDefinition', 'ecs:DeregisterTaskDefinition'], families),
+        statement(['ecs:DescribeTaskDefinition'], families),
+        # The ECS API authorizes deregister against resource "*", not the family ARN.
+        statement(['ecs:DeregisterTaskDefinition'], '*'),
         statement(['ecs:UpdateService', 'ecs:DescribeServices', 'ecs:TagResource', 'ecs:UntagResource'], service_arns),
         statement(['ecs:DescribeServiceDeployments', 'ecs:StopServiceDeployment'], service_arns + service_deployments),
         statement(['ecs:ListServiceDeployments'], service_arns),
