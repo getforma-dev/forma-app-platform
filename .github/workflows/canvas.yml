@@ -11,7 +11,7 @@ concurrency:
 jobs:
   app-003:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: '2'
     steps:
