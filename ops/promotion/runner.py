@@ -72,7 +72,10 @@ class Runner:
     def stack(self):
         return self.read('cloudformation', 'describe_stacks', StackName=self.store.document['authority']['stack_id'])['Stacks'][0]
 
-    def boundary(self, count, expected_parameters=None, after=False):
+    def boundary(self, count, expected_parameters=None, after=False, require_settled=True):
+        # A reviewed schema can make the predecessor image unable to serve.
+        # Identity and desired count still have to match. Health is required
+        # after activation, when require_settled stays at its default.
         state = self.store.document; stack = self.stack(); outputs = guards.outputs(stack)
         expected = expected_parameters or state['live']['parameters']
         require(guards.parameters(stack) == expected, 'live stack parameters drifted')
@@ -95,8 +98,24 @@ class Runner:
             broker = service['serviceName'] == outputs['SharedBrokerServiceName']
             name = outputs['SharedBrokerServiceName' if broker else 'ServiceName']
             arn = f"arn:aws:ecs:{guards.REGION}:{guards.ACCOUNT}:service/{outputs['ClusterName']}/{name}"
-            guards.service(service, arn, cluster, outputs['SharedBrokerTaskDefinition' if broker else 'TaskDefinition'], count)
-            if count:
+            guards.service(service, arn, cluster, outputs['SharedBrokerTaskDefinition' if broker else 'TaskDefinition'], count, settled=require_settled)
+            if count and not require_settled:
+                listed = self.read('ecs', 'list_tasks', cluster=outputs['ClusterName'], serviceName=name, desiredStatus='RUNNING')
+                require(not listed.get('nextToken') and len(listed.get('taskArns') or []) <= 1, 'more than one running task')
+                if listed.get('taskArns'):
+                    actual = self.read('ecs', 'describe_tasks', cluster=outputs['ClusterName'], tasks=listed['taskArns'])
+                    require(not actual.get('failures') and len(actual.get('tasks', [])) == 1, 'running task unavailable')
+                    task = actual['tasks'][0]
+                    container = (task.get('containers') or [{}])[0]
+                    image_role = 'operator' if broker else 'service'
+                    registry = state['active']['packet']['registry'] if after else state['live']['registry']
+                    image = registry[image_role]
+                    if task.get('lastStatus') == 'RUNNING' and container.get('imageDigest'):
+                        require(task.get('taskDefinitionArn') == service['taskDefinition']
+                                and container.get('image') == expected[guards.IMAGE_KEYS[image_role]]
+                                and container.get('imageDigest') in [image['manifest_digest'], image['index_digest']],
+                                'running image digest differs')
+            if count and require_settled:
                 listed = self.read('ecs', 'list_tasks', cluster=outputs['ClusterName'], serviceName=name, desiredStatus='RUNNING')
                 require(not listed.get('nextToken') and len(listed['taskArns']) == 1, 'expected one running task')
                 actual = self.read('ecs', 'describe_tasks', cluster=outputs['ClusterName'], tasks=listed['taskArns'])
@@ -140,7 +159,7 @@ class Runner:
         bundle = self.bundle(directory, request)
         promotion = str(uuid.uuid4())
         self.store.acquire(promotion, request['authorization'], request['candidate_sha'])
-        before = self.boundary(1)
+        before = self.boundary(1, require_settled=False)
         pending = self.read('cloudformation', 'list_change_sets', StackName=before['stack']['StackId'])
         require(not pending.get('NextToken'), 'change-set inventory needs explicit reconciliation')
         require(not any(x.get('ExecutionStatus') in ['AVAILABLE', 'EXECUTE_IN_PROGRESS'] for x in pending['Summaries']), 'another change set is pending')
@@ -244,7 +263,7 @@ class Runner:
         # Recheck the original reservation, basis age, exact live state, actual
         # ARN/template/parameters immediately before starting the outage.
         preflight().reserve(packet['config'], self.store.document['ledger'], self.clock())
-        before = self.boundary(1)
+        before = self.boundary(1, require_settled=False)
         described = self.read('cloudformation', 'describe_change_set', ChangeSetName=packet['change_set_arn'], StackName=before['stack']['StackId'])
         guards.changeset(described, packet['parameters'], self.store.document['authority']['execution_role_arn'], self.store.document['baseline']['template'], packet['create_request'])
         template = body(self.read('cloudformation', 'get_template', ChangeSetName=packet['change_set_arn'], StackName=before['stack']['StackId'], TemplateStage='Original')['TemplateBody'])
