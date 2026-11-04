@@ -17,6 +17,11 @@ def statement(actions, resources, **extra):
     return {'Effect': 'Allow', 'Action': actions, 'Resource': resources, **extra}
 
 
+def concrete(value, prefix, label):
+    require(isinstance(value, str) and value.startswith(prefix) and '*' not in value and '?' not in value, label)
+    return value
+
+
 def policy(statements):
     return {'Version': '2012-10-17', 'Statement': statements}
 
@@ -30,15 +35,14 @@ def template(inventory):
     require(inventory['account'] == ACCOUNT and inventory['region'] == REGION, 'bootstrap account/region differs')
     require(inventory['stack_id'].startswith(f'arn:aws:cloudformation:{REGION}:{ACCOUNT}:stack/GenuiSyntheticFoundation/'), 'stack differs')
     require(set(inventory['definitions']) == set(ROLE_KEYS) and len(inventory['services']) == 2 and len(inventory['schedules']) == 2, 'incomplete runtime boundary')
-    database = inventory['database_arn']
-    attribute_roles = sorted(set(inventory['attribute_role_arns']))
-    describe_keys = sorted(set(inventory['describe_key_arns']))
-    require(isinstance(database, str) and database.startswith(f'arn:aws:rds:{REGION}:{ACCOUNT}:db:'), 'database attribute scope differs')
+    database = concrete(inventory['database_arn'], f'arn:aws:rds:{REGION}:{ACCOUNT}:db:', 'database attribute scope differs')
+    attribute_roles = sorted(concrete(role, f'arn:aws:iam::{ACCOUNT}:role/', 'attribute role scope differs') for role in inventory['attribute_role_arns'])
+    describe_keys = sorted(concrete(key, f'arn:aws:kms:{REGION}:{ACCOUNT}:key/', 'key attribute scope differs') for key in inventory['describe_key_arns'])
     require(attribute_roles and describe_keys, 'task-definition attribute reads are incomplete')
-    require(all(role.startswith(f'arn:aws:iam::{ACCOUNT}:role/') for role in attribute_roles), 'attribute role scope differs')
-    require(all(key.startswith(f'arn:aws:kms:{REGION}:{ACCOUNT}:key/') for key in describe_keys), 'key attribute scope differs')
-    cluster = inventory['cluster_arn']
-    require(isinstance(cluster, str) and cluster.startswith(f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/'), 'cluster attribute scope differs')
+    cluster = concrete(inventory['cluster_arn'], f'arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/', 'cluster attribute scope differs')
+    log_group = concrete(inventory['log_group_arn'], f'arn:aws:logs:{REGION}:{ACCOUNT}:log-group:', 'log group attribute scope differs')
+    schedule_group = concrete(inventory['schedule_group_arn'], f'arn:aws:scheduler:{REGION}:{ACCOUNT}:schedule-group/', 'schedule group attribute scope differs')
+    evidence_bucket = concrete(inventory['evidence_bucket_arn'], 'arn:aws:s3:::', 'evidence bucket attribute scope differs')
     bucket_name = f'forma-beta-promotion-{ACCOUNT}-{REGION}'
     bucket = 'arn:aws:s3:::' + bucket_name
     objects = bucket + '/' + PREFIX + '/*'
@@ -71,7 +75,7 @@ def template(inventory):
     execute = common + [ecr_read, statement(['cloudformation:ExecuteChangeSet'], stack, Condition={'StringLike': {'cloudformation:ChangeSetName': ['forma-promotion-*', change_sets]}}),
         statement(['ecs:UpdateService'], service_arns)]
     execution_rules = [statement(['ecs:RegisterTaskDefinition', 'ecs:TagResource', 'ecs:UntagResource'], families),
-        statement(['ecs:DescribeTaskDefinition', 'ecs:DeregisterTaskDefinition'], '*'),
+        statement(['ecs:DescribeTaskDefinition', 'ecs:DeregisterTaskDefinition'], families),
         statement(['ecs:UpdateService', 'ecs:DescribeServices', 'ecs:TagResource', 'ecs:UntagResource'], service_arns),
         statement(['ecs:DescribeServiceDeployments', 'ecs:StopServiceDeployment'], service_arns + service_deployments),
         statement(['ecs:ListServiceDeployments'], service_arns),
@@ -80,14 +84,17 @@ def template(inventory):
         statement(['iam:PassRole'], ecs_task_roles, Condition={'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}),
         statement(['iam:PassRole'], scheduler_roles, Condition={'StringEquals': {'iam:PassedToService': 'scheduler.amazonaws.com'}}),
         statement(['iam:GetRole'], sorted(set(ecs_task_roles + scheduler_roles + attribute_roles))),
-        # Task definitions embed these attributes. CloudFormation resolves them
-        # while replacing a task definition; the role still cannot modify them.
+        # Only the attributes this stack's task definitions and services embed.
+        # DescribeSecurityGroups cannot take a group ARN; every other read is one resource.
         statement(['rds:DescribeDBInstances'], database),
         statement(['kms:DescribeKey'], describe_keys),
         statement(['ecs:DescribeClusters'], cluster),
-        # DescribeSecurityGroups does not accept a group ARN. The service
-        # update resolves GroupId, and this remains a read.
+        statement(['logs:DescribeLogGroups'], log_group),
+        statement(['scheduler:GetScheduleGroup'], schedule_group),
+        statement(['s3:GetBucketLocation', 's3:ListBucket'], evidence_bucket),
+        # These two describe calls reject a resource ARN. They cannot change the resource.
         statement(['ec2:DescribeSecurityGroups'], '*'),
+        statement(['elasticloadbalancing:DescribeLoadBalancers'], '*'),
         # CDK's BootstrapVersion is an SSM-backed template parameter, resolved
         # while creating the change set (before resource handlers execute).
         statement(['ssm:GetParameters'], f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/cdk-bootstrap/hnb659fds/version'),
