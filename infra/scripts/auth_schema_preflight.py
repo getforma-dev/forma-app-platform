@@ -72,7 +72,7 @@ def collect(connection):
       pg_catalog.current_setting('statement_timeout'), pg_catalog.current_setting('lock_timeout'),
       pg_catalog.current_setting('idle_in_transaction_session_timeout'),
       (SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid())""").fetchone()
-    require(identity == ("genui_migration", "genui_migration", "genui", "160013", "on", "on", "5s", "2s", "10s", True))
+    require(identity == ("genui_migration", "genui_migration", "genui", "160015", "on", "on", "5s", "2s", "10s", True))
     rows = connection.execute(query["sql"]).fetchall()
     require(len(rows) == 1 and isinstance(rows[0][0], str)
             and 0 < len(rows[0][0].encode()) <= query["max_output_bytes"])
