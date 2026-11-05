@@ -5304,7 +5304,7 @@
       "Depends on": "APP-168",
       "External dependencies": "None",
       "Assignee": "Grok \u2014 GenUI",
-      "Branch / PR": "`feat/app-169-artifact-kind`",
+      "Branch / PR": "`feat/app-169-artifact-kind` \u2014 [PR 84](https://github.com/getforma-dev/forma-app-platform/pull/84)",
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Explicit user direction; deployment held while redesign is implemented.",
