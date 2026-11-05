@@ -2836,7 +2836,7 @@
       "Depends on": "APP-073",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok residuals, independent review of the migration",
-      "Branch / PR": "`chore/app-084-residuals`",
+      "Branch / PR": "`chore/app-084-residuals`, [PR 83](https://github.com/getforma-dev/forma-app-platform/pull/83)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
