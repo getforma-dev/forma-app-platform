@@ -978,6 +978,8 @@ fn storage_error(error: super::Error) -> &'static str {
         super::Error::Denied => "Denied",
         super::Error::Unavailable => "Unavailable",
         super::Error::Deadline => "Deadline",
+        super::Error::ProjectionLimit => "ProjectionLimit",
+        super::Error::Busy => "Busy",
         super::Error::UnknownOutcome => "UnknownOutcome",
     }
 }

@@ -65,7 +65,7 @@ FILES = "APP075_HARNESS_FILES "
 REFUSAL_KEYS = frozenset({"case", "reason", "pool", "stage", "step", "error", "sqlstate", "cause", "elapsed_ms", "pools",
                           "checks_passed"})
 POOL_KEYS = frozenset({"pool", "stage", "step", "error", "sqlstate", "cause", "elapsed_ms"})
-STORAGE_ERRORS = frozenset({"Configuration", "Denied", "Unavailable", "Deadline", "UnknownOutcome"})
+STORAGE_ERRORS = frozenset({"Configuration", "Denied", "Unavailable", "Deadline", "ProjectionLimit", "Busy", "UnknownOutcome"})
 WRONG_PASSWORD_ROLE = "control"
 
 

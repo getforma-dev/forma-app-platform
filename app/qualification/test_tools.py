@@ -248,6 +248,13 @@ class RefusalTests(unittest.TestCase):
         for key in harness.POOL_KEYS:
             self.assertIn('"%s":' % key, ENTRY_SOURCE[ENTRY_SOURCE.index("fn probe_value"):])
 
+    def test_the_harness_accepts_exactly_the_entry_storage_errors(self):
+        # storage::Error gained variants after APP-086 (ProjectionLimit, Busy); the closed
+        # set must follow the entry's match, or a real refusal reads as malformed.
+        body = ENTRY_SOURCE[ENTRY_SOURCE.index("fn storage_error"):]
+        body = body[:body.index("\n}\n")]
+        self.assertEqual(set(re.findall(r'=> "(\w+)"', body)), harness.STORAGE_ERRORS)
+
     def test_a_closed_refusal_names_pool_stage_and_cause(self):
         value = refusal()
         self.assertTrue(harness.closed_refusal(value, [harness.HOST, "genui_", "password"]))
