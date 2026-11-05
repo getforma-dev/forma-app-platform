@@ -21,5 +21,5 @@ Do not treat a frozen spike as the application, and do not move `APP-006` out of
 ## Read next
 
 - [Application](../app/AGENTS.md)
-- [Contracts](../contracts/AGENTS.md)
+- [Contracts](../contracts/README.md)
 - [Framework baseline](../docs/architecture/FRAMEWORK-BASELINE.md)

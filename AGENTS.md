@@ -23,3 +23,7 @@ Phase definitions and completion gates live in Tickets/plan.json. Read the assig
 ## Where to read
 
 Read README.md, then docs/DEVELOPMENT.md, then the assigned ticket. Each major folder has its own AGENTS.md. docs/README.md classifies every document under docs/. Tickets/TRACKER.md is the board view. TRACKER, PHASES, SPRINTS, CATEGORIES, COVERAGE, BLOCKERS, the phase, sprint and category pages, and Tickets/index.json are generated. Read evidence/ and design/ from a path in a ticket or an ADR. Do not search them for current guidance.
+
+## Hashed folders
+
+`app/migrations/`, `parser/` and `contracts/` have no AGENTS.md on purpose. Every file in them is a release input: `app/migrations/` is hashed into the deployment contract digest that promotion compares with its baseline (`ops/promotion/candidate.py`), `parser/` into the parser source hash, and `contracts/` into `implementation-lock.json`. Adding any file there changes a release and stops automated beta promotion until a reviewed release. Migrations rules are in app/AGENTS.md. The parser is a separate sealed workspace reached through `imports` and `supervise`: build with `just parser`, probe with `just campaign parser-sandbox`, never fold it into the root workspace, and remember the images qualify their own parser. Contracts are the locked cross-language edition ([ADR-002](docs/architecture/ADR-002-CONTRACT-EDITION.md)): verify with `just check contracts`, and never change a published edition's fixtures or digests in place.

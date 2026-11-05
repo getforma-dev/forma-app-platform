@@ -403,7 +403,6 @@ parser/**
 !parser/rust-toolchain.toml
 !parser/verify_vendor.py
 !parser/write_manifest.py
-!parser/AGENTS.md
 !parser/.cargo/
 parser/.cargo/**
 !parser/.cargo/config.toml
@@ -583,7 +582,6 @@ app/admin/src/record-components/**
 !app/admin/src/styles/file-card.css
 !app/migrations/0020_work_data_copies.sql
 !app/migrations/catalog-v20.json
-!app/migrations/AGENTS.md
 !app/runtime/box_record_import.py
 !app/src/actions/assistant.rs
 !app/src/actions/record_search.rs
