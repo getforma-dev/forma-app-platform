@@ -904,8 +904,11 @@ def migrate():
     import psycopg
     require(os.environ["PGDATABASE"] == "genui" and os.environ["PGUSER"] == "genui_migration")
     require(migration_manifest(migration_directory())["database_version"] == DATABASE_SCHEMA_VERSION)
+    # Always verify-full TLS, as admission_operator.connect does: a Unix-socket host never
+    # uses TLS, and libpq would prefer GSSAPI encryption over TLS when Kerberos credentials exist.
+    require(not os.environ["PGHOST"].startswith("/"))
     with psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
-                         sslmode="verify-full", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
+                         sslmode="verify-full", gssencmode="disable", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
                          options="-c statement_timeout=30000 -c lock_timeout=5000") as connection:
         apply_migrations(connection, migration_directory())
     print("tenant_foundation_migration_complete")

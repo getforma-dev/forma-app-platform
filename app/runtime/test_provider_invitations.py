@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from unittest import mock
 import uuid
 
@@ -70,9 +71,31 @@ class ConfigTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="genui-provider-config-")
         self.key_file = private_file(Path(self.tmp, "key"), KEY + "\n")
+        # The synthetic host stands in for the reviewed provider origin in these tests only.
+        self.hosts = patch.object(pm, "PROVIDER_HOSTS", frozenset({"auth.example.test"}))
+        self.hosts.start(); self.addCleanup(self.hosts.stop)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_the_production_allowlist_is_the_reviewed_provider_origin_only(self):
+        # Provider review n2: the tenant-wide management key goes out with the first
+        # request, so only a reviewed host (or loopback, for the local stand-in) may receive it.
+        self.hosts.stop()
+        self.assertEqual(pm.PROVIDER_HOSTS, frozenset({"auth-staging.getforma.dev"}))
+        config = pm.load_config(self.env(**{pm.ENV_URL: "https://auth-staging.getforma.dev"}), required=True)
+        self.assertEqual((config.scheme, config.host, config.port), ("https", "auth-staging.getforma.dev", 443))
+        self.refused(self.env(), "provider_url_refused")
+
+    def test_an_unlisted_https_host_is_refused_before_any_request(self):
+        with patch.object(pm, "request") as request, patch.object(pm.http.client, "HTTPSConnection") as https:
+            for url in ("https://auth.example.org", "https://auth.example.test.evil.invalid", "https://getforma.dev",
+                        "https://AUTH-STAGING.getforma.dev.invalid", "https://10.0.0.1"):
+                with self.subTest(url=url):
+                    self.refused(self.env(**{pm.ENV_URL: url}), "provider_url_refused")
+                    self.refused({pm.ENV_MANAGED_URL: url, pm.ENV_MANAGED_KEY: KEY, pm.ENV_MANAGED_TENANT: TENANT,
+                                  pm.ENV_CAPABILITY_SECRET: ARN}, "provider_url_refused")
+            request.assert_not_called(); https.assert_not_called()
 
     def env(self, **changes):
         base = {pm.ENV_URL: "https://auth.example.test", pm.ENV_KEY_FILE: str(self.key_file), pm.ENV_CAPABILITY_SECRET: ARN}
