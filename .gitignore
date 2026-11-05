@@ -16,3 +16,6 @@ __pycache__/
 runtime-data/
 credentials/
 /founder-notes/
+
+# Playwright MCP browser session logs and screenshots
+.playwright-mcp/

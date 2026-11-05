@@ -68,7 +68,7 @@
       "**/.cache/**": true,
       "**/.venv/**": true
     },
-    "python.defaultInterpreterPath": "${workspaceFolder:forma-pitch-mvp}/app/runtime/.venv/bin/python",
+    "python.defaultInterpreterPath": "${workspaceFolder:forma-app-platform}/app/runtime/.venv/bin/python",
     "typescript.tsdk": "app/admin/node_modules/typescript/lib"
   },
   "extensions": {
@@ -87,7 +87,7 @@
         "type": "shell",
         "command": "just dev",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -96,7 +96,7 @@
         "type": "shell",
         "command": "just dev clean",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -105,7 +105,7 @@
         "type": "shell",
         "command": "just status",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -114,7 +114,7 @@
         "type": "shell",
         "command": "just dev stop",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -123,7 +123,7 @@
         "type": "shell",
         "command": "just restart",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -132,7 +132,7 @@
         "type": "shell",
         "command": "just check",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": [],
         "group": {
@@ -145,7 +145,7 @@
         "type": "shell",
         "command": "just ci",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -154,7 +154,7 @@
         "type": "shell",
         "command": "just campaigns --all",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -163,7 +163,7 @@
         "type": "shell",
         "command": "just campaign ${input:campaign}",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -172,7 +172,7 @@
         "type": "shell",
         "command": "just doctor",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -181,7 +181,7 @@
         "type": "shell",
         "command": "just setup",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       },
@@ -190,7 +190,7 @@
         "type": "shell",
         "command": "just clean ${input:cleanWhat}",
         "options": {
-          "cwd": "${workspaceFolder:forma-pitch-mvp}"
+          "cwd": "${workspaceFolder:forma-app-platform}"
         },
         "problemMatcher": []
       }

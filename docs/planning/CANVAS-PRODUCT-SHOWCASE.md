@@ -2,7 +2,7 @@
 
 The two demos show how an app gets context. Spend starts with an uploaded file. A user can explore its transactions in an app and ask a calculator to use that same data. Jacket Reminder starts with an intent. The user connects a Weather widget and two delivery widgets, then asks the app to act on those connections.
 
-The preserved local branch is `showcase/spend-and-jacket`. Everyday development resumes on `pivot/local-ui-iteration`, whose last product commit before the Spend rehearsal was `6f7f7d3`. To replay the prepared paths, use the showcase branch with the pitch preview at `http://localhost:4001/canvas`, bring your own September spreadsheet, and use the steps below. The branch preserves the implementation. Uploaded files, sign-in state and browser placements live outside Git.
+The preserved local branch is `showcase/spend-and-jacket`. Everyday development is on `main` ([ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). The last product commit before the Spend rehearsal was `6f7f7d3`. To replay the prepared paths, use the showcase branch with the pitch preview at `http://localhost:4001/canvas`, bring your own September spreadsheet, and use the steps below. The branch preserves the implementation. Uploaded files, sign-in state and browser placements live outside Git.
 
 ## From an upload to an app
 
