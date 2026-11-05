@@ -16,7 +16,7 @@ just doctor
 just dev -d
 ```
 
-Pitch personas are [Diego on 4001](http://127.0.0.1:4001/canvas), [Sarah on 4002](http://127.0.0.1:4002/canvas) and [Priya on 4003](http://127.0.0.1:4003/canvas) in the main checkout. `just dev clean -d` starts [Alex on 4010](http://127.0.0.1:4010/canvas) as a new customer. A worktree receives its own ports; `just status` prints them. Both profiles keep their data across restarts. See the developer guide before resetting or cleaning an instance.
+Local profiles are [Diego on 4001](http://127.0.0.1:4001/canvas), [Sarah on 4002](http://127.0.0.1:4002/canvas) and [Priya on 4003](http://127.0.0.1:4003/canvas) in the main checkout. `just dev clean -d` starts [Alex on 4010](http://127.0.0.1:4010/canvas) as a new customer. A worktree receives its own ports; `just status` prints them. Both profiles keep their data across restarts. See the developer guide before resetting or cleaning an instance.
 
 ## Current work and delivery
 

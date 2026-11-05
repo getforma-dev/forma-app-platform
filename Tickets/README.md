@@ -17,7 +17,7 @@ Sprints are ordered scope batches, not calendar commitments. Start dates and cap
 
 The November 2 [whole-app decision](../docs/architecture/ADR-018-WHOLE-APP-VIEWS.md) supersedes app component fan-out in the frontend: one App Card/Stack/Open object, Focus, new-tab member pages and separate Apps/Widgets/Cards Library categories. [APP-168](3-in-review/APP-168.md) carries current implementation and local qualification; APP-169–171 capture durable artifact classification/cleanup, published component visibility and desktop icon exploration. Deployment remains held for this redesign PR; inherited spreadsheet fixes remain included.
 
-The workspace-entry follow-through [APP-162](4-done/APP-162.md) is Done and deployed as `7c3ab12`, retaining the composed-app runtime and original trial. Its [release evidence](../evidence/APP-162/aws-workspace-entry-2026-11-02/README.md) includes actual browser handoff and switching. APP-163 verified-email discovery, APP-164 authenticated workspace switching and APP-165 invitation email delivery remain Backlog.
+The sealed beta is `beta/20261104-1e28488`. [APP-162](4-done/APP-162.md) workspace entry is Done. [APP-163](0-backlog/APP-163.md) verified-email discovery, [APP-164](0-backlog/APP-164.md) authenticated workspace switching and [APP-165](0-backlog/APP-165.md) invitation delivery remain Backlog until their predecessors are Done.
 
 ## One authoritative ticket
 
