@@ -223,17 +223,20 @@ class LifecycleTests(unittest.TestCase):
         (self.directory/'manifest.json').write_bytes(encoded(self.manifest))
         self.request['qualified_artifact_manifest_sha256'] = hashlib.sha256((self.directory/'manifest.json').read_bytes()).hexdigest()
         self.initial['baseline']['deployment_contract_sha256'] = contract
-        self.initial['live']['registry']['operator']['manifest_digest'] = disposition['predecessor_manifest_digest']
+        for role, entry in disposition['roles'].items():
+            self.initial['live']['registry'][role]['manifest_digest'] = entry['predecessor_manifest_digest']
         self.s3.objects['beta/state.json'] = encoded(self.initial)
         self.aws.state = copy.deepcopy(self.initial); self.aws.original = copy.deepcopy(self.initial)
         original = self.aws._call
+        by_repository = {guards.REPOS[role]: entry['findings'] for role, entry in disposition['roles'].items()}
         def transport(service, operation, args):
-            if operation == 'describe_image_scan_findings' and args['repositoryName'] == guards.REPOS['operator']:
-                return {'imageScanStatus': {'status': 'COMPLETE'}, 'imageScanFindings': {'findings': disposition['findings']}}
+            if operation == 'describe_image_scan_findings' and args['repositoryName'] in by_repository:
+                return {'imageScanStatus': {'status': 'COMPLETE'}, 'imageScanFindings': {'findings': by_repository[args['repositoryName']]}}
             return original(service, operation, args)
         self.aws._call = transport
         result = self.prepared()
-        self.assertEqual(result['review']['scan']['operator']['reviewed_count'], 3)
+        for role in guards.REPOS:
+            self.assertEqual(result['review']['scan'][role]['reviewed_count'], 2)
         def final_network_read(_):
             self.runner.clock = lambda: datetime.fromisoformat(disposition['expires_at_utc'].replace('Z', '+00:00'))
         self.current_mock.side_effect = final_network_read
