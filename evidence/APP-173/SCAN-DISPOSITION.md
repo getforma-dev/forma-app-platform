@@ -55,3 +55,13 @@ Independent review (Claude subagent, 2026-11-05, head `cc5d6ce`): **no blocker.*
 ## Approval
 
 The beta approval summary will show, for each image, **2 introduced, 2 reviewed, 0 unreviewed**, the two CVE IDs, this disposition's content hash and its expiry. Approve only if those match. Any other introduced finding still stops preparation before approval is requested.
+
+## Result
+
+PR #88 merged as `05db000` at 19:12:06 UTC, three seconds after `PROMOTION_ENABLED` was restored. Run [42091618441](https://github.com/getforma-dev/forma-app-platform/actions/runs/42091618441) carried PRs #85–#88 as one candidate.
+
+- **Preparation (19:59:08 UTC)**, read from the private packet: for each image, 23 findings, **2 introduced, 2 reviewed, 0 unreviewed** (CVE-2026-109518, CVE-2026-76844), disposition `12e8d896213326b55c6758c5faa3f82fc46f84506a9e322d6131a6486e8e5278`, expiry 2026-11-12. The change set modified 10 resources (seven task definitions, two services, two expiry schedules), with no additions or removals. GenUI reserved $160.44 of $180; the project $198.44 of $218. New shutdown expiry 2026-11-25 08:00 UTC.
+- **Removed since the baseline:** in all three images the scanner no longer reported the three MEDIUM gcc-12 findings that the APP-167 disposition had covered (CVE-2026-114690, CVE-2026-114691, CVE-2026-115455). That is a change in scanner data, not in packages. Removals need no review.
+- **One readiness blip:** `/health/ready` returned 503 once at about 19:59 UTC, before approval. Every probe before and after returned 200, both tasks reported `HEALTHY` on unchanged task definitions with no restart, and no service event was recorded. Its cause was not determined.
+- **Execution:** Victor approved in the `beta` environment. Execution ran 20:30:48–20:34:49 UTC and the tag job sealed `beta/20261105-05db000` at 20:35:03. `/`, `/health/live` and `/health/ready` returned 200 afterwards.
+- **New baseline:** the live state (revision 6331, no active promotion) records manifests `1bbf0e4d…` (service), `152088e1…` (qualification) and `9dbe284e…` (operator), each with 23 findings, including both CVEs. They are now ordinary baseline findings; the disposition has no further effect and expires on November 12.
