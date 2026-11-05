@@ -2781,7 +2781,7 @@
       "Depends on": "APP-074",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok evidence binding, independent review of the CI receipt",
-      "Branch / PR": "`chore/app-082-ci-binding` (PR 13 remains the campaign landing)",
+      "Branch / PR": "`chore/app-082-ci-binding`, [PR 82](https://github.com/getforma-dev/forma-app-platform/pull/82) (PR 13 remains the campaign landing)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
