@@ -8,12 +8,12 @@ use super::{
 };
 use std::collections::BTreeMap;
 
-/// `card` is stored. `app` writes `app`, which is the reversible step back to
-/// an App. Anything else is refused. Absence of a row stays an ambiguous App.
-pub(crate) fn parse_artifact_kind(value: &str) -> Option<Option<&'static str>> {
+/// The two kinds a member can save: `card`, or `app`, the reversible step
+/// back to an App. Anything else is refused. No row stays an ambiguous App.
+pub(crate) fn parse_artifact_kind(value: &str) -> Option<&'static str> {
     match value {
-        "card" => Some(Some("card")),
-        "app" => Some(None),
+        "card" => Some("card"),
+        "app" => Some("app"),
         _ => None,
     }
 }
@@ -42,11 +42,7 @@ impl Workspace {
                 let app: String = row.try_get(0).map_err(|_| Error::Unavailable)?;
                 let work: String = row.try_get(1).map_err(|_| Error::Unavailable)?;
                 let kind: String = row.try_get(2).map_err(|_| Error::Unavailable)?;
-                let kind = match kind.as_str() {
-                    "card" => "card",
-                    "app" => "app",
-                    _ => return Err(Error::Unavailable),
-                };
+                let kind = parse_artifact_kind(&kind).ok_or(Error::Unavailable)?;
                 kinds.insert((app, work), kind);
             }
             Ok(kinds)
@@ -56,20 +52,19 @@ impl Workspace {
         result
     }
 
-    /// Record this member's classification of one whole work they can open.
-    /// `Some("card")` stores a Card. `None` stores `app`. The saved work, its
-    /// components, grants, records and receipts stay.
+    /// Record this member's classification of one whole work they can open:
+    /// `card` or `app`, inserted or replaced in one statement, so an `app`
+    /// before any row exists is saved too. The saved work, its components,
+    /// grants, records and receipts stay. Returns the kind stored.
     pub async fn set_artifact_kind(
         &self,
         request: &TrustedRequest,
         app: &str,
         work: &str,
-        kind: Option<&str>,
-    ) -> Result<Option<&'static str>> {
+        kind: &str,
+    ) -> Result<&'static str> {
         require(valid_id(app) && valid_id(work))?;
-        if let Some(kind) = kind {
-            require(kind == "card")?;
-        }
+        let kind = parse_artifact_kind(kind).ok_or(Error::Denied)?;
         let mut tx = Transaction::begin(&self.inner, request).await?;
         let result = async {
             confirm_identity(&tx, request).await?;
@@ -89,21 +84,12 @@ impl Workspace {
                 .await?;
             require(!found.is_empty())?;
             permit.recheck_entitlement().await?;
-            if kind == Some("card") {
-                t.query(
-                    "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,'card') ON CONFLICT (organization_id,principal_id,app_id,work_id) DO UPDATE SET kind='card', updated_at=date_trunc('second',now())",
-                    &[&request.organization(), &request.principal(), &app, &work],
-                )
-                .await?;
-                Ok(Some("card"))
-            } else {
-                t.query(
-                    "UPDATE genui.work_artifact_kinds SET kind='app', updated_at=date_trunc('second',now()) WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND app_id=$3::text::uuid AND work_id=$4::text::uuid",
-                    &[&request.organization(), &request.principal(), &app, &work],
-                )
-                .await?;
-                Ok(None)
-            }
+            t.query(
+                "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5) ON CONFLICT (organization_id,principal_id,app_id,work_id) DO UPDATE SET kind=EXCLUDED.kind, updated_at=date_trunc('second',now())",
+                &[&request.organization(), &request.principal(), &app, &work, &kind],
+            )
+            .await?;
+            Ok(kind)
         }
         .await;
         tx.finish(result.is_ok()).await?;
@@ -117,9 +103,10 @@ mod tests {
 
     #[test]
     fn only_card_and_app_are_kinds() {
-        assert_eq!(parse_artifact_kind("card"), Some(Some("card")));
-        assert_eq!(parse_artifact_kind("app"), Some(None));
+        assert_eq!(parse_artifact_kind("card"), Some("card"));
+        assert_eq!(parse_artifact_kind("app"), Some("app"));
         assert_eq!(parse_artifact_kind("stack"), None);
+        assert_eq!(parse_artifact_kind("Card"), None);
         assert_eq!(parse_artifact_kind(""), None);
     }
 }

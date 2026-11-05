@@ -2720,6 +2720,12 @@ async fn route_campaign(
             (
                 down_routes.clone(),
                 "POST",
+                format!("/v1/library/{APP}/{load_work}/kind"),
+                br#"{"kind":"card"}"#.to_vec(),
+            ),
+            (
+                down_routes.clone(),
+                "POST",
                 format!("/v1/work/{APP}/{load_work}/queries/total"),
                 query_body(&window()).into_bytes(),
             ),
@@ -2758,6 +2764,11 @@ async fn route_campaign(
         (
             down_routes.clone(),
             "POST",
+            format!("/v1/library/{APP}/{load_work}/kind"),
+        ),
+        (
+            down_routes.clone(),
+            "POST",
             format!("/v1/work/{APP}/{load_work}/queries/total"),
         ),
         (down_routes.clone(), "GET", format!("/w/{APP}/{load_work}")),
@@ -2770,7 +2781,7 @@ async fn route_campaign(
     down.close().await.unwrap();
     check(
         checks,
-        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, GET /v1/library, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
+        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, GET /v1/library, POST /v1/library/{{app}}/{{work}}/kind (APP-169), the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
     );
     let mut report = report;
     report["store_outage"] = json!({"requests": outage, "elapsed_ms": outage_ms, "dispatch_calls": down_counting.calls()});

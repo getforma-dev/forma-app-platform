@@ -205,11 +205,28 @@ async fn library(State(work): State<Arc<Work>>, headers: HeaderMap) -> Response 
     }
 }
 
+/// The largest `/kind` body: `{"kind":"card"}` with room for whitespace.
+const KIND_BODY_LIMIT: usize = 256;
+
+/// `{"kind":"card"}` or `{"kind":"app"}` as forma-json-v1, and nothing else.
+fn artifact_kind_body(bytes: &[u8]) -> Option<&'static str> {
+    let value = admission::decode(bytes).ok()?;
+    let body = value.as_object()?;
+    if body.len() != 1 {
+        return None;
+    }
+    crate::storage::parse_artifact_kind(body.get("kind")?.as_str()?)
+}
+
 /// `POST /v1/library/{app}/{work}/kind` (APP-169). Body `{"kind":"card"}`
 /// records that whole work as a Card for this member. `{"kind":"app"}`
-/// writes `app`, which is the reversible step back. Component count is not
-/// read. A work the member cannot open is the uniform 404, the same answer
-/// as a missing work.
+/// stores `app`, which is the reversible step back, whether or not a row
+/// existed. Component count is not read. Refusal order, as the other member
+/// writes: cross-site (403) → a query string or a malformed id (404) → a live
+/// session (the uniform 404; 503 when the workspace store is unavailable) →
+/// the member write window (429) → the bounded body (413) → the body (422
+/// `invalid_kind`) → authorization: a work the member cannot open is the
+/// uniform 404, the same answer as a missing work.
 async fn set_artifact_kind(
     State(work): State<Arc<Work>>,
     UniformPath((app, saved)): UniformPath<(String, String)>,
@@ -226,36 +243,48 @@ async fn set_artifact_kind(
     {
         return http::not_found();
     }
-    let Ok((_, member)) = member(auth, &parts.headers).await else {
-        return http::not_found();
+    let (_, member) = match member(auth, &parts.headers).await {
+        Ok(live) => live,
+        Err(refusal) => return refusal,
     };
+    if let Err(retry_after) = auth
+        .limits
+        .admit_member_write(member.organization(), member.principal())
+    {
+        return http::too_many_requests(retry_after);
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
-    let Some(bytes) = http::bounded(body, 256).await else {
+    let Some(bytes) = http::bounded(body, KIND_BODY_LIMIT).await else {
         return http::payload_too_large();
     };
-    let kind = match serde_json::from_slice::<Value>(&bytes)
-        .ok()
-        .as_ref()
-        .and_then(|value| value.get("kind"))
-        .and_then(Value::as_str)
-        .and_then(crate::storage::parse_artifact_kind)
-    {
-        Some(kind) => kind,
-        None => return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_kind"),
+    let Some(kind) = artifact_kind_body(&bytes) else {
+        return problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_kind");
     };
-    match stores
+    let response = match stores
         .workspace
         .set_artifact_kind(&member, &app, &saved, kind)
         .await
     {
-        Ok(Some("card")) => json_response(br#"{"kind":"card"}"#.to_vec()),
-        Ok(None) => json_response(br#"{"kind":"app"}"#.to_vec()),
-        Ok(_) => http::unavailable(),
+        Ok(stored) => match admission::encode(&json!({ "kind": stored })) {
+            Ok(bytes) => json_response(bytes),
+            Err(_) => http::unavailable(),
+        },
         Err(Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),
-    }
+    };
+    tracing::info!(
+        event = "work.kind_set",
+        status = response.status().as_u16(),
+        organization_id = member.organization(),
+        principal_id = member.principal(),
+        app_id = app,
+        work_id = saved,
+        kind,
+        "member artifact kind"
+    );
+    response
 }
 
 fn problem(status: StatusCode, code: &'static str) -> Response {
