@@ -94,7 +94,7 @@ secret as "overwritten with `{}`" and 15.3.3 says the address then "exists in ex
 of `GetSecretValue` on the secret (the operator host's credentials; the `MigrationExecutionRole`). The same holds for
 FormaStack's A12 reset of `ProviderManagementKey` to `{}`: the management key remains the `AWSPREVIOUS` version until
 another put moves it out of the labeled stages (unlabeled versions are deprecated and deleted by Secrets Manager
-later, not immediately). APP-084 item 7 (`Tickets/3-in-review/APP-084.md:36`) records rotation and audit but not this.
+later, not immediately). APP-084 item 7 (`Tickets/2-in-progress/APP-084.md:36`) records rotation and audit but not this.
 
 Fix: at 15.3.5, after the `{}` put, perform a second `{}` put with a new `--client-request-token` (or
 `update-secret-version-stage --move-to-version-id <the {} version> --remove-from-version-id <the address version>

@@ -120,7 +120,7 @@ P17: a fixture receipt cut to the read input fails `validate_bundle`. The campai
 - Update D4.
 - Switch to D9.8's S when record inputs arrive (APP-020+), and name that switch in APP-023's or APP-085's Log.
 
-**m9 — The operator-path audit residual is not carried anywhere.** Storage OQ1 says the missing `register-source-revision`/`create-bound-work` audit kinds are "deferred with the other operator-kind work (APP-084)". `Tickets/3-in-review/APP-084.md` does not mention them, and ADR-010 §5 requires that no residual is lost. **Fix:** add the residual to APP-084 (Tier C).
+**m9 — The operator-path audit residual is not carried anywhere.** Storage OQ1 says the missing `register-source-revision`/`create-bound-work` audit kinds are "deferred with the other operator-kind work (APP-084)". `Tickets/2-in-progress/APP-084.md` does not mention them, and ADR-010 §5 requires that no residual is lost. **Fix:** add the residual to APP-084 (Tier C).
 
 **m10 — The outline lists every single-input query view, not only qualified ones.** `queries.rs:554-558`. With the edition-two Northstar definition, `rate` (aggregate plus ratio) would be listed and dispatched to the engine only to be refused, contrary to the routes README's "the page lists only what the qualified subset can run". The seeded edition-one definition has no `rate`, so November 2 is unaffected. **Fix**, either:
 - Filter by the qualified operation types (`filter`, `project`, `aggregate`, `time_bucket`, `sort`, `limit`), or

@@ -223,11 +223,12 @@
         "APP-083",
         "APP-084",
         "APP-085",
-        "APP-086"
+        "APP-086",
+        "APP-174"
       ],
-      "ticket_count": 5,
+      "ticket_count": 6,
       "done_count": 0,
-      "blocked_count": 0
+      "blocked_count": 1
     },
     {
       "id": "PH08",
@@ -339,9 +340,10 @@
         "APP-168",
         "APP-169",
         "APP-170",
-        "APP-171"
+        "APP-171",
+        "APP-175"
       ],
-      "ticket_count": 12,
+      "ticket_count": 13,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -2820,11 +2822,11 @@
     {
       "id": "APP-084",
       "title": "Close the admission and provider review residuals (APP-073 reviews)",
-      "path": "3-in-review/APP-084.md",
+      "path": "2-in-progress/APP-084.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In review",
+      "Status": "In progress",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S13",
@@ -2838,6 +2840,7 @@
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok residuals, independent review of the migration",
       "Branch / PR": "`chore/app-084-residuals`, [PR 83](https://github.com/getforma-dev/forma-app-platform/pull/83)",
+      "Deployment": "Not deployed. Migration 0021 ships with APP-169's 0022 in one operator schema release, [APP-175](../0-backlog/APP-175.md).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5422,6 +5425,64 @@
       "Blocked by": "None",
       "Unblock evidence": "Not applicable.",
       "dependencies": [
+        "APP-167"
+      ]
+    },
+    {
+      "id": "APP-174",
+      "title": "Detach the Northstar management secret, rotate its key and clean up the invitation input secret",
+      "path": "9-blocked/APP-174.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "IAM",
+      "Status": "Blocked",
+      "Priority": "P1",
+      "Type": "Chore",
+      "Sprint": "S13",
+      "Phase": "PH07",
+      "Order": "174",
+      "Size": "S",
+      "Repos": "forma-app-platform, gatewasm",
+      "Decision": "Split from [APP-084](../2-in-progress/APP-084.md) item 7 on 2026-11-05, as its independent review suggested, so APP-084's code can finish while these AWS changes wait. The plan is [ADR-003](../../docs/architecture/ADR-003-PUBLIC-BETA-ACCESS.md)'s 2026-10-30 managed-invitations amendment.",
+      "Requirements": "SR1, SR2, SR12",
+      "Depends on": "APP-084",
+      "External dependencies": "FormaStack rotates the Northstar management key with its own runbook after GenUI confirms the detach.",
+      "Assignee": "Unassigned \u2014 GenUI operator with FormaStack",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "Victor's approval of three AWS mutations: a stack update that clears `ProviderManagementSecretArn` and `ProviderManagementUrl`, FormaStack's key rotation afterwards, and the cleanup of the `OperatorInvitationInput` secret's address-bearing versions. None was run by APP-084.",
+      "Unblock evidence": "Victor approves the stack update, names when FormaStack rotates, and chooses the version-cleanup method (delete and recreate the secret, or an audited bound on deprecated versions).",
+      "dependencies": [
+        "APP-084"
+      ]
+    },
+    {
+      "id": "APP-175",
+      "title": "A reviewed operator schema release for migrations 21 and 22",
+      "path": "0-backlog/APP-175.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "175",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-05: finish PRs #83 (APP-084, migration 0021) and #84 (APP-169, renumbered to 0022), then ship both migrations in **one** operator schema release.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-084, APP-169, APP-167",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog (selected by Victor; moves to Selected when APP-084 and APP-169 are Done)",
+      "Unblock evidence": "Not applicable.",
+      "dependencies": [
+        "APP-084",
+        "APP-169",
         "APP-167"
       ]
     }

@@ -33,3 +33,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 167 | [APP-167: Promote merged beta releases through GitHub Actions](../4-done/APP-167.md) | [PH08](../phases/PH08.md) | S14 | OPS | P0 | L | Done | None |
 | 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](../4-done/APP-172.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | L | Done | APP-167 |
 | 173 | [APP-173: Review the November 5 base-image scan findings so beta promotion can continue](../2-in-progress/APP-173.md) | [PH08](../phases/PH08.md) | S14 | OPS | P0 | S | In progress | APP-167 |
+| 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](../0-backlog/APP-175.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | M | Backlog | APP-084, APP-169, APP-167 |
