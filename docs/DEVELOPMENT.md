@@ -1,6 +1,6 @@
 # Developing the Forma app platform
 
-This is the working guide for the pitch application: setup, local development, checks, delivery and agent rules. The decisions are [ADR-012](architecture/ADR-012-DEVELOPER-WORKFLOW.md) and [ADR-013](architecture/ADR-013-REPOSITORY-AND-DELIVERY.md); the executable entry points are in the root [justfile](../justfile). Run commands from the repository root. `just` lists the recipes.
+This is the working guide for the Forma app: setup, local development, checks, delivery and agent rules. The decisions are [ADR-012](architecture/ADR-012-DEVELOPER-WORKFLOW.md) and [ADR-013](architecture/ADR-013-REPOSITORY-AND-DELIVERY.md); the executable entry points are in the root [justfile](../justfile). Run commands from the repository root. `just` lists the recipes.
 
 ## Project and branch model
 
