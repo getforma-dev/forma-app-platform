@@ -141,6 +141,15 @@ def seed(connection, bundles, changes=None):
         connection.execute("SELECT set_config('genui.organization_id',%s,true)", (o,))
         put('organizations', ('organization_id','display_name','status'), (o,'Synthetic organization '+o[-4:],'active'), 1)
         put('provider_tenant_bindings', ('organization_id','issuer','provider_tenant_id','active'), (o,ISSUER,tenant,True), 3)
+        # APP-084: claim the tenant in the cross-organization index in the same transaction,
+        # as the operator's bind and provision do, so no other organization can bind it first.
+        claimed = connection.execute("""INSERT INTO genui_private.provider_tenant_index(issuer,provider_tenant_id,organization_id)
+              VALUES (%s,%s,%s) ON CONFLICT (issuer,provider_tenant_id) DO NOTHING""", (ISSUER, tenant, o))
+        if changes is not None and claimed.rowcount == 1:
+            changes.append('provider_tenant_index')
+        if connection.execute("""SELECT organization_id::text FROM genui_private.provider_tenant_index
+              WHERE issuer=%s AND provider_tenant_id=%s""", (ISSUER, tenant)).fetchone() != (o,):
+            raise ValueError("seed tenant bound to another organization")
         actors = {p: ('active',1), pub['approver_id']: ('active',1),
                   '00000000-0000-4000-8000-00000000006e': ('revoked',2),
                   '00000000-0000-4000-8000-00000000006f': ('active',1),

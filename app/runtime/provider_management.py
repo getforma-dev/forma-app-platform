@@ -107,6 +107,10 @@ PROVIDER_VARIABLES = ENV_NAMES + MANAGED_NAMES + (ENV_RETIRED_MANAGEMENT_JSON,)
 # The capability secret: a full Secrets Manager ARN (its region is the client's region).
 SECRET_ARN = re.compile(r"arn:aws:secretsmanager:([a-z]{2}(?:-[a-z]+)+-[0-9]):[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]{1,512}")
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
+# Provider review n2 (APP-084): the tenant-wide management key goes out in the first
+# request, before any tenant check, so only a reviewed provider host may receive it.
+# Loopback stays allowed for the local stand-in. Adding a host is a reviewed change here.
+PROVIDER_HOSTS = frozenset({"auth-staging.getforma.dev"})
 KEY = re.compile(r"mgmt_[A-Za-z0-9_-]{8,256}")
 REMOTE_ID = re.compile(r"tinv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 TOKEN = REMOTE_ID  # same shape as the id (management.rs:1718-1719); never interchangeable
@@ -237,7 +241,7 @@ def load_config(environ, required, secret_id=None, *, capability_store_required=
     scheme, host = url.scheme, url.hostname
     require(scheme in ("https", "http") and host and url.username is None and url.password is None and not url.query
             and not url.fragment and url.path in ("", "/") and (port is None or 1 <= port <= 65535)
-            and (scheme == "https" or host in LOOPBACK), "provider_url_refused")
+            and (host in LOOPBACK if scheme == "http" else host in LOOPBACK or host in PROVIDER_HOSTS), "provider_url_refused")
     require(ENV_KEY not in present or ENV_KEY_FILE not in present, "provider_key_refused")
     key = _private_file(present[ENV_KEY_FILE]) if ENV_KEY_FILE in present else present[ENV_KEY]
     require(isinstance(key, str) and KEY.fullmatch(key) is not None, "provider_key_refused")

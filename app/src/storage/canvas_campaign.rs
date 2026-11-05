@@ -659,6 +659,22 @@ async fn campaign() {
             "{kind}"
         );
     }
+    // D7.8 (APP-169 review): each change of kind is one `work.kind_set` workspace
+    // event in the same transaction; the same choice again writes nothing.
+    let kind_events = || {
+        c.fixture.sql(
+            &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='workspace' AND kind='work.kind_set' AND app_id='{APP}' AND work_id='{CANVAS_WORK}'"),
+            "genui",
+        )
+    };
+    assert_eq!(kind_events().trim(), "2", "app then card");
+    let again = maya.post(&routes, &northstar, CARD).await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.body);
+    assert_eq!(
+        kind_events().trim(),
+        "2",
+        "the same kind again is not audited"
+    );
     let saved = maya.post(&routes, &spend_kind, CARD).await;
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
     // A closed body naming card or app; anything else is 422 and stores nothing.
@@ -771,7 +787,7 @@ async fn campaign() {
     assert_eq!(refused.body, NOT_FOUND_BODY);
     check(
         &mut checks,
-        "artifact kind (APP-169): with no grant on a work, saving its kind is the same uniform 404 as a missing work; the canvas says the kinds were read and a work with nothing saved carries no kind; an app before any row is stored and a card replaces it, each rendered on the next load; a body other than card or app is 422 invalid_kind; cross-site is 403; anonymous, forged and another organization's member get the uniform 404; a teammate on the same work sees no kind; storage returns only her rows and refuses the teammate, the canary and an unknown kind; an exhausted member write window is 429; once record_read is revoked the saved card is not rendered and the write is the uniform 404",
+        "artifact kind (APP-169): with no grant on a work, saving its kind is the same uniform 404 as a missing work; the canvas says the kinds were read and a work with nothing saved carries no kind; an app before any row is stored and a card replaces it, each rendered on the next load and each one work.kind_set workspace event, while the same kind again writes none; a body other than card or app is 422 invalid_kind; cross-site is 403; anonymous, forged and another organization's member get the uniform 404; a teammate on the same work sees no kind; storage returns only her rows and refuses the teammate, the canary and an unknown kind; an exhausted member write window is 429; once record_read is revoked the saved card is not rendered and the write is the uniform 404",
     );
 
     let report = json!({

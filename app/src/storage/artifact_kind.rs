@@ -2,7 +2,7 @@
 //! Absence is ambiguous and is shown as an App. Component count is never read.
 use super::{
     authorization::{Action, Resource, Transaction},
-    definitions::confirm_identity,
+    definitions::{append, confirm_identity, Chain, Event},
     pool::Workspace,
     require, valid_id, Error, Result, TrustedRequest,
 };
@@ -16,6 +16,24 @@ pub(crate) fn parse_artifact_kind(value: &str) -> Option<&'static str> {
         "app" => Some("app"),
         _ => None,
     }
+}
+
+/// Audit outcome identity of one kind change (D7.8), in its own domain.
+fn kind_outcome(work: &str, kind: &str) -> Result<String> {
+    use sha2::{Digest as _, Sha256};
+    let bytes = crate::admission::encode(&serde_json::json!({"work_id": work, "kind": kind}))
+        .map_err(|_| Error::Unavailable)?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"forma:work-kind:v1\0");
+    hasher.update(bytes);
+    Ok(format!(
+        "sha256:{}",
+        hasher
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    ))
 }
 
 impl Workspace {
@@ -84,11 +102,17 @@ impl Workspace {
                 .await?;
             require(!found.is_empty())?;
             permit.recheck_entitlement().await?;
-            t.query(
-                "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5) ON CONFLICT (organization_id,principal_id,app_id,work_id) DO UPDATE SET kind=EXCLUDED.kind, updated_at=date_trunc('second',now())",
+            // Only an actual change returns a row; the same choice again writes nothing.
+            let changed = t.query(
+                "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5) ON CONFLICT (organization_id,principal_id,app_id,work_id) DO UPDATE SET kind=EXCLUDED.kind, updated_at=date_trunc('second',now()) WHERE work_artifact_kinds.kind IS DISTINCT FROM EXCLUDED.kind RETURNING 1",
                 &[&request.organization(), &request.principal(), &app, &work, &kind],
             )
             .await?;
+            if !changed.is_empty() {
+                // D7.8: one workspace-chain event per change, in the same transaction.
+                let outcome = kind_outcome(work, kind)?;
+                append(t, Chain::Workspace, request, Event { kind: "work.kind_set", id: None, app: Some(app), work: Some(work), record: None, outcome: Some(&outcome) }).await?;
+            }
             Ok(kind)
         }
         .await;

@@ -583,8 +583,10 @@ app/admin/src/record-components/**
 !app/admin/src/styles/file-card.css
 !app/migrations/0020_work_data_copies.sql
 !app/migrations/catalog-v20.json
-!app/migrations/0021_work_artifact_kinds.sql
+!app/migrations/0021_operator_audit_kinds.sql
+!app/migrations/0022_work_artifact_kinds.sql
 !app/migrations/catalog-v21.json
+!app/migrations/catalog-v22.json
 !app/runtime/box_record_import.py
 !app/src/actions/assistant.rs
 !app/src/actions/record_search.rs

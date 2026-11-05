@@ -35,7 +35,7 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 21
+DATABASE_SCHEMA_VERSION = 22
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;
@@ -904,8 +904,11 @@ def migrate():
     import psycopg
     require(os.environ["PGDATABASE"] == "genui" and os.environ["PGUSER"] == "genui_migration")
     require(migration_manifest(migration_directory())["database_version"] == DATABASE_SCHEMA_VERSION)
+    # Always verify-full TLS, as admission_operator.connect does: a Unix-socket host never
+    # uses TLS, and libpq would prefer GSSAPI encryption over TLS when Kerberos credentials exist.
+    require(not os.environ["PGHOST"].startswith("/"))
     with psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
-                         sslmode="verify-full", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
+                         sslmode="verify-full", gssencmode="disable", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
                          options="-c statement_timeout=30000 -c lock_timeout=5000") as connection:
         apply_migrations(connection, migration_directory())
     print("tenant_foundation_migration_complete")
