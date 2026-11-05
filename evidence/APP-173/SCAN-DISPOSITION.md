@@ -1,6 +1,6 @@
 # November 5 scan disposition
 
-Reviewed scope: the next beta promotion from the live release `beta/20261104-1e28488`. It covers exactly two HIGH findings, in each of the three images, bound to each image's live predecessor manifest, the deployment contract `4a2cea85…` and an expiry of **2026-11-12 00:00 UTC**. The exact fingerprints are in [`scan-disposition.json`](../../ops/promotion/scan-disposition.json); the accepted names, severities and roles are also pinned in `ops/promotion/registry.py`, so editing the JSON alone cannot widen them.
+Reviewed scope: the next beta promotion from the live release `beta/20261104-1e28488`. It covers exactly two HIGH findings, in each of the three images, bound to each image's live predecessor manifest, the deployment contract `4a2cea85…` and an expiry of **2026-11-12 00:00 UTC**. The exact fingerprints are in [`scan-disposition.json`](../../ops/promotion/scan-disposition.json). The accepted CVE names, severities, packages, roles and the expiry are also pinned in `ops/promotion/registry.py`, so editing the JSON alone cannot widen them; the JSON adds only each image's predecessor manifest, the contract and the complete fingerprints.
 
 This is a temporary acceptance, not a package fix, a scanner suppression or a claim of zero vulnerabilities. A changed CVSS value, package version, severity, predecessor image or deployment contract falls outside it. A CRITICAL finding is never accepted. After a successful release records its scan inventory, these two become ordinary baseline findings; this disposition grants no permission for any later new finding.
 
@@ -44,9 +44,13 @@ Limit: the images were built locally at `cd17f93` for this check, not pulled fro
 
 ## Checks
 
-- `python3 -m unittest discover -s ops/promotion -p 'test_*.py'`: 124 tests, OK. New tests show that changing any finding's name, severity, CVSS score, package name or version refuses; an extra finding refuses; a changed predecessor, contract or expiry refuses for each role; one role alone may introduce the reviewed pair; and sixteen edits to the JSON file (CRITICAL or MEDIUM severity, a new CVE, an extra or missing finding, a missing or extra role, a malformed digest or date, schema 1, the APP-167 evidence path) all refuse.
+- `python3 -m unittest discover -s ops/promotion -p 'test_*.py'`: 125 tests, OK. New tests show that changing any finding's name, severity, CVSS score, package name or version refuses; an extra finding refuses; a changed predecessor, contract or expiry refuses for each role; and one role alone may introduce the reviewed pair. 29 edits to the JSON file all refuse with `Refused`, among them CRITICAL or MEDIUM severity, a new CVE, the same CVE under another package, a later expiry, an extra or missing finding or role, malformed attributes, digests or dates, a non-integer schema, schema 1 and the APP-167 evidence path. So do six malformed texts, including a duplicated `expires_at_utc` or role key and invalid JSON.
 - `deployment_contract_digest(repo, 'HEAD')` on this branch is `4a2cea855e962fda7f79a55f2b2754df9a056e4b3bab3fc4e5b4ee1a98fdd2a0`, the live baseline's value.
 - The live state (read-only) names the same three predecessor manifests as the disposition, and its November budget basis was reconciled at 2026-11-04 21:28:12 UTC, so preparation needs a fresh basis after 2026-11-05 21:28 UTC.
+
+## Review
+
+Independent review (Claude subagent, 2026-11-05, head `cc5d6ce`): **no blocker.** Its three hardening findings were fixed before merge: the expiry and each CVE's package were pinned in source (a JSON-only edit could previously extend the expiry or move a CVE to another package), duplicate JSON keys are refused, and malformed shapes now refuse instead of raising `TypeError`. It verified that the disposition's fingerprints and predecessor digests match the scan delta for all three roles, that all six container definitions are read-only and non-root, that no source uses `gz*`, `ctypes` or `apt`, and that the contract is unchanged. It did not verify the live state, the ECR images' packages or Debian's tracker; those were read directly above.
 
 ## Approval
 

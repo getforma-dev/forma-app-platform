@@ -5418,7 +5418,7 @@
       "Depends on": "APP-167",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`ops/scan-disposition-2026-11-05`",
+      "Branch / PR": "`ops/scan-disposition-2026-11-05`, [PR #88](https://github.com/getforma-dev/forma-app-platform/pull/88)",
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Not applicable.",

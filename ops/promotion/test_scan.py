@@ -85,14 +85,27 @@ class ScanDispositionTests(unittest.TestCase):
 class DispositionFileTests(unittest.TestCase):
     """Editing scan-disposition.json alone must never widen what is accepted."""
 
-    def load(self, mutate):
-        value = json.loads(registry.DISPOSITION.read_bytes())
-        mutate(value)
+    def load_text(self, text):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'scan-disposition.json'
-            path.write_text(json.dumps(value))
+            path.write_text(text)
             with patch.object(registry, 'DISPOSITION', path):
                 return scan_disposition()
+
+    def load(self, mutate):
+        value = json.loads(registry.DISPOSITION.read_bytes())
+        replaced = mutate(value)  # only a mutation that rebuilds the document returns it
+        return self.load_text(json.dumps(replaced if isinstance(replaced, list) else value))
+
+    def test_duplicate_keys_and_invalid_json_refuse(self):
+        text = registry.DISPOSITION.read_text()
+        for changed in [text.replace('"expires_at_utc": "2026-11-12T00:00:00Z"',
+                            '"expires_at_utc": "2026-11-12T00:00:00Z", "expires_at_utc": "2099-01-01T00:00:00Z"'),
+                        text.replace('"roles": {', '"roles": {"operator": {}, ', 1),
+                        text[:-3], '', 'null', '[]']:
+            with self.subTest(changed=changed[:40]):
+                self.assertNotEqual(changed, text)
+                with self.assertRaises(Refused): self.load_text(changed)
 
     def test_the_committed_file_is_valid(self):
         value, sha = scan_disposition()
@@ -101,7 +114,21 @@ class DispositionFileTests(unittest.TestCase):
 
     def test_widening_or_reshaping_the_file_refuses(self):
         first = lambda v: v['roles']['service']['findings'][0]
+        attribute = lambda v, key: next(a for a in first(v)['attributes'] if a['key'] == key)
         mutations = [
+            lambda v: v.update(expires_at_utc='2099-01-01T00:00:00Z'),
+            lambda v: v.update(expires_at_utc='2026-11-13T00:00:00Z'),
+            lambda v: attribute(v, 'package_name').update(value='openssl'),
+            lambda v: first(v)['attributes'].remove(attribute(v, 'package_name')),
+            lambda v: first(v)['attributes'].append(copy.deepcopy(attribute(v, 'package_name'))),
+            lambda v: attribute(v, 'package_version').update(value=['1.2.13']),
+            lambda v: attribute(v, 'package_version').update(extra='x'),
+            lambda v: first(v).update(attributes='package_name=zlib'),
+            lambda v: first(v).update(attributes={'package_name': 'zlib'}),
+            lambda v: first(v).update(name=['CVE-2026-76844']),
+            lambda v: v.update(schema_version=2.0),
+            lambda v: v.update(schema_version=True),
+            lambda v: [[k, x] for k, x in v.items()],
             lambda v: first(v).update(severity='CRITICAL'),
             lambda v: first(v).update(severity='MEDIUM'),
             lambda v: first(v).update(name='CVE-2099-12345'),
