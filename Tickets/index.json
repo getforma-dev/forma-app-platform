@@ -212,7 +212,7 @@
       "depends_on": [
         "PH06"
       ],
-      "status": "planned",
+      "status": "active",
       "gate_status": "pending",
       "gate_evidence": [],
       "sprints": [
@@ -350,7 +350,6 @@
     "APP-016",
     "APP-026",
     "APP-027",
-    "APP-082",
     "APP-084",
     "APP-085",
     "APP-087",
@@ -2765,11 +2764,11 @@
     {
       "id": "APP-082",
       "title": "Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)",
-      "path": "0-backlog/APP-082.md",
+      "path": "3-in-review/APP-082.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "In review",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S13",
@@ -2781,8 +2780,8 @@
       "Requirements": "C01, C11, C15, R15, SR1, SR2, SR7, SR12",
       "Depends on": "APP-074",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "pivot/app-082-invite-races https://github.com/getforma-dev/forma-app-platform/pull/13",
+      "Assignee": "GenUI \u2014 Grok evidence binding, independent review of the CI receipt",
+      "Branch / PR": "`chore/app-082-ci-binding`, [PR 82](https://github.com/getforma-dev/forma-app-platform/pull/82) (PR 13 remains the campaign landing)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

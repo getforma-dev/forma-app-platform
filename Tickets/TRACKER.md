@@ -87,7 +87,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 79 | [APP-076: Run the beta go-live trial on the live deployment](0-backlog/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Backlog | APP-012, APP-013, APP-014, APP-074, APP-078 |
 | 80 | [APP-079: Hosted identity acceptance deferred from Phase 1](9-blocked/APP-079.md) | [PH06](phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
-| 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](0-backlog/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-074 |
+| 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](3-in-review/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | In review | APP-074 |
 | 83 | [APP-083: Prove concurrent redemption through the public beta API on the live deployment (deferred from APP-076)](0-backlog/APP-083.md) | [PH07](phases/PH07.md) | S13 | VAL | P1 | S | Backlog | APP-076 |
 | 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](0-backlog/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-073 |
 | 85 | [APP-085: Close the definition and publication review residuals (APP-010 review)](0-backlog/APP-085.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-010 |
