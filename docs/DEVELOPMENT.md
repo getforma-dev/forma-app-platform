@@ -6,7 +6,7 @@ This is the working guide for the pitch application: setup, local development, c
 
 The product is a modular monolith: a Rust service renders typed FMIR pages with registered Forma canvas islands; PostgreSQL holds identity, grants, work, records and audit; confined Python children run the DuckDB queries; a separate sealed Rust/WASM parser handles imports. Model output is typed data admitted by the service, never executable code, SQL or a permission grant. The [module map](architecture/MODULE-MAP.md) records dependencies, known leaks and their owners. Dependency enforcement and a Python-to-Rust engine decision remain APP-097 work; neither is part of setup.
 
-`main` is the trunk and the only beta deploy branch ([ADR-019](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). Work on a topic branch, review the change and its CI, then merge back to `main`. A merge prepares one beta packet; it deploys only after the protected approval. `pivot/pitch-mvp` is the pitch history through that landing. There is one clone plus worktrees; do not revive the archived second clone or borrow its environment.
+`main` is the trunk and the only beta deploy branch ([ADR-019](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). Work on a topic branch, review the change and its CI, then merge back to `main`. A merge prepares one beta packet; it deploys only after the protected approval. `pivot/pitch-mvp` is the pitch history through that landing. There is one clone plus worktrees; do not revive the archived second clone or borrow its environment. The checkout folder is `forma-app-platform`. `forma-pitch-mvp` was the pitch-era path.
 
 | Path | Responsibility |
 | --- | --- |
@@ -18,11 +18,11 @@ The product is a modular monolith: a Rust service renders typed FMIR pages with 
 | `infra/`, `ops/beta/` | AWS infrastructure and the scripts for each beta delivery step |
 | `Tickets/`, `docs/`, `evidence/`, `design/` | Authoritative work board, maintained procedures, retained checks and frozen design evidence |
 
-Open [forma-pitch-mvp.code-workspace](../forma-pitch-mvp.code-workspace) in VS Code. Its tasks call these same recipes. The framework and the `getforma.dev` website have their own repositories and instructions; the website's OVH pipeline does not deploy this AWS application.
+Open [forma-app-platform.code-workspace](../forma-app-platform.code-workspace) in VS Code. Its tasks call these same recipes. The framework and the `getforma.dev` website have their own repositories and instructions; the website's OVH pipeline does not deploy this AWS application.
 
 ## First hour
 
-Use the existing `forma-pitch-mvp` checkout, or clone `getforma-dev/forma-app-platform` and select `pivot/pitch-mvp`. Install rustup, Node/npm, uv, just, process-compose and Docker with Compose. The exact versions are in [tools.versions](../tools.versions), [rust-toolchain.toml](../rust-toolchain.toml), [.node-version](../.node-version) and [.python-version](../.python-version). `just setup` installs the pinned Rust/Python toolchains and project dependencies; it does not install Node or the task runner/supervisor for you.
+Use the existing `forma-app-platform` checkout, or clone `getforma-dev/forma-app-platform` and select `main`. Install rustup, Node/npm, uv, just, process-compose and Docker with Compose. The exact versions are in [tools.versions](../tools.versions), [rust-toolchain.toml](../rust-toolchain.toml), [.node-version](../.node-version) and [.python-version](../.python-version). `just setup` installs the pinned Rust/Python toolchains and project dependencies; it does not install Node or the task runner/supervisor for you.
 
 ```sh
 just setup
