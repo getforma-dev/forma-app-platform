@@ -29,3 +29,9 @@ Readable aliases are optional discoverable addresses. A successful redirect can 
 ## Delivery and evidence
 
 APP-162 ships first with independent authentication review, native rendering, actual route/campaign tests, mobile/keyboard checks and a qualified AWS release. APP-163/164 remain backlog until their own implementations and evidence exist. No planning record or passing local test establishes hosted delivery. Preserve the trial throughout and record any remaining email/discovery limitation explicitly.
+
+## Amendment, 2026-11-04: the mailbox proof is fAuth work
+
+Victor decided that the proof of mailbox control for Find my workspaces (APP-163) belongs in fAuth (GateWasm), filed with FormaStack as FORMA-368. This app keeps the discovery mapping from verified email to workspace destinations, because the workspace registry is app-owned.
+
+The [capability survey](../../evidence/APP-163/fauth-capability-survey-2026-11-04.md) found that fAuth today verifies only the email of an existing account in one tenant. It has no one-time code or sign-in link, no per-recipient send quota, no email-change event and no email-to-workspace lookup, and staging mail is SES sandbox. APP-163 is Blocked until FORMA-368 delivers a reviewed proof contract and real delivery. The rules above are unchanged: discovery is not authentication, and an email match never links accounts or grants membership.

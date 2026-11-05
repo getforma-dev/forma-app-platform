@@ -167,7 +167,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](0-backlog/APP-160.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
 | 161 | [APP-161: Spike — measure idle app costs and decide safe sleep/wake architecture](0-backlog/APP-161.md) | [PH09](phases/PH09.md) | S15 | OPS | P2 | M | Backlog | APP-140, APP-154 |
 | 162 | [APP-162: Workspace name/link entry and explicit switch on sign-in](4-done/APP-162.md) | [PH08](phases/PH08.md) | S14 | IAM | P0 | M | Done | APP-009 |
-| 163 | [APP-163: Find my workspaces after verified email discovery](0-backlog/APP-163.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162 |
+| 163 | [APP-163: Find my workspaces after verified email discovery](9-blocked/APP-163.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Blocked | APP-162 |
 | 164 | [APP-164: Authenticated workspace chooser and safe session switching](0-backlog/APP-164.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162, APP-163 |
 | 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](0-backlog/APP-165.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |
 | 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](0-backlog/APP-166.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |

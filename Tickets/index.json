@@ -313,7 +313,7 @@
       ],
       "ticket_count": 69,
       "done_count": 5,
-      "blocked_count": 0
+      "blocked_count": 1
     },
     {
       "id": "PH09",
@@ -358,7 +358,6 @@
     "APP-092",
     "APP-098",
     "APP-125",
-    "APP-163",
     "APP-166",
     "APP-169",
     "APP-170",
@@ -5121,11 +5120,11 @@
     {
       "id": "APP-163",
       "title": "Find my workspaces after verified email discovery",
-      "path": "0-backlog/APP-163.md",
+      "path": "9-blocked/APP-163.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Backlog",
+      "Status": "Blocked",
       "Priority": "P1",
       "Type": "Feature",
       "Sprint": "S14",
@@ -5133,15 +5132,15 @@
       "Order": "163",
       "Size": "L",
       "Repos": "forma-app-platform",
-      "Decision": "[ADR-016](../../docs/architecture/ADR-016-WORKSPACE-SIGNIN.md).",
+      "Decision": "[ADR-016](../../docs/architecture/ADR-016-WORKSPACE-SIGNIN.md); its [2026-11-04 amendment](../../docs/architecture/ADR-016-WORKSPACE-SIGNIN.md#amendment-2026-11-04-the-mailbox-proof-is-fauth-work) puts the mailbox proof in fAuth and keeps the discovery mapping in this app.",
       "Requirements": "C01, C11, SR1, SR2, SR5",
       "Depends on": "APP-162",
-      "External dependencies": "Provider capability and email-delivery contract must be verified before implementation; no upstream capability is assumed.",
+      "External dependencies": "FORMA-368 (open): fAuth mailbox proof and real delivery. The provider contract was inspected on 2026-11-04 ([survey](../../evidence/APP-163/fauth-capability-survey-2026-11-04.md)); no upstream capability is assumed beyond it.",
       "Assignee": "Unassigned \u2014 GenUI with fAuth owner",
       "Branch / PR": "Not started \u2014 follow-up to workspace entry.",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 planned follow-up.",
-      "Unblock evidence": "Select after the discovery identity/data ownership contract is reviewed.",
+      "Blocked by": "FormaStack FORMA-368: fAuth can verify only an existing account's email in one tenant, has no one-time mailbox proof, no per-recipient send quota and no delivery to arbitrary recipients (staging SES is sandbox).",
+      "Unblock evidence": "FORMA-368 delivers a reviewed, documented proof contract (start, neutral response, single-use proof, the assertion returned to this app, limits and failure modes) on staging with real delivery to an unverified recipient, and GenUI checks it against the acceptance tests below before selecting this ticket.",
       "dependencies": [
         "APP-162"
       ]
