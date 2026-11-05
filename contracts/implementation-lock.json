@@ -97,7 +97,7 @@
     "contracts/test_shared_receipt.py": "6d8e16229481992188213c546b04f453e9f97c8ae9010119598c7e2e48f43b7b",
     "contracts/validate.py": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
     "contracts/verify_vectors.mjs": "b81b9bdeb4e57037a66bca328c5e519ea7613101eec1c3d8486598aa28b31674",
-    "docs/architecture/ADR-002-CONTRACT-EDITION.md": "5bba501cbd3e9b603439e790acc3fea9c8c3e78bc2cb8ba57a94ed2f6b25a79a",
+    "docs/architecture/ADR-002-CONTRACT-EDITION.md": "80849402f98500a0fb9df2d7553e25f8ca800fc8fffdcebc199f8dbbe4412553",
     "docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md": "8a52d3cb7efa6e8451633de44634c3f3fcd3107044be4c6c94b8cf85c765172f",
     "evidence/APP-002/dependencies.json": "89c86a4d381f8d945bdcd9c7655ad9e7f01ae80a60515ded172060afd890771c"
   }
