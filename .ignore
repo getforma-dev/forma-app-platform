@@ -1,0 +1,5 @@
+# Search noise for rg. git grep and an explicit path still see these files.
+design/**/deliverables/
+Tickets/index.json
+evidence/**/*.json
+evidence/**/*.log

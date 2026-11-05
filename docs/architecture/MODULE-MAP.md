@@ -47,7 +47,7 @@ A module may name modules in a **lower** layer. Layer 2 modules may also name ea
 | | `mcp` | Forma as an MCP server; agent tokens | |
 | | `slack` | slash command, buttons, approver DMs | |
 | | the canvas (`app/admin`, TypeScript) | the canvas client; it talks to the server over HTTP only | |
-| 4 Composition | `product`, `main.rs`, `bin/genui-dev` (ADR-012 D12.1) | the route composition and entry points | anything |
+| 4 Composition | `product`, `main.rs`, `lib.rs`, `bin/genui-dev` (ADR-012 D12.1) | the route composition, the crate root and the entry points | anything |
 
 The rules (D13.4):
 

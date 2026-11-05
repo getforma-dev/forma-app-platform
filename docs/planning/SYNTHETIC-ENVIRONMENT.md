@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md).
+
 # Synthetic environment and operating record — APP-007
 
 The delivered demo's D2 and D10 control this isolated synthetic environment. It has now been deployed and exercised; the [managed evidence index](../../evidence/APP-007/managed/README.md) distinguishes actual results from later application gates. The [final operating receipt](../../evidence/APP-007/managed/final-operating-state.json) records all ten observed tasks stopped at 2026-10-29 01:04 UTC, with the source database and supporting infrastructure retained. APP-007 is accepted with independent review and all eight exact-source checks at `b925600`. This is not permission to reuse a production database or activate an unreviewed workload.

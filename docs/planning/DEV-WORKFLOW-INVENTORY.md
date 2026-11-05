@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # Developer workflow: inventory, root causes, options
 
 Research only, 2026-10-31, at `pivot/pitch-mvp` `e7dda41`. Nothing was changed, started or deployed while it was written. Every claim cites a file and line or a command that was run. Secrets and env values were not read into this report: the env files are described by their variable names only.

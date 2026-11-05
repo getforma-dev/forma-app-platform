@@ -19,3 +19,7 @@ Use [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup, commands, instance own
 Run `just check` and the focused campaigns appropriate to the change; `just check --list` and `just campaigns` name them. Regenerate the board after ticket edits, then run `python3 Tickets/_tools/board.py check`. Follow current user authorization; historical upstream protocol snapshots do not grant actions here.
 
 Phase definitions and completion gates live in Tickets/plan.json. Read the assigned phase and docs/planning/QUALITY-GATES.md. Passing planning checks never passes application acceptance; mark a phase gate passed only with completed tickets, predecessor gates and independently reviewed runtime/trial evidence.
+
+## Where to read
+
+Read README.md, then docs/DEVELOPMENT.md, then the assigned ticket. Each major folder has its own AGENTS.md. docs/README.md classifies every document under docs/. Tickets/TRACKER.md is the board view. TRACKER, PHASES, SPRINTS, CATEGORIES, COVERAGE, BLOCKERS, the phase, sprint and category pages, and Tickets/index.json are generated. Read evidence/ and design/ from a path in a ticket or an ADR. Do not search them for current guidance.

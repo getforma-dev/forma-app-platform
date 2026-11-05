@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DIRECTION.md](DIRECTION.md).
+
 # Forma platform: November 1 pivot review
 
 This review reconstructs the original design, the seeded pitch, today's clean-user decision, Grok's delivery, and the remaining work. Source baseline: `origin/pivot/pitch-mvp` at `c5b9452`. Review work is isolated on `codex/pivot-review-2026-11-01`; the combined candidate retains the four reviewed topic histories. Delivery details follow below; no deployment is implied. GitHub was read on November 1. Ticket status, branch implementation, CI and deployment are different facts.

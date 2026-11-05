@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [first-run/RECORDING.md](../planning/first-run/RECORDING.md).
+
 # Forma: presentation script
 
 For Victor, presenting to the YC panel or investors. About 8 minutes spoken plus a 4-minute live demo (section 5; the optional beats take it to 5). Lines in plain text are said aloud. The shot-by-shot filming plan and the pre-demo checklist are in [RECORDING.md](RECORDING.md). *Italic lines are stage directions.* **[Fill in]** marks what only you can supply. The grammar behind every typed line is [CANVAS-RULES.md](CANVAS-RULES.md); the definitions are in [GUIDE.md](GUIDE.md).

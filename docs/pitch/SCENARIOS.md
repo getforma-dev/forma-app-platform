@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [first-run/README.md](../planning/first-run/README.md).
+
 # Pitch scenarios: the five flows, the exact words, the two-window choreography
 
 Status: built on `pivot/scenarios` (ADR-011; APP-093 action path, APP-094 library, APP-095 sharing and live updates, APP-098 demo shortcuts). Every number and every state change in these scenarios is real: the records are typed records committed through the audited, idempotent command path; the permissions are the share path's; the live updates are the event stream re-authorized at delivery; the receipts are the governed query path's. The only staged part is the parse of the rehearsed sentences inside the demo organization (APP-098 DS-38), and the member still confirms before anything is written.

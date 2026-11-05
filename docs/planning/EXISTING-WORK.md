@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # Existing work audit — 2026-10-28
 
 This audit read the local Forma work board and existing donor manifests/remotes. It changed no existing tickets, repositories, deployments, or application code. Status is evidence as read on this date, not a promise about future completion.

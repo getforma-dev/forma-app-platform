@@ -172,6 +172,8 @@ Start with `just clean docker --dry-run` or `just clean target --dry-run` and in
 - If Docker's VM is full, pause new builds, inspect the dry-run sweep and retain any needed evidence before cleaning. Do not delete Docker's VM disk or a live dev volume as a shortcut.
 - The machine-wide sweeps remain under `~/dev/Forma/work/_maintenance/` (`clean-space.sh`, `clean-build-artifacts.sh`). They span repositories and are dry-run first; coordinate with other work. They are not another app deployment path.
 
+`rg` skips `design/**/deliverables/`, `Tickets/index.json`, and the raw `evidence/**/*.json` and `evidence/**/*.log` files named in the root `.ignore`; `git grep` or an explicit path still searches them.
+
 ## Rules for contributors and agents
 
 1. Read [AGENTS.md](../AGENTS.md), the assigned ticket, its decisions and the actual source. Pre-assign unique APP IDs before parallel work. Ticket Markdown is authoritative; regenerate the board after ticket edits and check it. Keep unfinished acceptance and phase gates explicit.

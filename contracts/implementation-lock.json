@@ -40,6 +40,7 @@
   "artifacts": {
     ".github/workflows/contracts.yml": "802f0f664e20a7bae03da33f78507a92328f0c2662154369bc967efd76f6e2d1",
     "contracts/.gitignore": "57a8ad0e62346f7b0f2e261d59a7b90f1310043424bcb9d229208f183f1940d9",
+    "contracts/AGENTS.md": "a394b0ebe3610625107d7fe82bc3761e5b4afe2b0435bcfa57f0fc34c6f433cb",
     "contracts/README.md": "c343cb61974fcd500cabcff9cb4ac9ba551be5272d5cd412d418cc6db52c7735",
     "contracts/fixtures/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
     "contracts/fixtures/command-recovery.json": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",

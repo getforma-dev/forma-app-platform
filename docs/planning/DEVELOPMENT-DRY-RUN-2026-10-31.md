@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # DEVELOPMENT.md dry-run
 
 Checked the local setup instructions in a worktree, not in the main checkout. No deploy, image push, snapshot, migrate, seed, or reset was run for this check. The delivery table was read and not executed.

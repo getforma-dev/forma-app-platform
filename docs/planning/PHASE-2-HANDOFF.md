@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # Phase 2 handoff — NOT READY
 
 For the October29 transfer between agents, read [the GenUI Claude handoff](https://github.com/getforma-dev/forma-app-platform/blob/93df32175794e856f4aa02055dc5d75b0750c7aa/CLAUDE-HANDOFF.md). It preserves the unfinished APP-008 entry, current operational evidence and separate FormaStack owner. Agent transfer does not pass Phase1 or authorize Phase2 implementation.

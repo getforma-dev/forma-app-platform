@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DIRECTION.md](DIRECTION.md).
+
 # Phase 1 Finish-Line Execution Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every task is one board ticket slice: move the ticket on the board at the start and end of the task (`Tickets/README.md`), keep an evidence directory, and obtain an independent review before Done.
