@@ -96,11 +96,17 @@ def refusal_names(refusal, **expected):
     return isinstance(refusal, dict) and all(refusal.get(key) == value for key, value in expected.items())
 
 
-def confinement(uid=65532):
+# The managed entry runs in the Fargate QualificationTask (infra/src/stack.ts: cpu 1024,
+# i.e. 1 vCPU). The local positive gets the same CPU budget by default, so it cannot pass
+# on more CPU than the managed run has (APP-078: readiness refused twice on RDS).
+ENTRY_CPUS = "1"
+
+
+def confinement(uid=65532, cpus=ENTRY_CPUS):
     """No network beyond the internal one, read-only root, no capabilities;
     the private run directory is a fresh 0700 tmpfs owned by the run UID."""
     return ["--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=128",
-            "--memory=1g", "--memory-swap=1g", "--cpus=2",
+            "--memory=1g", "--memory-swap=1g", "--cpus=%s" % cpus,
             "--tmpfs=/run/genui:rw,noexec,nosuid,size=1m,uid=%d,gid=%d,mode=0700" % (uid, uid),
             "--tmpfs=/tmp:rw,noexec,nosuid,size=16m"]
 
@@ -233,7 +239,8 @@ def parse_output(stdout):
 
 
 class Harness:
-    def __init__(self, image, python, label):
+    def __init__(self, image, python, label, cpus=ENTRY_CPUS):
+        self.cpus = cpus
         self.image, self.python, self.label = image, python, label
         self.directory = Path(tempfile.mkdtemp(prefix="genui-app075-harness-")).resolve()
         os.chmod(self.directory, 0o700)
@@ -361,7 +368,7 @@ class Harness:
         container = "%s-%s" % (self.label, name)
         self.containers.append(container)
         command = ["run", "--rm", "-i", "--name", container, "--network", self.network, "--user", user,
-                   *confinement(int(user.split(":")[0]))]
+                   *confinement(int(user.split(":")[0]), self.cpus)]
         if armed:
             command += ["--env", ARM + "=APP-008"]
         command += ["--entrypoint", "python3", image, "-c", LOADER]
@@ -387,7 +394,7 @@ class Harness:
                               "host": HOST, "ca_sha256": self.ca_sha}).encode()
         container = self.label + "-supervised"
         self.containers.append(container)
-        command = ["run", "--rm", "-i", "--name", container, "--network", self.network, "--user", "65532:65532", *confinement(),
+        command = ["run", "--rm", "-i", "--name", container, "--network", self.network, "--user", "65532:65532", *confinement(cpus=self.cpus),
                    "--env", ARM + "=APP-008", "--env", "GENUI_DATABASE_HOST=" + HOST, "--entrypoint", "python3", image, "-c", SUPERVISED]
         started = time.time()
         completed = docker(*command, input=payload, check=False, timeout=660)
@@ -497,9 +504,11 @@ def main():
     parser.add_argument("--image", required=True, help="locally built qualification image (tag or id)")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--python", default=str(APP / "runtime/.venv/bin/python"), help="locked runtime Python for migrations and seed")
+    parser.add_argument("--cpus", default=ENTRY_CPUS, help="CPU budget for the entry containers (default: the Fargate QualificationTask's 1 vCPU)")
     args = parser.parse_args()
     label = "genui-app075-" + uuid.uuid4().hex[:10]
-    harness = Harness(args.image, args.python, label)
+    harness = Harness(args.image, args.python, label, args.cpus)
+    harness.report["entry_cpus"] = args.cpus
     harness.report["recorded_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     try:
         harness.execute()

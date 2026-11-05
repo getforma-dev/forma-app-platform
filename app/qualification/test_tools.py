@@ -240,6 +240,16 @@ def refusal(**changes):
     return value
 
 
+class ConfinementTests(unittest.TestCase):
+    def test_the_entry_cpu_budget_matches_the_fargate_qualification_task(self):
+        stack = (harness.REPOSITORY / "infra/src/stack.ts").read_text()
+        task = re.search(r"FargateTaskDefinition\(this, 'QualificationTask', \{ cpu: (\d+),", stack)
+        self.assertIsNotNone(task)
+        self.assertEqual(float(harness.ENTRY_CPUS), int(task.group(1)) / 1024)
+        self.assertIn("--cpus=%s" % harness.ENTRY_CPUS, harness.confinement())
+        self.assertIn("--cpus=0.5", harness.confinement(cpus="0.5"))
+
+
 class RefusalTests(unittest.TestCase):
     def test_the_harness_reads_the_entry_refusal_members(self):
         block = ENTRY_SOURCE[ENTRY_SOURCE.index("const REFUSAL_KEYS:"):]
