@@ -4,6 +4,7 @@ The entry (app/src/storage/managed_qualification.rs) is the single source of
 the source list, the seed inputs and their declared pins; these tests keep
 local_harness.py and check_image.py reading the same tables.
 """
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -227,6 +228,73 @@ class ServiceImageTests(unittest.TestCase):
         for src in copied:
             with self.subTest(copy=src):
                 self.assertTrue(src in names or any(name.startswith(src.rstrip("/") + "/") for name in names), src)
+
+
+def refusal(**changes):
+    """A readiness refusal shaped like the entry's (APP-086)."""
+    pools = [{"pool": name, "stage": "done", "step": None, "error": None, "sqlstate": None, "cause": None, "elapsed_ms": 40}
+             for name in harness.ROLES]
+    pools[1] = {"pool": "control", "stage": "acquire", "step": "connect", "error": "Unavailable", "sqlstate": "28P01",
+                "cause": "db_error", "elapsed_ms": 12}
+    value = {"case": "readiness", "reason": "stage_failed", **pools[1], "pools": pools, "checks_passed": 0}
+    value.update(changes)
+    return value
+
+
+class ConfinementTests(unittest.TestCase):
+    def test_the_entry_cpu_budget_matches_the_fargate_qualification_task(self):
+        stack = (harness.REPOSITORY / "infra/src/stack.ts").read_text()
+        task = re.search(r"FargateTaskDefinition\(this, 'QualificationTask', \{ cpu: (\d+),", stack)
+        self.assertIsNotNone(task)
+        self.assertEqual(float(harness.ENTRY_CPUS), int(task.group(1)) / 1024)
+        self.assertIn("--cpus=%s" % harness.ENTRY_CPUS, harness.confinement())
+        self.assertIn("--cpus=0.5", harness.confinement(cpus="0.5"))
+
+    def test_the_cpu_budget_must_be_positive(self):
+        self.assertEqual(harness.positive_cpus("0.25"), "0.25")
+        for value in ("0", "-1", "nan", "max", ""):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                harness.positive_cpus(value)
+
+
+class RefusalTests(unittest.TestCase):
+    def test_the_harness_reads_the_entry_refusal_members(self):
+        block = ENTRY_SOURCE[ENTRY_SOURCE.index("const REFUSAL_KEYS:"):]
+        block = block[:block.index("];")]
+        self.assertEqual(set(re.findall(r'"(\w+)"', block)), harness.REFUSAL_KEYS)
+        for key in harness.POOL_KEYS:
+            self.assertIn('"%s":' % key, ENTRY_SOURCE[ENTRY_SOURCE.index("fn probe_value"):])
+
+    def test_the_harness_accepts_exactly_the_entry_storage_errors(self):
+        # storage::Error gained variants after APP-086 (ProjectionLimit, Busy); the closed
+        # set must follow the entry's match, or a real refusal reads as malformed.
+        body = ENTRY_SOURCE[ENTRY_SOURCE.index("fn storage_error"):]
+        body = body[:body.index("\n}\n")]
+        self.assertEqual(set(re.findall(r'=> "(\w+)"', body)), harness.STORAGE_ERRORS)
+
+    def test_a_closed_refusal_names_pool_stage_and_cause(self):
+        value = refusal()
+        self.assertTrue(harness.closed_refusal(value, [harness.HOST, "genui_", "password"]))
+        self.assertTrue(harness.refusal_names(value, case="readiness", pool="control", stage="acquire", step="connect",
+                                              error="Unavailable", sqlstate="28P01", cause="db_error"))
+        self.assertFalse(harness.refusal_names(None, case="readiness"))
+        panic = {key: None for key in harness.REFUSAL_KEYS}
+        panic.update(case="scoped_reads", reason="panic", checks_passed=1)
+        self.assertTrue(harness.closed_refusal(panic))
+
+    def test_free_text_extra_members_or_forbidden_text_are_refused(self):
+        for value in (refusal(cause="password authentication failed for user genui_control"),
+                      refusal(stage="acquire " + harness.HOST),
+                      refusal(sqlstate="28p01x"),
+                      refusal(elapsed_ms=1.5),
+                      refusal(elapsed_ms=True),
+                      refusal(detail="x"),
+                      {k: v for k, v in refusal().items() if k != "pools"},
+                      refusal(pools=[{"pool": "control"}]),
+                      "readiness"):
+            with self.subTest(value=value):
+                self.assertFalse(harness.closed_refusal(value))
+        self.assertFalse(harness.closed_refusal(refusal(cause="db_error"), ["db_error"]))
 
 
 class AllowlistTests(unittest.TestCase):

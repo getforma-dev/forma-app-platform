@@ -127,13 +127,19 @@ async fn lock_waiters(fixture: &Fixture) -> i64 {
     .await
 }
 
-/// One backend of this database waiting on a heavyweight lock: who, what, and who blocks it.
+/// The one backend of this database waiting on a heavyweight lock: who (its
+/// role), the lock object it waits for, the relation of any tuple lock it
+/// already holds, who blocks it, and who holds that same object.
 #[derive(Clone, Debug)]
 pub(super) struct LockObservation {
     pid: i32,
+    role: String,
     wait_event: String,
+    locktype: String,
     relations: Vec<String>,
     blockers: Vec<i32>,
+    holders: Vec<i32>,
+    holder_writes: Vec<String>,
     blocker_state: Option<String>,
 }
 
@@ -141,9 +147,13 @@ impl LockObservation {
     pub(super) fn json(&self) -> Value {
         json!({
             "pid": self.pid,
+            "role": self.role,
             "wait_event": self.wait_event,
+            "locktype": self.locktype,
             "relations": self.relations,
             "blockers": self.blockers,
+            "holders": self.holders,
+            "holder_writes": self.holder_writes,
             "blocker_state": self.blocker_state,
         })
     }
@@ -158,7 +168,11 @@ pub(super) async fn quiet(fixture: &Fixture) {
     );
 }
 
-/// The waiting backend, its granted tuple relation when PostgreSQL exposes one, and its blocker.
+/// The only lock waiter of this database (APP-014 m1). It must be the single
+/// ungranted lock in `genui`, and every blocker `pg_blocking_pids` reports
+/// must hold a granted lock on the very object it waits for (same locktype,
+/// relation, tuple, transaction id or advisory key), so an unrelated backend
+/// or a stale blocker cannot satisfy an observation.
 pub(super) async fn observe_lock(fixture: &Fixture) -> LockObservation {
     let operator = fixture.operator().await;
     timeout(Duration::from_secs(10), async {
@@ -166,31 +180,59 @@ pub(super) async fn observe_lock(fixture: &Fixture) -> LockObservation {
             let rows = operator
                 .client
                 .query(
-                    "SELECT a.pid, a.wait_event, \
-                     COALESCE(array_agg(DISTINCT l.relation::regclass::text) \
-                       FILTER (WHERE l.relation IS NOT NULL), '{}'), \
-                     pg_blocking_pids(a.pid), \
+                    "SELECT w.pid, a.usename::text, a.wait_event, w.locktype, \
+                     COALESCE((SELECT array_agg(DISTINCT t.relation::regclass::text ORDER BY t.relation::regclass::text) \
+                       FROM pg_locks t WHERE t.pid = w.pid AND t.locktype = 'tuple' AND t.granted), '{}'), \
+                     pg_blocking_pids(w.pid), \
+                     ARRAY(SELECT h.pid FROM pg_locks h WHERE h.granted AND h.pid <> w.pid \
+                       AND h.locktype = w.locktype \
+                       AND h.database IS NOT DISTINCT FROM w.database \
+                       AND h.relation IS NOT DISTINCT FROM w.relation \
+                       AND h.page IS NOT DISTINCT FROM w.page \
+                       AND h.tuple IS NOT DISTINCT FROM w.tuple \
+                       AND h.transactionid IS NOT DISTINCT FROM w.transactionid \
+                       AND h.virtualxid IS NOT DISTINCT FROM w.virtualxid \
+                       AND h.classid IS NOT DISTINCT FROM w.classid \
+                       AND h.objid IS NOT DISTINCT FROM w.objid \
+                       AND h.objsubid IS NOT DISTINCT FROM w.objsubid ORDER BY h.pid), \
                      (SELECT b.state FROM pg_stat_activity b \
-                      WHERE b.pid = (pg_blocking_pids(a.pid))[1]) \
-                     FROM pg_stat_activity a \
-                     LEFT JOIN pg_locks l ON l.pid = a.pid AND l.locktype = 'tuple' AND l.granted \
-                     WHERE a.datname = 'genui' AND a.wait_event_type = 'Lock' \
-                     GROUP BY a.pid, a.wait_event",
+                      WHERE b.pid = (pg_blocking_pids(w.pid))[1]), \
+                     a.wait_event_type, \
+                     COALESCE((SELECT array_agg(DISTINCT h.relation::regclass::text ORDER BY h.relation::regclass::text) \
+                       FROM pg_locks h JOIN pg_class c ON c.oid = h.relation \
+                       WHERE h.granted AND h.pid = ANY(pg_blocking_pids(w.pid)) \
+                       AND h.mode = 'RowExclusiveLock' AND c.relkind = 'r'), '{}') \
+                     FROM pg_locks w JOIN pg_stat_activity a ON a.pid = w.pid \
+                     WHERE NOT w.granted AND a.datname = 'genui'",
                     &[],
                 )
                 .await
                 .unwrap();
-            if let Some(row) = rows
+            let settled = rows
                 .iter()
-                .find(|row| !row.get::<_, Vec<i32>>(3).is_empty())
-            {
-                return LockObservation {
+                .all(|row| row.get::<_, Option<String>>(8).as_deref() == Some("Lock"));
+            if settled && rows.iter().any(|row| !row.get::<_, Vec<i32>>(5).is_empty()) {
+                assert_eq!(rows.len(), 1, "more than one lock waiter in genui");
+                let row = &rows[0];
+                let observation = LockObservation {
                     pid: row.get(0),
-                    wait_event: row.get(1),
-                    relations: row.get(2),
-                    blockers: row.get(3),
-                    blocker_state: row.get(4),
+                    role: row.get(1),
+                    wait_event: row.get(2),
+                    locktype: row.get(3),
+                    relations: row.get(4),
+                    blockers: row.get(5),
+                    holders: row.get(6),
+                    holder_writes: row.get(9),
+                    blocker_state: row.get(7),
                 };
+                assert!(
+                    observation
+                        .blockers
+                        .iter()
+                        .all(|blocker| observation.holders.contains(blocker)),
+                    "a blocker does not hold the waited object: {observation:?}"
+                );
+                return observation;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -220,12 +262,48 @@ pub(super) fn on_relation(wait: &LockObservation, table: &str) {
 /// A same-key claim waits on the in-flight transaction, not on a tuple.
 pub(super) fn on_claim(wait: &LockObservation) {
     assert_eq!(wait.wait_event, "transactionid", "{wait:?}");
+    assert_eq!(wait.locktype, "transactionid", "{wait:?}");
     assert_eq!(wait.blockers.len(), 1, "{wait:?}");
     assert_eq!(
         wait.blocker_state.as_deref(),
         Some("idle in transaction"),
         "{wait:?}"
     );
+}
+
+/// The wait is on `holder` alone, and `holder` holds the waited object.
+pub(super) fn blocked_by(wait: &LockObservation, holder: i32) {
+    assert_eq!(wait.blockers, vec![holder], "{wait:?}");
+    assert!(wait.holders.contains(&holder), "{wait:?}");
+}
+
+/// The wait concerns `table`: the waiter holds a tuple lock on it, or, when
+/// PostgreSQL takes no tuple lock because the waiter already holds a weaker
+/// row lock on the row, the blocker has written it (granted RowExclusiveLock).
+pub(super) fn on_table(wait: &LockObservation, table: &str) {
+    let written = wait
+        .holder_writes
+        .iter()
+        .any(|relation| relation == table || relation.ends_with(&format!(".{table}")));
+    assert!(
+        names(wait, table) || written,
+        "the wait does not concern {table}: {wait:?}"
+    );
+}
+
+/// The waiting backend connected as `role`.
+pub(super) fn waiter_role(wait: &LockObservation, role: &str) {
+    assert_eq!(wait.role, role, "{wait:?}");
+}
+
+/// The backend of an operator connection: the expected holder of a lock it took.
+pub(super) async fn backend_pid(holder: &Operator) -> i32 {
+    holder
+        .client
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(0)
 }
 
 /// A command of `principal` at `epoch` through the storage module, in its own task.
@@ -1189,10 +1267,13 @@ async fn campaign() {
         let reply = spawn_post(&app, &s05, &author_cookie, &k32);
         paused(&hooks).await;
         let writer = hold(&fixture, &statements).await;
+        let holder = backend_pid(&writer).await;
         quiet(&fixture).await;
         hooks.release.notify_one();
         let waited = observe_lock(&fixture).await;
         on_claim(&waited);
+        blocked_by(&waited, holder);
+        on_table(&waited, "saved_work");
         held_timeouts.push(json!({"code": code, "lock": waited.json()}));
         problem(&reply.await.unwrap(), StatusCode::CONFLICT, code);
         finish(writer, "ROLLBACK").await;
@@ -1388,10 +1469,13 @@ async fn campaign() {
         let reply = spawn_post(&app, &s05, &reviewer_cookie, &k42);
         paused(&hooks).await;
         let writer = hold(&fixture, &statements).await;
+        let holder = backend_pid(&writer).await;
         quiet(&fixture).await;
         hooks.release.notify_one();
         let waited = observe_lock(&fixture).await;
         on_claim(&waited);
+        blocked_by(&waited, holder);
+        on_table(&waited, "memberships");
         member_timeouts.push(json!({"code": code, "lock": waited.json()}));
         problem(&reply.await.unwrap(), StatusCode::CONFLICT, code);
         finish(writer, "ROLLBACK").await;

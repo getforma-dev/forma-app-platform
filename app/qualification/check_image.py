@@ -216,7 +216,8 @@ class Checks:
         self.report["entry_unarmed"] = {"exit_code": result["exit_code"], "result": value}
         self.expect("executable selected exactly refuses an unarmed run before any store exists",
                     result["exit_code"] != 0 and value.get("error") == "configuration_refused"
-                    and value.get("cleanup_applicable") is False and value.get("checks") == [])
+                    and value.get("cleanup_applicable") is False and value.get("checks") == []
+                    and "refusal" in value and value["refusal"] is None)
         pins = value.get("resource_pins") or {}
         expected = harness.expected_pins()
         self.expect("executable's source-bundle pin equals the recomputation from the exported context",
