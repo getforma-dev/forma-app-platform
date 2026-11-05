@@ -16,7 +16,9 @@ use super::{
     pool::TestHooks,
     qualification::Fixture,
     qualification_cases::{ORG, OTHER, PRINCIPAL, REVIEWER},
-    race_qualification::{observe_lock, on_claim, on_relation, quiet},
+    race_qualification::{
+        backend_pid, blocked_by, observe_lock, on_claim, on_relation, quiet, waiter_role,
+    },
     *,
 };
 use crate::{
@@ -787,6 +789,8 @@ async fn campaign() {
     });
     let waited_same = observe_lock(&fixture).await;
     on_claim(&waited_same);
+    blocked_by(&waited_same, holder_pid);
+    waiter_role(&waited_same, "genui_data");
     assert_eq!(b.await.unwrap(), Ok(CommandResult::InFlight));
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
     // Two serial one-second waits can exhaust the holder's three-second idle
@@ -872,7 +876,7 @@ async fn campaign() {
         BUSY_RECORD,
         command(&s05, IK[7], 0, 1, values("needs_context", "busy")),
     );
-    let race = |statement: String, expected: CommandResult| {
+    let race = |statement: String, expected: CommandResult, relation: Option<&'static str>| {
         let stores = stores.clone();
         let command = busy_command.clone();
         let fixture = &fixture;
@@ -885,6 +889,7 @@ async fn campaign() {
                 ))
                 .await
                 .unwrap();
+            let holder_pid = backend_pid(&holder).await;
             quiet(fixture).await;
             let racer = tokio::spawn(async move {
                 let author = request(&stores, ORG, AUTHOR, 1);
@@ -892,6 +897,15 @@ async fn campaign() {
             });
             let waited = observe_lock(fixture).await;
             on_claim(&waited);
+            blocked_by(&waited, holder_pid);
+            waiter_role(&waited, "genui_data");
+            // PostgreSQL takes no tuple lock when the waiter already holds a
+            // weaker row lock on the row (busy: the claim's KEY SHARE), so only
+            // the in_flight wait names its relation; both are tied to the holder
+            // through its transaction id above.
+            if let Some(table) = relation {
+                on_relation(&waited, table);
+            }
             assert_eq!(racer.await.unwrap(), Ok(expected));
             holder.client.batch_execute("ROLLBACK").await.unwrap();
             waited
@@ -900,6 +914,7 @@ async fn campaign() {
     let busy_lock = race(
         format!("UPDATE genui.memberships SET membership_epoch=membership_epoch WHERE organization_id='{ORG}' AND principal_id='{AUTHOR}'"),
         CommandResult::Busy,
+        None,
     )
     .await;
     // The D7.1 operator lock itself (member FOR UPDATE) already blocks the
@@ -908,6 +923,7 @@ async fn campaign() {
     let inflight_lock = race(
         format!("SELECT principal_id FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{AUTHOR}' FOR UPDATE"),
         CommandResult::InFlight,
+        Some("memberships"),
     )
     .await;
     assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
@@ -1565,15 +1581,30 @@ async fn campaign() {
         })
     };
     paused(&hooks).await;
-    let in_flight = send(
-        &app,
-        "POST",
-        &action,
-        Some(&cookie),
-        &held_body,
-        &json_headers(held_key),
-    )
-    .await;
+    quiet(&fixture).await;
+    let second = {
+        let (app, action, cookie, body) = (
+            app.clone(),
+            action.clone(),
+            cookie.clone(),
+            held_body.clone(),
+        );
+        tokio::spawn(async move {
+            send(
+                &app,
+                "POST",
+                &action,
+                Some(&cookie),
+                &body,
+                &json_headers(held_key),
+            )
+            .await
+        })
+    };
+    // The same-key request waits on the paused first command's claim (APP-014 m1).
+    let waited_route = observe_lock(&fixture).await;
+    on_claim(&waited_route);
+    let in_flight = second.await.unwrap();
     assert_eq!(in_flight.status, StatusCode::CONFLICT, "{}", in_flight.body);
     assert_eq!(in_flight.headers[header::RETRY_AFTER], "2");
     assert_eq!(
@@ -1625,7 +1656,7 @@ async fn campaign() {
     record(
         &mut checks,
         "the JSON route answers 200 with the outcome document, 200 again on the identical retry, 409 conflict with the recovery view on a stale version or a changed payload, 412 stale on a moved work premise, 409 in_flight with Retry-After: 2 for the same key while its first command holds the claim, 200 on the outcome lookup by key (404 for another key or another principal), 400 for a missing, short, padded or repeated key and for a malformed, duplicate-member or non-JSON body, 413 over 256 KiB, 403 cross-site and 404 for a foreign path; eight commits in all",
-        json!({"problem_codes": codes, "commits": 8}),
+        json!({"problem_codes": codes, "commits": 8, "in_flight_lock": waited_route.json()}),
     );
     record(
         &mut checks,
