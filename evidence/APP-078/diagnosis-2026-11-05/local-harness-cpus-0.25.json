@@ -1,0 +1,1016 @@
+{
+  "cleanup": {
+    "genui-app075-60bc0281fd-extract": true,
+    "genui-app075-60bc0281fd-hostname-mismatch": true,
+    "genui-app075-60bc0281fd-net": true,
+    "genui-app075-60bc0281fd-pg": true,
+    "genui-app075-60bc0281fd-positive": true,
+    "genui-app075-60bc0281fd-root-uid": true,
+    "genui-app075-60bc0281fd-run-synthetic-ca:local": true,
+    "genui-app075-60bc0281fd-run-untrusted-ca:local": true,
+    "genui-app075-60bc0281fd-supervised": true,
+    "genui-app075-60bc0281fd-unarmed": true,
+    "genui-app075-60bc0281fd-untrusted-ca": true,
+    "genui-app075-60bc0281fd-wrong-arguments": true,
+    "genui-app075-60bc0281fd-wrong-password": true,
+    "private_directory": true
+  },
+  "cleanup_complete": true,
+  "entry_cpus": "0.25",
+  "executable": {
+    "identity": {
+      "cargo_artifact": "genui-b4ae4d22981864cf",
+      "executable": "/app/qualification/genui-storage-tests",
+      "executable_sha256": "1e75f60c53e7b835cd87ee7ed5412e4cd709185fde0add5dd20d057e8af38f42",
+      "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+      "schema_version": 1
+    },
+    "sha256": "1e75f60c53e7b835cd87ee7ed5412e4cd709185fde0add5dd20d057e8af38f42"
+  },
+  "expectations": [
+    {
+      "expectation": "positive passed with six checks and confirmed cleanup",
+      "met": true
+    },
+    {
+      "expectation": "positive reports exactly the independently recomputed pins",
+      "met": true
+    },
+    {
+      "expectation": "positive ran as UID 65532 with 0700 run directory and 0600 private files",
+      "met": true
+    },
+    {
+      "expectation": "positive used the exact five-argument invocation",
+      "met": true
+    },
+    {
+      "expectation": "supervised positive passed with six checks and confirmed cleanup",
+      "met": true
+    },
+    {
+      "expectation": "unarmed refused with configuration_refused",
+      "met": true
+    },
+    {
+      "expectation": "root-uid refused with configuration_refused",
+      "met": true
+    },
+    {
+      "expectation": "wrong-arguments refused with configuration_refused",
+      "met": true
+    },
+    {
+      "expectation": "untrusted-ca refused with case_refused",
+      "met": true
+    },
+    {
+      "expectation": "wrong-password refused with case_refused",
+      "met": true
+    },
+    {
+      "expectation": "hostname-mismatch refused with case_refused",
+      "met": true
+    },
+    {
+      "expectation": "passing and configuration-refused results carry a null refusal",
+      "met": true
+    },
+    {
+      "expectation": "no run's output carries any of its credentials",
+      "met": true
+    },
+    {
+      "expectation": "untrusted-ca refusal names readiness/workspace/acquire/connect, Unavailable, tls_unknown_issuer",
+      "met": true
+    },
+    {
+      "expectation": "wrong-password refusal names readiness/control/acquire/connect, Unavailable, db_error/28P01",
+      "met": true
+    },
+    {
+      "expectation": "hostname-mismatch refusal names readiness/workspace/acquire/connect, Unavailable, tls_name_mismatch",
+      "met": true
+    }
+  ],
+  "expected_pins": {
+    "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+    "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+    "database_version": 20,
+    "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+    "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+    "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+    "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+    "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+    "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+    "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+    "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+  },
+  "label": "genui-app075-60bc0281fd",
+  "network": {
+    "alias": "genuisyntheticfoundation-databaseb269d8bb-pta9s49jelmg.cg58i06y2r4e.us-east-1.rds.amazonaws.com",
+    "driver": "bridge",
+    "internal": true
+  },
+  "passed": true,
+  "postgres": {
+    "authentication": "hostssl scram-sha-256 only; plaintext TCP rejected; distinct random per-role local passwords (not IAM)",
+    "image": "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a",
+    "migrations": [
+      "0001_role_foundation.sql",
+      "0002_tenant_foundation.sql",
+      "0003_admission.sql",
+      "0004_entitlement_reads.sql",
+      "0005_definition_work_grants.sql",
+      "0006_sessions.sql",
+      "0007_command_outcomes.sql",
+      "0008_sharing.sql",
+      "0009_slack_links.sql",
+      "0010_agent_tokens.sql",
+      "0011_boxes.sql",
+      "0012_review_fixes.sql",
+      "0013_agent_governance.sql",
+      "0014_labels.sql",
+      "0015_member_cards.sql",
+      "0016_authoring_shell.sql",
+      "0017_live_sharing.sql",
+      "0018_work_names.sql",
+      "0019_work_presentation.sql",
+      "0020_work_data_copies.sql"
+    ],
+    "schema_version": 20,
+    "server_version": "16.15 (Debian 16.15-1.pgdg13+2)"
+  },
+  "qualification_image": {
+    "architecture": "arm64",
+    "cmd": [
+      "run"
+    ],
+    "entrypoint": [
+      "python3",
+      "/app/qualification_supervisor.py"
+    ],
+    "id": "sha256:a942546a16035943fa1c394d2b37a6a79e3c9b23a956c25c88990c3b40be99a7",
+    "os": "linux",
+    "user": "65532:65532"
+  },
+  "recorded_at": "2026-11-05T10:45:13.048908+00:00",
+  "runs": [
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "armed": true,
+      "checks_printed": 6,
+      "exit_code": 0,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 65532,
+          "euid": 65532,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              65532
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              65532
+            ],
+            "credentials.json": [
+              "0o600",
+              65532
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 65532
+        }
+      ],
+      "manifest_sha256": "73414624b2cc14282ef457f897ea34ae661da153f5ef2118161504140a24e3b7",
+      "name": "positive",
+      "registry_sha256": "525d1d989c407a05e29a014620ce5acd32807a2d89252b8cabf469a1f285c08e",
+      "result": {
+        "ca_sha256_self_consistency_only": "5e47b067c5e10a472195ef748c17309d4410aa64481e4c9a6aaf081be0afeca4",
+        "checks": [
+          {
+            "name": "aggregate fixed-role native readiness verifies identity, schema and blank scope",
+            "passed": true
+          },
+          {
+            "name": "TLS role identity and scoped two-organization publication/record reads",
+            "passed": true
+          },
+          {
+            "name": "all four fixed roles enforce RLS, blank scope and direct write refusal",
+            "passed": true
+          },
+          {
+            "name": "revocation, epoch, missing grants and registry/DB binding mismatches deny",
+            "passed": true
+          },
+          {
+            "name": "closed action matrix evaluates current scoped grants without granting business writes",
+            "passed": true
+          },
+          {
+            "name": "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
+            "passed": true
+          }
+        ],
+        "cleanup_applicable": true,
+        "cleanup_confirmed": true,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": null,
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": "73414624b2cc14282ef457f897ea34ae661da153f5ef2118161504140a24e3b7",
+        "original_expires_at": 1793876119,
+        "original_issued_at": 1793875519,
+        "passed": true,
+        "refusal": null,
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": "e5025bcd-682b-4a6c-bf0b-09cae019456e",
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "e5025bcd-682b-4a6c-bf0b-09cae019456e",
+      "seconds": 5.27,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 0,
+      "user": "65532:65532"
+    },
+    {
+      "exit_code": 0,
+      "manifest_sha256": "8c9f3539218f3efd59d069235ddf27b5e563e930e2aabb618f82a3818d3eee60",
+      "name": "supervised_positive",
+      "result": {
+        "ca_sha256_self_consistency_only": "5e47b067c5e10a472195ef748c17309d4410aa64481e4c9a6aaf081be0afeca4",
+        "checks": [
+          {
+            "name": "aggregate fixed-role native readiness verifies identity, schema and blank scope",
+            "passed": true
+          },
+          {
+            "name": "TLS role identity and scoped two-organization publication/record reads",
+            "passed": true
+          },
+          {
+            "name": "all four fixed roles enforce RLS, blank scope and direct write refusal",
+            "passed": true
+          },
+          {
+            "name": "revocation, epoch, missing grants and registry/DB binding mismatches deny",
+            "passed": true
+          },
+          {
+            "name": "closed action matrix evaluates current scoped grants without granting business writes",
+            "passed": true
+          },
+          {
+            "name": "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
+            "passed": true
+          }
+        ],
+        "cleanup_applicable": true,
+        "cleanup_confirmed": true,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": null,
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": "8c9f3539218f3efd59d069235ddf27b5e563e930e2aabb618f82a3818d3eee60",
+        "original_expires_at": 1793876124,
+        "original_issued_at": 1793875524,
+        "passed": true,
+        "refusal": null,
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": "7112339c-f903-43ff-a53b-f51f98092206",
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "run_id": "7112339c-f903-43ff-a53b-f51f98092206",
+      "seconds": 6.68,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 0,
+      "substitutions": [
+        "credential refresh writes the synthetic local-password envelope instead of STS/IAM tokens",
+        "reviewed-CA pin is the synthetic local CA hash instead of 90a6f1a7..."
+      ],
+      "summary": {
+        "child_exit": 0,
+        "deadline_kill": false,
+        "error": null,
+        "files_removed": true,
+        "launched": true,
+        "passed": true,
+        "refresh_failures": 0,
+        "refreshes": 1,
+        "result_retained": true,
+        "run_id": "7112339c-f903-43ff-a53b-f51f98092206",
+        "schema_version": 1,
+        "scope": "APP-075 qualification supervisor",
+        "stderr_bytes": 0,
+        "stdout_lines": 14
+      }
+    },
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "armed": false,
+      "checks_printed": 0,
+      "exit_code": 101,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 65532,
+          "euid": 65532,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              65532
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              65532
+            ],
+            "credentials.json": [
+              "0o600",
+              65532
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 65532
+        }
+      ],
+      "manifest_sha256": "80bec7caab441cec3bfd7602bf3251dc18e86dba9dc81649c215473666d562ba",
+      "name": "unarmed",
+      "registry_sha256": "fc6dad8bd4efd2aabd4723c4caf8ba4ec08f3fe258a5b6741c84fb5ed63ecb26",
+      "result": {
+        "ca_sha256_self_consistency_only": null,
+        "checks": [],
+        "cleanup_applicable": false,
+        "cleanup_confirmed": false,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": "configuration_refused",
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": null,
+        "original_expires_at": null,
+        "original_issued_at": null,
+        "passed": false,
+        "refusal": null,
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "8221e681-9459-4686-a067-81ab781c315b",
+      "seconds": 0.66,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 39,
+      "user": "65532:65532"
+    },
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "armed": true,
+      "checks_printed": 0,
+      "exit_code": 101,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 0,
+          "euid": 0,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              0
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              0
+            ],
+            "credentials.json": [
+              "0o600",
+              0
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 0
+        }
+      ],
+      "manifest_sha256": "949d6fe74c50991a850a2c7037f076ba6f819cc0910adc85c842eff374f63383",
+      "name": "root-uid",
+      "registry_sha256": "8a69a2a88d8d48ec665034499503f4f2ceab5830ff0cb2dbc03b5faf2ffeea57",
+      "result": {
+        "ca_sha256_self_consistency_only": null,
+        "checks": [],
+        "cleanup_applicable": false,
+        "cleanup_confirmed": false,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": "configuration_refused",
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": null,
+        "original_expires_at": null,
+        "original_issued_at": null,
+        "passed": false,
+        "refusal": null,
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "f328312d-0471-45b1-b6c8-1b99ecd338cc",
+      "seconds": 0.45,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 39,
+      "user": "0:0"
+    },
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--test-threads=1"
+      ],
+      "armed": true,
+      "checks_printed": 0,
+      "exit_code": 101,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 65532,
+          "euid": 65532,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              65532
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              65532
+            ],
+            "credentials.json": [
+              "0o600",
+              65532
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 65532
+        }
+      ],
+      "manifest_sha256": "d5bb8bda52e30fe949f2a2295fcd2a7b9816d56370b2df9af371e4b6a1791f30",
+      "name": "wrong-arguments",
+      "registry_sha256": "a848e45aea7841a1bcc096411300cc06066bdbfa6866261d407c10b7736b73ac",
+      "result": {
+        "ca_sha256_self_consistency_only": null,
+        "checks": [],
+        "cleanup_applicable": false,
+        "cleanup_confirmed": false,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": "configuration_refused",
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": null,
+        "original_expires_at": null,
+        "original_issued_at": null,
+        "passed": false,
+        "refusal": null,
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": null,
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "bac71800-47b3-4509-bdc6-a76e0d3bb987",
+      "seconds": 0.46,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 0,
+      "user": "65532:65532"
+    },
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "armed": true,
+      "checks_printed": 0,
+      "exit_code": 101,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 65532,
+          "euid": 65532,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              65532
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              65532
+            ],
+            "credentials.json": [
+              "0o600",
+              65532
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 65532
+        }
+      ],
+      "manifest_sha256": "04539830b0ce0465995426491896de0bf6eea12b53836d5db327ae0dbed4d82f",
+      "name": "untrusted-ca",
+      "registry_sha256": "e7d25c56599b2af46f83e18586b1c476e4fe874ac51ea3833847cc5855249d1c",
+      "result": {
+        "ca_sha256_self_consistency_only": "a8f1d8e64a09d1b7a8b7e00dafd836246c5d84c2ad3b2578e924882b3a6c5ca0",
+        "checks": [],
+        "cleanup_applicable": true,
+        "cleanup_confirmed": true,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": "case_refused",
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": "04539830b0ce0465995426491896de0bf6eea12b53836d5db327ae0dbed4d82f",
+        "original_expires_at": 1793876132,
+        "original_issued_at": 1793875532,
+        "passed": false,
+        "refusal": {
+          "case": "readiness",
+          "cause": "tls_unknown_issuer",
+          "checks_passed": 0,
+          "elapsed_ms": 86,
+          "error": "Unavailable",
+          "pool": "workspace",
+          "pools": [
+            {
+              "cause": "tls_unknown_issuer",
+              "elapsed_ms": 86,
+              "error": "Unavailable",
+              "pool": "workspace",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": "tls_unknown_issuer",
+              "elapsed_ms": 88,
+              "error": "Unavailable",
+              "pool": "control",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": "tls_unknown_issuer",
+              "elapsed_ms": 84,
+              "error": "Unavailable",
+              "pool": "data",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": "tls_unknown_issuer",
+              "elapsed_ms": 85,
+              "error": "Unavailable",
+              "pool": "worker",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            }
+          ],
+          "reason": "stage_failed",
+          "sqlstate": null,
+          "stage": "acquire",
+          "step": "connect"
+        },
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": "b3bc1ee0-f22d-446c-a088-82d77eae0f5f",
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "b3bc1ee0-f22d-446c-a088-82d77eae0f5f",
+      "seconds": 0.81,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 39,
+      "user": "65532:65532"
+    },
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "armed": true,
+      "checks_printed": 0,
+      "exit_code": 101,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 65532,
+          "euid": 65532,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              65532
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              65532
+            ],
+            "credentials.json": [
+              "0o600",
+              65532
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 65532
+        }
+      ],
+      "manifest_sha256": "7ecbaecb89835c949249eec7ab526b3be5c6aac9b3e14d97ac7de4e0f8645acb",
+      "name": "wrong-password",
+      "registry_sha256": "fff467743329c849d97d8674a61f47f280d7543d17f68abad56a220533368d40",
+      "result": {
+        "ca_sha256_self_consistency_only": "5e47b067c5e10a472195ef748c17309d4410aa64481e4c9a6aaf081be0afeca4",
+        "checks": [],
+        "cleanup_applicable": true,
+        "cleanup_confirmed": true,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": "case_refused",
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": "7ecbaecb89835c949249eec7ab526b3be5c6aac9b3e14d97ac7de4e0f8645acb",
+        "original_expires_at": 1793876133,
+        "original_issued_at": 1793875533,
+        "passed": false,
+        "refusal": {
+          "case": "readiness",
+          "cause": "db_error",
+          "checks_passed": 0,
+          "elapsed_ms": 601,
+          "error": "Unavailable",
+          "pool": "control",
+          "pools": [
+            {
+              "cause": null,
+              "elapsed_ms": 1199,
+              "error": null,
+              "pool": "workspace",
+              "sqlstate": null,
+              "stage": "done",
+              "step": null
+            },
+            {
+              "cause": "db_error",
+              "elapsed_ms": 601,
+              "error": "Unavailable",
+              "pool": "control",
+              "sqlstate": "28P01",
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": null,
+              "elapsed_ms": 1199,
+              "error": null,
+              "pool": "data",
+              "sqlstate": null,
+              "stage": "done",
+              "step": null
+            },
+            {
+              "cause": null,
+              "elapsed_ms": 1199,
+              "error": null,
+              "pool": "worker",
+              "sqlstate": null,
+              "stage": "done",
+              "step": null
+            }
+          ],
+          "reason": "stage_failed",
+          "sqlstate": "28P01",
+          "stage": "acquire",
+          "step": "connect"
+        },
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": "d0ceca50-862a-4c60-b910-a1aae2f7f2ca",
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "d0ceca50-862a-4c60-b910-a1aae2f7f2ca",
+      "seconds": 2.01,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 39,
+      "user": "65532:65532"
+    },
+    {
+      "arguments": [
+        "--exact",
+        "storage::managed_qualification::managed_readonly_entry",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "armed": true,
+      "checks_printed": 0,
+      "exit_code": 101,
+      "facts": [
+        {
+          "argv": [
+            "--exact",
+            "storage::managed_qualification::managed_readonly_entry",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "ca_mode": "0o444",
+          "egid": 65532,
+          "euid": 65532,
+          "files": {
+            "app008-managed-registry.json": [
+              "0o600",
+              65532
+            ],
+            "app008-managed-run.json": [
+              "0o600",
+              65532
+            ],
+            "credentials.json": [
+              "0o600",
+              65532
+            ]
+          },
+          "run_directory": "0o700",
+          "run_directory_uid": 65532
+        }
+      ],
+      "manifest_sha256": "02b71a31624f184abe1d4c6929d7e23a99dedb1c896b3bfde0d41c64fd99aa32",
+      "name": "hostname-mismatch",
+      "registry_sha256": "1bf1775de4036c2bab9128ea19871ac3438ee076c4d437dd59f718d2f2d6d5d6",
+      "result": {
+        "ca_sha256_self_consistency_only": "5e47b067c5e10a472195ef748c17309d4410aa64481e4c9a6aaf081be0afeca4",
+        "checks": [],
+        "cleanup_applicable": true,
+        "cleanup_confirmed": true,
+        "declared_control_plane_resource_id": "db-KW4LRMTPI5YXHZXF4LELQZKTAU",
+        "error": "case_refused",
+        "limits": [
+          "Fixture identities are synthetic; no hosted identity or application admission is established.",
+          "RDS resource ID and CA provenance require separate reviewed control-plane and immutable-image receipts.",
+          "This subset does not pass managed races, drift, HTTP, recovery or complete APP-008 acceptance."
+        ],
+        "manifest_sha256": "02b71a31624f184abe1d4c6929d7e23a99dedb1c896b3bfde0d41c64fd99aa32",
+        "original_expires_at": 1793876136,
+        "original_issued_at": 1793875536,
+        "passed": false,
+        "refusal": {
+          "case": "readiness",
+          "cause": "tls_name_mismatch",
+          "checks_passed": 0,
+          "elapsed_ms": 90,
+          "error": "Unavailable",
+          "pool": "workspace",
+          "pools": [
+            {
+              "cause": "tls_name_mismatch",
+              "elapsed_ms": 90,
+              "error": "Unavailable",
+              "pool": "workspace",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": "tls_name_mismatch",
+              "elapsed_ms": 89,
+              "error": "Unavailable",
+              "pool": "control",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": "tls_name_mismatch",
+              "elapsed_ms": 90,
+              "error": "Unavailable",
+              "pool": "data",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            },
+            {
+              "cause": "tls_name_mismatch",
+              "elapsed_ms": 89,
+              "error": "Unavailable",
+              "pool": "worker",
+              "sqlstate": null,
+              "stage": "acquire",
+              "step": "connect"
+            }
+          ],
+          "reason": "stage_failed",
+          "sqlstate": null,
+          "stage": "acquire",
+          "step": "connect"
+        },
+        "resource_pins": {
+          "catalog_query_sha256": "5e8bf686accd98fa65672e015020b7ce7efa612b699dcf2b1d438e5e52e2ce1b",
+          "catalog_sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773",
+          "database_version": 20,
+          "fixture_setup_sha256": "7460864468915d3ca1660303e2569e0eb96837e6b6fd703e91be0f92b984ec7c",
+          "migrations_manifest_sha256": "08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb",
+          "seed_library_sha256": "fb92b15e761c84c593dcd1a8a19ee4077f672f40fc0ba05dbf7ee7e889c44828",
+          "seed_northstar_sha256": "45639ea369193d60f45fbafbe6c3aad648881017df57615bdf89bd501dfdd592",
+          "seed_program_sha256": "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+          "seed_spend_review_sha256": "4a4581f5a7fcfec867070584a00b0fbebdf33558fffe538eec35f97f72aa5650",
+          "seed_validator_sha256": "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+          "source_bundle_sha256": "d3e7da90d1ca61fcffdd8fdf8e9c977d26bf976b78f83bc2c0d5ca15c99ce4b2"
+        },
+        "run_id": "1dc6a769-ea1b-4516-902e-eabc1ac3aafb",
+        "schema_version": 1,
+        "scope": "APP-008 isolated application-data-read-only qualification"
+      },
+      "result_lines": 1,
+      "run_id": "1dc6a769-ea1b-4516-902e-eabc1ac3aafb",
+      "seconds": 0.81,
+      "secrets_absent_from_output": true,
+      "stderr_bytes": 39,
+      "user": "65532:65532"
+    }
+  ],
+  "scope": "APP-075 local-only positive; synthetic CA, local SCRAM, no AWS/RDS",
+  "synthetic_ca_sha256": "5e47b067c5e10a472195ef748c17309d4410aa64481e4c9a6aaf081be0afeca4",
+  "untrusted_ca_sha256": "a8f1d8e64a09d1b7a8b7e00dafd836246c5d84c2ad3b2578e924882b3a6c5ca0"
+}
