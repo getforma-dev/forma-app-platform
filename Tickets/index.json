@@ -314,7 +314,7 @@
         "APP-173"
       ],
       "ticket_count": 70,
-      "done_count": 5,
+      "done_count": 6,
       "blocked_count": 1
     },
     {
@@ -5403,11 +5403,11 @@
     {
       "id": "APP-173",
       "title": "Review the November 5 base-image scan findings so beta promotion can continue",
-      "path": "2-in-progress/APP-173.md",
+      "path": "4-done/APP-173.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "In progress",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Task",
       "Sprint": "S14",
@@ -5420,7 +5420,8 @@
       "Depends on": "APP-167",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`ops/scan-disposition-2026-11-05`, [PR #88](https://github.com/getforma-dev/forma-app-platform/pull/88)",
+      "Branch / PR": "`ops/scan-disposition-2026-11-05`, [PR #88](https://github.com/getforma-dev/forma-app-platform/pull/88), merged as `05db000`",
+      "Deployment": "Sealed `beta/20261105-05db000` by run [42091618441](https://github.com/getforma-dev/forma-app-platform/actions/runs/42091618441), 2026-11-05 20:35:03 UTC.",
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Not applicable.",
