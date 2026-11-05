@@ -622,11 +622,18 @@ def source_record_bytes(raw, organization):
 
 # --- operator transaction -----------------------------------------------------
 
+PGHOST_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
+
+
 def connect():
     import psycopg
     # Always verify-full TLS: a Unix-socket host never uses TLS, and libpq would
     # prefer GSSAPI encryption over TLS when Kerberos credentials exist.
-    require(not os.environ["PGHOST"].startswith("/"), "socket_host_refused")
+    # One DNS name or IPv4 address only, as app/operator/operator.py requires: libpq also
+    # reads '@' as an abstract socket and ',' as a host list (APP-084 review).
+    host = os.environ["PGHOST"]
+    require(host and not host.startswith(("/", "@")), "socket_host_refused")
+    require(PGHOST_NAME.fullmatch(host) is not None, "host_refused")
     return psycopg.connect(host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                            dbname=os.environ.get("PGDATABASE", "genui"), user=os.environ["PGUSER"],
                            password=os.environ.get("PGPASSWORD"), sslmode="verify-full", gssencmode="disable",
@@ -689,9 +696,9 @@ def note_invitation(c, org, kind, code_id, operation, state_before, state, remot
 def claim_provider_tenants(c, org):
     """Own every active binding in the cross-organization index.
 
-    A missing row is claimed here, which is how an organization created before
-    it had a handle or a code takes its tenant. A row owned by another
-    organization refuses. ON CONFLICT does not abort the transaction."""
+    Migration 0021 indexed every active binding, so a missing row here is a
+    binding made since without a claim; it is claimed now. A row owned by
+    another organization refuses. ON CONFLICT does not abort the transaction."""
     rows = c.execute("""SELECT issuer, provider_tenant_id FROM genui.provider_tenant_bindings
           WHERE organization_id=%s AND active ORDER BY issuer, provider_tenant_id""", (org,)).fetchall()
     for issuer, tenant in rows:
@@ -2097,8 +2104,10 @@ def issue_handle(c, args):
     once and installed in each environment; otherwise a fresh handle is drawn."""
     org = args.organization
     begin(c, org)
-    lock_handles(c, org)
+    # The index claim first: lock_handles takes the operator audit head, and D7.1 puts
+    # the head last (APP-084 review).
     claim_provider_tenants(c, org)
+    lock_handles(c, org)
     require(live_handles(c, org) == 0, "handle_exists")
     raw = add_handle(c, org, args.raw_handle)
     c.commit()

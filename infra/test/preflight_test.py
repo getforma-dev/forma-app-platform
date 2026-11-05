@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -577,9 +578,18 @@ class AttachedManagementSecret(unittest.TestCase):
                         {'provider_management_secret_arn': MANAGEMENT_SECRET[:-7]}, {'provider_management_secret_arn': 'fauth-beta/management/northstar'},
                         {'provider_management_secret_arn': MANAGEMENT_SECRET + ':management_key::'}, {'provider_management_secret_arn': None},
                         {'provider_management_url': 'http://auth-staging.getforma.dev'}, {'provider_management_url': MANAGEMENT_URL + '/manage'},
-                        {'provider_management_url': MANAGEMENT_URL + '\n'}, {'operator_image_digest': ''}):
+                        {'provider_management_url': MANAGEMENT_URL + '\n'}, {'operator_image_digest': ''},
+                        {'provider_management_url': 'https://auth.example.org'},
+                        {'provider_management_url': 'https://auth-staging.getforma.dev.example.org'}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 preflight.reserve(dict(config, **changes), ledger, WINDOW)
+
+    def test_the_provider_host_pin_matches_the_operator_runtime(self):
+        # APP-084 review: a URL outside the operator's pin must be refused at preflight,
+        # not only when the task starts, so both lists must be the same set.
+        source = (Path(__file__).resolve().parents[2] / 'app/runtime/provider_management.py').read_text()
+        pinned = re.search(r'^PROVIDER_HOSTS = frozenset\(\{([^}]*)\}\)$', source, re.M).group(1)
+        self.assertEqual(preflight.PROVIDER_HOSTS, frozenset(h.strip().strip('"\'') for h in pinned.split(',') if h.strip()))
 
     def test_attaching_and_clearing_stay_within_the_reserved_window(self):
         config, ledger = always_on()
