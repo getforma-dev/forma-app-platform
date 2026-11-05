@@ -1722,6 +1722,56 @@ def qualify():
             passed('fresh checksummed version'+str(latest)+' install and exact repeat')
     finally:
         report['fresh_container_removed']=fresh.removed
+    # APP-084 review: 0021 copies every active provider-tenant binding into the private
+    # index when it upgrades a populated version-20 database, and turns FORCE RLS back on.
+    # Two organizations sharing one issuer and tenant fail the upgrade whole, which is
+    # what the release preflight must look for before a schema release.
+    def version20(directory):
+        manifest=json.loads((MIGRATIONS/'manifest.json').read_text())
+        manifest.update(database_version=20, migrations=manifest['migrations'][:20], catalog=manifest['catalog'][:21])
+        for item in manifest['migrations']+manifest['catalog']: shutil.copyfile(MIGRATIONS/item['file'], directory/item['file'])
+        (directory/'manifest.json').write_text(json.dumps(manifest))
+        return directory
+    def seed20(pg, bindings):
+        with pg.connect('postgres') as c:
+            for org, tenant, active in bindings:
+                c.execute("INSERT INTO genui.organizations VALUES (%s,'Upgrade fixture','active') ON CONFLICT DO NOTHING",(org,))
+                c.execute('INSERT INTO genui.provider_tenant_bindings VALUES (%s,%s,%s,%s)',(org,'upgrade-iss',tenant,active))
+    assert latest>=21
+    report['backfill_containers_removed']=[]
+    orgs=['00000000-0000-4000-8000-0000000021%02d'%i for i in range(1,4)]
+    upgrade=LocalPostgres()
+    try:
+        with upgrade, tempfile.TemporaryDirectory() as tmp:
+            with upgrade.connect() as c: runtime.apply_migrations(c,version20(Path(tmp)))
+            seed20(upgrade,[(orgs[0],'ten_a',True),(orgs[1],'ten_b',True),(orgs[2],'ten_c',False)])
+            with upgrade.connect() as c:
+                assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(20,)
+                runtime.apply_migrations(c,MIGRATIONS)
+            with upgrade.connect('postgres') as c:
+                index=c.execute('SELECT issuer,provider_tenant_id,organization_id::text FROM genui_private.provider_tenant_index ORDER BY 2').fetchall()
+                assert index==[('upgrade-iss','ten_a',orgs[0]),('upgrade-iss','ten_b',orgs[1])],index
+                assert c.execute("""SELECT relrowsecurity,relforcerowsecurity FROM pg_catalog.pg_class
+                    WHERE oid='genui.provider_tenant_bindings'::regclass""").fetchone()==(True,True)
+                assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(latest,)
+            passed('0021 upgrade of a populated version-20 database copies exactly the active provider-tenant bindings into the private index (an organization with no handle or code included, an inactive binding excluded) and leaves the bindings table ENABLE+FORCE RLS',
+                   index_rows=2)
+    finally: report['backfill_containers_removed'].append(upgrade.removed)
+    shared=LocalPostgres()
+    try:
+        with shared, tempfile.TemporaryDirectory() as tmp:
+            with shared.connect() as c: runtime.apply_migrations(c,version20(Path(tmp)))
+            seed20(shared,[(orgs[0],'ten_shared',True),(orgs[1],'ten_shared',True)])
+            before=shared.digest()
+            try:
+                with shared.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
+            except psycopg.errors.UniqueViolation: pass
+            else: raise AssertionError('0021 accepted two organizations sharing one issuer and tenant')
+            assert shared.digest()==before
+            with shared.connect() as c:
+                assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(20,)
+            passed('0021 refuses whole, leaving version 20 and every byte unchanged, when two organizations share one active issuer and tenant (the release preflight condition)')
+    finally: report['backfill_containers_removed'].append(shared.removed)
     pg=LocalPostgres()
     try:
         with pg:

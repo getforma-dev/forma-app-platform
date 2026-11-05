@@ -25,9 +25,9 @@ never rewritten (an identical record is `unchanged`, a differing one refused).
 `create-bound-work` writes a new saved work at version 1 that copies an
 existing work's publication, context and bindings and binds one source input
 to another live revision of the same source with the same contract; the old
-work and its records are untouched. Neither writes an audit event: D7.8's
-operator kinds name none (a kind is an ADR amendment), so, as with the seed,
-the retained JSON output is the record.
+work and its records are untouched. Each writes one operator-chain event
+(`source_revision.registered`, `work.seeded`; ADR-007 D7.8 as amended by
+APP-084), and an unchanged rerun writes none.
 
 A new access code's secret (32 CSPRNG bytes, base32) is printed exactly once,
 on standard output, after its transaction commits. It is never logged, stored
@@ -92,8 +92,8 @@ inputs and record schemas, the publication, the saved work, its collection and
 bindings, the expenses source revision and the seeded EXP-002 outcome, labeled
 "seeded definition" as the seed labels every fixture definition (ADR-010 §1,
 demo R3). Exact-match idempotent (`changed: false` on a repeat; any differing
-row refuses whole). No audit event: D7.8's operator kinds name none (APP-084
-item 6), as for `create-bound-work`; the retained output is the record. The
+row refuses whole). A change writes one `app.seeded` operator-chain event (ADR-007
+D7.8 as amended by APP-084); a repeat writes none. The
 definition is not re-admitted through the service's whole-output admission
 path (APP-010, Rust): that path is not reproducible from Python byte for byte,
 so the seeded rows are used, exactly as the seed itself placed them.
@@ -108,16 +108,16 @@ schemas, publication, saved work with its collection and bindings, the source
 revision (its REAL normalized digest, the bytes `library_sources.py build`
 places in the cache or the deploy uploads), the seeded decision record and the
 author's grants. Exact-match idempotent (`changed: false` on a repeat; any
-differing row refuses whole); no audit event, as for the other seeds. The
-output lists each app with its identities so the record is the retained JSON.
+differing row refuses whole). It writes no audit event, unlike `seed-spend-review`:
+D7.8 names no kind for the library seed or its author grants (an accepted limit,
+APP-084). The output lists each app with its identities, so the retained JSON is the record.
 
 Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
 organization (the two seeded ones) to its real provider tenant for an issuer, the
 row the callback's registry/database agreement needs (ADR-006; the seed binds only
-the fixture issuer). Identifiers only, so it runs in the managed operator task;
-it writes no audit event because ADR-007 D7.8's operator kinds are closed and
-name none (the seed's bindings have none either; a `provider_tenant.bound` kind
-would be an ADR-007 amendment).
+the fixture issuer). Identifiers only, so it runs in the managed operator task.
+A created binding writes one `provider_tenant.bound` operator-chain event (ADR-007
+D7.8 as amended by APP-084); a repeat writes none. The seed's own bindings write none.
 
 Sign-in handles (APP-009, ADR-006 §handle): `issue-handle` gives an organization
 without one its first live handle (fresh, or an exact already-issued `--handle`
@@ -1574,8 +1574,10 @@ def record_revocations(c, org, code_id, lock=True):
 # ADR-003 amendment 2026-10-30: every change to the environment's capability secret is a
 # read and a whole-map PutSecretValue, so operator commands that change it take this
 # transaction-scoped advisory lock first (one per database, so one per environment). Only
-# create_remote takes it while holding rows, and no holder of this lock waits for a row
-# lock, so it adds no wait cycle to D7.1's order. The pair keeps runtime.py's lock class.
+# create_remote takes it while holding rows. Since APP-084, a holder may also take the
+# operator audit head (`note_invitation` -> `append`, audit_heads FOR UPDATE) under it; no
+# path takes this lock while already holding that head, so it still adds no wait cycle to
+# D7.1's order (APP-084 review). The pair keeps runtime.py's lock class.
 CAPABILITY_LOCK = (1819409017, 74)
 
 
@@ -1718,8 +1720,8 @@ def process_revoke(c, org, invitation_id, client):
     create = c.execute("""SELECT state,remote_invitation_id FROM genui.provider_invitations WHERE organization_id=%s AND code_id=%s
           AND operation='create'""", (org, code_id)).fetchone()
     if create is None or create[0] == "failed":
-        c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
-                  (org, invitation_id))
+        c.execute("""UPDATE genui.provider_invitations SET state='confirmed',detail='nothing_to_revoke',updated_at=now()
+              WHERE organization_id=%s AND invitation_id=%s""", (org, invitation_id))
         note_invitation(c, org, "provider.invitation.revoked", code_id, "revoke", state_before, "confirmed", None, "nothing_to_revoke")
         c.commit()
         return operation_result(invitation_id, "revoke", "confirmed", None, "nothing_to_revoke")
@@ -1731,8 +1733,8 @@ def process_revoke(c, org, invitation_id, client):
     except Refused:
         _rollback(c)
         return operation_result(invitation_id, "revoke", state_before, create[1], "provider_contract_mismatch")
-    c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,updated_at=now()
-          WHERE organization_id=%s AND invitation_id=%s""", (outcome.state, create[1], org, invitation_id))
+    c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,detail=%s,updated_at=now()
+          WHERE organization_id=%s AND invitation_id=%s""", (outcome.state, create[1], outcome.detail, org, invitation_id))
     note_invitation(c, org, "provider.invitation.revoked", code_id, "revoke", state_before, outcome.state, create[1], outcome.detail)
     c.commit()
     result = operation_result(invitation_id, "revoke", outcome.state, create[1], outcome.detail)
@@ -1895,8 +1897,8 @@ def ended_remotely(c, org, client, tenant, scan):
         begin(c, org)
         recorded = record_revocations(c, org, code_id)
         for revocation, _ in recorded:
-            c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
-                      (org, revocation))
+            c.execute("""UPDATE genui.provider_invitations SET state='confirmed',detail=%s,updated_at=now()
+                  WHERE organization_id=%s AND invitation_id=%s""", (detail, org, revocation))
             note_invitation(c, org, "provider.invitation.revoked", code_id, "revoke", "pending", "confirmed", remote, detail)
         c.commit()
         entries += [operation_result(revocation, "revoke", "confirmed", remote, detail, state_before=None) for revocation, _ in recorded]

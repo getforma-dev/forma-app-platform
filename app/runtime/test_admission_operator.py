@@ -506,6 +506,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                          {"organization_id": ORG, "binding": "created", "active_bindings": 2, "source": "arguments"})
         self.assertRegex(created["audit_event"], r"^[0-9a-f-]{36}$")
         self.assertEqual(self.operator_events(), before + [("provider_tenant.bound",)])
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)  # APP-084 review: the new kind verifies
         self.assertEqual(rows(), [(ISSUER, TENANT, True), ("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
         self.assertEqual(self.cli(*args), {"organization_id": ORG, "binding": "existing", "active_bindings": 2, "audit_event": None, "source": "arguments"})
         # B1 review m6: a pair already active for another organization that can sign in is refused.
@@ -990,6 +991,33 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         entry = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
         self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "active"))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
+                         "the seed validates its bundles with contracts/validate.py, which needs jsonschema")
+    def test_the_seed_claims_each_tenant_in_the_cross_organization_index(self):
+        """APP-084 review: a seeded binding is claimed in genui_private.provider_tenant_index in the same
+        transaction, so no other organization can bind the same tenant first; an owned tenant refuses."""
+        import tenant_seed
+        with self.connect() as c:
+            tenant_seed.seed(c, tenant_seed.make_bundles())
+        index = dict(((r[0], r[1]), r[2]) for r in self.query(
+            "SELECT issuer, provider_tenant_id, organization_id::text FROM genui_private.provider_tenant_index"))
+        for org in tenant_seed.ORGANIZATIONS:
+            self.assertEqual(index.get((tenant_seed.ISSUER, "ten_" + org)), org)
+        with self.connect() as c:  # an exact repeat changes nothing
+            changes = []
+            tenant_seed.seed(c, tenant_seed.make_bundles(), changes)
+            self.assertEqual(changes, [])
+        northstar, canary = tenant_seed.ORGANIZATIONS
+        move = "UPDATE genui_private.provider_tenant_index SET organization_id=%s WHERE issuer=%s AND provider_tenant_id=%s"
+        with self.connect("postgres") as c:
+            c.execute(move, (canary, tenant_seed.ISSUER, "ten_" + northstar))
+        try:
+            with self.connect() as c, self.assertRaises(ValueError):
+                tenant_seed.seed(c, tenant_seed.make_bundles())
+        finally:  # the class shares one database
+            with self.connect("postgres") as c:
+                c.execute(move, (northstar, tenant_seed.ISSUER, "ten_" + northstar))
 
     @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
                          "seed-spend-review validates the bundle with contracts/validate.py; jsonschema is in the operator image's "

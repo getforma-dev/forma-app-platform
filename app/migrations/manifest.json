@@ -105,7 +105,7 @@
     {
       "version": 21,
       "file": "0021_operator_audit_kinds.sql",
-      "sha256": "ea740b7f31c534b8f0ab6598543b57b637e3b58b30c7f8637de6f850caf4742e"
+      "sha256": "a6ce1a80c484fe7133a06b5e5c3cf28e18fa7b13aa6646790afa5dfe372d2883"
     }
   ],
   "catalog": [
@@ -195,7 +195,7 @@
     },
     {
       "file": "catalog-v21.json",
-      "sha256": "9f612e879f594d5a292ca9c7861630c74f17439177e2860bdac5dc16ecd9371f"
+      "sha256": "c881eb4eea81ed3ca5261f0bf2bb2bd40c2d0b1d5d0bf3c123b546da27568869"
     }
   ]
 }

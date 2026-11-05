@@ -470,6 +470,12 @@ async fn campaign() {
         rows(&fixture, &format!("SELECT count(*)::text FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='operator' AND kind='work.seeded' AND app_id='{APP}' AND work_id='{BOUND}'")).await,
         ["1"]
     );
+    // APP-084 review: the operator's own `verify` recomputes the whole operator chain,
+    // including the new source_revision.registered and work.seeded events.
+    assert_eq!(
+        operator(&fixture, &["verify", "--organization", ORG])["verified"],
+        true
+    );
     refused_for(
         &operator_as(
             &fixture,
@@ -503,7 +509,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision, and one work.seeded event; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
+        "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision, and one work.seeded event, and the operator's verify recomputes the chain with both new events; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
     );
 
     // --- Authorized member: exact result, released, receipted ---

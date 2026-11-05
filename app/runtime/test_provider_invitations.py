@@ -11,6 +11,7 @@ TLS CA and drive the real command line as genui_migration over verify-full TLS.
 """
 import contextlib
 import datetime
+import hashlib
 import io
 import json
 import os
@@ -343,6 +344,24 @@ class CapabilitySecretTests(unittest.TestCase):
             shutil.rmtree(target, ignore_errors=True)
 
 
+class ProviderTimeTests(unittest.TestCase):
+    def test_every_fraction_width_chrono_writes_parses_to_the_same_instant(self):
+        """Provider review n1(b) (APP-084): PostgreSQL timestamps reach the provider's JSON through
+        chrono's to_rfc3339, which writes 0, 3, 6 or 9 fraction digits; the stand-in writes only 9."""
+        base = datetime.datetime(2026, 11, 5, 12, 0, 0, 123000, tzinfo=datetime.timezone.utc)
+        for text, expected in (("2026-11-05T12:00:00Z", base.replace(microsecond=0)),
+                               ("2026-11-05T12:00:00.123Z", base),
+                               ("2026-11-05T12:00:00.123000Z", base),
+                               ("2026-11-05T12:00:00.123000000Z", base),
+                               ("2026-11-05T12:00:00.123456789Z", base.replace(microsecond=123456)),
+                               ("2026-11-05T13:00:00.123+01:00", base)):
+            with self.subTest(text=text):
+                self.assertEqual(pm.parse_time(text), expected)
+        for text in ("2026-11-05T12:00:00", "2026-11-05T12:00:00.Z", "2026-11-05T12:00:00.1234567890Z", "2026-11-05 12:00:00Z", None):
+            with self.subTest(text=text), self.assertRaises(pm.Refused):
+                pm.parse_time(text)
+
+
 class ClientTests(unittest.TestCase):
     """The management client against the loopback stand-in, in process."""
 
@@ -539,6 +558,32 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
     def rows(self, code_id):
         return self.query("""SELECT invitation_id::text,operation,state,remote_invitation_id FROM genui.provider_invitations
                              WHERE organization_id=%s AND code_id=%s ORDER BY operation""", (ORG, code_id))
+
+    def details(self, code_id):
+        return [tuple(r) for r in self.query("""SELECT operation,state,detail FROM genui.provider_invitations
+                             WHERE organization_id=%s AND code_id=%s ORDER BY operation""", (ORG, code_id))]
+
+    def test_a_revocation_keeps_why_it_settled(self):
+        """Provider review n5 (APP-084): a 404 for an invitation the invitee already accepted is
+        stored with its detail, so the ledger tells "revoked" from "identity already created"."""
+        self.ensure_backfill()
+        outs = {name: self.invite("n5-%s-%s@example.test" % (name, uuid.uuid4().hex[:6])) for name in ("accepted", "live")}
+        token = json.loads(self.capability(outs["accepted"]["provider_invitation"]["invitation_id"]).read_text())["invite_token"]
+        remote = outs["accepted"]["provider_invitation"]["remote_invitation_id"]
+        self.assertIsNotNone(self.fake.register(token, self.fake.invites[remote]["email"]))
+        for out in outs.values():
+            self.run_cli("revoke", "--organization", ORG, "--code-id", out["code_id"])
+        self.assertEqual(self.details(outs["accepted"]["code_id"]), [("create", "confirmed", None), ("revoke", "confirmed", "not_pending")])
+        self.assertEqual(self.details(outs["live"]["code_id"]), [("create", "confirmed", None), ("revoke", "confirmed", "revoked")])
+        # APP-084 review: the event's outcome_digest is recomputable from the canonical transition record.
+        stored = self.query("""SELECT outcome_digest::text FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator'
+                                 AND kind='provider.invitation.revoked' AND code_id=%s""", (ORG, outs["accepted"]["code_id"]))
+        # Recomputed independently of op.command_digest: forma-json-v1 (ASCII-ordered keys, no spaces).
+        record = {"detail": "not_pending", "operation": "revoke", "remote_invitation_id": remote,
+                  "state": "confirmed", "state_before": "pending"}
+        expected = "sha256:" + hashlib.sha256(b"forma:provider-invitation-outcome:v1\x00" + json.dumps(
+            record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        self.assertEqual(stored, [(expected,)])
 
     def age(self, *code_ids, seconds=900):
         """Move these codes' provider operations, and the stand-in's invitations for their addresses,
@@ -1053,7 +1098,9 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertFalse(path.exists())
         self.assertTrue(self.capability(live["provider_invitation"]["invitation_id"]).exists())
         self.assertEqual([r[1:3] for r in self.rows(live["code_id"])], [("create", "confirmed")])
-        self.assertGreater(len(self.operator_events()), events)
+        # APP-084 review: exactly one provider.invitation.revoked per settled revocation (expired and
+        # exhausted); the lapsed capability ends without a ledger transition, so it writes no event.
+        self.assertEqual(self.operator_events()[events:], [("provider.invitation.revoked",)] * 2)
         self.assertEqual(self.run_cli("verify", "--organization", ORG)["verified"], True)
 
     def test_contract_mismatch_is_confirmed_unusable_and_revoked(self):
@@ -1243,9 +1290,13 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.entry(self.reconcile(), create)["detail"], "ambiguous_remote_match")
         self.assertEqual([r[1:3] for r in self.rows(out["code_id"])], [("create", "unknown"), ("revoke", "pending")])
         self.age(out["code_id"], seconds=72 * 3600)
+        events = len(self.operator_events())
         result = self.reconcile()
         entry = self.entry(result, create)
         self.assertEqual((entry["state_before"], entry["state"], entry["detail"]), ("unknown", "failed", "expired_unconfirmed"))
+        # APP-084 review: reconcile's settlement of the create is one provider.invitation.reconciled event,
+        # and the revocation it makes unnecessary is one provider.invitation.revoked.
+        self.assertEqual(self.operator_events()[events:], [("provider.invitation.reconciled",), ("provider.invitation.revoked",)])
         revoke = self.rows(out["code_id"])[1][0]
         self.assertEqual((self.entry(result, revoke)["state"], self.entry(result, revoke)["detail"]), ("confirmed", "nothing_to_revoke"))
         self.assertEqual([r[1:] for r in self.rows(out["code_id"])], [("create", "failed", None), ("revoke", "confirmed", None)])

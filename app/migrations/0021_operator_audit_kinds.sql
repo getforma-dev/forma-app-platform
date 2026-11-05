@@ -1,6 +1,7 @@
 -- APP-084: the operator chain gains the provider-invitation and operator-command
--- kinds, and a private index makes one provider tenant belong to one
--- organization. Additive: no genui table changes and no stored value is rewritten.
+-- kinds, a private index makes one provider tenant belong to one organization,
+-- and a provider operation keeps why it settled. Additive: one nullable column,
+-- one new private table, and no stored value is rewritten.
 -- genui_private.provider_tenant_index has no RLS, like code_index and
 -- handle_index, because FORCE RLS hides every other organization's binding.
 -- Executed only by the checksummed, transactional migration runner (D7.12).
@@ -16,6 +17,12 @@ ALTER POLICY operator_chain ON genui.audit_events
   'code.issued','code.revoked','code.extended','membership.revoked','entitlement.revoked','permission.granted',
   'permission.revoked','creator_authority.revoked','provider.invitation.created','provider.invitation.reconciled',
   'provider.invitation.revoked','source_revision.registered','work.seeded','provider_tenant.bound','app.seeded']));
+
+-- Provider review n5: a revocation answered 404 `not_pending` means the invitee
+-- already created the identity. The detail is kept, so the ledger tells that
+-- from `revoked`. Existing rows keep NULL: their detail was never recorded.
+ALTER TABLE genui.provider_invitations ADD COLUMN detail text
+ CHECK (detail IS NULL OR detail ~ '^[a-z][a-z0-9_]{0,63}$');
 
 CREATE TABLE genui_private.provider_tenant_index (
  issuer text NOT NULL,
