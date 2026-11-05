@@ -4,6 +4,7 @@ The entry (app/src/storage/managed_qualification.rs) is the single source of
 the source list, the seed inputs and their declared pins; these tests keep
 local_harness.py and check_image.py reading the same tables.
 """
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -248,6 +249,12 @@ class ConfinementTests(unittest.TestCase):
         self.assertEqual(float(harness.ENTRY_CPUS), int(task.group(1)) / 1024)
         self.assertIn("--cpus=%s" % harness.ENTRY_CPUS, harness.confinement())
         self.assertIn("--cpus=0.5", harness.confinement(cpus="0.5"))
+
+    def test_the_cpu_budget_must_be_positive(self):
+        self.assertEqual(harness.positive_cpus("0.25"), "0.25")
+        for value in ("0", "-1", "nan", "max", ""):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                harness.positive_cpus(value)
 
 
 class RefusalTests(unittest.TestCase):

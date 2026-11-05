@@ -799,6 +799,8 @@ fn assert_closed_refusal(refusal: &Value, forbidden: &[&str]) {
             "Denied",
             "Unavailable",
             "Deadline",
+            "ProjectionLimit",
+            "Busy",
             "UnknownOutcome",
         ]
         .contains(&text);

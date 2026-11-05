@@ -102,6 +102,17 @@ def refusal_names(refusal, **expected):
 ENTRY_CPUS = "1"
 
 
+def positive_cpus(value):
+    """argparse type for --cpus: a positive number (docker reads --cpus=0 as no limit)."""
+    try:
+        number = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("--cpus must be a positive number") from None
+    if not number > 0:
+        raise argparse.ArgumentTypeError("--cpus must be a positive number")
+    return value
+
+
 def confinement(uid=65532, cpus=ENTRY_CPUS):
     """No network beyond the internal one, read-only root, no capabilities;
     the private run directory is a fresh 0700 tmpfs owned by the run UID."""
@@ -399,7 +410,10 @@ class Harness:
         started = time.time()
         completed = docker(*command, input=payload, check=False, timeout=660)
         output = parse_output(completed.stdout)
+        streams = completed.stdout + completed.stderr
+        secrets_absent = not any(value.encode() in streams for value in self.passwords.values())
         return {"name": "supervised_positive", "run_id": run_id, "manifest_sha256": sha256(manifest.encode()),
+                "secrets_absent_from_output": secrets_absent,
                 "exit_code": completed.returncode, "seconds": round(time.time() - started, 2),
                 "substitutions": ["credential refresh writes the synthetic local-password envelope instead of STS/IAM tokens",
                                   "reviewed-CA pin is the synthetic local CA hash instead of 90a6f1a7..."],
@@ -466,7 +480,7 @@ class Harness:
                all("refusal" in (runs[name]["result"] or {}) and (runs[name]["result"] or {}).get("refusal") is None
                    for name in ("positive", "supervised_positive", "unarmed", "root-uid", "wrong-arguments")))
         expect("no run's output carries any of its credentials",
-               all(item.get("secrets_absent_from_output") is True for item in self.report["runs"] if "secrets_absent_from_output" in item))
+               all(item.get("secrets_absent_from_output") is True for item in self.report["runs"]))
         for name, pool, step, cause, sqlstate, failed in (
                 ("untrusted-ca", "workspace", "connect", "tls_unknown_issuer", None, 4),
                 ("wrong-password", WRONG_PASSWORD_ROLE, "connect", "db_error", "28P01", 1),
@@ -504,7 +518,7 @@ def main():
     parser.add_argument("--image", required=True, help="locally built qualification image (tag or id)")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--python", default=str(APP / "runtime/.venv/bin/python"), help="locked runtime Python for migrations and seed")
-    parser.add_argument("--cpus", default=ENTRY_CPUS, help="CPU budget for the entry containers (default: the Fargate QualificationTask's 1 vCPU)")
+    parser.add_argument("--cpus", default=ENTRY_CPUS, type=positive_cpus, help="CPU budget for the entry containers (default: the Fargate QualificationTask's 1 vCPU)")
     args = parser.parse_args()
     label = "genui-app075-" + uuid.uuid4().hex[:10]
     harness = Harness(args.image, args.python, label, args.cpus)
