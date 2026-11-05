@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # APP-135 clean-customer audit
 
 Focused walk of a new customer with no template library and no existing data. This is evidence for APP-135. It does not close the ticket. Acceptance checks stay open. Folders, sharing, MCP, Slack, rename, and Victor's keep/remove/defer decisions were not exercised.

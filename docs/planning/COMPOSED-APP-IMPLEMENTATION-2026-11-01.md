@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # Composed app implementation — November 1
 
 Victor explicitly prioritized this implementation and AWS delivery after the initial planning-only pass. Implementation began on `codex/composed-app-implementation`, based on trunk `0fd3968`, and merged in [PR 38](https://github.com/getforma-dev/forma-app-platform/pull/38) at `d10cf`. The exact qualified source `9ee4a01b1c4b1b90147928844805b7397aa40903` is now deployed. This record separates implemented behavior, observed qualification and release status.

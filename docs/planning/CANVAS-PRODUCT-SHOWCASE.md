@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # Forma canvas showcase — Spend and Jacket Reminder
 
 The two demos show how an app gets context. Spend starts with an uploaded file. A user can explore its transactions in an app and ask a calculator to use that same data. Jacket Reminder starts with an intent. The user connects a Weather widget and two delivery widgets, then asks the app to act on those connections.

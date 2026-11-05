@@ -37,7 +37,33 @@ The pitch is over. Its trunk landed on `main` at `bbb926d`, and pitch-era branch
 | Framework/fAuth integration | [Cross-team handoff](docs/planning/CROSS-TEAM-HANDOFF.md), [upstream blockers](Tickets/BLOCKERS.md) |
 | Deferred platform work | [APP-097](Tickets/0-backlog/APP-097.md), [roadmap](docs/planning/ROADMAP.md), [phase board](Tickets/PHASES.md) |
 
-`app/` owns the application, `parser/` the separately built parser, `infra/` and `ops/beta/` delivery, `contracts/` the locked schemas and vectors, and `scripts/dev/` the local recipes. `design/` and `evidence/` retain source history and measured results; they are not disposable scratch. The root Cargo workspace includes `app` and the auth verifier in `spikes/APP-006`; builds go to root `target/`.
+## Repository map
+
+```text
+What runs
+  app/                 application: src/ Rust service, admin/ canvas, migrations/ schema, runtime/ Python children
+  parser/              sealed parser workspace and process
+  contracts/           locked cross-language schemas and vectors
+  spikes/APP-006       production auth verifier, and a Cargo workspace member
+
+How it runs
+  justfile             task recipes
+  scripts/dev/         local development scripts
+  compose.dev.yaml     local PostgreSQL
+  process-compose.yaml local process supervision
+  infra/               AWS CDK stack for the one beta environment
+  ops/                 beta operator scripts and promotion
+  .github/             CI workflows and the beta promotion workflow
+
+Records
+  Tickets/             work board; status-folder ticket files are authoritative
+  docs/                procedures, decisions and the document index
+  design/              frozen design packets
+  evidence/            measured results, opened from a ticket or an ADR
+  fixtures/            synthetic fixture tooling
+```
+
+Daily entry points are this README, [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), [Tickets/TRACKER.md](Tickets/TRACKER.md) and the ADR folder [docs/architecture](docs/architecture).
 
 ## Check a change
 

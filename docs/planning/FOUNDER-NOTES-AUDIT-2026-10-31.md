@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # Founder-notes audit — approved handoff moves
 
 Date: 2026-10-31. Scope: the tracked files in `forma-pitch-mvp`, inspected during the pickup of [the October 31 handoff](https://github.com/getforma-dev/forma-app-platform/blob/93df32175794e856f4aa02055dc5d75b0750c7aa/docs/planning/HANDOFF-2026-10-31.md). Victor reviewed the list and approved **only the two session handoff moves**, preserving their instructions and references. Both originals now live byte-for-byte under the ignored `founder-notes/handoffs/` directory; their tracked removals are part of this change. The pitch-script split and cross-team extraction below remain proposals and were not performed.

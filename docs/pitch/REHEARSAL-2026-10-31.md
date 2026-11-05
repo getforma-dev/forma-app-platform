@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # APP-096 rehearsal log (local)
 
 Documentation rehearsal of [PITCH-SCRIPT.md](PITCH-SCRIPT.md) section 5 and [RECORDING.md](RECORDING.md). No application code changed. Nothing was deployed. APP-096's beta acceptance stays open.

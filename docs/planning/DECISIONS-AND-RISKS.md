@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [CROSS-TEAM-HANDOFF.md](CROSS-TEAM-HANDOFF.md).
+
 # Decisions and risks to retire
 
 These are bounded decisions attached to implementation work, not reasons to stop preparation. Product/architecture choices already made are in [DECISIONS](../architecture/DECISIONS.md).

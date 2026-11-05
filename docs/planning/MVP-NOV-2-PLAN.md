@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DIRECTION.md](DIRECTION.md).
+
 # November 2 MVP plan — Oct 29 evening → Nov 2
 
 **Historical October 29 plan.** The November 1 [clean first-run decision](first-run/README.md) and [current direction](DIRECTION.md) supersede this recording/demo scope. The original schedule and obligations below remain evidence; they are not current approvals or completion claims.

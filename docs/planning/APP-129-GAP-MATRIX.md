@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # APP-129 gap matrix
 
 Read against `af63feba41aa825a972dde354e0a5d2195f7d608` (`origin/pivot/pitch-mvp`). Source only. No application code changed. No test command was run for this note. No new APP id is taken; the board allocates the next id when someone adds a ticket file and runs `Tickets/_tools/board.py`.

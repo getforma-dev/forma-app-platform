@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [MODULE-MAP.md](MODULE-MAP.md).
+
 # Pitch join: canvas, planner, and composer
 
 Status: the APP-091 record. Read against `pivot/pitch-mvp` at `1a8c9c84e889`, which descends from `phase-one-spikes` `21199f4`. The authoritative shortcut text is [APP-098](../../Tickets/0-backlog/APP-098.md). This note names the seam, the rule relaxed, and the revisit ticket. APP-097 decides keep, rework, or drop.

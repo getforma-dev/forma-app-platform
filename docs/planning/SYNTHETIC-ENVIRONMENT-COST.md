@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md).
+
 # APP-007 synthetic environment cost estimate
 
 Prepared 2026-10-28 for account 877573132739, us-east-1; reconciled against the [final managed operating receipt](../../evidence/APP-007/managed/final-operating-state.json) at 2026-10-29 01:04 UTC. Victor selected **$100/month**, `beta.getforma.dev` and public HTTPS with invite-first application admission. The billable synthetic foundation has been deployed and qualified; its app service and all ten observed tasks are stopped, while retained infrastructure continues charging. The dedicated non-exportable ACM certificate and DNS validation were completed; the original cost model applies the integrated-service certificate pricing below. [ACM pricing](https://aws.amazon.com/certificate-manager/pricing/).

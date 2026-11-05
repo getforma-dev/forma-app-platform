@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md).
+
 # October 31 continuation: implementation and remaining gates
 
 Use [DEVELOPMENT](../DEVELOPMENT.md) for commands and repository rules, the

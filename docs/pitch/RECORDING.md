@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [first-run/RECORDING.md](../planning/first-run/RECORDING.md).
+
 # Recording shot list and pre-demo checklist (YC demo)
 
 How to set up, run and film the demo in short, retakeable shots. The words to say are in [PITCH-SCRIPT.md](PITCH-SCRIPT.md), section 5. The grammar is [CANVAS-RULES.md](CANVAS-RULES.md).

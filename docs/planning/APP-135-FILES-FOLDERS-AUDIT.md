@@ -1,3 +1,5 @@
+> **Historical (pitch era, kept as a record).** Current guidance: [DEVELOPMENT.md](../DEVELOPMENT.md).
+
 # APP-135 files, folders and naming
 
 One fresh clean customer. No application code changed. Acceptance stays open. Sharing, MCP, Slack and the founder keep/remove/defer list were not exercised.

@@ -2,3 +2,15 @@
 design/** -text -whitespace
 Tickets/evidence/upstream/** -text -whitespace
 Tickets/evidence/upstream-current/** -text -whitespace
+
+# Derived board views. Edit a ticket or register, then run board.py render.
+Tickets/index.json linguist-generated=true
+Tickets/TRACKER.md linguist-generated=true
+Tickets/PHASES.md linguist-generated=true
+Tickets/SPRINTS.md linguist-generated=true
+Tickets/CATEGORIES.md linguist-generated=true
+Tickets/COVERAGE.md linguist-generated=true
+Tickets/BLOCKERS.md linguist-generated=true
+Tickets/phases/** linguist-generated=true
+Tickets/sprints/** linguist-generated=true
+Tickets/categories/** linguist-generated=true
