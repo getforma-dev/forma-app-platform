@@ -35,3 +35,21 @@ Expenses is one work with 8 components. Show in Cards posted `{"kind":"card"}` a
 Migration `0021_work_artifact_kinds.sql` is version 21 on this branch. Open PR 83 (APP-084) adds a different migration at version 21. One of those branches has to be renumbered before both can merge.
 
 This is not a hosted or RDS run. No cloud change is in this ticket. Merging to `main` prepares a beta packet because `app/` changed, and that needs Victor's approval before any AWS change.
+
+## Review fixes, 2026-11-05
+
+Prepared by Claude on `app169/review-fixes` (PR 84 head `494073b` merged with `main` at `73f18d8`), commits `e82291e` and `188c426`. This section supersedes the race note under "Review and limits": `app` is now an upsert and the browser sends one write per work at a time.
+
+- First load: a library row carries `data-artifact-kind="card"`, `"app"`, or no attribute when nothing is saved. The canvas carries `data-artifact-kinds="true"` once the kinds were read. The board keeps a local Card that has no saved row and uploads it once. Only a saved `app` drops a local Card. Without the page signal nothing local changes and nothing is sent. A failed kinds read renders the canvas without kinds instead of refusing it.
+- Writes: a refused or failed write restores the last saved choice and announces it. The route spends the member write window, returns 503 when the session store is unavailable, decodes a closed body, and logs `work.kind_set`.
+- Not changed here: the write is still not audited, and the policy is still the shared `tenant_scope` form. Both need the migration change. No backfill of existing ambiguous works and no retirement of `stacks.ts` or `startStacks` is implemented.
+
+Checks on `188c426`:
+
+- `just check admin fmt clippy test http-smoke`: all ok. Admin tests 277 passed, 0 failed. Rust library tests 405 passed, 34 ignored; binary 8 passed; doctests 3 passed.
+- `npx tsx --test test/artifact-kind-board.test.ts test/artifact-kind-board-unread.test.ts` in `app/admin` with the previous `board.ts` and `layout.ts` restored: 4 failed. The first failure was `a local Card with no server row is kept`. With the fix all 4 pass.
+- `cargo test --locked -p forma-app-platform --lib -- the_kind_route the_kind_body only_card_and_app_are_kinds a_card_kind_stays an_unreadable_kind`: 5 passed.
+- `cargo test --locked -p forma-app-platform --bins -- canvas_page_renders_groups_cards_and_receipts_without_javascript`: 1 passed. It checks the `card` row, the row with no attribute, no `data-artifact-kind=""`, an `app` row, and the page signal present or absent.
+- `just campaign canvas`: passed, including the `artifact kind (APP-169)` check. `just campaign query`: passed, and its store-outage check now includes `POST /v1/library/{app}/{work}/kind` (503).
+
+Limit: a failing kinds read is covered by unit and SSR tests only. The campaign could not hold the table without also blocking new pooled connections' catalog check, and a privilege change trips the pinned catalog.
