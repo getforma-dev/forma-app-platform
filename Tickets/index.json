@@ -312,7 +312,7 @@
         "APP-172"
       ],
       "ticket_count": 69,
-      "done_count": 4,
+      "done_count": 5,
       "blocked_count": 0
     },
     {
@@ -341,7 +341,7 @@
         "APP-171"
       ],
       "ticket_count": 12,
-      "done_count": 0,
+      "done_count": 1,
       "blocked_count": 0
     }
   ],
@@ -355,9 +355,14 @@
     "APP-085",
     "APP-087",
     "APP-088",
+    "APP-092",
+    "APP-098",
     "APP-125",
     "APP-163",
-    "APP-166"
+    "APP-166",
+    "APP-169",
+    "APP-170",
+    "APP-171"
   ],
   "tickets": [
     {
@@ -3015,11 +3020,11 @@
     {
       "id": "APP-091",
       "title": "Pitch clone and join plan: canvas, planner and composer on the platform backbone",
-      "path": "2-in-progress/APP-091.md",
+      "path": "4-done/APP-091.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "In progress",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S14",
@@ -3032,7 +3037,7 @@
       "Depends on": "APP-012, APP-074",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`pivot/app-091-join` records the join. The clone is `pivot/pitch-mvp`",
+      "Branch / PR": "`pivot/app-091-join` records the join (PR #15, `63498fd`). The clone's trunk landed on `main` at `bbb926d`; both branches are deleted.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5258,11 +5263,11 @@
     {
       "id": "APP-168",
       "title": "One whole app on the canvas and an Apps, Widgets, Cards Library",
-      "path": "3-in-review/APP-168.md",
+      "path": "4-done/APP-168.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Feature",
       "Sprint": "S15",
@@ -5277,7 +5282,7 @@
       "Assignee": "Codex \u2014 GenUI",
       "Branch / PR": "`pivot/app-view-library` \u2014 [PR #48](https://github.com/getforma-dev/forma-app-platform/pull/48)",
       "Implementation": "Implemented; 164 admin tests, native checks, 19 browser checks and independent review passed.",
-      "Deployment": "Held at Victor\u2019s request; no AWS action for this redesign.",
+      "Deployment": "In the sealed beta `beta/20261104-1e28488`.",
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Explicit user direction; deployment held while redesign is implemented.",
