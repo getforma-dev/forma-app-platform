@@ -2,7 +2,7 @@
 
 ## What this is
 
-`APP-006` is the production auth verifier (`genui-auth-verifier`) and a member of the root Cargo workspace. The app's `auth` module links it. `APP-001`, `APP-003`, `APP-004` and `APP-005` are frozen. `APP-005/requirements.lock` is the DuckDB pin the contracts check installs.
+`APP-006` is the production auth verifier (`genui-auth-verifier`) and a member of the root Cargo workspace. The app's `auth` module links it. `APP-001`, `APP-003`, `APP-004` and `APP-005` are measurement spikes whose code is not changed casually, but CI still runs them: `baseline.yml` (APP-001), `canvas.yml` (APP-003), `parser.yml` and `fixtures.yml` (APP-004, also the parser release qualification suite) and `query.yml` (APP-005). `APP-005/requirements.lock` is the DuckDB pin the contracts check installs.
 
 ## Authoritative sources
 
@@ -12,7 +12,7 @@
 
 ## Verify a change here
 
-`just check clippy` and `just check test` build the app, which depends on `APP-006`. No `just check` step rebuilds a frozen spike.
+`just check clippy` and `just check test` build the app, which depends on `APP-006`. No `just check` step rebuilds the other spikes; the CI workflows above do, so a change there must keep them green.
 
 ## Never
 

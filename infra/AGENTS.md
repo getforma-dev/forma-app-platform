@@ -2,7 +2,7 @@
 
 ## What this is
 
-The AWS CDK stack for the one beta environment, `GenuiSyntheticFoundation`, in account `877573132739`, region `us-east-1`. Local synth and tests create no resources.
+The AWS CDK stack for the one beta environment, `GenuiSyntheticFoundation`, in region `us-east-1`. Local synth and tests create no resources.
 
 ## Authoritative sources
 

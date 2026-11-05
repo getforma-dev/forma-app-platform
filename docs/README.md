@@ -43,7 +43,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [pitch/BETA-PROMOTION.md](pitch/BETA-PROMOTION.md) | Current | The one-approval path from a merge on `main` to beta. | |
 | [pitch/CANVAS-RULES.md](pitch/CANVAS-RULES.md) | Reference | Canvas grammar. ADR-018 and CANVAS-WINDOWS override the older component-placement rules. | |
 | [pitch/CLEAN-TRIAL-DEPLOY.md](pitch/CLEAN-TRIAL-DEPLOY.md) | Current | Clean-profile operator procedure. Its November 2 status block is behind the sealed release. | |
-| [pitch/CONNECTIONS.md](pitch/CONNECTIONS.md) | Reference | How a person, an agent and the model each connect. | |
+| [pitch/CONNECTIONS.md](pitch/CONNECTIONS.md) | Reference | How a person, an agent and the model each connect. Its definitions point to pitch/GUIDE.md, which is Historical. | |
 | [pitch/DEPLOY-RUNBOOK.md](pitch/DEPLOY-RUNBOOK.md) | Current | Operator steps for schema and infrastructure. Laptop mutation recipes are blocked after the promotion cutover. | |
 | [pitch/GUIDE.md](pitch/GUIDE.md) | Historical | Pitch-build tour, including the Northstar sign-in alias and the demo highlights. | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | [pitch/PITCH-SCRIPT.md](pitch/PITCH-SCRIPT.md) | Historical | Spoken script for the investor demo. | [planning/first-run/RECORDING.md](planning/first-run/RECORDING.md) |
@@ -63,7 +63,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/DEFERRED.md](planning/DEFERRED.md) | Reference | Candidate journeys that are not tickets until their trigger is met. | |
 | [planning/DEV-WORKFLOW-INVENTORY.md](planning/DEV-WORKFLOW-INVENTORY.md) | Historical | Measured workflow inventory that ADR-012 decided. | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | [planning/DEVELOPMENT-DRY-RUN-2026-10-31.md](planning/DEVELOPMENT-DRY-RUN-2026-10-31.md) | Historical | Dry run of the developer guide on 2026-10-31. | |
-| [planning/DIRECTION.md](planning/DIRECTION.md) | Current | Where product work starts. Some ticket sentences lag the board. The next slices are APP-163, APP-164 and APP-165. | |
+| [planning/DIRECTION.md](planning/DIRECTION.md) | Current | The November 1 product direction and its ticket order (APP-145 onward). The current next slices are named in the root README (APP-163 to APP-165). | |
 | [planning/EXISTING-WORK.md](planning/EXISTING-WORK.md) | Historical | Audit of nearby repositories on 2026-10-28. | |
 | [planning/FOUNDER-NOTES-AUDIT-2026-10-31.md](planning/FOUNDER-NOTES-AUDIT-2026-10-31.md) | Historical | Audit of the approved handoff moves on 2026-10-31. | |
 | [planning/LATER.md](planning/LATER.md) | Current | Work that stays behind the current slices. | |

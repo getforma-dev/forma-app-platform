@@ -6,7 +6,11 @@ This folder is the running application. Rust in `src/` renders typed pages and o
 
 A small Python support process delivers temporary credentials and supervises the Rust binary. It is not a second business service. This explicit deployment detail preserves the demo's one business process, while avoiding a large unqualified Rust AWS SDK addition. Both processes share the task's trust boundary: a process compromise can reach the task's six permitted assumed roles. Logical role separation does not replace application authorization or future process isolation.
 
-## Reproduce local preparation
+## APP-007 foundation record (historical)
+
+The sections below are the APP-007 foundation record from October 2026, kept as evidence. They are not current procedure: current commands are in [DEVELOPMENT.md](../docs/DEVELOPMENT.md), and beta delivery goes through [promotion](../docs/pitch/BETA-PROMOTION.md), never a manual `aws ecs run-task` from a laptop.
+
+### Reproduce local preparation
 
 Python 3.11, Node 22.21.0/npm 11.6.2, Rust 1.93.1 and Docker are the qualified tools. From the repository root:
 
@@ -21,7 +25,7 @@ These checks install hash-locked packages, typecheck/build native browser assets
 
 The Dockerfile pins all three base image digests and builds source/lockfiles in a repository-root context restricted by the root `.dockerignore` allowlist, including the canonical APP-006 verifier beside app sources. No home, AWS credential directory, environment file, build cache or private runtime file enters that context. The image is UID65532 with a read-only root and a declared `/run/genui` volume initialized mode0700/owner65532. Only that volume is writable during normal startup. Dependencies are in `runtime/requirements.lock`; public RDS roots and dependency metadata are recorded in `evidence/APP-007/runtime-dependencies.json`. The RDS bundle is public trust material, not a credential; update it deliberately with a reviewed digest.
 
-## Credentials, reload and health
+### Credentials, reload and health
 
 CDK supplies non-secret endpoint/role/key/prefix identities, shown by `.env.example`; its placeholders are intentionally unusable. `runtime.py serve` uses ECS task identity to assume four database roles and two organization storage roles. Each database role can authenticate only its fixed SQL user. It creates four different IAM tokens, with 900-second STS sessions and a published deadline no later than 600 seconds from issuance or 60 seconds before any session expiry. The helper refreshes approximately every 240 seconds. AWS documents a 15-minute IAM database token lifetime; the shorter published deadline is intentional. No token or password is printed or sent as a command-line argument.
 
@@ -31,7 +35,7 @@ The helper atomically replaces `/run/genui/credentials.json` (0700 parent, 0600 
 
 Readiness requires a recent successful probe for the exact current credential-file SHA-256 and generation, with its original expiry still valid. Refresh during a probe, stale results, credential expiry, wrong identity, unavailable dependencies and probe timeout fail closed. A late result cannot extend expiry; success ages out after 45 seconds. The helper process is limited to 25 seconds per probe, and the monitor waits 15 seconds between probes. Local success with test doubles is never reported as a managed probe.
 
-## Initial migration
+### Initial migration
 
 Use the separate migration task and execution role described in `infra/README.md`. The application task never receives the generated RDS migration password. The migration helper requires `PGUSER=genui_migration`, database `genui`, a verified TLS connection and the exact actual session identity; ECS injects `PGPASSWORD` only into the one-off migration task. No password belongs in overrides, shell arguments, context, logs or evidence.
 
@@ -39,7 +43,7 @@ The versioned SQL creates the non-login owner, four non-superuser/non-BYPASSRLS 
 
 For an operator already connected to the private database through an approved execution environment, the equivalent command is `app/scripts/migrate.sh` after supplying the documented PG variables via the authorized secret channel. Its Python dependencies are the same lockfile; it does not need a separately installed `psql`.
 
-## Managed tenant qualification and cleanup
+### Managed tenant qualification and cleanup
 
 After the budget/operator/certificate/image decision and approved provisioning, run migration first with service desired count0. Then run the **application task definition** once with command `qualify` and the following container override (the operator fills the stack's actual cluster/task/subnet/security-group IDs in the separate network invocation):
 
