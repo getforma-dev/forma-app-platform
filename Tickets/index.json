@@ -309,9 +309,10 @@
         "APP-164",
         "APP-165",
         "APP-167",
-        "APP-172"
+        "APP-172",
+        "APP-173"
       ],
-      "ticket_count": 69,
+      "ticket_count": 70,
       "done_count": 5,
       "blocked_count": 1
     },
@@ -5393,6 +5394,34 @@
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Not applicable. Select only after the current promotion has sealed and the deployment lease is idle.",
+      "dependencies": [
+        "APP-167"
+      ]
+    },
+    {
+      "id": "APP-173",
+      "title": "Review the November 5 base-image scan findings so beta promotion can continue",
+      "path": "2-in-progress/APP-173.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "In progress",
+      "Priority": "P0",
+      "Type": "Task",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "173",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-05: pause automatic promotion, merge PRs #86 and #87, accept the two new findings with an exact, expiring, per-image disposition, then re-enable and promote once. The apt fix follows in APP-089.",
+      "Requirements": "SR1",
+      "Depends on": "APP-167",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`ops/scan-disposition-2026-11-05`",
+      "Team": "GenUI",
+      "Blocked by": "None",
+      "Unblock evidence": "Not applicable.",
       "dependencies": [
         "APP-167"
       ]

@@ -177,3 +177,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](4-done/APP-172.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | L | Done | APP-167 |
+| 173 | [APP-173: Review the November 5 base-image scan findings so beta promotion can continue](2-in-progress/APP-173.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | S | In progress | APP-167 |

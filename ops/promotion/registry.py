@@ -1,6 +1,7 @@
 """Promote validated OCI bytes to existing immutable repositories, never rebuild."""
 import hashlib
 import json
+import re
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,19 +121,41 @@ def finding_set(findings):
 
 
 DISPOSITION = Path(__file__).with_name('scan-disposition.json')
+# The reviewed scope is pinned here, in source, so editing the JSON alone can never
+# widen it: the evidence record, the roles, and each accepted finding's name and
+# severity. A different finding, severity or role needs a reviewed change to this
+# constant. The APP-167 operator-only disposition (three MEDIUM gcc-12 findings,
+# expiring 2026-11-09) preceded this one; its record stays in evidence/APP-167.
+REVIEWED_DISPOSITION = {
+    'evidence': 'evidence/APP-173/SCAN-DISPOSITION.md',
+    'roles': frozenset(REPOS),
+    'findings': {'CVE-2026-76844': 'HIGH', 'CVE-2026-109518': 'HIGH'},
+}
 
 
 def scan_disposition():
     raw = DISPOSITION.read_bytes()
     value = json.loads(raw)
-    require(set(value) == {'schema_version', 'role', 'predecessor_manifest_digest',
-        'deployment_contract_sha256', 'expires_at_utc', 'evidence', 'findings'}
-        and value['schema_version'] == 1 and value['role'] == 'operator'
-        and value['evidence'] == 'evidence/APP-167/SCAN-DISPOSITION.md', 'invalid scan disposition')
-    require(len(value['findings']) == 3 and all(set(f) == {'name', 'severity', 'attributes'}
-        and f['severity'] == 'MEDIUM' for f in value['findings']), 'disposition cannot broaden severity or scope')
-    require({f['name'] for f in value['findings']} == {
-        'CVE-2026-114690', 'CVE-2026-114691', 'CVE-2026-115455'}, 'unexpected disposition finding')
+    require(set(value) == {'schema_version', 'deployment_contract_sha256', 'expires_at_utc', 'evidence', 'roles'}
+        and value['schema_version'] == 2 and value['evidence'] == REVIEWED_DISPOSITION['evidence']
+        and isinstance(value['deployment_contract_sha256'], str)
+        and re.fullmatch(r'[0-9a-f]{64}', value['deployment_contract_sha256'])
+        and isinstance(value['expires_at_utc'], str)
+        and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', value['expires_at_utc'])
+        and isinstance(value['roles'], dict) and set(value['roles']) == REVIEWED_DISPOSITION['roles'],
+        'invalid scan disposition')
+    try: datetime.fromisoformat(value['expires_at_utc'].replace('Z', '+00:00'))
+    except ValueError: require(False, 'invalid scan disposition')
+    for entry in value['roles'].values():
+        require(isinstance(entry, dict) and set(entry) == {'predecessor_manifest_digest', 'findings'}
+            and isinstance(entry['predecessor_manifest_digest'], str)
+            and re.fullmatch(r'sha256:[0-9a-f]{64}', entry['predecessor_manifest_digest'])
+            and isinstance(entry['findings'], list), 'invalid scan disposition')
+        require(len(entry['findings']) == len(REVIEWED_DISPOSITION['findings'])
+            and all(isinstance(f, dict) and set(f) == {'name', 'severity', 'attributes'}
+                and REVIEWED_DISPOSITION['findings'].get(f['name']) == f['severity'] for f in entry['findings'])
+            and {f['name'] for f in entry['findings']} == set(REVIEWED_DISPOSITION['findings']),
+            'disposition cannot broaden severity or scope')
     return value, hashlib.sha256(raw).hexdigest()
 
 
@@ -147,12 +170,12 @@ def guard_scan_delta(current, baseline, deployment_contract=None, clock=None):
         reviewed = []; disposition_sha = None; expiry = None
         if introduced:
             disposition, disposition_sha = scan_disposition()
-            require(role == disposition['role']
-                and baseline[role]['manifest_digest'] == disposition['predecessor_manifest_digest']
+            entry = disposition['roles'][role]
+            require(baseline[role]['manifest_digest'] == entry['predecessor_manifest_digest']
                 and deployment_contract == disposition['deployment_contract_sha256']
                 and clock < datetime.fromisoformat(disposition['expires_at_utc'].replace('Z', '+00:00')),
                 'scan disposition scope changed or expired')
-            require(introduced <= finding_set(disposition['findings']),
+            require(introduced <= finding_set(entry['findings']),
                 'new scan findings require separately reviewed disposition: ' + role)
             reviewed = sorted(x[0] for x in introduced)
             require(len(reviewed) == len(set(reviewed)), 'ambiguous reviewed finding')

@@ -1,0 +1,206 @@
+{
+  "operator": {
+    "baseline_counts": {
+      "HIGH": 8,
+      "LOW": 3,
+      "MEDIUM": 13
+    },
+    "baseline_scan_completed_at": "2026-11-04T17:15:25-05:00",
+    "candidate_counts": {
+      "HIGH": 10,
+      "LOW": 3,
+      "MEDIUM": 13
+    },
+    "candidate_scan_completed_at": "2026-11-05T06:28:52-05:00",
+    "introduced": [
+      {
+        "attributes": [
+          {
+            "key": "CVSS4_SCORE",
+            "value": "7.7"
+          },
+          {
+            "key": "CVSS4_VECTOR",
+            "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+          },
+          {
+            "key": "package_version",
+            "value": "2.6.1"
+          },
+          {
+            "key": "package_name",
+            "value": "apt"
+          }
+        ],
+        "description": "On Debian, Ubuntu, and derivative Linux distributions, an on-path attacker who can manipulate the HTTP traffic (including a malicious mirror or proxy) between an APT client and an archive server triggered by a package install can trick the client into installing an attacker-controlled unverified package and achieve remote code execution with root privileges. The vulnerability is caused by the reuse of hard links and requires the client to follow redirects and retry the download of package files. It requires the client to have a non-zero\u00a0Acquire::Retries configuration setting; the value 3 is the default starting with Debian 12 (bookworm) and Ubuntu 22.04 LTS (Jammy Jellyfish), so older releases are unaffected in a default configuration",
+        "name": "CVE-2026-109518",
+        "severity": "HIGH",
+        "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-109518"
+      },
+      {
+        "attributes": [
+          {
+            "key": "CVSS4_SCORE",
+            "value": "8.3"
+          },
+          {
+            "key": "CVSS4_VECTOR",
+            "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+          },
+          {
+            "key": "package_version",
+            "value": "1.2.13.dfsg-1"
+          },
+          {
+            "key": "package_name",
+            "value": "zlib"
+          }
+        ],
+        "description": "zlib 1.2.11 through 1.3.2 contains a heap buffer overflow: after an underlying write() fails, gz_write() returns without resetting strm.next_in, leaving it pointed at the caller's buffer. A later gz* write call then derives a position from the stale pointer and writes past a heap allocation; any write() failure reaches it, including EPIPE on a blocking descriptor, and in versions before 1.3.1.2 the failed write must be followed by a gzclearerr() call.",
+        "name": "CVE-2026-76844",
+        "severity": "HIGH",
+        "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-76844"
+      }
+    ],
+    "predecessor_manifest_digest": "sha256:60493a103bbf88120e71a829fe5d719c4e85b0a4b5a271e35a2a2431ad0e1d55",
+    "refused_candidate_manifest_digest": "sha256:220688eaeb480875626ed045ec465f527dd51431696f4a7eeca5ef7fc115c338",
+    "removed": [],
+    "repository": "genui-operator"
+  },
+  "qualification": {
+    "baseline_counts": {
+      "HIGH": 8,
+      "LOW": 3,
+      "MEDIUM": 13
+    },
+    "baseline_scan_completed_at": "2026-11-04T17:18:06-05:00",
+    "candidate_counts": {
+      "HIGH": 10,
+      "LOW": 3,
+      "MEDIUM": 13
+    },
+    "candidate_scan_completed_at": "2026-11-05T06:29:39-05:00",
+    "introduced": [
+      {
+        "attributes": [
+          {
+            "key": "CVSS4_SCORE",
+            "value": "8.3"
+          },
+          {
+            "key": "CVSS4_VECTOR",
+            "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+          },
+          {
+            "key": "package_version",
+            "value": "1.2.13.dfsg-1"
+          },
+          {
+            "key": "package_name",
+            "value": "zlib"
+          }
+        ],
+        "description": "zlib 1.2.11 through 1.3.2 contains a heap buffer overflow: after an underlying write() fails, gz_write() returns without resetting strm.next_in, leaving it pointed at the caller's buffer. A later gz* write call then derives a position from the stale pointer and writes past a heap allocation; any write() failure reaches it, including EPIPE on a blocking descriptor, and in versions before 1.3.1.2 the failed write must be followed by a gzclearerr() call.",
+        "name": "CVE-2026-76844",
+        "severity": "HIGH",
+        "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-76844"
+      },
+      {
+        "attributes": [
+          {
+            "key": "CVSS4_SCORE",
+            "value": "7.7"
+          },
+          {
+            "key": "CVSS4_VECTOR",
+            "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+          },
+          {
+            "key": "package_version",
+            "value": "2.6.1"
+          },
+          {
+            "key": "package_name",
+            "value": "apt"
+          }
+        ],
+        "description": "On Debian, Ubuntu, and derivative Linux distributions, an on-path attacker who can manipulate the HTTP traffic (including a malicious mirror or proxy) between an APT client and an archive server triggered by a package install can trick the client into installing an attacker-controlled unverified package and achieve remote code execution with root privileges. The vulnerability is caused by the reuse of hard links and requires the client to follow redirects and retry the download of package files. It requires the client to have a non-zero\u00a0Acquire::Retries configuration setting; the value 3 is the default starting with Debian 12 (bookworm) and Ubuntu 22.04 LTS (Jammy Jellyfish), so older releases are unaffected in a default configuration",
+        "name": "CVE-2026-109518",
+        "severity": "HIGH",
+        "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-109518"
+      }
+    ],
+    "predecessor_manifest_digest": "sha256:4bb5f4f5e8352f47e5f499d434a9e581374c918cdad8e5846575bcd1629125b3",
+    "refused_candidate_manifest_digest": "sha256:ff4e066dac14f6aa355bf884899d87926cefef737c22d3eefc418a19ac9fc395",
+    "removed": [],
+    "repository": "genui-qualification"
+  },
+  "service": {
+    "baseline_counts": {
+      "HIGH": 8,
+      "LOW": 3,
+      "MEDIUM": 13
+    },
+    "baseline_scan_completed_at": "2026-11-04T17:20:11-05:00",
+    "candidate_counts": {
+      "HIGH": 10,
+      "LOW": 3,
+      "MEDIUM": 13
+    },
+    "candidate_scan_completed_at": "2026-11-05T06:30:30-05:00",
+    "introduced": [
+      {
+        "attributes": [
+          {
+            "key": "CVSS4_SCORE",
+            "value": "8.3"
+          },
+          {
+            "key": "CVSS4_VECTOR",
+            "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+          },
+          {
+            "key": "package_version",
+            "value": "1.2.13.dfsg-1"
+          },
+          {
+            "key": "package_name",
+            "value": "zlib"
+          }
+        ],
+        "description": "zlib 1.2.11 through 1.3.2 contains a heap buffer overflow: after an underlying write() fails, gz_write() returns without resetting strm.next_in, leaving it pointed at the caller's buffer. A later gz* write call then derives a position from the stale pointer and writes past a heap allocation; any write() failure reaches it, including EPIPE on a blocking descriptor, and in versions before 1.3.1.2 the failed write must be followed by a gzclearerr() call.",
+        "name": "CVE-2026-76844",
+        "severity": "HIGH",
+        "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-76844"
+      },
+      {
+        "attributes": [
+          {
+            "key": "CVSS4_SCORE",
+            "value": "7.7"
+          },
+          {
+            "key": "CVSS4_VECTOR",
+            "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+          },
+          {
+            "key": "package_version",
+            "value": "2.6.1"
+          },
+          {
+            "key": "package_name",
+            "value": "apt"
+          }
+        ],
+        "description": "On Debian, Ubuntu, and derivative Linux distributions, an on-path attacker who can manipulate the HTTP traffic (including a malicious mirror or proxy) between an APT client and an archive server triggered by a package install can trick the client into installing an attacker-controlled unverified package and achieve remote code execution with root privileges. The vulnerability is caused by the reuse of hard links and requires the client to follow redirects and retry the download of package files. It requires the client to have a non-zero\u00a0Acquire::Retries configuration setting; the value 3 is the default starting with Debian 12 (bookworm) and Ubuntu 22.04 LTS (Jammy Jellyfish), so older releases are unaffected in a default configuration",
+        "name": "CVE-2026-109518",
+        "severity": "HIGH",
+        "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-109518"
+      }
+    ],
+    "predecessor_manifest_digest": "sha256:e0f0aab4f2dfbfbd2d2884e05355e0a1d067cb4bbf2c6fe891075773ef251b81",
+    "refused_candidate_manifest_digest": "sha256:68ad8b040f84767635d2ea4fc6243e09230d18439748b339f66df8dd1712781c",
+    "removed": [],
+    "repository": "genui-synthetic"
+  }
+}
