@@ -173,10 +173,11 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](0-backlog/APP-166.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |
 | 167 | [APP-167: Promote merged beta releases through GitHub Actions](4-done/APP-167.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | L | Done | None |
 | 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](4-done/APP-168.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Done | None |
-| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](3-in-review/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | In review | APP-168 |
+| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](2-in-progress/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | In progress | APP-168 |
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](4-done/APP-172.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | L | Done | APP-167 |
 | 173 | [APP-173: Review the November 5 base-image scan findings so beta promotion can continue](4-done/APP-173.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | S | Done | APP-167 |
 | 174 | [APP-174: Detach the Northstar management secret, rotate its key and clean up the invitation input secret](9-blocked/APP-174.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | S | Blocked | APP-084 |
 | 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](0-backlog/APP-175.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | M | Backlog | APP-084, APP-169, APP-167 |
+| 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](0-backlog/APP-176.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
