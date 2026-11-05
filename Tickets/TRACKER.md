@@ -96,7 +96,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 88 | [APP-088: Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)](0-backlog/APP-088.md) | [PH02](phases/PH02.md) | S03 | QRY | P1 | S | Backlog | None |
 | 89 | [APP-089: Harden the container images: base CVEs and effective scan-on-push](0-backlog/APP-089.md) | [PH02](phases/PH02.md) | S03 | OPS | P1 | M | Backlog | APP-075, APP-078 |
 | 90 | [APP-090: MVP UI fixes and the designer handoff](0-backlog/APP-090.md) | [PH02](phases/PH02.md) | S03 | UX | P1 | M | Backlog | APP-076, APP-078 |
-| 091 | [APP-091: Pitch clone and join plan: canvas, planner and composer on the platform backbone](2-in-progress/APP-091.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | In progress | APP-012, APP-074 |
+| 091 | [APP-091: Pitch clone and join plan: canvas, planner and composer on the platform backbone](4-done/APP-091.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Done | APP-012, APP-074 |
 | 092 | [APP-092: Canvas in the signed-in workspace](0-backlog/APP-092.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-091 |
 | 093 | [APP-093: Composer: describe an app and assemble it from admitted modules](0-backlog/APP-093.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-091, APP-092 |
 | 094 | [APP-094: Governed data on the canvas: views with receipts and the record form](0-backlog/APP-094.md) | [PH08](phases/PH08.md) | S14 | QRY | P0 | L | Backlog | APP-093 |
@@ -172,7 +172,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](0-backlog/APP-165.md) | [PH08](phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |
 | 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](0-backlog/APP-166.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |
 | 167 | [APP-167: Promote merged beta releases through GitHub Actions](4-done/APP-167.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | L | Done | None |
-| 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](3-in-review/APP-168.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | In review | None |
+| 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](4-done/APP-168.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Done | None |
 | 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](0-backlog/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
