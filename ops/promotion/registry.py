@@ -1,11 +1,12 @@
 """Promote validated OCI bytes to existing immutable repositories, never rebuild."""
 import hashlib
 import json
+import re
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 from .guards import REPOS
-from .state import digest, require
+from .state import Refused, digest, no_duplicates, require
 
 MEDIA = ['application/vnd.oci.image.index.v1+json', 'application/vnd.oci.image.manifest.v1+json']
 
@@ -120,19 +121,58 @@ def finding_set(findings):
 
 
 DISPOSITION = Path(__file__).with_name('scan-disposition.json')
+# The reviewed scope is pinned here, in source, so editing the JSON alone can never
+# widen it: the evidence record, the roles, the expiry, and each accepted finding's
+# name, severity and package. A different finding, severity, package, role or expiry
+# needs a reviewed change to this constant. The JSON adds only what binds the review
+# to real images: each role's predecessor manifest, the deployment contract and the
+# complete scanner fingerprints. The APP-167 operator-only disposition (three MEDIUM
+# gcc-12 findings, expiring 2026-11-09) preceded this one; see evidence/APP-167.
+REVIEWED_DISPOSITION = {
+    'evidence': 'evidence/APP-173/SCAN-DISPOSITION.md',
+    'roles': frozenset(REPOS),
+    'expires_at_utc': '2026-11-12T00:00:00Z',
+    'findings': {'CVE-2026-76844': ('HIGH', 'zlib'), 'CVE-2026-109518': ('HIGH', 'apt')},
+}
+
+
+def reviewed_finding(finding):
+    if not (isinstance(finding, dict) and set(finding) == {'name', 'severity', 'attributes'}
+            and isinstance(finding['name'], str) and finding['name'] in REVIEWED_DISPOSITION['findings']
+            and isinstance(finding['attributes'], list)):
+        return False
+    severity, package = REVIEWED_DISPOSITION['findings'][finding['name']]
+    attributes = finding['attributes']
+    if not all(isinstance(a, dict) and set(a) == {'key', 'value'}
+               and isinstance(a['key'], str) and isinstance(a['value'], str) for a in attributes):
+        return False
+    keys = [a['key'] for a in attributes]
+    return (finding['severity'] == severity and len(keys) == len(set(keys))
+            and [a['value'] for a in attributes if a['key'] == 'package_name'] == [package])
 
 
 def scan_disposition():
     raw = DISPOSITION.read_bytes()
-    value = json.loads(raw)
-    require(set(value) == {'schema_version', 'role', 'predecessor_manifest_digest',
-        'deployment_contract_sha256', 'expires_at_utc', 'evidence', 'findings'}
-        and value['schema_version'] == 1 and value['role'] == 'operator'
-        and value['evidence'] == 'evidence/APP-167/SCAN-DISPOSITION.md', 'invalid scan disposition')
-    require(len(value['findings']) == 3 and all(set(f) == {'name', 'severity', 'attributes'}
-        and f['severity'] == 'MEDIUM' for f in value['findings']), 'disposition cannot broaden severity or scope')
-    require({f['name'] for f in value['findings']} == {
-        'CVE-2026-114690', 'CVE-2026-114691', 'CVE-2026-115455'}, 'unexpected disposition finding')
+    try: value = json.loads(raw, object_pairs_hook=no_duplicates)
+    except ValueError as error: raise Refused('invalid scan disposition') from error
+    require(isinstance(value, dict)
+        and set(value) == {'schema_version', 'deployment_contract_sha256', 'expires_at_utc', 'evidence', 'roles'}
+        and type(value['schema_version']) is int and value['schema_version'] == 2
+        and value['evidence'] == REVIEWED_DISPOSITION['evidence']
+        and value['expires_at_utc'] == REVIEWED_DISPOSITION['expires_at_utc']
+        and isinstance(value['deployment_contract_sha256'], str)
+        and re.fullmatch(r'[0-9a-f]{64}', value['deployment_contract_sha256'])
+        and isinstance(value['roles'], dict) and set(value['roles']) == REVIEWED_DISPOSITION['roles'],
+        'invalid scan disposition')
+    for entry in value['roles'].values():
+        require(isinstance(entry, dict) and set(entry) == {'predecessor_manifest_digest', 'findings'}
+            and isinstance(entry['predecessor_manifest_digest'], str)
+            and re.fullmatch(r'sha256:[0-9a-f]{64}', entry['predecessor_manifest_digest'])
+            and isinstance(entry['findings'], list), 'invalid scan disposition')
+        require(len(entry['findings']) == len(REVIEWED_DISPOSITION['findings'])
+            and all(reviewed_finding(f) for f in entry['findings'])
+            and {f['name'] for f in entry['findings']} == set(REVIEWED_DISPOSITION['findings']),
+            'disposition cannot broaden severity or scope')
     return value, hashlib.sha256(raw).hexdigest()
 
 
@@ -147,12 +187,12 @@ def guard_scan_delta(current, baseline, deployment_contract=None, clock=None):
         reviewed = []; disposition_sha = None; expiry = None
         if introduced:
             disposition, disposition_sha = scan_disposition()
-            require(role == disposition['role']
-                and baseline[role]['manifest_digest'] == disposition['predecessor_manifest_digest']
+            entry = disposition['roles'][role]
+            require(baseline[role]['manifest_digest'] == entry['predecessor_manifest_digest']
                 and deployment_contract == disposition['deployment_contract_sha256']
                 and clock < datetime.fromisoformat(disposition['expires_at_utc'].replace('Z', '+00:00')),
                 'scan disposition scope changed or expired')
-            require(introduced <= finding_set(disposition['findings']),
+            require(introduced <= finding_set(entry['findings']),
                 'new scan findings require separately reviewed disposition: ' + role)
             reviewed = sorted(x[0] for x in introduced)
             require(len(reviewed) == len(set(reviewed)), 'ambiguous reviewed finding')

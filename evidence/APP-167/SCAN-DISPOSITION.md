@@ -1,5 +1,7 @@
 # First promotion scan disposition
 
+> **Superseded 2026-11-05.** `scan-disposition.json` now holds the [APP-173 disposition](../APP-173/SCAN-DISPOSITION.md). The file this record reviewed is the version at commit `fe03aa3` and earlier. This record is otherwise unchanged.
+
 Reviewed scope: the first APP-167 operator-image promotion from the exact
 predecessor ARM64 manifest and deployment contract recorded in
 [`scan-disposition.json`](../../ops/promotion/scan-disposition.json). Expires

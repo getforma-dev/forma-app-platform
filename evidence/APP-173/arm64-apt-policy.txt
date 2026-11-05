@@ -1,0 +1,33 @@
+# ARM64 APT candidates inside python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
+# Command: docker run --rm --platform linux/arm64 <base> sh -c 'apt-get update -qq; dpkg-query -W apt libapt-pkg6.0 zlib1g; apt-cache policy apt libapt-pkg6.0 zlib1g'
+# Observed 2026-11-05T17:09Z
+== installed
+apt	2.6.1
+libapt-pkg6.0:arm64	2.6.1
+zlib1g:arm64	1:1.2.13.dfsg-1
+== policy
+apt:
+  Installed: 2.6.1
+  Candidate: 2.6.2
+  Version table:
+     2.6.2 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 2.6.1 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+libapt-pkg6.0:
+  Installed: 2.6.1
+  Candidate: 2.6.2
+  Version table:
+     2.6.2 500
+        500 http://deb.debian.org/debian-security bookworm-security/main arm64 Packages
+ *** 2.6.1 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status
+zlib1g:
+  Installed: 1:1.2.13.dfsg-1
+  Candidate: 1:1.2.13.dfsg-1
+  Version table:
+ *** 1:1.2.13.dfsg-1 500
+        500 http://deb.debian.org/debian bookworm/main arm64 Packages
+        100 /var/lib/dpkg/status

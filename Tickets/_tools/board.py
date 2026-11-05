@@ -136,7 +136,9 @@ def verify(tickets, config):
     generated_paths.update((BOARD / 'sprints' / f"{s['id']}.md").resolve() for s in config['sprints'])
     generated_paths.update((BOARD / 'categories' / f"{e['id']}.md").resolve() for e in config['categories'])
     generated_paths.update((BOARD / 'phases' / f"{p['id']}.md").resolve() for p in config['phases'])
-    for top in [ROOT / 'README.md', ROOT / 'AGENTS.md', ROOT / 'CONTRIBUTING.md', ROOT / 'docs', BOARD, ROOT / 'fixtures', ROOT / 'evidence']:
+    guides = [p for p in sorted(ROOT.glob('*/AGENTS.md')) + sorted(ROOT.glob('*/*/AGENTS.md'))
+              if not any(part.startswith('.') or part in ('node_modules', 'target') for part in p.relative_to(ROOT).parts)]
+    for top in [ROOT / 'README.md', ROOT / 'AGENTS.md', ROOT / 'CONTRIBUTING.md', ROOT / 'docs', BOARD, ROOT / 'fixtures', ROOT / 'evidence', *guides]:
         paths = list(top.rglob('*.md')) if top.is_dir() else [top]
         for p in paths:
             if not p.exists() or any(f'Tickets/evidence/{name}/' in str(p) for name in ('upstream', 'upstream-current')):

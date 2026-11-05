@@ -1,76 +1,155 @@
 {
-  "deployment_contract_sha256": "ef8580511349b5f1883979d034be55f5753ea9453ff1e73390c4d2955889c9c0",
-  "evidence": "evidence/APP-167/SCAN-DISPOSITION.md",
-  "expires_at_utc": "2026-11-09T00:00:00Z",
-  "findings": [
-    {
-      "attributes": [
+  "deployment_contract_sha256": "4a2cea855e962fda7f79a55f2b2754df9a056e4b3bab3fc4e5b4ee1a98fdd2a0",
+  "evidence": "evidence/APP-173/SCAN-DISPOSITION.md",
+  "expires_at_utc": "2026-11-12T00:00:00Z",
+  "roles": {
+    "operator": {
+      "findings": [
         {
-          "key": "CVSS3_SCORE",
-          "value": "6.2"
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "7.7"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "2.6.1"
+            },
+            {
+              "key": "package_name",
+              "value": "apt"
+            }
+          ],
+          "name": "CVE-2026-109518",
+          "severity": "HIGH"
         },
         {
-          "key": "CVSS3_VECTOR",
-          "value": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
-        },
-        {
-          "key": "package_version",
-          "value": "12.2.0-14+deb12u1"
-        },
-        {
-          "key": "package_name",
-          "value": "gcc-12"
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "name": "CVE-2026-76844",
+          "severity": "HIGH"
         }
       ],
-      "name": "CVE-2026-114690",
-      "severity": "MEDIUM"
+      "predecessor_manifest_digest": "sha256:60493a103bbf88120e71a829fe5d719c4e85b0a4b5a271e35a2a2431ad0e1d55"
     },
-    {
-      "attributes": [
+    "qualification": {
+      "findings": [
         {
-          "key": "CVSS3_SCORE",
-          "value": "5.9"
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "7.7"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "2.6.1"
+            },
+            {
+              "key": "package_name",
+              "value": "apt"
+            }
+          ],
+          "name": "CVE-2026-109518",
+          "severity": "HIGH"
         },
         {
-          "key": "CVSS3_VECTOR",
-          "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
-        },
-        {
-          "key": "package_version",
-          "value": "12.2.0-14+deb12u1"
-        },
-        {
-          "key": "package_name",
-          "value": "gcc-12"
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "name": "CVE-2026-76844",
+          "severity": "HIGH"
         }
       ],
-      "name": "CVE-2026-114691",
-      "severity": "MEDIUM"
+      "predecessor_manifest_digest": "sha256:4bb5f4f5e8352f47e5f499d434a9e581374c918cdad8e5846575bcd1629125b3"
     },
-    {
-      "attributes": [
+    "service": {
+      "findings": [
         {
-          "key": "CVSS3_SCORE",
-          "value": "6.5"
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "7.7"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "2.6.1"
+            },
+            {
+              "key": "package_name",
+              "value": "apt"
+            }
+          ],
+          "name": "CVE-2026-109518",
+          "severity": "HIGH"
         },
         {
-          "key": "CVSS3_VECTOR",
-          "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:H"
-        },
-        {
-          "key": "package_version",
-          "value": "12.2.0-14+deb12u1"
-        },
-        {
-          "key": "package_name",
-          "value": "gcc-12"
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "name": "CVE-2026-76844",
+          "severity": "HIGH"
         }
       ],
-      "name": "CVE-2026-115455",
-      "severity": "MEDIUM"
+      "predecessor_manifest_digest": "sha256:e0f0aab4f2dfbfbd2d2884e05355e0a1d067cb4bbf2c6fe891075773ef251b81"
     }
-  ],
-  "predecessor_manifest_digest": "sha256:d66e151ce70cc6ee6306ddc30182d22c75a530d8ae63c4c9a7c286b676774869",
-  "role": "operator",
-  "schema_version": 1
+  },
+  "schema_version": 2
 }

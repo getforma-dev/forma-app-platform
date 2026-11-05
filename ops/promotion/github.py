@@ -223,12 +223,12 @@ def validate_summary(value, candidate):
             if scan["introduced"]:
                 from .registry import scan_disposition
                 disposition, disposition_sha = scan_disposition()
-                require(role == disposition["role"] and scan["disposition_sha256"] == disposition_sha
+                require(role in disposition["roles"] and scan["disposition_sha256"] == disposition_sha
                     and scan["review_expires_at_utc"] == disposition["expires_at_utc"]
                     and review["deployment_contract_sha256"] == disposition["deployment_contract_sha256"]
                     and all(isinstance(name, str) for name in scan["reviewed"])
                     and scan["reviewed"] == sorted(set(scan["reviewed"]))
-                    and set(scan["reviewed"]) <= {f["name"] for f in disposition["findings"]},
+                    and set(scan["reviewed"]) <= {f["name"] for f in disposition["roles"][role]["findings"]},
                     "scan review projection changed")
             else:
                 require(scan["reviewed"] == [] and scan["disposition_sha256"] is None

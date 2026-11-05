@@ -309,9 +309,10 @@
         "APP-164",
         "APP-165",
         "APP-167",
-        "APP-172"
+        "APP-172",
+        "APP-173"
       ],
-      "ticket_count": 69,
+      "ticket_count": 70,
       "done_count": 5,
       "blocked_count": 1
     },
@@ -809,7 +810,7 @@
       "Depends on": "APP-013",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok implementation, Codex independent review and fixture repair",
-      "Branch / PR": "`chore/app-014-observed`, [PR 81](https://github.com/getforma-dev/forma-app-platform/pull/81) (PR 44 remains the earlier race-observation pull request)",
+      "Branch / PR": "`chore/app-014-observed`, [PR 81](https://github.com/getforma-dev/forma-app-platform/pull/81), then the identity follow-up `chore/app-014-assert-identity` (PR 44 remains the earlier race-observation pull request)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -2645,11 +2646,11 @@
     {
       "id": "APP-078",
       "title": "Prove tenant isolation and role bindings on managed RDS (managed qualification verdict)",
-      "path": "1-selected/APP-078.md",
+      "path": "2-in-progress/APP-078.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "Selected",
+      "Status": "In progress",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -2662,7 +2663,7 @@
       "Depends on": "APP-075, APP-077",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Window `88d1b19d` ran on 2026-10-30 ([record](../../evidence/APP-078/window/README.md)). Diagnostics: `app086/qualification-diagnostics` (`ba21ced`, unmerged, 482 commits behind `main` on 2026-11-04).",
+      "Branch / PR": "Window `88d1b19d` ran on 2026-10-30 ([record](../../evidence/APP-078/window/README.md)). Diagnostics rebased onto `main` on branch `app078/diagnose-managed-refusal` (from `ba21ced`; [local diagnosis](../../evidence/APP-078/diagnosis-2026-11-05/README.md)).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5392,6 +5393,34 @@
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Not applicable. Select only after the current promotion has sealed and the deployment lease is idle.",
+      "dependencies": [
+        "APP-167"
+      ]
+    },
+    {
+      "id": "APP-173",
+      "title": "Review the November 5 base-image scan findings so beta promotion can continue",
+      "path": "2-in-progress/APP-173.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "In progress",
+      "Priority": "P0",
+      "Type": "Task",
+      "Sprint": "S14",
+      "Phase": "PH08",
+      "Order": "173",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-05: pause automatic promotion, merge PRs #86 and #87, accept the two new findings with an exact, expiring, per-image disposition, then re-enable and promote once. The apt fix follows in APP-089.",
+      "Requirements": "SR1",
+      "Depends on": "APP-167",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`ops/scan-disposition-2026-11-05`, [PR #88](https://github.com/getforma-dev/forma-app-platform/pull/88)",
+      "Team": "GenUI",
+      "Blocked by": "None",
+      "Unblock evidence": "Not applicable.",
       "dependencies": [
         "APP-167"
       ]

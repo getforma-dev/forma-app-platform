@@ -83,7 +83,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 75 | [APP-072: Evaluate one real recurring workflow and second-person reuse](0-backlog/APP-072.md) | [PH06](phases/PH06.md) | S12 | VAL | P1 | M | Backlog | APP-058, APP-070, APP-071 |
 | 76 | [APP-075: Finish the managed qualification entry, image and supervisor](4-done/APP-075.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Done | APP-008 |
 | 77 | [APP-077: Package the operator image and tools](4-done/APP-077.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Done | APP-008 |
-| 78 | [APP-078: Prove tenant isolation and role bindings on managed RDS (managed qualification verdict)](1-selected/APP-078.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | Selected | APP-075, APP-077 |
+| 78 | [APP-078: Prove tenant isolation and role bindings on managed RDS (managed qualification verdict)](2-in-progress/APP-078.md) | [PH01](phases/PH01.md) | S02 | IAM | P0 | L | In progress | APP-075, APP-077 |
 | 79 | [APP-076: Run the beta go-live trial on the live deployment](0-backlog/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Backlog | APP-012, APP-013, APP-014, APP-074, APP-078 |
 | 80 | [APP-079: Hosted identity acceptance deferred from Phase 1](9-blocked/APP-079.md) | [PH06](phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
@@ -177,3 +177,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](4-done/APP-172.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | L | Done | APP-167 |
+| 173 | [APP-173: Review the November 5 base-image scan findings so beta promotion can continue](2-in-progress/APP-173.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | S | In progress | APP-167 |

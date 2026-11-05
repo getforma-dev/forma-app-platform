@@ -82,16 +82,20 @@ class GithubTests(unittest.TestCase):
         from ops.promotion.registry import scan_disposition
         disposition, sha = scan_disposition()
         value["review"]["deployment_contract_sha256"] = disposition["deployment_contract_sha256"]
-        scan = value["review"]["scan"]["operator"]
-        scan.update(introduced=3, reviewed_count=3, reviewed=sorted(f["name"] for f in disposition["findings"]),
-            disposition_sha256=sha, review_expires_at_utc=disposition["expires_at_utc"])
+        for role in g.NAMES:
+            names = sorted(f["name"] for f in disposition["roles"][role]["findings"])
+            value["review"]["scan"][role].update(introduced=len(names), reviewed_count=len(names), reviewed=names,
+                disposition_sha256=sha, review_expires_at_utc=disposition["expires_at_utc"])
         self.assertEqual(g.validate_summary(value, SHA), value)
-        for mutate in (lambda s: s.update(introduced=0), lambda s: s.update(reviewed_count=0),
-                lambda s: s.update(unreviewed=1), lambda s: s.update(disposition_sha256="0" * 64),
-                lambda s: s.update(review_expires_at_utc="2099-01-01T00:00:00Z"),
-                lambda s: s["reviewed"].__setitem__(0, "CVE-2099-12345")):
-            changed = copy.deepcopy(value); mutate(changed["review"]["scan"]["operator"])
-            with self.assertRaises(ValueError): g.validate_summary(changed, SHA)
+        for role in g.NAMES:
+            for mutate in (lambda s: s.update(introduced=0), lambda s: s.update(reviewed_count=0),
+                    lambda s: s.update(unreviewed=1), lambda s: s.update(disposition_sha256="0" * 64),
+                    lambda s: s.update(review_expires_at_utc="2099-01-01T00:00:00Z"),
+                    lambda s: s["reviewed"].__setitem__(0, "CVE-2099-12345")):
+                changed = copy.deepcopy(value); mutate(changed["review"]["scan"][role])
+                with self.assertRaises(ValueError): g.validate_summary(changed, SHA)
+        changed = copy.deepcopy(value); changed["review"]["deployment_contract_sha256"] = "0" * 64
+        with self.assertRaises(ValueError): g.validate_summary(changed, SHA)
 
     def test_artifact_requires_same_run_head_id_digest_and_name(self):
         value = {"id": 8, "expired": False, "name": "beta-qualified-" + SHA,
