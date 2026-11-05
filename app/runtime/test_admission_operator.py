@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 import uuid
 
 import admission_operator as op
@@ -994,6 +995,16 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
 
     @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
                          "the seed validates its bundles with contracts/validate.py, which needs jsonschema")
+    def test_connect_refuses_any_host_but_one_name_before_connecting(self):
+        """APP-084 review: '@' is an abstract socket and ',' a host list to libpq; neither uses TLS."""
+        for host, code in (("/var/run/postgresql", "socket_host_refused"), ("@abstract", "socket_host_refused"), ("", "socket_host_refused"),
+                           ("db.example.test,/var/run/postgresql", "host_refused"), ("db.example.test,@x", "host_refused"),
+                           ("db example.test", "host_refused"), ("db.example.test.", "host_refused"), ("[::1]", "host_refused")):
+            with self.subTest(host=host), mock.patch.dict(os.environ, {"PGHOST": host, "PGUSER": "genui_migration", "PGSSLROOTCERT": "/x"}), \
+                 mock.patch("psycopg.connect") as connect, self.assertRaises(op.Refused) as refused:
+                op.connect()
+            self.assertEqual(str(refused.exception), code); connect.assert_not_called()
+
     def test_the_seed_claims_each_tenant_in_the_cross_organization_index(self):
         """APP-084 review: a seeded binding is claimed in genui_private.provider_tenant_index in the same
         transaction, so no other organization can bind the same tenant first; an owned tenant refuses."""

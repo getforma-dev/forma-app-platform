@@ -316,9 +316,11 @@ class RuntimeTests(unittest.TestCase):
         # credentials exist, so the migration connection pins both, as connect() does.
         env = {'PGDATABASE': 'genui', 'PGUSER': 'genui_migration', 'PGPASSWORD': 'unit-only',
                'PGSSLROOTCERT': '/unit-only/ca.pem'}
-        with patch.dict(os.environ, dict(env, PGHOST='/var/run/postgresql')), patch('psycopg.connect') as connect:
-            with self.assertRaises(runtime.Refused): runtime.migrate()
-            connect.assert_not_called()
+        for host in ('/var/run/postgresql', '@abstract', 'db.example.test,/var/run/postgresql', 'db.example.test,@x',
+                     'db example.test', '-db.example.test', 'db.example.test.', '[::1]', ''):
+            with self.subTest(host=host), patch.dict(os.environ, dict(env, PGHOST=host)), patch('psycopg.connect') as connect:
+                with self.assertRaises(runtime.Refused): runtime.migrate()
+                connect.assert_not_called()
         with patch.dict(os.environ, dict(env, PGHOST='synthetic.invalid')), \
              patch('psycopg.connect') as connect, patch.object(runtime, 'apply_migrations'):
             runtime.migrate()

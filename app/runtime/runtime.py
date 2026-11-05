@@ -900,13 +900,18 @@ def apply_migrations(connection, directory):
     verify_schema_catalog(connection, directory, latest)
 
 
+PGHOST_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
+
+
 def migrate():
     import psycopg
     require(os.environ["PGDATABASE"] == "genui" and os.environ["PGUSER"] == "genui_migration")
     require(migration_manifest(migration_directory())["database_version"] == DATABASE_SCHEMA_VERSION)
     # Always verify-full TLS, as admission_operator.connect does: a Unix-socket host never
     # uses TLS, and libpq would prefer GSSAPI encryption over TLS when Kerberos credentials exist.
-    require(not os.environ["PGHOST"].startswith("/"))
+    # Exactly one DNS name or IPv4 address, as app/operator/operator.py requires: libpq
+    # also reads '@' as an abstract socket and ',' as a host list (APP-084 review).
+    require(PGHOST_NAME.fullmatch(os.environ["PGHOST"]) is not None)
     with psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
                          sslmode="verify-full", gssencmode="disable", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
                          options="-c statement_timeout=30000 -c lock_timeout=5000") as connection:
