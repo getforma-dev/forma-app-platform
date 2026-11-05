@@ -172,6 +172,7 @@ pub fn router(work: Arc<Work>) -> Router {
         )
         .route("/v1/work/{app}/{work}/queries/{view}", post(query))
         .route("/v1/library", get(library))
+        .route("/v1/library/{app}/{work}/kind", post(set_artifact_kind))
         .route("/w/{app}/{work}", get(work_page).post(run_page))
         .with_state(work)
 }
@@ -200,6 +201,59 @@ async fn library(State(work): State<Arc<Work>>, headers: HeaderMap) -> Response 
     });
     match serde_json::to_vec(&body) {
         Ok(bytes) => json_response(bytes),
+        Err(_) => http::unavailable(),
+    }
+}
+
+/// `POST /v1/library/{app}/{work}/kind` (APP-169). Body `{"kind":"card"}`
+/// records that whole work as a Card for this member. `{"kind":"app"}`
+/// writes `app`, which is the reversible step back. Component count is not
+/// read. A work the member cannot open is the uniform 404, the same answer
+/// as a missing work.
+async fn set_artifact_kind(
+    State(work): State<Arc<Work>>,
+    UniformPath((app, saved)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    let auth = work.auth();
+    let (parts, body) = request.into_parts();
+    if !csrf::same_origin(&parts.headers, auth.origin()) {
+        return http::cross_site();
+    }
+    if parts.uri.query().is_some()
+        || !crate::storage::valid_identifier(&app)
+        || !crate::storage::valid_identifier(&saved)
+    {
+        return http::not_found();
+    }
+    let Ok((_, member)) = member(auth, &parts.headers).await else {
+        return http::not_found();
+    };
+    let Some(stores) = &auth.stores else {
+        return http::not_found();
+    };
+    let Some(bytes) = http::bounded(body, 256).await else {
+        return http::payload_too_large();
+    };
+    let kind = match serde_json::from_slice::<Value>(&bytes)
+        .ok()
+        .as_ref()
+        .and_then(|value| value.get("kind"))
+        .and_then(Value::as_str)
+        .and_then(crate::storage::parse_artifact_kind)
+    {
+        Some(kind) => kind,
+        None => return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_kind"),
+    };
+    match stores
+        .workspace
+        .set_artifact_kind(&member, &app, &saved, kind)
+        .await
+    {
+        Ok(Some("card")) => json_response(br#"{"kind":"card"}"#.to_vec()),
+        Ok(None) => json_response(br#"{"kind":"app"}"#.to_vec()),
+        Ok(_) => http::unavailable(),
+        Err(Error::Denied) => http::not_found(),
         Err(_) => http::unavailable(),
     }
 }

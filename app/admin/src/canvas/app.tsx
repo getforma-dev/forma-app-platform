@@ -213,6 +213,7 @@ type LibraryApp = {
   id: string;
   app: string;
   work: string;
+  artifactKind: string;
   workNameScope: boolean;
   number: string;
   title: string;
@@ -765,7 +766,7 @@ function Canvas(props: CanvasProps) {
                 </h3>
                 <ul class="cv-lib-apps">
                   {createList(() => category.apps, app => app.id, app => (
-                    <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-work-name-scope={app.workNameScope} data-number={app.number} data-search={app.search}>
+                    <li class="cv-lib-app" id={app.id} data-app={app.app} data-work={app.work} data-artifact-kind={app.artifactKind} data-work-name-scope={app.workNameScope} data-number={app.number} data-search={app.search}>
                       <div class="cv-lib-app-head">
                         <div class="cv-lib-title-group">
                           <span class="cv-lib-dot" data-lib-dot aria-hidden="true"></span>
@@ -783,7 +784,7 @@ function Canvas(props: CanvasProps) {
                           <details class="cv-lib-menu">
                             <summary aria-label="Library options" title="Library options">⋯</summary>
                             <div class="cv-lib-menu-items">
-                              <button type="button" data-lib-classify title="Personal category in this browser; the whole saved work stays intact">Show in Cards</button>
+                              <button type="button" data-lib-classify title="Saves this whole work as a Card or an App on your account. It does not split the work.">Show in Cards</button>
                               <button type="button" data-lib-remove hidden>Remove from canvas</button>
                             </div>
                           </details>

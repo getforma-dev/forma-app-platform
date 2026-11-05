@@ -15,7 +15,7 @@ import {
 } from '../canvas-vendor/index';
 import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
-import { clearLayouts, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
+import { clearLayouts, durableCardKeys, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
 import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { announce, buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
@@ -90,7 +90,27 @@ export function setStandaloneWork(app: string, work: string, standalone: boolean
   const key = `${app}/${work}`;
   if (standalone) standaloneWorks.add(key); else standaloneWorks.delete(key);
   saveStandaloneWorks(member, standaloneWorks);
+  void persistArtifactKind(app, work, standalone);
   emitCanvasChanged();
+}
+function persistArtifactKind(app: string, work: string, card: boolean): void {
+  if (typeof fetch !== 'function') return;
+  void fetch(`/v1/library/${app}/${work}/kind`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind: card ? 'card' : 'app' }),
+  }).catch(() => undefined);
+}
+function adoptServerKinds(document_: Document): void {
+  const rows = [...document_.querySelectorAll<HTMLElement>('[data-artifact-kind]')];
+  if (!rows.length) return;
+  standaloneWorks = new Set(durableCardKeys(rows.map((row) => ({
+    app: row.dataset.app ?? '',
+    work: row.dataset.work ?? '',
+    kind: row.dataset.artifactKind ?? '',
+  }))));
+  saveStandaloneWorks(member, standaloneWorks);
 }
 export function markStandaloneWork(app: string, work: string): void { setStandaloneWork(app, work, true); }
 const dismissed = new Set<string>();
@@ -1481,6 +1501,7 @@ export function startBoard(document_: Document): void {
   member = host.dataset.member ?? '';
   placed = loadPlaced(member);
   standaloneWorks = loadStandaloneWorks(member);
+  adoptServerKinds(document_);
   const sections = Array.from(document_.querySelectorAll<HTMLElement>('#cv-board > .cv-group'));
   const flush = canvas.deferDerivedUpdates(false);
   let y = ORIGIN;

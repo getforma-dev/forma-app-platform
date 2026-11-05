@@ -1568,6 +1568,7 @@ mod tests {
         // work under "My apps").
         let library = canvas::library(vec![
             canvas::LibrarySource {
+                artifact_kind: String::new(),
                 app: app.into(),
                 work: spend.into(),
                 title: "Spend <Review>".into(),
@@ -1580,6 +1581,7 @@ mod tests {
                 )],
             },
             canvas::LibrarySource {
+                artifact_kind: String::new(),
                 app: app.into(),
                 work: northstar.into(),
                 title: "Northstar egress".into(),

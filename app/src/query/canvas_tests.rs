@@ -407,6 +407,7 @@ fn the_summary_counts_apps_and_cards() {
 fn the_library_pane_groups_numbers_and_counts() {
     let source = |work: &str, title: &str, grouping: Option<(usize, &str, &str)>, cards: usize| {
         LibrarySource {
+            artifact_kind: String::new(),
             app: "a".repeat(8),
             work: work.into(),
             title: title.into(),
@@ -503,4 +504,47 @@ fn the_library_pane_groups_numbers_and_counts() {
     assert_eq!(card_kind("table"), "table");
     assert_eq!(member_key("org", "p").len(), 16);
     assert_ne!(member_key("org", "p"), member_key("org", "q"));
+}
+
+/// APP-169: a Card is one whole work however many renderers it contains.
+/// An empty artifact kind stays an App. Nothing here counts the cards.
+#[test]
+fn a_card_kind_stays_one_work_and_an_empty_kind_stays_an_app() {
+    let many = LibrarySource {
+        artifact_kind: "card".into(),
+        app: "a".repeat(8),
+        work: "w-card".into(),
+        title: "Q3 board".into(),
+        grouping: None,
+        cards: (0..4)
+            .map(|index| {
+                (
+                    format!("c-{index}"),
+                    "View".into(),
+                    "table".into(),
+                    "table".into(),
+                )
+            })
+            .collect(),
+    };
+    let plain = LibrarySource {
+        artifact_kind: String::new(),
+        app: "b".repeat(8),
+        work: "w-app".into(),
+        title: "Spend".into(),
+        grouping: None,
+        cards: vec![(
+            "a-w-app".into(),
+            "App card".into(),
+            "app".into(),
+            "app".into(),
+        )],
+    };
+    let library = library(vec![many, plain]);
+    let apps = &library[0].apps;
+    assert_eq!(apps.len(), 2);
+    assert_eq!(apps[0].artifact_kind, "card");
+    assert_eq!(apps[0].cards.len(), 4);
+    assert_eq!(apps[1].artifact_kind, "");
+    assert_eq!(apps[1].cards.len(), 1);
 }

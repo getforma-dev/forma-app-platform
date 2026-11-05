@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 20,
+  "database_version": 21,
   "migrations": [
     {
       "version": 1,
@@ -101,6 +101,11 @@
       "version": 20,
       "file": "0020_work_data_copies.sql",
       "sha256": "4b5a46cc9a9cd8cd867c4d0098d2df684a1e87d2b1a8ef92e8bac38aa613eab4"
+    },
+    {
+      "version": 21,
+      "file": "0021_work_artifact_kinds.sql",
+      "sha256": "e5d731cfd89b47845095589f9aa74efd41216daa8af2bbc9a80224585a904363"
     }
   ],
   "catalog": [
@@ -187,6 +192,10 @@
     {
       "file": "catalog-v20.json",
       "sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773"
+    },
+    {
+      "file": "catalog-v21.json",
+      "sha256": "d44c0b6b0ffd47117d817a433237463bde9e62449c3eeefe1c06c5f1ae9a2a42"
     }
   ]
 }

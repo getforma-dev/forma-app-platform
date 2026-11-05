@@ -204,6 +204,11 @@ export function loadStandaloneWorks(member: string): Set<string> {
     return parts.length === 2 && isUuid(parts[0]) && isUuid(parts[1]);
   }).slice(-MAX_WORKS) : []);
 }
+/** Server-admitted Cards only. An empty kind, an App, or a bad id stays out. Component count is not an input. */
+export function durableCardKeys(rows: readonly { app: string; work: string; kind: string }[]): string[] {
+  return rows.filter((row) => row.kind === 'card' && isUuid(row.app) && isUuid(row.work)).map((row) => `${row.app}/${row.work}`);
+}
+
 export function saveStandaloneWorks(member: string, works: Set<string>): void {
   if (!/^[0-9a-f]{16}$/.test(member)) return;
   write(standaloneKey(member), [...works].filter(value => {

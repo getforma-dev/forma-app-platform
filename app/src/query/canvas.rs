@@ -126,6 +126,8 @@ pub struct LibraryAppProps {
     /// Lowercase words the pane's search matches.
     pub search: String,
     pub cards: Vec<LibraryCardProps>,
+    /// `card` or empty. Empty is an ambiguous App. Never inferred from card count.
+    pub artifact_kind: String,
 }
 
 /// One card row: the canvas card id (`c-{work}-{view}`, `f-…`, `r-…`, `l-…`,
@@ -154,6 +156,8 @@ pub struct LibrarySource {
     pub title: String,
     pub grouping: Option<(usize, String, String, String)>,
     pub cards: Vec<(String, String, String, String)>,
+    /// `card` when this member admitted that kind. Empty means ambiguous App.
+    pub artifact_kind: String,
 }
 
 /// The library categories in pane order: capability prefix → title.
@@ -265,6 +269,7 @@ pub fn library(sources: Vec<LibrarySource>) -> Vec<LibraryCategoryProps> {
             has_slug: !slug.is_empty(),
             slug,
             cards,
+            artifact_kind: source.artifact_kind,
         };
         match categories.last_mut() {
             Some(last) if last.id == id => last.apps.push(app),
@@ -1271,6 +1276,7 @@ fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
     // member composed from it (retrieved, adapted) is theirs.
     let library = crate::composer::matcher::seeded_work(work);
     LibrarySource {
+        artifact_kind: String::new(),
         app: app.to_owned(),
         work: work.to_owned(),
         // APP-120: a library app shows its catalog display title, if any.
@@ -1637,6 +1643,14 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     let mut sources = Vec::new();
     let listed_works = listing(&canvas, &member).await;
     let listed_ms = started.elapsed().as_millis();
+    let kinds = match canvas.work.auth().stores.as_ref() {
+        Some(stores) => match stores.workspace.artifact_kinds(&member).await {
+            Ok(kinds) => kinds,
+            Err(crate::storage::Error::Denied) => std::collections::BTreeMap::new(),
+            Err(error) => return routes::storage_refusal(&error),
+        },
+        None => std::collections::BTreeMap::new(),
+    };
     let reads = match read_works(&canvas, &member, &listed_works).await {
         Ok(reads) => reads,
         Err(refusal) => {
@@ -1666,7 +1680,11 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
                 return refusal;
             }
         };
-        sources.push(library_source(listed, &read));
+        let mut source = library_source(listed, &read);
+        if kinds.contains_key(&(listed.app.clone(), listed.work.clone())) {
+            source.artifact_kind = "card".to_owned();
+        }
+        sources.push(source);
         let verdict = routes::restore(auth, &parts.headers, &listed.app, &listed.work, &cookie);
         let restored = matches!(verdict, Restore::Parameters(_));
         let pending = read.listing.as_ref().is_some_and(|listing| {

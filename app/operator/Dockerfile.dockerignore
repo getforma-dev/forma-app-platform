@@ -240,3 +240,5 @@ parser/vendor/zip-9.1.3/src/write/**
 !app/migrations/0020_work_data_copies.sql
 !app/migrations/catalog-v20.json
 !app/migrations/AGENTS.md
+!app/migrations/0021_work_artifact_kinds.sql
+!app/migrations/catalog-v21.json
