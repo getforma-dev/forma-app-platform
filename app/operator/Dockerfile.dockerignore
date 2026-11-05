@@ -101,7 +101,6 @@ parser/**
 !parser/rust-toolchain.toml
 !parser/verify_vendor.py
 !parser/write_manifest.py
-!parser/AGENTS.md
 !parser/.cargo/
 parser/.cargo/**
 !parser/.cargo/config.toml
@@ -239,4 +238,3 @@ parser/vendor/zip-9.1.3/src/write/**
 # APP-168: current compiled inputs and editable spreadsheet app data.
 !app/migrations/0020_work_data_copies.sql
 !app/migrations/catalog-v20.json
-!app/migrations/AGENTS.md
