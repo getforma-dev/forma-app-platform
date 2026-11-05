@@ -557,7 +557,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(|_| Error::Unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 20 {
+    if row.try_get::<_, i32>(0).map_err(|_| Error::Unavailable)? != 21 {
         return Err(Error::Unavailable);
     }
     Ok(())

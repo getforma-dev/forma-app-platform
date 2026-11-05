@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 20,
+  "database_version": 21,
   "migrations": [
     {
       "version": 1,
@@ -101,6 +101,11 @@
       "version": 20,
       "file": "0020_work_data_copies.sql",
       "sha256": "4b5a46cc9a9cd8cd867c4d0098d2df684a1e87d2b1a8ef92e8bac38aa613eab4"
+    },
+    {
+      "version": 21,
+      "file": "0021_operator_audit_kinds.sql",
+      "sha256": "ea740b7f31c534b8f0ab6598543b57b637e3b58b30c7f8637de6f850caf4742e"
     }
   ],
   "catalog": [
@@ -187,6 +192,10 @@
     {
       "file": "catalog-v20.json",
       "sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773"
+    },
+    {
+      "file": "catalog-v21.json",
+      "sha256": "9f612e879f594d5a292ca9c7861630c74f17439177e2860bdac5dc16ecd9371f"
     }
   ]
 }

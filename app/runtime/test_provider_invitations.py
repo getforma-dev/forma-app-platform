@@ -716,8 +716,10 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
             self.secret.set_value(json.dumps(document))
             p = self.raw_cli("bind-provider-tenant", "--organization", ORG, "--from-auth-configuration", env=env)
             self.assertEqual((p.returncode, p.stderr), (0, ""), p.stderr[-300:])
-            self.assertEqual(json.loads(p.stdout), {"organization_id": ORG, "binding": "created", "active_bindings": 2, "audit_event": None,
-                                                    "source": "auth_configuration"})
+            created = json.loads(p.stdout)
+            self.assertRegex(created.pop("audit_event"), r"^[0-9a-f-]{36}$")
+            self.assertEqual(created, {"organization_id": ORG, "binding": "created", "active_bindings": 2,
+                                       "source": "auth_configuration"})
             self.assertEqual(rows(), [("secret-iss", "ten_from_secret", True)])
             for identifier in ("secret-iss", "ten_from_secret", "legacy-platform"):
                 self.assertNotIn(identifier, p.stdout)
@@ -886,7 +888,7 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.fake.status_of(created["remote_invitation_id"]), "revoked")
         self.assertEqual([r[1:] for r in self.rows(out["code_id"])],
                          [("create", "confirmed", created["remote_invitation_id"]), ("revoke", "confirmed", created["remote_invitation_id"])])
-        self.assertEqual(self.operator_events()[-1], ("code.revoked",))
+        self.assertEqual(self.operator_events()[-2:], [("code.revoked",), ("provider.invitation.revoked",)])
         own = {r[0] for r in self.rows(out["code_id"])}
         self.assertEqual([o for o in self.reconcile()["operations"] if o["invitation_id"] in own], [])
 
@@ -1028,7 +1030,7 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertFalse(path.exists())
         self.assertTrue(self.capability(live["provider_invitation"]["invitation_id"]).exists())
         self.assertEqual([r[1:3] for r in self.rows(live["code_id"])], [("create", "confirmed")])
-        self.assertEqual(len(self.operator_events()), events, "provider operation state is not an audit kind (D7.8 is closed)")
+        self.assertGreater(len(self.operator_events()), events)
         self.assertEqual(self.run_cli("verify", "--organization", ORG)["verified"], True)
 
     def test_contract_mismatch_is_confirmed_unusable_and_revoked(self):

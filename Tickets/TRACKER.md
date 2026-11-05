@@ -89,7 +89,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
 | 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](3-in-review/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | In review | APP-074 |
 | 83 | [APP-083: Prove concurrent redemption through the public beta API on the live deployment (deferred from APP-076)](0-backlog/APP-083.md) | [PH07](phases/PH07.md) | S13 | VAL | P1 | S | Backlog | APP-076 |
-| 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](0-backlog/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Backlog | APP-073 |
+| 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](3-in-review/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | In review | APP-073 |
 | 85 | [APP-085: Close the definition and publication review residuals (APP-010 review)](0-backlog/APP-085.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-010 |
 | 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](0-backlog/APP-086.md) | [PH07](phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |
 | 87 | [APP-087: Decide the parser fuel bound and close the parser packaging residuals (APP-017 preparation review)](0-backlog/APP-087.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | M | Backlog | APP-004 |

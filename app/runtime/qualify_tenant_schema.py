@@ -75,7 +75,9 @@ CHAIN_KINDS = {
     # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
                                  'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
-                                 'creator_authority.revoked')),
+                                 'creator_authority.revoked','provider.invitation.created','provider.invitation.reconciled',
+                                 'provider.invitation.revoked','source_revision.registered','work.seeded',
+                                 'provider_tenant.bound','app.seeded')),
 }
 
 
@@ -462,7 +464,8 @@ def admission_checks(pg, passed, denied):
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),
           (SELECT count(*) FROM pg_policy p WHERE p.polrelid=c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE n.nspname='genui_private' AND c.relkind='r' ORDER BY c.relname""").fetchall()
-        assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0)],rows
+        assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0),
+                      ('provider_tenant_index',False,False,'genui_owner',0)],rows
     passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_admit holds a privilege on it (INSERT, nine columns), no application role any',
            tables=list(SHARING_TABLES))
     with pg.connect('postgres') as c:
@@ -479,7 +482,7 @@ def admission_checks(pg, passed, denied):
           AND grantee<>'genui_owner'""").fetchone()==(0,)
     passed('0009 slack_links is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_workspace holds column SELECT, INSERT and the four re-link/unlink UPDATE columns, no table-level grant',
            tables=list(SLACK_TABLES))
-    passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS',
+    passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the genui_private indexes carry no RLS',
            tables=list(ADMISSION_TABLES))
 
     # --- Exact (role, relation, privilege, column) grant set (D7.3 + D7.1) ---

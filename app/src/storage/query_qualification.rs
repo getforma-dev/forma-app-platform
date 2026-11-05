@@ -402,9 +402,13 @@ async fn campaign() {
         rows(&fixture, &format!("SELECT revision_id::text||' '||normalized_digest::text FROM genui.source_revisions WHERE organization_id='{ORG}' AND source_id='{SOURCE}' ORDER BY revision_id")).await,
         [format!("{SEEDED_REVISION} {PLACEHOLDER}"), format!("{REVISION} {NORMALIZED}")]
     );
+    assert_eq!(
+        rows(&fixture, &format!("SELECT count(*)::text FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='operator' AND kind='source_revision.registered'")).await,
+        ["1"]
+    );
     check(
         &mut checks,
-        "register-source-revision writes one new source revision with the uploaded objects' real digests; a rerun is unchanged; a differing record, a revision id not derived from the content digest, a disagreeing object digest and another organization are refused; the seeded placeholder revision is untouched",
+        "register-source-revision writes one new source revision with the uploaded objects' real digests and one source_revision.registered event; a rerun is unchanged; a differing record, a revision id not derived from the content digest, a disagreeing object digest and another organization are refused; the seeded placeholder revision is untouched",
     );
 
     let bound = operator(
@@ -462,6 +466,10 @@ async fn campaign() {
         ],
     );
     assert_eq!(rerun["changed"], false);
+    assert_eq!(
+        rows(&fixture, &format!("SELECT count(*)::text FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='operator' AND kind='work.seeded' AND app_id='{APP}' AND work_id='{BOUND}'")).await,
+        ["1"]
+    );
     refused_for(
         &operator_as(
             &fixture,
@@ -495,7 +503,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
+        "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision, and one work.seeded event; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
     );
 
     // --- Authorized member: exact result, released, receipted ---

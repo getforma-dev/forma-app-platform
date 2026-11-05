@@ -93,7 +93,12 @@ class PureTests(unittest.TestCase):
         base = ["--organization", ORG, "--principal", principal]
         self.assertEqual(op.GRANTABLE, {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
                                         "record_read": "work", "record_write": "work", "source_read": "source"})
-        self.assertEqual(op.OPERATOR_KINDS[-3:], ("permission.granted", "permission.revoked", "creator_authority.revoked"))
+        self.assertEqual(op.OPERATOR_KINDS[:10], ("organization.provisioned", "handle.rotated", "code.issued", "code.revoked",
+                                                  "code.extended", "membership.revoked", "entitlement.revoked",
+                                                  "permission.granted", "permission.revoked", "creator_authority.revoked"))
+        self.assertEqual(op.OPERATOR_KINDS[10:], ("provider.invitation.created", "provider.invitation.reconciled",
+                                                  "provider.invitation.revoked", "source_revision.registered", "work.seeded",
+                                                  "provider_tenant.bound", "app.seeded"))
         for command in ("grant-permission", "revoke-permission"):
             for good in (["--permission", "run", "--app", app], ["--permission", "review_publish", "--app", app],
                          ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source]):
@@ -489,16 +494,18 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
             self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
         self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
 
-    def test_bind_provider_tenant_adds_the_real_binding_once_without_an_audit_event(self):
-        """APP-078 B1: an existing (seeded) organization gains its real provider tenant binding beside
-        the fixture one; identifiers only, idempotent, no audit event (D7.8's kinds name none)."""
+    def test_bind_provider_tenant_adds_the_real_binding_once_and_one_audit_event(self):
+        """APP-078 B1 / APP-084: an existing organization gains its provider tenant once, with one event."""
         self.ensure_backfill()
         before = self.operator_events()
         rows = lambda: self.query("SELECT issuer,provider_tenant_id,active FROM genui.provider_tenant_bindings WHERE organization_id=%s ORDER BY issuer", (ORG,))
         self.assertEqual(rows(), [(ISSUER, TENANT, True)], "the fixture's existing binding, like the seed's `app008-fixture-only` on RDS")
         args = ("bind-provider-tenant", "--organization", ORG, "--issuer", "synthetic-iss", "--provider-tenant", "ten_00000000-0000-4000-8000-00000000a001")
         created = self.cli(*args)
-        self.assertEqual(created, {"organization_id": ORG, "binding": "created", "active_bindings": 2, "audit_event": None, "source": "arguments"})
+        self.assertEqual({k: created[k] for k in ("organization_id", "binding", "active_bindings", "source")},
+                         {"organization_id": ORG, "binding": "created", "active_bindings": 2, "source": "arguments"})
+        self.assertRegex(created["audit_event"], r"^[0-9a-f-]{36}$")
+        self.assertEqual(self.operator_events(), before + [("provider_tenant.bound",)])
         self.assertEqual(rows(), [(ISSUER, TENANT, True), ("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
         self.assertEqual(self.cli(*args), {"organization_id": ORG, "binding": "existing", "active_bindings": 2, "audit_event": None, "source": "arguments"})
         # B1 review m6: a pair already active for another organization that can sign in is refused.
@@ -507,6 +514,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
             c.execute("INSERT INTO genui.organizations VALUES (%s,'Operator test other','active') ON CONFLICT DO NOTHING", (other,))
             c.execute("INSERT INTO genui_private.handle_index VALUES (%s,%s,NULL) ON CONFLICT DO NOTHING", (op.handle_digest(os.urandom(16)), other))
             c.execute("INSERT INTO genui.provider_tenant_bindings VALUES (%s,'elsewhere-iss','ten_elsewhere',true) ON CONFLICT DO NOTHING", (other,))
+            c.execute("INSERT INTO genui_private.provider_tenant_index VALUES ('elsewhere-iss','ten_elsewhere',%s) ON CONFLICT DO NOTHING", (other,))
         before_rows = self.dump()
         elsewhere = self.cli("bind-provider-tenant", "--organization", ORG, "--issuer", "elsewhere-iss", "--provider-tenant", "ten_elsewhere", expect=1)
         self.assertEqual(json.loads(elsewhere.stderr), {"refused": "provider_tenant_bound_elsewhere"})
@@ -515,6 +523,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.cli("bind-provider-tenant", "--organization", ORG, "--issuer", "other-iss", "--provider-tenant", "ten_elsewhere")
         with self.connect("postgres", autocommit=True) as c:
             c.execute("DELETE FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer='other-iss'", (ORG,))
+            c.execute("DELETE FROM genui_private.provider_tenant_index WHERE issuer='other-iss' AND organization_id=%s", (ORG,))
         # The source form: either both identifiers or the auth configuration flag, never a mixture.
         for bad in (("--issuer", "x"), ("--provider-tenant", "t"), ("--issuer", "x", "--provider-tenant", "t", "--from-auth-configuration"),
                     ("--from-auth-configuration", "--issuer", "x"), ("--issuer", "x", "--provider-tenant", "t", "--auth-configuration-secret-id", "arn:aws:secretsmanager:us-east-1:000000000000:secret:x")):
@@ -522,7 +531,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                 op.validate(op.parser().parse_args(["bind-provider-tenant", "--organization", ORG, *bad]))
             self.assertEqual(str(refused.exception), "binding_source_refused")
         self.assertEqual(rows()[1:], [("synthetic-iss", "ten_00000000-0000-4000-8000-00000000a001", True)])
-        self.assertEqual(self.operator_events(), before, "D7.8's closed operator kinds name no binding event")
+        self.assertEqual(self.operator_events(), before + [("provider_tenant.bound",), ("provider_tenant.bound",)])
         # The registry's own bounds, checked before any connection; an unknown organization refuses after it.
         for bad in (("--issuer", "with space"), ("--issuer", "x" * 257), ("--provider-tenant", ""), ("--provider-tenant", "t" * 129)):
             with self.subTest(bad=bad):
@@ -1000,8 +1009,10 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((rows(northstar), rows(canary)), ((0, 0, 0, 0), (1, 1, 1, 1)))
         # Not a fixture organization: refused before any write.
         self.assertIn("organization_refused", self.cli("seed-spend-review", "--organization", ORG, expect=1).stderr)
+        self.cli("backfill", "--organization", northstar)
         first = self.cli("seed-spend-review", "--organization", northstar)
-        self.assertEqual((first["changed"], first["label"], first["edition"], first["audit_event"]), (True, "seeded definition", "impl-2026-10-28.1", None))
+        self.assertEqual((first["changed"], first["label"], first["edition"]), (True, "seeded definition", "impl-2026-10-28.1"))
+        self.assertRegex(first["audit_event"], r"^[0-9a-f-]{36}$")
         self.assertGreater(first["rows_inserted"], 0)
         self.assertEqual((first["app_id"], first["work_id"], first["publication_id"], first["definition_revision_id"], first["definition_digest"]),
                          (app, work, bundle["publication"]["publication_id"], bundle["definition"]["revision_id"], bundle["definition"]["digest"]))
