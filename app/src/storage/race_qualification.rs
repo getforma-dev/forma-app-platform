@@ -26,7 +26,7 @@ use super::{
     },
     pool::TestHooks,
     qualification::{Fixture, Operator},
-    qualification_cases::{check, ORG, OTHER, PRINCIPAL, REVIEWER},
+    qualification_cases::{ORG, OTHER, PRINCIPAL, REVIEWER},
     *,
 };
 use crate::{
@@ -129,7 +129,7 @@ async fn lock_waiters(fixture: &Fixture) -> i64 {
 
 /// One backend of this database waiting on a heavyweight lock: who, what, and who blocks it.
 #[derive(Clone, Debug)]
-struct LockObservation {
+pub(super) struct LockObservation {
     pid: i32,
     wait_event: String,
     relations: Vec<String>,
@@ -138,7 +138,7 @@ struct LockObservation {
 }
 
 impl LockObservation {
-    fn json(&self) -> Value {
+    pub(super) fn json(&self) -> Value {
         json!({
             "pid": self.pid,
             "wait_event": self.wait_event,
@@ -150,7 +150,7 @@ impl LockObservation {
 }
 
 /// No lock waiter yet. Called after the first actor is paused and before the second starts.
-async fn quiet(fixture: &Fixture) {
+pub(super) async fn quiet(fixture: &Fixture) {
     assert_eq!(
         lock_waiters(fixture).await,
         0,
@@ -159,7 +159,7 @@ async fn quiet(fixture: &Fixture) {
 }
 
 /// The waiting backend, its granted tuple relation when PostgreSQL exposes one, and its blocker.
-async fn observe_lock(fixture: &Fixture) -> LockObservation {
+pub(super) async fn observe_lock(fixture: &Fixture) -> LockObservation {
     let operator = fixture.operator().await;
     timeout(Duration::from_secs(10), async {
         loop {
@@ -205,7 +205,7 @@ fn names(wait: &LockObservation, table: &str) -> bool {
         .any(|relation| relation == table || relation.ends_with(&format!(".{table}")))
 }
 
-fn on_relation(wait: &LockObservation, table: &str) {
+pub(super) fn on_relation(wait: &LockObservation, table: &str) {
     assert!(
         names(wait, table),
         "waited on {:?} ({}) for {table}; blockers {:?} state {:?}",
@@ -218,7 +218,7 @@ fn on_relation(wait: &LockObservation, table: &str) {
 }
 
 /// A same-key claim waits on the in-flight transaction, not on a tuple.
-fn on_claim(wait: &LockObservation) {
+pub(super) fn on_claim(wait: &LockObservation) {
     assert_eq!(wait.wait_event, "transactionid", "{wait:?}");
     assert_eq!(wait.blockers.len(), 1, "{wait:?}");
     assert_eq!(
@@ -1606,7 +1606,17 @@ async fn campaign() {
     );
     assert_eq!(claims(&fixture).await, commits);
     let mut closing = Vec::new();
-    check(&mut closing, &format!("the operator recomputes the data chain to its head: {commits} command.committed events for {commits} outcomes and {commits} claims, every outcome naming its own event; no refused or raced command left a claim, outcome or event"));
+    closing.push(json!({
+        "name": format!("the operator recomputes the data chain to its head: {commits} command.committed events for {commits} outcomes and {commits} claims, every outcome naming its own event; no refused or raced command left a claim, outcome or event"),
+        "passed": true,
+        "observed": {
+            "verified": true,
+            "commits": commits,
+            "command_outcomes": out["command_outcomes"],
+            "data_events": out["chains"]["data"]["events"],
+            "unpaired_outcomes": 0,
+        },
+    }));
 
     drop(app);
     drop(auth);
@@ -1619,10 +1629,11 @@ async fn campaign() {
     );
     fixture.removed = true;
     std::fs::remove_dir_all(&fixture.directory.0).unwrap();
-    check(
-        &mut closing,
-        "local database and private fixture files removed",
-    );
+    closing.push(json!({
+        "name": "local database and private fixture files removed",
+        "passed": true,
+        "observed": {"removed": true},
+    }));
     let total: usize = groups
         .iter()
         .map(|g| g["checks"].as_array().unwrap().len())

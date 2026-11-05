@@ -9,13 +9,14 @@
 //! a response alone; concurrency uses the pool's test-only checkpoints and
 //! observed PostgreSQL lock waits, never sleeps.
 use super::{
-    admission_qualification::{lock_wait, operator},
+    admission_qualification::operator,
     definition_qualification::{
         grant, request, spend_review_s05, SpendReview, AUTHOR, EXPENSES, SPEND_APP,
     },
     pool::TestHooks,
     qualification::Fixture,
-    qualification_cases::{check, ORG, OTHER, PRINCIPAL, REVIEWER},
+    qualification_cases::{ORG, OTHER, PRINCIPAL, REVIEWER},
+    race_qualification::{observe_lock, on_claim, on_relation, quiet},
     *,
 };
 use crate::{
@@ -388,6 +389,16 @@ fn native_command_campaign() {
         .unwrap();
 }
 
+/// A campaign check keeps the values the assertion compared, not only a pass flag.
+fn record(checks: &mut Vec<Value>, name: &str, observed: Value) {
+    checks.push(json!({
+        "name": name,
+        "passed": true,
+        "observed": observed,
+    }));
+    println!("APP013 check: {name}");
+}
+
 async fn campaign() {
     let mut fixture = Fixture::new();
     fixture.sql(
@@ -407,9 +418,10 @@ async fn campaign() {
     let again = operator(&fixture, &["backfill", "--organization", ORG]);
     assert_eq!(again["sequence"]["organization_sequences"], "existing");
     assert_eq!(next_sequence(&fixture).await, 2);
-    check(
+    record(
         &mut checks,
         "operator backfill creates each organization's organization_sequences row at 1 + max(internal_record_revisions.commit_sequence) once, and reports it existing afterwards (D7.7, D7.19)",
+        json!({"next_commit_sequence": 2, "repeat": again["sequence"]["organization_sequences"]}),
     );
 
     let settings = fixture.settings();
@@ -420,9 +432,10 @@ async fn campaign() {
     let s05 = spend_review_s05(&fixture, &stores).await;
     let before = footprint(&fixture).await;
     assert_eq!(before, [3, 3, 5, 0, 0, 0]);
-    check(
+    record(
         &mut checks,
         "S05 Spend Review in Northstar through the admitted path over the three seeded placeholder records; no claim, outcome or data-chain event exists before the first command",
+        json!({"footprint": before}),
     );
     // APP-113 review (storage 1, `commands::compose`): a declared transition
     // on an existing record is never taken by its filer. The author files;
@@ -492,9 +505,10 @@ async fn campaign() {
         (event.2.as_str(), event.3.as_str(), event.4.as_str()),
         (SPEND_APP, s05.work.as_str(), AUTHOR)
     );
-    check(
+    record(
         &mut checks,
         "ik-1 at expected version 0 commits record version 1: one revision (commit_sequence 2, creator and updater the author), one current pointer, the record's source dependencies, one scoped outcome and exactly one command.committed event naming the record, in one transaction; the sequence advances to 3",
+        json!({"record_version": outcome1.record_version, "commit_sequence": outcome1.commit_sequence, "audit_event_id": outcome1.audit_event_id, "next_sequence": 3}),
     );
 
     // --- identical retry after a lost response ---
@@ -509,9 +523,10 @@ async fn campaign() {
             .await,
         Ok(Some(outcome1.clone()))
     );
-    check(
+    record(
         &mut checks,
         "ik-1 retried with its now-stale expected version 0 returns the stored outcome unchanged, with no second revision, outcome or audit event; the outcome lookup by key returns the same",
+        json!({"result": "replayed", "footprint": [4, 4, 6, 1, 1, 1], "next_sequence": 3}),
     );
 
     // --- same key, different payload ---
@@ -526,9 +541,10 @@ async fn campaign() {
         Some(values("needs_context", "Review required — synthetic only"))
     );
     assert_eq!(footprint(&fixture).await, [4, 4, 6, 1, 1, 1]);
-    check(
+    record(
         &mut checks,
         "the same key with a changed canonical payload conflicts with the authorized recovery view naming the stored outcome and the current record; nothing is written",
+        json!({"reason": "payload_mismatch", "current_record_version": view.current_record_version, "footprint": [4, 4, 6, 1, 1, 1]}),
     );
 
     // --- stale expected version (S05: a stale edit expecting version 0) ---
@@ -547,9 +563,10 @@ async fn campaign() {
     // The conflicting command's claim was released with its rollback.
     assert_eq!(footprint(&fixture).await, [4, 4, 6, 1, 1, 1]);
     assert_eq!(next_sequence(&fixture).await, 3);
-    check(
+    record(
         &mut checks,
         "a new key expecting version 0 against version 1 conflicts (409 recovery view: expected 0, current 1 with the current values) without partially writing a record, claim or outcome",
+        json!({"reason": "expected_version", "expected": 0, "current": 1, "next_sequence": 3, "footprint": [4, 4, 6, 1, 1, 1]}),
     );
 
     // --- stale work premise ---
@@ -575,9 +592,10 @@ async fn campaign() {
         Ok(CommandResult::Stale(_))
     ));
     assert_eq!(footprint(&fixture).await, [4, 4, 6, 1, 1, 1]);
-    check(
+    record(
         &mut checks,
         "a work version or publication premise that is not the saved work's is Stale (412) naming the current publication, revision, digest and work version; nothing is written",
+        json!({"result": "stale", "footprint": [4, 4, 6, 1, 1, 1]}),
     );
 
     // --- ik-2: reviewed at version 1 → version 2 ---
@@ -602,9 +620,10 @@ async fn campaign() {
         scalar(&fixture, &format!("SELECT current_version FROM genui.internal_records WHERE organization_id='{ORG}' AND record_id='{EXP_002}'")).await,
         2
     );
-    check(
+    record(
         &mut checks,
         "ik-2 (reviewed, the declared needs_context → reviewed transition) is refused for the record's filer (APP-113: the filer never decides) with nothing written, and commits for the reviewer at version 2, commit_sequence 3: one more revision, outcome and audit event; the current pointer is 2",
+        json!({"filer": "denied", "record_version": outcome2.record_version, "commit_sequence": outcome2.commit_sequence, "current_version": 2}),
     );
 
     // --- refusals that write nothing ---
@@ -691,9 +710,10 @@ async fn campaign() {
         Err(Error::Denied)
     );
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
-    check(
+    record(
         &mut checks,
         "an undeclared transition (reviewed → needs_context on a create command), a note-only edit and a resubmission of the current values through the create command (no declared transition fires; edition impl-2026-10-29.3 amendment), an undeclared command, another schema version, a mistyped or unknown field, a malformed key, a member without record_write and the canary organization are refused with nothing written",
+        json!({"result": "denied", "footprint": [4, 5, 7, 2, 2, 2]}),
     );
 
     // --- another principal cannot read or replay the outcome by key ---
@@ -726,9 +746,10 @@ async fn campaign() {
             .await,
         Ok(Some(outcome1.clone()))
     );
-    check(
+    record(
         &mut checks,
         "the idempotency scope includes the principal: a reviewer with record_write reads no outcome under the author's key and gets its own conflict on replaying it; a member without authority is denied; the author reads its outcome",
+        json!({"reason": "expected_version", "current_record_version": view.current_record_version, "footprint": [4, 5, 7, 2, 2, 2]}),
     );
 
     // --- in flight: the same key while the first command holds its claim ---
@@ -750,6 +771,7 @@ async fn campaign() {
     hooks.arm("record_lock");
     let a = spawn_holder();
     paused(&hooks).await;
+    quiet(&fixture).await;
     let observer = fixture.operator().await;
     let holder_pid: i32 = observer
         .client
@@ -763,7 +785,8 @@ async fn campaign() {
         let author = request(&b_stores, ORG, AUTHOR, 1);
         b_stores.data.commit_record(&author, &b_command).await
     });
-    lock_wait(&fixture, 1).await;
+    let waited_same = observe_lock(&fixture).await;
+    on_claim(&waited_same);
     assert_eq!(b.await.unwrap(), Ok(CommandResult::InFlight));
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
     // Two serial one-second waits can exhaust the holder's three-second idle
@@ -796,6 +819,7 @@ async fn campaign() {
     hooks.arm("record_lock");
     let a = spawn_holder();
     paused(&hooks).await;
+    quiet(&fixture).await;
     let c_stores = stores.clone();
     let c_command = on(
         IN_FLIGHT_RECORD,
@@ -805,7 +829,8 @@ async fn campaign() {
         let author = request(&c_stores, ORG, AUTHOR, 1);
         c_stores.data.commit_record(&author, &c_command).await
     });
-    lock_wait(&fixture, 1).await;
+    let waited_sequence = observe_lock(&fixture).await;
+    on_relation(&waited_sequence, "organization_sequences");
     assert_eq!(c.await.unwrap(), Ok(CommandResult::InFlight));
     assert_eq!(footprint(&fixture).await, [4, 5, 7, 2, 2, 2]);
     hooks.release.notify_one();
@@ -832,9 +857,10 @@ async fn campaign() {
         (ConflictReason::ExpectedVersion, 1)
     );
     assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
-    check(
+    record(
         &mut checks,
         "in two bounded holder cycles, the same key waits on the claim and a different key on the sequence row, each observed in pg_stat_activity and answered in_flight after lock_timeout (never 503) with nothing written; the first holder is cancelled and its PostgreSQL connection disappears without a write before the second starts; the released second holder commits its record's version 1 (commit_sequence 4), the same key then replays and the different key conflicts on the moved version",
+        json!({"same_key": waited_same.json(), "different_key": waited_sequence.json(), "record_version": outcome3.record_version, "commit_sequence": outcome3.commit_sequence, "current": 1, "footprint": [5, 6, 8, 3, 3, 3]}),
     );
 
     // --- busy: a lock wait on the authorization fence ---
@@ -859,16 +885,19 @@ async fn campaign() {
                 ))
                 .await
                 .unwrap();
+            quiet(fixture).await;
             let racer = tokio::spawn(async move {
                 let author = request(&stores, ORG, AUTHOR, 1);
                 stores.data.commit_record(&author, &command).await
             });
-            lock_wait(fixture, 1).await;
+            let waited = observe_lock(fixture).await;
+            on_claim(&waited);
             assert_eq!(racer.await.unwrap(), Ok(expected));
             holder.client.batch_execute("ROLLBACK").await.unwrap();
+            waited
         }
     };
-    race(
+    let busy_lock = race(
         format!("UPDATE genui.memberships SET membership_epoch=membership_epoch WHERE organization_id='{ORG}' AND principal_id='{AUTHOR}'"),
         CommandResult::Busy,
     )
@@ -876,7 +905,7 @@ async fn campaign() {
     // The D7.1 operator lock itself (member FOR UPDATE) already blocks the
     // claim's foreign-key reference, so that wait is classified in_flight:
     // the same 409 with Retry-After, never 503.
-    race(
+    let inflight_lock = race(
         format!("SELECT principal_id FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{AUTHOR}' FOR UPDATE"),
         CommandResult::InFlight,
     )
@@ -884,9 +913,10 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
     let outcome4 = committed(stores.data.commit_record(&author, &busy_command).await);
     assert_eq!(outcome4.record_version, 1);
-    check(
+    record(
         &mut checks,
         "a member row being updated by an operator transaction makes the authorization fence wait past lock_timeout: the command answers busy (409); a member row held FOR UPDATE blocks the claim's reference and answers in_flight (409); neither is a 503, nothing is written, and the command commits once the operator releases",
+        json!({"busy": busy_lock.json(), "in_flight": inflight_lock.json(), "record_version": outcome4.record_version, "footprint": [5, 6, 8, 3, 3, 3]}),
     );
 
     // --- ambiguous commit: the backend ends before COMMIT answers ---
@@ -928,9 +958,10 @@ async fn campaign() {
             .await,
         Ok(Some(outcome5.clone()))
     );
-    check(
+    record(
         &mut checks,
         "a backend ended before COMMIT answers is UnknownOutcome (503 unknown_outcome), never a claimed success: the outcome lookup by key finds nothing, the same key resubmitted commits once, and the lookup then finds it",
+        json!({"terminated": terminated, "record_version": outcome5.record_version, "footprint": [6, 7, 9, 4, 4, 4]}),
     );
 
     // --- insert-only outcomes and role separation at the row level ---
@@ -964,9 +995,10 @@ async fn campaign() {
         assert_eq!((row.get::<_, i64>(0), row.get::<_, i64>(1)), (1, 1));
         operator.client.batch_execute("ROLLBACK").await.unwrap();
     }
-    check(
+    record(
         &mut checks,
         "claims, outcomes, revisions and audit events are insert-only for the data role; it cannot write a sequence row, another chain or another principal's claim; workspace, control and worker cannot read the command relations; another principal's outcomes are row-invisible",
+        json!({"sqlstate": "42501", "reviewer_visible_outcomes": 1, "reviewer_owned_outcomes": 1}),
     );
 
     // --- the HTTP route and the record page with a minted session ---
@@ -1040,9 +1072,10 @@ async fn campaign() {
             .status,
         StatusCode::NOT_FOUND
     );
-    check(
+    record(
         &mut checks,
         "the record page renders the current record (version 1, needs_context) with a fresh 32-hex key per render and the session-bound token; no session or a member without record_read is the uniform 404",
+        json!({"version": "1", "anonymous_status": 404, "foreign_status": 404}),
     );
 
     let action = field(&shown.body, "action");
@@ -1201,9 +1234,10 @@ async fn campaign() {
         );
     }
     assert_eq!(footprint(&fixture).await, [7, 9, 11, 6, 6, 6]);
-    check(
+    record(
         &mut checks,
         "the record page's form commits through the route (303 to the page with notice=committed, the record's version 2), resubmits as replayed and conflicts when edited under the same key; a value storage refuses (a status outside the enum, an unwritable field) returns 303 to the page with notice=refused; a cross-site post, a wrong token, a missing key and no session are refused before any write",
+        json!({"notice": "refused", "version": "2", "footprint": [7, 9, 11, 6, 6, 6]}),
     );
 
     // --- the JSON route: the S05 sequence as the island would drive it ---
@@ -1588,13 +1622,15 @@ async fn campaign() {
             "stale"
         ])
     );
-    check(
+    record(
         &mut checks,
         "the JSON route answers 200 with the outcome document, 200 again on the identical retry, 409 conflict with the recovery view on a stale version or a changed payload, 412 stale on a moved work premise, 409 in_flight with Retry-After: 2 for the same key while its first command holds the claim, 200 on the outcome lookup by key (404 for another key or another principal), 400 for a missing, short, padded or repeated key and for a malformed, duplicate-member or non-JSON body, 413 over 256 KiB, 403 cross-site and 404 for a foreign path; eight commits in all",
+        json!({"problem_codes": codes, "commits": 8}),
     );
-    check(
+    record(
         &mut checks,
         "every problem body the route answered (conflict, stale, in_flight, the three 400 codes, payload_too_large, cross_site, not_found) validates under contracts/validate.py validate_problem for edition impl-2026-10-29.3 (the HTTP layer's not_found and cross_site carry exactly status and code), with Retry-After equal to retry_after_seconds",
+        json!({"problem_codes": codes}),
     );
 
     // --- restart: every pool and store, then reopen ---
@@ -1696,9 +1732,10 @@ async fn campaign() {
         ("2", "status=reviewed|note=Approved — synthetic only")
     );
     assert_eq!(footprint(&fixture).await, [9, 11, 13, 8, 8, 8]);
-    check(
+    record(
         &mut checks,
         "after every pool and store is replaced (and the old session ended with its vault), the EXP-002 decision record reads back at version 2 (reviewed) with its values, ik-1's outcome is unchanged and replays, and a fresh session reopens the page",
+        json!({"version": "2", "fields": "status=reviewed|note=Approved — synthetic only", "footprint": [9, 11, 13, 8, 8, 8]}),
     );
 
     // --- SR10: the chains verify; outcomes name their events ---
@@ -1717,9 +1754,10 @@ async fn campaign() {
         scalar(&fixture, &format!("SELECT count(DISTINCT commit_sequence) FROM genui.internal_record_revisions WHERE organization_id='{ORG}'")).await,
         9
     );
-    check(
+    record(
         &mut checks,
         "the operator recomputes the data chain (eight command.committed events) to its head and every outcome names its own event with the record and payload digest; the canary's data chain is empty; the sequence is 10 after eight commits",
+        json!({"verified": true, "data_events": 8, "command_outcomes": 8, "canary_data_events": 0, "next_sequence": 10, "distinct_commit_sequences": 9, "unpaired_outcomes": 0}),
     );
 
     restarted.close().await.unwrap();
@@ -1730,9 +1768,10 @@ async fn campaign() {
     );
     fixture.removed = true;
     std::fs::remove_dir_all(&fixture.directory.0).unwrap();
-    check(
+    record(
         &mut checks,
         "local database and private fixture files removed",
+        json!({"removed": true}),
     );
     if let Some(path) = std::env::var_os("GENUI_COMMAND_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&json!({

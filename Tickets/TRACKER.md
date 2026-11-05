@@ -21,7 +21,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](4-done/APP-011.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | M | Done | APP-002, APP-007 |
 | 14 | [APP-012: Deliver a minimal authorized query with receipt](4-done/APP-012.md) | [PH01](phases/PH01.md) | S02 | QRY | P0 | L | Done | APP-003, APP-005, APP-009, APP-010, APP-011 |
 | 15 | [APP-013: Commit one declared internal record and recover outcome](4-done/APP-013.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | L | Done | APP-012 |
-| 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](2-in-progress/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | In progress | APP-013 |
+| 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](3-in-review/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | In review | APP-013 |
 | 17 | [APP-015: Implement durable jobs, leases and cancellation](0-backlog/APP-015.md) | [PH02](phases/PH02.md) | S03 | OPS | P0 | L | Backlog | APP-008, APP-009, APP-073 |
 | 18 | [APP-016: Store original and normalized immutable revisions](0-backlog/APP-016.md) | [PH02](phases/PH02.md) | S03 | ING | P0 | L | Backlog | APP-008, APP-010 |
 | 19 | [APP-017: Build CSV and XLSX import jobs](0-backlog/APP-017.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | L | Backlog | APP-004, APP-015, APP-016 |

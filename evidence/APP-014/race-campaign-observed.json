@@ -3,15 +3,25 @@
   "closing": [
     {
       "name": "the operator recomputes the data chain to its head: 17 command.committed events for 17 outcomes and 17 claims, every outcome naming its own event; no refused or raced command left a claim, outcome or event",
+      "observed": {
+        "command_outcomes": 17,
+        "commits": 17,
+        "data_events": 17,
+        "unpaired_outcomes": 0,
+        "verified": true
+      },
       "passed": true
     },
     {
       "name": "local database and private fixture files removed",
+      "observed": {
+        "removed": true
+      },
       "passed": true
     }
   ],
   "commits": 17,
-  "elapsed_ms": 37712,
+  "elapsed_ms": 32054,
   "groups": [
     {
       "checks": [
@@ -68,7 +78,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 3766,
+      "elapsed_ms": 3352,
       "group": "lost_response_retry_returns_original_outcome_with_stale_expected_version"
     },
     {
@@ -79,9 +89,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 233,
+              "pid": 221,
               "relations": [],
               "wait_event": "transactionid"
             },
@@ -100,9 +110,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 233,
+              "pid": 221,
               "relations": [],
               "wait_event": "transactionid"
             },
@@ -123,9 +133,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 233,
+              "pid": 221,
               "relations": [
                 "genui.organization_sequences"
               ],
@@ -149,9 +159,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 233,
+              "pid": 221,
               "relations": [
                 "genui.organization_sequences"
               ],
@@ -194,7 +204,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 6053,
+      "elapsed_ms": 5650,
       "group": "same_key_and_different_key_races_commit_exactly_one_intended_write"
     },
     {
@@ -239,7 +249,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 2368,
+      "elapsed_ms": 2082,
       "group": "other_principal_cannot_retrieve_key"
     },
     {
@@ -263,9 +273,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                300
+                288
               ],
-              "pid": 225,
+              "pid": 215,
               "relations": [
                 "genui.saved_work"
               ],
@@ -290,9 +300,9 @@
                 "lock": {
                   "blocker_state": "idle in transaction",
                   "blockers": [
-                    306
+                    294
                   ],
-                  "pid": 233,
+                  "pid": 221,
                   "relations": [
                     "genui.saved_work"
                   ],
@@ -304,9 +314,9 @@
                 "lock": {
                   "blocker_state": "idle in transaction",
                   "blockers": [
-                    309
+                    297
                   ],
-                  "pid": 225,
+                  "pid": 215,
                   "relations": [],
                   "wait_event": "transactionid"
                 }
@@ -327,9 +337,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                233
+                221
               ],
-              "pid": 318,
+              "pid": 306,
               "relations": [
                 "genui.saved_work"
               ],
@@ -351,9 +361,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 330,
+              "pid": 317,
               "relations": [
                 "genui.saved_work"
               ],
@@ -370,7 +380,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 5150,
+      "elapsed_ms": 4376,
       "group": "adoption_vs_commit_both_orders"
     },
     {
@@ -394,9 +404,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                348
+                335
               ],
-              "pid": 233,
+              "pid": 221,
               "relations": [
                 "genui.memberships"
               ],
@@ -421,9 +431,9 @@
                 "lock": {
                   "blocker_state": "idle in transaction",
                   "blockers": [
-                    357
+                    345
                   ],
-                  "pid": 225,
+                  "pid": 215,
                   "relations": [
                     "genui.memberships"
                   ],
@@ -435,9 +445,9 @@
                 "lock": {
                   "blocker_state": "idle in transaction",
                   "blockers": [
-                    360
+                    348
                   ],
-                  "pid": 233,
+                  "pid": 221,
                   "relations": [],
                   "wait_event": "transactionid"
                 }
@@ -458,9 +468,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                368
+                356
               ],
-              "pid": 226,
+              "pid": 213,
               "relations": [
                 "genui.memberships"
               ],
@@ -477,9 +487,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 381,
+              "pid": 369,
               "relations": [
                 "genui.memberships"
               ],
@@ -501,9 +511,9 @@
             "lock": {
               "blocker_state": "idle in transaction",
               "blockers": [
-                225
+                215
               ],
-              "pid": 391,
+              "pid": 379,
               "relations": [
                 "genui.memberships"
               ],
@@ -527,7 +537,7 @@
           "passed": true
         }
       ],
-      "elapsed_ms": 8810,
+      "elapsed_ms": 8356,
       "group": "revocation_vs_commit_both_orders"
     }
   ],
@@ -543,15 +553,15 @@
   "passed": true,
   "s05": {
     "app_id": "00000000-0000-4000-8000-0000000000c9",
-    "collection_id": "f9231775-e9d5-4f9a-af2c-ea78839a435f",
+    "collection_id": "0351147d-096e-41d2-b327-24e50c0da7c6",
     "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "publication_id": "59aa41c1-7591-4039-9f6c-951077a7ee9f",
-    "work_id": "6c8ed61f-dc5d-4d59-a20d-63eff6087854"
+    "publication_id": "be344d72-8606-4d31-8d90-b8f725a4a0b8",
+    "work_id": "05490a63-4d5a-4ab6-a753-129b8c020448"
   },
   "schema_version": 1,
   "scope": "APP-014 isolated native PostgreSQL TLS command retry, conflict and authorization race qualification",
-  "server_version": "16.13 (Debian 16.13-1.pgdg13+1)",
+  "server_version": "16.15 (Debian 16.15-1.pgdg13+2)",
   "session_wait_observation": {
     "code": "not_found",
     "status": 404
