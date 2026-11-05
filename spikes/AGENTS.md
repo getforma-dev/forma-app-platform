@@ -2,7 +2,7 @@
 
 ## What this is
 
-`APP-006` is the production auth verifier (`genui-auth-verifier`) and a member of the root Cargo workspace. The app's `auth` module links it. `APP-001`, `APP-003`, `APP-004` and `APP-005` are measurement spikes whose code is not changed casually, but CI still runs them: `baseline.yml` (APP-001), `canvas.yml` (APP-003), `parser.yml` and `fixtures.yml` (APP-004, also the parser release qualification suite) and `query.yml` (APP-005). `APP-005/requirements.lock` is the DuckDB pin the contracts check installs.
+`APP-006` is the production auth verifier (`genui-auth-verifier`) and a member of the root Cargo workspace. The app's `auth` module links it. `APP-001`, `APP-003`, `APP-004` and `APP-005` are measurement spikes whose code is not changed casually, but CI still runs them, and these workflows gate promotion: `baseline.yml` (APP-001), `canvas.yml` (APP-003), `parser.yml` and `fixtures.yml` (APP-004, pinned to `evidence/APP-004/build-metadata.json` by `fixtures/qualify.py`), and `query.yml`, `fixtures.yml` and `parser-release.yml` (APP-005). `APP-005/requirements.lock` is the DuckDB pin the contracts check installs.
 
 ## Authoritative sources
 

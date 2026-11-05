@@ -22,7 +22,7 @@ Name a campaign from `just campaigns` when the change has one.
 
 ## Never
 
-Do not add any file to `migrations/`, `parser/` or `contracts/` that is not a release input (see the root AGENTS.md). Do not hand-edit FMIR, admin bundles, or catalog hashes. Model output is admitted data, not code, SQL, markup or a grant. Do not restart or reset a dev instance someone is using.
+Do not add any file to `migrations/`, `../parser/` or `../contracts/` that is not a release input (see the root AGENTS.md). Do not hand-edit FMIR, admin bundles, or catalog hashes. Model output is admitted data, not code, SQL, markup or a grant. Do not restart or reset a dev instance someone is using.
 
 ## Read next
 
