@@ -4036,7 +4036,7 @@
       "Depends on": "None",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`chore/app-125-acceptance`",
+      "Branch / PR": "`chore/app-125-acceptance`, [PR 80](https://github.com/getforma-dev/forma-app-platform/pull/80)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
