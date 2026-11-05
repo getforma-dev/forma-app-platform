@@ -213,7 +213,8 @@ type LibraryApp = {
   id: string;
   app: string;
   work: string;
-  artifactKind: string;
+  /** APP-169: `card` or `app` as the member saved it; null (no attribute) when nothing is saved. */
+  artifactKind: string | null;
   workNameScope: boolean;
   number: string;
   title: string;
@@ -240,6 +241,8 @@ type CanvasProps = {
   library: LibraryCategory[];
   librarySummary: string;
   memberKey: string;
+  /** APP-169: the member's saved Card or App choices were read for this page. */
+  artifactKindsLoaded: boolean;
 };
 
 type IntentProps = { placeholder: string };
@@ -359,6 +362,7 @@ function Canvas(props: CanvasProps) {
         data-live-events={props.liveEvents}
         data-demo={props.demoMode}
         data-member={props.memberKey}
+        data-artifact-kinds={props.artifactKindsLoaded}
       >
         <section id="cv-empty" class="cv-empty" aria-labelledby="cv-empty-title">
           <div class="cv-welcome">
@@ -945,6 +949,7 @@ mount(
       library: [],
       librarySummary: '',
       memberKey: '',
+      artifactKindsLoaded: false,
     }),
   '#app',
 );

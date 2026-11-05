@@ -204,9 +204,26 @@ export function loadStandaloneWorks(member: string): Set<string> {
     return parts.length === 2 && isUuid(parts[0]) && isUuid(parts[1]);
   }).slice(-MAX_WORKS) : []);
 }
-/** Server-admitted Cards only. An empty kind, an App, or a bad id stays out. Component count is not an input. */
-export function durableCardKeys(rows: readonly { app: string; work: string; kind: string }[]): string[] {
-  return rows.filter((row) => row.kind === 'card' && isUuid(row.app) && isUuid(row.work)).map((row) => `${row.app}/${row.work}`);
+/** One listed work's saved choice on the canvas page: `card`, `app`, or `null` when the member saved none. */
+export type ServerKind = { app: string; work: string; kind: string | null };
+/**
+ * APP-169: this browser's Cards merged with the member's saved choices.
+ * A saved `card` is added and a saved `app` is removed. A listed work with no
+ * saved choice keeps its local Card, and that Card is returned in `upload` to
+ * be saved once. Works the page did not list, unknown kinds and bad ids leave
+ * the local choice as it is. Component count is not an input.
+ */
+export function mergeArtifactKinds(local: ReadonlySet<string>, rows: readonly ServerKind[]): { cards: Set<string>; upload: string[] } {
+  const cards = new Set(local);
+  const upload: string[] = [];
+  for (const row of rows) {
+    if (!isUuid(row.app) || !isUuid(row.work)) continue;
+    const key = `${row.app}/${row.work}`;
+    if (row.kind === 'card') cards.add(key);
+    else if (row.kind === 'app') cards.delete(key);
+    else if (row.kind === null && local.has(key) && !upload.includes(key)) upload.push(key);
+  }
+  return { cards, upload };
 }
 
 export function saveStandaloneWorks(member: string, works: Set<string>): void {

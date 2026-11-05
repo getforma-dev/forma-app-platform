@@ -15,7 +15,7 @@ import {
 } from '../canvas-vendor/index';
 import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
-import { clearLayouts, durableCardKeys, loadCamera, loadLayout, loadPlaced, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
+import { clearLayouts, loadCamera, loadLayout, loadPlaced, mergeArtifactKinds, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
 import { subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { announce, buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
@@ -85,34 +85,102 @@ const loadingGroups = new Map<string, Promise<Group | null>>();
 const placementGeneration = new Map<string, number>();
 /** Personal Library classification; no authority or server definition is inferred. */
 export function isStandaloneWork(app: string, work: string): boolean { return standaloneWorks.has(`${app}/${work}`); }
-export function setStandaloneWork(app: string, work: string, standalone: boolean): void {
-  if (!isUuid(app) || !isUuid(work)) return;
+/**
+ * The member's Card or App choice for one whole work (APP-169). It shows at
+ * once and is saved on the account. A refused or failed save puts the last
+ * saved choice back and says so. Resolves `true` once the newest choice for
+ * that work is saved, `false` when a save in its queue failed.
+ */
+export function setStandaloneWork(app: string, work: string, standalone: boolean): Promise<boolean> {
+  if (!isUuid(app) || !isUuid(work)) return Promise.resolve(false);
   const key = `${app}/${work}`;
+  const before = standaloneWorks.has(key);
+  showStandalone(key, standalone);
+  return queueArtifactKind(app, work, standalone, before, true);
+}
+function showStandalone(key: string, standalone: boolean): void {
   if (standalone) standaloneWorks.add(key); else standaloneWorks.delete(key);
   saveStandaloneWorks(member, standaloneWorks);
-  void persistArtifactKind(app, work, standalone);
   emitCanvasChanged();
 }
-function persistArtifactKind(app: string, work: string, card: boolean): void {
-  if (typeof fetch !== 'function') return;
-  void fetch(`/v1/library/${app}/${work}/kind`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: card ? 'card' : 'app' }),
-  }).catch(() => undefined);
+// One kind write per work at a time, so an earlier click can never land after
+// a later one. `saved` is the last choice the server confirmed in this run
+// (null before the first), `prior` the choice shown before the first queued
+// change, `wanted` the newest choice. Only a member's own change reverts on
+// failure; the first-load upload of a local Card keeps it for the next load.
+type KindWrite = { prior: boolean; saved: boolean | null; wanted: boolean; revert: boolean; running: Promise<boolean> | null };
+const kindWrites = new Map<string, KindWrite>();
+function queueArtifactKind(app: string, work: string, card: boolean, prior: boolean, revert: boolean): Promise<boolean> {
+  const key = `${app}/${work}`;
+  const entry = kindWrites.get(key) ?? { prior, saved: null, wanted: card, revert, running: null };
+  kindWrites.set(key, entry);
+  entry.wanted = card;
+  entry.revert ||= revert;
+  entry.running ??= drainArtifactKind(app, work, key, entry);
+  return entry.running;
 }
+async function drainArtifactKind(app: string, work: string, key: string, entry: KindWrite): Promise<boolean> {
+  try {
+    while (entry.wanted !== entry.saved) {
+      const card = entry.wanted;
+      if (!await postArtifactKind(app, work, card)) {
+        if (entry.revert) refuseArtifactKind(work, key, card, entry.saved ?? entry.prior);
+        return false;
+      }
+      entry.saved = card;
+    }
+    return true;
+  } finally {
+    kindWrites.delete(key);
+  }
+}
+async function postArtifactKind(app: string, work: string, card: boolean): Promise<boolean> {
+  const kind = card ? 'card' : 'app';
+  try {
+    const response = await fetch(`/v1/library/${app}/${work}/kind`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind }),
+    });
+    if (!response.ok) return false;
+    const body = await response.json() as { kind?: unknown } | null;
+    return body?.kind === kind;
+  } catch {
+    return false;
+  }
+}
+function refuseArtifactKind(work: string, key: string, card: boolean, restore: boolean): void {
+  if (standaloneWorks.has(key) !== restore) showStandalone(key, restore);
+  const document_ = host?.ownerDocument ?? (typeof document === 'undefined' ? null : document);
+  if (!document_) return;
+  const title = groups.get(work)?.title || document_.getElementById(`lib-${work}`)?.querySelector('.cv-lib-app-title')?.textContent || 'This work';
+  announce(`${title} could not be saved as ${card ? 'a Card' : 'an App'}. It stays ${restore ? 'a Card' : 'an App'}. Try again.`, document_);
+}
+/**
+ * APP-169: adopt the member's saved Card or App choices from the canvas page.
+ * `data-artifact-kinds="true"` on the canvas says the server read them; each
+ * library row's `data-artifact-kind` is `card`, `app`, or absent when nothing
+ * is saved. Only a saved `app` drops a local Card. A local Card with nothing
+ * saved stays and is uploaded once. Without the page signal (the read was
+ * unavailable) the local choices stay as they are and nothing is sent.
+ */
 function adoptServerKinds(document_: Document): void {
-  const rows = [...document_.querySelectorAll<HTMLElement>('[data-artifact-kind]')];
-  if (!rows.length) return;
-  standaloneWorks = new Set(durableCardKeys(rows.map((row) => ({
+  if (host?.dataset.artifactKinds !== 'true') return;
+  const rows = Array.from(document_.querySelectorAll<HTMLElement>('.cv-lib-app[data-app]'), (row) => ({
     app: row.dataset.app ?? '',
     work: row.dataset.work ?? '',
-    kind: row.dataset.artifactKind ?? '',
-  }))));
+    kind: row.dataset.artifactKind ?? null,
+  }));
+  const merged = mergeArtifactKinds(standaloneWorks, rows);
+  standaloneWorks = merged.cards;
   saveStandaloneWorks(member, standaloneWorks);
+  for (const key of merged.upload) {
+    const [app, work] = key.split('/');
+    void queueArtifactKind(app!, work!, true, true, false);
+  }
 }
-export function markStandaloneWork(app: string, work: string): void { setStandaloneWork(app, work, true); }
+export function markStandaloneWork(app: string, work: string): void { void setStandaloneWork(app, work, true); }
 const dismissed = new Set<string>();
 const changeListeners: Array<() => void> = [];
 const utilityItems = new Set<HTMLElement>();

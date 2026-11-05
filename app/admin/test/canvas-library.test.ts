@@ -531,7 +531,7 @@ test('App rows expose whole-work actions with inert component metadata and no ex
   assert.equal(expensesRow.querySelector('[data-lib-open-view]')?.textContent, 'Open');
   assert.equal(expensesRow.querySelector('[data-lib-classify]')?.textContent, 'Show in Cards');
   assert.match(expensesRow.querySelector('[data-lib-classify]')?.getAttribute('title') ?? '', /on your account/);
-  assert.equal(expensesRow.dataset.artifactKind, '');
+  assert.equal(expensesRow.dataset.artifactKind, undefined, 'only the server page says what the member saved');
   for (const button of expensesRow.querySelectorAll('[data-lib-toggle]')) assert.equal(button.getAttribute('tabindex'), '-1');
 });
 
@@ -549,12 +549,12 @@ test('explicit standalone classification admits one whole work and is reversible
     requests += 1;
     throw Error('Unexpected placement request');
   };
-  board.setStandaloneWork(expenses.app, expenses.work, false);
+  assert.equal(await board.setStandaloneWork(expenses.app, expenses.work, false), true);
   assert.equal(library.findStandaloneWorks('expenses.ledger').length, 0);
   await library.CARD_COMMAND.run('expenses.ledger', message => reports.push(message));
   assert.match(reports.at(-1)!, /No card matches/);
   assert.equal(requests, 0, 'refusal is before any group load or placement');
-  board.markStandaloneWork(expenses.app, expenses.work);
+  assert.equal(await board.setStandaloneWork(expenses.app, expenses.work, true), true);
   assert.equal(posted.at(-1)?.url, `/v1/library/${expenses.app}/${expenses.work}/kind`);
   assert.equal(posted.at(-1)?.method, 'POST');
   assert.equal(posted.at(-1)?.credentials, 'same-origin');
@@ -571,7 +571,7 @@ test('explicit standalone classification admits one whole work and is reversible
   const shown = library.findStandaloneWorks('expenses')[0]!;
   assert.equal(library.cardCompletions('expenses')[0]?.value, `/card ${shown.slug}`);
   assert.equal(library.cardCompletions('expenses')[0]?.detail, `/${shown.slug} · standalone card`);
-  board.setStandaloneWork(expenses.app, expenses.work, false);
+  assert.equal(await board.setStandaloneWork(expenses.app, expenses.work, false), true);
   assert.equal(posted.at(-1)?.body, JSON.stringify({ kind: 'app' }));
   assert.equal(requests, 0, 'classification is not a placement request');
   assert.deepEqual(library.cardCompletions('expenses'), []);

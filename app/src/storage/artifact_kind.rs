@@ -19,11 +19,15 @@ pub(crate) fn parse_artifact_kind(value: &str) -> Option<Option<&'static str>> {
 }
 
 impl Workspace {
-    /// Kinds this member admitted. Other members' rows are not returned.
+    /// The kinds this member saved, `card` or `app`, by `(app, work)`. Other
+    /// members' rows are not returned. A work without a row is not in the map.
+    /// The caller shows a kind only on a work its own authorized listing
+    /// returned, so a row for a work the member can no longer open is never
+    /// rendered.
     pub async fn artifact_kinds(
         &self,
         request: &TrustedRequest,
-    ) -> Result<BTreeMap<(String, String), String>> {
+    ) -> Result<BTreeMap<(String, String), &'static str>> {
         let tx = Transaction::begin(&self.inner, request).await?;
         let result = async {
             confirm_identity(&tx, request).await?;
@@ -38,9 +42,12 @@ impl Workspace {
                 let app: String = row.try_get(0).map_err(|_| Error::Unavailable)?;
                 let work: String = row.try_get(1).map_err(|_| Error::Unavailable)?;
                 let kind: String = row.try_get(2).map_err(|_| Error::Unavailable)?;
-                if kind == "card" {
-                    kinds.insert((app, work), kind);
-                }
+                let kind = match kind.as_str() {
+                    "card" => "card",
+                    "app" => "app",
+                    _ => return Err(Error::Unavailable),
+                };
+                kinds.insert((app, work), kind);
             }
             Ok(kinds)
         }

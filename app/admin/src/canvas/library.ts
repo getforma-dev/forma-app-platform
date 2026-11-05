@@ -322,7 +322,6 @@ export function buildAppRow(
       el(document_, 'span', { class: 'cv-lib-action', 'data-lib-action': '' }, 'Add')))));
   const row = el(document_, 'li', {
     class: 'cv-lib-app', 'data-app': entry.app, 'data-work': entry.work,
-    'data-artifact-kind': isStandaloneWork(entry.app, entry.work) ? 'card' : '',
     'data-number': entry.number, 'data-work-name-scope': String(entry.workNameScope === true),
     'data-search': `${entry.number} ${entry.title.toLowerCase()} ${entry.slug ? `/${entry.slug}` : ''}`,
   }, head, list);
