@@ -22,7 +22,7 @@ Local profiles are [Diego on 4001](http://127.0.0.1:4001/canvas), [Sarah on 4002
 
 `main` is the trunk. A reviewed merge prepares one beta packet and deploys only after one approval ([ADR-019](docs/architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). The sealed release is `beta/20261104-1e28488`. The app database is schema 20 on PostgreSQL 16.15, with automatic minor upgrades off. There is no production environment. The `getforma.dev` website on OVH is separate.
 
-The next product slices are [APP-163](Tickets/0-backlog/APP-163.md) verified-email discovery, [APP-164](Tickets/0-backlog/APP-164.md) authenticated workspace switching, and [APP-165](Tickets/0-backlog/APP-165.md) workspace-aware invitation delivery. They follow [ADR-016](docs/architecture/ADR-016-WORKSPACE-SIGNIN.md). Each stays in its current status folder until its predecessors are Done.
+The next product slices are [APP-163](Tickets/9-blocked/APP-163.md) verified-email discovery, [APP-164](Tickets/0-backlog/APP-164.md) authenticated workspace switching, and [APP-165](Tickets/0-backlog/APP-165.md) workspace-aware invitation delivery. They follow [ADR-016](docs/architecture/ADR-016-WORKSPACE-SIGNIN.md). APP-163 waits on the fAuth mailbox proof, FormaStack FORMA-368. Each stays in its current status folder until its predecessors are Done.
 
 The pitch is over. Its trunk landed on `main` at `bbb926d`, and pitch-era branches are deleted once their work is on `main`. The seeded demo stays on the local branch `showcase/spend-and-jacket` and is not deployed. Older release notes, including the 2 November workspace-entry record, stay in [docs/planning](docs/planning) and [docs/pitch/RELEASES.md](docs/pitch/RELEASES.md).
 

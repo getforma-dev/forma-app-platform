@@ -73,6 +73,16 @@
       "kind": "required",
       "evidence": "evidence/APP-006/upstream-auth-source/fauth-beta-deployment-2026-10-29.md",
       "condition": "Lean always-on fAuth deployment for the beta (FormaStack ticket FORMA-367, P1; Victor approved it with SES SMTP on 2026-10-29 and FormaStack deploys once its image is qualified): an image at or after 1bf5d3b, ECR, KMS keys and secrets including the SMTP secret, three-stack deploy, custom domain (GenUI creates the DNS records), Northstar/Canary tenants, the beta client with the exact callback https://beta.getforma.dev/auth/callback and per-organization return_entry_url, a smoke test, and private delivery of the issuer identity and ten_/usr_ ids. FormaStack's recomputed always-on cost is about $31–38/month (ADR-008). Hosting changed 2026-10-29 at Victor's choice: AWS refused new App Runner services for the account, so fAuth runs on one EC2 t3a.small with Caddy (Let's Encrypt) at the unchanged origin https://auth-staging.getforma.dev, image main 1bf5d3b (manifest sha256:d1365238…); DNS is one A record created by Victor."
+    },
+    {
+      "id": "FORMA-368",
+      "state": "open",
+      "blocks": [
+        "APP-163"
+      ],
+      "kind": "required",
+      "evidence": "",
+      "condition": "fAuth mailbox proof for Find my workspaces (Victor, 2026-11-04; ADR-016 amendment). FormaStack delivers a reviewed, documented contract on staging: a relying-party-started proof for an address with no account or tenant; a short-lived single-use code or link bound to client, purpose and browser, with an attempt limit; a neutral response before proof; per-recipient, per-IP and global send quotas with honest outage reporting and no codes or addresses in logs; and a short-lived back-channel assertion to the app that is not a session and never links accounts or grants membership. Real delivery to an unverified recipient is required, so staging SES needs production access (Victor approves any cost). Survey: evidence/APP-163/fauth-capability-survey-2026-11-04.md."
     }
   ]
 }
