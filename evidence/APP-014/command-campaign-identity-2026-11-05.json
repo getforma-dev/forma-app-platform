@@ -25,7 +25,7 @@
     {
       "name": "ik-1 at expected version 0 commits record version 1: one revision (commit_sequence 2, creator and updater the author), one current pointer, the record's source dependencies, one scoped outcome and exactly one command.committed event naming the record, in one transaction; the sequence advances to 3",
       "observed": {
-        "audit_event_id": "e2d8f50b-a7e2-47b6-a939-9fb7ecf066cf",
+        "audit_event_id": "e86b8ee9-1e3c-4d20-b2ac-b133591f2e07",
         "commit_sequence": 2,
         "next_sequence": 3,
         "record_version": 1
@@ -146,13 +146,16 @@
         "different_key": {
           "blocker_state": "idle in transaction",
           "blockers": [
-            267
+            262
+          ],
+          "holder_writes": [
+            "genui.command_claims"
           ],
           "holders": [
-            267
+            262
           ],
           "locktype": "transactionid",
-          "pid": 282,
+          "pid": 277,
           "relations": [
             "genui.organization_sequences"
           ],
@@ -171,13 +174,16 @@
         "same_key": {
           "blocker_state": "idle in transaction",
           "blockers": [
-            180
+            172
+          ],
+          "holder_writes": [
+            "genui.command_claims"
           ],
           "holders": [
-            180
+            172
           ],
           "locktype": "transactionid",
-          "pid": 267,
+          "pid": 262,
           "relations": [],
           "role": "genui_data",
           "wait_event": "transactionid"
@@ -191,13 +197,16 @@
         "busy": {
           "blocker_state": "idle in transaction",
           "blockers": [
-            295
+            290
+          ],
+          "holder_writes": [
+            "genui.memberships"
           ],
           "holders": [
-            295
+            290
           ],
           "locktype": "transactionid",
-          "pid": 282,
+          "pid": 277,
           "relations": [],
           "role": "genui_data",
           "wait_event": "transactionid"
@@ -213,13 +222,14 @@
         "in_flight": {
           "blocker_state": "idle in transaction",
           "blockers": [
-            298
+            293
           ],
+          "holder_writes": [],
           "holders": [
-            298
+            293
           ],
           "locktype": "transactionid",
-          "pid": 267,
+          "pid": 262,
           "relations": [
             "genui.memberships"
           ],
@@ -287,13 +297,16 @@
         "in_flight_lock": {
           "blocker_state": "idle in transaction",
           "blockers": [
-            282
+            277
+          ],
+          "holder_writes": [
+            "genui.command_claims"
           ],
           "holders": [
-            282
+            277
           ],
           "locktype": "transactionid",
-          "pid": 348,
+          "pid": 342,
           "relations": [],
           "role": "genui_data",
           "wait_event": "transactionid"
@@ -368,21 +381,21 @@
   ],
   "first_outcome": {
     "app_id": "00000000-0000-4000-8000-0000000000c9",
-    "audit_event_id": "e2d8f50b-a7e2-47b6-a939-9fb7ecf066cf",
+    "audit_event_id": "e86b8ee9-1e3c-4d20-b2ac-b133591f2e07",
     "command_id": "record_decision",
     "commit_sequence": 2,
-    "committed_at": "2026-11-05T10:16:49Z",
+    "committed_at": "2026-11-05T10:31:42Z",
     "idempotency_key": "00000000000000000000000000000001",
     "kind": "command_outcome",
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "payload_digest": "sha256:43a0dfd4690a2e5cf548117243cc95999061a268a2684a2b77aeb4b8b9ea2020",
+    "payload_digest": "sha256:d450a8955c2e601e6db96be1d23b8d0770dd1a7789895099d9cf64519f371452",
     "principal_id": "00000000-0000-4000-8000-0000000000ca",
     "record_id": "00000000-0000-4000-8000-0000000000f0",
     "record_version": 1,
-    "retry_expires_at": "2026-11-06T10:16:49Z",
+    "retry_expires_at": "2026-11-06T10:31:42Z",
     "schema_version": 1,
     "state": "committed",
-    "work_id": "76d5b822-a6de-4832-b09f-91ef2a53813b",
+    "work_id": "c2ee9192-5b1f-4f20-bae6-dedb877b7814",
     "work_version": 1
   },
   "limits": [
@@ -397,12 +410,12 @@
   "passed": true,
   "s05": {
     "app_id": "00000000-0000-4000-8000-0000000000c9",
-    "collection_id": "389babdc-6834-4ca8-8aa0-5191fc32cd54",
+    "collection_id": "dff98d85-c4e7-49b5-a538-ff6ac0bf3caf",
     "definition_digest": "sha256:8c815d7ef814edd7fc99668b5344835c291ea5dd53634f35f3108f508d5146d9",
     "organization_id": "00000000-0000-4000-8000-000000000001",
-    "publication_id": "240a7dbf-96c4-4501-bb6d-3a99552d9abe",
+    "publication_id": "8b1fc3c5-237e-4fd6-8f3f-732617e4b06d",
     "record_id": "00000000-0000-4000-8000-0000000000f0",
-    "work_id": "76d5b822-a6de-4832-b09f-91ef2a53813b"
+    "work_id": "c2ee9192-5b1f-4f20-bae6-dedb877b7814"
   },
   "schema_version": 1,
   "scope": "APP-013 isolated native PostgreSQL TLS record command, outcome and audit qualification",

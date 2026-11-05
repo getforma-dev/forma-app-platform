@@ -139,6 +139,7 @@ pub(super) struct LockObservation {
     relations: Vec<String>,
     blockers: Vec<i32>,
     holders: Vec<i32>,
+    holder_writes: Vec<String>,
     blocker_state: Option<String>,
 }
 
@@ -152,6 +153,7 @@ impl LockObservation {
             "relations": self.relations,
             "blockers": self.blockers,
             "holders": self.holders,
+            "holder_writes": self.holder_writes,
             "blocker_state": self.blocker_state,
         })
     }
@@ -194,14 +196,22 @@ pub(super) async fn observe_lock(fixture: &Fixture) -> LockObservation {
                        AND h.objid IS NOT DISTINCT FROM w.objid \
                        AND h.objsubid IS NOT DISTINCT FROM w.objsubid ORDER BY h.pid), \
                      (SELECT b.state FROM pg_stat_activity b \
-                      WHERE b.pid = (pg_blocking_pids(w.pid))[1]) \
+                      WHERE b.pid = (pg_blocking_pids(w.pid))[1]), \
+                     a.wait_event_type, \
+                     COALESCE((SELECT array_agg(DISTINCT h.relation::regclass::text ORDER BY h.relation::regclass::text) \
+                       FROM pg_locks h JOIN pg_class c ON c.oid = h.relation \
+                       WHERE h.granted AND h.pid = ANY(pg_blocking_pids(w.pid)) \
+                       AND h.mode = 'RowExclusiveLock' AND c.relkind = 'r'), '{}') \
                      FROM pg_locks w JOIN pg_stat_activity a ON a.pid = w.pid \
                      WHERE NOT w.granted AND a.datname = 'genui'",
                     &[],
                 )
                 .await
                 .unwrap();
-            if rows.iter().any(|row| !row.get::<_, Vec<i32>>(5).is_empty()) {
+            let settled = rows
+                .iter()
+                .all(|row| row.get::<_, Option<String>>(8).as_deref() == Some("Lock"));
+            if settled && rows.iter().any(|row| !row.get::<_, Vec<i32>>(5).is_empty()) {
                 assert_eq!(rows.len(), 1, "more than one lock waiter in genui");
                 let row = &rows[0];
                 let observation = LockObservation {
@@ -212,6 +222,7 @@ pub(super) async fn observe_lock(fixture: &Fixture) -> LockObservation {
                     relations: row.get(4),
                     blockers: row.get(5),
                     holders: row.get(6),
+                    holder_writes: row.get(9),
                     blocker_state: row.get(7),
                 };
                 assert!(
@@ -264,6 +275,20 @@ pub(super) fn on_claim(wait: &LockObservation) {
 pub(super) fn blocked_by(wait: &LockObservation, holder: i32) {
     assert_eq!(wait.blockers, vec![holder], "{wait:?}");
     assert!(wait.holders.contains(&holder), "{wait:?}");
+}
+
+/// The wait concerns `table`: the waiter holds a tuple lock on it, or, when
+/// PostgreSQL takes no tuple lock because the waiter already holds a weaker
+/// row lock on the row, the blocker has written it (granted RowExclusiveLock).
+pub(super) fn on_table(wait: &LockObservation, table: &str) {
+    let written = wait
+        .holder_writes
+        .iter()
+        .any(|relation| relation == table || relation.ends_with(&format!(".{table}")));
+    assert!(
+        names(wait, table) || written,
+        "the wait does not concern {table}: {wait:?}"
+    );
 }
 
 /// The waiting backend connected as `role`.
@@ -1248,6 +1273,7 @@ async fn campaign() {
         let waited = observe_lock(&fixture).await;
         on_claim(&waited);
         blocked_by(&waited, holder);
+        on_table(&waited, "saved_work");
         held_timeouts.push(json!({"code": code, "lock": waited.json()}));
         problem(&reply.await.unwrap(), StatusCode::CONFLICT, code);
         finish(writer, "ROLLBACK").await;
@@ -1449,6 +1475,7 @@ async fn campaign() {
         let waited = observe_lock(&fixture).await;
         on_claim(&waited);
         blocked_by(&waited, holder);
+        on_table(&waited, "memberships");
         member_timeouts.push(json!({"code": code, "lock": waited.json()}));
         problem(&reply.await.unwrap(), StatusCode::CONFLICT, code);
         finish(writer, "ROLLBACK").await;

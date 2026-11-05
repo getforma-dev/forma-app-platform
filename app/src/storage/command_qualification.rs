@@ -17,7 +17,7 @@ use super::{
     qualification::Fixture,
     qualification_cases::{ORG, OTHER, PRINCIPAL, REVIEWER},
     race_qualification::{
-        backend_pid, blocked_by, observe_lock, on_claim, on_relation, quiet, waiter_role,
+        backend_pid, blocked_by, observe_lock, on_claim, on_relation, on_table, quiet, waiter_role,
     },
     *,
 };
@@ -876,7 +876,7 @@ async fn campaign() {
         BUSY_RECORD,
         command(&s05, IK[7], 0, 1, values("needs_context", "busy")),
     );
-    let race = |statement: String, expected: CommandResult, relation: Option<&'static str>| {
+    let race = |statement: String, expected: CommandResult, table: &'static str| {
         let stores = stores.clone();
         let command = busy_command.clone();
         let fixture = &fixture;
@@ -899,13 +899,11 @@ async fn campaign() {
             on_claim(&waited);
             blocked_by(&waited, holder_pid);
             waiter_role(&waited, "genui_data");
-            // PostgreSQL takes no tuple lock when the waiter already holds a
-            // weaker row lock on the row (busy: the claim's KEY SHARE), so only
-            // the in_flight wait names its relation; both are tied to the holder
-            // through its transaction id above.
-            if let Some(table) = relation {
-                on_relation(&waited, table);
-            }
+            // busy: PostgreSQL takes no tuple lock when the waiter already holds a
+            // weaker row lock (the claim's KEY SHARE), so the table is named
+            // through the holder's write; in_flight names it through the
+            // waiter's tuple lock.
+            on_table(&waited, table);
             assert_eq!(racer.await.unwrap(), Ok(expected));
             holder.client.batch_execute("ROLLBACK").await.unwrap();
             waited
@@ -914,7 +912,7 @@ async fn campaign() {
     let busy_lock = race(
         format!("UPDATE genui.memberships SET membership_epoch=membership_epoch WHERE organization_id='{ORG}' AND principal_id='{AUTHOR}'"),
         CommandResult::Busy,
-        None,
+        "memberships",
     )
     .await;
     // The D7.1 operator lock itself (member FOR UPDATE) already blocks the
@@ -923,7 +921,7 @@ async fn campaign() {
     let inflight_lock = race(
         format!("SELECT principal_id FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{AUTHOR}' FOR UPDATE"),
         CommandResult::InFlight,
-        Some("memberships"),
+        "memberships",
     )
     .await;
     assert_eq!(footprint(&fixture).await, [5, 6, 8, 3, 3, 3]);
