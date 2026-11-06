@@ -248,8 +248,8 @@ def validate_summary(value, candidate):
             else:
                 require(scan["reviewed"] == [] and scan["disposition_sha256"] is None
                     and scan["review_expires_at_utc"] is None, "unexpected scan disposition")
-        migration = [] if release is None else ["snapshot database", "run reviewed migration"]
-        require(review["sequence"] == ["stop both services", "execute reviewed change set", "verify stopped boundaries",
+        snapshot, migration = ([], []) if release is None else (["snapshot database"], ["run reviewed migration"])
+        require(review["sequence"] == [*snapshot, "stop both services", "execute reviewed change set", "verify stopped boundaries",
             *migration, "activate both services", "verify health and images"] and review["outage_required"] is True,
             "operation sequence changed")
     else:

@@ -37,7 +37,8 @@ def schema_release_statements():
              'Resource': [migration['taskRoleArn'], migration['executionRoleArn']],
              'Condition': {'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}},
             {'Effect': 'Allow', 'Action': ['rds:CreateDBSnapshot'], 'Resource': [database, snapshots]},
-            {'Effect': 'Allow', 'Action': ['rds:DescribeDBSnapshots'], 'Resource': [database, snapshots]}]
+            {'Effect': 'Allow', 'Action': ['rds:DescribeDBSnapshots'], 'Resource': [database, snapshots]},
+            {'Effect': 'Allow', 'Action': ['rds:AddTagsToResource'], 'Resource': snapshots}]
 
 
 class BootstrapTests(unittest.TestCase):
@@ -58,7 +59,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn('cloudformation:CreateChangeSet',actions(execute))
         # Execute passes only the migration task's two roles, to ECS (APP-175).
         self.assertEqual([r for r in execute if 'iam:PassRole' in r['Action']], [schema_release_statements()[1]])
-        schema_rds = {'rds:CreateDBSnapshot', 'rds:DescribeDBSnapshots'}
+        schema_rds = {'rds:CreateDBSnapshot', 'rds:DescribeDBSnapshots', 'rds:AddTagsToResource'}
         forbidden = {'kms:Decrypt','kms:GetKeyPolicy','kms:CreateGrant','secretsmanager:GetSecretValue','secretsmanager:DescribeSecret','iam:CreateRole','iam:PutRolePolicy','iam:AttachRolePolicy','iam:ListRolePolicies','iam:ListAttachedRolePolicies','rds:Describe*','ec2:Describe*','kms:Describe*'}
         for rows in [prep,execute,cf]:
             self.assertNotIn('*',actions(rows))
@@ -89,11 +90,15 @@ class BootstrapTests(unittest.TestCase):
 
     def test_schema_release_adds_exactly_the_migration_task_and_snapshot_scope(self):
         doc=template(inventory()); execute=statements(doc,'Execute')
-        added=[r for r in execute if set(r['Action']) & {'ecs:RunTask','iam:PassRole','rds:CreateDBSnapshot','rds:DescribeDBSnapshots'}]
+        schema_actions={'ecs:RunTask','iam:PassRole','rds:CreateDBSnapshot','rds:DescribeDBSnapshots','rds:AddTagsToResource'}
+        added=[r for r in execute if set(r['Action']) & schema_actions]
         self.assertEqual(added, schema_release_statements())
+        # Tagging only ever reaches the release snapshots, never the database.
+        self.assertEqual([r['Resource'] for r in execute if 'rds:AddTagsToResource' in r['Action']],
+                         [f'arn:aws:rds:{REGION}:{ACCOUNT}:snapshot:forma-schema-release-*'])
         for rows in [statements(doc,'Prepare'), statements(doc,'RuntimeExecution')]:
-            self.assertFalse({'ecs:RunTask','rds:CreateDBSnapshot','rds:DescribeDBSnapshots'} & {a for r in rows for a in r['Action']})
-        self.assertFalse(any(a in {'rds:AddTagsToResource','ecs:TagResource','ecs:StopTask','rds:DeleteDBSnapshot','rds:RestoreDBInstanceFromDBSnapshot'}
+            self.assertFalse((schema_actions - {'iam:PassRole'}) & {a for r in rows for a in r['Action']})
+        self.assertFalse(any(a in {'ecs:TagResource','ecs:StopTask','rds:DeleteDBSnapshot','rds:RestoreDBInstanceFromDBSnapshot','rds:RemoveTagsFromResource'}
             for r in execute for a in r['Action']))
         for key, bad in [('taskDefinitionArn', f'arn:aws:ecs:{REGION}:{ACCOUNT}:task-definition/*'),
                          ('taskRoleArn', f'arn:aws:iam::{ACCOUNT}:role/*'), ('executionRoleArn', '*')]:

@@ -6,7 +6,7 @@ infrastructure digest are synthetic there; separate tests bind the committed
 file to this tree's HEAD.
 """
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -15,13 +15,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ops.promotion import guards, schema_release
+from ops.promotion import guards, runner as runner_module, schema_release
 from ops.promotion.candidate import deployment_contract_digest, infrastructure_digest
 from ops.promotion.github import validate_summary
+from ops.promotion.maintenance import abandon
 from ops.promotion.runner import Runner, SCHEMA_SEQUENCE, SEQUENCE
-from ops.promotion.state import Refused, Store, encoded
+from ops.promotion.state import Refused, Store, digest, encoded
 from ops.promotion.test_artifacts import bundle
-from ops.promotion.test_github import approval
+from ops.promotion.test_github import approval, run as workflow_run
 from ops.promotion.test_runner import NOW, FakeAWS, fixture
 from ops.promotion.test_state import MemoryS3
 
@@ -234,10 +235,14 @@ class SchemaAWS(FakeAWS):
         super().__init__(*args)
         self.snapshots = {}; self.snapshot_status = 'available'; self.run_failures = []; self.migrated = False
         self.migration = {'exitCode': 0, 'stopCode': 'EssentialContainerExited', 'lastStatus': 'STOPPED'}
-        self.waits = []
+        self.waits = []; self.time = None; self.durations = []
 
     def wait(self, service, operation, predicate, **args):
-        self.waits.append((operation, args.pop('timeout', None), args.pop('retry_codes', None)))
+        timeout = args.pop('timeout', None)
+        self.waits.append((operation, timeout, args.pop('retry_codes', None)))
+        if self.time is not None and timeout is not None:
+            # By default the worst case: every wait uses its whole bound.
+            self.time.now += self.durations.pop(0) if self.durations else timeout
         value = self.call(service, operation, **args)
         if not predicate(value):
             raise Refused('bounded wait expired; retain lease and reconcile')
@@ -257,8 +262,9 @@ class SchemaAWS(FakeAWS):
 
     def _call(self, s, o, a):
         if s == 'rds' and o == 'create_db_snapshot':
-            assert self.counts == {'main': 0, 'broker': 0} and self.state['live']['outputs']['MigrationTaskDefinition'].endswith(':2')
-            assert self.persisted()['active']['phase'] == 'executing'
+            # Before the outage: services serving, change set unexecuted, phase still prepared.
+            assert self.counts == {'main': 1, 'broker': 1} and self.state['live']['outputs']['MigrationTaskDefinition'].endswith(':1')
+            assert self.persisted()['active']['phase'] == 'prepared'
             snapshot = {'DBSnapshotIdentifier': a['DBSnapshotIdentifier'], 'DBInstanceIdentifier': a['DBInstanceIdentifier'],
                         'Status': 'creating', 'SnapshotType': 'manual', 'Encrypted': True}
             self.snapshots[a['DBSnapshotIdentifier']] = snapshot
@@ -267,7 +273,7 @@ class SchemaAWS(FakeAWS):
             snapshot = self.snapshots[a['DBSnapshotIdentifier']]; snapshot['Status'] = self.snapshot_status
             return {'DBSnapshots': [dict(snapshot)]}
         if s == 'ecs' and o == 'run_task':
-            assert self.counts == {'main': 0, 'broker': 0}
+            assert self.counts == {'main': 0, 'broker': 0} and self.persisted()['active']['phase'] == 'executing'
             assert [x['Status'] for x in self.snapshots.values()] == ['available']
             assert a['taskDefinition'] == self.state['live']['outputs']['MigrationTaskDefinition']
             self.migrated = True
@@ -276,12 +282,47 @@ class SchemaAWS(FakeAWS):
             return {'tasks': [self.migration_task(self.migration['lastStatus'])], 'failures': []}
         if s == 'ecs' and o == 'update_service' and a['desiredCount'] == 1:
             assert self.migrated or not self.snapshots, 'activation before the migration'
+        if s == 'ecs' and o == 'update_service' and a['desiredCount'] == 0:
+            assert all(x['Status'] == 'available' for x in self.snapshots.values()), 'outage before the snapshot'
         return super()._call(s, o, a)
+
+
+class FakeTime:
+    def __init__(self):
+        self.now = 1000.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
 
 
 class SchemaLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.build()
+
+    def use_fake_time(self):
+        clock = FakeTime(); self.aws.time = clock
+        patcher = patch.object(runner_module, 'time', clock); patcher.start(); self.addCleanup(patcher.stop)
+        return clock
+
+    def abandon(self):
+        """The documented operator abandonment, 66 minutes after the workflow ended."""
+        self.aws.phase = 'operator'; original = self.aws._call
+        def transport(s, o, a):
+            if o == 'delete_change_set': self.aws.cs = None; return {}
+            return original(s, o, a)
+        self.aws._call = transport
+        finished = dict(workflow_run(), status='completed', updated_at=(NOW - timedelta(minutes=66)).isoformat())
+        return abandon(self.runner, digest(self.store.load()), read_run=lambda _: finished)
+
+    def assert_serving_and_prepared(self, journal):
+        persisted = self.store.load()
+        self.assertEqual(persisted['active']['phase'], 'prepared')
+        self.assertEqual(self.aws.counts, {'main': 1, 'broker': 1})
+        self.assertFalse(any(o in ['update_service', 'execute_change_set', 'run_task'] for _, o, _ in self.aws.calls))
+        self.assertEqual([(x['name'], x['status']) for x in persisted['active']['journal'] if x['name'].startswith('schema-')], journal)
 
     def build(self, release=True, candidate=CANDIDATE, policy=20, spec_value='default'):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
@@ -341,8 +382,10 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.assertFalse(any(o in ['create_db_snapshot', 'run_task'] for _, o, _ in self.aws.calls))
 
         summary = self.run_execute(); validate_summary(summary, self.request['candidate_sha'])
-        self.assertEqual(self.mutations(), [('update_service', 'main', 0), ('update_service', 'broker', 0), ('execute_change_set', None, None),
-            ('create_db_snapshot', None, None), ('run_task', None, None), ('update_service', 'broker', 1), ('update_service', 'main', 1)])
+        self.assertEqual(self.mutations(), [('create_db_snapshot', None, None), ('update_service', 'main', 0), ('update_service', 'broker', 0),
+            ('execute_change_set', None, None), ('run_task', None, None), ('update_service', 'broker', 1), ('update_service', 'main', 1)])
+        # Prepare checks the trunk twice; execute rechecks before and after the snapshot.
+        self.assertEqual(self.current_mock.call_count, 4)
         snapshot = next(a for _, o, a in self.aws.calls if o == 'create_db_snapshot')
         self.assertEqual(snapshot, {'DBInstanceIdentifier': INSTANCE, 'DBSnapshotIdentifier': identifier})
         run = next(a for _, o, a in self.aws.calls if o == 'run_task')
@@ -351,8 +394,8 @@ class SchemaLifecycleTests(unittest.TestCase):
             'networkConfiguration': {'awsvpcConfiguration': {'subnets': SUBNETS, 'securityGroups': [GROUP], 'assignPublicIp': 'ENABLED'}},
             'clientToken': hashlib.sha256((promotion + ':schema-migrate').encode()).hexdigest()})
         self.assertTrue(run['taskDefinition'].endswith('MigrationTaskDefinition:2'))
-        self.assertIn(('describe_db_snapshots', 1200, {'DBSnapshotNotFound'}), self.aws.waits)
-        self.assertIn(('describe_tasks', 1800, None), self.aws.waits)
+        self.assertIn(('describe_db_snapshots', 720, {'DBSnapshotNotFound'}), self.aws.waits)
+        self.assertIn(('describe_tasks', 720, None), self.aws.waits)
 
         final = self.store.load()
         self.assertIsNone(final['active']); self.assertEqual(self.aws.counts, {'main': 1, 'broker': 1})
@@ -428,6 +471,24 @@ class SchemaLifecycleTests(unittest.TestCase):
                 self.assertFalse(any(o in ['update_service', 'execute_change_set', 'create_db_snapshot', 'run_task'] for _, o, _ in self.aws.calls))
                 self.assertEqual(self.store.load()['active']['phase'], 'prepared')
 
+    def test_release_expiring_after_the_snapshot_never_stops_and_can_be_abandoned(self):
+        self.prepared(); calls = []
+        def second_check_expires(_):
+            calls.append(1)
+            if len(calls) == 2: self.runner.clock = lambda: datetime(2026, 11, 20, tzinfo=timezone.utc)
+        self.current_mock.side_effect = second_check_expires
+        with self.assertRaisesRegex(Refused, 'separate reviewed release required'): self.run_execute()
+        self.assert_serving_and_prepared([('schema-snapshot', 'confirmed')])
+        identifier = self.store.load()['active']['packet']['schema_release']['snapshot_identifier']
+        self.runner.clock = lambda: NOW; before = len(self.aws.calls)
+        result = self.abandon()
+        self.assertEqual(result['status'], 'abandoned'); self.assertIsNone(self.store.load()['active'])
+        self.assertFalse(any(s == 'rds' for s, _, _ in self.aws.calls[before:]))
+        self.assertEqual(list(self.aws.snapshots), [identifier])
+        promotion = result['promotion_id']
+        self.assertEqual(self.receipt(promotion, 'abandon-fence.json')['retained_schema_snapshot'], identifier)
+        self.assertEqual(self.receipt(promotion, 'abandoned.json')['retained_schema_snapshot'], identifier)
+
     def test_release_changed_before_approval_is_refused_even_if_restored_later(self):
         self.prepared(); original = self.file.path.read_text()
         self.file.write(json.dumps(spec(), sort_keys=True))
@@ -470,23 +531,43 @@ class SchemaLifecycleTests(unittest.TestCase):
         with self.assertRaises(Refused): self.run_execute()
         self.assert_stopped_without_activation([('schema-snapshot', 'confirmed'), ('schema-migrate', 'confirmed')])
 
-    def test_snapshot_failure_or_timeout_never_migrates(self):
-        for status in ['failed', 'creating']:
+    def test_snapshot_failure_or_timeout_leaves_beta_serving_and_abandonable(self):
+        for status in ['failed', 'creating', 'denied']:
             with self.subTest(status=status):
-                self.build(); self.prepared(); self.aws.snapshot_status = status
+                self.build(); self.prepared()
+                if status == 'denied':
+                    original = self.aws._call
+                    def denied(s, o, a):
+                        if o == 'create_db_snapshot': raise Refused('AccessDenied')
+                        return original(s, o, a)
+                    self.aws._call = denied
+                else:
+                    self.aws.snapshot_status = status
                 with self.assertRaises(Refused): self.run_execute()
-                self.assertFalse(any(o == 'run_task' for _, o, _ in self.aws.calls))
-                self.assert_stopped_without_activation([('schema-snapshot', 'confirmed')])
+                if status == 'denied':
+                    # A raised call is an unknown outcome: an intent that blocks resume and abandonment alike.
+                    self.assert_serving_and_prepared([('schema-snapshot', 'intent')])
+                    with self.assertRaises(Refused): self.abandon()
+                    self.assertIsNotNone(self.store.load()['active'])
+                    continue
+                self.assert_serving_and_prepared([('schema-snapshot', 'confirmed')])
+                calls = len(self.aws.calls)
+                # The same run cannot execute again: its approval record already exists.
+                with self.assertRaises(RuntimeError): self.run_execute()
+                self.assertEqual(len(self.aws.calls), calls)
+                result = self.abandon()
+                self.assertEqual(result['status'], 'abandoned')
+                self.assertFalse(any(o in ['update_service', 'execute_change_set', 'run_task'] for _, o, _ in self.aws.calls))
 
     def test_lost_snapshot_or_migration_ack_holds_the_lease_and_never_replays(self):
-        for fault, journal in [('create_db_snapshot', [('schema-snapshot', 'intent')]),
-                               ('run_task', [('schema-snapshot', 'confirmed'), ('schema-migrate', 'intent')])]:
+        for fault, journal, counts in [('create_db_snapshot', [('schema-snapshot', 'intent')], {'main': 1, 'broker': 1}),
+                                       ('run_task', [('schema-snapshot', 'confirmed'), ('schema-migrate', 'intent')], {'main': 0, 'broker': 0})]:
             with self.subTest(fault=fault):
                 self.build(); self.prepared(); self.aws.fail = fault
                 with self.assertRaises(TimeoutError): self.run_execute()
                 persisted = self.store.load()
                 self.assertEqual([(x['name'], x['status']) for x in persisted['active']['journal'] if x['name'].startswith('schema-')], journal)
-                self.assertEqual(self.aws.counts, {'main': 0, 'broker': 0})
+                self.assertEqual(self.aws.counts, counts)
                 calls = len(self.aws.calls)
                 with self.assertRaises(Refused): self.run_execute()
                 self.assertEqual(len(self.aws.calls), calls)
@@ -496,8 +577,8 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.s3.objects['beta/state.json'] = encoded(self.initial); self.aws.state = copy.deepcopy(self.initial)
         self.prepared()
         with self.assertRaises(Refused): self.run_execute()
-        self.assertFalse(any(o in ['create_db_snapshot', 'run_task'] for _, o, _ in self.aws.calls))
-        self.assert_stopped_without_activation([])
+        self.assertFalse(any(o == 'create_db_snapshot' for _, o, _ in self.aws.calls))
+        self.assert_serving_and_prepared([])
         self.build(); self.prepared(); original = self.aws.migration_task
         def other_image(status):
             task = original(status); task['containers'][0]['imageDigest'] = 'sha256:' + '0' * 64; return task
@@ -505,17 +586,80 @@ class SchemaLifecycleTests(unittest.TestCase):
         with self.assertRaises(Refused): self.run_execute()
         self.assert_stopped_without_activation([('schema-snapshot', 'confirmed'), ('schema-migrate', 'confirmed')])
 
-    def test_migration_requests_are_validated_before_the_snapshot(self):
+    def test_migration_needs_its_verified_request_and_a_confirmed_snapshot(self):
         self.prepared(); promotion = self.execute['promotion_id']
         self.store.load(); packet = self.store.document['active']['packet']
         after = self.runner.boundary(1, require_settled=False)
-        for name, change in [('definition', lambda a: a['definitions']['MigrationTaskDefinition'].update(taskDefinitionArn='other')),
-                             ('subnets', lambda a: a['outputs'].update(PublicTaskSubnets=SUBNETS[0])),
-                             ('endpoint', lambda a: a['outputs'].update(DatabaseEndpoint='db'))]:
+        with self.assertRaisesRegex(Refused, 'no confirmed pre-migration snapshot'): self.runner.migrate_schema(promotion, packet, after)
+        self.store.change(lambda d: d['active']['journal'].append({'name': 'schema-snapshot', 'status': 'confirmed'}))
+        for name, change, reason in [('definition', lambda a: a['definitions']['MigrationTaskDefinition'].update(taskDefinitionArn='other'), 'differs from the verified boundary'),
+                                     ('subnets', lambda a: a['outputs'].update(PublicTaskSubnets=SUBNETS[0]), 'unexpected task subnets')]:
             with self.subTest(name=name):
                 changed = copy.deepcopy(after); change(changed)
-                with self.assertRaises(Refused): self.runner.migrate_schema(promotion, packet, changed)
-                self.assertFalse(any(o in ['create_db_snapshot', 'run_task'] for _, o, _ in self.aws.calls))
+                with self.assertRaisesRegex(Refused, reason): self.runner.migrate_schema(promotion, packet, changed)
+        self.assertFalse(any(o == 'run_task' for _, o, _ in self.aws.calls))
+        with self.assertRaises(Refused):
+            self.runner.snapshot_schema(promotion, packet, dict(after['outputs'], DatabaseEndpoint='db'))
+        with self.assertRaises(Refused):
+            self.runner.snapshot_schema(promotion, dict(packet, schema_release=dict(packet['schema_release'], snapshot_identifier='other')), after['outputs'])
+        self.assertFalse(any(o == 'create_db_snapshot' for _, o, _ in self.aws.calls))
+
+    def test_execute_budget_constants_leave_room_for_the_outage(self):
+        budget, reserve = runner_module.EXECUTE_BUDGET_SECONDS, runner_module.OUTAGE_RESERVE_SECONDS
+        self.assertLessEqual(budget, 55 * 60); self.assertLess(budget, 3600)
+        # The pre-outage snapshot can never by itself push the outage below its reserve.
+        self.assertLessEqual(schema_release.SNAPSHOT_WAIT_SECONDS + reserve, budget)
+        self.assertLess(schema_release.MIGRATION_WAIT_SECONDS, reserve)
+
+    def test_worst_case_waits_refuse_inside_the_budget_rather_than_overrun(self):
+        for release in [True, False]:
+            with self.subTest(release=release):
+                self.build(release=release, policy=20 if release else 19); self.prepared(); clock = self.use_fake_time()
+                start = clock.now
+                with self.assertRaisesRegex(Refused, 'execute time'): self.run_execute()
+                self.assertLessEqual(clock.now - start, runner_module.EXECUTE_BUDGET_SECONDS)
+                if release:
+                    # Too little time is left to observe a migration, so none starts.
+                    self.assertEqual(self.store.load()['active']['phase'], 'executing')
+                    self.assertFalse(any(o == 'run_task' for _, o, _ in self.aws.calls))
+                    self.assertFalse(any(o == 'update_service' and a['desiredCount'] == 1 for _, o, a in self.aws.calls))
+                else:
+                    # A normal release still activates; only its verification runs out of time.
+                    self.assertEqual(self.store.load()['active']['phase'], 'activation-intended')
+                self.assertTrue(all(timeout is None or timeout <= runner_module.EXECUTE_BUDGET_SECONDS for _, timeout, _ in self.aws.waits))
+
+    def test_a_slow_snapshot_that_leaves_too_little_time_never_stops(self):
+        self.prepared(); clock = self.use_fake_time()
+        self.current_mock.side_effect = lambda _: setattr(clock, 'now', clock.now + 600)
+        with self.assertRaisesRegex(Refused, 'too little execute time left to start the outage'): self.run_execute()
+        self.assert_serving_and_prepared([('schema-snapshot', 'confirmed')])
+        self.assertEqual(self.abandon()['status'], 'abandoned')
+
+    def test_too_little_time_to_observe_the_migration_never_starts_it(self):
+        self.prepared(); clock = self.use_fake_time(); start = clock.now
+        self.aws.durations = [720, 900, 1200, 200]  # snapshot, stop settle, stack update, settle
+        with self.assertRaisesRegex(Refused, 'too little execute time left to observe the migration'): self.run_execute()
+        self.assertFalse(any(o == 'run_task' for _, o, _ in self.aws.calls))
+        self.assertEqual(self.aws.counts, {'main': 0, 'broker': 0})
+        self.assertLessEqual(clock.now - start, runner_module.EXECUTE_BUDGET_SECONDS)
+
+    def test_late_outage_waits_are_clipped_to_the_budget(self):
+        self.prepared(); clock = self.use_fake_time(); start = clock.now; checks = []
+        def slow_second_check(_):
+            checks.append(1)
+            if len(checks) == 2: clock.now += 700
+        self.current_mock.side_effect = slow_second_check
+        with self.assertRaisesRegex(Refused, 'execute time'): self.run_execute()
+        stack = [timeout for operation, timeout, _ in self.aws.waits if operation == 'describe_stacks']
+        self.assertEqual(len(stack), 1); self.assertLess(stack[0], runner_module.STACK_UPDATE_WAIT_SECONDS)
+        self.assertLessEqual(clock.now - start, runner_module.EXECUTE_BUDGET_SECONDS)
+
+    def test_slow_rechecks_never_start_a_snapshot_they_cannot_observe(self):
+        self.prepared(); clock = self.use_fake_time()
+        self.current_mock.side_effect = lambda _: setattr(clock, 'now', clock.now + 2700)
+        with self.assertRaisesRegex(Refused, 'too little execute time left to observe the snapshot'): self.run_execute()
+        self.assertFalse(any(o == 'create_db_snapshot' for _, o, _ in self.aws.calls))
+        self.assert_serving_and_prepared([])
 
     def test_release_with_new_scan_findings_refuses_before_a_change_set(self):
         # A reviewed disposition binds the baseline contract, which a schema release replaces.

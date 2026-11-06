@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 import sys
+from . import schema_release
 from .aws import AWS, body
 from .candidate import api
 from .github import run_identity
@@ -91,6 +92,30 @@ def operation_receipt(store, entry, window):
     require(isinstance(observed, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', observed), 'registry receipt observation missing')
     datetime.fromisoformat(observed.replace('Z', '+00:00'))
     return receipt
+
+
+def pre_outage_snapshot(active, state, store):
+    """The one pre-outage mutation a prepared schema release may carry (APP-175).
+
+    Execution takes the snapshot before it stops any service, with the phase
+    still 'prepared'. A confirmed snapshot left nothing running differently, so
+    it does not block abandonment; it is kept as evidence and never deleted.
+    An unknown snapshot outcome is an intent and is refused like any other.
+    """
+    entries = [x for x in active['journal'] if x['name'].startswith('schema-')]
+    if not entries:
+        return None
+    release = (active.get('packet') or {}).get('schema_release')
+    require(active['phase'] == 'prepared' and release and len(entries) == 1
+            and entries[0]['name'] == 'schema-snapshot' and entries[0]['status'] == 'confirmed',
+            'only one confirmed pre-outage snapshot may be abandoned')
+    identifier = schema_release.snapshot_identifier(active['promotion_id'], release['to_version'])
+    expected = {'service': 'rds', 'operation': 'create_db_snapshot', 'arguments': {
+        'DBInstanceIdentifier': schema_release.database_instance(state['live']['outputs'].get('DatabaseEndpoint')),
+        'DBSnapshotIdentifier': identifier}}
+    require(release['snapshot_identifier'] == identifier and entries[0]['request'] == expected, 'pre-outage snapshot request differs')
+    operation_receipt(store, entries[0], active['promotion_id'])
+    return identifier
 
 
 def no_pending_changesets(runner, stack_id, absent_name=None):
@@ -239,6 +264,7 @@ def release_rolled_back_execution(runner, expected_state_sha256, read_run=api):
     names = {x['name'] for x in journal}
     require({'stop-main', 'stop-broker', 'changeset-execute'} <= names, 'rollback release requires the stopped execution')
     require(not any(name.startswith('activate-') for name in names), 'activation started; release is refused')
+    require('schema-migrate' not in names, 'a migration may have run; release is refused')
     identity = runner.aws.identity()
     require(not any('/' + state['authority'][key].rsplit('/', 1)[-1] + '/' in identity['Arn']
                     for key in ('prepare_role_arn', 'execute_role_arn')),
@@ -298,7 +324,7 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
     require(not reconcile_failed_create or pre_changeset, 'rejected-create recovery only applies before a packet')
     if not reconcile_failed_create:
         require(not any(x['status']!='confirmed' for x in active['journal']), 'unknown operation must be reconciled')
-    require(not any(x['name'].startswith(('stop-', 'activate-', 'changeset-execute')) for x in active['journal']), 'runtime execution cannot be abandoned')
+    require(not any(x['name'].startswith(('stop-', 'activate-', 'changeset-execute', 'schema-migrate')) for x in active['journal']), 'runtime execution cannot be abandoned')
     identity=runner.aws.identity()
     require(not any('/'+state['authority'][key].rsplit('/',1)[-1]+'/' in identity['Arn'] for key in ['prepare_role_arn','execute_role_arn']),
             'abandonment is an operator recovery command, not a workflow permission')
@@ -313,6 +339,7 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
         # permits operator ownership for the final abandonment CAS. No replay.
         store.owner=active['owner']
     verified_receipts = reconciliation['registry_receipts_verified'] if reconciliation else (confirmed_registry_only(active, state, store) if pre_changeset else None)
+    retained_snapshot = None if pre_changeset else pre_outage_snapshot(active, state, store)
     absent_name = reconciliation['change_set_name'] if reconciliation else None
     before=runner.boundary(1)
     inventories = []
@@ -326,7 +353,8 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
         'run':run,'identity':identity,'observed_at_utc':now(),'before':before,
         'reviewed_state_sha256':expected_state_sha256,'phase':active['phase'],
         'journal':active['journal'],'change_set_inventory':inventories,
-        'registry_receipts_verified':verified_receipts,'rejected_create_reconciliation':reconciliation})
+        'registry_receipts_verified':verified_receipts,'rejected_create_reconciliation':reconciliation,
+        'retained_schema_snapshot':retained_snapshot})
     if not pre_changeset:
         runner.mutate('changeset-delete','cloudformation','delete_change_set',StackName=before['stack']['StackId'],ChangeSetName=arn)
         # Absence, not merely DeleteChangeSet acceptance, precedes release.
@@ -343,7 +371,8 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
     ledger,receipt=preflight().abandon(store.document['ledger'],active['promotion_id'],runner.clock())
     receipt.update(abandoned_window=ledger['windows'][active['promotion_id']],
         previous_ledger_sha256=digest(store.document['ledger']), updated_ledger_sha256=digest(ledger),
-        final_change_set_inventory=final_inventories,final_exact_change_set_absence=final_absence)
+        final_change_set_inventory=final_inventories,final_exact_change_set_absence=final_absence,
+        retained_schema_snapshot=retained_snapshot)
     store.immutable('promotions/'+active['promotion_id']+'/abandoned.json',receipt)
     def finish(document):
         document['ledger']=ledger

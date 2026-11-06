@@ -9,10 +9,12 @@ versions and the expiry. The JSON adds only the digests that bind the review to
 the real baseline and tree; a CI test binds its `to` side and infrastructure
 digest to HEAD. A missing file means no schema release.
 
-Execution takes a manual RDS snapshot and runs the stack's migration task on the
-candidate image while both services are stopped, after the reviewed change set
-and before activation. Any failure leaves the services stopped and the lease
-held for operator reconciliation; nothing is retried or replayed.
+Execution takes a manual RDS snapshot while beta still serves, after every
+pre-execution recheck, then stops the services, applies the reviewed change set
+and runs the stack's migration task on the candidate image before activation.
+A snapshot failure leaves beta running and the release abandonable; a migration
+failure leaves the services stopped and the lease held for operator
+reconciliation. Nothing is retried or replayed.
 """
 import hashlib
 import json
@@ -40,8 +42,10 @@ CHANGED = 'schema or deployment contract changed; separate reviewed release requ
 HEX = re.compile(r'[0-9a-f]{64}\Z')
 SNAPSHOT_PREFIX = 'forma-schema-release-'
 STARTED_BY = 'forma-schema-release'
-SNAPSHOT_WAIT_SECONDS = 1200
-MIGRATION_WAIT_SECONDS = 1800
+# Both bounds sit inside runner.EXECUTE_BUDGET_SECONDS; see the arithmetic there.
+# The snapshot runs before the outage, so its bound costs no downtime.
+SNAPSHOT_WAIT_SECONDS = 720
+MIGRATION_WAIT_SECONDS = 720
 
 
 def side(value, version):
@@ -161,7 +165,7 @@ def verify_snapshot(response, identifier, instance):
     require(len(rows) == 1 and rows[0].get('DBSnapshotIdentifier') == identifier
             and rows[0].get('DBInstanceIdentifier') == instance and rows[0].get('Status') == 'available'
             and rows[0].get('SnapshotType') == 'manual' and rows[0].get('Encrypted') is True,
-            'pre-migration snapshot unavailable; services remain stopped, reconcile')
+            'pre-migration snapshot unavailable; no service was stopped')
 
 
 def started_task(response, request):
