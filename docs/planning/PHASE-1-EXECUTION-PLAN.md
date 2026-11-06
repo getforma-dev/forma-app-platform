@@ -141,7 +141,7 @@ Done 2026-10-29 in the implementer's worktree and merged (`dc3900d`, `26c1622`):
 
 **Files:**
 - Create: `app/src/storage/admission.rs`, `app/runtime/admission_operator.py`, `app/runtime/test_admission_operator.py`, `evidence/APP-073/README.md`
-- Modify: `app/src/storage/mod.rs` (declare module, re-export `Admission`, `VerifiedNonmember`), `app/src/storage/authorization.rs:144-189` (entitlement join in `precheck`, recheck in `fence`), `app/src/storage/qualification_cases.rs`, `app/src/storage/qualification.rs` (campaign), `app/runtime/tenant_seed.py` (seed one active trial code and one expired code per fixture organization, digests only)
+- Modify: `app/src/storage/mod.rs` (declare module, re-export `Admission`, `VerifiedNonmember`), `app/src/storage/authorization.rs:144-189` (entitlement join in `precheck`, recheck in `fence`), `app/src/storage/qualification_cases.rs`, `app/src/storage/qualification.rs` (campaign), `app/runtime/tenant_seed.py` (seed one active trial code and one expired code per fixture organization, digests only). Disposition 2026-11-05 (APP-073 admission review m6, APP-084): the seed does not insert those codes. The campaigns issue their own codes through the operator command.
 
 **Interfaces:**
 - Consumes: `genui_private.resolve_code`, `admit_redemption`, `advance_member_epoch`; `Transaction::begin`; `storage::Error`.

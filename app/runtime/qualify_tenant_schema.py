@@ -75,7 +75,9 @@ CHAIN_KINDS = {
     # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
                                  'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
-                                 'creator_authority.revoked')),
+                                 'creator_authority.revoked','provider.invitation.created','provider.invitation.reconciled',
+                                 'provider.invitation.revoked','source_revision.registered','work.seeded',
+                                 'provider_tenant.bound','app.seeded')),
 }
 
 
@@ -224,11 +226,13 @@ APPLICATION_CHAIN_KINDS = {
     # 0011 (APP-108) widens the workspace list in place with the folder commands;
     # 0012 (APP-113 review) adds the summary and brief saves; 0014 (APP-121)
     # the organization label and personal alias writes; 0015 (APP-123) the
-    # made-card, pinned-answer, share and remove writes.
+    # made-card, pinned-answer, share and remove writes; 0017 the live shares;
+    # 0022 (APP-169) the member's Card or App classification.
     'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound','box.created',
                                       'box.renamed','box.file_added','box.data_registered','box.app_derived','box.shared',
                                       'box.explained','box.briefed','app.labeled','app.aliased',
-                                      'card.made','answer.pinned','card.shared','card.removed','share.created','share.updated','share.revoked')),
+                                      'card.made','answer.pinned','card.shared','card.removed','share.created','share.updated','share.revoked',
+                                      'work.kind_set')),
     'genui_control': ('control', ('publication.published','policy.changed')),
     'genui_data': ('data', ('command.committed',)),
 }
@@ -329,6 +333,14 @@ CARD_GRANTS = set().union(
     _role_columns('genui_workspace','member_cards','SELECT',*CARD_COLUMNS),
     _role_columns('genui_workspace','member_cards','INSERT',*(c for c in CARD_COLUMNS if c not in ('everyone','removed_at'))),
     _role_columns('genui_workspace','member_cards','UPDATE','everyone','updated_at','removed_at'),
+)
+
+# Migration 0022 (APP-169): one member's Card or App classification of a whole work.
+KIND_COLUMNS = ('organization_id','principal_id','app_id','work_id','kind','updated_at')
+KIND_GRANTS = set().union(
+    _role_columns('genui_workspace','work_artifact_kinds','SELECT',*KIND_COLUMNS),
+    _role_columns('genui_workspace','work_artifact_kinds','INSERT','organization_id','principal_id','app_id','work_id','kind'),
+    _role_columns('genui_workspace','work_artifact_kinds','UPDATE','kind','updated_at'),
 )
 
 # Migration 0007 (ADR-007 D7.3/D7.7/D7.8/D7.9, ADR-009 D9.8; APP-013): the record
@@ -462,7 +474,8 @@ def admission_checks(pg, passed, denied):
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),
           (SELECT count(*) FROM pg_policy p WHERE p.polrelid=c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
           WHERE n.nspname='genui_private' AND c.relkind='r' ORDER BY c.relname""").fetchall()
-        assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0)],rows
+        assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0),
+                      ('provider_tenant_index',False,False,'genui_owner',0)],rows
     passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_admit holds a privilege on it (INSERT, nine columns), no application role any',
            tables=list(SHARING_TABLES))
     with pg.connect('postgres') as c:
@@ -479,7 +492,7 @@ def admission_checks(pg, passed, denied):
           AND grantee<>'genui_owner'""").fetchone()==(0,)
     passed('0009 slack_links is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_workspace holds column SELECT, INSERT and the four re-link/unlink UPDATE columns, no table-level grant',
            tables=list(SLACK_TABLES))
-    passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the two genui_private indexes carry no RLS',
+    passed('0003 relations are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the genui_private indexes carry no RLS',
            tables=list(ADMISSION_TABLES))
 
     # --- Exact (role, relation, privilege, column) grant set (D7.3 + D7.1) ---
@@ -494,7 +507,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -1719,6 +1732,56 @@ def qualify():
             passed('fresh checksummed version'+str(latest)+' install and exact repeat')
     finally:
         report['fresh_container_removed']=fresh.removed
+    # APP-084 review: 0021 copies every active provider-tenant binding into the private
+    # index when it upgrades a populated version-20 database, and turns FORCE RLS back on.
+    # Two organizations sharing one issuer and tenant fail the upgrade whole, which is
+    # what the release preflight must look for before a schema release.
+    def version20(directory):
+        manifest=json.loads((MIGRATIONS/'manifest.json').read_text())
+        manifest.update(database_version=20, migrations=manifest['migrations'][:20], catalog=manifest['catalog'][:21])
+        for item in manifest['migrations']+manifest['catalog']: shutil.copyfile(MIGRATIONS/item['file'], directory/item['file'])
+        (directory/'manifest.json').write_text(json.dumps(manifest))
+        return directory
+    def seed20(pg, bindings):
+        with pg.connect('postgres') as c:
+            for org, tenant, active in bindings:
+                c.execute("INSERT INTO genui.organizations VALUES (%s,'Upgrade fixture','active') ON CONFLICT DO NOTHING",(org,))
+                c.execute('INSERT INTO genui.provider_tenant_bindings VALUES (%s,%s,%s,%s)',(org,'upgrade-iss',tenant,active))
+    assert latest>=21
+    report['backfill_containers_removed']=[]
+    orgs=['00000000-0000-4000-8000-0000000021%02d'%i for i in range(1,4)]
+    upgrade=LocalPostgres()
+    try:
+        with upgrade, tempfile.TemporaryDirectory() as tmp:
+            with upgrade.connect() as c: runtime.apply_migrations(c,version20(Path(tmp)))
+            seed20(upgrade,[(orgs[0],'ten_a',True),(orgs[1],'ten_b',True),(orgs[2],'ten_c',False)])
+            with upgrade.connect() as c:
+                assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(20,)
+                runtime.apply_migrations(c,MIGRATIONS)
+            with upgrade.connect('postgres') as c:
+                index=c.execute('SELECT issuer,provider_tenant_id,organization_id::text FROM genui_private.provider_tenant_index ORDER BY 2').fetchall()
+                assert index==[('upgrade-iss','ten_a',orgs[0]),('upgrade-iss','ten_b',orgs[1])],index
+                assert c.execute("""SELECT relrowsecurity,relforcerowsecurity FROM pg_catalog.pg_class
+                    WHERE oid='genui.provider_tenant_bindings'::regclass""").fetchone()==(True,True)
+                assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(latest,)
+            passed('0021 upgrade of a populated version-20 database copies exactly the active provider-tenant bindings into the private index (an organization with no handle or code included, an inactive binding excluded) and leaves the bindings table ENABLE+FORCE RLS',
+                   index_rows=2)
+    finally: report['backfill_containers_removed'].append(upgrade.removed)
+    shared=LocalPostgres()
+    try:
+        with shared, tempfile.TemporaryDirectory() as tmp:
+            with shared.connect() as c: runtime.apply_migrations(c,version20(Path(tmp)))
+            seed20(shared,[(orgs[0],'ten_shared',True),(orgs[1],'ten_shared',True)])
+            before=shared.digest()
+            try:
+                with shared.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
+            except psycopg.errors.UniqueViolation: pass
+            else: raise AssertionError('0021 accepted two organizations sharing one issuer and tenant')
+            assert shared.digest()==before
+            with shared.connect() as c:
+                assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(20,)
+            passed('0021 refuses whole, leaving version 20 and every byte unchanged, when two organizations share one active issuer and tenant (the release preflight condition)')
+    finally: report['backfill_containers_removed'].append(shared.removed)
     pg=LocalPostgres()
     try:
         with pg:
@@ -1896,6 +1959,7 @@ def qualify():
                   AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_labels' AND policyname='member_labels_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_cards' AND policyname='member_cards_principal')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='work_artifact_kinds' AND policyname='work_artifact_kinds_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'
@@ -2018,6 +2082,39 @@ def qualify():
                 assert c.execute('SELECT count(*) FROM genui.organizations').fetchone()==(1,)
                 assert c.execute('SELECT count(*) FROM genui.organizations WHERE organization_id=%s',(ORGANIZATIONS[1],)).fetchone()==(0,)
             passed('actual NOLOGIN table owner remains subject to FORCE RLS')
+            with pg.connect('postgres') as c:
+                rows = c.execute("""SELECT policyname, permissive, roles::text[], cmd, qual, with_check FROM pg_policies
+                  WHERE schemaname='genui' AND tablename='work_artifact_kinds' ORDER BY policyname""").fetchall()
+                assert [r[0] for r in rows] == ['tenant_scope', 'work_artifact_kinds_principal'], rows
+                tenant, principal = rows
+                assert tenant[1] == 'PERMISSIVE' and 'organization_id' in tenant[4] and 'principal_id' not in tenant[4], tenant
+                assert principal[1:4] == ('RESTRICTIVE', ['genui_workspace'], 'ALL') and 'principal_id' in principal[4] \
+                    and 'principal_id' in principal[5], principal
+            passed('artifact kind: tenant_scope binds the organization and the RESTRICTIVE work_artifact_kinds_principal binds the workspace to the scoped principal (the 0014/0015 pattern)')
+            other = '00000000-0000-4000-8000-0000000000ca'
+            denied('artifact kind rejects an unknown kind','genui_workspace',
+                   "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'stack')",
+                   (ORGANIZATIONS[0], P, APP, WORK), expected='23514')
+            denied('workspace cannot classify a work as another principal','genui_workspace',
+                   "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'card')",
+                   (ORGANIZATIONS[0], other, APP, WORK))
+            denied('workspace cannot delete an artifact kind','genui_workspace','DELETE FROM genui.work_artifact_kinds')
+            with pg.connect('genui_workspace') as c:
+                scope(c)
+                c.execute("INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'card')",
+                          (ORGANIZATIONS[0], P, APP, WORK))
+                assert c.execute("SELECT kind FROM genui.work_artifact_kinds WHERE app_id=%s AND work_id=%s", (APP, WORK)).fetchall() == [('card',)]
+                c.execute("UPDATE genui.work_artifact_kinds SET kind='app', updated_at=date_trunc('second', now()) WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND work_id=%s",
+                          (ORGANIZATIONS[0], P, APP, WORK))
+                assert c.execute("SELECT kind FROM genui.work_artifact_kinds WHERE app_id=%s AND work_id=%s", (APP, WORK)).fetchall() == [('app',)]
+                scope(c, principal=other)
+                assert c.execute('SELECT count(*) FROM genui.work_artifact_kinds').fetchone() == (0,)
+                c.execute("UPDATE genui.work_artifact_kinds SET kind='card' WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                          (ORGANIZATIONS[0], APP, WORK))
+                scope(c)
+                assert c.execute("SELECT kind FROM genui.work_artifact_kinds WHERE app_id=%s AND work_id=%s", (APP, WORK)).fetchall() == [('app',)]
+                c.rollback()
+            passed('artifact kind is personal: the writer stores card then app, and another principal sees and changes nothing')
             denied('real FK refuses foreign-only app','genui_migration',
                    "INSERT INTO genui.saved_work VALUES (%s,%s,%s,%s,1,'invalid')",
                    (ORGANIZATIONS[0],'00000000-0000-4000-8000-0000000000c9',str(uuid.uuid4()),'00000000-0000-4000-8000-0000000000cc'),expected='23503')

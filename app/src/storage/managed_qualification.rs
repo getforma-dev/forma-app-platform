@@ -132,7 +132,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_program_sha256",
         "app/runtime/tenant_seed.py",
-        "b8bbd34bbdc48b642ddefef057ed245ee5047bbb9eb58820208b8d706cc15c8f",
+        "b5c5770d02b55502390daec619e47db2b2707c9ba38274284eec8b8750ecc90c",
     ),
     (
         "seed_validator_sha256",
@@ -157,7 +157,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v20.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v22.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -178,7 +178,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 211] = [
+const SOURCES: [(&str, &[u8]); 212] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -594,6 +594,10 @@ const SOURCES: [(&str, &[u8]); 211] = [
         include_bytes!("admission_qualification.rs"),
     ),
     ("app/src/storage/agents.rs", include_bytes!("agents.rs")),
+    (
+        "app/src/storage/artifact_kind.rs",
+        include_bytes!("artifact_kind.rs"),
+    ),
     (
         "app/src/storage/authorization.rs",
         include_bytes!("authorization.rs"),

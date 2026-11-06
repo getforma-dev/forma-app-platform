@@ -1704,9 +1704,12 @@ async fn campaign() {
     }
     let out = operator(&fixture, &["verify", "--organization", ORG]);
     // Eleven issuances, three revocations, one extension, one entitlement revocation,
-    // one membership revocation (review m2 race). Provider operations are not audit
-    // kinds (D7.8 is closed): the reconcile wrote no event.
-    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(17));
+    // one membership revocation (review m2 race): 17. APP-084 adds seven provider
+    // invitation events on this organization: three `provider.invitation.created`,
+    // the faulted revoke's unknown `provider.invitation.revoked`, and three
+    // confirmed `provider.invitation.revoked` from reconcile (that unknown row,
+    // plus expiry and exhaustion).
+    assert_eq!(out["chains"]["operator"]["events"].as_i64(), Some(24));
     assert!(out["chains"]["admission"]["events"].as_i64().unwrap() >= 10);
     let dump = pg_dump(&fixture, false);
     for code in &codes {
