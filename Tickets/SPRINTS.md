@@ -2,7 +2,7 @@
 
 Sprints are ordered scope batches within the [implementation phases](PHASES.md), not calendar promises. Scheduling and capacity are agreed at sprint entry. Later batches are forecasts; split work before selection when it exceeds five focused days.
 
-Current board: Backlog: 141, Selected: 0, In progress: 1, In review: 3, Done: 24, Blocked: 3.
+Current board: Backlog: 141, Selected: 0, In progress: 3, In review: 3, Done: 24, Blocked: 4.
 
 | Sprint | Phase | Outcome | Tickets |
 |---|---|---|---|
@@ -18,6 +18,6 @@ Current board: Backlog: 141, Selected: 0, In progress: 1, In review: 3, Done: 24
 | [S10: Working dual-app release gate](sprints/S10.md) | [PH04](phases/PH04.md) | Northstar and Spend Review complete S01–S07 on one unchanged platform build. | 4 |
 | [S11: Hosted pilot controls](sprints/S11.md) | [PH05](phases/PH05.md) | Prepared hosted deployment and lifecycle controls support a defined pilot scope. | 10 |
 | [S12: Measured operations and pilot entry](sprints/S12.md) | [PH06](phases/PH06.md) | Measured capacity/recovery/security and operational ownership support the pilot decision. | 7 |
-| [S13: Post-MVP completion](sprints/S13.md) | [PH07](phases/PH07.md) | Every acceptance sentence and review residual deferred by ADR-010 is proven on the live beta or the local harness, or dispositioned with evidence. | 5 |
+| [S13: Post-MVP completion](sprints/S13.md) | [PH07](phases/PH07.md) | Every acceptance sentence and review residual deferred by ADR-010 is proven on the live beta or the local harness, or dispositioned with evidence. | 6 |
 | [S14: PIVOT: November 2 pitch demo](sprints/S14.md) | [PH08](phases/PH08.md) | The pitch journey (describe, canvas, governed data, share) rehearsed on the live beta, then the November 3 revisit. | 70 |
-| [S15: Composed app experience](sprints/S15.md) | [PH09](phases/PH09.md) | One coherent app across embedded, member and guest use, with typed component actions, durable appearance and qualified record dashboards. A separate spike decides future idle execution options. | 12 |
+| [S15: Composed app experience](sprints/S15.md) | [PH09](phases/PH09.md) | One coherent app across embedded, member and guest use, with typed component actions, durable appearance and qualified record dashboards. A separate spike decides future idle execution options. | 14 |

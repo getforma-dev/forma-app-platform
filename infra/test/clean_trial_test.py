@@ -75,7 +75,7 @@ class CleanTrialRequests(unittest.TestCase):
 class CleanTrialBudget(unittest.TestCase):
     def configuration(self):
         config, ledger = always_on()
-        config.update(clean_trial_organization_id=TRIAL['organization_id'], provider_management_secret_arn=MANAGEMENT, provider_management_url='https://auth.example.test')
+        config.update(clean_trial_organization_id=TRIAL['organization_id'], provider_management_secret_arn=MANAGEMENT, provider_management_url='https://auth-staging.getforma.dev')
         return config, ledger
     def test_broker_compute_and_retained_resources_are_explicit_and_supersede_at_correct_rate(self):
         config, ledger = self.configuration()

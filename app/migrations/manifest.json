@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 20,
+  "database_version": 22,
   "migrations": [
     {
       "version": 1,
@@ -101,6 +101,16 @@
       "version": 20,
       "file": "0020_work_data_copies.sql",
       "sha256": "4b5a46cc9a9cd8cd867c4d0098d2df684a1e87d2b1a8ef92e8bac38aa613eab4"
+    },
+    {
+      "version": 21,
+      "file": "0021_operator_audit_kinds.sql",
+      "sha256": "a6ce1a80c484fe7133a06b5e5c3cf28e18fa7b13aa6646790afa5dfe372d2883"
+    },
+    {
+      "version": 22,
+      "file": "0022_work_artifact_kinds.sql",
+      "sha256": "f5ef129039b20444bf9f62f9903e1635b3c413f9437f252334dd5a8f2164d5b9"
     }
   ],
   "catalog": [
@@ -187,6 +197,14 @@
     {
       "file": "catalog-v20.json",
       "sha256": "9c4a0c4902e621ea753e41e53bfb007aa3b5b32626e7d48de661634b29f3f773"
+    },
+    {
+      "file": "catalog-v21.json",
+      "sha256": "c881eb4eea81ed3ca5261f0bf2bb2bd40c2d0b1d5d0bf3c123b546da27568869"
+    },
+    {
+      "file": "catalog-v22.json",
+      "sha256": "3229553dc1069b7e84387bf393cc8037d211e8547ea815da950fbe8d7f43225f"
     }
   ]
 }

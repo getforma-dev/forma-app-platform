@@ -402,9 +402,13 @@ async fn campaign() {
         rows(&fixture, &format!("SELECT revision_id::text||' '||normalized_digest::text FROM genui.source_revisions WHERE organization_id='{ORG}' AND source_id='{SOURCE}' ORDER BY revision_id")).await,
         [format!("{SEEDED_REVISION} {PLACEHOLDER}"), format!("{REVISION} {NORMALIZED}")]
     );
+    assert_eq!(
+        rows(&fixture, &format!("SELECT count(*)::text FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='operator' AND kind='source_revision.registered'")).await,
+        ["1"]
+    );
     check(
         &mut checks,
-        "register-source-revision writes one new source revision with the uploaded objects' real digests; a rerun is unchanged; a differing record, a revision id not derived from the content digest, a disagreeing object digest and another organization are refused; the seeded placeholder revision is untouched",
+        "register-source-revision writes one new source revision with the uploaded objects' real digests and one source_revision.registered event; a rerun is unchanged; a differing record, a revision id not derived from the content digest, a disagreeing object digest and another organization are refused; the seeded placeholder revision is untouched",
     );
 
     let bound = operator(
@@ -462,6 +466,16 @@ async fn campaign() {
         ],
     );
     assert_eq!(rerun["changed"], false);
+    assert_eq!(
+        rows(&fixture, &format!("SELECT count(*)::text FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='operator' AND kind='work.seeded' AND app_id='{APP}' AND work_id='{BOUND}'")).await,
+        ["1"]
+    );
+    // APP-084 review: the operator's own `verify` recomputes the whole operator chain,
+    // including the new source_revision.registered and work.seeded events.
+    assert_eq!(
+        operator(&fixture, &["verify", "--organization", ORG])["verified"],
+        true
+    );
     refused_for(
         &operator_as(
             &fixture,
@@ -495,7 +509,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
+        "create-bound-work writes a new saved work at version 1 on the same publication whose events input binds the new revision, and one work.seeded event, and the operator's verify recomputes the chain with both new events; the seeded work, its binding and its record are unchanged; a creator without run and source_read is refused",
     );
 
     // --- Authorized member: exact result, released, receipted ---
@@ -2720,6 +2734,12 @@ async fn route_campaign(
             (
                 down_routes.clone(),
                 "POST",
+                format!("/v1/library/{APP}/{load_work}/kind"),
+                br#"{"kind":"card"}"#.to_vec(),
+            ),
+            (
+                down_routes.clone(),
+                "POST",
                 format!("/v1/work/{APP}/{load_work}/queries/total"),
                 query_body(&window()).into_bytes(),
             ),
@@ -2758,6 +2778,11 @@ async fn route_campaign(
         (
             down_routes.clone(),
             "POST",
+            format!("/v1/library/{APP}/{load_work}/kind"),
+        ),
+        (
+            down_routes.clone(),
+            "POST",
             format!("/v1/work/{APP}/{load_work}/queries/total"),
         ),
         (down_routes.clone(), "GET", format!("/w/{APP}/{load_work}")),
@@ -2770,7 +2795,7 @@ async fn route_campaign(
     down.close().await.unwrap();
     check(
         checks,
-        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, GET /v1/library, the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
+        &format!("store outage maps alike on GET /workspace and the APP-012 routes: with the workspace store unreachable, the member's live cookie and a forged cookie both get 503 unavailable (no-store) on GET /workspace, GET /v1/library, POST /v1/library/{{app}}/{{work}}/kind (APP-169), the JSON route, the page and its run form ({} requests in {outage_ms} ms, inside the 5 s handler deadline, so the answer is the storage mapping), without a cookie the uniform 404; the engine is never reached", outage.len()),
     );
     let mut report = report;
     report["store_outage"] = json!({"requests": outage, "elapsed_ms": outage_ms, "dispatch_calls": down_counting.calls()});

@@ -6,7 +6,7 @@ use serde_json::Value;
 use tokio_postgres::Client;
 
 const QUERY: &str = include_str!("../../migrations/catalog-query.json");
-const EXPECTED: &str = include_str!("../../migrations/catalog-v20.json");
+const EXPECTED: &str = include_str!("../../migrations/catalog-v22.json");
 const BOUND: usize = 786_432;
 
 #[derive(Deserialize)]

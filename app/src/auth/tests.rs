@@ -207,10 +207,11 @@ pub(crate) fn deliver_auth_configuration(
             ],
         );
         assert_eq!(bound["binding"], "created", "{org}");
-        assert_eq!(
-            bound["audit_event"],
-            Value::Null,
-            "D7.8 names no binding kind"
+        assert!(
+            bound["audit_event"]
+                .as_str()
+                .is_some_and(|event| event.len() == 36),
+            "a created binding writes one provider_tenant.bound event: {org}"
         );
         // Idempotent: the same binding again is reported, never duplicated.
         let again = operator(
@@ -226,6 +227,11 @@ pub(crate) fn deliver_auth_configuration(
             ],
         );
         assert_eq!(again["binding"], "existing", "{org}");
+        assert_eq!(
+            again["audit_event"],
+            Value::Null,
+            "an existing binding writes no second event"
+        );
     }
     let secret = FakeSecret::start_at(FakeSecret::AUTH_ARN);
     assert_eq!(
@@ -1335,7 +1341,7 @@ async fn campaign() {
     let settings = fixture.settings_with_registry(registry);
     let hooks = settings.hooks.clone();
     let stores = Arc::new(Stores::new(settings).unwrap());
-    check(&mut checks, "APP-078 B1: both organizations' provider tenant bindings come from `admission_operator.py bind-provider-tenant` (created once, `existing` on repeat, no audit event: D7.8's operator kinds name none), and the provider routing and closed registry come from the composed AuthConfiguration secret value put into the loopback Secrets Manager stand-in and materialized by runtime.write_auth_configuration as the two 0600 files that AuthConfig::load and the storage registry read; only the auth origin is the cfg(test) loopback issuer's (plain HTTP on 127.0.0.1) in place of the file's https origin");
+    check(&mut checks, "APP-078 B1: both organizations' provider tenant bindings come from `admission_operator.py bind-provider-tenant` (created once, `existing` on repeat, one provider_tenant.bound event on create and none on the repeat), and the provider routing and closed registry come from the composed AuthConfiguration secret value put into the loopback Secrets Manager stand-in and materialized by runtime.write_auth_configuration as the two 0600 files that AuthConfig::load and the storage registry read; only the auth origin is the cfg(test) loopback issuer's (plain HTTP on 127.0.0.1) in place of the file's https origin");
     let provider = FakeProvider::start_at(&fixture, NORTHSTAR_TENANT, "provider", None, None);
     let auth = Arc::new(
         Auth::loopback(auth_config, Some(stores.clone()), Arc::new(TestPages)).with_invitations(

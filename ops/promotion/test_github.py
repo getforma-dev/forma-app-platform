@@ -63,7 +63,7 @@ class GithubTests(unittest.TestCase):
         value = {"status": "prepared", "candidate_sha": SHA, "promotion_id": "run-42", "packet_sha256": "b" * 64,
             "cost_genui_cents": 16984, "cost_total_cents": 20784, "expires_at_utc": "2026-11-30T12:00:00Z",
             "review": {"images": {n: "sha256:" + "c" * 64 for n in g.NAMES}, "predecessor_candidate_sha": "d" * 40,
-                "source_tree_sha": "e" * 40, "deployment_contract_sha256": "f" * 64, "schema_version": 19,
+                "source_tree_sha": "e" * 40, "deployment_contract_sha256": "f" * 64, "schema_version": 19, "schema_release": None,
                 "preserved": {"schema": True, "template": True, "trial": True, "aliases": True, "secrets": True},
                 "changes": [{"logical_id": "ServiceTask", "resource_type": "AWS::ECS::TaskDefinition", "action": "Modify", "replacement": "True"}],
                 "scan": {n: {"findings": 24, "introduced": 0, "reviewed": [], "reviewed_count": 0,

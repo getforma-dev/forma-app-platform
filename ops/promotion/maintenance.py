@@ -9,8 +9,11 @@ import copy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
+from pathlib import Path
 import re
 import sys
+from . import schema_release
 from .aws import AWS, body
 from .candidate import api
 from .github import run_identity
@@ -91,6 +94,72 @@ def operation_receipt(store, entry, window):
     require(isinstance(observed, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', observed), 'registry receipt observation missing')
     datetime.fromisoformat(observed.replace('Z', '+00:00'))
     return receipt
+
+
+def pre_outage_snapshot(runner, active, state, store):
+    """The one pre-outage mutation a prepared schema release may carry (APP-175).
+
+    Execution takes the snapshot before it stops any service, with the phase
+    still 'prepared', so the snapshot never blocks abandonment. A confirmed entry
+    must match the packet's snapshot name, the live database and its intact
+    receipt. An unknown outcome (an intent: refused, denied or unanswered) is
+    read back once by its deterministic name and the observation is recorded:
+    absent, or present with its status. Any snapshot is kept as evidence; this
+    makes no other RDS call and never deletes one.
+    """
+    entries = [x for x in active['journal'] if x['name'].startswith('schema-')]
+    if not entries:
+        return None
+    release = (active.get('packet') or {}).get('schema_release')
+    require(active['phase'] == 'prepared' and release and len(entries) == 1
+            and entries[0]['name'] == 'schema-snapshot' and entries[0]['status'] in ['confirmed', 'intent', 'read-back'],
+            'only one pre-outage snapshot may be abandoned')
+    entry = entries[0]
+    identifier = schema_release.snapshot_identifier(active['promotion_id'], release['to_version'])
+    instance = schema_release.database_instance(state['live']['outputs'].get('DatabaseEndpoint'))
+    expected = {'service': 'rds', 'operation': 'create_db_snapshot', 'arguments': {
+        'DBInstanceIdentifier': instance, 'DBSnapshotIdentifier': identifier}}
+    require(release['snapshot_identifier'] == identifier and entry['request'] == expected
+            and entry.get('request_sha256') == digest(expected), 'pre-outage snapshot request differs')
+    result = {'snapshot_identifier': identifier, 'journal_status': entry['status'], 'readback': None, 'request': expected}
+    if entry['status'] == 'confirmed':
+        operation_receipt(store, entry, active['promotion_id'])
+        return result
+    require(not entry.get('receipt') and not entry.get('receipt_sha256'), 'snapshot intent carries a receipt')
+    if entry['status'] == 'read-back':
+        # An earlier abandonment read it back and recorded the observation.
+        path = 'promotions/' + active['promotion_id'] + '/schema-snapshot-readback.json'
+        require(entry.get('readback_receipt') == path, 'snapshot readback receipt missing')
+        raw = store.s3.get_object(Bucket=store.bucket, Key=store.prefix + '/' + path)['Body'].read(1024 * 1024 + 1)
+        require(len(raw) <= 1024 * 1024 and hashlib.sha256(raw).hexdigest() == entry.get('readback_receipt_sha256')
+                and json.loads(raw, object_pairs_hook=no_duplicates) == {'request': expected, 'readback': entry.get('readback')},
+                'snapshot readback receipt changed')
+        result['readback'] = entry['readback']
+        return result
+    try:
+        response = runner.read('rds', 'describe_db_snapshots', DBSnapshotIdentifier=identifier)
+    except Exception as error:
+        code = getattr(error, 'response', {}).get('Error', {}).get('Code')
+        require(code == 'DBSnapshotNotFound', 'snapshot readback unavailable; keep the lock')
+        result['readback'] = {'present': False, 'error_code': code, 'observed_at_utc': now()}
+        return result
+    rows = response.get('DBSnapshots')
+    require(isinstance(rows, list) and len(rows) == 1 and rows[0].get('DBSnapshotIdentifier') == identifier,
+            'snapshot readback is ambiguous; keep the lock')
+    result['readback'] = {'present': True, 'status': rows[0].get('Status'),
+        'db_instance_identifier': rows[0].get('DBInstanceIdentifier'), 'observed_at_utc': now(), 'snapshot': rows[0]}
+    return result
+
+
+def resolve_snapshot_intent(store, promotion, result):
+    """Record the read-back outcome of the snapshot intent, so later operations may run."""
+    path = 'promotions/' + promotion + '/schema-snapshot-readback.json'
+    receipt_sha256 = store.immutable(path, {'request': result['request'], 'readback': result['readback']})
+    def update(document):
+        entry = next(x for x in document['active']['journal'] if x['name'] == 'schema-snapshot')
+        require(entry['status'] == 'intent' and entry['request'] == result['request'], 'journal changed')
+        entry.update(status='read-back', readback=result['readback'], readback_receipt=path, readback_receipt_sha256=receipt_sha256)
+    store.change(update)
 
 
 def no_pending_changesets(runner, stack_id, absent_name=None):
@@ -239,6 +308,7 @@ def release_rolled_back_execution(runner, expected_state_sha256, read_run=api):
     names = {x['name'] for x in journal}
     require({'stop-main', 'stop-broker', 'changeset-execute'} <= names, 'rollback release requires the stopped execution')
     require(not any(name.startswith('activate-') for name in names), 'activation started; release is refused')
+    require('schema-migrate' not in names, 'a migration may have run; release is refused')
     identity = runner.aws.identity()
     require(not any('/' + state['authority'][key].rsplit('/', 1)[-1] + '/' in identity['Arn']
                     for key in ('prepare_role_arn', 'execute_role_arn')),
@@ -296,15 +366,20 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
     pre_changeset = active['phase'] == 'preparing'
     if not pre_changeset: require(active.get('packet'), 'fully prepared packet required')
     require(not reconcile_failed_create or pre_changeset, 'rejected-create recovery only applies before a packet')
+    # APP-175: the pre-outage snapshot is the one unknown outcome abandonment may
+    # read back itself (pre_outage_snapshot); every other intent needs reconciliation.
+    unknown = [x['name'] for x in active['journal'] if x['status'] != 'confirmed'
+               and not (x['name'] == 'schema-snapshot' and x['status'] == 'read-back')]
+    snapshot_intent = not reconcile_failed_create and unknown == ['schema-snapshot'] and active['phase'] == 'prepared'
     if not reconcile_failed_create:
-        require(not any(x['status']!='confirmed' for x in active['journal']), 'unknown operation must be reconciled')
-    require(not any(x['name'].startswith(('stop-', 'activate-', 'changeset-execute')) for x in active['journal']), 'runtime execution cannot be abandoned')
+        require(not unknown or snapshot_intent, 'unknown operation must be reconciled')
+    require(not any(x['name'].startswith(('stop-', 'activate-', 'changeset-execute', 'schema-migrate')) for x in active['journal']), 'runtime execution cannot be abandoned')
     identity=runner.aws.identity()
     require(not any('/'+state['authority'][key].rsplit('/',1)[-1]+'/' in identity['Arn'] for key in ['prepare_role_arn','execute_role_arn']),
             'abandonment is an operator recovery command, not a workflow permission')
     run=read_run(f'repos/{REPOSITORY}/actions/runs/{active["authorization"]["run_id"]}')
     terminal_proof(run,active,runner.clock())
-    if reconcile_failed_create: store.load()
+    if reconcile_failed_create or snapshot_intent: store.load()
     else: store.resume(active['promotion_id'],active['authorization'])
     require(digest(store.document)==expected_state_sha256,'state changed during fencing proof')
     reconciliation = rejected_bootstrap_create(runner,active,state,run) if reconcile_failed_create else None
@@ -313,6 +388,12 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
         # permits operator ownership for the final abandonment CAS. No replay.
         store.owner=active['owner']
     verified_receipts = reconciliation['registry_receipts_verified'] if reconciliation else (confirmed_registry_only(active, state, store) if pre_changeset else None)
+    retained_snapshot = None if pre_changeset else pre_outage_snapshot(runner, active, state, store)
+    if snapshot_intent:
+        # Only after the snapshot intent was matched and read back above.
+        require(retained_snapshot and retained_snapshot['journal_status'] == 'intent', 'snapshot intent not read back')
+        store.owner=active['owner']
+        resolve_snapshot_intent(store, active['promotion_id'], retained_snapshot)
     absent_name = reconciliation['change_set_name'] if reconciliation else None
     before=runner.boundary(1)
     inventories = []
@@ -326,7 +407,8 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
         'run':run,'identity':identity,'observed_at_utc':now(),'before':before,
         'reviewed_state_sha256':expected_state_sha256,'phase':active['phase'],
         'journal':active['journal'],'change_set_inventory':inventories,
-        'registry_receipts_verified':verified_receipts,'rejected_create_reconciliation':reconciliation})
+        'registry_receipts_verified':verified_receipts,'rejected_create_reconciliation':reconciliation,
+        'retained_schema_snapshot':retained_snapshot})
     if not pre_changeset:
         runner.mutate('changeset-delete','cloudformation','delete_change_set',StackName=before['stack']['StackId'],ChangeSetName=arn)
         # Absence, not merely DeleteChangeSet acceptance, precedes release.
@@ -343,7 +425,8 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
     ledger,receipt=preflight().abandon(store.document['ledger'],active['promotion_id'],runner.clock())
     receipt.update(abandoned_window=ledger['windows'][active['promotion_id']],
         previous_ledger_sha256=digest(store.document['ledger']), updated_ledger_sha256=digest(ledger),
-        final_change_set_inventory=final_inventories,final_exact_change_set_absence=final_absence)
+        final_change_set_inventory=final_inventories,final_exact_change_set_absence=final_absence,
+        retained_schema_snapshot=retained_snapshot)
     store.immutable('promotions/'+active['promotion_id']+'/abandoned.json',receipt)
     def finish(document):
         document['ledger']=ledger
@@ -353,14 +436,25 @@ def abandon(runner, expected_state_sha256, read_run=api, reconcile_failed_create
     return {'status':'abandoned','promotion_id':active['promotion_id'],'windows_preserved':len(ledger['windows'])}
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['inspect','abandon','release-rolled-back'])
+    parser.add_argument('command',choices=['inspect','abandon','release-rolled-back','restore-after-failed-migration'])
     parser.add_argument('--state-bucket',required=True);parser.add_argument('--state-prefix',default='beta')
     parser.add_argument('--expected-state-sha256')
     parser.add_argument('--reconcile-bootstrap-create-rejection',action='store_true',help='Only the verified bootstrap-SSM CreateChangeSet rejection; no replay or general unknown-outcome bypass')
-    args=parser.parse_args()
+    parser.add_argument('--output',type=Path,help='restore-after-failed-migration: a new private plan/result file, never overwritten')
+    parser.add_argument('--apply',action='store_true',help='restore-after-failed-migration: perform the reviewed restore; without it, plan only')
+    args=parser.parse_args(argv)
+    restore=args.command=='restore-after-failed-migration'
+    if not restore and (args.apply or args.output):
+        parser.error('--apply and --output belong to restore-after-failed-migration')
+    if restore and not (args.output and args.expected_state_sha256):
+        parser.error('restore-after-failed-migration needs --output and --expected-state-sha256')
+    output=None
     try:
+        if restore:
+            # Reserve the private output before any AWS work; never overwrite an attempt.
+            output=os.fdopen(os.open(args.output,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),'wb')
         aws=AWS();aws.identity();store=Store(aws.client('s3'),args.state_bucket,args.state_prefix)
         if args.command=='inspect':
             state=store.load();active=state.get('active')
@@ -372,10 +466,24 @@ def main():
             runner=Runner(aws,store)
             if args.command=='release-rolled-back':
                 result=release_rolled_back_execution(runner,args.expected_state_sha256)
+            elif restore:
+                from .schema_recovery import apply, plan
+                detail=(apply if args.apply else plan)(runner,args.expected_state_sha256)
+                output.write(encoded(detail));output.flush();os.fsync(output.fileno());output.close()
+                result=detail['public']
             else:
                 result=abandon(runner,args.expected_state_sha256,reconcile_failed_create=args.reconcile_bootstrap_create_rejection)
         print(json.dumps(result));return 0
     except Exception:
+        if output is not None and not output.closed:
+            try:
+                # Never an exception text, identity or claim that nothing was written.
+                output.seek(0);output.truncate()
+                output.write(encoded({'status':'refused-or-outcome-unknown',
+                    'instruction':'Inspect the lock, journal and restore receipts before any retry; nothing is repeated automatically.'}))
+                output.flush();os.fsync(output.fileno());output.close()
+            except OSError:
+                pass
         print('Maintenance refused or outcome unresolved. Keep the lock and inspect private receipts.',file=sys.stderr);return 1
 
 

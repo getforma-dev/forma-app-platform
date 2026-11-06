@@ -1568,6 +1568,7 @@ mod tests {
         // work under "My apps").
         let library = canvas::library(vec![
             canvas::LibrarySource {
+                artifact_kind: Some("card".into()),
                 app: app.into(),
                 work: spend.into(),
                 title: "Spend <Review>".into(),
@@ -1580,6 +1581,7 @@ mod tests {
                 )],
             },
             canvas::LibrarySource {
+                artifact_kind: None,
                 app: app.into(),
                 work: northstar.into(),
                 title: "Northstar egress".into(),
@@ -1610,6 +1612,7 @@ mod tests {
             library_summary: canvas::library_summary(&library),
             library,
             member_key: canvas::member_key("org", "principal"),
+            artifact_kinds_loaded: true,
             ..props
         };
         let response = ssr.canvas(&props);
@@ -1756,6 +1759,18 @@ mod tests {
                 && content.contains(">/traffic<")
         );
         assert!(content.contains("Spend &lt;Review&gt;") && !content.contains("<Review>"));
+        // APP-169: a saved kind is `card` or `app`; a work with nothing saved
+        // has no attribute at all (never an empty value), and the canvas says
+        // the kinds were read.
+        let row = |work: &str| -> String {
+            let start = content.find(&format!("id=\"lib-{work}\"")).unwrap();
+            let rest = &content[start..];
+            rest[..rest.find('>').unwrap()].to_owned()
+        };
+        assert!(row(spend).contains("data-artifact-kind=\"card\""));
+        assert!(!row(northstar).contains("data-artifact-kind"));
+        assert!(!content.contains("data-artifact-kind=\"\""));
+        assert!(content.contains("data-artifact-kinds=\"true\""));
         assert!(content.contains("Apps, widgets and standalone cards you can use."));
         assert!(!content.contains("2 apps · 3 cards"));
         // An empty canvas offers creation intents that require no installed
@@ -1773,5 +1788,28 @@ mod tests {
         // No stream configured: no live chip; no organization read: no name.
         assert!(!body.contains("id=\"cv-live\"") && !body.contains("class=\"cv-org\""));
         assert!(!body.contains("Synthetic data") && !body.contains("data-demo=\"on\""));
+        // APP-169: an explicit `app` is rendered as such. Kinds that could
+        // not be read leave the canvas without `data-artifact-kinds`, so the
+        // island keeps this browser's choices.
+        let unread = canvas::CanvasProps {
+            has_library: true,
+            library: canvas::library(vec![canvas::LibrarySource {
+                artifact_kind: Some("app".into()),
+                app: app.into(),
+                work: spend.into(),
+                title: "Spend".into(),
+                grouping: None,
+                cards: vec![(
+                    format!("a-{spend}"),
+                    "App card".into(),
+                    "app".into(),
+                    "app".into(),
+                )],
+            }]),
+            ..canvas::CanvasProps::default()
+        };
+        let (_, _, body) = html(ssr.canvas(&unread)).await;
+        assert!(body.contains("data-artifact-kind=\"app\""));
+        assert!(!body.contains("data-artifact-kinds"));
     }
 }

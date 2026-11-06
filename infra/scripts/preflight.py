@@ -99,6 +99,9 @@ OPTIONAL_PARAMETERS = ('QualificationImageDigest', 'OperatorImageDigest', 'Provi
 # not part of its binding. Both or neither; this account and region only.
 MANAGEMENT_SECRET_RE = r'arn:aws:secretsmanager:' + _REGION_RE + ':' + _ACCOUNT_RE + r':secret:[A-Za-z0-9/_+=.@-]{1,512}-[A-Za-z0-9]{6}'
 MANAGEMENT_URL_RE = r'https://[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?'
+# The only hosts the operator task may send the management key to. It must equal
+# app/runtime/provider_management.py PROVIDER_HOSTS (APP-084; preflight_test checks).
+PROVIDER_HOSTS = frozenset({'auth-staging.getforma.dev'})
 WITHIN_WINDOW = ('ingress_mode', 'service_desired_count', 'provider_management_secret_arn', 'provider_management_url')
 # Conservative Linux x86 price even when deploying an ARM64 image.
 TASK_HOURLY = Decimal('0.1215248')  # 2 CPU + 8 GiB + task IPv4
@@ -328,6 +331,9 @@ def reserve(config, ledger, now, activating=False):
     require(isinstance(management['provider_management_url'], str)
             and re.fullmatch('(?:' + MANAGEMENT_URL_RE + ')?', management['provider_management_url']) is not None,
             'provider_management_url must be empty or an https origin')
+    require(management['provider_management_url'] == ''
+            or re.fullmatch(r'https://([^:/]+)(?::[0-9]{1,5})?', management['provider_management_url']).group(1) in PROVIDER_HOSTS,
+            'provider_management_url must name a reviewed provider host')
     require((management['provider_management_secret_arn'] == '') == (management['provider_management_url'] == ''),
             'provider_management_secret_arn and provider_management_url are set together or left empty together')
     require(not management['provider_management_secret_arn'] or task_images['operator_image_digest'],

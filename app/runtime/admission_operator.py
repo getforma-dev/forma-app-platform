@@ -25,9 +25,9 @@ never rewritten (an identical record is `unchanged`, a differing one refused).
 `create-bound-work` writes a new saved work at version 1 that copies an
 existing work's publication, context and bindings and binds one source input
 to another live revision of the same source with the same contract; the old
-work and its records are untouched. Neither writes an audit event: D7.8's
-operator kinds name none (a kind is an ADR amendment), so, as with the seed,
-the retained JSON output is the record.
+work and its records are untouched. Each writes one operator-chain event
+(`source_revision.registered`, `work.seeded`; ADR-007 D7.8 as amended by
+APP-084), and an unchanged rerun writes none.
 
 A new access code's secret (32 CSPRNG bytes, base32) is printed exactly once,
 on standard output, after its transaction commits. It is never logged, stored
@@ -92,8 +92,8 @@ inputs and record schemas, the publication, the saved work, its collection and
 bindings, the expenses source revision and the seeded EXP-002 outcome, labeled
 "seeded definition" as the seed labels every fixture definition (ADR-010 §1,
 demo R3). Exact-match idempotent (`changed: false` on a repeat; any differing
-row refuses whole). No audit event: D7.8's operator kinds name none (APP-084
-item 6), as for `create-bound-work`; the retained output is the record. The
+row refuses whole). A change writes one `app.seeded` operator-chain event (ADR-007
+D7.8 as amended by APP-084); a repeat writes none. The
 definition is not re-admitted through the service's whole-output admission
 path (APP-010, Rust): that path is not reproducible from Python byte for byte,
 so the seeded rows are used, exactly as the seed itself placed them.
@@ -108,16 +108,16 @@ schemas, publication, saved work with its collection and bindings, the source
 revision (its REAL normalized digest, the bytes `library_sources.py build`
 places in the cache or the deploy uploads), the seeded decision record and the
 author's grants. Exact-match idempotent (`changed: false` on a repeat; any
-differing row refuses whole); no audit event, as for the other seeds. The
-output lists each app with its identities so the record is the retained JSON.
+differing row refuses whole). It writes no audit event, unlike `seed-spend-review`:
+D7.8 names no kind for the library seed or its author grants (an accepted limit,
+APP-084). The output lists each app with its identities, so the retained JSON is the record.
 
 Provider tenant bindings (APP-078 B1): `bind-provider-tenant` binds an existing
 organization (the two seeded ones) to its real provider tenant for an issuer, the
 row the callback's registry/database agreement needs (ADR-006; the seed binds only
-the fixture issuer). Identifiers only, so it runs in the managed operator task;
-it writes no audit event because ADR-007 D7.8's operator kinds are closed and
-name none (the seed's bindings have none either; a `provider_tenant.bound` kind
-would be an ADR-007 amendment).
+the fixture issuer). Identifiers only, so it runs in the managed operator task.
+A created binding writes one `provider_tenant.bound` operator-chain event (ADR-007
+D7.8 as amended by APP-084); a repeat writes none. The seed's own bindings write none.
 
 Sign-in handles (APP-009, ADR-006 §handle): `issue-handle` gives an organization
 without one its first live handle (fresh, or an exact already-issued `--handle`
@@ -159,7 +159,9 @@ CHAINS = ("workspace", "control", "data", "admission", "operator")
 # of 2026-10-29 (APP-010 review M2) and migration 0005's widened operator policy.
 OPERATOR_KINDS = ("organization.provisioned", "handle.rotated", "code.issued", "code.revoked", "code.extended",
                   "membership.revoked", "entitlement.revoked", "permission.granted", "permission.revoked",
-                  "creator_authority.revoked")
+                  "creator_authority.revoked", "provider.invitation.created", "provider.invitation.reconciled",
+                  "provider.invitation.revoked", "source_revision.registered", "work.seeded", "provider_tenant.bound",
+                  "app.seeded")
 # ADR-007 amendment (APP-010 review M2, m7): what grant-permission/revoke-permission
 # may write, and the resource each permission names. A closed subset of what the
 # 0002 permission tables allow: never admin_policy (governance), share_work or
@@ -262,6 +264,11 @@ def genesis(organization, writer_role):
 
 def event_hash(previous, body):
     return "sha256:" + hashlib.sha256(b"forma:audit-event:v1\x00" + previous.encode() + canonical(body)).hexdigest()
+
+
+def command_digest(domain, fields):
+    """sha256 of a canonical command or provider transition. The event stores this, not the fields."""
+    return "sha256:" + hashlib.sha256(domain + canonical(fields)).hexdigest()
 
 
 def timestamp(value):
@@ -615,11 +622,18 @@ def source_record_bytes(raw, organization):
 
 # --- operator transaction -----------------------------------------------------
 
+PGHOST_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
+
+
 def connect():
     import psycopg
     # Always verify-full TLS: a Unix-socket host never uses TLS, and libpq would
     # prefer GSSAPI encryption over TLS when Kerberos credentials exist.
-    require(not os.environ["PGHOST"].startswith("/"), "socket_host_refused")
+    # One DNS name or IPv4 address only, as app/operator/operator.py requires: libpq also
+    # reads '@' as an abstract socket and ',' as a host list (APP-084 review).
+    host = os.environ["PGHOST"]
+    require(host and not host.startswith(("/", "@")), "socket_host_refused")
+    require(PGHOST_NAME.fullmatch(host) is not None, "host_refused")
     return psycopg.connect(host=os.environ["PGHOST"], port=int(os.environ.get("PGPORT", "5432")),
                            dbname=os.environ.get("PGDATABASE", "genui"), user=os.environ["PGUSER"],
                            password=os.environ.get("PGPASSWORD"), sslmode="verify-full", gssencmode="disable",
@@ -647,7 +661,7 @@ def lock_organization(c, organization, active=False, lock=True):
     require(not active or row[0] == "active", "organization_inactive")
 
 
-def append(c, organization, kind, code_id=None, actor=None, app=None, work=None):
+def append(c, organization, kind, code_id=None, actor=None, app=None, work=None, outcome=None):
     """D7.8 append on the operator chain: the head row lock serializes appenders."""
     require(kind in OPERATOR_KINDS, "kind_refused")
     head = c.execute("SELECT chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s AND writer_role='operator' FOR UPDATE",
@@ -657,15 +671,42 @@ def append(c, organization, kind, code_id=None, actor=None, app=None, work=None)
     occurred = c.execute("SELECT date_trunc('second',now())").fetchone()[0]
     body = {"actor_principal_id": actor, "app_id": app, "chain_sequence": sequence, "code_id": code_id,
             "event_id": str(uuid.uuid4()), "kind": kind, "occurred_at": timestamp(occurred),
-            "organization_id": organization, "outcome_digest": None, "previous_hash": previous,
+            "organization_id": organization, "outcome_digest": outcome, "previous_hash": previous,
             "record_id": None, "work_id": work, "writer_role": "operator"}
     digest = event_hash(previous, body)
     c.execute("""INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,
                  work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash)
-                 VALUES (%s,%s,'operator',%s,%s,%s,%s,%s,NULL,%s,NULL,%s,%s,%s)""",
-              (organization, body["event_id"], sequence, kind, actor, app, work, code_id, occurred, previous, digest))
+                 VALUES (%s,%s,'operator',%s,%s,%s,%s,%s,NULL,%s,%s,%s,%s,%s)""",
+              (organization, body["event_id"], sequence, kind, actor, app, work, code_id, outcome, occurred, previous, digest))
     c.execute("UPDATE genui.audit_heads SET chain_sequence=%s,head_hash=%s WHERE organization_id=%s AND writer_role='operator'",
               (sequence, digest, organization))
+    return body["event_id"]
+
+
+def note_invitation(c, org, kind, code_id, operation, state_before, state, remote_id, detail):
+    """One operator event for a committed provider-invitation state change."""
+    if state == state_before:
+        return None
+    return append(c, org, kind, code_id=code_id, outcome=command_digest(
+        b"forma:provider-invitation-outcome:v1\x00",
+        {"detail": detail, "operation": operation, "remote_invitation_id": remote_id,
+         "state": state, "state_before": state_before}))
+
+
+def claim_provider_tenants(c, org):
+    """Own every active binding in the cross-organization index.
+
+    Migration 0021 indexed every active binding, so a missing row here is a
+    binding made since without a claim; it is claimed now. A row owned by
+    another organization refuses. ON CONFLICT does not abort the transaction."""
+    rows = c.execute("""SELECT issuer, provider_tenant_id FROM genui.provider_tenant_bindings
+          WHERE organization_id=%s AND active ORDER BY issuer, provider_tenant_id""", (org,)).fetchall()
+    for issuer, tenant in rows:
+        c.execute("""INSERT INTO genui_private.provider_tenant_index(issuer, provider_tenant_id, organization_id)
+              VALUES (%s,%s,%s) ON CONFLICT (issuer, provider_tenant_id) DO NOTHING""", (issuer, tenant, org))
+        owner = c.execute("""SELECT organization_id::text FROM genui_private.provider_tenant_index
+              WHERE issuer=%s AND provider_tenant_id=%s""", (issuer, tenant)).fetchone()
+        require(owner is not None and owner[0] == org, "provider_tenant_bound_elsewhere")
 
 
 def organization_sequence_row(c, organization):
@@ -695,6 +736,7 @@ def provision(c, args):
     c.execute("INSERT INTO genui.organizations(organization_id,display_name,status) VALUES (%s,%s,'active')", (org, args.display_name))
     c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
               (org, args.issuer, args.provider_tenant))
+    claim_provider_tenants(c, org)
     # A real first member has no seeded app or grants. The first explicit
     # compose still needs an organization space and an owner-publish policy;
     # these empty defaults are operator-owned, in the same provision commit.
@@ -720,8 +762,7 @@ def bind_provider_tenant(c, args):
     """APP-078 B1: bind an existing organization to its real provider tenant for `issuer`, so the
     callback's registry/database agreement (ADR-006) can hold for the hosted sign-in. Idempotent:
     an identical active row is reported `existing`; an inactive one refuses (reactivation is a
-    separate decision). No audit event: D7.8's closed operator kinds name none (the row is the
-    record, as for the seed's fixture bindings)."""
+    separate decision). A created binding writes one `provider_tenant.bound` event."""
     org = args.organization
     begin(c, org)
     lock_organization(c, org, active=True)
@@ -730,35 +771,27 @@ def bind_provider_tenant(c, args):
         require(not bound_elsewhere(c, org, args.issuer, args.provider_tenant), "provider_tenant_bound_elsewhere")
         c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,%s,%s,true)",
                   (org, args.issuer, args.provider_tenant))
+        claim_provider_tenants(c, org)
         state = "created"
     else:
         require(row == (True,), "provider_binding_inactive")
         state = "existing"
+    event = None
+    if state == "created":
+        event = append(c, org, "provider_tenant.bound", outcome=command_digest(
+            b"forma:provider-tenant-binding:v1\x00",
+            {"issuer": args.issuer, "provider_tenant_id": args.provider_tenant}))
     active = c.execute("SELECT count(*) FROM genui.provider_tenant_bindings WHERE organization_id=%s AND active", (org,)).fetchone()[0]
     c.commit()
-    return {"organization_id": org, "binding": state, "active_bindings": active, "audit_event": None,
+    return {"organization_id": org, "binding": state, "active_bindings": active, "audit_event": event,
             "source": "auth_configuration" if args.from_auth_configuration else "arguments"}
 
 
 def bound_elsewhere(c, org, issuer, tenant):
-    """B1 review m6: is this (issuer, tenant) already active for another organization?
-
-    FORCE RLS scopes every `genui` read to one organization, so the other organizations are visited
-    under their own scope in turn; the candidates are the organizations that can route a sign-in
-    (genui_private.handle_index, which has no RLS and is readable by the owner) plus every
-    organization with a code. A binding elsewhere is only ever useful to an organization that can
-    sign in, so this is the set the check must cover; the scope is restored afterwards."""
-    others = {r[0] for r in c.execute("""SELECT organization_id::text FROM genui_private.handle_index
-          UNION SELECT organization_id::text FROM genui_private.code_index""").fetchall()} - {org}
-    found = False
-    for other in sorted(others):
-        c.execute("SELECT set_config('genui.organization_id',%s,true)", (other,))
-        if c.execute("""SELECT 1 FROM genui.provider_tenant_bindings WHERE organization_id=%s AND issuer=%s AND provider_tenant_id=%s AND active""",
-                     (other, issuer, tenant)).fetchone() is not None:
-            found = True
-            break
-    c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
-    return found
+    """B1 review m6, closed by APP-084: the private index names the one organization for this tenant."""
+    owner = c.execute("""SELECT organization_id::text FROM genui_private.provider_tenant_index
+          WHERE issuer=%s AND provider_tenant_id=%s""", (issuer, tenant)).fetchone()
+    return owner is not None and owner[0] != org
 
 
 def backfill(c, args):
@@ -794,6 +827,7 @@ def issue(c, args):
         client = provider.Client(args.provider_config)
         client.require_tenant(args.provider_tenant)
     lock_organization(c, org, active=True)
+    claim_provider_tenants(c, org)
     if invited:
         # The binding row lock serializes invitation-bearing issuance per provider tenant,
         # and against a running reconcile (whose guard holds it, review M1(b)).
@@ -1183,8 +1217,12 @@ def register_source_revision(c, args):
           contract_digest,deleted_at,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,NULL,%s)""",
               (org, record["source_id"], record["revision_id"], record["content_digest"], record["normalized_digest"],
                record["contract_digest"], contract_canonical(envelope)))
+    event = append(c, org, "source_revision.registered", outcome=command_digest(
+        b"forma:source-revision:v1\x00",
+        {"normalized_digest": record["normalized_digest"], "revision_id": record["revision_id"],
+         "source_id": record["source_id"]}))
     c.commit()
-    return dict(result, changed=True, row_count=record["row_count"], created_at=envelope["created_at"])
+    return dict(result, changed=True, row_count=record["row_count"], created_at=envelope["created_at"], audit_event=event)
 
 
 def create_bound_work(c, args):
@@ -1257,8 +1295,11 @@ def create_bound_work(c, args):
             c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,
                   collection_id,schema_id,schema_version,revision_policy) VALUES (%s,%s,%s,%s,%s,'records',%s,%s,%s,%s,'committed_snapshot')""",
                       (org, app, work, publication, input_id, contract, collections[(schema, version)], schema, version))
+    event = append(c, org, "work.seeded", app=app, work=work, outcome=command_digest(
+        b"forma:bound-work:v1\x00",
+        {"app_id": app, "publication_id": publication, "work_id": work}))
     c.commit()
-    return dict(result, changed=True)
+    return dict(result, changed=True, audit_event=event)
 
 
 def seed_spend_review(c, args):
@@ -1270,8 +1311,8 @@ def seed_spend_review(c, args):
     with the same `ON CONFLICT DO NOTHING` then equality check, so a repeat is `changed: false` and a
     differing row refuses whole. Lock order: the organization FOR SHARE first (D7.1), then the
     seed's own writes under scope. D7.7: the organization's commit sequence (if backfilled) must
-    stay ahead of every seeded record revision, else nothing is kept. No audit event (D7.8 names
-    no kind; APP-084 item 6): this JSON output is the record.
+    stay ahead of every seeded record revision, else nothing is kept. A seed that inserts rows
+    writes one `app.seeded` event.
     """
     import tenant_seed
     org = args.organization
@@ -1295,6 +1336,11 @@ def seed_spend_review(c, args):
     highest = c.execute("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id=%s", (org,)).fetchone()[0]
     require(sequence is None or sequence[0] > highest, "commit_sequence_mismatch")
     d, pub, w, outcome = bundle["definition"], bundle["publication"], bundle["work"], bundle["outcome"]
+    event = None
+    if changes:
+        event = append(c, org, "app.seeded", app=d["app_id"], work=w["work_id"], outcome=command_digest(
+            b"forma:app-seed:v1\x00",
+            {"app_id": d["app_id"], "edition": SEED_EDITION, "work_id": w["work_id"]}))
     c.commit()
     return {"organization_id": org, "label": "seeded definition", "edition": SEED_EDITION, "app_id": d["app_id"],
             "definition_revision_id": d["revision_id"], "definition_digest": d["digest"], "publication_id": pub["publication_id"],
@@ -1302,7 +1348,7 @@ def seed_spend_review(c, args):
             "sources": [{"source_id": s["source_id"], "revision_id": s["revision_id"]} for s in bundle["sources"]],
             "seeded_record": {"record_id": outcome["record_id"], "version": outcome["record_version"]},
             "author_principal_id": bundle["context"]["principal_id"], "approver_principal_id": pub["approver_id"],
-            "changed": bool(changes), "rows_inserted": len(changes), "audit_event": None}
+            "changed": bool(changes), "rows_inserted": len(changes), "audit_event": event}
 
 
 def seed_library(c, args):
@@ -1535,8 +1581,10 @@ def record_revocations(c, org, code_id, lock=True):
 # ADR-003 amendment 2026-10-30: every change to the environment's capability secret is a
 # read and a whole-map PutSecretValue, so operator commands that change it take this
 # transaction-scoped advisory lock first (one per database, so one per environment). Only
-# create_remote takes it while holding rows, and no holder of this lock waits for a row
-# lock, so it adds no wait cycle to D7.1's order. The pair keeps runtime.py's lock class.
+# create_remote takes it while holding rows. Since APP-084, a holder may also take the
+# operator audit head (`note_invitation` -> `append`, audit_heads FOR UPDATE) under it; no
+# path takes this lock while already holding that head, so it still adds no wait cycle to
+# D7.1's order (APP-084 review). The pair keeps runtime.py's lock class.
 CAPABILITY_LOCK = (1819409017, 74)
 
 
@@ -1613,6 +1661,7 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
             # Too late to fit inside the recorded deadline: never sent, so definitively not created.
             c.execute("""UPDATE genui.provider_invitations SET state='failed',updated_at=clock_timestamp()
                   WHERE organization_id=%s AND invitation_id=%s""", (org, invitation_id))
+            note_invitation(c, org, "provider.invitation.created", code_id, "create", "pending", "failed", None, "send_window_passed")
             c.commit()
             return operation_result(invitation_id, "create", "failed", None, "send_window_passed", capability_stored=False)
         outcome = client.create(email, role)
@@ -1643,6 +1692,7 @@ def create_remote(c, org, invitation_id, code_id, email, role, client):
             # It exists remotely but can never be handed off: record its revocation
             # (unless the code's revocation already is); the operator revokes or keeps the code.
             record_revocations(c, org, code_id, lock=False)  # the code row is already held
+        note_invitation(c, org, "provider.invitation.created", code_id, "create", "pending", outcome.state, outcome.remote_id, detail)
         c.commit()
     except Exception:
         _rollback(c)
@@ -1677,8 +1727,9 @@ def process_revoke(c, org, invitation_id, client):
     create = c.execute("""SELECT state,remote_invitation_id FROM genui.provider_invitations WHERE organization_id=%s AND code_id=%s
           AND operation='create'""", (org, code_id)).fetchone()
     if create is None or create[0] == "failed":
-        c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
-                  (org, invitation_id))
+        c.execute("""UPDATE genui.provider_invitations SET state='confirmed',detail='nothing_to_revoke',updated_at=now()
+              WHERE organization_id=%s AND invitation_id=%s""", (org, invitation_id))
+        note_invitation(c, org, "provider.invitation.revoked", code_id, "revoke", state_before, "confirmed", None, "nothing_to_revoke")
         c.commit()
         return operation_result(invitation_id, "revoke", "confirmed", None, "nothing_to_revoke")
     if create[0] != "confirmed":
@@ -1689,8 +1740,9 @@ def process_revoke(c, org, invitation_id, client):
     except Refused:
         _rollback(c)
         return operation_result(invitation_id, "revoke", state_before, create[1], "provider_contract_mismatch")
-    c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,updated_at=now()
-          WHERE organization_id=%s AND invitation_id=%s""", (outcome.state, create[1], org, invitation_id))
+    c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,detail=%s,updated_at=now()
+          WHERE organization_id=%s AND invitation_id=%s""", (outcome.state, create[1], outcome.detail, org, invitation_id))
+    note_invitation(c, org, "provider.invitation.revoked", code_id, "revoke", state_before, outcome.state, create[1], outcome.detail)
     c.commit()
     result = operation_result(invitation_id, "revoke", outcome.state, create[1], outcome.detail)
     if outcome.provider_error:
@@ -1789,9 +1841,12 @@ def judge_creates(c, org, client, tenant, scan):
                     decided[row[0]] = ("confirmed", matches[0].remote_id, "found")
                 else:
                     waiting[row[0]] = "ambiguous_remote_match"
-    for invitation, (state, remote, _) in decided.items():
+    held_by = {row[0]: row for row in held}
+    for invitation, (state, remote, detail) in decided.items():
+        row = held_by[invitation]
         c.execute("""UPDATE genui.provider_invitations SET state=%s,remote_invitation_id=%s,updated_at=now()
               WHERE organization_id=%s AND invitation_id=%s""", (state, remote, org, invitation))
+        note_invitation(c, org, "provider.invitation.reconciled", row[6], "create", row[1], state, remote, detail)
     c.commit()
     entries, unusable = [], []
     for invitation, state_before, _, _, _, _, code_id, _ in held:
@@ -1849,8 +1904,9 @@ def ended_remotely(c, org, client, tenant, scan):
         begin(c, org)
         recorded = record_revocations(c, org, code_id)
         for revocation, _ in recorded:
-            c.execute("""UPDATE genui.provider_invitations SET state='confirmed',updated_at=now() WHERE organization_id=%s AND invitation_id=%s""",
-                      (org, revocation))
+            c.execute("""UPDATE genui.provider_invitations SET state='confirmed',detail=%s,updated_at=now()
+                  WHERE organization_id=%s AND invitation_id=%s""", (detail, org, revocation))
+            note_invitation(c, org, "provider.invitation.revoked", code_id, "revoke", "pending", "confirmed", remote, detail)
         c.commit()
         entries += [operation_result(revocation, "revoke", "confirmed", remote, detail, state_before=None) for revocation, _ in recorded]
     # Every ended or spent capability leaves the secret in one write.
@@ -2048,6 +2104,10 @@ def issue_handle(c, args):
     once and installed in each environment; otherwise a fresh handle is drawn."""
     org = args.organization
     begin(c, org)
+    # D7.1 order: the organization FOR SHARE, then the index claim, then the operator
+    # audit head that lock_handles takes (APP-084 review).
+    lock_organization(c, org, active=True)
+    claim_provider_tenants(c, org)
     lock_handles(c, org)
     require(live_handles(c, org) == 0, "handle_exists")
     raw = add_handle(c, org, args.raw_handle)

@@ -956,7 +956,7 @@ async fn campaign() {
         capabilities,
         issued: 0,
     };
-    c.record("APP-078 B1: both organizations' provider tenant bindings come from `admission_operator.py bind-provider-tenant` (created once, `existing` on repeat, no audit event: D7.8's operator kinds name none), and the provider routing and closed registry come from the composed AuthConfiguration secret value put into the loopback Secrets Manager stand-in and materialized by runtime.write_auth_configuration (the supervisor's own writer) as the two 0600 files that AuthConfig::load and the storage registry read; only the auth origin is the cfg(test) loopback issuer's (plain HTTP on 127.0.0.1) in place of the file's https origin");
+    c.record("APP-078 B1: both organizations' provider tenant bindings come from `admission_operator.py bind-provider-tenant` (created once, `existing` on repeat, one provider_tenant.bound event on create and none on the repeat), and the provider routing and closed registry come from the composed AuthConfiguration secret value put into the loopback Secrets Manager stand-in and materialized by runtime.write_auth_configuration (the supervisor's own writer) as the two 0600 files that AuthConfig::load and the storage registry read; only the auth origin is the cfg(test) loopback issuer's (plain HTTP on 127.0.0.1) in place of the file's https origin");
     let mut secrets: Vec<String> = Vec::new();
 
     // --- 1. A valid code: digest validation, backend-only PAR, no slot --------

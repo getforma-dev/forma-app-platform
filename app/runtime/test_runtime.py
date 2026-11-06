@@ -310,6 +310,24 @@ class RuntimeTests(unittest.TestCase):
                     with self.assertRaises(runtime.Refused): call()
                     connect.assert_not_called(); storage.assert_not_called()
 
+    def test_migrate_refuses_a_socket_host_and_never_negotiates_gssapi(self):
+        # APP-073 admission review nit (APP-084 item 4): a Unix-socket host never
+        # uses TLS, and libpq prefers GSSAPI encryption over TLS when Kerberos
+        # credentials exist, so the migration connection pins both, as connect() does.
+        env = {'PGDATABASE': 'genui', 'PGUSER': 'genui_migration', 'PGPASSWORD': 'unit-only',
+               'PGSSLROOTCERT': '/unit-only/ca.pem'}
+        for host in ('/var/run/postgresql', '@abstract', 'db.example.test,/var/run/postgresql', 'db.example.test,@x',
+                     'db example.test', '-db.example.test', 'db.example.test.', '[::1]', ''):
+            with self.subTest(host=host), patch.dict(os.environ, dict(env, PGHOST=host)), patch('psycopg.connect') as connect:
+                with self.assertRaises(runtime.Refused): runtime.migrate()
+                connect.assert_not_called()
+        with patch.dict(os.environ, dict(env, PGHOST='synthetic.invalid')), \
+             patch('psycopg.connect') as connect, patch.object(runtime, 'apply_migrations'):
+            runtime.migrate()
+            kwargs = connect.call_args.kwargs
+            self.assertEqual((kwargs['sslmode'], kwargs['gssencmode'], kwargs['host']),
+                             ('verify-full', 'disable', 'synthetic.invalid'))
+
 
 class MigrationSourceTests(unittest.TestCase):
     def test_exact_reviewed_migrations_and_original_bytes_are_required(self):

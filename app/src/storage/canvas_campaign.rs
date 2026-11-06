@@ -52,6 +52,25 @@ impl RecordPage for NoRecordPage {
 }
 
 const CANVAS_WORK: &str = "00000000-0000-4000-8000-0000000000f7";
+/// APP-169: a well-formed work id no row names.
+const UNKNOWN_WORK: &str = "00000000-0000-4000-8000-00000000dead";
+const CARD: &str = r#"{"kind":"card"}"#;
+const APP_KIND: &str = r#"{"kind":"app"}"#;
+const NOT_FOUND_BODY: &str = r#"{"code":"not_found","status":404}"#;
+
+fn kind_path(app: &str, work: &str) -> String {
+    format!("/v1/library/{app}/{work}/kind")
+}
+
+/// The start tag of the library row of `work` on a canvas page, or empty.
+fn library_row(body: &str, work: &str) -> String {
+    body.find(&format!("id=\"lib-{work}\""))
+        .map(|start| {
+            let rest = &body[start..];
+            rest[..rest.find('>').unwrap_or(rest.len())].to_owned()
+        })
+        .unwrap_or_default()
+}
 
 /// APP-113's deferred batching: the canvas page's batched reads equal the
 /// one-work-at-a-time reads they replaced, for `request`: the listing
@@ -370,6 +389,18 @@ async fn campaign() {
     assert_eq!(group["cards"][0]["integer_columns"], "total_bytes");
     let unshared = maya.get(&routes, &spend_path).await;
     assert_eq!(unshared.status, StatusCode::NOT_FOUND);
+    // APP-169: saving a kind on a work she holds no grant on is the same
+    // uniform 404 as a work that does not exist.
+    let ungranted = maya
+        .post(&routes, &kind_path(SPEND_APP, &spend.work), CARD)
+        .await;
+    let missing = maya
+        .post(&routes, &kind_path(APP, UNKNOWN_WORK), CARD)
+        .await;
+    for reply in [&ungranted, &missing] {
+        assert_eq!(reply.status, StatusCode::NOT_FOUND, "{}", reply.body);
+        assert_eq!(reply.body, NOT_FOUND_BODY);
+    }
     let total = maya
         .post(
             &routes,
@@ -506,7 +537,7 @@ async fn campaign() {
         "record collections stay visible with record_read"
     );
     assert!(writer.can_write, "record_write is granted");
-    let (reader_subject, _) = c.member("0000000013c3").await;
+    let (reader_subject, mut reader_browser) = c.member("0000000013c3").await;
     let reader_id = c.principal(&reader_subject).await;
     for permission in ["discover", "run"] {
         grant(&c.fixture, &reader_id, permission, &["--app", SPEND_APP]);
@@ -604,6 +635,189 @@ async fn campaign() {
     check(
         &mut checks,
         &format!("canvas isolation: the canary member's canvas shows none of Northstar's works; {denials} requests (the canary member on both Northstar groups and on the canvas view's query route; anonymous and forged sessions on /canvas and both groups) get the uniform 404, and the dispatch counter did not move"),
+    );
+
+    // --- APP-169: the member's saved Card or App kind ---
+    let page = maya.get(&routes, "/canvas").await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(page.body.contains("data-artifact-kinds=\"true\""));
+    assert!(
+        !page.body.contains("data-artifact-kind=\""),
+        "nothing saved yet: no row carries a kind"
+    );
+    let northstar = kind_path(APP, CANVAS_WORK);
+    let spend_kind = kind_path(SPEND_APP, &spend.work);
+    // `app` before any row exists is stored (an upsert), then `card` replaces it.
+    for (body, kind) in [(APP_KIND, "app"), (CARD, "card")] {
+        let saved = maya.post(&routes, &northstar, body).await;
+        assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+        assert_eq!(saved.body, format!("{{\"kind\":\"{kind}\"}}"));
+        let page = maya.get(&routes, "/canvas").await;
+        assert!(
+            library_row(&page.body, CANVAS_WORK)
+                .contains(&format!("data-artifact-kind=\"{kind}\"")),
+            "{kind}"
+        );
+    }
+    // D7.8 (APP-169 review): each change of kind is one `work.kind_set` workspace
+    // event in the same transaction; the same choice again writes nothing.
+    let kind_events = || {
+        c.fixture.sql(
+            &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='workspace' AND kind='work.kind_set' AND app_id='{APP}' AND work_id='{CANVAS_WORK}'"),
+            "genui",
+        )
+    };
+    assert_eq!(kind_events().trim(), "2", "app then card");
+    let again = maya.post(&routes, &northstar, CARD).await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.body);
+    assert_eq!(
+        kind_events().trim(),
+        "2",
+        "the same kind again is not audited"
+    );
+    // `if_absent` (the canvas's first-load upload) never replaces a saved
+    // choice: it answers with the kind already saved and writes nothing.
+    let kept = maya
+        .post(&routes, &northstar, r#"{"kind":"app","if_absent":true}"#)
+        .await;
+    assert_eq!(kept.status, StatusCode::OK, "{}", kept.body);
+    assert_eq!(kept.body, r#"{"kind":"card"}"#);
+    assert_eq!(kind_events().trim(), "2", "if_absent over a saved choice");
+    // Where nothing is saved, `if_absent` stores the kind and audits it once.
+    let saved = maya
+        .post(&routes, &spend_kind, r#"{"kind":"card","if_absent":true}"#)
+        .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    assert_eq!(saved.body, r#"{"kind":"card"}"#);
+    assert_eq!(
+        c.fixture
+            .sql(
+                &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND kind='work.kind_set' AND work_id='{}'", spend.work),
+                "genui",
+            )
+            .trim(),
+        "1"
+    );
+    // D7.8: `verify` recomputes the workspace chain, work.kind_set events included.
+    assert_eq!(
+        operator(&c.fixture, &["verify", "--organization", ORG])["verified"],
+        true
+    );
+    // A closed body naming card or app; anything else is 422 and stores nothing.
+    for body in [
+        r#"{"kind":"stack"}"#,
+        r#"{"kind":"card","app_id":"x"}"#,
+        r#"{"kind":"card","if_absent":false}"#,
+        r#"{"kind":"card","if_absent":"true"}"#,
+        r#"{}"#,
+        "kind=card",
+    ] {
+        let refused = maya.post(&routes, &northstar, body).await;
+        assert_eq!(refused.status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert!(refused.body.contains("invalid_kind"), "{}", refused.body);
+    }
+    // Cross-site with her live session is 403 before anything else.
+    let cross = maya
+        .send(
+            &routes,
+            "POST",
+            &northstar,
+            APP_KIND,
+            &[("sec-fetch-site", "cross-site")],
+        )
+        .await;
+    assert_eq!(cross.status, StatusCode::FORBIDDEN);
+    // Anonymous and forged sessions are the uniform 404.
+    for cookies in [
+        String::new(),
+        "__Host-genui_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            .to_owned(),
+    ] {
+        let reply = send_raw(
+            routes.clone(),
+            raw_request("POST", &northstar, &cookies, APP_KIND.as_bytes().to_vec()),
+        )
+        .await;
+        assert!(raw_404(&reply));
+    }
+    // Another organization's member: the uniform 404, and her own canvas
+    // and kinds show nothing of Maya's.
+    for path in [&northstar, &spend_kind] {
+        let foreign = canary.post(&routes, path, APP_KIND).await;
+        assert_eq!(foreign.status, StatusCode::NOT_FOUND, "{path}");
+        assert_eq!(foreign.body, NOT_FOUND_BODY);
+    }
+    // A teammate who opens Spend Review sees no kind on it: the row is Maya's.
+    let teammate = reader_browser.get(&routes, "/canvas").await;
+    assert_eq!(teammate.status, StatusCode::OK);
+    assert!(!library_row(&teammate.body, &spend.work).contains("data-artifact-kind"));
+    // Storage: her rows only; the teammate and the canary read none and
+    // cannot write where they hold no grant.
+    let kinds = stores
+        .workspace
+        .artifact_kinds(&maya_storage)
+        .await
+        .unwrap();
+    assert_eq!(
+        kinds,
+        std::collections::BTreeMap::from([
+            ((APP.to_owned(), CANVAS_WORK.to_owned()), "card"),
+            ((SPEND_APP.to_owned(), spend.work.clone()), "card"),
+        ])
+    );
+    for other in [&reader, &stranger] {
+        assert!(stores
+            .workspace
+            .artifact_kinds(other)
+            .await
+            .unwrap()
+            .is_empty());
+        for if_absent in [false, true] {
+            assert_eq!(
+                stores
+                    .workspace
+                    .set_artifact_kind(other, APP, CANVAS_WORK, "card", if_absent)
+                    .await,
+                Err(Error::Denied)
+            );
+        }
+    }
+    assert_eq!(
+        stores
+            .workspace
+            .set_artifact_kind(&maya_storage, APP, CANVAS_WORK, "stack", false)
+            .await,
+        Err(Error::Denied),
+        "storage refuses a kind outside card and app"
+    );
+    // The member write window: an exhausted window is 429 and stores nothing.
+    while auth.limits.admit_member_write(ORG, &member).is_ok() {}
+    let limited = maya.post(&routes, &northstar, APP_KIND).await;
+    assert_eq!(limited.status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(limited
+        .headers
+        .contains_key(axum::http::header::RETRY_AFTER));
+    auth.limits.clear();
+    let page = maya.get(&routes, "/canvas").await;
+    assert!(library_row(&page.body, CANVAS_WORK).contains("data-artifact-kind=\"card\""));
+    // A revoked grant hides the saved card: the work is not listed, so its
+    // kind is not rendered, and a write is the uniform 404.
+    crate::storage::definition_qualification::revoke(
+        &c.fixture,
+        &member,
+        "record_read",
+        &["--app", SPEND_APP, "--work", &spend.work],
+    );
+    let revoked = maya.get(&routes, "/canvas").await;
+    assert_eq!(revoked.status, StatusCode::OK);
+    assert!(!revoked.body.contains(&spend.work));
+    assert!(library_row(&revoked.body, CANVAS_WORK).contains("data-artifact-kind=\"card\""));
+    let refused = maya.post(&routes, &spend_kind, APP_KIND).await;
+    assert_eq!(refused.status, StatusCode::NOT_FOUND);
+    assert_eq!(refused.body, NOT_FOUND_BODY);
+    check(
+        &mut checks,
+        "artifact kind (APP-169): with no grant on a work, saving its kind is the same uniform 404 as a missing work; the canvas says the kinds were read and a work with nothing saved carries no kind; an app before any row is stored and a card replaces it, each rendered on the next load and each one work.kind_set workspace event, while the same kind again writes none; an if_absent write over a saved choice answers with that choice and writes nothing, and where nothing is saved stores the kind with one event; operator verify recomputes the workspace chain with these events; a body other than card or app is 422 invalid_kind; cross-site is 403; anonymous, forged and another organization's member get the uniform 404; a teammate on the same work sees no kind; storage returns only her rows and refuses the teammate, the canary and an unknown kind; an exhausted member write window is 429; once record_read is revoked the saved card is not rendered and the write is the uniform 404",
     );
 
     let report = json!({
