@@ -53,3 +53,20 @@ Checks on `188c426`:
 - `just campaign canvas`: passed, including the `artifact kind (APP-169)` check. `just campaign query`: passed, and its store-outage check now includes `POST /v1/library/{app}/{work}/kind` (503).
 
 Limit: a failing kinds read is covered by unit and SSR tests only. The campaign could not hold the table without also blocking new pooled connections' catalog check, and a privilege change trips the pinned catalog.
+
+## Renumbered to 0022 and stacked on APP-084 (2026-11-05/06, Claude)
+
+Both PR #83 and this PR claimed migration 21. APP-084 keeps 0021; this branch merges its review-fix branch (final head `a033d6b`) and moves the table to `0022_work_artifact_kinds.sql`, with every pin at 22. Two review findings land in the migration:
+
+- **Audit (finding 3):** each change of kind writes one `work.kind_set` workspace-chain event in the same transaction; 0022 adds the kind to `workspace_chain` (0017's 22 kinds kept). The upsert returns a row only on a real change, so the same kind again writes nothing.
+- **RLS (minor):** `tenant_scope` binds the organization and a RESTRICTIVE `work_artifact_kinds_principal` binds `genui_workspace` to the scoped principal, the 0014/0015 pattern.
+
+`catalog-v22.json` was regenerated from the SQL in a fresh PostgreSQL ([receipt](catalog-generation-2026-11-05.json)); v1–v21 are byte-identical to the committed files, and v22 adds only the table, its two policies, its grants, the widened `workspace_chain` and the version checks.
+
+Checks on merge `5f918f6` (re-checked after merging `a033d6b`):
+
+- `qualify_tenant_schema.py`: passed, 395 checks, including both 0021 upgrade checks and the artifact-kind policy check ([report](schema-campaign-review-fixes-2026-11-05.json)).
+- `just campaign canvas`: passed, including two `work.kind_set` events for app then card and none on a repeat ([report](canvas-campaign-review-fixes-2026-11-05.json)). `just campaign query`: passed ([report](query-campaign-review-fixes-2026-11-05.json)).
+- Python runtime 206 tests, `app/qualification` 16, Rust library 405 and binary 8, admin tests, fmt and clippy `-D warnings`: passed. After merging `a033d6b`, the 36 admission-operator tests passed again.
+
+Acceptance (b) and (c) were not implemented by this PR and moved to APP-176.
