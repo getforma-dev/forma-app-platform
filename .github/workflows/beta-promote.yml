@@ -181,7 +181,9 @@ jobs:
     name: Promote to beta
     needs: [qualify, prepare]
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The runner step carries its own 55-minute budget (ops/promotion/runner.py);
+    # the rest covers checkout, artifact checks, venv, CI recheck and OIDC.
+    timeout-minutes: 75
     environment:
       name: beta
       url: https://beta.getforma.dev

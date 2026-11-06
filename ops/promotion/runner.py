@@ -54,19 +54,28 @@ def public_probes(origin='https://beta.getforma.dev'):
 
 SEQUENCE = ['stop both services', 'execute reviewed change set', 'verify stopped boundaries', 'activate both services', 'verify health and images']
 SCHEMA_SEQUENCE = ['snapshot database'] + SEQUENCE[:3] + ['run reviewed migration'] + SEQUENCE[3:]
-# Execute time budget (APP-175). The execute job has 60 minutes, which also
-# cover checkout, artifact download and install before this step, and its role
-# session lasts 3600 s from just before it. The per-wait bounds alone already
-# exceed that: stop settle 900 + stack update 1200 + settle 900 + activation
-# settle 900 + health 900 = 4800 s, and a schema release adds its snapshot
-# (720 s) and migration (720 s). So execute carries one 55-minute budget and
-# clips every wait to what remains; once it is spent the run refuses with the
-# lease held instead of being killed mid-call by the job or an expired session.
-# Each AWS wait can overrun its bound by one 10 s poll and one call. No outage
-# starts with less than OUTAGE_RESERVE_SECONDS left: at least the migration
-# bound plus the observed ~4-minute normal execute, with margin. The worst case
-# before the outage is the snapshot bound plus the rechecks, which leaves
-# 3300 - 720 = 2580 s > 1800 s.
+# Execute time budget (APP-175). It bounds this runner step, from the start of
+# execute() through the health wait. The job's other steps (checkout, artifact
+# checks, venv, CI recheck, OIDC) run first under its 75-minute timeout; the
+# role session lasts 3600 s from just before this step. The per-wait bounds
+# alone exceed the session: stop settle 900 + stack update 1200 + settle 900 +
+# activation settle 900 + health 900 = 4800 s, and a schema release adds its
+# snapshot (720 s) and migration (720 s). So execute carries one 55-minute
+# budget and clips every wait to what remains; once it is spent the run refuses
+# with the lease held instead of being killed mid-call. Each AWS wait can
+# overrun its bound by one 10 s poll and one call. Outside the budget, after
+# the health wait: one boundary read (about 17 AWS calls), six public probes and two
+# S3 writes. Each is short in practice; their bounds are 65 s per AWS call
+# (5 s connect, 60 s read, no retry) and 15 s per probe, about 22 minutes if
+# every call hung, so such a hang would end with the services activated and
+# the lease held for reconciliation. No outage starts with less than
+# OUTAGE_RESERVE_SECONDS left. That covers the typical outage (the last normal
+# execute took about 4 minutes) plus the migration bound, not the worst case:
+# a slow but successful stack update can leave too little time to observe the
+# migration, which then never starts (tested). Beta stays down with the database
+# at its prior version, and `maintenance restore-after-failed-migration` brings
+# the previous release back. Before the outage the worst case is the snapshot
+# bound, which leaves 3300 - 720 = 2580 s > 1800 s.
 EXECUTE_BUDGET_SECONDS = 55 * 60
 OUTAGE_RESERVE_SECONDS = 30 * 60
 STACK_UPDATE_WAIT_SECONDS = 1200
@@ -103,10 +112,12 @@ class Runner:
     def stack(self):
         return self.read('cloudformation', 'describe_stacks', StackName=self.store.document['authority']['stack_id'])['Stacks'][0]
 
-    def boundary(self, count, expected_parameters=None, after=False, require_settled=True):
+    def boundary(self, count, expected_parameters=None, after=False, require_settled=True, registry_override=None):
         # A reviewed schema can make the predecessor image unable to serve.
         # Identity and desired count still have to match. Health is required
-        # after activation, when require_settled stays at its default.
+        # after activation, when require_settled stays at its default. A
+        # restore (APP-175) runs the previous images under the promotion role,
+        # so it names the registry those images come from.
         state = self.store.document; stack = self.stack(); outputs = guards.outputs(stack)
         expected = expected_parameters or state['live']['parameters']
         require(guards.parameters(stack) == expected, 'live stack parameters drifted')
@@ -155,7 +166,7 @@ class Runner:
                 require(task['lastStatus'] == 'RUNNING' and task['taskDefinitionArn'] == service['taskDefinition']
                         and len(task['containers']) == 1, 'running task boundary differs')
                 image_role = 'operator' if broker else 'service'
-                registry = state['active']['packet']['registry'] if after else state['live']['registry']
+                registry = registry_override or (state['active']['packet']['registry'] if after else state['live']['registry'])
                 image = registry[image_role]
                 container = task['containers'][0]
                 require(container['image'] == expected[guards.IMAGE_KEYS[image_role]]
@@ -173,19 +184,19 @@ class Runner:
             guards.schedule(previous, schedule, expected['DeploymentExpiresAtUtc']); schedules[key] = schedule
         return {'stack': stack, 'outputs': outputs, 'definitions': definitions, 'services': services, 'schedules': schedules, 'health': health, 'running_tasks': running_tasks}
 
-    def reviewed_release(self, source):
+    def reviewed_release(self, source, candidate):
         """None for an unchanged schema and contract; otherwise the one reviewed release, or Refused."""
         state = self.store.document
         if all(source[key] == state['baseline'][key] for key in schema_release.DIGESTS):
             return None
         return schema_release.applicable(source, state['baseline'], state['policy']['schema_version'],
-                                         self.repo if self.repo is not None else Path.cwd(), self.clock())
+                                         self.repo if self.repo is not None else Path.cwd(), self.clock(), candidate)
 
     def bundle(self, directory, request):
         from .artifacts import validate_bundle
         require(hashlib.sha256((directory / 'manifest.json').read_bytes()).hexdigest() == request['qualified_artifact_manifest_sha256'], 'artifact manifest bytes differ')
         bundle = validate_bundle(directory, request['candidate_sha'])
-        return bundle, self.reviewed_release(bundle['source'])
+        return bundle, self.reviewed_release(bundle['source'], request['candidate_sha'])
 
     def same_release(self, release, packet, promotion):
         expected = packet.get('schema_release')
@@ -275,9 +286,9 @@ class Runner:
         snapshot therefore leaves beta running: the workflow fails before the
         outage, nothing retries, and `maintenance abandon` may release the
         prepared release after its fence, keeping the snapshot. An unknown
-        CreateDBSnapshot outcome stays an unresolved intent for reconciliation.
-        Writes between the snapshot and the stop are not in it; the instance's
-        automated backups cover that interval.
+        CreateDBSnapshot outcome stays an intent, which abandonment reads back.
+        Writes continue after the snapshot until the tasks drain after the stop
+        call; the instance's automated backups cover that interval.
         """
         release = packet['schema_release']
         identifier = release['snapshot_identifier']
@@ -368,7 +379,7 @@ class Runner:
         require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
             self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
             'scan disposition expired during final execution checks')
-        require(self.same_release(self.reviewed_release(packet['bundle']['source']), packet, promotion),
+        require(self.same_release(self.reviewed_release(packet['bundle']['source'], request['candidate_sha']), packet, promotion),
             'schema release expired or changed during final execution checks')
         return before
 

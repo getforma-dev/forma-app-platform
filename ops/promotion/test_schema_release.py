@@ -22,6 +22,7 @@ from ops.promotion.maintenance import abandon
 from ops.promotion.runner import Runner, SCHEMA_SEQUENCE, SEQUENCE
 from ops.promotion.state import Refused, Store, digest, encoded
 from ops.promotion.test_artifacts import bundle
+from ops.promotion.test_candidate import SHA
 from ops.promotion.test_github import approval, run as workflow_run
 from ops.promotion.test_runner import NOW, FakeAWS, fixture
 from ops.promotion.test_state import MemoryS3
@@ -48,13 +49,20 @@ def spec(candidate=CANDIDATE, contract=CONTRACT, infra=INFRA):
 
 
 class SpecFile:
-    """Point schema_release at a temporary file; None removes it."""
+    """Point schema_release at a temporary file (None removes it) and pin the
+    source constant to a synthetic reviewed release, `spec()` by default."""
 
-    def __init__(self, test, value):
+    def __init__(self, test, value, pinned=None):
         directory = tempfile.TemporaryDirectory(); test.addCleanup(directory.cleanup)
         self.path = Path(directory.name) / 'schema-release.json'
         self.write(value)
-        patcher = patch.object(schema_release, 'SPEC', self.path); patcher.start(); test.addCleanup(patcher.stop)
+        for name, replacement in [('SPEC', self.path), ('REVIEWED_SCHEMA_RELEASE', {})]:
+            patcher = patch.object(schema_release, name, replacement); patcher.start(); test.addCleanup(patcher.stop)
+        self.pin(pinned or spec())
+
+    def pin(self, value):
+        schema_release.REVIEWED_SCHEMA_RELEASE.clear()
+        schema_release.REVIEWED_SCHEMA_RELEASE.update({k: copy.deepcopy(v) for k, v in value.items() if k != 'schema_version'})
 
     def write(self, value):
         if value is None:
@@ -118,6 +126,12 @@ class SpecFileTests(unittest.TestCase):
             # A release whose two ends share a digest cannot apply to any change.
             lambda v: v['to'].update(schema_manifest_sha256=v['from']['schema_manifest_sha256']),
             lambda v: v['to'].update(deployment_contract_sha256=v['from']['deployment_contract_sha256']),
+            # Well-formed, but retargeted away from the digests pinned in source.
+            lambda v: v['from'].update(schema_manifest_sha256='1' * 64),
+            lambda v: v['from'].update(deployment_contract_sha256='1' * 64),
+            lambda v: v['to'].update(schema_manifest_sha256='1' * 64),
+            lambda v: v['to'].update(deployment_contract_sha256='1' * 64),
+            lambda v: v.update(infrastructure_sha256='1' * 64),
         ]
         for mutate in mutations:
             with self.subTest(mutate=mutate):
@@ -143,24 +157,31 @@ class CommittedReleaseTests(unittest.TestCase):
         baseline = {k: value['from'][k] for k in schema_release.DIGESTS}
         source = {k: value['to'][k] for k in schema_release.DIGESTS}
         clock = datetime(2026, 11, 6, tzinfo=timezone.utc)
-        self.assertEqual(schema_release.applicable(source, baseline, 20, ROOT, clock),
+        head = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+        self.assertEqual(schema_release.applicable(source, baseline, 20, ROOT, clock, head),
                          {'from_version': 20, 'to_version': 22, 'spec_sha256': sha})
-        for policy, moment in [(21, clock), (20, schema_release.expiry(value))]:
-            with self.assertRaises(Refused): schema_release.applicable(source, baseline, policy, ROOT, moment)
+        for policy, moment, candidate in [(21, clock, head), (20, schema_release.expiry(value), head), (20, clock, 'f' * 40)]:
+            with self.assertRaises(Refused): schema_release.applicable(source, baseline, policy, ROOT, moment, candidate)
+
+    def test_committed_release_equals_the_source_pin(self):
+        value, _ = schema_release.load()
+        self.assertEqual({k: v for k, v in value.items() if k != 'schema_version'}, schema_release.REVIEWED_SCHEMA_RELEASE)
 
 
 class ApplicabilityTests(unittest.TestCase):
     def setUp(self):
         self.file = SpecFile(self, spec())
         self.candidate = CANDIDATE; self.infra = INFRA
-        for name, value in [('candidate_manifest', lambda repo: self.candidate), ('infrastructure_digest', lambda repo: self.infra)]:
+        self.head = SHA
+        for name, value in [('candidate_manifest', lambda repo: self.candidate), ('infrastructure_digest', lambda repo: self.infra),
+                            ('checkout_head', lambda repo: self.head)]:
             patcher = patch.object(schema_release, name, value); patcher.start(); self.addCleanup(patcher.stop)
         self.source = {'schema_manifest_sha256': hashlib.sha256(CANDIDATE).hexdigest(), 'deployment_contract_sha256': CONTRACT}
         self.baseline = {k: FROM[k] for k in schema_release.DIGESTS}
-        self.clock = NOW; self.policy = 20
+        self.clock = NOW; self.policy = 20; self.sha = SHA
 
     def check(self):
-        return schema_release.applicable(self.source, self.baseline, self.policy, ROOT, self.clock)
+        return schema_release.applicable(self.source, self.baseline, self.policy, ROOT, self.clock, self.sha)
 
     def test_exact_release_applies(self):
         result = self.check()
@@ -182,6 +203,11 @@ class ApplicabilityTests(unittest.TestCase):
             ('policy text', lambda: setattr(self, 'policy', '20')),
             ('candidate bytes', lambda: setattr(self, 'candidate', CANDIDATE + b' ')),
         ]
+        for name, mutate in [('another checkout', lambda: setattr(self, 'head', 'b' * 40)), ('short candidate', lambda: setattr(self, 'sha', SHA[:7])),
+                             ('no candidate', lambda: setattr(self, 'sha', None))]:
+            with self.subTest(name=name):
+                self.setUp(); mutate()
+                with self.assertRaisesRegex(Refused, 'checkout differs from the candidate'): self.check()
         for name, mutate in cases:
             with self.subTest(name=name):
                 self.setUp(); mutate()
@@ -192,11 +218,12 @@ class ApplicabilityTests(unittest.TestCase):
             with self.subTest(version=version):
                 self.setUp()
                 self.candidate = encoded({'schema_version': 1, 'database_version': version})
-                self.file.write(spec(candidate=self.candidate))
+                self.file.write(spec(candidate=self.candidate)); self.file.pin(spec(candidate=self.candidate))
                 self.source['schema_manifest_sha256'] = hashlib.sha256(self.candidate).hexdigest()
                 with self.assertRaises(Refused): self.check()
         self.setUp(); self.candidate = b'{"database_version": 22, "database_version": 22}'
-        self.file.write(spec(candidate=self.candidate)); self.source['schema_manifest_sha256'] = hashlib.sha256(self.candidate).hexdigest()
+        self.file.write(spec(candidate=self.candidate)); self.file.pin(spec(candidate=self.candidate))
+        self.source['schema_manifest_sha256'] = hashlib.sha256(self.candidate).hexdigest()
         with self.assertRaises(Refused): self.check()
 
     def test_identifiers_and_requests_are_closed(self):
@@ -228,6 +255,12 @@ class ApplicabilityTests(unittest.TestCase):
                 schema_release.migration_request(dict(outputs, **{key: bad}), PREPARED_ID)
 
 
+class AWSError(Exception):
+    """A botocore-shaped client error."""
+    def __init__(self, code):
+        super().__init__(code); self.response = {'Error': {'Code': code}}
+
+
 class SchemaAWS(FakeAWS):
     """FakeAWS plus RDS snapshots and the one migration task."""
 
@@ -235,7 +268,7 @@ class SchemaAWS(FakeAWS):
         super().__init__(*args)
         self.snapshots = {}; self.snapshot_status = 'available'; self.run_failures = []; self.migrated = False
         self.migration = {'exitCode': 0, 'stopCode': 'EssentialContainerExited', 'lastStatus': 'STOPPED'}
-        self.waits = []; self.time = None; self.durations = []
+        self.waits = []; self.time = None; self.durations = []; self.readback_error = None; self.restoring = False
 
     def wait(self, service, operation, predicate, **args):
         timeout = args.pop('timeout', None)
@@ -270,6 +303,8 @@ class SchemaAWS(FakeAWS):
             self.snapshots[a['DBSnapshotIdentifier']] = snapshot
             return {'DBSnapshot': dict(snapshot)}
         if s == 'rds' and o == 'describe_db_snapshots':
+            if self.readback_error: raise AWSError(self.readback_error)
+            if a['DBSnapshotIdentifier'] not in self.snapshots: raise AWSError('DBSnapshotNotFound')
             snapshot = self.snapshots[a['DBSnapshotIdentifier']]; snapshot['Status'] = self.snapshot_status
             return {'DBSnapshots': [dict(snapshot)]}
         if s == 'ecs' and o == 'run_task':
@@ -280,6 +315,19 @@ class SchemaAWS(FakeAWS):
             return {'tasks': [] if self.run_failures else [self.migration_task('PROVISIONING')], 'failures': self.run_failures}
         if s == 'ecs' and o == 'describe_tasks' and a['tasks'] == [MIGRATION_TASK]:
             return {'tasks': [self.migration_task(self.migration['lastStatus'])], 'failures': []}
+        if s == 'ecs' and o == 'update_service' and a['desiredCount'] == 1 and self.restoring:
+            # The operator restore activates the previous release under its own phase.
+            assert self.persisted()['active']['phase'] == 'restore-activation-intended'
+            assert self.state['live']['parameters'] == self.original['live']['parameters']
+            self.counts[a['service']] = 1
+            return {'service': next(x for x in self.services() if x['serviceName'] == a['service'])}
+        if s == 'ecs' and o == 'describe_tasks' and a['tasks'] != [MIGRATION_TASK] and self.restoring:
+            value = super()._call(s, o, a)
+            if self.state['live']['parameters'] == self.original['live']['parameters']:
+                for task in value['tasks']:
+                    role = 'service' if task['taskDefinitionArn'] == self.state['live']['outputs']['TaskDefinition'] else 'operator'
+                    task['containers'][0]['imageDigest'] = self.state['live']['registry'][role]['index_digest']
+            return value
         if s == 'ecs' and o == 'update_service' and a['desiredCount'] == 1:
             assert self.migrated or not self.snapshots, 'activation before the migration'
         if s == 'ecs' and o == 'update_service' and a['desiredCount'] == 0:
@@ -345,11 +393,12 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.request = dict(candidate_sha=self.manifest['candidate_sha'],
             qualified_artifact_manifest_sha256=hashlib.sha256((self.directory / 'manifest.json').read_bytes()).hexdigest(),
             authorization=dict(actor='fixture', run_id='42', run_attempt='1', repository=guards.REPOSITORY, workflow_ref=guards.WORKFLOW))
-        self.file = SpecFile(self, spec(candidate=candidate) if spec_value == 'default' else spec_value)
+        self.file = SpecFile(self, spec(candidate=candidate) if spec_value == 'default' else spec_value, pinned=spec(candidate=candidate))
         self.candidate = candidate; self.infra = INFRA
         patchers = [patch('ops.promotion.candidate.check_current'),
                     patch.object(schema_release, 'candidate_manifest', lambda repo: self.candidate),
-                    patch.object(schema_release, 'infrastructure_digest', lambda repo: self.infra)]
+                    patch.object(schema_release, 'infrastructure_digest', lambda repo: self.infra),
+                    patch.object(schema_release, 'checkout_head', lambda repo: self.request['candidate_sha'])]
         self.current_mock = patchers[0].start()
         for patcher in patchers[1:]: patcher.start()
         for patcher in patchers: self.addCleanup(patcher.stop)
@@ -410,7 +459,7 @@ class SchemaLifecycleTests(unittest.TestCase):
             self.assertIn('beta/promotions/' + promotion + '/' + name, self.s3.objects)
         self.assertEqual(self.receipt(promotion, 'schema-migrate.json')['request']['arguments'], run)
         # The admitted baseline now treats this candidate as an ordinary promotion.
-        self.assertIsNone(self.runner.reviewed_release(self.manifest['source']))
+        self.assertIsNone(self.runner.reviewed_release(self.manifest['source'], self.request['candidate_sha']))
         self.assertEqual(self.receipt(promotion, 'schema-migration-observed.json')['tasks'][0]['containers'][0]['exitCode'], 0)
 
     def test_scope_mismatch_refuses_before_the_lock(self):
@@ -419,8 +468,9 @@ class SchemaLifecycleTests(unittest.TestCase):
             ('widened expiry', lambda: self.file.write(dict(spec(), expires_at_utc='2099-01-01T00:00:00Z'))),
             ('duplicate key', lambda: self.file.write(json.dumps(spec()).replace('{', '{"schema_version": 1, ', 1))),
             ('bad type', lambda: self.file.write(dict(spec(), to=dict(spec()['to'], database_version='22')))),
-            ('from differs from baseline', lambda: self.file.write(dict(spec(), **{'from': dict(FROM, deployment_contract_sha256='0' * 64)}))),
-            ('to differs from candidate', lambda: self.file.write(dict(spec(), to=dict(spec()['to'], deployment_contract_sha256='0' * 64)))),
+            ('retargeted JSON', lambda: self.file.write(dict(spec(), to=dict(spec()['to'], deployment_contract_sha256='0' * 64)))),
+            ('baseline differs', lambda: (self.initial['baseline'].update(deployment_contract_sha256='0' * 64), self.s3.objects.update({'beta/state.json': encoded(self.initial)}))),
+            ('another checkout', lambda: self.enterContext(patch.object(schema_release, 'checkout_head', lambda repo: 'b' * 40))),
             ('infrastructure', lambda: setattr(self, 'infra', '5' * 64)),
             ('expired', lambda: setattr(self.runner, 'clock', lambda: datetime(2026, 11, 20, tzinfo=timezone.utc))),
             ('policy version', lambda: (self.initial['policy'].update(schema_version=19), self.s3.objects.update({'beta/state.json': encoded(self.initial)}))),
@@ -486,8 +536,11 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.assertFalse(any(s == 'rds' for s, _, _ in self.aws.calls[before:]))
         self.assertEqual(list(self.aws.snapshots), [identifier])
         promotion = result['promotion_id']
-        self.assertEqual(self.receipt(promotion, 'abandon-fence.json')['retained_schema_snapshot'], identifier)
-        self.assertEqual(self.receipt(promotion, 'abandoned.json')['retained_schema_snapshot'], identifier)
+        retained = {'snapshot_identifier': identifier, 'journal_status': 'confirmed', 'readback': None,
+                    'request': {'service': 'rds', 'operation': 'create_db_snapshot',
+                                'arguments': {'DBInstanceIdentifier': INSTANCE, 'DBSnapshotIdentifier': identifier}}}
+        self.assertEqual(self.receipt(promotion, 'abandon-fence.json')['retained_schema_snapshot'], retained)
+        self.assertEqual(self.receipt(promotion, 'abandoned.json')['retained_schema_snapshot'], retained)
 
     def test_release_changed_before_approval_is_refused_even_if_restored_later(self):
         self.prepared(); original = self.file.path.read_text()
@@ -545,10 +598,12 @@ class SchemaLifecycleTests(unittest.TestCase):
                     self.aws.snapshot_status = status
                 with self.assertRaises(Refused): self.run_execute()
                 if status == 'denied':
-                    # A raised call is an unknown outcome: an intent that blocks resume and abandonment alike.
+                    # A raised call is an unknown outcome. Abandonment reads the name back.
                     self.assert_serving_and_prepared([('schema-snapshot', 'intent')])
-                    with self.assertRaises(Refused): self.abandon()
-                    self.assertIsNotNone(self.store.load()['active'])
+                    result = self.abandon(); retained = self.receipt(result['promotion_id'], 'abandoned.json')['retained_schema_snapshot']
+                    self.assertEqual((retained['journal_status'], retained['readback']['present'], retained['readback']['error_code']),
+                                     ('intent', False, 'DBSnapshotNotFound'))
+                    self.assertIsNone(self.store.load()['active'])
                     continue
                 self.assert_serving_and_prepared([('schema-snapshot', 'confirmed')])
                 calls = len(self.aws.calls)
@@ -571,6 +626,13 @@ class SchemaLifecycleTests(unittest.TestCase):
                 calls = len(self.aws.calls)
                 with self.assertRaises(Refused): self.run_execute()
                 self.assertEqual(len(self.aws.calls), calls)
+                if fault == 'create_db_snapshot':
+                    # The snapshot was created although its response was lost: read back as present.
+                    result = self.abandon(); retained = self.receipt(result['promotion_id'], 'abandoned.json')['retained_schema_snapshot']
+                    self.assertEqual((retained['readback']['present'], retained['readback']['status']), (True, 'available'))
+                    self.assertEqual(self.receipt(result['promotion_id'], 'schema-snapshot-readback.json')['readback'], retained['readback'])
+                    rds = [o for s, o, _ in self.aws.calls[calls:] if s == 'rds']
+                    self.assertEqual(rds, ['describe_db_snapshots'])
 
     def test_wrong_database_endpoint_or_migration_image_refuses_before_activation(self):
         self.build(); self.initial['live']['outputs']['DatabaseEndpoint'] = 'db.c0.us-west-2.rds.amazonaws.com'

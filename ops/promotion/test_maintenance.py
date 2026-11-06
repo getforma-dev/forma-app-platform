@@ -119,11 +119,13 @@ class SchemaSnapshotAbandonTests(unittest.TestCase):
         self.assertFalse(any(s == 'rds' for s, _, _ in self.aws.calls[self.offset:]))
         self.assertIn(identifier, self.aws.snapshots)
         fence = json.loads(self.fixture.s3.objects['beta/promotions/' + result['promotion_id'] + '/abandon-fence.json'])
-        self.assertEqual(fence['retained_schema_snapshot'], identifier)
+        self.assertEqual(fence['retained_schema_snapshot']['snapshot_identifier'], identifier)
+        self.assertEqual(fence['retained_schema_snapshot']['journal_status'], 'confirmed')
     def test_unknown_duplicate_foreign_or_unbound_snapshot_refuses(self):
         def entry(d): return next(x for x in d['active']['journal'] if x['name'] == 'schema-snapshot')
         cases = [
-            ('intent', lambda d: entry(d).update(status='intent')),
+            ('intent with a receipt', lambda d: entry(d).update(status='intent')),
+            ('stop journaled', lambda d: d['active']['journal'].append({'name': 'stop-main', 'status': 'confirmed'})),
             ('duplicate', lambda d: d['active']['journal'].append(copy.deepcopy(entry(d)))),
             ('other instance', lambda d: self.rebind(entry(d), DBInstanceIdentifier='other-db')),
             ('other snapshot', lambda d: self.rebind(entry(d), DBSnapshotIdentifier='forma-schema-release-00000000-v22')),
@@ -134,6 +136,62 @@ class SchemaSnapshotAbandonTests(unittest.TestCase):
         for name, update in cases:
             with self.subTest(name=name):
                 self.setUp(); self.tamper(update); self.assert_refused_and_kept()
+    def snapshot_intent(self):
+        self.setUp()
+        def intent(d):
+            e = next(x for x in d['active']['journal'] if x['name'] == 'schema-snapshot')
+            for key in ['receipt', 'receipt_sha256']: e.pop(key)
+            e['status'] = 'intent'
+        self.tamper(intent)
+    def test_snapshot_intent_is_read_back_once_and_kept(self):
+        self.snapshot_intent()
+        result = self.attempt(); identifier = self.active['packet']['schema_release']['snapshot_identifier']
+        retained = json.loads(self.fixture.s3.objects['beta/promotions/' + result['promotion_id'] + '/abandoned.json'])['retained_schema_snapshot']
+        self.assertEqual((retained['journal_status'], retained['readback']['present'], retained['readback']['status']), ('intent', True, 'failed'))
+        self.assertEqual([o for s, o, _ in self.aws.calls[self.offset:] if s == 'rds'], ['describe_db_snapshots'])
+        self.assertIn(identifier, self.aws.snapshots); self.assertIsNone(self.store.load()['active'])
+    def test_a_snapshot_intent_beside_another_unknown_outcome_refuses(self):
+        self.snapshot_intent()
+        self.tamper(lambda d: next(x for x in d['active']['journal'] if x['name'] == 'changeset-create').update(status='intent'))
+        self.assert_refused_and_kept()
+    def test_unavailable_or_ambiguous_readback_keeps_the_lock(self):
+        for error in ['AccessDenied', 'Throttling', 'two rows', 'another name']:
+            with self.subTest(error=error):
+                self.snapshot_intent(); original = self.aws._call
+                if error in ['two rows', 'another name']:
+                    def ambiguous(s, o, a, error=error):
+                        value = original(s, o, a)
+                        if o == 'describe_db_snapshots':
+                            row = value['DBSnapshots'][0]
+                            value['DBSnapshots'] = [row, row] if error == 'two rows' else [dict(row, DBSnapshotIdentifier='other')]
+                        return value
+                    self.aws._call = ambiguous
+                else:
+                    self.aws.readback_error = error
+                with self.assertRaises(Refused): self.attempt()
+                state = self.store.load(); self.assertIsNotNone(state['active'])
+                self.assertEqual(next(x for x in state['active']['journal'] if x['name'] == 'schema-snapshot')['status'], 'intent')
+                self.assertFalse(any(o == 'delete_change_set' for _, o, _ in self.aws.calls[self.offset:]))
+    def test_a_read_back_snapshot_survives_a_retried_abandonment_but_not_a_changed_receipt(self):
+        for tampered in [False, True, 'rebound']:
+            with self.subTest(tampered=tampered):
+                self.snapshot_intent(); self.aws.running_health = None
+                with self.assertRaises(Refused): self.attempt()  # Fails after the readback was recorded.
+                entry = next(x for x in self.store.load()['active']['journal'] if x['name'] == 'schema-snapshot')
+                self.assertEqual(entry['status'], 'read-back'); self.aws.running_health = 'HEALTHY'
+                reads = len([o for s, o, _ in self.aws.calls if s == 'rds'])
+                if tampered:
+                    key = 'beta/' + entry['readback_receipt']
+                    self.fixture.s3.objects[key] = self.fixture.s3.objects[key].replace(b'failed', b'available')
+                    if tampered == 'rebound':  # The hash agrees; only the recorded observation differs.
+                        changed = hashlib.sha256(self.fixture.s3.objects[key]).hexdigest()
+                        self.tamper(lambda d: next(x for x in d['active']['journal'] if x['name'] == 'schema-snapshot').update(readback_receipt_sha256=changed))
+                    with self.assertRaises(Refused): self.attempt()
+                    self.assertIsNotNone(self.store.load()['active'])
+                else:
+                    self.assertEqual(self.attempt()['status'], 'abandoned')
+                # The second attempt reuses the recorded observation and reads nothing again.
+                self.assertEqual(len([o for s, o, _ in self.aws.calls if s == 'rds']), reads)
     def test_changed_snapshot_receipt_refuses(self):
         key = 'beta/' + next(x for x in self.active['journal'] if x['name'] == 'schema-snapshot')['receipt']
         self.fixture.s3.objects[key] = self.fixture.s3.objects[key].replace(b'creating', b'available')

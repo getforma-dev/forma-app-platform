@@ -3,11 +3,11 @@
 Automatic promotion refuses any change to the schema manifest or deployment
 contract. `schema-release.json` admits exactly one such change: from the live
 baseline's digests and policy schema version to the candidate's, with the stack
-source unchanged and before an expiry. Its scope is pinned here, in source, so
-editing the JSON alone cannot widen it: the evidence record, both database
-versions and the expiry. The JSON adds only the digests that bind the review to
-the real baseline and tree; a CI test binds its `to` side and infrastructure
-digest to HEAD. A missing file means no schema release.
+source unchanged and before an expiry. Every value in it is also pinned here, in
+source, so editing the JSON alone can neither widen nor retarget it: the
+evidence record, both ends' versions and digests, the infrastructure digest and
+the expiry. A CI test binds the `to` side and infrastructure digest to HEAD. A
+missing file means no schema release.
 
 Execution takes a manual RDS snapshot while beta still serves, after every
 pre-execution recheck, then stops the services, applies the reviewed change set
@@ -29,12 +29,19 @@ from .guards import ACCOUNT, REGION
 from .state import Refused, no_duplicates, require
 
 SPEC = Path(__file__).with_name('schema-release.json')
-# Changing any of these needs a reviewed source change, not a JSON edit.
+# Changing any of these needs a reviewed source change, not a JSON edit. The
+# JSON must equal it exactly; see evidence/APP-175/SCHEMA-RELEASE.md for how
+# each digest was computed.
 REVIEWED_SCHEMA_RELEASE = {
     'evidence': 'evidence/APP-175/SCHEMA-RELEASE.md',
-    'from_version': 20,
-    'to_version': 22,
     'expires_at_utc': '2026-11-20T00:00:00Z',
+    'from': {'database_version': 20,
+             'schema_manifest_sha256': '08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb',
+             'deployment_contract_sha256': '4a2cea855e962fda7f79a55f2b2754df9a056e4b3bab3fc4e5b4ee1a98fdd2a0'},
+    'to': {'database_version': 22,
+           'schema_manifest_sha256': '7ceb859d1794e79224ed609bfb557c21e79c23020894540b7b5114044ec68176',
+           'deployment_contract_sha256': '14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b'},
+    'infrastructure_sha256': 'e74b620e4d9749b5eb47819a1546be1adc00765008f042abbb0b747d9e549da1',
 }
 FIELDS = frozenset({'schema_version', 'evidence', 'from', 'to', 'infrastructure_sha256', 'expires_at_utc'})
 DIGESTS = ('schema_manifest_sha256', 'deployment_contract_sha256')
@@ -70,9 +77,12 @@ def load():
             and value['evidence'] == reviewed['evidence']
             and value['expires_at_utc'] == reviewed['expires_at_utc']
             and isinstance(value['infrastructure_sha256'], str) and HEX.fullmatch(value['infrastructure_sha256'])
-            and side(value['from'], reviewed['from_version']) and side(value['to'], reviewed['to_version'])
+            and side(value['from'], reviewed['from']['database_version']) and side(value['to'], reviewed['to']['database_version'])
             and all(value['from'][key] != value['to'][key] for key in DIGESTS),
             'invalid schema release')
+    require(value['from'] == reviewed['from'] and value['to'] == reviewed['to']
+            and value['infrastructure_sha256'] == reviewed['infrastructure_sha256'],
+            'schema release differs from the reviewed source')
     return value, hashlib.sha256(raw).hexdigest()
 
 
@@ -80,11 +90,15 @@ def expiry(spec):
     return datetime.fromisoformat(spec['expires_at_utc'].replace('Z', '+00:00'))
 
 
+def checkout_head(repo):
+    return subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+
+
 def candidate_manifest(repo):
     return subprocess.check_output(['git', '-C', str(repo), 'show', 'HEAD:app/migrations/manifest.json'])
 
 
-def applicable(source, baseline, policy_version, repo, clock):
+def applicable(source, baseline, policy_version, repo, clock, candidate):
     """The release for this exact baseline-to-candidate change, or Refused.
 
     Called only when the candidate's schema manifest or deployment contract
@@ -92,6 +106,9 @@ def applicable(source, baseline, policy_version, repo, clock):
     """
     spec, spec_sha = load()
     require(spec is not None, CHANGED)
+    # The tree read below must be the candidate's own checkout.
+    require(isinstance(candidate, str) and re.fullmatch(r'[0-9a-f]{40}', candidate)
+            and checkout_head(repo) == candidate, 'checkout differs from the candidate')
     before, after = spec['from'], spec['to']
     require(all(before[key] == baseline[key] and after[key] == source[key] for key in DIGESTS), CHANGED)
     require(type(policy_version) is int and policy_version == before['database_version'], CHANGED)
