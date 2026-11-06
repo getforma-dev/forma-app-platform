@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import urllib.error
 import urllib.request
 import uuid
-from . import guards
+from . import guards, schema_release
 from .aws import body
 from .registry import publish, guard_scan_delta
 from .state import digest, encoded, now, require
@@ -52,9 +52,14 @@ def public_probes(origin='https://beta.getforma.dev'):
     return result
 
 
+SEQUENCE = ['stop both services', 'execute reviewed change set', 'verify stopped boundaries', 'activate both services', 'verify health and images']
+SCHEMA_SEQUENCE = SEQUENCE[:3] + ['snapshot database', 'run reviewed migration'] + SEQUENCE[3:]
+
+
 class Runner:
-    def __init__(self, aws, store, clock=lambda: datetime.now(timezone.utc), probes=public_probes):
-        self.aws, self.store, self.clock, self.probes = aws, store, clock, probes
+    def __init__(self, aws, store, clock=lambda: datetime.now(timezone.utc), probes=public_probes, repo=None):
+        # repo is the candidate checkout; the workflow runs from its root.
+        self.aws, self.store, self.clock, self.probes, self.repo = aws, store, clock, probes, repo
 
     def read(self, service, operation, /, **arguments):
         return self.aws.call(service, operation, **arguments)
@@ -142,22 +147,35 @@ class Runner:
             guards.schedule(previous, schedule, expected['DeploymentExpiresAtUtc']); schedules[key] = schedule
         return {'stack': stack, 'outputs': outputs, 'definitions': definitions, 'services': services, 'schedules': schedules, 'health': health, 'running_tasks': running_tasks}
 
+    def reviewed_release(self, source):
+        """None for an unchanged schema and contract; otherwise the one reviewed release, or Refused."""
+        state = self.store.document
+        if all(source[key] == state['baseline'][key] for key in schema_release.DIGESTS):
+            return None
+        return schema_release.applicable(source, state['baseline'], state['policy']['schema_version'],
+                                         self.repo if self.repo is not None else Path.cwd(), self.clock())
+
     def bundle(self, directory, request):
         from .artifacts import validate_bundle
         require(hashlib.sha256((directory / 'manifest.json').read_bytes()).hexdigest() == request['qualified_artifact_manifest_sha256'], 'artifact manifest bytes differ')
         bundle = validate_bundle(directory, request['candidate_sha'])
-        state = self.store.document
-        for key in ['schema_manifest_sha256', 'deployment_contract_sha256']:
-            require(bundle['source'][key] == state['baseline'][key], 'schema or deployment contract changed; separate reviewed release required')
-        return bundle
+        return bundle, self.reviewed_release(bundle['source'])
+
+    def same_release(self, release, packet, promotion):
+        expected = packet.get('schema_release')
+        if expected is None:
+            return release is None
+        return release is not None and dict(release, snapshot_identifier=schema_release.snapshot_identifier(promotion, release['to_version'])) == expected
 
     def prepare(self, request, directory):
         guards.request(request, 'prepare')
         from .candidate import check_current
         check_current(request['candidate_sha'])
         self.store.load(); self.caller('prepare')
-        bundle = self.bundle(directory, request)
+        bundle, release = self.bundle(directory, request)
         promotion = str(uuid.uuid4())
+        if release:
+            release = dict(release, snapshot_identifier=schema_release.snapshot_identifier(promotion, release['to_version']))
         self.store.acquire(promotion, request['authorization'], request['candidate_sha'])
         before = self.boundary(1, require_settled=False)
         pending = self.read('cloudformation', 'list_change_sets', StackName=before['stack']['StackId'])
@@ -176,6 +194,10 @@ class Runner:
         registry = publish(self.aws, self.store, directory, bundle)
         scan_delta = guard_scan_delta(registry, state['live']['registry'],
             state['baseline']['deployment_contract_sha256'], self.clock())
+        # A disposition binds the baseline contract; the approval summary binds the
+        # candidate's. A schema release changes the contract, so it cannot carry one.
+        require(not release or not any(delta['introduced'] for delta in scan_delta.values()),
+                'a schema release cannot introduce scan findings; separate reviewed release required')
         check_current(request['candidate_sha'])
         parameters = guards.runtime_parameters(guards.parameters(before['stack']), receipt)
         template = state['baseline']['template']; template_bytes = encoded(template); template_hash = hashlib.sha256(template_bytes).hexdigest()
@@ -198,7 +220,7 @@ class Runner:
                   'artifact_manifest_sha256': request['qualified_artifact_manifest_sha256'], 'bundle': bundle,
                   'parameters': parameters, 'config': config, 'reservation': receipt, 'registry': registry,
                   'scan_delta': scan_delta, 'template_sha256': template_hash, 'create_request': create,
-                  'change_set_arn': arn, 'change_set': described, 'before': before}
+                  'change_set_arn': arn, 'change_set': described, 'before': before, 'schema_release': release}
         packet_sha = digest(packet)
         self.store.immutable('promotions/' + promotion + '/packet.json', packet)
         self.store.change(lambda d: d['active'].update(phase='prepared', packet=packet, packet_sha256=packet_sha))
@@ -209,14 +231,53 @@ class Runner:
                     'predecessor_candidate_sha': state['live']['candidate_sha'], 'source_tree_sha': bundle['source']['tree'],
                     'deployment_contract_sha256': bundle['source']['deployment_contract_sha256'],
                     'schema_version': state['policy']['schema_version'],
-                    'preserved': dict.fromkeys(['schema', 'template', 'trial', 'aliases', 'secrets'], True),
+                    'schema_release': release and {key: release[key] for key in ['from_version', 'to_version', 'spec_sha256']},
+                    'preserved': dict(dict.fromkeys(['schema', 'template', 'trial', 'aliases', 'secrets'], True), schema=not release),
                     'changes': [{'logical_id': c['ResourceChange']['LogicalResourceId'], 'resource_type': c['ResourceChange']['ResourceType'],
                                  'action': c['ResourceChange']['Action'], 'replacement': c['ResourceChange']['Replacement']} for c in described['Changes']],
                     'scan': scan_delta,
-                    'sequence': ['stop both services', 'execute reviewed change set', 'verify stopped boundaries', 'activate both services', 'verify health and images'],
+                    'sequence': SCHEMA_SEQUENCE if release else SEQUENCE,
                     'outage_required': True},
                 'cost_genui_cents': cost['genui_total_cents'],
                 'cost_total_cents': cost['project_total_cents'], 'expires_at_utc': config['deployment_expires_at_utc']}
+
+    def migrate_schema(self, promotion, packet, after):
+        """Snapshot, then run the reviewed migration on the candidate image; services stay stopped.
+
+        Runs after the stopped-after-execute boundary and before activation intent.
+        Any failure raises with phase 'executing' and the lease held: no activation,
+        no retry and no replay. The migration runner is one transaction, so a failed
+        migration leaves the database at its prior version.
+        """
+        release = packet['schema_release']; outputs = after['outputs']
+        receipts = 'promotions/' + promotion + '/'
+        identifier = release['snapshot_identifier']
+        require(identifier == schema_release.snapshot_identifier(promotion, release['to_version']), 'snapshot identity differs')
+        # Validate both requests before the first mutation.
+        instance = schema_release.database_instance(outputs.get('DatabaseEndpoint'))
+        request = schema_release.migration_request(outputs, promotion)
+        definition = after['definitions']['MigrationTaskDefinition']
+        require(definition['taskDefinitionArn'] == request['taskDefinition'], 'migration task definition differs from the verified boundary')
+        created = self.mutate('schema-snapshot', 'rds', 'create_db_snapshot', DBInstanceIdentifier=instance, DBSnapshotIdentifier=identifier)
+        snapshot = created.get('DBSnapshot') or {}
+        require(snapshot.get('DBSnapshotIdentifier') == identifier and snapshot.get('DBInstanceIdentifier') == instance,
+                'snapshot identity differs; services remain stopped, reconcile')
+        observed = self.aws.wait('rds', 'describe_db_snapshots', schema_release.snapshot_settled,
+                                 timeout=schema_release.SNAPSHOT_WAIT_SECONDS, retry_codes={'DBSnapshotNotFound'},
+                                 DBSnapshotIdentifier=identifier)
+        self.store.immutable(receipts + 'schema-snapshot-observed.json', observed)
+        schema_release.verify_snapshot(observed, identifier, instance)
+        started = self.mutate('schema-migrate', 'ecs', 'run_task', **request)
+        task = schema_release.started_task(started, request)
+        stopped = self.aws.wait('ecs', 'describe_tasks', lambda r: schema_release.task_stopped(r, task),
+                                timeout=schema_release.MIGRATION_WAIT_SECONDS, cluster=request['cluster'], tasks=[task])
+        self.store.immutable(receipts + 'schema-migration-observed.json', stopped)
+        service = packet['registry']['service']
+        schema_release.verify_migration(stopped, task, request, definition['containerDefinitions'][0]['name'],
+            packet['parameters'][guards.IMAGE_KEYS['service']], [service['manifest_digest'], service['index_digest']])
+        record = dict(release, migration_task_arn=task)
+        self.store.immutable(receipts + 'schema-release.json', record)
+        return record
 
     def settle_services(self, outputs, require_healthy=False):
         names = [outputs['ServiceName'], outputs['SharedBrokerServiceName']]
@@ -252,8 +313,9 @@ class Runner:
         self.store.resume(request['promotion_id'], request['authorization']); self.caller('execute')
         active = self.store.document['active']; require(active['phase'] == 'prepared', 'phase cannot be executed again')
         require(active['packet_sha256'] == request['packet_sha256'] and digest(active['packet']) == request['packet_sha256'], 'prepared packet differs')
-        packet = active['packet']; self.bundle(directory, request)
+        packet = active['packet']; _, release = self.bundle(directory, request)
         require(packet['artifact_manifest_sha256'] == request['qualified_artifact_manifest_sha256'] and packet['candidate_sha'] == request['candidate_sha'], 'candidate differs from approved packet')
+        require(self.same_release(release, packet, active['promotion_id']), 'schema release changed after preparation')
         require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
             self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
             'scan disposition changed after preparation')
@@ -273,6 +335,8 @@ class Runner:
         require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
             self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
             'scan disposition expired during final execution checks')
+        require(self.same_release(self.reviewed_release(packet['bundle']['source']), packet, active['promotion_id']),
+            'schema release expired or changed during final execution checks')
         self.store.change(lambda d: d['active'].update(phase='executing', approval_sha256=digest(approval)))
         outputs = before['outputs']
         for label, key in [('main', 'ServiceName'), ('broker', 'SharedBrokerServiceName')]:
@@ -287,6 +351,12 @@ class Runner:
         self.settle_services(guards.outputs(completed))
         after = self.boundary(0, packet['parameters'], after=True)
         self.store.immutable('promotions/' + active['promotion_id'] + '/stopped-after-execute.json', after)
+        migrated = None
+        if packet.get('schema_release'):
+            migrated = self.migrate_schema(active['promotion_id'], packet, after)
+            # The migration took minutes; prove nothing else moved before activation intent.
+            after = self.boundary(0, packet['parameters'], after=True)
+            self.store.immutable('promotions/' + active['promotion_id'] + '/stopped-after-migration.json', after)
         activation_config = dict(packet['config'], service_desired_count=1)
         ledger, _ = preflight().reserve(activation_config, self.store.document['ledger'], self.clock(), activating=True)
         self.store.change(lambda d: (d.update(ledger=ledger), d['active'].update(phase='activation-intended', activation_requested_at_utc=now())))
@@ -304,12 +374,23 @@ class Runner:
                    'packet_sha256': request['packet_sha256'], 'activated_at_utc': now(), 'tag': tag,
                    'service_revision': int(outputs['TaskDefinition'].rsplit(':', 1)[1]),
                    'broker_revision': int(outputs['SharedBrokerTaskDefinition'].rsplit(':', 1)[1])}
-        self.store.immutable('promotions/' + active['promotion_id'] + '/verified.json', {'summary': summary, 'healthy': healthy, 'public_probes': probes})
+        verified = {'summary': summary, 'healthy': healthy, 'public_probes': probes}
+        if migrated:
+            verified['schema_release'] = migrated
+        self.store.immutable('promotions/' + active['promotion_id'] + '/verified.json', verified)
         def finish(document):
             document['live'].update(candidate_sha=request['candidate_sha'], window_id=active['promotion_id'], config=packet['config'],
                 parameters=packet['parameters'], outputs=outputs, registry=packet['registry'], stack_execution_role_arn=document['authority']['execution_role_arn'])
             document['baseline'].update(definitions=healthy['definitions'], schedules=healthy['schedules'])
             document['completed'][active['promotion_id']] = summary
+            if migrated:
+                # The migrated schema and its contract become the next promotion's baseline.
+                require(document['policy']['schema_version'] == migrated['from_version'], 'schema policy changed during release')
+                source = packet['bundle']['source']
+                document['baseline'].update(schema_manifest_sha256=source['schema_manifest_sha256'],
+                                            deployment_contract_sha256=source['deployment_contract_sha256'])
+                document['policy']['schema_version'] = migrated['to_version']
+                document['completed'][active['promotion_id']] = dict(summary, schema_release=migrated)
             document['active'] = None
         self.store.change(finish)
         return summary

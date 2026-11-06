@@ -74,6 +74,17 @@ def template(inventory):
     prepare.append(statement(['cloudformation:DeleteChangeSet'], stack, Condition={'StringLike': {'cloudformation:ChangeSetName': ['forma-promotion-*', change_sets]}}))
     execute = common + [ecr_read, statement(['cloudformation:ExecuteChangeSet'], stack, Condition={'StringLike': {'cloudformation:ChangeSetName': ['forma-promotion-*', change_sets]}}),
         statement(['ecs:UpdateService'], service_arns)]
+    # APP-175 schema release: one snapshot and the stack's own migration task,
+    # only on this cluster, only with that task definition's two roles. No tags.
+    migration = inventory['definitions']['MigrationTaskDefinition']
+    migration_family = concrete(migration['taskDefinitionArn'], f'arn:aws:ecs:{REGION}:{ACCOUNT}:task-definition/', 'migration task scope differs').rsplit(':', 1)[0] + ':*'
+    migration_roles = [concrete(migration[key], f'arn:aws:iam::{ACCOUNT}:role/', 'migration role scope differs') for key in ['taskRoleArn', 'executionRoleArn']]
+    release_snapshots = f'arn:aws:rds:{REGION}:{ACCOUNT}:snapshot:forma-schema-release-*'
+    execute += [statement(['ecs:RunTask'], migration_family, Condition={'ArnEquals': {'ecs:cluster': cluster}}),
+        statement(['iam:PassRole'], migration_roles, Condition={'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}),
+        statement(['rds:CreateDBSnapshot'], [database, release_snapshots]),
+        # The service reference lists both db and snapshot resources for this read.
+        statement(['rds:DescribeDBSnapshots'], [database, release_snapshots])]
     execution_rules = [statement(['ecs:RegisterTaskDefinition', 'ecs:TagResource', 'ecs:UntagResource'], families),
         statement(['ecs:DescribeTaskDefinition'], families),
         # The ECS API authorizes deregister against resource "*", not the family ARN.
