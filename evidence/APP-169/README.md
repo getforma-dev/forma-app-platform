@@ -70,3 +70,21 @@ Checks on merge `5f918f6` (re-checked after merging `a033d6b`):
 - Python runtime 206 tests, `app/qualification` 16, Rust library 405 and binary 8, admin tests, fmt and clippy `-D warnings`: passed. After merging `a033d6b`, the 36 admission-operator tests passed again.
 
 Acceptance (b) and (c) were not implemented by this PR and moved to APP-176.
+
+## Second review fixes (2026-11-06, Claude)
+
+The second independent review of `a033d6b..1bf6dd9` found no blocker. Its findings are fixed on `app169/review-fixes`:
+
+- Creation intent (Make a card, Keep data, a replaced Card work) stays a Card when its save fails. The next load uploads it.
+- A Card the server has not confirmed is never evicted from this browser's 64-entry list by a confirmed one. Confirmed Cards are written first, so the bound drops them first. The page restores them on the next load.
+- A failed older write no longer stops the member's newer choice, and the message names the newest choice.
+- First-load uploads go one at a time, at most 16 per load, and stop at the first failure. They send `{"kind":"card","if_absent":true}`. The route accepts only that extra field, and only as `true`. Storage then inserts only where no choice is saved, and otherwise answers with the saved kind and writes nothing. A choice saved on another device after the page rendered therefore wins over the upload.
+- ADR-007 D7.8 gained a dated `work.kind_set` amendment (a suffix only).
+
+Checks:
+
+- Each new board test was run before its fix and failed on that fix's own assertion: creation intent reverted; the oldest local Card was evicted; the member's newer App choice was never sent; uploads went out in parallel without `if_absent`. All pass after the fixes.
+- `just check admin fmt clippy test http-smoke board`: all ok. Admin 281/281; Rust library 405 passed, 34 ignored; binary 8; doctests 3.
+- `just campaign canvas`: passed. It now also checks that an `if_absent` write over a saved choice answers with that choice and writes no event, that one with nothing saved stores the kind with one event, and that operator `verify` succeeds with these events in the workspace chain.
+
+Browser evidence: `docs/DEVELOPMENT.md` and `just campaigns` name no browser campaign for the Library or kinds. The uncatalogued APP-168 Playwright script `app/scripts/app_view_browser.mjs` toggles the classification but does not clear storage or use a second device, and Playwright is not installed in this checkout. The "Browser" section above ran on 0021 and the old merge code, so it is not evidence for the final head. Acceptance (a) is unticked until a fresh browser run on the final head.
