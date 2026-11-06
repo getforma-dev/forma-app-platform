@@ -2104,8 +2104,9 @@ def issue_handle(c, args):
     once and installed in each environment; otherwise a fresh handle is drawn."""
     org = args.organization
     begin(c, org)
-    # The index claim first: lock_handles takes the operator audit head, and D7.1 puts
-    # the head last (APP-084 review).
+    # D7.1 order: the organization FOR SHARE, then the index claim, then the operator
+    # audit head that lock_handles takes (APP-084 review).
+    lock_organization(c, org, active=True)
     claim_provider_tenants(c, org)
     lock_handles(c, org)
     require(live_handles(c, org) == 0, "handle_exists")

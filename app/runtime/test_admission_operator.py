@@ -993,8 +993,6 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((entry["redemptions"][0]["membership_status"], entry["redemptions"][0]["entitlement_status"]), ("active", "active"))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
 
-    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
-                         "the seed validates its bundles with contracts/validate.py, which needs jsonschema")
     def test_connect_refuses_any_host_but_one_name_before_connecting(self):
         """APP-084 review: '@' is an abstract socket and ',' a host list to libpq; neither uses TLS."""
         for host, code in (("/var/run/postgresql", "socket_host_refused"), ("@abstract", "socket_host_refused"), ("", "socket_host_refused"),
@@ -1005,6 +1003,8 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                 op.connect()
             self.assertEqual(str(refused.exception), code); connect.assert_not_called()
 
+    @unittest.skipUnless(importlib.util.find_spec("jsonschema") is not None,
+                         "the seed validates its bundles with contracts/validate.py, which needs jsonschema")
     def test_the_seed_claims_each_tenant_in_the_cross_organization_index(self):
         """APP-084 review: a seeded binding is claimed in genui_private.provider_tenant_index in the same
         transaction, so no other organization can bind the same tenant first; an owned tenant refuses."""
