@@ -39,8 +39,8 @@ test('the first load keeps local Cards, uploads the ones the server lacks once, 
   assert.equal(board.isStandaloneWork(APP, PLAIN), false, 'no row and no local choice stays an App');
   const saved = new Set(JSON.parse(store.get(KEY) ?? '[]') as string[]);
   assert.deepEqual(saved, new Set([`${APP}/${LOCAL_ONLY}`, `${APP}/${SERVER_CARD}`, `${APP}/${BOTH_CARD}`, `${APP}/${UNLISTED}`]));
-  assert.deepEqual(posted, [{ url: `/v1/library/${APP}/${LOCAL_ONLY}/kind`, body: JSON.stringify({ kind: 'card' }) }],
-    'only the local Card the server has no row for is uploaded, once');
+  assert.deepEqual(posted, [{ url: `/v1/library/${APP}/${LOCAL_ONLY}/kind`, body: JSON.stringify({ kind: 'card', if_absent: true }) }],
+    'only the local Card the server has no row for is uploaded, once, and only where nothing is saved');
 });
 
 /** A `fetch` whose `/kind` answers wait until the test releases them, in order. */
@@ -104,4 +104,23 @@ test('a refused save puts the last saved choice back and says so (APP-169)', asy
   (globalThis as { fetch?: unknown }).fetch = async () => { throw new TypeError('offline'); };
   assert.equal(await board.setStandaloneWork(APP, PLAIN, false), false);
   assert.equal(board.isStandaloneWork(APP, PLAIN), true);
+});
+
+test('a Card made with Make a card or Keep data stays a Card when its save fails (APP-169)', async () => {
+  const board = await import('../src/canvas/board.ts');
+  const made = '00000000-0000-4000-8000-0000000016e1';
+  (document as unknown as Document_).getElementById('cv-activity')!.textContent = '';
+  for (const status of [503, 429]) {
+    const held = heldFetch(() => status);
+    board.markStandaloneWork(APP, made);
+    await held.release();
+    assert.deepEqual(held.posted, ['card']);
+    assert.equal(board.isStandaloneWork(APP, made), true, `${status}: the creation intent is kept`);
+    assert.equal(stored().has(`${APP}/${made}`), true, 'and stays in this browser for the next load to upload');
+  }
+  (globalThis as { fetch?: unknown }).fetch = async () => { throw new TypeError('offline'); };
+  board.markStandaloneWork(APP, made);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(board.isStandaloneWork(APP, made), true);
+  assert.equal(activity(), '', 'nothing to undo, so nothing is announced');
 });

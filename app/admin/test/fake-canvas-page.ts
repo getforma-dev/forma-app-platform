@@ -128,3 +128,36 @@ export function install(document_: Document_, store: Map<string, string>, fetch_
     fetch: fetch_,
   });
 }
+
+/** One `/kind` POST the test has not answered yet. */
+export type HeldPost = { work: string; kind: string; ifAbsent: boolean; answer: (status: number, kind?: string) => void };
+/**
+ * A `fetch` that holds every `/kind` POST until the test answers it, and
+ * records how many were in flight at once. `answer` resolves the oldest one.
+ */
+export function heldKindFetch() {
+  const posts: HeldPost[] = [];
+  const pending: HeldPost[] = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const fetch_ = async (url: string, init?: { method?: string; body?: string }) => {
+    if (!String(url).endsWith('/kind') || init?.method !== 'POST') return { ok: false, status: 404, json: async () => ({}) };
+    const body = JSON.parse(init.body ?? '{}') as { kind: string; if_absent?: boolean };
+    const work = String(url).split('/')[4]!;
+    inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight);
+    const status = await new Promise<{ status: number; kind: string }>((resolve) => {
+      const post: HeldPost = { work, kind: body.kind, ifAbsent: body.if_absent === true, answer: (status, kind = body.kind) => resolve({ status, kind }) };
+      posts.push(post); pending.push(post);
+    });
+    inFlight -= 1;
+    return { ok: status.status < 300, status: status.status, json: async () => (status.status < 300 ? { kind: status.kind } : { code: 'unavailable' }) };
+  };
+  /** Answers the oldest held POST, then lets the board run until it is idle. */
+  const answer = async (status: number, kind?: string) => { pending.shift()!.answer(status, kind); await settle(); };
+  return { fetch_, posts, pending, answer, maxInFlight: () => maxInFlight };
+}
+
+/** Lets queued promise chains run to idle. */
+export async function settle(): Promise<void> {
+  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve));
+}

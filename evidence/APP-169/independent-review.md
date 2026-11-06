@@ -1,3 +1,5 @@
+*Superseded 2026-11-06 (Claude, for the coordinator):* this record's conclusions that the second and third acceptance items are met do not hold. The 2026-11-05 independent review of PR #84 (head `494073b`) found that no existing ambiguous work is migrated and no legacy placement is retired, and it found a first-load data-loss blocker this review missed. Those two acceptance items moved to [APP-176](../../Tickets/0-backlog/APP-176.md). The notes below are kept as written.
+
 No blocking findings.
 
 Note. `app/admin/src/canvas/board.ts` posts the classification and does not wait for it, read its status, or keep a second click behind the first. `app/src/storage/artifact_kind.rs` stores `app` with an UPDATE, not an insert. If that UPDATE runs while the row is still absent, it changes nothing, and a card insert that commits afterward leaves `card`. A refused or unavailable POST is also ignored, so this browser can show a Card that was not stored until the next canvas load. Neither case deletes the saved work or its grants, and neither shows a work to another member.

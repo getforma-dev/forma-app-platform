@@ -205,23 +205,32 @@ async fn library(State(work): State<Arc<Work>>, headers: HeaderMap) -> Response 
     }
 }
 
-/// The largest `/kind` body: `{"kind":"card"}` with room for whitespace.
+/// The largest `/kind` body: `{"kind":"card","if_absent":true}` with room
+/// for whitespace.
 const KIND_BODY_LIMIT: usize = 256;
 
-/// `{"kind":"card"}` or `{"kind":"app"}` as forma-json-v1, and nothing else.
-fn artifact_kind_body(bytes: &[u8]) -> Option<&'static str> {
+/// `{"kind":"card"}` or `{"kind":"app"}` as forma-json-v1, optionally with
+/// `"if_absent":true`, and nothing else. Returns the kind and whether the
+/// write may only fill an absent choice.
+fn artifact_kind_body(bytes: &[u8]) -> Option<(&'static str, bool)> {
     let value = admission::decode(bytes).ok()?;
     let body = value.as_object()?;
-    if body.len() != 1 {
-        return None;
-    }
-    crate::storage::parse_artifact_kind(body.get("kind")?.as_str()?)
+    let if_absent = match (body.len(), body.get("if_absent")) {
+        (1, None) => false,
+        (2, Some(Value::Bool(true))) => true,
+        _ => return None,
+    };
+    let kind = crate::storage::parse_artifact_kind(body.get("kind")?.as_str()?)?;
+    Some((kind, if_absent))
 }
 
 /// `POST /v1/library/{app}/{work}/kind` (APP-169). Body `{"kind":"card"}`
 /// records that whole work as a Card for this member. `{"kind":"app"}`
 /// stores `app`, which is the reversible step back, whether or not a row
-/// existed. Component count is not read. Refusal order, as the other member
+/// existed. With `"if_absent":true` (the canvas's first-load upload of a
+/// local Card) the kind is stored only when the member has saved none, and a
+/// choice already saved stays. The answer is always `{"kind": <stored>}`.
+/// Component count is not read. Refusal order, as the other member
 /// writes: cross-site (403) → a query string or a malformed id (404) → a live
 /// session (the uniform 404; 503 when the workspace store is unavailable) →
 /// the member write window (429) → the bounded body (413) → the body (422
@@ -259,12 +268,12 @@ async fn set_artifact_kind(
     let Some(bytes) = http::bounded(body, KIND_BODY_LIMIT).await else {
         return http::payload_too_large();
     };
-    let Some(kind) = artifact_kind_body(&bytes) else {
+    let Some((kind, if_absent)) = artifact_kind_body(&bytes) else {
         return problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_kind");
     };
     let response = match stores
         .workspace
-        .set_artifact_kind(&member, &app, &saved, kind)
+        .set_artifact_kind(&member, &app, &saved, kind, if_absent)
         .await
     {
         Ok(stored) => match admission::encode(&json!({ "kind": stored })) {
@@ -282,6 +291,7 @@ async fn set_artifact_kind(
         app_id = app,
         work_id = saved,
         kind,
+        if_absent,
         "member artifact kind"
     );
     response

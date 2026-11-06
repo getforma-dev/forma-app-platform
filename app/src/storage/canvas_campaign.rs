@@ -675,12 +675,40 @@ async fn campaign() {
         "2",
         "the same kind again is not audited"
     );
-    let saved = maya.post(&routes, &spend_kind, CARD).await;
+    // `if_absent` (the canvas's first-load upload) never replaces a saved
+    // choice: it answers with the kind already saved and writes nothing.
+    let kept = maya
+        .post(&routes, &northstar, r#"{"kind":"app","if_absent":true}"#)
+        .await;
+    assert_eq!(kept.status, StatusCode::OK, "{}", kept.body);
+    assert_eq!(kept.body, r#"{"kind":"card"}"#);
+    assert_eq!(kind_events().trim(), "2", "if_absent over a saved choice");
+    // Where nothing is saved, `if_absent` stores the kind and audits it once.
+    let saved = maya
+        .post(&routes, &spend_kind, r#"{"kind":"card","if_absent":true}"#)
+        .await;
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    assert_eq!(saved.body, r#"{"kind":"card"}"#);
+    assert_eq!(
+        c.fixture
+            .sql(
+                &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND kind='work.kind_set' AND work_id='{}'", spend.work),
+                "genui",
+            )
+            .trim(),
+        "1"
+    );
+    // D7.8: `verify` recomputes the workspace chain, work.kind_set events included.
+    assert_eq!(
+        operator(&c.fixture, &["verify", "--organization", ORG])["verified"],
+        true
+    );
     // A closed body naming card or app; anything else is 422 and stores nothing.
     for body in [
         r#"{"kind":"stack"}"#,
         r#"{"kind":"card","app_id":"x"}"#,
+        r#"{"kind":"card","if_absent":false}"#,
+        r#"{"kind":"card","if_absent":"true"}"#,
         r#"{}"#,
         "kind=card",
     ] {
@@ -744,18 +772,20 @@ async fn campaign() {
             .await
             .unwrap()
             .is_empty());
-        assert_eq!(
-            stores
-                .workspace
-                .set_artifact_kind(other, APP, CANVAS_WORK, "card")
-                .await,
-            Err(Error::Denied)
-        );
+        for if_absent in [false, true] {
+            assert_eq!(
+                stores
+                    .workspace
+                    .set_artifact_kind(other, APP, CANVAS_WORK, "card", if_absent)
+                    .await,
+                Err(Error::Denied)
+            );
+        }
     }
     assert_eq!(
         stores
             .workspace
-            .set_artifact_kind(&maya_storage, APP, CANVAS_WORK, "stack")
+            .set_artifact_kind(&maya_storage, APP, CANVAS_WORK, "stack", false)
             .await,
         Err(Error::Denied),
         "storage refuses a kind outside card and app"
@@ -787,7 +817,7 @@ async fn campaign() {
     assert_eq!(refused.body, NOT_FOUND_BODY);
     check(
         &mut checks,
-        "artifact kind (APP-169): with no grant on a work, saving its kind is the same uniform 404 as a missing work; the canvas says the kinds were read and a work with nothing saved carries no kind; an app before any row is stored and a card replaces it, each rendered on the next load and each one work.kind_set workspace event, while the same kind again writes none; a body other than card or app is 422 invalid_kind; cross-site is 403; anonymous, forged and another organization's member get the uniform 404; a teammate on the same work sees no kind; storage returns only her rows and refuses the teammate, the canary and an unknown kind; an exhausted member write window is 429; once record_read is revoked the saved card is not rendered and the write is the uniform 404",
+        "artifact kind (APP-169): with no grant on a work, saving its kind is the same uniform 404 as a missing work; the canvas says the kinds were read and a work with nothing saved carries no kind; an app before any row is stored and a card replaces it, each rendered on the next load and each one work.kind_set workspace event, while the same kind again writes none; an if_absent write over a saved choice answers with that choice and writes nothing, and where nothing is saved stores the kind with one event; operator verify recomputes the workspace chain with these events; a body other than card or app is 422 invalid_kind; cross-site is 403; anonymous, forged and another organization's member get the uniform 404; a teammate on the same work sees no kind; storage returns only her rows and refuses the teammate, the canary and an unknown kind; an exhausted member write window is 429; once record_read is revoked the saved card is not rendered and the write is the uniform 404",
     );
 
     let report = json!({

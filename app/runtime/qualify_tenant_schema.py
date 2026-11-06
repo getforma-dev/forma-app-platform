@@ -335,7 +335,7 @@ CARD_GRANTS = set().union(
     _role_columns('genui_workspace','member_cards','UPDATE','everyone','updated_at','removed_at'),
 )
 
-# Migration 0021 (APP-169): one member's Card or App classification of a whole work.
+# Migration 0022 (APP-169): one member's Card or App classification of a whole work.
 KIND_COLUMNS = ('organization_id','principal_id','app_id','work_id','kind','updated_at')
 KIND_GRANTS = set().union(
     _role_columns('genui_workspace','work_artifact_kinds','SELECT',*KIND_COLUMNS),

@@ -226,10 +226,16 @@ export function mergeArtifactKinds(local: ReadonlySet<string>, rows: readonly Se
   return { cards, upload };
 }
 
-export function saveStandaloneWorks(member: string, works: Set<string>): void {
+/**
+ * Keeps the newest `MAX_WORKS` Cards. `confirmed` names Cards the server
+ * already holds; they are written first, so the bound drops them before any
+ * Card that exists only here (APP-169: the page restores confirmed ones).
+ */
+export function saveStandaloneWorks(member: string, works: Set<string>, confirmed: ReadonlySet<string> = new Set()): void {
   if (!/^[0-9a-f]{16}$/.test(member)) return;
-  write(standaloneKey(member), [...works].filter(value => {
+  const valid = [...works].filter(value => {
     const parts = value.split('/');
     return parts.length === 2 && isUuid(parts[0]) && isUuid(parts[1]);
-  }).slice(-MAX_WORKS));
+  });
+  write(standaloneKey(member), [...valid.filter(value => confirmed.has(value)), ...valid.filter(value => !confirmed.has(value))].slice(-MAX_WORKS));
 }
