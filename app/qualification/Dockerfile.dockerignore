@@ -250,6 +250,8 @@ contracts/fixtures/shared-v1/**
 !app/migrations/catalog-v19.json
 !app/migrations/0020_work_data_copies.sql
 !app/migrations/catalog-v20.json
+!app/migrations/0021_operator_audit_kinds.sql
+!app/migrations/catalog-v21.json
 !app/src/storage/work_presentation_checks.rs
 !contracts/record_components_contract.py
 
