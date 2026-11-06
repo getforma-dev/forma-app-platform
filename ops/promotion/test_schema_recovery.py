@@ -34,6 +34,12 @@ class RestoreTests(unittest.TestCase):
             aws.migration.update(exitCode=1)
         elif kind == 'exit 0':
             aws.migration.update(exitCode=0, stopCode='TaskFailedToStart')
+        elif kind == 'killed':
+            aws.migration.update(exitCode=143, stopCode='UserInitiated')
+        elif kind == 'oom':
+            aws.migration.update(exitCode=137)
+        elif kind == 'exit 1 stopped from outside':
+            aws.migration.update(exitCode=1, stopCode='UserInitiated')
         elif kind == 'no exit code':
             aws.migration.update(exitCode=None)
         elif kind == 'unobserved':
@@ -108,7 +114,11 @@ class RestoreTests(unittest.TestCase):
 
     def test_a_migration_that_may_have_committed_or_is_unknown_refuses(self):
         for kind, reason in [('exit 0', 'exited 0'), ('no exit code', 'exit code unknown'), ('unobserved', 'receipt unavailable'),
-                             ('start failure', 'not one known task'), ('lost start', 'unknown operation')]:
+                             ('start failure', 'not one known task'), ('lost start', 'unknown operation'),
+                             # Review of c856fb8: a task killed from outside or by a signal may have
+                             # stopped just after the commit; only the program's own failure proves it did not.
+                             ('killed', 'did not fail by itself'), ('oom', 'did not fail by itself'),
+                             ('exit 1 stopped from outside', 'did not fail by itself')]:
             with self.subTest(kind=kind):
                 self.failed(kind)
                 with self.assertRaisesRegex(Refused, reason): self.plan()

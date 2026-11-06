@@ -66,6 +66,11 @@ def migration_outcome(store, active):
     code = rows[0]['containers'][0].get('exitCode')
     require(type(code) is int, 'migration exit code unknown; reconcile')
     require(code != 0, 'the migration exited 0 and committed; fix forward')
+    # Only the program's own failure proves the transaction did not commit: the container
+    # exited by itself with a small code. A task stopped from outside or ended by a signal
+    # (128+N, e.g. 137 or 143) may have stopped just after the commit (review of c856fb8).
+    require(rows[0].get('stopCode') == 'EssentialContainerExited' and 0 < code < 128,
+            'the migration did not fail by itself (stopped from outside or by a signal) and may have committed; reconcile')
     return {'started': True, 'task_arn': arn, 'exit_code': code, 'stop_code': rows[0].get('stopCode'),
             'observed_receipt': path, 'observed_sha256': hashlib.sha256(raw).hexdigest()}
 
