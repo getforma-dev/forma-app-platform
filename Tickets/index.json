@@ -5478,7 +5478,7 @@
       "Depends on": "APP-084, APP-169, APP-167",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`app175/schema-release` (local, stacked on #83 and #84; not pushed)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog (selected by Victor; moves to Selected when APP-084 and APP-169 are Done)",
       "Unblock evidence": "Not applicable.",
