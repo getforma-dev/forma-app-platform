@@ -947,8 +947,22 @@ async fn the_kind_route_refuses_cross_site_and_anonymous_writes() {
 
 #[test]
 fn the_kind_body_is_closed_and_names_card_or_app() {
-    assert_eq!(artifact_kind_body(br#"{"kind":"card"}"#), Some("card"));
-    assert_eq!(artifact_kind_body(br#"{"kind":"app"}"#), Some("app"));
+    assert_eq!(
+        artifact_kind_body(br#"{"kind":"card"}"#),
+        Some(("card", false))
+    );
+    assert_eq!(
+        artifact_kind_body(br#"{"kind":"app"}"#),
+        Some(("app", false))
+    );
+    assert_eq!(
+        artifact_kind_body(br#"{"kind":"card","if_absent":true}"#),
+        Some(("card", true))
+    );
+    assert_eq!(
+        artifact_kind_body(br#"{"if_absent":true,"kind":"app"}"#),
+        Some(("app", true))
+    );
     for body in [
         br#"{"kind":"stack"}"#.as_slice(),
         br#"{"kind":"Card"}"#,
@@ -957,6 +971,12 @@ fn the_kind_body_is_closed_and_names_card_or_app() {
         br#"{}"#,
         br#"{"kind":"card","app_id":"x"}"#,
         br#"{"kind":"card","kind":"app"}"#,
+        br#"{"kind":"card","if_absent":false}"#,
+        br#"{"kind":"card","if_absent":"true"}"#,
+        br#"{"kind":"card","if_absent":1}"#,
+        br#"{"if_absent":true}"#,
+        br#"{"kind":"stack","if_absent":true}"#,
+        br#"{"kind":"card","if_absent":true,"x":1}"#,
         br#"["card"]"#,
         b"",
         b"kind=card",

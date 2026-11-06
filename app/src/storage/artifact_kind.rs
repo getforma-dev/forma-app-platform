@@ -72,14 +72,17 @@ impl Workspace {
 
     /// Record this member's classification of one whole work they can open:
     /// `card` or `app`, inserted or replaced in one statement, so an `app`
-    /// before any row exists is saved too. The saved work, its components,
-    /// grants, records and receipts stay. Returns the kind stored.
+    /// before any row exists is saved too. With `if_absent` a kind is only
+    /// inserted where the member saved none, and a saved choice is left as it
+    /// is. The saved work, its components, grants, records and receipts stay.
+    /// Returns the kind stored after the write.
     pub async fn set_artifact_kind(
         &self,
         request: &TrustedRequest,
         app: &str,
         work: &str,
         kind: &str,
+        if_absent: bool,
     ) -> Result<&'static str> {
         require(valid_id(app) && valid_id(work))?;
         let kind = parse_artifact_kind(kind).ok_or(Error::Denied)?;
@@ -102,18 +105,45 @@ impl Workspace {
                 .await?;
             require(!found.is_empty())?;
             permit.recheck_entitlement().await?;
+            let params: [&(dyn tokio_postgres::types::ToSql + Sync); 5] =
+                [&request.organization(), &request.principal(), &app, &work, &kind];
             // Only an actual change returns a row; the same choice again writes nothing.
-            let changed = t.query(
-                "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5) ON CONFLICT (organization_id,principal_id,app_id,work_id) DO UPDATE SET kind=EXCLUDED.kind, updated_at=date_trunc('second',now()) WHERE work_artifact_kinds.kind IS DISTINCT FROM EXCLUDED.kind RETURNING 1",
-                &[&request.organization(), &request.principal(), &app, &work, &kind],
-            )
-            .await?;
+            let changed = if if_absent {
+                t.query(
+                    "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5) ON CONFLICT (organization_id,principal_id,app_id,work_id) DO NOTHING RETURNING 1",
+                    &params,
+                )
+                .await?
+            } else {
+                t.query(
+                    "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5) ON CONFLICT (organization_id,principal_id,app_id,work_id) DO UPDATE SET kind=EXCLUDED.kind, updated_at=date_trunc('second',now()) WHERE work_artifact_kinds.kind IS DISTINCT FROM EXCLUDED.kind RETURNING 1",
+                    &params,
+                )
+                .await?
+            };
             if !changed.is_empty() {
                 // D7.8: one workspace-chain event per change, in the same transaction.
                 let outcome = kind_outcome(work, kind)?;
                 append(t, Chain::Workspace, request, Event { kind: "work.kind_set", id: None, app: Some(app), work: Some(work), record: None, outcome: Some(&outcome) }).await?;
+                return Ok(kind);
             }
-            Ok(kind)
+            if !if_absent {
+                return Ok(kind);
+            }
+            // A choice was already saved (READ COMMITTED: this statement sees
+            // the row the conflict found): answer with it, unchanged.
+            let rows = t
+                .query(
+                    "SELECT kind FROM genui.work_artifact_kinds WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND app_id=$3::text::uuid AND work_id=$4::text::uuid",
+                    &[&request.organization(), &request.principal(), &app, &work],
+                )
+                .await?;
+            let saved: String = rows
+                .first()
+                .ok_or(Error::Unavailable)?
+                .try_get(0)
+                .map_err(|_| Error::Unavailable)?;
+            parse_artifact_kind(&saved).ok_or(Error::Unavailable)
         }
         .await;
         tx.finish(result.is_ok()).await?;
