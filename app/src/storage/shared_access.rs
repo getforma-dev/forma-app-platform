@@ -269,10 +269,12 @@ fn live_clause_for(organization: &str) -> String {
     format!("s.revoked_at IS NULL AND s.expires_at>clock_timestamp() AND w.publication_id=s.publication_id AND w.version=s.work_version AND p.definition_digest=s.definition_digest AND p.operator_version=1 AND {}",sponsor_clause_for(organization))
 }
 /// APP-178 (ADR-014 addendum, 2026-11-12): a connected link whose grant is
-/// valid in every respect except that the sponsor organization is suspended is
-/// paused, not removed. It is hidden and unreadable while suspended, and comes
-/// back when the organization is restored. Revocation, a policy change and
-/// expiry still remove it.
+/// live in every respect apart from the sponsor organization's state is paused,
+/// not removed. It is hidden and unreadable while the organization is suspended,
+/// and comes back when it is restored. Either state counts here, so a restore
+/// that commits between the listing's access check and this check keeps the
+/// link instead of removing it. Revocation, a policy change and expiry still
+/// remove it.
 async fn link_paused(
     tx: &Transaction<'_>,
     account: &ShareAccount,
@@ -281,7 +283,7 @@ async fn link_paused(
     grant_version: i64,
 ) -> Result<bool> {
     check_account(tx, account, false).await?;
-    let rows=tx.query(&format!("SELECT 1 {SHARE_FROM} WHERE s.organization_id=$1::text::uuid AND s.share_id=$2::text::uuid AND s.accepted_account_id=$3::text::uuid AND s.version=$4::bigint AND s.allow_add_to_canvas AND {}",live_clause_for("o.status='suspended'")), &[&org,&share,&account.account_id(),&grant_version]).await?;
+    let rows=tx.query(&format!("SELECT 1 {SHARE_FROM} WHERE s.organization_id=$1::text::uuid AND s.share_id=$2::text::uuid AND s.accepted_account_id=$3::text::uuid AND s.version=$4::bigint AND s.allow_add_to_canvas AND {}",live_clause_for("o.status IN ('active','suspended')")), &[&org,&share,&account.account_id(),&grant_version]).await?;
     Ok(!rows.is_empty())
 }
 
