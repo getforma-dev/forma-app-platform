@@ -169,20 +169,35 @@ def source_binding():
         "schema_manifest_sha256": hashlib.sha256(Path(manifests[0]).read_bytes()).hexdigest()}
 
 
-def deployment_contract_digest(repo, revision=None):
+INFRASTRUCTURE_FILES = frozenset({"infra/package.json", "infra/package-lock.json", "infra/cdk.json", "infra/tsconfig.json"})
+
+
+def tree_digest(repo, revision, selected, label):
+    """One row per selected committed path, `path NUL sha256(bytes) LF`, sorted by path."""
     revision = revision or "HEAD"
-    require(revision == "HEAD" or SHA.fullmatch(revision), "full deployment baseline SHA required")
+    require(revision == "HEAD" or SHA.fullmatch(revision), "full " + label + " baseline SHA required")
     def read(*args):
         return subprocess.check_output(["git", "-C", str(repo), *args])
-    paths = read("ls-tree", "-r", "--name-only", revision).decode().splitlines()
-    contract = {p for p in paths if p.startswith(("infra/src/", "app/migrations/")) or p in {
-        "infra/package.json", "infra/package-lock.json", "infra/cdk.json", "infra/tsconfig.json",
+    paths = {p for p in read("ls-tree", "-r", "--name-only", revision).decode().splitlines() if selected(p)}
+    require(paths, label + " is empty")
+    rows = [(p, hashlib.sha256(read("show", revision + ":" + p)).hexdigest()) for p in sorted(paths)]
+    return hashlib.sha256(b"".join(p.encode() + b"\0" + h.encode() + b"\n" for p, h in rows)).hexdigest()
+
+
+def deployment_contract_digest(repo, revision=None):
+    return tree_digest(repo, revision, lambda p: p.startswith(("infra/src/", "app/migrations/")) or p in INFRASTRUCTURE_FILES | {
         "app/runtime/runtime.py", "app/Dockerfile", "app/qualification/Dockerfile",
         "app/operator/Dockerfile", ".dockerignore", "app/qualification/Dockerfile.dockerignore",
-        "app/operator/Dockerfile.dockerignore"}}
-    require(contract, "deployment contract is empty")
-    rows = [(p, hashlib.sha256(read("show", revision + ":" + p)).hexdigest()) for p in sorted(contract)]
-    return hashlib.sha256(b"".join(p.encode() + b"\0" + h.encode() + b"\n" for p, h in rows)).hexdigest()
+        "app/operator/Dockerfile.dockerignore"}, "deployment contract")
+
+
+def infrastructure_digest(repo, revision=None):
+    """The CDK source alone, in the deployment contract's row format (APP-175).
+
+    A schema release may change migrations, the runtime and the image contexts,
+    never the stack: the runtime promotion still applies the baseline template.
+    """
+    return tree_digest(repo, revision, lambda p: p.startswith("infra/src/") or p in INFRASTRUCTURE_FILES, "infrastructure")
 
 
 def main():

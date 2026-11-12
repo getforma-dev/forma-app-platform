@@ -163,7 +163,7 @@ For APP-142:
 - Added the page module, the resize handle, the fan-out copy, the page share menu, and the stack refusal. Reserved the verb `fan` so an app cannot be addressed by that name. Recorded the one local change on the vendored canvas (`resizeItem`) and the `.dockerignore` allowlist entry for `page.ts`.
 - Ran the admin typecheck and the admin test suite. Ran the reserved-verb Rust test after a production admin build.
 - Verified the page in a fresh browser on port 8001, then stopped that server.
-- Updated `Tickets/0-backlog/APP-142.md`, regenerated the board, and recorded the checks. Status stayed Backlog.
+- Updated `Tickets/4-done/APP-142.md`, regenerated the board, and recorded the checks. Status stayed Backlog.
 - Pushed the branch and opened PR 27. Stopped for Codex and Claude.
 
 Ports 4001–4010 were not reset, not browsed, and not used as the demo. No AWS resource was changed. `contracts/.venv`, `app/admin/dist`, `.env.dev`, and Playwright snapshots were not committed.

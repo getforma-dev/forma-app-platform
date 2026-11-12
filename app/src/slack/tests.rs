@@ -181,6 +181,42 @@ fn every_posted_text_is_escaped() {
     assert!(format!("{:?}", secret()).contains("redacted"));
 }
 
+/// APP-108 acceptance 9: `/forma … from the Q3 metrics folder` reaches the
+/// shared `boxes::intent::act` (the box campaign drives that call); this is
+/// the Slack half: the built app is one escaped line with a link to its
+/// page, and a refusal is a neutral sentence that names no folder.
+#[test]
+fn a_folder_build_answer_is_one_escaped_line_linking_the_app_page() {
+    use crate::boxes::{intent::Answer, routes::BuildRefusal};
+    let state = slack_state("http://127.0.0.1:1");
+    let built = super::flows::folder_message(
+        &state,
+        Answer::Done(serde_json::json!({
+            "via": "folder", "kind": "build_from_box", "app_id": "a1", "work_id": "w1",
+            "title": "Q3 <metrics> & co", "label": "Built from folder: Q3 board pack · 3 files"
+        })),
+    );
+    let text = built.to_string();
+    assert!(
+        text.contains("Q3 &lt;metrics&gt; &amp; co is on your canvas (Built from folder: Q3 board pack · 3 files)."),
+        "{text}"
+    );
+    assert!(text.contains("/w/a1/w1"), "{text}");
+    assert!(!text.contains("<metrics>"), "{text}");
+    let empty =
+        super::flows::folder_message(&state, Answer::Refused(BuildRefusal::NoData)).to_string();
+    assert!(
+        empty.contains("has no CSV or XLSX data to build from yet"),
+        "{empty}"
+    );
+    let missing =
+        super::flows::folder_message(&state, Answer::Refused(BuildRefusal::NotFound)).to_string();
+    assert!(
+        !missing.contains("a1") && !missing.contains("Q3"),
+        "{missing}"
+    );
+}
+
 fn slack_state(api_base: &str) -> Arc<Slack> {
     let auth = Arc::new(Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap());
     Slack::new(

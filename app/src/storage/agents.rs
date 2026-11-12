@@ -86,6 +86,14 @@ pub struct AgentToken {
 pub struct AgentAttribution {
     pub record: Option<(String, i64)>,
     pub label: String,
+    /// APP-116: the tool call that committed this version, from the
+    /// append-only access log, and its duration. Only `forma_commit`
+    /// attributes a record version, so this is the first allowed
+    /// `forma_commit` by the same token that touched the record in or after
+    /// the attribution's second (the log's `occurred_at` is whole seconds,
+    /// so a draft call in that second must not match).
+    pub tool: Option<String>,
+    pub duration_ms: Option<i32>,
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -252,7 +260,7 @@ impl Workspace {
         let cap = Instant::now() + AGENT_HANDLER_DEADLINE;
         let transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
-            let rows = transaction.query("SELECT a.record_id::text,a.record_version,t.label FROM genui.agent_attributions a JOIN genui.agent_tokens t ON t.organization_id=a.organization_id AND t.token_id=a.token_id WHERE a.organization_id=$1::text::uuid AND a.app_id=$2::text::uuid AND a.work_id=$3::text::uuid ORDER BY a.created_at,a.attribution_id LIMIT $4", &[&request.organization,&app,&work,&ATTRIBUTION_LIMIT]).await?;
+            let rows = transaction.query("SELECT a.record_id::text,a.record_version,t.label,l.tool,l.duration_ms FROM genui.agent_attributions a JOIN genui.agent_tokens t ON t.organization_id=a.organization_id AND t.token_id=a.token_id LEFT JOIN LATERAL (SELECT x.tool,x.duration_ms FROM genui.agent_access_log x WHERE x.organization_id=a.organization_id AND x.token_id=a.token_id AND x.outcome='allowed' AND x.tool=$5 AND a.record_id IS NOT NULL AND a.record_id=ANY(x.touched_records) AND x.occurred_at>=date_trunc('second',a.created_at) ORDER BY x.chain_sequence LIMIT 1) l ON true WHERE a.organization_id=$1::text::uuid AND a.app_id=$2::text::uuid AND a.work_id=$3::text::uuid ORDER BY a.created_at,a.attribution_id LIMIT $4", &[&request.organization,&app,&work,&ATTRIBUTION_LIMIT,&crate::mcp::tools::COMMIT]).await?;
             rows.iter()
                 .map(|row| {
                     let record: Option<String> = optional(row, 0)?;
@@ -260,6 +268,8 @@ impl Workspace {
                     Ok(AgentAttribution {
                         record: record.zip(version),
                         label: text(row, 2)?,
+                        tool: optional(row, 3)?,
+                        duration_ms: row.try_get(4).map_err(|_| Error::Unavailable)?,
                     })
                 })
                 .collect::<Result<Vec<_>>>()

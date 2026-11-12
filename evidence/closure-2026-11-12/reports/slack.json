@@ -1,0 +1,58 @@
+{
+  "campaign": "APP-100 Slack: link, file, approve and notify through the governed action path (synthetic identities and Slack payloads, loopback Slack and model stubs, Docker)",
+  "checks": [
+    {
+      "name": "an unsigned command and a url_verification signed with another secret get the same uniform 401 before any parsing (the refusal counter moved by two); the challenge is echoed only under a valid signature",
+      "passed": true
+    },
+    {
+      "name": "an unlinked Slack user's utterance is acknowledged and answered only with the link prompt; nothing is drafted or written",
+      "passed": true
+    },
+    {
+      "name": "linking: /forma link answers a single-use 10-minute token; the signed-in member's page names the Slack user; the confirmation binds the confirming member in its own organization (3 Northstar links, the outsider's in the canary organization); a reused or tampered token is refused, an anonymous visitor is asked to sign in, a cross-site POST is 403; the linked user gets a DM",
+      "passed": true
+    },
+    {
+      "name": "/forma file (rehearsed): acknowledged in 0 ms; the ephemeral confirmation card ($86.00, Nobu, meals, submitted, Approver Sarah Chen, Confirm/Cancel) arrives by response_url in 899 ms; his app is placed (app.placed on his canvas) and no record is written",
+      "passed": true
+    },
+    {
+      "name": "Confirm: another Slack user's click on the draft is refused; Diego's Confirm commits exactly one audited record (record.committed on his canvas, app.shared on Sarah's) in 288 ms and replaces the card with \"Filed … sent to Sarah Chen\"; a second Confirm replays the stored outcome (one record, one outcome); Sarah gets a DM with the claim and Approve/Reject in 1129 ms; the records listing marks the version via Slack",
+      "passed": true
+    },
+    {
+      "name": "hostile clicks: a non-approver member, another organization's linked member, a nonexistent record id and markup as the value all get the same refusal without replacing the message; an unlinked user and Sarah's user id under another team get the link prompt; an oversized value is ignored; nothing changed",
+      "passed": true
+    },
+    {
+      "name": "a 10-second model: the command is acknowledged in 0 ms and the card arrives by response_url in 10611 ms; user text in every posted message is Slack-escaped (no <!channel>, link or tag survives); Cancel writes nothing",
+      "passed": true
+    },
+    {
+      "name": "Approve by button: decided as Sarah through the audited route (version 2, approved, updater Sarah, via Slack); the DM is replaced in 671 ms with \"Approved by Sarah Chen\" and no buttons; record.committed on both canvases; Diego's DM \"Your Nobu claim ($86.00) was approved by Sarah Chen\" in 671 ms; a second Approve or a Reject on the decided record is refused without a change; the audit chains verify",
+      "passed": true
+    },
+    {
+      "name": "after Sarah's sign-out-all advanced her epoch her Slack link answers only the link prompt; after /forma unlink Diego's does too",
+      "passed": true
+    },
+    {
+      "name": "I6: the bot token travels only in the Authorization header of Web API calls (never to a response_url); the captured log and every posted message contain no bot token, signing secret or link token",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "timings_ms": {
+    "approve_ack_ms": 0,
+    "approve_to_filer_dm_ms": 671,
+    "approve_to_replaced_ms": 671,
+    "command_ack_ms": 0,
+    "command_to_card_ms": 899,
+    "confirm_ack_ms": 0,
+    "confirm_to_approver_dm_ms": 1129,
+    "confirm_to_filed_ms": 288,
+    "slow_model_ack_ms": 0,
+    "slow_model_card_ms": 10611
+  }
+}

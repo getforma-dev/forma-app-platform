@@ -110,15 +110,28 @@ export function showTiming(title: string, steps: Step[], target?: HTMLElement | 
   };
 }
 
-/** "Agent activity" on a card: `via Claude · 2:14:03 PM`. */
-export function showActivity(target: HTMLElement | null, label: string, what: string): void {
+/** The agent tool and its duration, when the listing names them: `forma_commit 142 ms` (APP-116). */
+export function agentCall(tool?: string | null, ms?: number | null): string {
+  const name = typeof tool === 'string' && /^forma_[a-z_]{1,40}$/.test(tool) ? tool : '';
+  const time = typeof ms === 'number' && Number.isFinite(ms) && ms >= 0 ? formatMs(ms) : '';
+  return [name, time].filter(Boolean).join(' ');
+}
+
+/** The chip's text: `Agent activity: Nobu approved via Claude (forma_commit 142 ms) · 2:14:03 PM`. */
+export function activityText(what: string, label: string, time: string, tool?: string | null, ms?: number | null): string {
+  const call = agentCall(tool, ms);
+  return `Agent activity: ${what} via ${label}${call ? ` (${call})` : ''} · ${time}`;
+}
+
+/** "Agent activity" on a card: `via Claude (forma_commit 142 ms) · 2:14:03 PM`. */
+export function showActivity(target: HTMLElement | null, label: string, what: string, tool?: string | null, ms?: number | null): void {
   const card = holder(target);
   if (!on || !documentRef || !card) return;
   const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   card.querySelector(':scope > .cv-activity-chip')?.remove();
   card.append(el(documentRef, 'p', { class: 'cv-timing cv-activity-chip', title: 'A change that arrived live from another channel' },
     el(documentRef, 'span', { class: 'cv-timing-mark', 'aria-hidden': 'true' }, '⚡'),
-    `Agent activity: ${what} via ${label} · ${time}`));
+    activityText(what, label, time, tool, ms)));
 }
 
 /** Resolves with the ms until every view card of `work` shows a value (or a final state), capped at `limit`. */

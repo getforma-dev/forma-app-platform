@@ -1,6 +1,6 @@
 # APP-082 — exact-source CI receipt
 
-This file records the tenant-foundation run. The independent review that binds it is [independent-review.md](independent-review.md). Ticket: [APP-082](../../Tickets/3-in-review/APP-082.md).
+This file records the tenant-foundation run. The independent review that binds it is [independent-review.md](independent-review.md). Ticket: [APP-082](../../Tickets/4-done/APP-082.md).
 
 Exact source: `a9a730531dc6644d2fa6ef291a967080886f596a` (`origin/main`).
 

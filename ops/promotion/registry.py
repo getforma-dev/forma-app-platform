@@ -126,13 +126,31 @@ DISPOSITION = Path(__file__).with_name('scan-disposition.json')
 # name, severity and package. A different finding, severity, package, role or expiry
 # needs a reviewed change to this constant. The JSON adds only what binds the review
 # to real images: each role's predecessor manifest, the deployment contract and the
-# complete scanner fingerprints. The APP-167 operator-only disposition (three MEDIUM
-# gcc-12 findings, expiring 2026-11-09) preceded this one; see evidence/APP-167.
+# complete scanner fingerprints. This one covers the APP-175 schema release only: its
+# contract is the release's `to` contract and it expires with the release. It
+# supersedes APP-173's (zlib and apt, expired 2026-11-12), which followed APP-167's
+# operator-only one (three MEDIUM gcc-12 findings, expired 2026-11-09); both records
+# stay under evidence/.
 REVIEWED_DISPOSITION = {
-    'evidence': 'evidence/APP-173/SCAN-DISPOSITION.md',
+    'evidence': 'evidence/APP-175/SCAN-DISPOSITION.md',
     'roles': frozenset(REPOS),
-    'expires_at_utc': '2026-11-12T00:00:00Z',
-    'findings': {'CVE-2026-76844': ('HIGH', 'zlib'), 'CVE-2026-109518': ('HIGH', 'apt')},
+    'expires_at_utc': '2026-11-20T00:00:00Z',
+    'findings': {
+        'CVE-2026-100290': ('LOW', 'glibc'),
+        'CVE-2026-112314': ('HIGH', 'krb5'),
+        'CVE-2026-112315': ('MEDIUM', 'krb5'),
+        'CVE-2026-112316': ('MEDIUM', 'krb5'),
+        'CVE-2026-112317': ('MEDIUM', 'krb5'),
+        'CVE-2026-112318': ('MEDIUM', 'krb5'),
+        'CVE-2026-112319': ('MEDIUM', 'krb5'),
+        'CVE-2026-112320': ('HIGH', 'krb5'),
+        'CVE-2026-112321': ('HIGH', 'krb5'),
+        'CVE-2026-112322': ('HIGH', 'krb5'),
+        'CVE-2026-112323': ('HIGH', 'krb5'),
+        'CVE-2026-115456': ('LOW', 'gcc-12'),
+        'CVE-2026-115819': ('MEDIUM', 'glibc'),
+        'CVE-2026-119079': ('HIGH', 'krb5'),
+    },
 }
 
 

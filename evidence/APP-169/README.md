@@ -88,3 +88,16 @@ Checks:
 - `just campaign canvas`: passed. It now also checks that an `if_absent` write over a saved choice answers with that choice and writes no event, that one with nothing saved stores the kind with one event, and that operator `verify` succeeds with these events in the workspace chain.
 
 Browser evidence: `docs/DEVELOPMENT.md` and `just campaigns` name no browser campaign for the Library or kinds. The uncatalogued APP-168 Playwright script `app/scripts/app_view_browser.mjs` toggles the classification but does not clear storage or use a second device, and Playwright is not installed in this checkout. The "Browser" section above ran on 0021 and the old merge code, so it is not evidence for the final head. Acceptance (a) is unticked until a fresh browser run on the final head.
+
+## Browser evidence on the final head (2026-11-12, Claude)
+
+Acceptance (a), "admitted durable kind survives new device/login while unauthorized work remains undiscoverable", on `main` at `5695869` (PRs #83 and #84 merged; schema 22). A fresh pitch instance from a clean worktree of that commit (`just setup`, `just dev -d`; port base 5600; its own Compose project, so nothing shared with any other checkout), driven in Chrome through the real UI.
+
+1. **Before.** Diego (`127.0.0.1:5601/canvas`): `#cv-canvas` carries `data-artifact-kinds="true"`; all 20 Library rows carry no `data-artifact-kind`; Diego's member-scoped store `forma.canvas.standalone.v1:32f5442b…` is empty.
+2. **Classify through the UI.** Library → the row "Budget vs actual" → its options menu → **Show in Cards**. The local store then holds that work (`…1401/…1404`).
+3. **New device.** `localStorage.clear()` and `sessionStorage.clear()` on Diego's origin, then reload. The server renders the row with `data-artifact-kind="card"` (the only row with a kind), and the board adopts it back into a fresh local store. The choice survived losing every byte of browser state.
+4. **Another member.** Sarah (`127.0.0.1:5602/canvas`, same organization, also granted that work): the row is present, carries **no** kind, and her own store `…:c7d20ddf…` is empty. A member's classification is personal.
+5. **Undiscoverable.** From Sarah's page, `POST /v1/library/{app}/{work}/kind` for a work that does not exist and for an app that does not exist both answer `404 {"code":"not_found","status":404}`, the same uniform body the canvas campaign proves for a work without a grant; neither wrote a row.
+6. **Database** (read-only `psql` in that instance's container): schema version `22`; exactly one `genui.work_artifact_kinds` row (Diego's principal, work `…1404`, `card`); exactly one `work.kind_set` workspace-chain audit event for that work.
+
+Limit: one browser and one organization; the no-grant 404 for a real, ungranted work is proven by the canvas campaign (`canvas_campaign.rs`), not re-driven here.

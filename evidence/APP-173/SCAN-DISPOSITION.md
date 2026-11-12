@@ -65,3 +65,7 @@ PR #88 merged as `05db000` at 19:12:06 UTC, three seconds after `PROMOTION_ENABL
 - **One readiness blip:** `/health/ready` returned 503 once at about 19:59 UTC, before approval. Every probe before and after returned 200, both tasks reported `HEALTHY` on unchanged task definitions with no restart, and no service event was recorded. Its cause was not determined.
 - **Execution:** Victor approved in the `beta` environment. Execution ran 20:30:48–20:34:49 UTC and the tag job sealed `beta/20261105-05db000` at 20:35:03. `/`, `/health/live` and `/health/ready` returned 200 afterwards.
 - **New baseline:** the live state (revision 6331, no active promotion) records manifests `1bbf0e4d…` (service), `152088e1…` (qualification) and `9dbe284e…` (operator), each with 23 findings, including both CVEs. They are now ordinary baseline findings; the disposition has no further effect and expires on November 12.
+
+## Superseded (2026-11-12)
+
+This disposition expired on 2026-11-12 and its two findings are baseline findings of the live images. [`ops/promotion/scan-disposition.json`](../../ops/promotion/scan-disposition.json) now holds the [APP-175 disposition](../APP-175/SCAN-DISPOSITION.md) for the schema release. This record and its [scan delta](scan-delta-2026-11-05.json) stay as evidence, unchanged above this note.

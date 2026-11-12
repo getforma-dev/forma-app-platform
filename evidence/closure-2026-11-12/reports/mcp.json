@@ -1,0 +1,74 @@
+{
+  "campaign": "APP-099: Forma as an MCP server, the two-member story through POST /v1/mcp (synthetic identities, Docker)",
+  "checks": [
+    {
+      "name": "connect an agent: members mint labelled tokens through POST /v1/agent-tokens from their canvas session (fmat_ + 64 characters, shown once); only SHA-256 digests are stored; the listing shows labels, never a token; another member's revoke and an anonymous mint are the uniform 404, a cross-site revoke 403",
+      "passed": true
+    },
+    {
+      "name": "protocol: initialize negotiates 2025-06-18, notifications answer 202 with no session id, tools/list is exactly the 11 tools, ping answers, an unknown method is -32601 and an unknown tool -32602, GET /v1/mcp is 405",
+      "passed": true
+    },
+    {
+      "name": "scenario 1a: Diego's agent lists his library (the expense app with its writable fields, synthetic data) and forma_draft_record drafts $86.00 Nobu meals, status submitted, approver Sarah Chen in 962 ms; the expense app is placed for him (app.placed live on his stream) and no record is written",
+      "passed": true
+    },
+    {
+      "name": "hostile values: an extra field, a wrong type and a status other than the starting state are invalid_arguments; an untypable amount is could_not_draft; SQL and markup are drafted as typed text and a grant phrase resolves no approver; a foreign organization's app id is not_found; nothing was written",
+      "passed": true
+    },
+    {
+      "name": "scenario 1b: forma_commit files one audited record v1 through the command route (358 ms) and shares it with Sarah Chen: record.committed on Diego's stream, app.shared on Sarah's (0 ms); a repeated forma_commit replays the same outcome (one record, one outcome); Sarah's agent cannot commit Diego's draft (same refusal as an unknown id); Sarah's canvas records list shows the claim \"via Claude\"",
+      "passed": true
+    },
+    {
+      "name": "scenario 2: Sarah's agent lists one pending claim filed by Diego Ramos (Diego's own list is empty), drafts and commits the approval (770 ms): version 2 approved; record.committed reaches Diego's stream (0 ms) and his records list shows it approved by Sarah Chen \"via OpenAI\"; a second approval has no transition and is refused before any write",
+      "passed": true
+    },
+    {
+      "name": "forma_run_view returns exactly the canvas query route's rows and receipt (digest sha256:48ff389cfeec5c5c8bae70e4c19264f17030257696fb9f7719dbcb6dcf828d54) for the same member, view and parameters (332 ms); Sarah's run (first view by default) carries her own receipt",
+      "passed": true
+    },
+    {
+      "name": "the audit chains verify; exactly two command.committed events name the work (Diego's claim through Claude, Sarah's approval through OpenAI), the actor being the member each time",
+      "passed": true
+    },
+    {
+      "name": "isolation: no bearer, a malformed, forged or unknown token, a token revoked from the canvas, a token whose member's epoch moved (sign-out) and a session cookie without a bearer are all the byte-identical uniform 404 (timings in the report); a foreign Origin is 403; a canary-organization token running Diego's view, sharing his work, drafting on his app or deciding his claim, Diego's token on the canary's app, and Sarah sharing Diego's work onward all answer the same not_found tool result as a nonexistent work; a foreign token cannot commit his draft and lists nothing of Northstar's; nothing was written",
+      "passed": true
+    },
+    {
+      "name": "forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in 394 ms, app.placed live on Diego's stream, the work attributed to his token; an active canary member's first compose creates only their own unpublished shell with three grants and one audit; model absence returns could_not_compose, Northstar is unchanged and no source/work grant is added",
+      "passed": true
+    },
+    {
+      "name": "APP-115 scoped tokens: a mint with an unknown space, an empty selection, an unknown action, 31 days or an extra member is 400 malformed_scope; \"Security bot\" (Security, read and draft, 7 days) lists only the in-scope Access requests app; drafting in Time off (People) by its name (292 ms), running its view by id, drafting a decision on the Nobu claim (decide not allowed), composing (narrowed scope) and sharing (share not allowed) are each the uniform not_found, byte-identical to a nonexistent app, and write nothing; an in-scope access request drafts and its commit is refused (commit not allowed) with nothing written",
+      "passed": true
+    },
+    {
+      "name": "APP-115 access log: every tools/call is one row (token, label, member, tool, touched ids, outcome and reason, space, duration); GET /v1/governance/agents lists Diego's agents with scope, status and counts (Security bot: 9 calls, 7 refused); its timeline is newest first and shows \"Draft a record — refused: outside scope (People), Time off\" with the time-off app id, the view refusal with its work id, and the allowed access-request draft; Sarah reading Diego's agent and an anonymous read are the uniform 404; no token in the log; the 32-row organization chain verifies, editing row 3's duration as the owner breaks it at row 3 and restoring it verifies again; genui_workspace holds no UPDATE or DELETE; a token revoked through DELETE /v1/agent-tokens answers the uniform 404 on its next call and lists as revoked",
+      "passed": true
+    }
+  ],
+  "engine": "deterministic stub Executor shared by the canvas query route and the MCP tool",
+  "passed": true,
+  "timings": {
+    "commit_ms": 358,
+    "compose_ms": 394,
+    "diego_record_committed_event_ms": 0,
+    "draft_record_ms": 962,
+    "run_view_ms": 332,
+    "sarah_app_shared_after_commit_ms": 0,
+    "sarah_decide_and_commit_ms": 770,
+    "scope_refusal_ms": 292,
+    "uniform_refusal_us": {
+      "epoch_bumped": 63989,
+      "forged": 52,
+      "malformed": 79,
+      "no_credential": 178,
+      "revoked": 56270,
+      "session_cookie_only": 81,
+      "unknown_secret": 66912
+    }
+  }
+}
