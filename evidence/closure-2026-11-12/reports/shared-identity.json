@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "name": "anonymous, malformed, absent-row, expired, revoked and missing-vault home sessions offer signup through the actual JSON entry and exact target-tenant POST; raw-cookie CSRF remains required; live home session suppresses signup",
+      "passed": true
+    },
+    {
+      "name": "real locked home membership makes GET suppress signup and POST refuse without flow/broker/PAR growth or replacing the home cookie; no fallback tenant on uncertain lookup",
+      "passed": true
+    },
+    {
+      "name": "existing other-organization session reauthenticates in its own provider tenant, receives account-only identity, accepts exact work, and retains its live home cookie with no tenant membership/grant growth",
+      "passed": true
+    },
+    {
+      "name": "eight-session cap refuses a ninth seat but verified reauthentication replaces the current browser; shared-only signout revokes its vault/session and preserves the live home workspace",
+      "passed": true
+    },
+    {
+      "name": "callback replay, wrong mailbox, wrong issuer, mismatched subject and foreign tenant uniformly refuse without replacing or clearing the home workspace session",
+      "passed": true
+    },
+    {
+      "name": "real HTTP broker and provider contract fakes perform exact-email hosted registration; unverified callback grants nothing, fresh verified signin returns the exact share and creates no organization membership or workspace cookie",
+      "passed": true
+    },
+    {
+      "name": "revoked exact share refuses before issuing provider authorization",
+      "passed": true
+    },
+    {
+      "name": "ordinary workspace signout also destroys and clears the browser's account-only session and revokes its provider reference",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Synthetic loopback broker/provider HTTP; no hosted delivery or live deployment claim.",
+    "Existing home workspace session is fixture-minted but backed by a real signed synthetic-provider token and resolved by production storage."
+  ],
+  "passed": true,
+  "schema_version": 1
+}

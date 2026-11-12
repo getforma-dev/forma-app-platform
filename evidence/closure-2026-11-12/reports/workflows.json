@@ -1,0 +1,51 @@
+{
+  "campaign": "APP-107: the workflow library end to end (synthetic identities, Docker, loopback model stub)",
+  "checks": [
+    {
+      "name": "seed-library adds the five workflow apps (19 in all); the operator's grants put exactly the five in Diego's action catalog, each with a filing create and a decide command",
+      "passed": true
+    },
+    {
+      "name": "time off, a $180 purchase, an admin access request and a 15% discount: each rehearsed sentence answers a typed card (no model call; status at the declared initial value), Confirm files one audited record (record.committed on Diego's stream), the share reaches Sarah (app.shared on hers), her listing offers exactly the allowed transition, her structured decision commits version 2 (approved / approved in one step under $5,000 / granted / approved) and Diego's listing shows it live; card 888 / 784 / 930 / 817 ms",
+      "passed": true
+    },
+    {
+      "name": "a $7,200 purchase names two approvers (Sarah Chen, then Priya Natarajan) and is shared with both; at submitted it offers only manager_approved or rejected; finance posting \"approved\" first is refused by storage and nothing changes; Sarah's Approve drafts manager_approved with the declared rule shown (amount > $5,000.00), then Priya's Approve commits approved (version 3, updater Priya) and Diego sees it live; the $180 one completed in one approval; two steps 1727 ms",
+      "passed": true
+    },
+    {
+      "name": "Priya logs invoice FIG-2207 for $7,450 naming PO-385AFFD2: the card carries the server's flag \"PO mismatch: PO-385AFFD2 is $7,200.00, this invoice is $7,450.00\" (a $7,200 one: match), status received by the declared initial value; after the share Sarah's listing carries the same flag, and she approves and marks it paid (versions 2 and 3): the flag never blocks",
+      "passed": true
+    },
+    {
+      "name": "deal desk: an 8% discount drafts status approved with the rule \"discount pct ≤ 10%\" and commits as one audited command (exactly one new audit event, its id the outcome's) in 616 ms; a create claiming approved for 15% is refused by storage; the 15% Kestrel request waited for Sarah (above)",
+      "passed": true
+    },
+    {
+      "name": "one unrehearsed sentence per app goes to the model (loopback stub, 5 calls) and drafts in the right app; every status the model named (approved, paid, granted) is replaced by the declared initial value (submitted, received, requested; 25% stays submitted)",
+      "passed": true
+    },
+    {
+      "name": "MCP: Sarah's agent token \"Haiku\" lists the pending holidays time off (forma_list_pending), drafts the decision across her decidable works (forma_draft_decision, no app named) and commits it (forma_commit) in 1071 ms; Diego's listing shows approved, via Haiku",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "timings": {
+    "access_card_ms": 930,
+    "access_confirm_ms": 168,
+    "access_decide_ms": 682,
+    "auto_approve_ms": 616,
+    "discount_deep_card_ms": 817,
+    "discount_deep_confirm_ms": 132,
+    "discount_deep_decide_ms": 599,
+    "mcp_decide_ms": 1071,
+    "purchase_small_card_ms": 784,
+    "purchase_small_confirm_ms": 156,
+    "purchase_small_decide_ms": 622,
+    "time_off_card_ms": 888,
+    "time_off_confirm_ms": 142,
+    "time_off_decide_ms": 613,
+    "two_step_ms": 1727
+  }
+}
