@@ -3253,7 +3253,7 @@
       "Depends on": "APP-091",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`app098/demo-register` (local, not pushed); no PR yet",
+      "Branch / PR": "`app098/demo-register` (register verification and box 1; PR to follow)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
