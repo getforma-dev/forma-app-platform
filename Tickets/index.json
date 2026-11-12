@@ -315,7 +315,7 @@
       ],
       "ticket_count": 70,
       "done_count": 39,
-      "blocked_count": 1
+      "blocked_count": 2
     },
     {
       "id": "PH09",
@@ -364,7 +364,6 @@
     "APP-098",
     "APP-099",
     "APP-111",
-    "APP-127",
     "APP-132",
     "APP-139",
     "APP-150",
@@ -4089,11 +4088,11 @@
     {
       "id": "APP-127",
       "title": "Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)",
-      "path": "0-backlog/APP-127.md",
+      "path": "9-blocked/APP-127.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Blocked",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",
@@ -4106,10 +4105,10 @@
       "Depends on": "APP-126",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`pivot/devflow` (built; not merged into `pivot/pitch-mvp`)",
+      "Branch / PR": "Built on `pivot/devflow` and `pivot/ladder`, merged to `main`. Closure fixes and tests on `chore/dev-chain-close` (2026-11-12)",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
-      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "Blocked by": "Victor's product decision on acceptance box 5 (\"the next beta window runs entirely through recipes\"). The window it described ran partly by hand, and the legacy path has been fenced since APP-167, so the box can never be met as written.",
+      "Unblock evidence": "Victor withdraws box 5 as superseded by APP-167's approved end-to-end promotion (recorded in this ticket with his words), or names another proof that a real window can supply.",
       "dependencies": [
         "APP-126"
       ]
@@ -4192,7 +4191,7 @@
       "Depends on": "APP-125, APP-126, APP-127, APP-128",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`pivot/ladder` (built; not merged into `pivot/pitch-mvp`)",
+      "Branch / PR": "Built on `pivot/devflow` and `pivot/ladder`, merged to `main`. Closure fixes and tests on `chore/dev-chain-close` (2026-11-12)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -4280,7 +4279,7 @@
       "Depends on": "APP-127, APP-130",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`pivot/ladder` (built; not merged into `pivot/pitch-mvp`)",
+      "Branch / PR": "Built on `pivot/devflow` and `pivot/ladder`, merged to `main`. Closure fixes and tests on `chore/dev-chain-close` (2026-11-12)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
