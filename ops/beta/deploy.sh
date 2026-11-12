@@ -301,7 +301,11 @@ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
     load_env; window_dir "$WINDOW_ID"; need_window_dir
     [[ ! -f "$W/clean-trial.json" || "$step" == migrate ]] || die "clean trial refuses sandbox seed and library grants; provision an empty organization and issue its member invite"
     if [[ -f "$W/clean-trial.json" ]]; then
-      shown 'python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state stopped > "$W/services-stopped.json"'
+      # [read] both services stopped before the migration (sts, ecs describe-
+      # services). It runs only once approved, and only after the approval is
+      # recorded, so no AWS call precedes Victor's words (APP-127 acceptance 2).
+      if [[ -n "$APPROVED" ]] && (( ! DRY_RUN )); then record_approval "$step (services-stopped guard)"; fi
+      prepare 'python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state stopped > "$W/services-stopped.json"'
     fi
     fwd=(--window "$WINDOW_ID"); [[ -n "$APPROVED" ]] && fwd+=(--approved "$APPROVED"); (( DRY_RUN )) && fwd+=(--dry-run)
     case $step in

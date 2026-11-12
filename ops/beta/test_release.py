@@ -462,6 +462,53 @@ class DeployFlowTests(unittest.TestCase):
         self.assertEqual(self.shim_log(), before)
         self.assertFalse((self.priv / "approvals.md").exists())
 
+    def test_a_clean_trial_migrate_reads_aws_only_after_its_approval(self):
+        # APP-127 acceptance 1 and 2 for a clean-trial window: the services-
+        # stopped guard (sts, ecs describe-services) is a read before the
+        # migration. Refused, it calls nothing; approved, it runs only after
+        # the approval line is written.
+        self.new_window()
+        w = self.priv / "windows" / self.window
+        (w / "clean-trial.json").write_text("{}")
+        (w / "stack-after.json").write_text("{}")
+        guard = self.repo / "infra/scripts/shared_broker_activation.py"
+        guard.write_text("import subprocess\nsubprocess.run(['aws', 'sts', 'get-caller-identity'], check=True)\nprint('{}')\n")
+        out = self.deploy("migrate", self.window, expect=3)
+        self.assertIn("(runs once approved)", out)
+        self.assertNotIn("aws ", self.shim_log())
+        self.assertFalse((self.priv / "approvals.md").exists())
+        # Approved: run-step.sh's own steps may then stop on the synthetic
+        # inputs; only the order of the guard's call is asserted here.
+        subprocess.run(["bash", str(self.repo / "ops/beta/deploy.sh"), "migrate", self.window, "--approved", "yes, migrate"],
+                       cwd=self.repo, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+        calls = Path(self.env["SHIM_LOG"] + ".order").read_text().splitlines()
+        self.assertEqual(calls[0].split()[1:], ["aws", "sts", "get-caller-identity"])
+        for call in calls:
+            self.assertGreater(int(call.split()[0]), 0, f"'{call}' ran before the approval")
+        self.assertIn("migrate (services-stopped guard)", (self.priv / "approvals.md").read_text())
+
+    def test_verify_picks_the_newest_activated_window(self):
+        # APP-133 acceptance 5: with several windows, `verify` (no window
+        # named) records its results on the newest activated one only.
+        windows = {}
+        for label, activated_at in (("older", "2026-11-01T09:30:00Z"), ("newer", "2026-11-03T09:30:00Z"), ("pending", None)):
+            self.new_window()
+            path = self.priv / "windows" / self.window / "release.json"
+            record = json.loads(path.read_text())
+            if activated_at:
+                for name in release.IMAGES:
+                    record["images"][name]["digest"] = DIGESTS[name]
+                record["stack"]["task_definition_revision"] = 13
+                record["activated_at_utc"] = activated_at
+                record["approvals"].append({"step": "activate", "at_utc": activated_at, "approvals_md_line": 3})
+            path.write_text(json.dumps(record))
+            windows[label] = path
+        self.deploy("verify")
+        verified = {label: json.loads(path.read_text()).get("verified") for label, path in windows.items()}
+        self.assertIs(verified["newer"]["live"], True, verified)
+        self.assertIsNone(verified["older"]["live"], "the older activated window is not re-verified")
+        self.assertIsNone(verified["pending"]["live"], "a window never activated is not verified")
+
     def test_push_refuses_images_that_were_not_qualified(self):
         self.new_window()
         self.env["SHIM_BAD_ID"] = "1"
