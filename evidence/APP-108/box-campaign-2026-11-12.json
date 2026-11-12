@@ -17,11 +17,11 @@
       "passed": true
     },
     {
-      "name": "derived app: \"build a metrics app from folder 1\" through POST /v1/act resolves the folder by number and the model receives only the capped context (2879 bytes: file names and types, at most 3 data files with typed fields and at most 20 sample rows, the PDF by name only); the typed definition is admitted, published on Maya's authoring app and placed, labeled generated with \"Built from folder: Q3 board pack\"; its receipts name the folder's revisions",
+      "name": "derived app: \"build a metrics app from folder 1\" through POST /v1/act resolves the folder by number and the model receives only the capped context (3548 bytes: file names and types, at most 3 data files with typed fields and at most 20 sample rows, the PDF by name only); the typed definition is admitted, published on Maya's authoring app and placed, labeled generated with \"Built from folder: Q3 board pack\"; its receipts name the folder's revisions",
       "passed": true
     },
     {
-      "name": "APP-108 surfaces: the canvas sentence goes through boxes::intent::act with no selected folder, the call Slack's /forma makes; an agent token minted from Maya's session builds the same kind of app through MCP forma_folder_formation (folder 1): one model call, generated, \"Built from folder: Q3 board pack\", a new work whose lineage names the folder's CSV; the teammate's token naming Maya's folder is a tool error with no model call",
+      "name": "APP-108 surfaces: the canvas sentence goes through boxes::intent::act with no selected folder, the call Slack's /forma makes; an agent token minted from Maya's session builds the same kind of app through MCP forma_folder_formation (folder 1): one model call, generated, \"Built from folder: Q3 board pack\", a new work whose lineage names the folder's CSV; the teammate's token naming Maya's folder by its name (Q3 board pack) or its number (1) is not_found with no model call",
       "passed": true
     },
     {
@@ -75,15 +75,15 @@
   ],
   "scope": "APP-108 folders, local Docker campaign over a loopback stand, synthetic identities and files, a loopback model stub",
   "timings_ms": {
-    "brief": 4098,
-    "build_from_folder": 3988,
-    "confirm_register_card": 1698,
-    "context_bytes": 2879,
-    "demo_build": 2713,
-    "upload_forecast.xlsx": 1558,
-    "upload_logo.png": 233,
-    "upload_q3_metrics.csv": 887,
-    "upload_q3_metrics_brief.pdf": 235,
-    "upload_q3_pipeline.csv": 937
+    "brief": 4799,
+    "build_from_folder": 3351,
+    "confirm_register_card": 1727,
+    "context_bytes": 3548,
+    "demo_build": 2595,
+    "upload_forecast.xlsx": 1484,
+    "upload_logo.png": 203,
+    "upload_q3_metrics.csv": 824,
+    "upload_q3_metrics_brief.pdf": 222,
+    "upload_q3_pipeline.csv": 909
   }
 }

@@ -2,7 +2,7 @@
 
 **Author evidence, not acceptance.** Built on the clone's sub-branch `pivot/library` (from `pivot/pitch-mvp` 9cf52c2); not merged. No independent review has run and no ticket was moved. Nothing touched AWS or `forma-app-platform`. Everything ran on one Apple-silicon Mac (Darwin arm64) with local Docker; every container this slice started was removed by its campaign. Data is labeled synthetic throughout (`contracts/fixtures/library/catalog.json` `synthetic: true`); no customer evidence, credential, address or key appears in this folder.
 
-Controlling text: [APP-094](../../../Tickets/0-backlog/APP-094.md); [ADR-011](../../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md) §3 invariants (verified identity, tenant isolation, receipts on every governed number, idempotent audited commands, model output as data through admission, no credential in evidence); APP-012's engine and its qualified subset ([../../APP-012/README.md](../../APP-012/README.md)).
+Controlling text: [APP-094](../../../Tickets/4-done/APP-094.md); [ADR-011](../../../docs/architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md) §3 invariants (verified identity, tenant isolation, receipts on every governed number, idempotent audited commands, model output as data through admission, no credential in evidence); APP-012's engine and its qualified subset ([../../APP-012/README.md](../../APP-012/README.md)).
 
 ## What the library is
 
