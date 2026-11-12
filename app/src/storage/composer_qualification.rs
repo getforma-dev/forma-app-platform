@@ -201,10 +201,11 @@ async fn campaign() {
 
     // --- The context names only what the member owns, reads and runs ---
     let context = stores.workspace.composer_context(&member).await.unwrap();
-    assert_eq!(
-        context.authoring.as_ref().map(|a| a.app.as_str()),
-        Some(APP)
-    );
+    // APP-085 (APP-010 review m3): the member's only owned app is the seeded
+    // Northstar app, whose publication went through independent_review. It
+    // stays under review, so it is not an authoring app; an explicit compose
+    // creates the member's shell instead.
+    assert_eq!(context.authoring.as_ref().map(|a| a.app.as_str()), None);
     assert_eq!(context.owner_publish_policy.as_deref(), Some(POLICY));
     assert_eq!(context.sources.len(), 2, "events and inventory revisions");
     assert_eq!(context.library.len(), 1);
@@ -271,14 +272,24 @@ async fn campaign() {
         0
     );
     let disabled = Composer::new(None, "r", "g");
+    let prepared = footprint(&fixture).await;
     assert_eq!(
         compose_for(&stores, &disabled, &member, intent).await,
         Err(Refused::ComposerUnavailable)
     );
+    // APP-085: the member's only owned app is under review, so this explicit
+    // compose first prepares the member's authoring shell (APP-145), then
+    // refuses for the missing key. Nothing else is written.
     let before = footprint(&fixture).await;
+    let mut shell_only = prepared.clone();
+    shell_only[10] += 1; // the shell's audit event
+    shell_only[11] += 1; // apps
+    shell_only[12] += 3; // its discover, edit_definition and run
+    assert_eq!(before, shell_only, "only the authoring shell is written");
+    let shell = text(&fixture, &format!("SELECT app_id::text FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{PRINCIPAL}' AND app_id<>'{APP}'")).await;
     check(
         &mut checks,
-        "a revoked member and a principal with no row get the uniform refusal before any model call and no app row is inserted; without a key the composer answers composer_unavailable and writes nothing",
+        "a revoked member and a principal with no row get the uniform refusal before any model call and no app row is inserted; without a key the composer answers composer_unavailable and writes nothing but the member's authoring shell (APP-085: the member's owned app is under review)",
     );
 
     // --- Retrieved: a confident router choice instantiates the library app ---
@@ -336,9 +347,10 @@ async fn campaign() {
         "a high-confidence router choice saves a new work of the library app's publication bound under the member's own source_read, labeled retrieved, with work.saved and work.bound events and no generation call; the creator opens it and an ungranted teammate is denied",
     );
 
-    // --- Generated: admitted, drafted on the owned app, owner-published, saved ---
+    // --- Generated: admitted, drafted on the member's authoring shell, owner-published, saved ---
+    // APP-085: never on the seeded app under review.
     let before = after;
-    let publications_before = scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}'")).await;
+    let reviewed_publications = scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}'")).await;
     let (script, composer) = Script::composer(vec![
         Ok(router_reply("none", "low", "")),
         Ok(serde_json::to_string(&runnable_northstar()).unwrap()),
@@ -348,7 +360,10 @@ async fn campaign() {
         .unwrap();
     assert_eq!(script.calls(), 2);
     assert_eq!(generated.origin, Origin::Generated);
-    assert_eq!(generated.app, APP);
+    assert_eq!(
+        generated.app, shell,
+        "drafted on the shell, never on the reviewed app"
+    );
     assert_eq!(generated.title, "Northstar investigation");
     let after = footprint(&fixture).await;
     let mut expected = before.clone();
@@ -367,18 +382,25 @@ async fn campaign() {
         after, expected,
         "no app, permission or grant row is written"
     );
-    let publications_after = scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}'")).await;
-    assert_eq!(publications_after, publications_before + 1);
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}'")).await,
+        reviewed_publications,
+        "the app under review gains no publication"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{shell}'")).await,
+        1
+    );
     let detail = stores
         .workspace
-        .read_work(&member, APP, &generated.work)
+        .read_work(&member, &shell, &generated.work)
         .await
         .unwrap();
     assert_ne!(
         detail.publication, context.library[0].publication,
         "pinned to the new publication"
     );
-    let newest = text(&fixture, &format!("SELECT publication_id::text FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}' ORDER BY publication_sequence DESC LIMIT 1")).await;
+    let newest = text(&fixture, &format!("SELECT publication_id::text FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{shell}' ORDER BY publication_sequence DESC LIMIT 1")).await;
     assert_eq!(detail.publication, newest);
     assert_eq!(
         text(&fixture, &format!("SELECT policy_kind||':'||author_id::text||':'||approver_id::text FROM genui.publications WHERE organization_id='{ORG}' AND publication_id='{newest}'")).await,
@@ -397,7 +419,7 @@ async fn campaign() {
     // The generated work runs: its runnable views are the outline's.
     let outline = stores
         .data
-        .work_outline(&member, APP, &generated.work)
+        .work_outline(&member, &shell, &generated.work)
         .await
         .unwrap();
     assert_eq!(outline.title, "Northstar investigation");
@@ -411,7 +433,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "a generated definition passes admission, is drafted on the member's owned app, owner-published (author and approver the member) and saved bound to the registered source revisions, labeled generated, with definition.drafted, publication.published, work.saved and work.bound events and no new app, permission or grant row",
+        "a generated definition passes admission, is drafted on the member's authoring shell, never on the owned app under review (APP-085), owner-published (author and approver the member) and saved bound to the registered source revisions, labeled generated, with definition.drafted, publication.published, work.saved and work.bound events and no new app, permission or grant row",
     );
 
     // --- Hostile outputs: refused by admission on every attempt, no row ---
@@ -475,13 +497,17 @@ async fn campaign() {
     assert_eq!(script.calls(), 1, "no generation call");
     assert_eq!(adapted.origin, Origin::Adapted);
     assert_eq!(adapted.title, "Traffic review");
+    assert_eq!(
+        adapted.app, shell,
+        "adapted onto the shell, never onto the reviewed app (APP-085)"
+    );
     let after = footprint(&fixture).await;
     assert_eq!(after[3], before[3] + 1, "one more publication");
     assert_eq!(after[6], before[6] + 1, "one more saved work");
     assert_eq!(after[11..], before[11..], "no app, permission or grant row");
     let outline = stores
         .data
-        .work_outline(&member, APP, &adapted.work)
+        .work_outline(&member, &adapted.app, &adapted.work)
         .await
         .unwrap();
     assert_eq!(outline.title, "Traffic review");
@@ -541,7 +567,7 @@ async fn campaign() {
     );
     let outline = stores
         .data
-        .work_outline(&member, APP, &kept.work)
+        .work_outline(&member, &kept.app, &kept.work)
         .await
         .unwrap();
     assert!(
@@ -590,8 +616,10 @@ async fn campaign() {
     );
 
     // --- APP-145: one shell when an active member owns no eligible app ---
-    // The member above already owns APP. A fresh context still selects it
-    // and does not insert a shell. The bare member owns nothing.
+    // The member above owns APP, which is under review and so not eligible
+    // (APP-085), and the shell its first compose created. A fresh context
+    // selects that shell and does not insert another. The bare member owns
+    // nothing.
     assert_eq!(
         stores
             .workspace
@@ -601,12 +629,12 @@ async fn campaign() {
             .authoring
             .as_ref()
             .map(|authoring| authoring.app.as_str()),
-        Some(APP)
+        Some(shell.as_str())
     );
     assert_eq!(
         scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{PRINCIPAL}'")).await,
-        1,
-        "a member who already owns an eligible app composes without a new shell"
+        2,
+        "APP under review and one shell: a member who already has an eligible app composes without another shell"
     );
     let policies = scalar(
         &fixture,
@@ -859,7 +887,8 @@ async fn campaign() {
     );
     assert_eq!(
         scalar(&fixture, &format!("SELECT count(*) FROM genui.apps WHERE organization_id='{ORG}' AND owner_principal_id='{PRINCIPAL}'")).await,
-        1
+        2,
+        "the member owns APP (under review) and its one authoring shell (APP-085)"
     );
     check(
         &mut checks,
