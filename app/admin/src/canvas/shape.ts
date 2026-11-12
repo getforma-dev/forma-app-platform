@@ -373,6 +373,7 @@ export function appThemesFromStorage(value: unknown): [string, AppTheme][] {
 }
 
 function themeKey(): string | null {
+  // DS-40: demo mode keeps no app themes.
   if (typeof document === 'undefined' || isDemoCanvas()) return null;
   const member = document.getElementById('cv-canvas')?.getAttribute('data-member') ?? '';
   return /^[0-9a-f]{16}$/.test(member) ? `forma.canvas.app-theme.v1:${member}` : null;

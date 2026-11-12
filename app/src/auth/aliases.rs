@@ -11,6 +11,7 @@
 //! database are APP-117.
 use std::{collections::HashMap, sync::OnceLock};
 
+// DS-81: sign-in aliases from deployment configuration; not behind GENUI_DEMO_MODE.
 pub const ENV: &str = "GENUI_SIGNIN_ALIASES_JSON";
 const MAX_BYTES: usize = 16 * 1024;
 

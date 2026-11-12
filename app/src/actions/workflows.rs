@@ -437,6 +437,7 @@ fn decision_word(lower: &str) -> Option<&'static str> {
 }
 
 /// The deterministic parse of a rehearsed workflow sentence, or `None`.
+// DS-69: reached only through rehearsed::parse.
 pub fn rehearsed(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Parsed> {
     let lower = utterance.to_lowercase();
     // A slash command pins one app: its sentence needs no naming word.

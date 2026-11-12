@@ -26,6 +26,7 @@ pub struct Product {
     /// The realtime URL the canvas hands its island (empty: none).
     pub live_events: String,
     /// `GENUI_DEMO_ORGANIZATIONS` (APP-098).
+    // DS-40.
     pub demo_organizations: BTreeSet<String>,
     /// The composer (`POST /v1/compose`) and the MCP server's model.
     pub composer: Composer,

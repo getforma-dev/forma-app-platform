@@ -289,6 +289,7 @@ pub struct TextHints {
     pub note: Option<String>,
 }
 
+// DS-83: the rehearsed parser's pattern helpers, in every organization.
 pub fn text_hints(utterance: &str, today: &str) -> TextHints {
     let mut hints = TextHints::default();
     if utterance.trim().is_empty() {
@@ -441,6 +442,7 @@ impl Parser {
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         let app = expense_app(catalog).ok_or(ParseFailure::CouldNotParse("no_expense_app"))?;
         let hints = text_hints(utterance, today);
+        // DS-57: the rehearsed receipt fixture, demo organization only.
         if demo && receipt.sha256() == FIXTURE_SHA256 {
             tracing::info!(
                 event = "action.rehearsed",

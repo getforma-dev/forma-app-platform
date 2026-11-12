@@ -288,7 +288,10 @@ function scheduleReflow(): void {
   if (!reflowFrame) reflowFrame = requestAnimationFrame(reflow);
 }
 
-/** `GENUI_DEMO_MODE` is on for this page (`data-demo="on"`). */
+/**
+ * DS-40: `GENUI_DEMO_MODE` is on for this page (`data-demo="on"`), which the
+ * server sets only for a listed demo organization with the switch on.
+ */
 function demo(): boolean {
   return host?.dataset.demo === 'on';
 }
@@ -330,7 +333,7 @@ export function canvasHost(): HTMLElement | null {
   return canvas ? host : null;
 }
 
-/** Whether this page runs the pitch's demo mode (`GENUI_DEMO_MODE`). */
+/** DS-40: whether this page runs the pitch's demo mode (`GENUI_DEMO_MODE`). */
 export function isDemoCanvas(): boolean {
   return demo();
 }
@@ -898,7 +901,7 @@ function adopt(section: HTMLElement, y: number, animate: boolean, include: (card
   const app = section.dataset.app ?? '';
   const work = section.dataset.work ?? '';
   if (!isUuid(app) || !isUuid(work) || groups.has(work)) return null;
-  // APP-098 demo shortcut (GENUI_DEMO_MODE): every load starts from the
+  // DS-40 (APP-098, GENUI_DEMO_MODE): every load starts from the
   // default arrangement, so two windows of the pitch show the same canvas.
   const saved = demo() ? new Map<string, Partial<WidgetCanvasItemState>>() : loadLayout(app, work);
   const cards = Array.from(section.querySelectorAll<HTMLElement>(':scope > .cv-card'));
@@ -1722,6 +1725,7 @@ async function settle(document_: Document): Promise<void> {
   if (!canvas || !host) return;
   await uniteHooks.restore();
   stackHooks.settled();
+  // DS-40: no saved camera in demo mode.
   const camera = demo() ? null : loadCamera();
   const target = requestedWork(location.hash);
   const mounted = target ? host.querySelector<HTMLElement>(`.cv-item-unite[data-unite="${target}"]`) ?? groups.get(target)?.items[0] : undefined;

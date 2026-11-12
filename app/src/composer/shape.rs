@@ -763,7 +763,7 @@ fn field_named<'a>(word: &str, fields: &'a [Field]) -> Option<&'a Field> {
         })
 }
 
-/// DS: the rehearsed card sentences (module notes): clauses separated by
+/// DS-78: the rehearsed card sentences (module notes): clauses separated by
 /// commas or "and". `None`: nothing rehearsed matched (then the model).
 pub fn rehearsed_card(words: &str, fields: &[Field]) -> Option<CardView> {
     let text = normalize(words);
@@ -928,7 +928,7 @@ pub fn rehearsed_card(words: &str, fields: &[Field]) -> Option<CardView> {
     Some(view)
 }
 
-/// The rehearsed app themes: a mode, an accent and a density in any order
+/// DS-78: the rehearsed app themes: a mode, an accent and a density in any order
 /// ("dark green, compact"; "light"; "reset").
 pub fn rehearsed_theme(words: &str) -> Option<AppTheme> {
     let text = normalize(words).replace(',', " ");

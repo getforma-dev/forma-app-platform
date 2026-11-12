@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""APP-107: the "second vendor" agent loop on the local stand (APP-098 DS-69:
+"""APP-107: the "second vendor" agent loop on the local stand (APP-098 DS-70:
 a Claude Haiku model stands in for OpenAI until its key is added; Victor,
 2026-10-30: "for now just mock [OpenAI] with lower-level models").
 

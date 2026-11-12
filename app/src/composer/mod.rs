@@ -110,6 +110,7 @@ pub const COMPOSE_DEADLINE: Duration = Duration::from_secs(120);
 /// organization only. A rehearsed transform is judged and admitted like any
 /// other; nothing bypasses admission, authorization, the audited command
 /// path, receipts or live updates.
+// DS-05, DS-39: the demo organization list (the stack names one organization).
 pub const DEMO_ORGANIZATIONS_ENV: &str = "GENUI_DEMO_ORGANIZATIONS";
 const ROUTER_MAX_TOKENS: u32 = 300;
 /// The transform call's output bound and budget (APP-101: the reshape
@@ -213,6 +214,7 @@ impl Composer {
     /// listed here and by [`crate::demo::is_demo_org`], so `GENUI_DEMO_MODE`
     /// off turns every composer shortcut off.
     pub fn demo_for(&self, organization: &str) -> bool {
+        // DS-05: the composer's list and the switch, both required.
         self.demo.contains(organization) && crate::demo::is_demo_org(organization)
     }
     /// The route may compose for this organization: a model, the instant
@@ -220,6 +222,7 @@ impl Composer {
     /// composition answers `composer_unavailable`), or the demo
     /// organization's rehearsed path.
     pub fn available_for(&self, organization: &str) -> bool {
+        // DS-53: a demo organization's rehearsed transform needs no model.
         self.enabled() || self.matcher || self.demo_for(organization)
     }
     /// Whether the instant matcher runs.
@@ -328,6 +331,7 @@ impl Composer {
         demo: bool,
     ) -> Result<(Transform, &'static str), TransformFailure> {
         if demo {
+            // DS-53: the rehearsed transform, demo organization only.
             if let Some(rehearsed) = transform::rehearsed(intent) {
                 return Ok((rehearsed, "rehearsed"));
             }

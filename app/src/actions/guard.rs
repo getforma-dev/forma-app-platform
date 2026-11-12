@@ -220,6 +220,7 @@ fn money_at(words: &[String], at: usize) -> bool {
         return false;
     }
     let text = words[at..words.len().min(at + 2)].join(" ");
+    // DS-83: the rehearsed parser's amount pattern, in every organization.
     rehearsed::amount(&text).is_some()
 }
 

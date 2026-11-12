@@ -141,6 +141,7 @@ fn boolean(row: &Row, index: usize) -> Result<bool> {
 /// The member label: the operator-set display name when one exists
 /// (`crate::directory`, ADR-011 scenarios), else the neutral `Member` and the
 /// first eight hex digits.
+// DS-17, DS-44: the directory's name, else the neutral label.
 pub fn member_label(principal: &str) -> String {
     crate::directory::label(principal)
 }

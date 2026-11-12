@@ -144,7 +144,7 @@ Start with **[DEVELOPMENT.md](../DEVELOPMENT.md)** for setup, the persona URLs, 
 - **Secrets:** keys live only in the clone's gitignored `.env`. They go into AWS Secrets Manager by piping from that file, are never printed, and are never put in chat or in a commit. After a secret changes, force a new deployment of the service.
 - **Health:** `/health/live` returns 200. Every protected route answers the same 404 when signed out.
 - **Rollback:** each build refuses any schema but its own; observe the live catalog before selecting a candidate. A replaced task definition cannot simply be redeployed. Fix forward by default; the other paths are in the runbook's "Rollback" section.
-- **Known shortcuts and limits:** every mock, hard-coded path and pitch limit is in [APP-098](../../Tickets/0-backlog/APP-098.md) (DS-01 onward). The demo shortcuts only run inside the demo organization. Everything after a parse is real.
+- **Known shortcuts and limits:** every mock, hard-coded path and pitch limit is in [APP-098](../../Tickets/2-in-progress/APP-098.md) (DS-01 onward). The demo shortcuts only run inside the demo organization. Everything after a parse is real.
 
 ## Definitions
 

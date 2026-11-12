@@ -124,6 +124,7 @@ function notice(message: string, actions: { label: string; run(): void }[] = [],
 // --- Persistence (this browser only) ---
 
 function save(): void {
+  // DS-40: demo mode keeps no folder layout.
   if (isDemoCanvas()) return;
   const rows: { id: string; x: number; y: number }[] = [];
   for (const entry of open.values()) {
@@ -1367,6 +1368,7 @@ export function startBoxes(document_: Document): void {
   onCanvasDragEnd((item, completion) => { void dropSheetOnFolder(item, completion); });
   const restoreCamera = JSON.stringify(canvasApi()?.getCamera());
   void refreshBoxes().then(async () => {
+    // DS-40: demo mode restores no folders.
     if (!isDemoCanvas()) for (const row of load()) void openBox(row.id, { x: row.x, y: row.y });
     // Only references are cached. Resolve authorized metadata before mounting.
     const placements = loadSheets();

@@ -2,7 +2,7 @@
 
 # Pitch join: canvas, planner, and composer
 
-Status: the APP-091 record. Read against `pivot/pitch-mvp` at `1a8c9c84e889`, which descends from `phase-one-spikes` `21199f4`. The authoritative shortcut text is [APP-098](../../Tickets/0-backlog/APP-098.md). This note names the seam, the rule relaxed, and the revisit ticket. APP-097 decides keep, rework, or drop.
+Status: the APP-091 record. Read against `pivot/pitch-mvp` at `1a8c9c84e889`, which descends from `phase-one-spikes` `21199f4`. The authoritative shortcut text is [APP-098](../../Tickets/2-in-progress/APP-098.md). This note names the seam, the rule relaxed, and the revisit ticket. APP-097 decides keep, rework, or drop.
 
 ADR-011's first draft named a vector index from Forma Generative UI. That index is not in this tree. The 2026-10-30 amendment replaced it: the planner is the library matcher. A generated definition enters only through admission.
 

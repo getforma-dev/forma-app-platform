@@ -188,6 +188,7 @@ export function serverSteps(timings: unknown): Step[] {
     const ms = value[key];
     if (typeof ms !== 'number' || !Number.isFinite(ms)) return [];
     // A rehearsed demo build calls no model: say so rather than "model 0 ms".
+    // DS-73: the rehearsed build's label.
     if (key === 'generation_ms' && ms === 0) return [{ label, ms, text: 'not called (rehearsed)' }];
     return [{ label, ms, server: ms }];
   });

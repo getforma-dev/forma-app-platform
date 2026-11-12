@@ -332,6 +332,7 @@ fn summed(table: &FolderTable) -> Option<(usize, ColumnType)> {
 }
 
 /// A rehearsed answer, or `None` (then the model).
+// DS-79: reached only when the route's demo flag is on.
 pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
     let words = words(question);
     let has = |w: &str| words.iter().any(|word| word == w);
@@ -562,6 +563,7 @@ pub async fn ask_post(
     let Some(member) = routes::session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // DS-79: a demo organization's rehearsed folder questions need no model.
     let demo = demo::is_demo_org(member.organization());
     if !state.composer.enabled() && !demo {
         return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
@@ -621,6 +623,7 @@ pub async fn ask_post(
         };
         return routes::document(StatusCode::OK, &document(&answer, &tables));
     }
+    // DS-79: rehearsed folder questions, demo organization only.
     if let Some(answer) = demo.then(|| rehearsed(&question, &tables)).flatten() {
         log("rehearsed", "ok", answer.references.len());
         return routes::document(StatusCode::OK, &document(&answer, &tables));

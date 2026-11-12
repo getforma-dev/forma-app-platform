@@ -536,6 +536,7 @@ pub fn redirect(question: &str, scope: &str, rows: &[Row]) -> Answer {
 
 /// A rehearsed answer to `question` over `rows`, or `None` (then the model).
 /// `partial`: a work in scope had more records than were read (module notes).
+// DS-77: reached only when the route's demo flag is on.
 pub fn rehearsed(question: &str, scope: &str, rows: &[Row], partial: bool) -> Option<Answer> {
     let words = words(question);
     if words.first().is_some_and(|w| CHANGES.contains(&w.as_str())) {

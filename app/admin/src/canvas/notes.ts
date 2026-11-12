@@ -453,6 +453,7 @@ export function startNotes(document_: Document): void {
   onBoardSettled(() => {
     loadView();
     void findWork(false).then(async (found) => {
+      // DS-40: demo mode restores no notes.
       if (found && (await refresh()) && !isDemoCanvas()) {
         for (const note of [...notes.values()].sort((a, b) => a.at.localeCompare(b.at))) if (!hidden.has(note.id)) show(note);
       }

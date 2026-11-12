@@ -103,7 +103,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 095 | [APP-095: Share an app with a teammate under policy](0-backlog/APP-095.md) | [PH08](phases/PH08.md) | S14 | SHR | P0 | M | Backlog | APP-094 |
 | 096 | [APP-096: Deploy and rehearse the pitch on beta.getforma.dev](0-backlog/APP-096.md) | [PH08](phases/PH08.md) | S14 | VAL | P0 | L | Backlog | APP-092, APP-093, APP-094, APP-095 |
 | 097 | [APP-097: Post-November 2 revisit: land the pitch and close the deferred work](0-backlog/APP-097.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | L | Backlog | APP-076, APP-078, APP-086, APP-089, APP-090, APP-014, APP-084, APP-096 |
-| 098 | [APP-098: Demo shortcuts register: every mock, hard-code and pitch limit behind GENUI_DEMO_MODE](0-backlog/APP-098.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-091 |
+| 098 | [APP-098: Demo shortcuts register: every mock, hard-code and pitch limit behind GENUI_DEMO_MODE](2-in-progress/APP-098.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | In progress | APP-091 |
 | 099 | [APP-099: Forma as an MCP server: any agent (Claude, OpenAI, others) works through the governed canvas](0-backlog/APP-099.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095 |
 | 100 | [APP-100: Slack: file, approve and get notified in Slack through the governed action path](0-backlog/APP-100.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-095, APP-099 |
 | 101 | [APP-101: Instant pick and live transform: prebuilt apps land at once and reshape to the request](0-backlog/APP-101.md) | [PH08](phases/PH08.md) | S14 | AI | P0 | L | Backlog | APP-093, APP-094 |

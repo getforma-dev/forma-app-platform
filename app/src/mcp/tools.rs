@@ -519,6 +519,7 @@ async fn list_apps(
             })
         })
         .collect();
+    // DS-80: the synthetic-data sentence, demo organization only.
     let synthetic = demo::is_demo_org(member.organization());
     let summary = format!(
         "{} library app(s) you can start and {} saved or shared work(s).{}",
@@ -615,6 +616,7 @@ async fn run_view(
     let total = rows.len();
     let shown: Vec<Value> = rows.into_iter().take(MAX_ROWS).collect();
     let receipt_id = document["receipt"]["digest"].clone();
+    // DS-80: the synthetic-data sentence, demo organization only.
     let synthetic = demo::is_demo_org(member.organization());
     let summary = format!(
         "{} ({}): {} row(s){}. Receipt {}.{}",

@@ -17,6 +17,7 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
+// DS-44: display names from an operator file or JSON; not behind GENUI_DEMO_MODE.
 pub const FILE_ENV: &str = "GENUI_DISPLAY_NAMES_FILE";
 /// The same JSON inline (the deployed task: the stack sets it at synth from a
 /// private file, APP-096); the file wins when both are set.

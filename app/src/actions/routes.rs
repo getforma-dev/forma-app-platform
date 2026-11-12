@@ -485,6 +485,7 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         log_refused(&member, "invalid_utterance", started);
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_utterance");
     };
+    // DS-43, DS-57, DS-69: the demo flag selects the rehearsed parse and receipt.
     let demo = demo::is_demo_org(member.organization());
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();

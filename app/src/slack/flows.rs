@@ -415,6 +415,7 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
     if catalog.is_empty() {
         return text::ephemeral(REFUSED, None, false);
     }
+    // DS-43, DS-69: the rehearsed parse in Slack, demo organization only.
     let demo = demo::is_demo_org(member.organization());
     let today = crate::events::today();
     let parse = match state.parser.parse(utterance, &catalog, demo, &today).await {

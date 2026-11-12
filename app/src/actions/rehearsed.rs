@@ -285,6 +285,7 @@ pub(super) fn approver(text: &str) -> Option<String> {
 }
 
 /// The deterministic parse, or `None` when no rehearsed pattern applies.
+// DS-43: reached only when the caller's demo flag is on (Parser::parse).
 pub fn parse(utterance: &str, catalog: &[CatalogApp], today: &str) -> Option<Parsed> {
     // APP-107 (DS-69): the workflow apps' rehearsed sentences first; they
     // fire only on words naming a workflow (time off, purchase, invoice,
