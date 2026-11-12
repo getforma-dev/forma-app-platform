@@ -717,17 +717,14 @@ pub fn records_document_with(
     listing: &RecordsListing,
     attributions: &[storage::AgentAttribution],
 ) -> Value {
-    let via = |record: &str, version: i64| {
-        attributions
-            .iter()
-            .rev()
-            .find(|a| {
-                a.record
-                    .as_ref()
-                    .is_some_and(|(r, v)| r == record && *v == version)
-            })
-            .map(|a| a.label.clone())
+    let attribution = |record: &str, version: i64| {
+        attributions.iter().rev().find(|a| {
+            a.record
+                .as_ref()
+                .is_some_and(|(r, v)| r == record && *v == version)
+        })
     };
+    let via = |record: &str, version: i64| attribution(record, version).map(|a| a.label.clone());
     json!({
         "app_id": listing.app,
         "work_id": listing.work,
@@ -784,6 +781,16 @@ pub fn records_document_with(
                         .map(|(_, to, rule)| json!({"to": to, "rule": rule}))
                         .collect(),
                 );
+            }
+            // APP-116: the agent tool call that committed this version and its
+            // duration, from the access log; display only, like the label.
+            if let Some(agent) = attribution(&r.record_id, r.version) {
+                if let Some(tool) = &agent.tool {
+                    record["via_tool"] = json!(tool);
+                }
+                if let Some(ms) = agent.duration_ms {
+                    record["via_ms"] = json!(ms);
+                }
             }
             // APP-100 (DS-59): the channel that committed this version, for
             // the canvas's origin chip; a display label only.
