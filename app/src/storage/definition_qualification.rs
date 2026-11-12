@@ -1226,6 +1226,26 @@ async fn campaign() {
         &mut checks,
         "independent_review (review m4): under an independent_review policy the owner is refused even with review_publish, a member without review_publish is refused, nothing is written; a non-owner reviewer publishes the owner's revision as approver with the owner as author",
     );
+    // APP-085 (APP-010 review m3): the app is now under review, and it stays
+    // there. Its owner cannot bypass review by naming the organization's
+    // owner_publish policy, nor by naming a policy that does not exist.
+    let before = footprint(&fixture).await;
+    for named in [POLICY, "00000000-0000-4000-8000-0000000085ff"] {
+        assert_eq!(
+            stores
+                .control
+                .publish(&author, SPEND_APP, &s05.revision, named)
+                .await,
+            Err(Error::Denied),
+            "the owner names policy {named} for an app under review"
+        );
+    }
+    assert_eq!(footprint(&fixture).await, before);
+    assert_eq!(highest(&fixture).await, reviewed.publication_id);
+    check(
+        &mut checks,
+        "APP-085 (review m3): once an app is published under independent_review, its owner naming the organization's owner_publish policy, or a policy that does not exist, is refused and writes nothing; the app's newest publication stays the reviewed one",
+    );
 
     // --- ADR-007 amendment (review M2): creator authority on saved work ---
     grant(&fixture, PRINCIPAL, "run", &["--app", SPEND_APP]);
