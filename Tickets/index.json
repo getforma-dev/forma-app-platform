@@ -348,7 +348,7 @@
         "APP-179"
       ],
       "ticket_count": 17,
-      "done_count": 3,
+      "done_count": 4,
       "blocked_count": 0
     }
   ],
@@ -372,7 +372,6 @@
     "APP-165",
     "APP-170",
     "APP-171",
-    "APP-177",
     "APP-178"
   ],
   "tickets": [
@@ -3431,7 +3430,7 @@
       "Depends on": "APP-094, APP-101, APP-103",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Library pane is on pivot/pitch-mvp (now `main`). Card drag: pivot/app-104-library-drag. Fences moved to [APP-177](../0-backlog/APP-177.md) on 2026-11-12",
+      "Branch / PR": "Library pane is on pivot/pitch-mvp (now `main`). Card drag: pivot/app-104-library-drag. Fences moved to [APP-177](../4-done/APP-177.md) on 2026-11-12",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5531,11 +5530,11 @@
     {
       "id": "APP-177",
       "title": "Decide and, if kept, build canvas fences for whole apps",
-      "path": "0-backlog/APP-177.md",
+      "path": "4-done/APP-177.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P3",
       "Type": "Feature",
       "Sprint": "S15",
@@ -5548,7 +5547,7 @@
       "Depends on": "APP-104",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`decisions/app177-fences`, PR #99 (decision; no fence code; the `/arrange` text in `controls.ts` was corrected on review)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

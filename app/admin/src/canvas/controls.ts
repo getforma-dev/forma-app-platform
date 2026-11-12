@@ -422,12 +422,12 @@ export function startControls(document_: Document): void {
   registerCommands([{
     slug: 'arrange',
     title: 'Arrange by app',
-    purpose: 'Lay the canvas out again, one row per app (view layout only)',
+    purpose: 'Lay the canvas out again, app by app, left to right (view layout only)',
     run: (_text: string, report?: (message: string) => void) => {
       resetLayout();
       const input = document_.getElementById('intent-input') as HTMLInputElement | null;
       if (input) input.value = '';
-      report?.('Arranged by app: one row per app.');
+      report?.('Arranged by app, left to right.');
     },
   }, {
     slug: 'shortcuts',
