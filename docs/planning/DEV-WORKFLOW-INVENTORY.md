@@ -40,7 +40,7 @@ Short answer: no, until 2026-10-30 22:54 there was no way to run the product loc
 ### A.3 What breaks (observed today)
 
 - **The pitch proxies run old code.** PIDs 35360-35362 have been up for 9 h 45 m, which puts their start before `e7dda41` (10:18, "each browser gets its own session"). `start` and `restart-server` skip a proxy that is alive (`dev_stand.sh:156`), so a proxy code change takes effect only after `stop`.
-- **The two stands share one machine-wide state directory and fixed ports.** A second checkout cannot run a stand. APP-119 says so in its log: "`dev_stand.sh` hard-codes the proxy ports 4001–4003, which Victor's running stand uses, so a second stand could not run beside it" (`Tickets/0-backlog/APP-119.md:100`).
+- **The two stands share one machine-wide state directory and fixed ports.** A second checkout cannot run a stand. APP-119 says so in its log: "`dev_stand.sh` hard-codes the proxy ports 4001–4003, which Victor's running stand uses, so a second stand could not run beside it" (`Tickets/4-done/APP-119.md:100`).
 - **Every server change re-seeds the database** (`GUIDE.md:141`), because the database lives in tmpfs inside a container the stand owns.
 
 ---
