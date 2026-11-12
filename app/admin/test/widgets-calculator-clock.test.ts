@@ -34,3 +34,19 @@ test('the calculator parser refuses anything but numbers, operators and parenthe
   }
   assert.equal(evaluate('('.repeat(40) + '1' + ')'.repeat(40)), null, 'nesting past the depth bound');
 });
+
+test('/clock Tokyo resolves to Asia/Tokyo and shows Tokyo time (APP-103)', async () => {
+  const { zoneOf, zoneName } = await import('../src/canvas/widgets/state.ts');
+  const { clockParts } = await import('../src/canvas/widgets/clock.ts');
+  assert.equal(zoneOf('Tokyo'), 'Asia/Tokyo');
+  assert.equal(zoneOf('tokyo'), 'Asia/Tokyo');
+  assert.equal(zoneOf('Asia/Tokyo'), 'Asia/Tokyo');
+  assert.equal(zoneOf('Atlantis'), null, 'an unknown place is not a zone');
+  assert.equal(zoneName('Asia/Tokyo'), 'Tokyo');
+  // 2026-11-12 00:30:05 UTC is 09:30:05 on Thursday 12 November in Tokyo (UTC+9, no DST).
+  const parts = clockParts(new Date('2026-11-12T00:30:05Z'), 'Asia/Tokyo', false);
+  assert.deepEqual([parts.hours, parts.minutes, parts.seconds, parts.period], ['09', '30', '05', '']);
+  assert.equal(parts.date, 'THU, NOV 12');
+  const twelve = clockParts(new Date('2026-11-12T05:00:00Z'), 'Asia/Tokyo', true);
+  assert.deepEqual([twelve.hours, twelve.period], ['02', 'PM']);
+});
