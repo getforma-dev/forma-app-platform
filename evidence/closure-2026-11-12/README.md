@@ -26,4 +26,4 @@ Most PH08 pitch tickets were built on `pivot/*` branches between October 30 and 
 
 - No new browser check. The canvas and widget behaviors that only a browser can show were checked by the earlier walks recorded in each ticket's log; Victor does the browser QA.
 - No hosted or AWS acceptance beyond what each ticket already records.
-- APP-104's unbuilt fences are moved to [APP-177](../../Tickets/0-backlog/APP-177.md) instead of being ticked.
+- APP-104's unbuilt fences are moved to [APP-177](../../Tickets/4-done/APP-177.md) instead of being ticked.

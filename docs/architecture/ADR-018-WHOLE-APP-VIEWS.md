@@ -17,3 +17,22 @@ Published component hiding is not admitted by the existing schema. Optional pers
 The common app toolbar retains Focus, Edit and Share where authorized, Open page and Remove from canvas. Inner component remove/focus controls and redundant successful Ready badges are suppressed; loading, errors, stale state and receipts remain. An app's live behavior, generic actions and record forms continue using the existing controller and server routes.
 
 APP-168 carries implementation and qualification. This decision supersedes older fan-out/per-app-subcard UX instructions without rewriting their historical evidence. Deployment is explicitly held for the redesign PR. Local qualification does not claim AWS release.
+
+## Amendment, 2026-11-12: canvas fences are dropped
+
+Decided by Claude (Opus 5.5) under Victor's delegation of 2026-11-12 ("Make your best judgement and answer for yourself based on the product and continue with tickets"), for [APP-177](../../Tickets/4-done/APP-177.md). Victor can reverse it.
+
+**The question.**
+- **What a fence is.** A fence is a labeled canvas region that items drop into and move with, and a double-click rolls it up.
+- **History.** Fences were planned on 2026-10-30 in APP-104, beside stacks, and never built. The same APP-104 box already said `/arrange` covered arranging by app.
+- **What would be left.** ADR-018 makes each app one canvas object whose components cannot be placed loose. A fence could therefore only group whole apps and widgets into named, member-made regions.
+- **What has no equivalent today.** Nothing on the canvas gives members named groups. `/arrange` is an automatic tidy that places whole apps left to right and wraps them at the viewport edge (`arrangeAppViews`). Library categories are fixed and live in the pane. Folders hold files.
+
+**The decision.** Fences are dropped. No code is written, and no fence entry is stored in the view layout.
+
+**Why.**
+- **The work is elsewhere.** The direction (`docs/planning/DIRECTION.md`) is the app as a page within a clean first-run trial. A first-run member has a handful of apps, so named canvas groups do not serve that journey.
+- **The cost is high for its value.** A container region adds canvas surface, drag and roll-up interactions, and a browser QA cost, for a need no ticket or trial has shown.
+- **The closest request is a bookmark, not a container.** It is APP-150 (2026-11-01): sections of the board a member can mark and return to. That stays in `docs/planning/LATER.md`.
+
+**Reopening.** If trial members ask to group apps, a new ticket should start from APP-150's marked sections and decide whether a section also holds what is inside it. A container would be a labeled region of the view layout holding App Cards and widgets, presentation only. APP-177's "if kept" scope is the starting point.
