@@ -2,7 +2,7 @@
 
 Sprints are ordered scope batches within the [implementation phases](PHASES.md), not calendar promises. Scheduling and capacity are agreed at sprint entry. Later batches are forecasts; split work before selection when it exceeds five focused days.
 
-Current board: Backlog: 140, Selected: 0, In progress: 4, In review: 3, Done: 24, Blocked: 4.
+Current board: Backlog: 103, Selected: 0, In progress: 4, In review: 0, Done: 67, Blocked: 4.
 
 | Sprint | Phase | Outcome | Tickets |
 |---|---|---|---|
@@ -20,4 +20,4 @@ Current board: Backlog: 140, Selected: 0, In progress: 4, In review: 3, Done: 24
 | [S12: Measured operations and pilot entry](sprints/S12.md) | [PH06](phases/PH06.md) | Measured capacity/recovery/security and operational ownership support the pilot decision. | 7 |
 | [S13: Post-MVP completion](sprints/S13.md) | [PH07](phases/PH07.md) | Every acceptance sentence and review residual deferred by ADR-010 is proven on the live beta or the local harness, or dispositioned with evidence. | 6 |
 | [S14: PIVOT: November 2 pitch demo](sprints/S14.md) | [PH08](phases/PH08.md) | The pitch journey (describe, canvas, governed data, share) rehearsed on the live beta, then the November 3 revisit. | 70 |
-| [S15: Composed app experience](sprints/S15.md) | [PH09](phases/PH09.md) | One coherent app across embedded, member and guest use, with typed component actions, durable appearance and qualified record dashboards. A separate spike decides future idle execution options. | 14 |
+| [S15: Composed app experience](sprints/S15.md) | [PH09](phases/PH09.md) | One coherent app across embedded, member and guest use, with typed component actions, durable appearance and qualified record dashboards. A separate spike decides future idle execution options. | 17 |

@@ -13,41 +13,43 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 31 | [APP-029: Verify accessible component states and equivalent focused workflows](../0-backlog/APP-029.md) | [PH02](../phases/PH02.md) | S05 | UX | P1 | M | Backlog | APP-028 |
 | 34 | [APP-081: Integrate linked views and evidence connections on the canvas](../0-backlog/APP-081.md) | [PH02](../phases/PH02.md) | S05 | UX | P1 | M | Backlog | APP-025, APP-027 |
 | 90 | [APP-090: MVP UI fixes and the designer handoff](../0-backlog/APP-090.md) | [PH02](../phases/PH02.md) | S03 | UX | P1 | M | Backlog | APP-076, APP-078 |
-| 092 | [APP-092: Canvas in the signed-in workspace](../0-backlog/APP-092.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-091 |
-| 104 | [APP-104: Canvas library pane, a clean board, and Figma-style controls](../0-backlog/APP-104.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-094, APP-101, APP-103 |
-| 106 | [APP-106: Focus mode and Unite: work on a card in a modal, and assemble an app's cards into the whole app](../0-backlog/APP-106.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104 |
-| 109 | [APP-109: Quick notes: /note saves a note as a card](../0-backlog/APP-109.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-103, APP-104 |
-| 112 | [APP-112: Command parity: every slash command has a click path](../0-backlog/APP-112.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-104, APP-106, APP-108, APP-109 |
+| 092 | [APP-092: Canvas in the signed-in workspace](../4-done/APP-092.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-091 |
+| 104 | [APP-104: Canvas library pane, a clean board, and Figma-style controls](../4-done/APP-104.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-094, APP-101, APP-103 |
+| 106 | [APP-106: Focus mode and Unite: work on a card in a modal, and assemble an app's cards into the whole app](../4-done/APP-106.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-104 |
+| 109 | [APP-109: Quick notes: /note saves a note as a card](../4-done/APP-109.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Done | APP-103, APP-104 |
+| 112 | [APP-112: Command parity: every slash command has a click path](../4-done/APP-112.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Done | APP-104, APP-106, APP-108, APP-109 |
 | 114 | [APP-114: Landing page for getforma.dev: the product, how it connects, security, and the beta list](../0-backlog/APP-114.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-096, APP-110 |
-| 116 | [APP-116: Timing chip: real step durations on screen for demos and trust](../0-backlog/APP-116.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-101, APP-104 |
-| 118 | [APP-118: Command system: one registry, argument hints, /commands help, /apps opens the Library](../0-backlog/APP-118.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-104, APP-112 |
-| 119 | [APP-119: Commands are verbs, apps are addresses: split the registry, derive app hints from definitions](../0-backlog/APP-119.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-118 |
-| 120 | [APP-120: One canvas model: apps (with cards), widgets, arrangements; one grammar; Library = Apps + Widgets](../0-backlog/APP-120.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-119 |
-| 121 | [APP-121: User naming: app and card names, addresses, descriptions (owner) and personal aliases (member)](../0-backlog/APP-121.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | L | Backlog | APP-120 |
-| 122 | [APP-122: Two AI jobs: Ask (read-only conversation about the data) and Shape (change the look or view of a card, an app or a widget), separated by where you type](../0-backlog/APP-122.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-121 |
+| 116 | [APP-116: Timing chip: real step durations on screen for demos and trust](../4-done/APP-116.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Done | APP-101, APP-104 |
+| 118 | [APP-118: Command system: one registry, argument hints, /commands help, /apps opens the Library](../4-done/APP-118.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-104, APP-112 |
+| 119 | [APP-119: Commands are verbs, apps are addresses: split the registry, derive app hints from definitions](../4-done/APP-119.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-118 |
+| 120 | [APP-120: One canvas model: apps (with cards), widgets, arrangements; one grammar; Library = Apps + Widgets](../4-done/APP-120.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-119 |
+| 121 | [APP-121: User naming: app and card names, addresses, descriptions (owner) and personal aliases (member)](../4-done/APP-121.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | L | Done | APP-120 |
+| 122 | [APP-122: Two AI jobs: Ask (read-only conversation about the data) and Shape (change the look or view of a card, an app or a widget), separated by where you type](../4-done/APP-122.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-121 |
 | 123 | [APP-123: Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /forma, /<folder> words](../0-backlog/APP-123.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-122, APP-097 |
 | 124 | [APP-124: Start from your data: drop files, Ask the folder, Make a card, Make an app](../0-backlog/APP-124.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-108, APP-122, APP-123 |
-| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](../0-backlog/APP-132.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-128 |
+| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](../4-done/APP-132.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-128 |
 | 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](../0-backlog/APP-135.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
 | 138 | [APP-138: Forma Canvas — shared Forma brand and application design](../4-done/APP-138.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | None |
-| 140 | [APP-141: Create an app before it reaches the canvas](../0-backlog/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-093, APP-104, APP-120, APP-145 |
-| 141 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../0-backlog/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-106, APP-120, APP-141 |
-| 142 | [APP-144: Open an app as a page and use it there](../0-backlog/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-142, APP-093 |
+| 140 | [APP-141: Create an app before it reaches the canvas](../4-done/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-093, APP-104, APP-120, APP-145 |
+| 141 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../4-done/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-106, APP-120, APP-141 |
+| 142 | [APP-144: Open an app as a page and use it there](../4-done/APP-144.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-142, APP-093 |
 | 145 | [APP-139: Guided first-run trial: a new member, an empty canvas, one app, one record, one share](../0-backlog/APP-139.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-074, APP-093, APP-095, APP-145, APP-144, APP-154 |
-| 147 | [APP-146: Spike — what an app is](../0-backlog/APP-146.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
-| 148 | [APP-147: Spike — what a component of an app is](../0-backlog/APP-147.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-120 |
-| 149 | [APP-148: Spike — what a widget is](../0-backlog/APP-148.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-103, APP-120 |
-| 150 | [APP-149: Spike — what a box is, and where it sits](../0-backlog/APP-149.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Backlog | APP-108, APP-120 |
+| 147 | [APP-146: Spike — what an app is](../4-done/APP-146.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Done | APP-120 |
+| 148 | [APP-147: Spike — what a component of an app is](../4-done/APP-147.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Done | APP-120 |
+| 149 | [APP-148: Spike — what a widget is](../4-done/APP-148.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Done | APP-103, APP-120 |
+| 150 | [APP-149: Spike — what a box is, and where it sits](../4-done/APP-149.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | S | Done | APP-108, APP-120 |
 | 151 | [APP-150: Favorite sections, and a way to go to one](../0-backlog/APP-150.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-142 |
 | 152 | [APP-151: Middle-click zooms into focus, then Tab moves through the app](../0-backlog/APP-151.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | S | Backlog | APP-106, APP-142 |
-| 154 | [APP-153: Spike — why the library pane has four tabs](../0-backlog/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Backlog | APP-112, APP-122 |
+| 154 | [APP-153: Spike — why the library pane has four tabs](../4-done/APP-153.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | S | Done | APP-112, APP-122 |
 | 155 | [APP-155: One coherent app presentation on the canvas and at its own URL](../0-backlog/APP-155.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-139, APP-140, APP-142, APP-144, APP-146, APP-147, APP-154 |
 | 157 | [APP-157: Persisted bounded app appearance across all presentations](../0-backlog/APP-157.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-155, APP-122 |
 | 158 | [APP-158: Place an admitted records list with authoritative scoped filters](../0-backlog/APP-158.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-144, APP-155, APP-020, APP-025 |
 | 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](../0-backlog/APP-160.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
-| 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](../0-backlog/APP-166.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-138 |
+| 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](../4-done/APP-166.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Done | APP-138 |
 | 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](../4-done/APP-168.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Done | None |
 | 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](../2-in-progress/APP-169.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | In progress | APP-168 |
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](../0-backlog/APP-170.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](../0-backlog/APP-171.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](../0-backlog/APP-176.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
+| 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](../0-backlog/APP-177.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-104 |
+| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](../4-done/APP-179.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |

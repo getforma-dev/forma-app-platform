@@ -54,3 +54,14 @@ test('form cards name the record in plain words', async () => {
   assert.equal(formTitle('New leave_request record'), 'New leave request');
   assert.equal(formTitle('Record decision'), 'Record decision');
 });
+
+test('agent activity names the tool and its duration when the listing carries them (APP-116)', async () => {
+  const { activityText, agentCall } = await import('../src/canvas/timing.ts');
+  assert.equal(activityText('Nobu approved', 'Claude', '2:14:03 PM', 'forma_commit', 142), 'Agent activity: Nobu approved via Claude (forma_commit 142 ms) · 2:14:03 PM');
+  assert.equal(activityText('record changed', 'Slack', '2:14:03 PM'), 'Agent activity: record changed via Slack · 2:14:03 PM', 'Slack and older rows carry no tool');
+  assert.equal(agentCall('forma_commit', 1250), 'forma_commit 1.3 s');
+  assert.equal(agentCall(null, 80), '80 ms');
+  assert.equal(agentCall('forma_commit', null), 'forma_commit');
+  for (const hostile of ['<img onerror=x>', 'commit', 'forma_Commit', 'forma_' + 'x'.repeat(41)]) assert.equal(agentCall(hostile, null), '', `not a tool name: ${hostile}`);
+  for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) assert.equal(agentCall(null, bad), '', `not a duration: ${bad}`);
+});

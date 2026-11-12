@@ -1,6 +1,6 @@
 # ADR-014: Named live app sharing and connected canvases
 
-Status: accepted product decision; implementation and qualification tracked in [APP-154](../../Tickets/0-backlog/APP-154.md). Date: 2026-11-01. Supersedes the assumption in APP-139 that accepting an app share makes its recipient an organization member.
+Status: accepted product decision; implementation and qualification tracked in [APP-154](../../Tickets/4-done/APP-154.md). Date: 2026-11-01. Supersedes the assumption in APP-139 that accepting an app share makes its recipient an organization member.
 
 An app share is private, live and view-only by default. It gives a named verified person access to one saved app, without inviting them into Northstar. Inviting someone to the platform or an organization is a separate action. A shared URL identifies the invitation; possessing or forwarding it grants no authority. There is no anonymous public-link mode in this decision. Static snapshots belong to explicit export, not ordinary sharing.
 

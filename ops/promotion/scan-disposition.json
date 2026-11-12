@@ -1,154 +1,946 @@
 {
-  "deployment_contract_sha256": "4a2cea855e962fda7f79a55f2b2754df9a056e4b3bab3fc4e5b4ee1a98fdd2a0",
-  "evidence": "evidence/APP-173/SCAN-DISPOSITION.md",
-  "expires_at_utc": "2026-11-12T00:00:00Z",
+  "deployment_contract_sha256": "14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b",
+  "evidence": "evidence/APP-175/SCAN-DISPOSITION.md",
+  "expires_at_utc": "2026-11-20T00:00:00Z",
   "roles": {
     "operator": {
       "findings": [
         {
           "attributes": [
             {
-              "key": "CVSS4_SCORE",
-              "value": "7.7"
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
             },
             {
-              "key": "CVSS4_VECTOR",
-              "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
             },
             {
               "key": "package_version",
-              "value": "2.6.1"
+              "value": "2.36-9+deb12u14"
             },
             {
               "key": "package_name",
-              "value": "apt"
+              "value": "glibc"
             }
           ],
-          "name": "CVE-2026-109518",
+          "name": "CVE-2026-100290",
+          "severity": "LOW"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112314",
           "severity": "HIGH"
         },
         {
           "attributes": [
             {
-              "key": "CVSS4_SCORE",
-              "value": "8.3"
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
             },
             {
-              "key": "CVSS4_VECTOR",
-              "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
             },
             {
               "key": "package_version",
-              "value": "1.2.13.dfsg-1"
+              "value": "1.20.1-2+deb12u5"
             },
             {
               "key": "package_name",
-              "value": "zlib"
+              "value": "krb5"
             }
           ],
-          "name": "CVE-2026-76844",
+          "name": "CVE-2026-112315",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112316",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112317",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112318",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112319",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112320",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112321",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112322",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112323",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "12.2.0-14+deb12u1"
+            },
+            {
+              "key": "package_name",
+              "value": "gcc-12"
+            }
+          ],
+          "name": "CVE-2026-115456",
+          "severity": "LOW"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "4.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "name": "CVE-2026-115819",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-119079",
           "severity": "HIGH"
         }
       ],
-      "predecessor_manifest_digest": "sha256:60493a103bbf88120e71a829fe5d719c4e85b0a4b5a271e35a2a2431ad0e1d55"
+      "predecessor_manifest_digest": "sha256:9dbe284eb1f244f4b85c2beb741e7e18ba31607023aee98a497182ddbf59518a"
     },
     "qualification": {
       "findings": [
         {
           "attributes": [
             {
-              "key": "CVSS4_SCORE",
-              "value": "7.7"
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
             },
             {
-              "key": "CVSS4_VECTOR",
-              "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
             },
             {
               "key": "package_version",
-              "value": "2.6.1"
+              "value": "2.36-9+deb12u14"
             },
             {
               "key": "package_name",
-              "value": "apt"
+              "value": "glibc"
             }
           ],
-          "name": "CVE-2026-109518",
+          "name": "CVE-2026-100290",
+          "severity": "LOW"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112314",
           "severity": "HIGH"
         },
         {
           "attributes": [
             {
-              "key": "CVSS4_SCORE",
-              "value": "8.3"
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
             },
             {
-              "key": "CVSS4_VECTOR",
-              "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
             },
             {
               "key": "package_version",
-              "value": "1.2.13.dfsg-1"
+              "value": "1.20.1-2+deb12u5"
             },
             {
               "key": "package_name",
-              "value": "zlib"
+              "value": "krb5"
             }
           ],
-          "name": "CVE-2026-76844",
+          "name": "CVE-2026-112315",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112316",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112317",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112318",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112319",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112320",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112321",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112322",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112323",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "12.2.0-14+deb12u1"
+            },
+            {
+              "key": "package_name",
+              "value": "gcc-12"
+            }
+          ],
+          "name": "CVE-2026-115456",
+          "severity": "LOW"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "4.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "name": "CVE-2026-115819",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-119079",
           "severity": "HIGH"
         }
       ],
-      "predecessor_manifest_digest": "sha256:4bb5f4f5e8352f47e5f499d434a9e581374c918cdad8e5846575bcd1629125b3"
+      "predecessor_manifest_digest": "sha256:152088e1d77bd0c15621a896951ff70ac9b6cb2e6f6033b0a8742d6d9c8233a0"
     },
     "service": {
       "findings": [
         {
           "attributes": [
             {
-              "key": "CVSS4_SCORE",
-              "value": "7.7"
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
             },
             {
-              "key": "CVSS4_VECTOR",
-              "value": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
             },
             {
               "key": "package_version",
-              "value": "2.6.1"
+              "value": "2.36-9+deb12u14"
             },
             {
               "key": "package_name",
-              "value": "apt"
+              "value": "glibc"
             }
           ],
-          "name": "CVE-2026-109518",
+          "name": "CVE-2026-100290",
+          "severity": "LOW"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112314",
           "severity": "HIGH"
         },
         {
           "attributes": [
             {
-              "key": "CVSS4_SCORE",
-              "value": "8.3"
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
             },
             {
-              "key": "CVSS4_VECTOR",
-              "value": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
             },
             {
               "key": "package_version",
-              "value": "1.2.13.dfsg-1"
+              "value": "1.20.1-2+deb12u5"
             },
             {
               "key": "package_name",
-              "value": "zlib"
+              "value": "krb5"
             }
           ],
-          "name": "CVE-2026-76844",
+          "name": "CVE-2026-112315",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112316",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112317",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112318",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112319",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112320",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112321",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112322",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-112323",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "12.2.0-14+deb12u1"
+            },
+            {
+              "key": "package_name",
+              "value": "gcc-12"
+            }
+          ],
+          "name": "CVE-2026-115456",
+          "severity": "LOW"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "4.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "name": "CVE-2026-115819",
+          "severity": "MEDIUM"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "name": "CVE-2026-119079",
           "severity": "HIGH"
         }
       ],
-      "predecessor_manifest_digest": "sha256:e0f0aab4f2dfbfbd2d2884e05355e0a1d067cb4bbf2c6fe891075773ef251b81"
+      "predecessor_manifest_digest": "sha256:1bbf0e4db54db2bc898a5fd19f4042bfbd6e17331382a6d269b4052e532ac466"
     }
   },
   "schema_version": 2

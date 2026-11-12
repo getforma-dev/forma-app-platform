@@ -137,7 +137,7 @@ edit → just check / focused campaigns → push topic → exact-commit GitHub C
   → release.json + RELEASES.md row + beta/<yyyymmdd>-<sha7> tag
 ```
 
-For compatible application releases after APP-167's verified state cutover, use [Promote to beta](pitch/BETA-PROMOTION.md): merge to the active trunk, review the prepared packet, and approve the protected deployment once. The legacy local sequence above is blocked after cutover to prevent competing deployment state. Infrastructure/schema changes need separately reviewed delivery using the same canonical state.
+For compatible application releases after APP-167's verified state cutover, use [Promote to beta](pitch/BETA-PROMOTION.md): merge to the active trunk, review the prepared packet, and approve the protected deployment once. The legacy local sequence above is blocked after cutover to prevent competing deployment state. A migration ships through the same packet only as a committed, reviewed [schema release](pitch/BETA-PROMOTION.md#schema-releases); other schema and infrastructure changes need separately reviewed delivery using the same canonical state.
 
 Use the full [beta deploy runbook](pitch/DEPLOY-RUNBOOK.md) for the legacy/operator procedures; the diagram is an index, not a replacement for its conditions. `just deploy help` lists actual arguments. Window arguments are positional IDs, for example `just deploy observe <window-id>`, not the directory path and not a `--window` option.
 
