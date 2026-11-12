@@ -372,11 +372,14 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.assertFalse(any(o in ['update_service', 'execute_change_set', 'run_task'] for _, o, _ in self.aws.calls))
         self.assertEqual([(x['name'], x['status']) for x in persisted['active']['journal'] if x['name'].startswith('schema-')], journal)
 
-    def build(self, release=True, candidate=CANDIDATE, policy=20, spec_value='default'):
+    def build(self, release=True, candidate=CANDIDATE, policy=20, spec_value='default', reviewed=None):
+        # `reviewed`: a complete release (the committed one) instead of the synthetic spec().
+        contract = reviewed['to']['deployment_contract_sha256'] if reviewed else CONTRACT
+        origin = reviewed['from'] if reviewed else FROM
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.directory = Path(self.tmp.name); self.manifest = bundle(self.directory)
         if release:
-            source = dict(self.manifest['source'], schema_manifest_sha256=hashlib.sha256(candidate).hexdigest(), deployment_contract_sha256=CONTRACT)
+            source = dict(self.manifest['source'], schema_manifest_sha256=hashlib.sha256(candidate).hexdigest(), deployment_contract_sha256=contract)
             self.manifest['source'] = source
             path = self.directory / 'candidate.json'; value = json.loads(path.read_bytes()); value['source'] = source
             path.write_bytes(encoded(value))
@@ -384,7 +387,7 @@ class SchemaLifecycleTests(unittest.TestCase):
             (self.directory / 'manifest.json').write_bytes(encoded(self.manifest))
         self.initial = fixture(self.manifest)
         if release:
-            self.initial['baseline'].update({k: FROM[k] for k in schema_release.DIGESTS})
+            self.initial['baseline'].update({k: origin[k] for k in schema_release.DIGESTS})
         self.initial['policy']['schema_version'] = policy
         self.initial['live']['outputs'].update(DatabaseEndpoint=ENDPOINT, PublicTaskSubnets=','.join(SUBNETS), TaskSecurityGroup=GROUP)
         self.s3 = MemoryS3(self.initial); self.store = Store(self.s3, 'bucket', 'beta')
@@ -393,8 +396,9 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.request = dict(candidate_sha=self.manifest['candidate_sha'],
             qualified_artifact_manifest_sha256=hashlib.sha256((self.directory / 'manifest.json').read_bytes()).hexdigest(),
             authorization=dict(actor='fixture', run_id='42', run_attempt='1', repository=guards.REPOSITORY, workflow_ref=guards.WORKFLOW))
-        self.file = SpecFile(self, spec(candidate=candidate) if spec_value == 'default' else spec_value, pinned=spec(candidate=candidate))
-        self.candidate = candidate; self.infra = INFRA
+        pinned = reviewed or spec(candidate=candidate)
+        self.file = SpecFile(self, pinned if spec_value == 'default' else spec_value, pinned=pinned)
+        self.candidate = candidate; self.infra = pinned['infrastructure_sha256']
         patchers = [patch('ops.promotion.candidate.check_current'),
                     patch.object(schema_release, 'candidate_manifest', lambda repo: self.candidate),
                     patch.object(schema_release, 'infrastructure_digest', lambda repo: self.infra),
@@ -722,6 +726,38 @@ class SchemaLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(Refused, 'too little execute time left to observe the snapshot'): self.run_execute()
         self.assertFalse(any(o == 'create_db_snapshot' for _, o, _ in self.aws.calls))
         self.assert_serving_and_prepared([])
+
+    @unittest.skipUnless(schema_release.SPEC.exists(), 'no schema release is pending')
+    def test_the_committed_release_and_disposition_promote_together(self):
+        """The committed schema release and the committed scan disposition, end to end:
+        the live predecessors, the release's `to` contract, every reviewed finding."""
+        from ops.promotion.registry import scan_disposition
+        committed = json.loads(Path(schema_release.__file__).with_name('schema-release.json').read_text())  # setUp patched SPEC
+        disposition, disposition_sha = scan_disposition()
+        manifest = subprocess.check_output(['git', '-C', str(ROOT), 'show', 'HEAD:app/migrations/manifest.json'])
+        self.build(candidate=manifest, reviewed=committed)
+        for role, entry in disposition['roles'].items():
+            self.initial['live']['registry'][role]['manifest_digest'] = entry['predecessor_manifest_digest']
+        self.s3.objects['beta/state.json'] = encoded(self.initial); self.aws.state = copy.deepcopy(self.initial)
+        findings = {guards.REPOS[role]: entry['findings'] for role, entry in disposition['roles'].items()}
+        original = self.aws._call
+        def scans(s, o, a):
+            if o == 'describe_image_scan_findings':
+                return {'imageScanStatus': {'status': 'COMPLETE'}, 'imageScanFindings': {'findings': copy.deepcopy(findings[a['repositoryName']])}}
+            return original(s, o, a)
+        self.aws._call = scans
+        result = self.prepared()
+        self.assertEqual(result['review']['deployment_contract_sha256'], disposition['deployment_contract_sha256'])
+        for role in guards.REPOS:
+            scan = result['review']['scan'][role]
+            self.assertEqual((scan['introduced'], scan['reviewed_count'], scan['unreviewed']), (14, 14, 0))
+            self.assertEqual((scan['disposition_sha256'], scan['review_expires_at_utc']), (disposition_sha, disposition['expires_at_utc']))
+        summary = self.run_execute(); validate_summary(summary, self.request['candidate_sha'])
+        final = self.store.load()
+        self.assertEqual(final['baseline']['deployment_contract_sha256'], disposition['deployment_contract_sha256'])
+        self.assertEqual(final['policy']['schema_version'], 22)
+        for role in guards.REPOS:
+            self.assertEqual(len(final['live']['registry'][role]['findings']), 14)
 
     def test_the_scan_delta_binds_the_promoted_candidates_contract(self):
         """Fable dry run, 2026-11-12: a schema release must be able to carry a disposition, or no
