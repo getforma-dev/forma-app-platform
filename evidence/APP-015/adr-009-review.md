@@ -625,3 +625,19 @@ Map gaps: each is decided or assigned (:156–158 and the table at :205–218).
 - `parser-host` exits before normalize: the slot holds one process;
 - the 90-day lifecycle is not applied to the fixture organizations: the demo needs that operator-seeded content;
 - `created_by` is nullable for pre-existing rows under the additive rule: the RESTRICTIVE `WITH CHECK` still refuses NULL on every new insert.
+
+## Residual dispositions (2026-11-12, APP-088)
+
+Recorded by GenUI. The findings above are unchanged. `3f5ec2a` applied this re-review in place on 2026-10-29. APP-088 checked each fix against the findings and recorded the rest in [ADR-009-AMENDMENTS.md](../../docs/architecture/ADR-009-AMENDMENTS.md). It is not in ADR-009 itself because the contract lock hashes that file, and an edit there needs a new contract edition. The amendment record controls; this table is its copy. Line numbers are ADR-009 as locked (`8a52d3cb…`).
+
+| Finding | Disposition |
+| --- | --- |
+| R-M1 | Fixed by `3f5ec2a` (ADR-009:82). Confirmed and completed: a running row locked by a concurrent claimer counts as existing, so the claim returns nothing; the running row is the candidate whatever its kind; APP-015's two-organization crash/reclaim test is specified. |
+| R-m1 | Fixed: schema USAGE and `SELECT(kind)` (:87), fence EXECUTE as `genui_lock` (:98). Completed: the grant is issued under `SET LOCAL ROLE genui_lock`, and the tuples, grantor included, join B10's catalog assertion. |
+| R-m2 | Fixed: B19–B23 (:28–32). Completed: B21, B22 and B23 read as extending B12, B13 and B9; point-of-change marks listed for B8, B12 and B19–B23; :35's A6 pointer superseded, and the fixture-organization exemption stated. |
+| R-m3 | Partly fixed by `3f5ec2a`. Superseded: :98's "one statement" sentence, which does not close the race (0002:247–254). Now one retake after a fence miss with an active membership; a refused recheck releases the row, fails `authority_revoked` and writes one `job.failed`, all in one transaction. |
+| R-m4 | Fixed with this review's first option: an organization-local estimate, computed the same way at enqueue and on every poll. :104's task-wide count is superseded; `genui_jobs` keeps five functions. |
+| R-m5 | `3f5ec2a`'s "member holding `import_source`" is superseded by this review's fix: the job's principal or a `source_read` holder on its source (creator authority counts), otherwise the uniform 404. Who may cancel is left to APP-015. |
+| R-m6 | Fixed for the classification (:82, claim only). Completed: :75's "one job running per task" is superseded by one per deployment (one task under D7.18), which APP-061 revisits. |
+
+The contract-edition review's kept items 5, 6, 7 and 11 are decided as E5, E6, E7 and E11 in the same record. Its unrun native campaign passed on 2026-11-12 ([receipt](residuals-2026-11-12/README.md)).

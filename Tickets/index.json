@@ -47,7 +47,7 @@
       "depends_on": [
         "PH01"
       ],
-      "status": "planned",
+      "status": "active",
       "gate_status": "pending",
       "gate_evidence": [],
       "sprints": [
@@ -356,7 +356,6 @@
     "APP-027",
     "APP-085",
     "APP-087",
-    "APP-088",
     "APP-092",
     "APP-098",
     "APP-166",
@@ -2936,11 +2935,11 @@
     {
       "id": "APP-088",
       "title": "Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)",
-      "path": "0-backlog/APP-088.md",
+      "path": "2-in-progress/APP-088.md",
       "Field": "Value",
       "---": "---",
       "Epic": "QRY",
-      "Status": "Backlog",
+      "Status": "In progress",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S03",
@@ -2952,8 +2951,8 @@
       "Requirements": "C05, C06, C07, N4, R3",
       "Depends on": "None",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "GenUI \u2014 Claude",
+      "Branch / PR": "`app088/adr009-residuals` (local worktree from `main` `5695869`; not pushed, no PR)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
