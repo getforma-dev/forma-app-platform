@@ -295,9 +295,6 @@ class SecretStateTests(unittest.TestCase):
         client.create.assert_not_called()
         self.assertEqual(self.api.calls, [])
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class HostedBrokerConfiguration(unittest.TestCase):
     def test_configuration_is_closed_and_never_contains_a_management_key(self):
@@ -323,7 +320,7 @@ class HostedBrokerConfiguration(unittest.TestCase):
                 self.assertEqual(config.tenant_id, good['provider_tenant_id'])
                 return mock.Mock()
             env={'GENUI_SHARED_BROKER_CONFIG_JSON':json.dumps(good),'GENUI_SHARED_BROKER_BIND_ADDRESS':'0.0.0.0',
-                 'GENUI_PROVIDER_MANAGEMENT_URL':'https://auth.example.test','GENUI_PROVIDER_MANAGEMENT_SECRET_KEY':'mgmt_fixture_key_only',
+                 'GENUI_PROVIDER_MANAGEMENT_URL':'https://auth-staging.getforma.dev','GENUI_PROVIDER_MANAGEMENT_SECRET_KEY':'mgmt_fixture_key_only',
                  'GENUI_PROVIDER_MANAGEMENT_SECRET_TENANT_ID':good['provider_tenant_id']}
             with mock.patch.dict(os.environ,env,clear=True), mock.patch.object(b.provider.runtime,'SharedBrokerDirectory',side_effect=materialize), mock.patch.object(b.provider,'Client',side_effect=client), mock.patch.object(b,'SecretState'), mock.patch.object(b,'Server') as server:
                 self.assertEqual(b.main(),0)
@@ -333,3 +330,9 @@ class HostedBrokerConfiguration(unittest.TestCase):
                 self.assertEqual(b.main(),1); provider.assert_not_called()
                 self.assertNotIn(good['client_token'], error.getvalue())
             self.assertEqual(list(root.iterdir()),[])
+
+
+# At the end, so every class above runs when CI executes this file as a script
+# (APP-084 review: HostedBrokerConfiguration was defined after this and never ran).
+if __name__ == "__main__":
+    unittest.main()
