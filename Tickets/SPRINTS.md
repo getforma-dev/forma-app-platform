@@ -2,7 +2,7 @@
 
 Sprints are ordered scope batches within the [implementation phases](PHASES.md), not calendar promises. Scheduling and capacity are agreed at sprint entry. Later batches are forecasts; split work before selection when it exceeds five focused days.
 
-Current board: Backlog: 109, Selected: 0, In progress: 3, In review: 0, Done: 61, Blocked: 5.
+Current board: Backlog: 108, Selected: 0, In progress: 3, In review: 0, Done: 62, Blocked: 5.
 
 | Sprint | Phase | Outcome | Tickets |
 |---|---|---|---|

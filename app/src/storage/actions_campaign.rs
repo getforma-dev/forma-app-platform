@@ -27,7 +27,7 @@
 use super::{
     admission_qualification::operator,
     command_qualification::{json_headers, send, vault_token, TestPages},
-    definition_qualification::{grant, request},
+    definition_qualification::{grant, request, revoke},
     qualification::Fixture,
     qualification_cases::{check, ORG, OTHER, PRINCIPAL, REVIEWER},
     *,
@@ -1548,6 +1548,122 @@ async fn campaign() {
             &["--source", "00000000-0000-4000-8000-000000003024"],
         );
     }
+    // APP-179 (APP-109): each member's notes are their own. Both members may
+    // now run the Notes app and read its source, neither has a notes work
+    // yet, and neither is shared the other's. `/v1/notes` answers only the
+    // caller's own work, and the author's work is the uniform 404 to the
+    // teammate (before the assistant step below shares one on purpose).
+    let notes = |cookie: &str, create: bool| {
+        let app = app.clone();
+        let cookie = cookie.to_owned();
+        async move {
+            if create {
+                send(&app, "POST", "/v1/notes", Some(&cookie), "", &SAME_ORIGIN).await
+            } else {
+                send(&app, "GET", "/v1/notes", Some(&cookie), "", &[]).await
+            }
+        }
+    };
+    let none = notes(&sarah, false).await;
+    assert_eq!(none.status, StatusCode::OK, "{}", none.body);
+    assert_eq!(
+        none.json(),
+        json!({"app_id": notes_app, "work_id": null, "created": false})
+    );
+    let authored = notes(&diego, true).await;
+    assert_eq!(authored.status, StatusCode::OK, "{}", authored.body);
+    let authored = authored.json();
+    assert_eq!(authored["created"], true);
+    let author_work = authored["work_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        notes(&diego, false).await.json()["work_id"],
+        author_work.as_str(),
+        "the author's GET returns the author's notes work"
+    );
+    assert_eq!(
+        notes(&sarah, false).await.json()["work_id"],
+        Value::Null,
+        "the teammate's GET does not list the author's notes work"
+    );
+    // Even when the author's notes work is shared with the teammate (read and
+    // write), it never becomes the teammate's notes: `own_works` keeps only
+    // works the caller created, so a teammate's `/note` never lands in it.
+    for permission in ["record_read", "record_write"] {
+        grant(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", notes_app, "--work", &author_work],
+        );
+    }
+    assert_eq!(
+        notes(&sarah, false).await.json()["work_id"],
+        Value::Null,
+        "a notes work shared with the teammate is still not the teammate's notes"
+    );
+    for permission in ["record_read", "record_write"] {
+        revoke(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", notes_app, "--work", &author_work],
+        );
+    }
+    assert_eq!(
+        records(&diego, notes_app, &author_work).await.status,
+        StatusCode::OK
+    );
+    let absent = "00000000-0000-4000-8000-0000000179ff";
+    for uri in [
+        format!("/v1/work/{notes_app}/{author_work}/records"),
+        format!("/v1/canvas/works/{notes_app}/{author_work}"),
+    ] {
+        let hidden = send(&app, "GET", &uri, Some(&sarah), "", &[]).await;
+        let missing = send(
+            &app,
+            "GET",
+            &uri.replace(&author_work, absent),
+            Some(&sarah),
+            "",
+            &[],
+        )
+        .await;
+        assert_eq!(
+            hidden.status,
+            StatusCode::NOT_FOUND,
+            "{uri}: {}",
+            hidden.body
+        );
+        assert_eq!(
+            (hidden.status, hidden.body),
+            (missing.status, missing.body),
+            "{uri}: the author's notes work is indistinguishable from an absent one"
+        );
+    }
+    let own = notes(&sarah, true).await.json();
+    assert_eq!(own["created"], true);
+    let teammate_work = own["work_id"].as_str().unwrap().to_owned();
+    assert_ne!(
+        teammate_work, author_work,
+        "the teammate gets a separate notes work"
+    );
+    assert_eq!(
+        notes(&sarah, false).await.json()["work_id"],
+        teammate_work.as_str()
+    );
+    assert_eq!(
+        notes(&diego, false).await.json()["work_id"],
+        author_work.as_str()
+    );
+    assert_eq!(
+        records(&diego, notes_app, &teammate_work).await.status,
+        StatusCode::NOT_FOUND
+    );
+    check(
+        &mut checks,
+        "APP-179 (APP-109): with both members granted the Notes app, POST /v1/notes creates each member's own notes work; GET /v1/notes answers only the caller's own work (the teammate sees none until creating one, then only that one); shared with the teammate for read and write, the author's notes work still is not the teammate's notes; unshared, it is the uniform 404 to the teammate on its records and canvas group, byte-identical to an absent work, and the teammate's is 404 to the author",
+    );
+
     let notes_context = stores.workspace.composer_context(&employee).await.unwrap();
     let notes = notes_context
         .library

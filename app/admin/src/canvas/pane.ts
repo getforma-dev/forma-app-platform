@@ -1,11 +1,12 @@
-// APP-122: a fourth tab, Ask (`ask.ts`): a read-only conversation about the
-// data; `?` first in the bar opens it, and `?` no longer opens Shortcuts.
+// APP-122 added a fourth tab, Ask; since ADR-018 a question opens the app's
+// assistant or the workspace assistant instead (`ask.ts`), so the pane has
+// three tabs again (`PANE_TABS`), and `?` still does not open Shortcuts.
 // APP-119: the right-hand pane, one pane with three tabs: Library (the apps
 // and cards you can bring in, `library.ts`), Commands (the verbs with their
 // arguments and examples, `command-sheet.ts`) and Shortcuts (every action
 // with its click path and keys, `shortcut-tab.ts`). `L` and `/apps` open it
-// on Library; `/commands` and `/help` on Commands; `?` (on the canvas or in
-// the empty bar) and `/shortcuts` on Shortcuts. One × and Esc close it;
+// on Library; `/commands` and `/help` on Commands; `/shortcuts` and ⋯ →
+// Shortcuts and commands on Shortcuts (`?` means Ask). One × and Esc close it;
 // focus returns to what opened it. The tabs follow the
 // ARIA tabs pattern: ←/→, Home and End move between them (automatic
 // activation), the selected tab is the only one in the Tab order. At phone
