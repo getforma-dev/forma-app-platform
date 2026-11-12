@@ -288,6 +288,20 @@ impl Composer {
         library: &[LibraryApp],
         exclude: Option<&str>,
     ) -> Result<(Decision, &'static str), ModelError> {
+        self.route_for(intent, library, exclude, false).await
+    }
+
+    /// `route` for an organization. `demo` is [`Composer::demo_for`]: only
+    /// where the demo switch is on does a near tie with no model answer the
+    /// matcher's nearest candidate (APP-098 DS-03). Elsewhere it is refused,
+    /// as any routing that needs a model.
+    pub async fn route_for(
+        &self,
+        intent: &str,
+        library: &[LibraryApp],
+        exclude: Option<&str>,
+        demo: bool,
+    ) -> Result<(Decision, &'static str), ModelError> {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
         }
@@ -300,10 +314,11 @@ impl Composer {
             nearest = found.ranked.first().copied();
         }
         let Some(model) = self.model.as_ref() else {
-            // No model to settle a near tie (APP-098 DS-03): the matcher's
-            // best candidate, still only an app from the catalog, labeled
-            // retrieved; with no candidate at all the caller is refused.
-            return match nearest {
+            // No model to settle a near tie (APP-098 DS-03, demo switch only):
+            // the matcher's best candidate, still only an app from the
+            // catalog, labeled retrieved. Without the switch, or with no
+            // candidate at all, the caller is refused.
+            return match nearest.filter(|_| demo) {
                 Some(index) => Ok((Decision::Retrieve { index }, "nearest")),
                 None => Err(ModelError::Unavailable),
             };

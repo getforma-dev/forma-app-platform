@@ -357,7 +357,11 @@ pub(crate) async fn compose_instant(
         },
         Pin::Generate => Ok((Decision::Generate, "requested")),
         Pin::Template(_) => unreachable!("template composition is handled above"),
-        Pin::Free | Pin::Chooser => composer.route(intent, &context.library, exclude).await,
+        Pin::Free | Pin::Chooser => {
+            composer
+                .route_for(intent, &context.library, exclude, demo)
+                .await
+        }
     };
     let (decision, confidence) = match routing {
         Ok(decision) => decision,
