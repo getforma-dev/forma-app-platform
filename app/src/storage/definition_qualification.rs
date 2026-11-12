@@ -1226,6 +1226,26 @@ async fn campaign() {
         &mut checks,
         "independent_review (review m4): under an independent_review policy the owner is refused even with review_publish, a member without review_publish is refused, nothing is written; a non-owner reviewer publishes the owner's revision as approver with the owner as author",
     );
+    // APP-085 (APP-010 review m3): the app is now under review, and it stays
+    // there. Its owner cannot bypass review by naming the organization's
+    // owner_publish policy, nor by naming a policy that does not exist.
+    let before = footprint(&fixture).await;
+    for named in [POLICY, "00000000-0000-4000-8000-0000000085ff"] {
+        assert_eq!(
+            stores
+                .control
+                .publish(&author, SPEND_APP, &s05.revision, named)
+                .await,
+            Err(Error::Denied),
+            "the owner names policy {named} for an app under review"
+        );
+    }
+    assert_eq!(footprint(&fixture).await, before);
+    assert_eq!(highest(&fixture).await, reviewed.publication_id);
+    check(
+        &mut checks,
+        "APP-085 (review m3): once an app is published under independent_review, its owner naming the organization's owner_publish policy, or a policy that does not exist, is refused and writes nothing; the app's newest publication stays the reviewed one",
+    );
 
     // --- ADR-007 amendment (review M2): creator authority on saved work ---
     grant(&fixture, PRINCIPAL, "run", &["--app", SPEND_APP]);
@@ -1484,7 +1504,7 @@ async fn campaign() {
                 "The app shell and every permission row are written by the operator package's create-app, grant-permission and revoke-permission commands; the Northstar expenses source revision and the independent_review policy row are fixture-only operator SQL (the import tickets and policy seeding own them).",
                 "Source digests are the APP-002 synthetic placeholders; no source bytes were imported.",
                 "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
-                "The publisher names the policy; the server does not yet resolve the organization's applicable policy (review m3), so an owner could choose owner_publish where an independent_review policy also exists.",
+                "The publisher names the policy. Since APP-085 an app ever published under independent_review stays under review: naming owner_publish for it is refused (review m3, ADR-007 amendment 2026-11-12). Policy versions that change kind are not exercised.",
                 "40001 at COMMIT is provoked by a superuser SERIALIZABLE transaction (SSI), the transport loss by pg_terminate_backend, both at a test-only checkpoint before COMMIT."
             ]
         })).unwrap()).unwrap();

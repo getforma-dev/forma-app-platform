@@ -49,7 +49,7 @@ Commit `4bae2c0` on base `f75bc69`. Dispositions are appended to the [review](in
 
 **Phase 1 limits added by the review.**
 
-- m3: the publisher names the policy id, and `publish` honors the newest version of that policy. The server does not resolve the organization's applicable policy. Before a second policy coexists with `owner_publish` outside a test, the server must resolve it (per organization or space) and refuse any other id. The campaign's `independent_review` row shows the gap: the owner could still name `owner_publish`.
+- m3: the publisher names the policy id, and `publish` honors the newest version of that policy. The server does not resolve the organization's applicable policy. Before a second policy coexists with `owner_publish` outside a test, the server must resolve it (per organization or space) and refuse any other id. The campaign's `independent_review` row shows the gap: the owner could still name `owner_publish`. *(2026-11-12: closed for apps under review by APP-085. An app ever published under `independent_review` stays under review; see the ADR-007 amendment.)*
 - An operator `source_read` grant event records the grantee but no source id, because D7.8's event columns have no source column.
 - `create-app` has no operator kind of its own, since D7.8 names none. The owner's `permission.granted` event (with the app id) is the audited record of the creation.
 - Policy rows still have no operator subcommand. `owner_publish` comes from the seed, and the campaign's `independent_review` row is fixture SQL.
