@@ -26,6 +26,21 @@ def statements(document, logical):
     return document['Resources'][logical]['Properties']['Policies'][0]['PolicyDocument']['Statement']
 
 
+def schema_release_statements():
+    migration = inventory()['definitions']['MigrationTaskDefinition']
+    snapshots = f'arn:aws:rds:{REGION}:{ACCOUNT}:snapshot:forma-schema-release-*'
+    database = inventory()['database_arn']
+    return [{'Effect': 'Allow', 'Action': ['ecs:RunTask'],
+             'Resource': f'arn:aws:ecs:{REGION}:{ACCOUNT}:task-definition/MigrationTaskDefinition:*',
+             'Condition': {'ArnEquals': {'ecs:cluster': inventory()['cluster_arn']}}},
+            {'Effect': 'Allow', 'Action': ['iam:PassRole'],
+             'Resource': [migration['taskRoleArn'], migration['executionRoleArn']],
+             'Condition': {'StringEquals': {'iam:PassedToService': 'ecs-tasks.amazonaws.com'}}},
+            {'Effect': 'Allow', 'Action': ['rds:CreateDBSnapshot'], 'Resource': [database, snapshots]},
+            {'Effect': 'Allow', 'Action': ['rds:DescribeDBSnapshots'], 'Resource': [database, snapshots]},
+            {'Effect': 'Allow', 'Action': ['rds:AddTagsToResource'], 'Resource': snapshots}]
+
+
 class BootstrapTests(unittest.TestCase):
     def test_cdk_parameter_read_is_exact_and_only_on_cloudformation_role(self):
         doc = template(inventory())
@@ -41,11 +56,15 @@ class BootstrapTests(unittest.TestCase):
         prep=statements(doc,'Prepare');execute=statements(doc,'Execute');cf=statements(doc,'RuntimeExecution')
         actions=lambda rows:{a for r in rows for a in r['Action']}
         self.assertNotIn('ecs:UpdateService',actions(prep));self.assertNotIn('cloudformation:ExecuteChangeSet',actions(prep))
-        self.assertNotIn('cloudformation:CreateChangeSet',actions(execute));self.assertNotIn('iam:PassRole',actions(execute))
+        self.assertNotIn('cloudformation:CreateChangeSet',actions(execute))
+        # Execute passes only the migration task's two roles, to ECS (APP-175).
+        self.assertEqual([r for r in execute if 'iam:PassRole' in r['Action']], [schema_release_statements()[1]])
+        schema_rds = {'rds:CreateDBSnapshot', 'rds:DescribeDBSnapshots', 'rds:AddTagsToResource'}
         forbidden = {'kms:Decrypt','kms:GetKeyPolicy','kms:CreateGrant','secretsmanager:GetSecretValue','secretsmanager:DescribeSecret','iam:CreateRole','iam:PutRolePolicy','iam:AttachRolePolicy','iam:ListRolePolicies','iam:ListAttachedRolePolicies','rds:Describe*','ec2:Describe*','kms:Describe*'}
         for rows in [prep,execute,cf]:
             self.assertNotIn('*',actions(rows))
-            self.assertFalse(any(a in forbidden or a.startswith('rds:') and a != 'rds:DescribeDBInstances' or a.startswith('kms:') and a != 'kms:DescribeKey' for a in actions(rows)))
+            allowed_rds = schema_rds if rows is execute else {'rds:DescribeDBInstances'}
+            self.assertFalse(any(a in forbidden or a.startswith('rds:') and a not in allowed_rds or a.startswith('kms:') and a != 'kms:DescribeKey' for a in actions(rows)))
             self.assertNotIn('s3:DeleteObject',actions(rows));self.assertNotIn('iam:CreateRole',actions(rows))
         self.assertEqual(next(s for s in cf if s['Action']==['rds:DescribeDBInstances'])['Resource'], inventory()['database_arn'])
         self.assertEqual(next(s for s in cf if s['Action']==['kms:DescribeKey'])['Resource'], inventory()['describe_key_arns'])
@@ -57,7 +76,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn('logs:GetLogEvents', actions(cf))
         self.assertNotIn('s3:GetObject', [a for s in cf if s.get('Resource')==inventory()['evidence_bucket_arn'] for a in s['Action']])
         self.assertFalse(any(a.startswith(('rds:','kms:','ec2:')) for a in actions(prep)))
-        self.assertFalse(any(a.startswith(('rds:','kms:','ec2:')) for a in actions(execute)))
+        self.assertFalse(any(a.startswith(('kms:','ec2:')) for a in actions(execute)))
+        self.assertEqual({a for a in actions(execute) if a.startswith('rds:')}, schema_rds)
         for bad in ('*', 'arn:aws:rds:us-east-1:123:db:*', 'arn:aws:iam::123:role/*'):
             broken = inventory()
             if bad.startswith('arn:aws:rds'): broken['database_arn'] = bad
@@ -67,6 +87,24 @@ class BootstrapTests(unittest.TestCase):
                 template(broken)
         create=next(r for r in prep if 'cloudformation:CreateChangeSet' in r['Action'])
         self.assertEqual(create['Condition']['StringEquals']['cloudformation:RoleArn'],f'arn:aws:iam::{ACCOUNT}:role/forma-beta-runtime-cloudformation')
+
+    def test_schema_release_adds_exactly_the_migration_task_and_snapshot_scope(self):
+        doc=template(inventory()); execute=statements(doc,'Execute')
+        schema_actions={'ecs:RunTask','iam:PassRole','rds:CreateDBSnapshot','rds:DescribeDBSnapshots','rds:AddTagsToResource'}
+        added=[r for r in execute if set(r['Action']) & schema_actions]
+        self.assertEqual(added, schema_release_statements())
+        # Tagging only ever reaches the release snapshots, never the database.
+        self.assertEqual([r['Resource'] for r in execute if 'rds:AddTagsToResource' in r['Action']],
+                         [f'arn:aws:rds:{REGION}:{ACCOUNT}:snapshot:forma-schema-release-*'])
+        for rows in [statements(doc,'Prepare'), statements(doc,'RuntimeExecution')]:
+            self.assertFalse((schema_actions - {'iam:PassRole'}) & {a for r in rows for a in r['Action']})
+        self.assertFalse(any(a in {'ecs:TagResource','ecs:StopTask','rds:DeleteDBSnapshot','rds:RestoreDBInstanceFromDBSnapshot','rds:RemoveTagsFromResource'}
+            for r in execute for a in r['Action']))
+        for key, bad in [('taskDefinitionArn', f'arn:aws:ecs:{REGION}:{ACCOUNT}:task-definition/*'),
+                         ('taskRoleArn', f'arn:aws:iam::{ACCOUNT}:role/*'), ('executionRoleArn', '*')]:
+            with self.subTest(key=key):
+                broken = inventory(); broken['definitions']['MigrationTaskDefinition'][key] = bad
+                with self.assertRaises(Exception): template(broken)
 
     def test_ecs_supported_resource_and_condition_shapes(self):
         doc=template(inventory());cf=statements(doc,'RuntimeExecution')

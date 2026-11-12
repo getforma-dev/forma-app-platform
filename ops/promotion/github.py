@@ -193,14 +193,29 @@ def validate_summary(value, candidate):
         require(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value["expires_at_utc"]), "invalid expiry")
         review = value["review"]
         require(set(review) == {"images", "predecessor_candidate_sha", "source_tree_sha", "deployment_contract_sha256",
-            "schema_version", "preserved", "changes", "scan", "sequence", "outage_required"}, "invalid review projection")
+            "schema_version", "schema_release", "preserved", "changes", "scan", "sequence", "outage_required"}, "invalid review projection")
         require(set(review["images"]) == set(NAMES) and all(re.fullmatch(r"sha256:[0-9a-f]{64}", d)
             for d in review["images"].values()), "invalid review image identities")
         require(all(re.fullmatch(r"[0-9a-f]{40}", review[k]) for k in ("predecessor_candidate_sha", "source_tree_sha"))
             and re.fullmatch(r"[0-9a-f]{64}", review["deployment_contract_sha256"])
             and type(review["schema_version"]) is int and 1 <= review["schema_version"] <= 10000,
             "invalid review source/schema")
-        require(review["preserved"] == {"schema": True, "template": True, "trial": True, "aliases": True, "secrets": True},
+        release = review["schema_release"]
+        if release is not None:
+            # schema_version stays the current policy version; the release names both ends.
+            require(isinstance(release, dict) and set(release) == {"from_version", "to_version", "spec_sha256"}
+                and type(release["from_version"]) is int and type(release["to_version"]) is int
+                and release["from_version"] == review["schema_version"] < release["to_version"] <= 10000
+                and isinstance(release["spec_sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", release["spec_sha256"]),
+                "invalid schema release projection")
+            from .schema_release import load
+            spec, spec_sha = load()
+            require(spec is not None and release["spec_sha256"] == spec_sha
+                and release["from_version"] == spec["from"]["database_version"]
+                and release["to_version"] == spec["to"]["database_version"]
+                and review["deployment_contract_sha256"] == spec["to"]["deployment_contract_sha256"],
+                "schema release projection changed")
+        require(review["preserved"] == {"schema": release is None, "template": True, "trial": True, "aliases": True, "secrets": True},
             "preserved state not proven")
         require(isinstance(review["changes"], list) and 1 <= len(review["changes"]) <= 100, "invalid change count")
         ids = set()
@@ -233,8 +248,9 @@ def validate_summary(value, candidate):
             else:
                 require(scan["reviewed"] == [] and scan["disposition_sha256"] is None
                     and scan["review_expires_at_utc"] is None, "unexpected scan disposition")
-        require(review["sequence"] == ["stop both services", "execute reviewed change set", "verify stopped boundaries",
-            "activate both services", "verify health and images"] and review["outage_required"] is True,
+        snapshot, migration = ([], []) if release is None else (["snapshot database"], ["run reviewed migration"])
+        require(review["sequence"] == [*snapshot, "stop both services", "execute reviewed change set", "verify stopped boundaries",
+            *migration, "activate both services", "verify health and images"] and review["outage_required"] is True,
             "operation sequence changed")
     else:
         require(re.fullmatch(r"beta/\d{8}-" + re.escape(candidate[:7]), value["tag"]), "release tag differs")

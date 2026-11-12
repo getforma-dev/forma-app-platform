@@ -236,7 +236,7 @@ class LifecycleTests(unittest.TestCase):
         self.aws._call = transport
         result = self.prepared()
         for role in guards.REPOS:
-            self.assertEqual(result['review']['scan'][role]['reviewed_count'], 2)
+            self.assertEqual(result['review']['scan'][role]['reviewed_count'], len(disposition['roles'][role]['findings']))
         def final_network_read(_):
             self.runner.clock = lambda: datetime.fromisoformat(disposition['expires_at_utc'].replace('Z', '+00:00'))
         self.current_mock.side_effect = final_network_read
