@@ -4,7 +4,7 @@ Owner: GenUI. Status: accepted implementation direction for Phase 2 preparation.
 
 **Why this file exists.** `contracts/lock.py` hashes [ADR-009](ADR-009-PHASE-2-DATA-PLANE.md) and [ADR-002](ADR-002-CONTRACT-EDITION.md) whole into `contracts/implementation-lock.json` (edition `impl-2026-11-01.2`). ADR-002 forbids rewriting a published edition's lock in place. One byte added to either ADR therefore fails `lock.py check`, a required workflow, until a new contract edition opens. So amendments to ADR-009 live here.
 
-From its date, a section here controls over the ADR-009 text it names. When the next contract edition opens, its owner copies each section into ADR-009 as a dated amendment, and the edition decisions (E5, E6, E7 and E11) into `contracts/README.md`. That edition then writes its own lock, and this file keeps a pointer to the copy.
+From its date, a section here controls over the ADR-009 text it names. When the next contract edition opens, its owner copies each section into ADR-009 as a dated amendment, and the edition decisions (E5, E6, E7 and E11) and R-m4's poll-time `queue_position` wording into `contracts/README.md`. Whichever ticket opens that edition carries the copy, even if it is not APP-018: re-locking ADR-009 without the copy would drop these amendments. That edition then writes its own lock, and this file keeps a pointer to the copy.
 
 Line numbers such as "ADR-009:82" refer to the locked file, SHA-256 `8a52d3cb7efa6e8451633de44634c3f3fcd3107044be4c6c94b8cf85c765172f`, unchanged since `29b6ff6`.
 
@@ -78,7 +78,7 @@ Victor selected APP-088 on 2026-11-12. The sources are the [re-review](../../evi
 **New:**
 - `WorkerScope` installs the organization, reads the job's principal and that member's current epoch under scope, installs them, and takes the fence.
 - On a fence miss, it re-reads the membership under scope in the same transaction. If the membership is active, it installs the epoch just read and takes the fence once more. This is a read inside one transaction, not a mutation retry, so ADR-004's rule against automatic mutation retries is unchanged.
-- A second miss, an inactive membership, or a failed `precheck` (organization, membership, entitlement, `import_source`) is a refused recheck. Two epoch advances inside one step's transaction therefore end the job visibly; the rule allows one retake, not a loop.
+- A second miss, an inactive membership, or a failed `precheck` (organization, membership, entitlement, `import_source`) is a refused recheck. The fence's first attempt takes `FOR SHARE` on the membership row (0002:252–254) and holds it to the end of the transaction. No second epoch advance can therefore commit before the retake, so the retake succeeds while the membership is active. A lock timeout (55P03) inside the fence aborts the transaction; that is not a refused recheck, and the job falls back to lease reclaim. In short, the rule allows one retake, not a loop.
 - A refused recheck at start (step 3, ADR-009:92) or at result (step 5, ADR-009:94) commits all of the following in that step's one transaction:
   - `release_job` with the claim's sequence, which deletes the queue row;
   - `genui.jobs.state = 'failed'` with `failure_code = 'authority_revoked'`;
@@ -97,6 +97,7 @@ This completes ADR-009:98's failure sentence, which named the code and the event
 The re-review offered two fixes. This takes the first, which edition two's contract already states: `queue_position` is "the organization position `enqueue_job` returns, 1-based" (`contracts/README.md`, edition `impl-2026-10-29.2`).
 
 - `queue_position` is the job's 1-based place among its organization's jobs that have not started.
+- Within an organization, the claim takes the queued row with the smallest `(available_at, job_id)`. At enqueue `available_at` is the job's `created_at`, so the claim order and the position order agree. A retried job, whose `available_at` is later, is within the estimate this section allows.
 - `enqueue_job` returns it with `queued`. It counts the organization's queued `job_queue` rows, this one included, under its cursor lock.
 - Each poll of `GET /v1/jobs/{job}` recomputes it from `genui.jobs`: 1 + the organization's rows in state `queued` created earlier (ordered by `created_at`, then `job_id`). The workspace reads those rows under its RLS scope, so the poll needs no new definer function.
 - `expected_wait_seconds` = `queue_position` × the in-process p50 job duration (D9.2, ADR-009:45), at enqueue and on every poll.
@@ -117,7 +118,7 @@ The re-review offered two fixes. This takes the first, which edition two's contr
 - The job's source is the `sources` row its enqueue inserted (an import, D9.4 step 1) or the source its normalize payload names (APP-018).
 - `import_source` lets a member upload. It does not disclose other members' jobs or their upload metadata.
 
-**Not decided here:** who may cancel a job. ADR-009 does not say; APP-015 states it (plan Task A2).
+**Cancel authority (decided 2026-11-12, under Victor's delegation of that day):** only the job's principal may cancel it. Anyone else, including a `source_read` holder who may read the job, gets the uniform 404 from `POST /v1/jobs/{job}/cancel`. Cancel authority is thus never broader than read authority, so the cancel route cannot reveal a job that R-m5 hides.
 
 **Test** (plan Task A2): `job_read_is_uniform_404_for_other_principals_without_source_read`, renamed from `…_without_import_source`.
 
@@ -167,7 +168,7 @@ Edition `impl-2026-10-29.2` kept these items as "documented here" in `contracts/
 
 ### Consumers
 
-APP-015 implements R-M1 and R-m1–R-m6 in migration 0008 (plan Task A1) and its runtime (Task A2). APP-016 (Task A3) and APP-018 (Task A6) implement E7, APP-017 (Task A5) and APP-015 E11, APP-019 and APP-024 E6, and APP-022 E5. The Phase 2 plan's tasks name this section. The edition-two review's unrun limitation, the Docker-backed campaign that seeds through `tenant_seed.py`, is closed by the run in [evidence/APP-015/residuals-2026-11-12](../../evidence/APP-015/residuals-2026-11-12/README.md).
+APP-015 implements R-M1 and R-m1–R-m6 in its migration (numbered when it lands; 0008 is now `0008_sharing.sql`) (plan Task A1) and its runtime (Task A2). APP-016 (Task A3) and APP-018 (Task A6) implement E7, APP-017 (Task A5) and APP-015 E11, APP-019 and APP-024 E6, and APP-022 E5. The Phase 2 plan's tasks name this section. The edition-two review's unrun limitation, the Docker-backed campaign that seeds through `tenant_seed.py`, is closed by the run in [evidence/APP-015/residuals-2026-11-12](../../evidence/APP-015/residuals-2026-11-12/README.md).
 
 ## 2026-11-12: this record is ADR-009's amendment ledger (decision)
 
@@ -181,8 +182,10 @@ The open question in APP-088 was whether ADR-009 itself must carry the 2026-11-1
 - Changing ADR-009 changes its lock hash. ADR-002 forbids rewriting a published edition's lock, so an edit needs a new edition.
 - A new edition should not be cut while APP-175's schema release waits for its approval.
 - An append-only, dated ledger is already the only text that consumers follow:
-  - the Phase 2 plan's Spec line and its 2026-11-12 change note;
+  - the Phase 2 plan's Spec line and its 2026-11-12 change note (the plan is classified Historical, so the durable routes are the next two);
   - the APP-015, 016 and 018 logs;
   - this file's row in `docs/README.md`, which tells a reader of ADR-009 to read it with this record.
 
 Copying the ledger into the edition loses nothing.
+
+**Also superseded (2026-11-12, review m3):** ADR-009:233–235, the re-review table's R-m3, R-m4 and R-m5 rows. They state the replaced fixes. The R-m3, R-m4 and R-m5 sections above control; the review file's copy is `evidence/APP-015/adr-009-review.md:638–640`.

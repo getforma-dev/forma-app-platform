@@ -2964,7 +2964,7 @@
       "Depends on": "None",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Claude",
-      "Branch / PR": "`app088/adr009-residuals` (local worktree from `main` `5695869`; not pushed, no PR)",
+      "Branch / PR": "`app088/adr009-residuals` (from `main` `5695869`, main merged at `f5edef3`); PR to follow",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
