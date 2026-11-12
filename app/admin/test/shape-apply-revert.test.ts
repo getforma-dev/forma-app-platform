@@ -37,6 +37,7 @@ const LISTING = {
   truncated: false,
 };
 const HIGHLIGHT = { highlight: [{ field: 'status', op: 'in', value: ['submitted'], color: 'crimson' }] };
+const THEME = { mode: 'dark', accent: 'green', density: 'compact' };
 
 /** A minimal DOM: the selectors `shape.ts` uses (`:scope > X`, `.class`, tag, `[hidden]`), events and `after`. */
 class Node_ {
@@ -74,6 +75,8 @@ class Node_ {
   matchesOne(selector: string): boolean {
     if (selector === '[hidden]') return this.hidden;
     if (selector === '[inert]') return this.inert;
+    const withAttribute = /^(\.[\w-]+)\[data-([\w-]+)\]$/.exec(selector);
+    if (withAttribute) return this.classes.has(withAttribute[1]!.slice(1)) && this.dataset[withAttribute[2]!.replace(/-([a-z])/g, (_m, l: string) => l.toUpperCase())] !== undefined;
     if (selector.startsWith('.')) return selector.slice(1).split('.').every((c) => this.classes.has(c));
     return this.tagName === selector;
   }
@@ -101,9 +104,12 @@ class Document_ {
   createElement(tag: string) { return new Node_(this, tag); }
   createTextNode(text: string) { const node = new Node_(this, '#text'); node.text = text; return node; }
   getElementById() { return null; }
+  querySelectorAll(selector: string) { return this.body.querySelectorAll(selector); }
+  querySelector(selector: string) { return this.body.querySelector(selector); }
 }
 
-async function fixture() {
+let serial = 0;
+async function fixture(kind: 'card' | 'app' = 'card') {
   const entry = fileURLToPath(new URL('../src/canvas/shape.ts', import.meta.url));
   const source = await readFile(entry, 'utf8');
   const imports = new Map<string, string[]>();
@@ -120,6 +126,28 @@ async function fixture() {
   bodyNode.append('Nobu · Delta');
   card.append(header, bodyNode);
   document_.body.append(card);
+  // APP-122 box 6: an app card and its components, all of one saved work.
+  const appCard = document_.createElement('article');
+  const appHead = document_.createElement('header');
+  const components: Node_[] = [];
+  if (kind === 'app') {
+    for (const c of ['cv-card', 'cv-app']) appCard.classes.add(c);
+    Object.assign(appCard.dataset, { work: WORK, kind: 'app' });
+    appHead.classes.add('cv-card-head');
+    appCard.append(appHead);
+    Object.assign(card.dataset, { work: WORK, kind: 'records' });
+    components.push(card);
+    const view = document_.createElement('article');
+    view.classes.add('cv-card');
+    Object.assign(view.dataset, { work: WORK, kind: 'view' });
+    const viewBody = document_.createElement('div');
+    viewBody.classes.add('cv-card-body');
+    viewBody.append('Spend by vendor');
+    view.append(viewBody);
+    components.push(view);
+    document_.body.append(appCard, view);
+  }
+  const appRow = { app: APP, work: WORK, slug: 'expenses', title: 'Expenses', number: '1' };
   const row = { id: card.dataset.card, slug: 'ledger', title: 'Ledger', number: '1.2', app: { app: APP, work: WORK } };
   const docks: Node_[] = [];
   const messages: string[] = [];
@@ -131,18 +159,19 @@ async function fixture() {
   };
   const mocks: Record<string, Record<string, (...args: any[]) => any>> = {
     ...real as never,
-    './board': { ensureAppGroup: async () => ({ cards: [card] }), isOnBoard: () => true, focusCard: () => undefined, onLiveEvent: () => undefined },
+    './board': { ensureAppGroup: async () => ({ cards: [card] }), isOnBoard: () => true, focusCard: () => undefined, onLiveEvent: () => undefined, isDemoCanvas: () => false, addCards: async () => { throw new Error('the app is already on the board'); } },
     './unite': { setAppView: async () => { throw new Error('the card is already on the board'); } },
     '../presentation/presentation': { appComponentVisible: () => true },
     './dock-card': { showDockCard: (_d: unknown, node: Node_) => { docks.push(node); document_.body.append(node); return () => node.remove(); }, isDismissKey: () => false },
-    './library': { findCards: () => [row], cardAddress: () => 'expenses.ledger', libraryApps: () => [], findApps: () => [], findCardRow: () => row },
-    './command-registry': { findCardShortcut: () => null, findAppAddress: () => null, findAddress: () => null, findVerb: () => null, appForm: () => '' },
+    './library': { findCards: () => [row], cardAddress: () => 'expenses.ledger', libraryApps: () => [appRow], findApps: () => [appRow], findCardRow: () => row },
+    './command-registry': { findCardShortcut: () => null, findAppAddress: () => null, findAddress: (name: string) => name === 'expenses' ? { app: APP, work: WORK, slug: 'expenses' } : null, findVerb: () => null, appForm: () => 'expenses' },
     './widgets/index': { widgetKind: () => null, widgetFor: () => null, widgetOfItem: () => null },
     './address-chip': { fillBar: () => undefined, addressFor: () => '' },
   };
-  const key = '__shapeApplyRevert';
+  const key = `__shapeApplyRevert${serial}`;
   (globalThis as any)[key] = mocks;
-  const result = await build({ entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false,
+  // A banner per fixture gives each test its own shape.ts instance (no shared applied state).
+  const result = await build({ entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false, banner: { js: `// fixture ${serial++}` },
     plugins: [{ name: 'shape-boundaries', setup(builder) {
       builder.onResolve({ filter: /.*/ }, (args) => args.importer === entry && imports.has(args.path) ? { path: args.path, namespace: 'shape-spy' } : undefined);
       builder.onLoad({ filter: /.*/, namespace: 'shape-spy' }, (args) => ({ contents: imports.get(args.path)!.map((name) => `export const ${name} = (...args) => globalThis[${JSON.stringify(key)}][${JSON.stringify(args.path)}]?.[${JSON.stringify(name)}]?.(...args);`).join('\n'), loader: 'js' }));
@@ -154,12 +183,12 @@ async function fixture() {
   (globalThis as any).fetch = async (url: string, init: { method?: string; body?: string } = {}) => {
     requests.push({ url, method: init.method ?? 'GET', body: init.body });
     if (url === LISTING_URL) return { ok: true, status: 200, json: async () => structuredClone(LISTING) };
-    if (url === '/v1/shape') return { ok: true, status: 200, json: async () => ({ target: 'card', spec: HIGHLIGHT }) };
+    if (url === '/v1/shape') return { ok: true, status: 200, json: async () => (kind === 'app' ? { target: 'app', spec: THEME } : { target: 'card', spec: HIGHLIGHT }) };
     return { ok: false, status: 404, json: async () => ({}) };
   };
   const report = (message: string) => messages.push(message);
   const button = (label: string) => docks.at(-1)!.querySelectorAll('button').find((node) => node.textContent === label)!;
-  return { api, card, header, bodyNode, docks, messages, requests, report, button,
+  return { api, card, header, bodyNode, appCard, appHead, components, docks, messages, requests, report, button,
     cleanup: () => { delete (globalThis as any)[key]; (globalThis as any).document = previous.document; globalThis.fetch = previous.fetch; } };
 }
 const LISTING_URL = `/v1/work/${APP}/${WORK}/records`;
@@ -174,6 +203,9 @@ test('Shape previews a highlighted ledger, Apply labels it shaped, Revert restor
     assert.equal(f.card.querySelector(':scope > .cv-shaped')?.dataset.state, 'preview');
     assert.equal(f.bodyNode.hidden, true);
     assert.equal(f.header.querySelector(':scope > .cv-shaped-label'), null, 'no shaped label before Apply');
+    const highlighted = f.card.querySelector(':scope > .cv-shaped')!.descendants().filter((node) => node.dataset.highlight === 'crimson');
+    assert.equal(highlighted.length, 1, 'exactly the submitted (Nobu) row is highlighted crimson');
+    assert.match(highlighted[0]!.textContent, /Nobu/);
     assert.match(f.docks[0]!.textContent, /Nothing changes until you apply it\. No record is written\./);
     // Apply: the card is labeled shaped, with Revert on it.
     f.button('Apply').click();
@@ -207,5 +239,56 @@ test('Cancel on a Shape preview leaves the card exactly as it was (APP-122)', as
     assert.equal(f.header.querySelector(':scope > .cv-shaped-label'), null);
     assert.equal(f.messages.at(-1), 'Nothing changed.');
     assert.deepEqual(f.requests.map((r) => r.method), ['GET', 'POST']);
+  } finally { f.cleanup(); }
+});
+
+test('Shape previews a theme on every card of an app, Apply themes them all keeping each view, Revert restores them (APP-122 box 6)', async () => {
+  const f = await fixture('app');
+  try {
+    await f.api.runShape('expenses', 'dark green, compact', f.report);
+    const themed = [f.appCard, ...f.components];
+    // Preview: every card of the work carries the theme; nothing is applied yet.
+    assert.equal(f.docks.length, 1);
+    for (const node of themed) {
+      assert.equal(node.dataset.theme, 'green-dark', 'every card previews the theme');
+      assert.equal(node.dataset.themeDensity, 'compact');
+      assert.equal(node.dataset.themePreview, 'true');
+    }
+    assert.equal(f.appHead.querySelector(':scope > .cv-shaped-label'), null, 'no shaped label before Apply');
+    assert.match(f.docks[0]!.textContent, /Nothing changes until you apply it\./);
+    // Apply: every card keeps the theme and its own view; the app card is labeled shaped with Revert.
+    f.button('Apply').click();
+    for (const node of themed) {
+      assert.equal(node.dataset.theme, 'green-dark');
+      assert.equal(node.dataset.themePreview, undefined, 'the preview marker is settled');
+      assert.equal(node.querySelector(':scope > .cv-shaped'), null, 'each card keeps its own view (no shaped section)');
+    }
+    assert.equal(f.bodyNode.hidden, false);
+    const label = f.appHead.querySelector(':scope > .cv-shaped-label');
+    assert.ok(label, 'the app card is labeled shaped');
+    assert.match(f.messages.at(-1)!, /Every \/expenses card is shaped; each keeps its own view\./);
+    // Revert on the app card restores every card.
+    label!.querySelector('.cv-shaped-revert')!.click();
+    for (const node of themed) {
+      assert.equal(node.dataset.theme, undefined, 'the theme is removed from every card');
+      assert.equal(node.dataset.themeDensity, undefined);
+    }
+    assert.equal(f.appHead.querySelector(':scope > .cv-shaped-label'), null);
+    // Theming reads no records and writes nothing: one shape request only.
+    assert.deepEqual(f.requests.map((r) => `${r.method} ${r.url}`), ['POST /v1/shape']);
+    assert.deepEqual(JSON.parse(f.requests[0]!.body!).target, { kind: 'app', app_id: APP, work_id: WORK });
+  } finally { f.cleanup(); }
+});
+
+test('Cancel on an app theme preview leaves every card as it was (APP-122 box 6)', async () => {
+  const f = await fixture('app');
+  try {
+    await f.api.runShape('expenses', 'dark green, compact', f.report);
+    f.button('Cancel').click();
+    for (const node of [f.appCard, ...f.components]) {
+      assert.equal(node.dataset.theme, undefined);
+      assert.equal(node.dataset.themePreview, undefined);
+    }
+    assert.equal(f.messages.at(-1), 'Nothing changed.');
   } finally { f.cleanup(); }
 });
