@@ -181,6 +181,6 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 174 | [APP-174: Detach the Northstar management secret, rotate its key and clean up the invitation input secret](9-blocked/APP-174.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | S | Blocked | APP-084 |
 | 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](0-backlog/APP-175.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | M | Backlog | APP-084, APP-169, APP-167 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](0-backlog/APP-176.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
-| 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](0-backlog/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-104 |
+| 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](4-done/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Done | APP-104 |
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](4-done/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
 | 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](4-done/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |

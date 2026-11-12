@@ -22,6 +22,7 @@ Forma is a canvas where teams describe what they need and get working apps: expe
   - An `app.card` address such as `expenses.ledger` still names a component, for Shape and Ask.
 - **Apps stay together.** `/split` and "break apart …" answer "Apps stay together. Choose Card, Browse or Open view."
 - **Old stacks and united frames.** Those made before November 2 are the legacy path that APP-176 retires. New ones are not made.
+- **Fences** were never built, and on 2026-11-12 they were dropped ([ADR-018 amendment](../architecture/ADR-018-WHOLE-APP-VIEWS.md#amendment-2026-11-12-canvas-fences-are-dropped)).
 - **Ask lives with the app.** Each app has an attached assistant, opened with its App assistant button. It has four tabs: Ask, Summary, Sources and Saved.
   - When a question is about one app, `?`, `/ask` and ⋯ → Ask about this open that app's assistant.
   - Any other question opens the workspace assistant on the canvas.
