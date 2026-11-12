@@ -520,6 +520,7 @@ async fn campaign() {
     );
     check(&mut checks,"revocation between query authorization and release blocks results and links; account actions append exactly-once transactional audit and every tenant grant/member/app footprint stays unchanged");
     authority_regressions(&fixture, &stores, &owner, &mut checks).await;
+    fail_closed(&fixture, &stores, &owner, &mut checks).await;
     drop(stores);
     http_campaign(&fixture, &mut checks).await;
     if let Some(path) = std::env::var_os("GENUI_LIVE_SHARING_REPORT") {
@@ -868,6 +869,255 @@ async fn http_campaign(fixture: &Fixture, checks: &mut Vec<serde_json::Value>) {
         StatusCode::NOT_FOUND
     );
     check(checks,"real HTTP owner defaults/list/version conflict, verified named consent, cross-site/closed-body/oversize denials, confined engine numeric shared receipts, guest-only member API denials, zero-query authority polling, and revocation after engine computation prevent stale JSON release");
+}
+
+/// APP-178: organization shutdown, share expiry and overlapping grants. Each
+/// denial is bracketed by the same call succeeding before and after, so a
+/// refusal cannot come from anything but the condition under test.
+async fn fail_closed(
+    fixture: &Fixture,
+    stores: &Stores,
+    owner: &TrustedRequest,
+    checks: &mut Vec<serde_json::Value>,
+) {
+    let (_, recipient) = account(stores, "fail-closed-recipient", "failclosed@example.test").await;
+    let share = |key: &str, add: bool| NewLiveShare {
+        recipient_email: "failclosed@example.test".into(),
+        allow_add_to_canvas: add,
+        expires_in_days: 7,
+        idempotency_key: key.into(),
+    };
+    // Two independent grants of the same work to the same account.
+    let first = stores
+        .workspace
+        .create_live_share(
+            owner,
+            APP,
+            WORK,
+            &share("00000000-0000-4000-8000-00000000c301", true),
+        )
+        .await
+        .unwrap();
+    let second = stores
+        .workspace
+        .create_live_share(
+            owner,
+            APP,
+            WORK,
+            &share("00000000-0000-4000-8000-00000000c302", false),
+        )
+        .await
+        .unwrap();
+    assert_ne!(first.share_id, second.share_id);
+    let first_access = stores
+        .workspace
+        .accept_live_share(&recipient, &first.key)
+        .await
+        .unwrap();
+    let second_access = stores
+        .workspace
+        .accept_live_share(&recipient, &second.key)
+        .await
+        .unwrap();
+    stores
+        .workspace
+        .link_shared_app(&recipient, &first.key)
+        .await
+        .unwrap();
+    assert_eq!(
+        stores
+            .workspace
+            .linked_apps(&recipient)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    stores
+        .data
+        .release_guest_access(&first_access)
+        .await
+        .unwrap();
+    stores
+        .data
+        .release_guest_access(&second_access)
+        .await
+        .unwrap();
+
+    // Organization shutdown: query release, reads and connected links all refuse,
+    // including a result computed before the shutdown; restoring restores access.
+    let run = stores
+        .data
+        .guest_run_query(&second_access, "total", &json!({}))
+        .await
+        .unwrap();
+    fixture.sql(
+        &format!("UPDATE genui.organizations SET status='suspended' WHERE organization_id='{ORG}'"),
+        "genui",
+    );
+    assert!(
+        matches!(
+            stores.data.release_guest_result(&second_access, &run).await,
+            Err(Error::Denied)
+        ),
+        "a result computed before the shutdown is not released"
+    );
+    assert!(matches!(
+        stores.data.release_guest_access(&first_access).await,
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        stores.data.guest_work_reads(&second_access).await,
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        stores
+            .data
+            .guest_run_query(&second_access, "total", &json!({}))
+            .await,
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        stores
+            .workspace
+            .resolve_guest_access(&recipient, &first.key)
+            .await,
+        Err(Error::Denied)
+    ));
+    let links = stores.workspace.linked_apps(&recipient).await;
+    assert!(
+        matches!(&links, Err(Error::Denied)) || links.as_ref().is_ok_and(|l| l.is_empty()),
+        "no connected link is shown while the sponsor organization is shut down: {links:?}"
+    );
+    fixture.sql(
+        &format!("UPDATE genui.organizations SET status='active' WHERE organization_id='{ORG}'"),
+        "genui",
+    );
+    stores
+        .data
+        .release_guest_access(&first_access)
+        .await
+        .unwrap();
+    stores
+        .data
+        .release_guest_access(&second_access)
+        .await
+        .unwrap();
+    // The shutdown removed the link (linked_apps unlinks, audited, any link whose
+    // grant no longer resolves); it stays removed until an explicit Add, as when
+    // placement is disabled and re-enabled.
+    assert!(
+        stores
+            .workspace
+            .linked_apps(&recipient)
+            .await
+            .unwrap()
+            .is_empty(),
+        "the shutdown removed the link and restoring does not bring it back"
+    );
+    stores
+        .workspace
+        .link_shared_app(&recipient, &first.key)
+        .await
+        .unwrap();
+    assert_eq!(
+        stores
+            .workspace
+            .linked_apps(&recipient)
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "an explicit Add after the restore links again"
+    );
+    check(checks, "APP-178: organization shutdown (status suspended) denies the guest's final release, a result computed before it, work reads, a new query, access resolution and connected links; restoring the organization restores access; the shutdown removed the connected link (audited), and an explicit Add links it again");
+
+    // Overlapping independent grants: revoking one leaves the other exactly intact.
+    let revoked = stores
+        .workspace
+        .revoke_live_share(owner, APP, WORK, &first.share_id, first.version)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(revoked.status, "revoked");
+    assert!(matches!(
+        stores.data.release_guest_access(&first_access).await,
+        Err(Error::Denied)
+    ));
+    assert!(
+        stores
+            .workspace
+            .linked_apps(&recipient)
+            .await
+            .unwrap()
+            .is_empty(),
+        "the revoked grant's link is gone"
+    );
+    stores
+        .data
+        .release_guest_access(&second_access)
+        .await
+        .unwrap();
+    stores.data.guest_work_reads(&second_access).await.unwrap();
+    let again = stores
+        .workspace
+        .resolve_guest_access(&recipient, &second.key)
+        .await
+        .unwrap();
+    assert_eq!(again, second_access, "the other grant is unchanged");
+    check(checks, "APP-178: two independent grants of one work to one account: revoking the first denies it and removes its link, while the second still resolves to the same access, reads and releases");
+
+    // Share expiry: an expired invitation cannot be accepted, with the same
+    // refusal as a key that never existed.
+    let (_, invitee) = account(stores, "expired-invitee", "expired@example.test").await;
+    let expiring = stores
+        .workspace
+        .create_live_share(
+            owner,
+            APP,
+            WORK,
+            &NewLiveShare {
+                recipient_email: "expired@example.test".into(),
+                allow_add_to_canvas: false,
+                expires_in_days: 7,
+                idempotency_key: "00000000-0000-4000-8000-00000000c303".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        stores
+            .workspace
+            .pending_share(&invitee, &expiring.key)
+            .await
+            .unwrap(),
+        "pending before expiry"
+    );
+    fixture.sql(&format!("UPDATE genui.live_work_shares SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE organization_id='{ORG}' AND share_id='{}'", expiring.share_id), "genui");
+    let expired = stores
+        .workspace
+        .accept_live_share(&invitee, &expiring.key)
+        .await;
+    assert!(
+        matches!(expired, Err(Error::Denied)),
+        "an expired invitation cannot be accepted: {expired:?}"
+    );
+    let mut unknown = expiring.key.clone();
+    unknown.replace_range(unknown.len() - 4.., "0000");
+    let never = stores.workspace.accept_live_share(&invitee, &unknown).await;
+    assert_eq!(
+        format!("{expired:?}"),
+        format!("{never:?}"),
+        "the refusal is the same as for a key that never existed"
+    );
+    assert!(matches!(
+        stores
+            .workspace
+            .resolve_guest_access(&invitee, &expiring.key)
+            .await,
+        Err(Error::Denied)
+    ));
+    check(checks, "APP-178: an invitation past its expiry cannot be accepted or resolved, and the refusal equals the one for a key that never existed");
 }
 
 async fn authority_regressions(
