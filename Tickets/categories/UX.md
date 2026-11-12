@@ -27,7 +27,7 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 122 | [APP-122: Two AI jobs: Ask (read-only conversation about the data) and Shape (change the look or view of a card, an app or a widget), separated by where you type](../4-done/APP-122.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | APP-121 |
 | 123 | [APP-123: Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /forma, /<folder> words](../0-backlog/APP-123.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-122, APP-097 |
 | 124 | [APP-124: Start from your data: drop files, Ask the folder, Make a card, Make an app](../0-backlog/APP-124.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-108, APP-122, APP-123 |
-| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](../0-backlog/APP-132.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-128 |
+| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](../4-done/APP-132.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-128 |
 | 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](../0-backlog/APP-135.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
 | 138 | [APP-138: Forma Canvas — shared Forma brand and application design](../4-done/APP-138.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | None |
 | 140 | [APP-141: Create an app before it reaches the canvas](../4-done/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-093, APP-104, APP-120, APP-145 |
@@ -52,4 +52,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](../0-backlog/APP-171.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](../0-backlog/APP-176.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
 | 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](../0-backlog/APP-177.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-104 |
-| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](../0-backlog/APP-179.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | S | Backlog | APP-112, APP-120 |
+| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](../4-done/APP-179.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |

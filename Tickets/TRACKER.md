@@ -132,16 +132,16 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 124 | [APP-124: Start from your data: drop files, Ask the folder, Make a card, Make an app](0-backlog/APP-124.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-108, APP-122, APP-123 |
 | 125 | [APP-125: Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink](4-done/APP-125.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | None |
 | 126 | [APP-126: Developer workflow step 2: the front door (justfile, campaign catalog, VS Code workspace)](4-done/APP-126.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | APP-125 |
-| 127 | [APP-127: Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)](0-backlog/APP-127.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-126 |
+| 127 | [APP-127: Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)](4-done/APP-127.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Done | APP-126 |
 | 128 | [APP-128: Developer workflow step 4: the genui-dev binary under process-compose (Compose PostgreSQL, in-process personas, clean profile)](4-done/APP-128.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Done | APP-125, APP-126 |
 | 129 | [APP-129: Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)](0-backlog/APP-129.md) | [PH08](phases/PH08.md) | S14 | FND | P1 | S | Backlog | APP-107, APP-113 |
-| 130 | [APP-130: Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep](0-backlog/APP-130.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128 |
+| 130 | [APP-130: Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep](4-done/APP-130.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | APP-125, APP-126, APP-127, APP-128 |
 | 131 | [APP-131: Developer workflow step 5: CI green or quarantined (Foundation, Tenant foundation, the APP-013 campaign)](4-done/APP-131.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | APP-125, APP-126 |
-| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](0-backlog/APP-132.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Backlog | APP-128 |
-| 133 | [APP-133: Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map](0-backlog/APP-133.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127, APP-130 |
+| 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](4-done/APP-132.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Done | APP-128 |
+| 133 | [APP-133: Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map](4-done/APP-133.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | APP-127, APP-130 |
 | 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](0-backlog/APP-135.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
-| 136 | [APP-136: Developer guide from setup through beta delivery](0-backlog/APP-136.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
-| 137 | [APP-137: One private beta ledger across repository worktrees](0-backlog/APP-137.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-127 |
+| 136 | [APP-136: Developer guide from setup through beta delivery](4-done/APP-136.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | APP-125, APP-126, APP-127, APP-128, APP-130, APP-131, APP-133 |
+| 137 | [APP-137: One private beta ledger across repository worktrees](4-done/APP-137.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | APP-127 |
 | 138 | [APP-138: Forma Canvas — shared Forma brand and application design](4-done/APP-138.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Done | None |
 | 139 | [APP-145: Give a new member one authoring shell so the first description can publish](4-done/APP-145.md) | [PH08](phases/PH08.md) | S14 | AUT | P0 | M | Done | APP-093 |
 | 140 | [APP-141: Create an app before it reaches the canvas](4-done/APP-141.md) | [PH08](phases/PH08.md) | S14 | UX | P0 | M | Done | APP-093, APP-104, APP-120, APP-145 |
@@ -183,4 +183,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](0-backlog/APP-176.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
 | 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](0-backlog/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-104 |
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](0-backlog/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Backlog | APP-154 |
-| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](0-backlog/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Backlog | APP-112, APP-120 |
+| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](4-done/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |
