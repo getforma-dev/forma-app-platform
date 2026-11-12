@@ -314,7 +314,7 @@
         "APP-173"
       ],
       "ticket_count": 70,
-      "done_count": 39,
+      "done_count": 40,
       "blocked_count": 2
     },
     {
@@ -364,7 +364,7 @@
     "APP-098",
     "APP-099",
     "APP-111",
-    "APP-132",
+    "APP-135",
     "APP-139",
     "APP-150",
     "APP-151",
@@ -4234,11 +4234,11 @@
     {
       "id": "APP-132",
       "title": "Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)",
-      "path": "0-backlog/APP-132.md",
+      "path": "4-done/APP-132.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Bug",
       "Sprint": "S14",
@@ -4251,7 +4251,7 @@
       "Depends on": "APP-128",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
-      "Branch / PR": "`pivot/clean-generate` (built and pushed; not merged into `pivot/pitch-mvp`)",
+      "Branch / PR": "`pivot/clean-generate` (`91553b5`, `5bd3c35`); landed on `main` through `pivot/pitch-mvp`, the trunk since [ADR-019](../../docs/architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md); closed 2026-11-12 ([closure](../../evidence/APP-132/closure-2026-11-12.md))",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
