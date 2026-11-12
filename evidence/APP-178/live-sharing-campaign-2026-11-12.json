@@ -1,0 +1,79 @@
+{
+  "checks": [
+    {
+      "name": "verified account sessions exist without principal, membership, entitlement or tenant grants; forged cookie and absent vault reference refuse",
+      "passed": true
+    },
+    {
+      "name": "named invitation is idempotent, wrong identity and foreign work deny, acceptance binds one account and grants no access before consent",
+      "passed": true
+    },
+    {
+      "name": "policy epoch changes deny both guest query and final document release; unsupported operator version is rejected by the database constraint",
+      "passed": true
+    },
+    {
+      "name": "guest reads exact published views/collections with no forms or command metadata; query attribution is the actual account and member release rejects it; sibling work substitution refuses",
+      "passed": true
+    },
+    {
+      "name": "add-to-canvas permission is independent, link is idempotent and account-private, old grant versions deny release, disabling placement hides links while preserving document view, no copied app or grants",
+      "passed": true
+    },
+    {
+      "name": "real member command commit becomes visible through the linked original work without republishing or copying records",
+      "passed": true
+    },
+    {
+      "name": "source deletion during query, configuration version change, and sponsor epoch change deny release; management reports paused rather than active",
+      "passed": true
+    },
+    {
+      "name": "account epoch and session expiry deny cached access; account-only prelogin flow is single-use and bound to its server-side locator",
+      "passed": true
+    },
+    {
+      "name": "revocation between query authorization and release blocks results and links; account actions append exactly-once transactional audit and every tenant grant/member/app footprint stays unchanged",
+      "passed": true
+    },
+    {
+      "name": "verified mailbox change keeps immutable account identity, advances account epoch, and invalidates both old cookie and cached account authority",
+      "passed": true
+    },
+    {
+      "name": "same-org verified account follows identical consent, concurrent acceptance is idempotent, placement revoke cleans once, reenable requires new Add, 100 expired links cannot strand quota, and session revocation never deletes references",
+      "passed": true
+    },
+    {
+      "name": "account FORCE RLS refuses blank/foreign account reads and data-role writes; bounded cross-account sweeper deletes at most100 expired sessions per call and preserves accounts, grants and linked references",
+      "passed": true
+    },
+    {
+      "name": "APP-178: organization shutdown (status suspended) denies the guest's final release, a result computed before it, work reads, a new query, access resolution and connected links; restoring the organization restores access; the shutdown removed the connected link (audited), and an explicit Add links it again",
+      "passed": true
+    },
+    {
+      "name": "APP-178: two independent grants of one work to one account: revoking the first denies it and removes its link, while the second still resolves to the same access, reads and releases",
+      "passed": true
+    },
+    {
+      "name": "APP-178: an invitation past its expiry cannot be accepted or resolved, and the refusal equals the one for a key that never existed",
+      "passed": true
+    },
+    {
+      "name": "APP-144 shared JSON retains every admitted part in default_layout order and literal note text; form parts are view-only labels without command identity, selectors or member routes",
+      "passed": true
+    },
+    {
+      "name": "real HTTP owner defaults/list/version conflict, verified named consent, cross-site/closed-body/oversize denials, confined engine numeric shared receipts, guest-only member API denials, zero-query authority polling, and revocation after engine computation prevent stale JSON release",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Synthetic verified identity proof; hosted provider exchange qualified separately.",
+    "No AWS deployment or IAM claim."
+  ],
+  "passed": true,
+  "schema_version": 1,
+  "scope": "Named account sharing native PostgreSQL campaign"
+}
