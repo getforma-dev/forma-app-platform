@@ -324,13 +324,15 @@ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
     [[ ! -f "$W/clean-trial.json" ]] || die "clean trial refuses sandbox library upload"
     [[ -f "$W/stack-after.json" ]] || (( DRY_RUN )) || die "no $W/stack-after.json (just deploy execute)"
     ORG=${organization:-00000000-0000-4000-8000-000000000001}; export ORG
-    # [read] the live task definition's environment (bucket, tenants); [local] the files and the plan.
+    # [local] the files and the plan. The read of the live task definition's
+    # environment (bucket, tenants) is inside the gate, so the approval is
+    # recorded before any AWS call (APP-127 acceptance 2).
     prepare '
-TD=$(jq -r ".Stacks[0].Outputs[] | select(.OutputKey==\"TaskDefinition\") | .OutputValue" "$W/stack-after.json")
-aws ecs describe-task-definition --task-definition "$TD" --query "taskDefinition.containerDefinitions[0].environment" > "$W/task-env.json"
 "$PY" "$REPO/app/runtime/library_sources.py" build --organization "$ORG" --cache-root "$PRIV/library" > "$W/library-build.json"
 "$PY" "$REPO/app/runtime/library_sources.py" plan --organization "$ORG" > "$W/library-plan.json"'
     mutate library '
+TD=$(jq -r ".Stacks[0].Outputs[] | select(.OutputKey==\"TaskDefinition\") | .OutputValue" "$W/stack-after.json")
+aws ecs describe-task-definition --task-definition "$TD" --query "taskDefinition.containerDefinitions[0].environment" > "$W/task-env.json"
 "$OPVENV/bin/python" -I "$REPO/ops/beta/upload-library.py" --repo "$REPO" --priv "$PRIV" --window-dir "$W" --organization "$ORG" > "$W/library-upload.json"
 jq -c "[.objects[].state] | group_by(.) | map({(.[0]): length}) | add" "$W/library-upload.json"'
     ;;
