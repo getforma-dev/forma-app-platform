@@ -226,11 +226,13 @@ APPLICATION_CHAIN_KINDS = {
     # 0011 (APP-108) widens the workspace list in place with the folder commands;
     # 0012 (APP-113 review) adds the summary and brief saves; 0014 (APP-121)
     # the organization label and personal alias writes; 0015 (APP-123) the
-    # made-card, pinned-answer, share and remove writes.
+    # made-card, pinned-answer, share and remove writes; 0017 the live shares;
+    # 0022 (APP-169) the member's Card or App classification.
     'genui_workspace': ('workspace', ('session.signed_in','app.created','definition.drafted','work.saved','work.bound','box.created',
                                       'box.renamed','box.file_added','box.data_registered','box.app_derived','box.shared',
                                       'box.explained','box.briefed','app.labeled','app.aliased',
-                                      'card.made','answer.pinned','card.shared','card.removed','share.created','share.updated','share.revoked')),
+                                      'card.made','answer.pinned','card.shared','card.removed','share.created','share.updated','share.revoked',
+                                      'work.kind_set')),
     'genui_control': ('control', ('publication.published','policy.changed')),
     'genui_data': ('data', ('command.committed',)),
 }
@@ -331,6 +333,14 @@ CARD_GRANTS = set().union(
     _role_columns('genui_workspace','member_cards','SELECT',*CARD_COLUMNS),
     _role_columns('genui_workspace','member_cards','INSERT',*(c for c in CARD_COLUMNS if c not in ('everyone','removed_at'))),
     _role_columns('genui_workspace','member_cards','UPDATE','everyone','updated_at','removed_at'),
+)
+
+# Migration 0022 (APP-169): one member's Card or App classification of a whole work.
+KIND_COLUMNS = ('organization_id','principal_id','app_id','work_id','kind','updated_at')
+KIND_GRANTS = set().union(
+    _role_columns('genui_workspace','work_artifact_kinds','SELECT',*KIND_COLUMNS),
+    _role_columns('genui_workspace','work_artifact_kinds','INSERT','organization_id','principal_id','app_id','work_id','kind'),
+    _role_columns('genui_workspace','work_artifact_kinds','UPDATE','kind','updated_at'),
 )
 
 # Migration 0007 (ADR-007 D7.3/D7.7/D7.8/D7.9, ADR-009 D9.8; APP-013): the record
@@ -497,7 +507,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -1949,6 +1959,7 @@ def qualify():
                   AND NOT (permissive='RESTRICTIVE' AND tablename='saved_work' AND policyname='saved_work_creator')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_labels' AND policyname='member_labels_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_cards' AND policyname='member_cards_principal')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='work_artifact_kinds' AND policyname='work_artifact_kinds_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'
@@ -2071,6 +2082,39 @@ def qualify():
                 assert c.execute('SELECT count(*) FROM genui.organizations').fetchone()==(1,)
                 assert c.execute('SELECT count(*) FROM genui.organizations WHERE organization_id=%s',(ORGANIZATIONS[1],)).fetchone()==(0,)
             passed('actual NOLOGIN table owner remains subject to FORCE RLS')
+            with pg.connect('postgres') as c:
+                rows = c.execute("""SELECT policyname, permissive, roles::text[], cmd, qual, with_check FROM pg_policies
+                  WHERE schemaname='genui' AND tablename='work_artifact_kinds' ORDER BY policyname""").fetchall()
+                assert [r[0] for r in rows] == ['tenant_scope', 'work_artifact_kinds_principal'], rows
+                tenant, principal = rows
+                assert tenant[1] == 'PERMISSIVE' and 'organization_id' in tenant[4] and 'principal_id' not in tenant[4], tenant
+                assert principal[1:4] == ('RESTRICTIVE', ['genui_workspace'], 'ALL') and 'principal_id' in principal[4] \
+                    and 'principal_id' in principal[5], principal
+            passed('artifact kind: tenant_scope binds the organization and the RESTRICTIVE work_artifact_kinds_principal binds the workspace to the scoped principal (the 0014/0015 pattern)')
+            other = '00000000-0000-4000-8000-0000000000ca'
+            denied('artifact kind rejects an unknown kind','genui_workspace',
+                   "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'stack')",
+                   (ORGANIZATIONS[0], P, APP, WORK), expected='23514')
+            denied('workspace cannot classify a work as another principal','genui_workspace',
+                   "INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'card')",
+                   (ORGANIZATIONS[0], other, APP, WORK))
+            denied('workspace cannot delete an artifact kind','genui_workspace','DELETE FROM genui.work_artifact_kinds')
+            with pg.connect('genui_workspace') as c:
+                scope(c)
+                c.execute("INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'card')",
+                          (ORGANIZATIONS[0], P, APP, WORK))
+                assert c.execute("SELECT kind FROM genui.work_artifact_kinds WHERE app_id=%s AND work_id=%s", (APP, WORK)).fetchall() == [('card',)]
+                c.execute("UPDATE genui.work_artifact_kinds SET kind='app', updated_at=date_trunc('second', now()) WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND work_id=%s",
+                          (ORGANIZATIONS[0], P, APP, WORK))
+                assert c.execute("SELECT kind FROM genui.work_artifact_kinds WHERE app_id=%s AND work_id=%s", (APP, WORK)).fetchall() == [('app',)]
+                scope(c, principal=other)
+                assert c.execute('SELECT count(*) FROM genui.work_artifact_kinds').fetchone() == (0,)
+                c.execute("UPDATE genui.work_artifact_kinds SET kind='card' WHERE organization_id=%s AND app_id=%s AND work_id=%s",
+                          (ORGANIZATIONS[0], APP, WORK))
+                scope(c)
+                assert c.execute("SELECT kind FROM genui.work_artifact_kinds WHERE app_id=%s AND work_id=%s", (APP, WORK)).fetchall() == [('app',)]
+                c.rollback()
+            passed('artifact kind is personal: the writer stores card then app, and another principal sees and changes nothing')
             denied('real FK refuses foreign-only app','genui_migration',
                    "INSERT INTO genui.saved_work VALUES (%s,%s,%s,%s,1,'invalid')",
                    (ORGANIZATIONS[0],'00000000-0000-4000-8000-0000000000c9',str(uuid.uuid4()),'00000000-0000-4000-8000-0000000000cc'),expected='23503')

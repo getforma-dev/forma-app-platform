@@ -1,7 +1,7 @@
 // Library projects authorized work metadata into Apps, Widgets and Cards.
 // Apps have one face/stack/open view; their components remain inert metadata
-// for naming and Ask. Only an explicit member-local category marks a whole
-// work as a standalone Card. No classification is inferred from its content.
+// for naming and Ask. An explicit Card or App choice is saved on the account.
+// Nothing here infers a kind from the component count.
 // Placement always loads the whole work through the authorized board route.
 import { addressChip, aliasNote, decorateAppCard, decorateAppCards } from './address-chip';
 import { activeCanvasItem, boardWorks, CANVAS_CHANGED, canvasApi, cardFootprint, isStandaloneWork, removeWork, setStandaloneWork, updateWorkTitle } from './board';
@@ -306,7 +306,7 @@ export function buildAppRow(
       el(document_, 'details', { class: 'cv-lib-menu' },
         el(document_, 'summary', { 'aria-label': `Options for ${entry.title}`, title: 'Library options' }, '⋯'),
         el(document_, 'div', { class: 'cv-lib-menu-items' },
-          el(document_, 'button', { type: 'button', 'data-lib-classify': '', title: 'Personal category in this browser; the whole saved work stays intact' }, 'Show in Cards'),
+          el(document_, 'button', { type: 'button', 'data-lib-classify': '', title: 'Saves this whole work as a Card or an App on your account. It does not split the work.' }, 'Show in Cards'),
           el(document_, 'button', { type: 'button', 'data-lib-remove': '', hidden: '' }, 'Remove from canvas')))));
   const list = el(document_, 'ul', { class: 'cv-lib-cards cv-lib-metadata', 'data-lib-metadata': '', hidden: '', 'aria-hidden': 'true' },
     ...entry.cards.map((card) => el(document_, 'li', {
@@ -321,7 +321,8 @@ export function buildAppRow(
       el(document_, 'span', { class: 'cv-lib-kind', 'data-kind': card.kind }, card.kind),
       el(document_, 'span', { class: 'cv-lib-action', 'data-lib-action': '' }, 'Add')))));
   const row = el(document_, 'li', {
-    class: 'cv-lib-app', 'data-app': entry.app, 'data-work': entry.work, 'data-number': entry.number, 'data-work-name-scope': String(entry.workNameScope === true),
+    class: 'cv-lib-app', 'data-app': entry.app, 'data-work': entry.work,
+    'data-number': entry.number, 'data-work-name-scope': String(entry.workNameScope === true),
     'data-search': `${entry.number} ${entry.title.toLowerCase()} ${entry.slug ? `/${entry.slug}` : ''}`,
   }, head, list);
   row.id = `lib-${entry.work}`;

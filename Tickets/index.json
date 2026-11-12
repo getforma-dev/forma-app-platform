@@ -341,9 +341,10 @@
         "APP-169",
         "APP-170",
         "APP-171",
-        "APP-175"
+        "APP-175",
+        "APP-176"
       ],
-      "ticket_count": 13,
+      "ticket_count": 14,
       "done_count": 1,
       "blocked_count": 0
     }
@@ -359,7 +360,6 @@
     "APP-092",
     "APP-098",
     "APP-166",
-    "APP-169",
     "APP-170",
     "APP-171"
   ],
@@ -5291,11 +5291,11 @@
     {
       "id": "APP-169",
       "title": "Persist artifact classification and retire legacy app placement after compatibility review",
-      "path": "0-backlog/APP-169.md",
+      "path": "2-in-progress/APP-169.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "Backlog",
+      "Status": "In progress",
       "Priority": "P2",
       "Type": "Feature",
       "Sprint": "S15",
@@ -5307,8 +5307,9 @@
       "Requirements": "C11, SR1",
       "Depends on": "APP-168",
       "External dependencies": "None",
-      "Assignee": "Codex \u2014 GenUI",
-      "Branch / PR": "[PR #48](https://github.com/getforma-dev/forma-app-platform/pull/48) (ticket only; implementation deferred)",
+      "Assignee": "Grok \u2014 GenUI; review fixes by Claude",
+      "Branch / PR": "`feat/app-169-artifact-kind` \u2014 [PR 84](https://github.com/getforma-dev/forma-app-platform/pull/84), stacked on APP-084's PR 83",
+      "Deployment": "Not deployed. Migration 0022 ships with APP-084's 0021 in one operator schema release, [APP-175](../0-backlog/APP-175.md).",
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Explicit user direction; deployment held while redesign is implemented.",
@@ -5485,6 +5486,34 @@
         "APP-084",
         "APP-169",
         "APP-167"
+      ]
+    },
+    {
+      "id": "APP-176",
+      "title": "Classify existing ambiguous works with owner review and retire legacy app placement",
+      "path": "0-backlog/APP-176.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Feature",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "176",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Split from [APP-169](../2-in-progress/APP-169.md) on 2026-11-05, as its independent review suggested: these two acceptance tests were ticked there without evidence. [ADR-018](../../docs/architecture/ADR-018-WHOLE-APP-VIEWS.md).",
+      "Requirements": "C11, SR1",
+      "Depends on": "APP-169",
+      "External dependencies": "None",
+      "Assignee": "Unassigned \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-169"
       ]
     }
   ]

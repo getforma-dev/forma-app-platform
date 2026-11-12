@@ -8,6 +8,8 @@
 mod actions;
 mod admission;
 mod agents;
+mod artifact_kind;
+pub(crate) use artifact_kind::parse_artifact_kind;
 mod authorization;
 // APP-108 (ADR-011 pitch): boxes, files, registered data, derivations.
 mod boxes;

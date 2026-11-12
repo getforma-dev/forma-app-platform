@@ -1,0 +1,29 @@
+{
+  "checks": [
+    {
+      "name": "canvas: GET /canvas renders the member's saved work (Northstar egress bound to the uploaded events) with its view cards idle and nothing run on GET; the group JSON lists the views with their integer columns; an app not shared with her (Spend Review) is absent and its group is the uniform 404; the canvas card's query route answers 1,140,000 with a contract-valid receipt",
+      "passed": true
+    },
+    {
+      "name": "batched reads (APP-113): for the member, after the share, the batched listing and library catalog equal the serial ones, and the canvas page's batched outline and records reads equal work_outline and list_records for each of 4 works (an unknown work and a malformed id included, refused alike)",
+      "passed": true
+    },
+    {
+      "name": "sharing: once Spend Review is shared with the member (discover, run, source_read, record_read, record_write), her canvas renders it with its record form posting to the audited command route, and its group JSON (the island's placement seam) answers with the form",
+      "passed": true
+    },
+    {
+      "name": "outline authority: the batched outline matches work_outline for the source-query work and for Spend Review; the creator and the record_write grantee have can_write, a record_read grantee sees the same collections with can_write false, and the canary member is refused",
+      "passed": true
+    },
+    {
+      "name": "canvas isolation: the canary member's canvas shows none of Northstar's works; 9 requests (the canary member on both Northstar groups and on the canvas view's query route; anonymous and forged sessions on /canvas and both groups) get the uniform 404, and the dispatch counter did not move",
+      "passed": true
+    },
+    {
+      "name": "artifact kind (APP-169): with no grant on a work, saving its kind is the same uniform 404 as a missing work; the canvas says the kinds were read and a work with nothing saved carries no kind; an app before any row is stored and a card replaces it, each rendered on the next load and each one work.kind_set workspace event, while the same kind again writes none; a body other than card or app is 422 invalid_kind; cross-site is 403; anonymous, forged and another organization's member get the uniform 404; a teammate on the same work sees no kind; storage returns only her rows and refuses the teammate, the canary and an unknown kind; an exhausted member write window is 429; once record_read is revoked the saved card is not rendered and the write is the uniform 404",
+      "passed": true
+    }
+  ],
+  "scope": "ADR-011 pitch canvas, local Docker campaign (synthetic identities, uploaded Northstar events)"
+}

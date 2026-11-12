@@ -899,3 +899,93 @@ fn document_record_selection_is_closed_bounded_and_not_a_command() {
     }
     assert!(document_selections(&many).is_none());
 }
+
+/// APP-169 review: `POST /v1/library/{app}/{work}/kind` refuses before any
+/// session work like the other member writes. Cross-site is 403 first; no
+/// session, a forged or pre-access cookie, a query string, a malformed id and
+/// any other method are the uniform 404. The authorized paths, the 422, the
+/// member write window, foreign and revoked members and the store outage run
+/// over real sessions in the canvas and query campaigns.
+#[tokio::test]
+async fn the_kind_route_refuses_cross_site_and_anonymous_writes() {
+    let auth = Arc::new(Auth::new(None, None, Arc::new(NoPages)).unwrap());
+    let app = compose(Arc::new(Work::new(
+        auth,
+        Some(Arc::new(Counting::default())),
+        Arc::new(RecordingPages::default()),
+    )));
+    let path = format!("/v1/library/{APP}/{WORK}/kind");
+    let card = br#"{"kind":"card"}"#.to_vec();
+    let cross = send(
+        &app,
+        "POST",
+        &path,
+        &[
+            ("sec-fetch-site", "cross-site"),
+            ("cookie", "__Host-genui_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        ],
+        card.clone(),
+    )
+    .await;
+    assert_eq!(cross.0, StatusCode::FORBIDDEN);
+    assert_eq!(cross.2, b"{\"code\":\"cross_site\",\"status\":403}");
+    let same = ("sec-fetch-site", "same-origin");
+    for headers in [
+        vec![same],
+        vec![same, ("cookie", "__Host-genui_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")],
+        vec![same, ("cookie", "__Host-genui_pre=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")],
+    ] {
+        assert!(uniform_404(&send(&app, "POST", &path, &headers, card.clone()).await));
+        assert!(uniform_404(&send(&app, "POST", &format!("{path}?kind=card"), &headers, card.clone()).await));
+        assert!(uniform_404(&send(&app, "POST", &format!("/v1/library/not-an-id/{WORK}/kind"), &headers, card.clone()).await));
+        assert!(uniform_404(&send(&app, "POST", "/v1/library/%FF/x/kind", &headers, card.clone()).await));
+        for method in ["GET", "PUT", "DELETE"] {
+            assert!(uniform_404(&send(&app, method, &path, &headers, card.clone()).await), "{method}");
+        }
+    }
+}
+
+#[test]
+fn the_kind_body_is_closed_and_names_card_or_app() {
+    assert_eq!(
+        artifact_kind_body(br#"{"kind":"card"}"#),
+        Some(("card", false))
+    );
+    assert_eq!(
+        artifact_kind_body(br#"{"kind":"app"}"#),
+        Some(("app", false))
+    );
+    assert_eq!(
+        artifact_kind_body(br#"{"kind":"card","if_absent":true}"#),
+        Some(("card", true))
+    );
+    assert_eq!(
+        artifact_kind_body(br#"{"if_absent":true,"kind":"app"}"#),
+        Some(("app", true))
+    );
+    for body in [
+        br#"{"kind":"stack"}"#.as_slice(),
+        br#"{"kind":"Card"}"#,
+        br#"{"kind":null}"#,
+        br#"{"kind":true}"#,
+        br#"{}"#,
+        br#"{"kind":"card","app_id":"x"}"#,
+        br#"{"kind":"card","kind":"app"}"#,
+        br#"{"kind":"card","if_absent":false}"#,
+        br#"{"kind":"card","if_absent":"true"}"#,
+        br#"{"kind":"card","if_absent":1}"#,
+        br#"{"if_absent":true}"#,
+        br#"{"kind":"stack","if_absent":true}"#,
+        br#"{"kind":"card","if_absent":true,"x":1}"#,
+        br#"["card"]"#,
+        b"",
+        b"kind=card",
+    ] {
+        assert_eq!(
+            artifact_kind_body(body),
+            None,
+            "{}",
+            String::from_utf8_lossy(body)
+        );
+    }
+}

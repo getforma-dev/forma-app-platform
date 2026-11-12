@@ -530,6 +530,8 @@ test('App rows expose whole-work actions with inert component metadata and no ex
   assert.equal(expensesRow.querySelector('[data-lib-stack]')?.textContent, 'Browse');
   assert.equal(expensesRow.querySelector('[data-lib-open-view]')?.textContent, 'Open');
   assert.equal(expensesRow.querySelector('[data-lib-classify]')?.textContent, 'Show in Cards');
+  assert.match(expensesRow.querySelector('[data-lib-classify]')?.getAttribute('title') ?? '', /on your account/);
+  assert.equal(expensesRow.dataset.artifactKind, undefined, 'only the server page says what the member saved');
   for (const button of expensesRow.querySelectorAll('[data-lib-toggle]')) assert.equal(button.getAttribute('tabindex'), '-1');
 });
 
@@ -538,13 +540,25 @@ test('explicit standalone classification admits one whole work and is reversible
   const board = await import('../src/canvas/board.ts');
   const reports: string[] = [];
   let requests = 0;
-  (globalThis as { fetch?: unknown }).fetch = async () => { requests += 1; throw Error('Unexpected placement request'); };
-  board.setStandaloneWork(expenses.app, expenses.work, false);
+  const posted: { url: string; body: string; method?: string; credentials?: string }[] = [];
+  (globalThis as { fetch?: unknown }).fetch = async (url: string, init?: { method?: string; body?: string; credentials?: string }) => {
+    if (String(url).endsWith('/kind')) {
+      posted.push({ url: String(url), body: init?.body ?? '', method: init?.method, credentials: init?.credentials });
+      return { ok: true, status: 200, json: async () => ({ kind: JSON.parse(init?.body ?? '{}').kind }) };
+    }
+    requests += 1;
+    throw Error('Unexpected placement request');
+  };
+  assert.equal(await board.setStandaloneWork(expenses.app, expenses.work, false), true);
   assert.equal(library.findStandaloneWorks('expenses.ledger').length, 0);
   await library.CARD_COMMAND.run('expenses.ledger', message => reports.push(message));
   assert.match(reports.at(-1)!, /No card matches/);
   assert.equal(requests, 0, 'refusal is before any group load or placement');
-  board.markStandaloneWork(expenses.app, expenses.work);
+  assert.equal(await board.setStandaloneWork(expenses.app, expenses.work, true), true);
+  assert.equal(posted.at(-1)?.url, `/v1/library/${expenses.app}/${expenses.work}/kind`);
+  assert.equal(posted.at(-1)?.method, 'POST');
+  assert.equal(posted.at(-1)?.credentials, 'same-origin');
+  assert.equal(posted.at(-1)?.body, JSON.stringify({ kind: 'card' }));
   assert.equal(expenses.cards.length, 4, 'multi-component work, not a card-count heuristic');
   for (const query of ['expenses', 'expense.ledger', '3.2']) {
     const found = library.findStandaloneWorks(query);
@@ -557,7 +571,9 @@ test('explicit standalone classification admits one whole work and is reversible
   const shown = library.findStandaloneWorks('expenses')[0]!;
   assert.equal(library.cardCompletions('expenses')[0]?.value, `/card ${shown.slug}`);
   assert.equal(library.cardCompletions('expenses')[0]?.detail, `/${shown.slug} · standalone card`);
-  board.setStandaloneWork(expenses.app, expenses.work, false);
+  assert.equal(await board.setStandaloneWork(expenses.app, expenses.work, false), true);
+  assert.equal(posted.at(-1)?.body, JSON.stringify({ kind: 'app' }));
+  assert.equal(requests, 0, 'classification is not a placement request');
   assert.deepEqual(library.cardCompletions('expenses'), []);
   assert.ok(library.findCards('expenses.ledger').length, 'naming and Ask metadata survives category changes');
 });

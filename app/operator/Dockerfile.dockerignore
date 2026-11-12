@@ -239,4 +239,6 @@ parser/vendor/zip-9.1.3/src/write/**
 !app/migrations/0020_work_data_copies.sql
 !app/migrations/catalog-v20.json
 !app/migrations/0021_operator_audit_kinds.sql
+!app/migrations/0022_work_artifact_kinds.sql
 !app/migrations/catalog-v21.json
+!app/migrations/catalog-v22.json
