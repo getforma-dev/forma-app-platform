@@ -314,8 +314,8 @@
         "APP-173"
       ],
       "ticket_count": 70,
-      "done_count": 40,
-      "blocked_count": 2
+      "done_count": 45,
+      "blocked_count": 1
     },
     {
       "id": "PH09",
@@ -4087,11 +4087,11 @@
     {
       "id": "APP-127",
       "title": "Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)",
-      "path": "9-blocked/APP-127.md",
+      "path": "4-done/APP-127.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Blocked",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",
@@ -4106,8 +4106,8 @@
       "Assignee": "Claude \u2014 GenUI owner (implementation by a subagent)",
       "Branch / PR": "Built on `pivot/devflow` and `pivot/ladder`, merged to `main`. Closure fixes and tests on `chore/dev-chain-close` (2026-11-12)",
       "Team": "GenUI",
-      "Blocked by": "Victor's product decision on acceptance box 5 (\"the next beta window runs entirely through recipes\"). The window it described ran partly by hand, and the legacy path has been fenced since APP-167, so the box can never be met as written.",
-      "Unblock evidence": "Victor withdraws box 5 as superseded by APP-167's approved end-to-end promotion (recorded in this ticket with his words), or names another proof that a real window can supply.",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-126"
       ]
@@ -4173,11 +4173,11 @@
     {
       "id": "APP-130",
       "title": "Repository and delivery step C/D: one root Cargo workspace, the builder-cache sweep",
-      "path": "0-backlog/APP-130.md",
+      "path": "4-done/APP-130.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",
@@ -4261,11 +4261,11 @@
     {
       "id": "APP-133",
       "title": "Repository and delivery: the release record (release.json, RELEASES.md, beta tags) and the module map",
-      "path": "0-backlog/APP-133.md",
+      "path": "4-done/APP-133.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",
@@ -4318,11 +4318,11 @@
     {
       "id": "APP-136",
       "title": "Developer guide from setup through beta delivery",
-      "path": "0-backlog/APP-136.md",
+      "path": "4-done/APP-136.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",
@@ -4352,11 +4352,11 @@
     {
       "id": "APP-137",
       "title": "One private beta ledger across repository worktrees",
-      "path": "0-backlog/APP-137.md",
+      "path": "4-done/APP-137.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",
