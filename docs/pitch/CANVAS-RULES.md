@@ -131,7 +131,7 @@ The pane always reflects the canvas.
 | Place | `/app <name or number>` | Puts an app and its cards on the canvas; also `/app:<name>` (the full form) |
 | | `/card <address, number or words>` | Puts one card on the canvas: `/card expenses.ledger`, `/card 3.2`, `/card spend by category`; also `/card:expenses.ledger` |
 | | `/widget <weather, calculator, clock, note or folder> [details]` | Puts a widget on the canvas: `/widget weather Austin`, `/widget:weather Austin` |
-| Arrange | `/arrange` | Lays the canvas out, one row per app |
+| Arrange | `/arrange` | Lays the canvas out, one row per app *(2026-11-12: under ADR-018 it places whole apps left to right and wraps at the viewport edge)* |
 | | `/unite <app>` · `/split` | Assembles an app's cards into one frame, and takes them apart again |
 | | `/focus` | Opens the selected card large, in focus mode |
 | Make | `/forma <words>` | Makes something new from your words: exactly a plain sentence (picks or builds an app, behind its confirm card) (APP-123) |

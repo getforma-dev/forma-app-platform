@@ -93,7 +93,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 85 | [APP-085: Close the definition and publication review residuals (APP-010 review)](2-in-progress/APP-085.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | In progress | APP-010 |
 | 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](0-backlog/APP-086.md) | [PH07](phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |
 | 87 | [APP-087: Decide the parser fuel bound and close the parser packaging residuals (APP-017 preparation review)](0-backlog/APP-087.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | M | Backlog | APP-004 |
-| 88 | [APP-088: Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)](0-backlog/APP-088.md) | [PH02](phases/PH02.md) | S03 | QRY | P1 | S | Backlog | None |
+| 88 | [APP-088: Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)](4-done/APP-088.md) | [PH02](phases/PH02.md) | S03 | QRY | P1 | S | Done | None |
 | 89 | [APP-089: Harden the container images: base CVEs and effective scan-on-push](0-backlog/APP-089.md) | [PH02](phases/PH02.md) | S03 | OPS | P1 | M | Backlog | APP-075, APP-078 |
 | 90 | [APP-090: MVP UI fixes and the designer handoff](0-backlog/APP-090.md) | [PH02](phases/PH02.md) | S03 | UX | P1 | M | Backlog | APP-076, APP-078 |
 | 091 | [APP-091: Pitch clone and join plan: canvas, planner and composer on the platform backbone](4-done/APP-091.md) | [PH08](phases/PH08.md) | S14 | FND | P0 | M | Done | APP-012, APP-074 |
@@ -181,6 +181,6 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 174 | [APP-174: Detach the Northstar management secret, rotate its key and clean up the invitation input secret](9-blocked/APP-174.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | S | Blocked | APP-084 |
 | 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](0-backlog/APP-175.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | M | Backlog | APP-084, APP-169, APP-167 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](0-backlog/APP-176.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
-| 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](0-backlog/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-104 |
-| 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](0-backlog/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Backlog | APP-154 |
+| 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](4-done/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Done | APP-104 |
+| 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](4-done/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
 | 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](4-done/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |

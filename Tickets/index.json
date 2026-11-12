@@ -47,7 +47,7 @@
       "depends_on": [
         "PH01"
       ],
-      "status": "planned",
+      "status": "active",
       "gate_status": "pending",
       "gate_evidence": [],
       "sprints": [
@@ -80,7 +80,7 @@
         "APP-090"
       ],
       "ticket_count": 22,
-      "done_count": 0,
+      "done_count": 1,
       "blocked_count": 0
     },
     {
@@ -348,7 +348,7 @@
         "APP-179"
       ],
       "ticket_count": 17,
-      "done_count": 3,
+      "done_count": 5,
       "blocked_count": 0
     }
   ],
@@ -358,7 +358,6 @@
     "APP-026",
     "APP-027",
     "APP-087",
-    "APP-088",
     "APP-096",
     "APP-098",
     "APP-099",
@@ -370,9 +369,7 @@
     "APP-152",
     "APP-165",
     "APP-170",
-    "APP-171",
-    "APP-177",
-    "APP-178"
+    "APP-171"
   ],
   "tickets": [
     {
@@ -2947,11 +2944,11 @@
     {
       "id": "APP-088",
       "title": "Fold the ADR-009 re-review and contract-edition residuals into the Phase 2 record (APP-015 preparation)",
-      "path": "0-backlog/APP-088.md",
+      "path": "4-done/APP-088.md",
       "Field": "Value",
       "---": "---",
       "Epic": "QRY",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S03",
@@ -2963,8 +2960,8 @@
       "Requirements": "C05, C06, C07, N4, R3",
       "Depends on": "None",
       "External dependencies": "None beyond listed local predecessors",
-      "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Assignee": "GenUI \u2014 Claude",
+      "Branch / PR": "`app088/adr009-residuals` (from `main` `5695869`, main merged at `f5edef3`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -3430,7 +3427,7 @@
       "Depends on": "APP-094, APP-101, APP-103",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Library pane is on pivot/pitch-mvp (now `main`). Card drag: pivot/app-104-library-drag. Fences moved to [APP-177](../0-backlog/APP-177.md) on 2026-11-12",
+      "Branch / PR": "Library pane is on pivot/pitch-mvp (now `main`). Card drag: pivot/app-104-library-drag. Fences moved to [APP-177](../4-done/APP-177.md) on 2026-11-12",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5530,11 +5527,11 @@
     {
       "id": "APP-177",
       "title": "Decide and, if kept, build canvas fences for whole apps",
-      "path": "0-backlog/APP-177.md",
+      "path": "4-done/APP-177.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P3",
       "Type": "Feature",
       "Sprint": "S15",
@@ -5547,7 +5544,7 @@
       "Depends on": "APP-104",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`decisions/app177-fences`, PR #99 (decision; no fence code; the `/arrange` text in `controls.ts` was corrected on review)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5558,11 +5555,11 @@
     {
       "id": "APP-178",
       "title": "Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants",
-      "path": "0-backlog/APP-178.md",
+      "path": "4-done/APP-178.md",
       "Field": "Value",
       "---": "---",
       "Epic": "SHR",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S15",
@@ -5575,7 +5572,7 @@
       "Depends on": "APP-154",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`app178/shared-fail-closed`, PR #94 (continued on `app178/fail-closed-links`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

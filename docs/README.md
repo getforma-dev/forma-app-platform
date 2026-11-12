@@ -17,7 +17,8 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md](architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md) | Reference | Sign-in, the verification-pending state and resend. | |
 | [architecture/ADR-007-PHASE-1-WRITE-AUTHORITY.md](architecture/ADR-007-PHASE-1-WRITE-AUTHORITY.md) | Reference | Phase 1 write authority, schema layout and query execution. | |
 | [architecture/ADR-008-YC-DEMO-AND-BETA-MVP.md](architecture/ADR-008-YC-DEMO-AND-BETA-MVP.md) | Reference | The YC demo plus an invite-first beta, and which hosted checks moved later. | |
-| [architecture/ADR-009-PHASE-2-DATA-PLANE.md](architecture/ADR-009-PHASE-2-DATA-PLANE.md) | Reference | The Phase 2 data plane, job authority and workspace presentation. | |
+| [architecture/ADR-009-PHASE-2-DATA-PLANE.md](architecture/ADR-009-PHASE-2-DATA-PLANE.md) | Reference | The Phase 2 data plane, job authority and workspace presentation. Read it with its amendment record below. | |
+| [architecture/ADR-009-AMENDMENTS.md](architecture/ADR-009-AMENDMENTS.md) | Reference | Dated amendments to ADR-009, kept outside the ADR because the contract lock hashes it: the job queue and worker authority fixes and the edition-two decisions (APP-088). | |
 | [architecture/ADR-010-NOV-2-MVP-CUT.md](architecture/ADR-010-NOV-2-MVP-CUT.md) | Reference | The November 2 MVP cut. ADR-011 superseded only its MVP definition for that date. | |
 | [architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md](architecture/ADR-011-NOV-2-EMERGENCY-PIVOT.md) | Reference | The pitch pivot and the later clean-trial amendment. | |
 | [architecture/ADR-012-DEVELOPER-WORKFLOW.md](architecture/ADR-012-DEVELOPER-WORKFLOW.md) | Reference | One dev profile, one command front door and deploy recipes in Git. | |

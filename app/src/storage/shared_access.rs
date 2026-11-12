@@ -256,12 +256,35 @@ async fn audit_account(
 
 /// Same current authority as member readers, judged for the sponsor only. This
 /// is delegation attenuation, not an actor substitution or recipient grant.
-fn sponsor_clause() -> String {
-    format!("o.status='active' AND m.status='active' AND m.membership_epoch=s.sponsor_epoch AND EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()) AND ({}) AND ((w.created_by=s.sponsor_id AND w.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.principal_id=s.sponsor_id AND p.permission='share_work'))", record_read_clause("m.principal_id"))
+/// The sponsor organization's state is a parameter: `live_clause` requires an
+/// active one, and the paused-link check (APP-178) asks about a suspended one.
+fn sponsor_clause_for(organization: &str) -> String {
+    format!("{organization} AND m.status='active' AND m.membership_epoch=s.sponsor_epoch AND EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()) AND ({}) AND ((w.created_by=s.sponsor_id AND w.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.principal_id=s.sponsor_id AND p.permission='share_work'))", record_read_clause("m.principal_id"))
 }
 const SHARE_FROM: &str = "FROM genui.live_work_shares s JOIN genui.saved_work w ON (w.organization_id,w.app_id,w.work_id)=(s.organization_id,s.app_id,s.work_id) JOIN genui.publications p ON (p.organization_id,p.app_id,p.publication_id)=(w.organization_id,w.app_id,w.publication_id) JOIN genui.memberships m ON (m.organization_id,m.principal_id)=(s.organization_id,s.sponsor_id) JOIN genui.organizations o ON o.organization_id=s.organization_id";
 fn live_clause() -> String {
-    format!("s.revoked_at IS NULL AND s.expires_at>clock_timestamp() AND w.publication_id=s.publication_id AND w.version=s.work_version AND p.definition_digest=s.definition_digest AND p.operator_version=1 AND {}",sponsor_clause())
+    live_clause_for("o.status='active'")
+}
+fn live_clause_for(organization: &str) -> String {
+    format!("s.revoked_at IS NULL AND s.expires_at>clock_timestamp() AND w.publication_id=s.publication_id AND w.version=s.work_version AND p.definition_digest=s.definition_digest AND p.operator_version=1 AND {}",sponsor_clause_for(organization))
+}
+/// APP-178 (ADR-014 addendum, 2026-11-12): a connected link whose grant is
+/// live in every respect apart from the sponsor organization's state is paused,
+/// not removed. It is hidden and unreadable while the organization is suspended,
+/// and comes back when it is restored. Either state counts here, so a restore
+/// that commits between the listing's access check and this check keeps the
+/// link instead of removing it. Revocation, a policy change and expiry still
+/// remove it.
+async fn link_paused(
+    tx: &Transaction<'_>,
+    account: &ShareAccount,
+    org: &str,
+    share: &str,
+    grant_version: i64,
+) -> Result<bool> {
+    check_account(tx, account, false).await?;
+    let rows=tx.query(&format!("SELECT 1 {SHARE_FROM} WHERE s.organization_id=$1::text::uuid AND s.share_id=$2::text::uuid AND s.accepted_account_id=$3::text::uuid AND s.version=$4::bigint AND s.allow_add_to_canvas AND {}",live_clause_for("o.status IN ('active','suspended')")), &[&org,&share,&account.account_id(),&grant_version]).await?;
+    Ok(!rows.is_empty())
 }
 
 pub(super) async fn check_guest(tx: &Transaction<'_>, access: &GuestAccess) -> Result<()> {
@@ -527,6 +550,19 @@ impl Workspace {
         tx.finish(result.is_ok()).await?;
         result
     }
+    async fn is_link_paused(
+        &self,
+        account: &ShareAccount,
+        key: &str,
+        grant_version: i64,
+    ) -> Result<bool> {
+        let (org, share) = share_locator(key)?;
+        let tx =
+            Transaction::begin_shared(&self.inner, Some(org), Some(account.account_id())).await?;
+        let result = link_paused(&tx, account, org, share, grant_version).await;
+        tx.finish(result.is_ok()).await?;
+        result
+    }
     pub async fn linked_apps(&self, account: &ShareAccount) -> Result<Vec<LinkedApp>> {
         let tx = Transaction::begin_shared(&self.inner, None, Some(account.account_id())).await?;
         let keys=async {
@@ -544,6 +580,12 @@ impl Workspace {
                     result.push(linked?);
                 }
                 Ok(_) | Err(Error::Denied) => {
+                    // A suspended sponsor organization pauses the link: hidden,
+                    // kept, back on restore (ADR-014 addendum). Anything else
+                    // that refuses it removes it.
+                    if self.is_link_paused(account, &key, grant_version).await? {
+                        continue;
+                    }
                     // Re-check account liveness inside the mutation. A signed-out or
                     // expired account must never lose its saved references. Store
                     // failures never enter this branch. Unlink is idempotent/audited.

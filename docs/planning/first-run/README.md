@@ -53,4 +53,4 @@ The seeded choreography. Nothing here is unchecked because of this note. It is n
 
 ## Pile C — later
 
-PH02 through PH06, APP-078's reserved database window, canvas fences, and the platform-landing list inside APP-097. Untouched by this note.
+PH02 through PH06, APP-078's reserved database window, canvas fences, and the platform-landing list inside APP-097. Untouched by this note. *(2026-11-12: canvas fences were dropped, not deferred; see [the ADR-018 amendment](../../architecture/ADR-018-WHOLE-APP-VIEWS.md#amendment-2026-11-12-canvas-fences-are-dropped).)*
