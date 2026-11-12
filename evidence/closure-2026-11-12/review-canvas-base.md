@@ -108,3 +108,52 @@
 - I did not re-run any Rust test or campaign. The pass results are the lead's `just ci` reports at `5695869`.
 - No browser was used. The "visible" parts of APP-092, 093 and 094 rest on the server-side rendering tests, the admin tests and the 2026-10-30 browser walks in the logs.
 - I did not check board placement or status moves. That stays with the board's landing rules.
+
+## Recheck (2026-11-12)
+
+- **Bound to:** `8e7f631`, plus the uncommitted tree it describes.
+- **Checked:**
+  - `git diff 2e84398 8e7f631` for `evidence/APP-09{2,3,4,5}*`, `evidence/APP-145*` and `Tickets/0-backlog/APP-097.md`;
+  - the five ticket moves, read with `-M`.
+- **Ran:** nothing new. No source changed.
+
+**The earlier findings are resolved.**
+- APP-097's log now records both measurements (line 62).
+- APP-092 now states the limits on `/_assets/`, the forged pre-access cookie and reproduction.
+- APP-093 box 4 now cites `pitch` check 13 and says why the earlier checks were not evidence. It now cites the refusal and malformed-output tests and records the scan commands.
+- APP-094 now cites `canvas-cards.test.ts:397`, `command-outcome.test.ts` and `pitch` check 8, and keeps the APP-013 limit.
+- APP-095's mechanism sentence is now correct (`0008_sharing.sql:131-158`). Box 3 now cites `canvas` check 6, and the `source_read` limit is added.
+- APP-145's two limits are added.
+- None of the new citations misstates its source.
+
+**New findings in the moves:**
+- **BLOCKER (board record).**
+  - `Tickets/4-done/APP-092.md`, `APP-093.md`, `APP-094.md` and `APP-095.md` are Done with all 4 acceptance boxes still `- [ ]`.
+  - `Tickets/README.md:24` makes the checklist authoritative, and `:34` defines Done as "acceptance and review complete". Every other Done ticket in this batch is fully ticked; APP-145 has 9 of 9.
+  - **Fix:** tick the boxes that are now evidenced, then regenerate the board.
+- **MAJOR.** The `Branch / PR` field on those four still reads "not merged; no PR" (APP-092 and APP-094), or names an unmerged `pivot/*` branch (APP-093 and APP-095). That contradicts Done, which means "landed". **Fix:** name the merge on `main` (PR 22–48 per the pass README) or the PR that landed each ticket.
+- **MINOR.** `evidence/APP-095/independent-review.md` m6 now cites `Tickets/4-done/APP-095.md:49`, but line 49 is the review log line. The campaign-command line it means is line 50.
+
+**Final verdicts at `8e7f631`:**
+- **APP-092:** changes requested. The closure evidence is sufficient. Fix the board blocker and the `Branch / PR` field, then Done may stand.
+- **APP-093:** changes requested, for the same two board fixes only.
+- **APP-094:** changes requested, for the same two board fixes only.
+- **APP-095:** changes requested, for the same two board fixes only. The m6 line number is optional.
+- **APP-145:** no blocking findings. Done may be recorded.
+
+## Recheck 2 (2026-11-12)
+
+- **Bound to:** `8e7f631`, plus the uncommitted `git diff HEAD -- Tickets/4-done/APP-09{2,3,4,5}.md`.
+- **What I checked:**
+  - In all four tickets every acceptance box is now `[x]`: 4 of 4 each, with the box text unchanged. Each ticked box matches evidence accepted above.
+  - The `Branch / PR` fields now say the work landed on `main` through `pivot/pitch-mvp`, the trunk since ADR-019. The ADR-019 link resolves, and each field links its closure file.
+  - This resolves the blocker and the major from the first recheck.
+- **Still open, optional:** the m6 line-number nit is in `evidence/APP-095/independent-review.md`, not in this file. The current task does not allow me to edit that file, so it stays open. It does not block Done.
+
+**Final verdicts:**
+- **APP-092:** no blocking findings. Done may be recorded.
+- **APP-093:** no blocking findings. Done may be recorded.
+- **APP-094:** no blocking findings. Done may be recorded.
+- **APP-095:** no blocking findings. Done may be recorded.
+- **APP-145:** no blocking findings. Done may be recorded.
+- **Condition:** commit this tree as reviewed, regenerate the board, and run `board.py check`. I ran neither.

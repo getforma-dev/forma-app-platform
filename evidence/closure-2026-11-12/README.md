@@ -14,7 +14,7 @@ Most PH08 pitch tickets were built on `pivot/*` branches between October 30 and 
 ## What "verified on main" means here
 
 - Every check runs on `main` at `5695869` (PR #84's merge), in a clean worktree set up with `just setup`.
-- **`just ci`:** the fast set, the schema qualifier and the 18 CI campaigns. [ci-run.md](ci-run.md) has the exact command, the step summary and every campaign's check list.
+- **`just ci`:** the fast set, the schema qualifier and the 22 CI campaigns of the catalog (the `justfile` comment's "18" is stale). [ci-run.md](ci-run.md) has the exact command, the step summary and every campaign's check list.
 - **The box campaign** runs separately. It needs the sealed parser (`just parser`) and is not in CI.
 - **Earlier acceptance evidence is cited, not re-run, where re-running it would need:**
   - a real model key (the `smoke-*` entries in `scripts/dev/campaigns.tsv`);

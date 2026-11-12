@@ -129,3 +129,34 @@ I read each document against its ticket, APP-120 and the cited source. Every cit
 - **Browser and hosted claims:** November 1 browser evidence and hosted records were read, not reproduced.
 - **Rust and campaigns:** none re-run; I relied on `ci-run.md` and the report JSONs.
 - **Scope:** this review checks the mappings and the behavior they claim. It is not a new full Tier A review of APP-154's code.
+
+## Recheck (2026-11-12)
+
+Same reviewer. I checked the fixes with `git diff 2e84398 8e7f631` over the batch's closures, their tickets (now in `4-done/`) and the new `Tickets/0-backlog/APP-178.md`. Each new citation matches the source on `5695869` that I had already read. No code changed. I edited only this file.
+
+- **X1 resolved.** The fan-out and legacy-stack clauses now carry dated notes: "Superseded 2026-11-02 by ADR-018 (APP-168)". This covers APP-142 boxes 1, 2 and 5 (`APP-142.md:57,58,61`) and APP-144 box 4 (`APP-144.md:61`). The closures cite `unite.ts:372` and `stacks.ts:401-409` and do not count these clauses as verified on `main`. The false "goes back to its App Card" wording is gone.
+- **X2 and X3 resolved.** Every spike closure now has a dated limit naming its stale lines, and the wrong commit list is gone.
+  - Residual minor: the APP-148 limit names ADR-018 as the later decision, but `widget.md:19` went stale because of APP-143.
+- **X4 resolved.** The APP-143 and APP-154 closures state the role-only attribution.
+- **APP-141 resolved.** Box 7 rests on `compose.ts:178-181` with its limit stated. Box 4 is marked "by source inspection". Box 5 cites `routes.rs:117-130` and the hosted record. Box 3 has a limit.
+- **APP-142 resolved.** Box 2 states that no test closes Focus and cites APP-168's November 2 check. Box 4 cites `/shares` and `live-sharing` check 14.
+- **APP-143 resolved.** Box 2 states that `scopeOfCard` is untested. Box 4 is re-cited to the `talk.rs` lines and `context-ask.test.ts:9,33`.
+- **APP-144 resolved.** Box 7 cites `commands/tests.rs:803`. The refusal and two-way limits and the widget half are stated.
+- **APP-154 resolved.**
+  - Organization shutdown, overlapping grants and the expired invitation are split into APP-178. Its checks require a mutation that removes each predicate and makes the check fail. The source boxes (`APP-154.md:38,42`) are annotated.
+  - The co-author cross-review limit is stated. Each part was reviewed by someone who did not write it, so box 8 stands with that limit.
+  - Residual minor: closure line 19 points to this review as "this pass's attributable review". This is a review of the mappings, not a new Tier A code review.
+- **Process (minor).**
+  - `8e7f631` moved the tickets to Done, with logs saying "findings fixed and rechecked", before this recheck happened. This section is that recheck.
+  - `python3 Tickets/_tools/board.py check` on the current working tree stops at `Tickets/4-done/APP-166.md`. Its link to `review-remaining.md` is broken. That ticket is outside this batch, but the check fails until that file lands.
+
+**Final verdicts:**
+- **APP-141:** no blocking findings.
+- **APP-142:** no blocking findings. The superseded clauses are historical.
+- **APP-143:** no blocking findings.
+- **APP-144:** no blocking findings. The superseded clause is historical.
+- **APP-154:** no blocking findings. The untested clauses are now APP-178.
+- **APP-146:** no blocking findings.
+- **APP-147:** no blocking findings.
+- **APP-148:** no blocking findings.
+- **APP-149:** no blocking findings.

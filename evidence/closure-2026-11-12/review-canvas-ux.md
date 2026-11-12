@@ -139,3 +139,41 @@ Fixes: render the board; edit APP-104.md:48 and :19 to point to APP-177. Also, A
 **No acceptance blocker.** Changes are requested on the closure records before the moves: findings 1, 2 and 5, the major findings above, and per-box supersession notes in each ticket.
 
 **Limits:** no browser; no cargo or campaign re-run (I read the lead's reports); test coverage was judged from the source.
+
+## Recheck (2026-11-12)
+
+The same independent Claude subagent reviewer rechecked commits `8e7f631` (the closures and ticket moves) and `955d495` (APP-177's quote). I read `git diff 2e84398 8e7f631` for the eight closure files, the eight tickets now in `4-done/`, APP-177 and APP-179, and ran `board.py check` on the working tree.
+
+**Fixed:**
+
+- **APP-104:** the drag row is corrected (standalone works only; canvas-library-drag.test.ts is cited). The controls and waiting-record rows now name their limits. The SSR pane test is cited. The fences box is gone from the checklist, with a Branch/PR note and a Log pointer to APP-177. Boxes 2, 3, 6 and 7 carry dated ADR-018 notes.
+- **APP-106:** the citations from other surfaces are gone, the untested items are named, and the walk's limits are restated.
+- **APP-109:** the privacy row now cites pitch "sharing" with its limit. APP-179 owns the teammate test.
+- **APP-112 and APP-118:** the `?` sheet is now attributed to the Shortcuts tab. The two-of-three limit is stated, and the stale rows plus the GUIDE and SCENARIOS drift belong to APP-179. APP-179 is well formed and needs a test that fails on a removed action.
+- **APP-119 and APP-120:** the data-level limits are stated. Victor's waiver of the browser look is recorded in both closures and both Done logs. I relay that waiver as the lead reports it; I did not see the chat.
+- **APP-121:** boxes ticked, narrowings recorded, Branch/PR fixed.
+- **APP-177:** `955d495` now quotes only Victor's own words.
+
+**Still open (none blocks the verdicts):**
+
+- **Major:** some boxes superseded by the same decisions have no ticket-level note, unlike the others. They are recorded only in the closures, which the Done logs link. Add one-line notes to:
+  - APP-106 boxes 5 and 7 (the unite parts);
+  - APP-118 box 1 (`/card ` suggestions) and box 4 (the `?` sheet);
+  - APP-120 box 1 (`?` now opens Ask, per APP-122);
+  - APP-112 boxes 1 and 3, and APP-119 box 3 (later changes).
+- **Major (process, outside my batch):** `board.py check` fails on the working tree at `955d495`. `Tickets/4-done/APP-166.md` links to `evidence/closure-2026-11-12/review-remaining.md`, which is not in the tree. CI's `board` step will fail until it exists. I could not confirm the earlier stale-index failure is gone, because this error stops the check first.
+- **Minor:**
+  - APP-106.md:19 and APP-109.md:19 still say "not merged".
+  - APP-112's closure still says "October 30 log entry", and APP-118's says "Delivered October 30"; the logs say 2026-10-31 UTC.
+  - The Done logs said "fixed and rechecked" before this recheck ran.
+
+**Final verdicts:**
+
+- **APP-104:** Done stands. No blocking findings.
+- **APP-106:** Done stands. No blocking findings; add the box 5 and 7 notes.
+- **APP-109:** Done stands. No blocking findings; the note-privacy test is APP-179's.
+- **APP-112:** Done stands as a delivery record. No blocking findings; the drift is APP-179's.
+- **APP-118:** Done stands. No blocking findings; add the box 1 and 4 notes.
+- **APP-119:** Done stands, on Victor's recorded waiver. No blocking findings.
+- **APP-120:** Done stands, on Victor's recorded waiver. No blocking findings; add the box 1 note.
+- **APP-121:** Done stands. No blocking findings.

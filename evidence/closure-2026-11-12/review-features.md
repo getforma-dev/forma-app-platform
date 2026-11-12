@@ -118,3 +118,47 @@
 - **APP-103:** Done once `tests/closure-gaps` is on `main` and Victor has looked at the skins (or the screenshot requirement is waived).
 - **APP-108:** Done once `tests/closure-gaps` is on `main` and the closure lists the ticket log's open limits. Strengthening the MCP control is recommended; it needs a box-campaign re-run.
 - **`tests/closure-gaps` at `b2ba6b7`:** fit to merge, with no blocking findings.
+
+## Recheck (2026-11-12)
+
+The same independent reviewer rechecked only the fixes.
+- **Code:** PR #92 (`closure/acceptance-gaps`), commit `9ea5b9b`. Commits `f3505dd` and `154b5e7` are another reviewer's and are not covered here.
+- **Records:** `git diff 2e84398 8e7f631` for the APP-101, 102, 103 and 108 closure files and their `Tickets/4-done/` files.
+- **Ran in `forma-app-082n2` at `9ea5b9b`:**
+  - `npx tsx --test test/ledger-totals.test.ts`: 1 passed. With the range end changed from `>` to `>=` (on a scratch copy), it fails.
+  - `cargo test --locked -p forma-app-platform --lib actions::receipt_tests`: 5 passed, 1 ignored (the real-model smoke).
+  - `gh pr view 92`: **OPEN, not merged**, with CI still running.
+
+**The code fixes are resolved.**
+- The MCP teammate control now names `"Q3 board pack"` and `"1"` and asserts `structuredContent.error == "not_found"` (`box_campaign.rs:1003-1025`). If folder listing leaked across members, either name would resolve and the test would fail.
+- The receipt `Debug` assertion is now an equality (`receipt_tests.rs:106-110`).
+- `ledger-totals.test.ts` checks the inclusive range ends, the status filter, the other collection, per-currency sums, and that people and categories add up. I re-derived the arithmetic by hand; it is correct.
+- Minor: the box campaign's capped context grew from 2,879 to 3,548 bytes between the `8e91665` and `9ea5b9b` runs, although the campaign code before that step is unchanged. The caps are asserted on structure, so this is not a failure. The cause is unexplained, and the figure should not be cited as stable.
+
+**The record fixes are resolved:**
+- APP-101's box 7 supersession note;
+- APP-102's re-citation, including the "own arithmetic" note and the live re-read limit;
+- APP-108's four open limits and the corrected `/storage` path;
+- APP-103's waiver, which I take on the lead's record because I cannot see the chat.
+
+**New findings in the records:**
+- **Blocker: APP-102, APP-103 and APP-108 are Done before their tests have landed.**
+  - All three are in `Tickets/4-done/`, and their logs say the evidence "landed through PR #92". PR #92 is open.
+  - [README](../../Tickets/README.md):34 defines Done as "landed in the agreed source". Line 9 says work on an open PR is logged "without declaring it Done".
+  - Their own closure files say "Done only once PR #92 is on `main`".
+  - **Fix:** merge PR #92 before the records branch, or keep the three tickets out of Done until then.
+- **Blocker: APP-108 is Done with all nine acceptance boxes unticked** (`Tickets/4-done/APP-108.md:48-56`). `board.py check` counts boxes but does not check ticks (`board.py:37`), so it passes. **Fix:** tick each box against its closure mapping.
+- **Minor: the APP-108 closure names the wrong source for its report.**
+  - Line 5 says the report came from `tests/closure-gaps` at `8e91665`, "`main` plus test-only commits".
+  - The report now carries the check text from `9ea5b9b`. That head also includes `154b5e7`, which changes production code (`actions/routes.rs`, `storage/agents.rs`).
+  - **Fix:** name the revision that actually ran.
+- **Minor:** the APP-103 closure still names `tests/closure-gaps`. The work now ships as PR #92.
+- **Minor, carried over:** the `Branch / PR` field is still stale on all four tickets (line 19).
+
+## Final verdicts (2026-11-12)
+
+- **APP-101:** no blocking findings; Done stands.
+- **APP-102:** the acceptance evidence is now sufficient, but Done is premature until PR #92 is merged to `main`.
+- **APP-103:** the acceptance evidence is sufficient with the recorded waiver, but Done is premature until PR #92 is merged to `main`.
+- **APP-108:** changes requested on the record: tick the nine boxes and land PR #92 first. The evidence itself is sufficient.
+- **`9ea5b9b`:** fit to merge, with no blocking findings.
