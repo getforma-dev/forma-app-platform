@@ -229,12 +229,13 @@ class Runner:
         self.store.change(lambda d: (d.update(ledger=ledger), d['active'].update(config=config, reservation=receipt,
                           artifact_manifest_sha256=request['qualified_artifact_manifest_sha256'])))
         registry = publish(self.aws, self.store, directory, bundle)
+        # A scan disposition binds the contract of the candidate being promoted, which the
+        # approval summary also shows. bundle() requires it to equal the baseline's for a
+        # normal promotion; a schema release promotes its reviewed `to` contract, so a
+        # disposition for it must name that contract (Fable dry run, 2026-11-12: refusing
+        # all findings would block every later release once main carries a migration).
         scan_delta = guard_scan_delta(registry, state['live']['registry'],
-            state['baseline']['deployment_contract_sha256'], self.clock())
-        # A disposition binds the baseline contract; the approval summary binds the
-        # candidate's. A schema release changes the contract, so it cannot carry one.
-        require(not release or not any(delta['introduced'] for delta in scan_delta.values()),
-                'a schema release cannot introduce scan findings; separate reviewed release required')
+            bundle['source']['deployment_contract_sha256'], self.clock())
         check_current(request['candidate_sha'])
         parameters = guards.runtime_parameters(guards.parameters(before['stack']), receipt)
         template = state['baseline']['template']; template_bytes = encoded(template); template_hash = hashlib.sha256(template_bytes).hexdigest()
@@ -377,7 +378,7 @@ class Runner:
         from .candidate import check_current
         check_current(request['candidate_sha'])
         require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
-            self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
+            packet['bundle']['source']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
             'scan disposition expired during final execution checks')
         require(self.same_release(self.reviewed_release(packet['bundle']['source'], request['candidate_sha']), packet, promotion),
             'schema release expired or changed during final execution checks')
@@ -393,7 +394,7 @@ class Runner:
         require(packet['artifact_manifest_sha256'] == request['qualified_artifact_manifest_sha256'] and packet['candidate_sha'] == request['candidate_sha'], 'candidate differs from approved packet')
         require(self.same_release(release, packet, active['promotion_id']), 'schema release changed after preparation')
         require(guard_scan_delta(packet['registry'], self.store.document['live']['registry'],
-            self.store.document['baseline']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
+            packet['bundle']['source']['deployment_contract_sha256'], self.clock()) == packet['scan_delta'],
             'scan disposition changed after preparation')
         from .github import validate_approval
         validate_approval(approval, request['authorization']['run_id'], request['candidate_sha'])

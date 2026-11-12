@@ -723,12 +723,31 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.assertFalse(any(o == 'create_db_snapshot' for _, o, _ in self.aws.calls))
         self.assert_serving_and_prepared([])
 
-    def test_release_with_new_scan_findings_refuses_before_a_change_set(self):
-        # A reviewed disposition binds the baseline contract, which a schema release replaces.
-        delta = {role: {'introduced': 1 if role == 'operator' else 0} for role in guards.REPOS}
-        with patch('ops.promotion.runner.guard_scan_delta', return_value=delta):
-            with self.assertRaisesRegex(Refused, 'schema release cannot introduce scan findings'):
+    def test_the_scan_delta_binds_the_promoted_candidates_contract(self):
+        """Fable dry run, 2026-11-12: a schema release must be able to carry a disposition, or no
+        release could ship once main holds a migration. Every scan-delta check (prepare, the final
+        checks and execute) binds the candidate's contract, never the baseline's it replaces."""
+        from ops.promotion import registry as registry_module
+        contracts = []
+        def recording(current, baseline, contract=None, clock=None):
+            contracts.append(contract); return registry_module.guard_scan_delta(current, baseline, contract, clock)
+        with patch('ops.promotion.runner.guard_scan_delta', side_effect=recording):
+            self.prepared(); self.run_execute()
+        baseline = self.store.load()['baseline']['deployment_contract_sha256']
+        self.assertGreaterEqual(len(contracts), 3)
+        self.assertEqual(set(contracts), {CONTRACT})
+        self.assertNotIn(self.initial['baseline']['deployment_contract_sha256'], contracts)
+        self.assertEqual(baseline, CONTRACT)  # finish() admits the candidate's contract as the new baseline
+
+    def test_introduced_findings_without_a_disposition_for_the_candidate_contract_refuse(self):
+        delta_calls = []
+        def refusing(current, baseline, contract=None, clock=None):
+            delta_calls.append(contract)
+            raise Refused('new scan findings require separately reviewed disposition: operator')
+        with patch('ops.promotion.runner.guard_scan_delta', side_effect=refusing):
+            with self.assertRaisesRegex(Refused, 'new scan findings require separately reviewed disposition'):
                 self.runner.prepare(self.request, self.directory)
+        self.assertEqual(delta_calls, [CONTRACT])
         self.assertFalse(any(o == 'create_change_set' or (o == 'put_object' and a.get('Key', '').endswith('template.json'))
                              for _, o, a in self.aws.calls))
         self.assertEqual(self.store.load()['active']['phase'], 'preparing')
