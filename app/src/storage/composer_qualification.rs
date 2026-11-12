@@ -231,7 +231,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "the composer context names the owned authoring app, the owner_publish policy, the two readable source revisions and the one bindable library app; a foreign organization's apps are never offered",
+        "the composer context names no authoring app while the member's only owned app is under review (APP-085), the owner_publish policy, the two readable source revisions and the one bindable library app; a foreign organization's apps are never offered",
     );
 
     // --- Revoked and unknown principals compose nothing and get no shell ---
@@ -553,6 +553,15 @@ async fn campaign() {
     assert_eq!(script.calls(), 2);
     assert_eq!(kept.origin, Origin::Generated);
     assert_eq!(kept.title, "Time off");
+    assert_eq!(
+        kept.app, shell,
+        "kept on the shell, never on the reviewed app (APP-085)"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.publications WHERE organization_id='{ORG}' AND app_id='{APP}'")).await,
+        reviewed_publications,
+        "after generation, adaptation and keeping, the app under review still has only its own publications"
+    );
     let after = footprint(&fixture).await;
     let mut expected = before.clone();
     // One revision, input, schema, publication, its input and schema, work,

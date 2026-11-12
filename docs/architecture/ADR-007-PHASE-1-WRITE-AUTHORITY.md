@@ -155,14 +155,14 @@ Decided by Claude (Opus 5.5) under Victor's delegation of 2026-11-12 ("Make your
 - **The gap.** `Control::publish` took the policy id from the caller. Once an organization holds both an `owner_publish` and an `independent_review` policy, an owner could publish an app that had been reviewed by naming `owner_publish`.
 - **Why "per organization" does not fit.** The review's fix said to resolve the applicable policy "per organization or space". The seeded data shows policies attach to apps through their publications, not to organizations: the demo organization publishes most apps under `owner_publish` and some fixtures under `independent_review`. Making the strictest policy apply organization-wide would force review on every app.
 
-**The decision.** An app whose newest publication was under `independent_review` stays under review.
+**The decision.** An app that has ever been published under `independent_review` stays under review. The rule looks at the whole publication history, not only the newest row. An app the older composer had already self-published over is therefore still protected.
 - Naming an `owner_publish` policy for it is `Denied`, and so is naming a policy the organization does not hold.
-- Moving an app to a stricter policy stays allowed.
+- Moving an app to a stricter policy stays allowed, and it is one-way. A member granted `review_publish` on an app can publish it under `independent_review`, and from then on it never returns to `owner_publish`. Only an operator grant gives `review_publish`.
 - An app with no publication takes the organization's policies as before.
 - The composer owner-publishes, so it never chooses such an app as its authoring app. A member whose only owned app is under review gets an authoring shell (APP-145) instead.
 
 **Where it is enforced.**
-- `Control::publish_once` reads the app's newest `policy_kind` inside the fenced, serializable transaction.
+- `Control::publish_once` checks for any `independent_review` publication of the app inside the fenced, serializable transaction. A concurrent review publication serializes against it.
 - `choose_authoring` treats an owned app under review as ineligible.
 
 **Tests.**

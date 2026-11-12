@@ -1084,10 +1084,10 @@ impl Control {
     /// transaction within the D7.14 handler deadline, and a second one (or one
     /// that leaves too little of the deadline for a retry) is `Stale` naming
     /// the app's publication with the highest sequence (D7.6, D7.9). Nothing
-    /// else retries. The caller names `policy`, but an app whose newest
-    /// publication was under `independent_review` stays under review: naming an
-    /// `owner_publish` policy for it is `Denied`, so an owner cannot bypass
-    /// review (APP-085, APP-010 review m3). Moving to a stricter policy stays
+    /// else retries. The caller names `policy`, but an app ever published under
+    /// `independent_review` stays under review: naming an `owner_publish`
+    /// policy for it is `Denied`, so an owner cannot bypass review (APP-085,
+    /// APP-010 review m3). Moving to a stricter policy stays
     /// allowed, and an app with no publication takes any of the organization's
     /// policies.
     pub async fn publish(
@@ -1164,11 +1164,12 @@ impl Control {
             let transaction = permit.transaction();
             let owner = transaction.query("SELECT owner_principal_id::text FROM genui.apps WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid", &[org,&app]).await?;
             let owner = text(owner.first().ok_or(Error::Denied)?, 0)?;
-            // APP-085 (APP-010 review m3): an app under review stays under review.
-            let current = transaction.query("SELECT policy_kind FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid ORDER BY publication_sequence DESC LIMIT 1", &[org,&app]).await?;
-            if let Some(row) = current.first() {
-                require(!(text(row, 0)? == "independent_review" && policy_kind == "owner_publish"))?;
-            }
+            // APP-085 (APP-010 review m3): an app ever published under review
+            // stays under review, including one an older composer self-published
+            // over (review m1 of APP-085: "newest" would let those escape).
+            let reviewed = transaction.query("SELECT EXISTS(SELECT 1 FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND policy_kind='independent_review')", &[org,&app]).await?;
+            let reviewed: bool = reviewed.first().ok_or(Error::Unavailable)?.try_get(0).map_err(|_| Error::Unavailable)?;
+            require(!(reviewed && policy_kind == "owner_publish"))?;
             require(match action {
                 Action::EditDefinition => owner == request.principal,
                 _ => owner != request.principal,

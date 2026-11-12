@@ -295,15 +295,15 @@ impl Workspace {
                 permit.recheck_entitlement().await?;
             }
             let mut candidates = Vec::new();
-            let owned = permit.transaction().query("SELECT a.app_id::text, (SELECT p.definition_digest::text FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id ORDER BY p.publication_sequence DESC LIMIT 1), (SELECT p.policy_kind FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id ORDER BY p.publication_sequence DESC LIMIT 1) FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.owner_principal_id=$2::text::uuid ORDER BY a.app_id", &[org,principal]).await?;
+            let owned = permit.transaction().query("SELECT a.app_id::text, (SELECT p.definition_digest::text FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id ORDER BY p.publication_sequence DESC LIMIT 1), EXISTS(SELECT 1 FROM genui.publications p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id AND p.policy_kind='independent_review') FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.owner_principal_id=$2::text::uuid ORDER BY a.app_id", &[org,principal]).await?;
             for row in &owned {
                 let app = text(row, 0)?;
                 let newest: Option<String> = row.try_get(1).map_err(|_| Error::Unavailable)?;
-                // APP-085 (APP-010 review m3): an app whose newest publication
-                // was under independent_review stays under review, and the
-                // composer owner-publishes, so it never drafts onto such an app.
-                let reviewed: Option<String> = row.try_get(2).map_err(|_| Error::Unavailable)?;
-                let granted = reviewed.as_deref() != Some("independent_review")
+                // APP-085 (APP-010 review m3): an app ever published under
+                // independent_review stays under review, and the composer
+                // owner-publishes, so it never drafts onto such an app.
+                let reviewed: bool = row.try_get(2).map_err(|_| Error::Unavailable)?;
+                let granted = !reviewed
                     && granted(permit.also(Action::EditDefinition, Resource::App(&app)).await)?
                     && granted(permit.also(Action::Run, Resource::App(&app)).await)?;
                 candidates.push(AuthoringCandidate { app, newest, granted });

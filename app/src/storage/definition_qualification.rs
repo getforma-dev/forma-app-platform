@@ -1504,7 +1504,7 @@ async fn campaign() {
                 "The app shell and every permission row are written by the operator package's create-app, grant-permission and revoke-permission commands; the Northstar expenses source revision and the independent_review policy row are fixture-only operator SQL (the import tickets and policy seeding own them).",
                 "Source digests are the APP-002 synthetic placeholders; no source bytes were imported.",
                 "The database itself is not restarted (tmpfs fixture); the restart is of every application pool and store.",
-                "The publisher names the policy; the server does not yet resolve the organization's applicable policy (review m3), so an owner could choose owner_publish where an independent_review policy also exists.",
+                "The publisher names the policy. Since APP-085 an app ever published under independent_review stays under review: naming owner_publish for it is refused (review m3, ADR-007 amendment 2026-11-12). Policy versions that change kind are not exercised.",
                 "40001 at COMMIT is provoked by a superuser SERIALIZABLE transaction (SSI), the transport loss by pg_terminate_backend, both at a test-only checkpoint before COMMIT."
             ]
         })).unwrap()).unwrap();
