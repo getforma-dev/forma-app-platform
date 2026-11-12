@@ -303,6 +303,7 @@ impl Customizer {
         let started = Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         if demo {
+            // DS-66: rehearsed sentences, demo organization only (the caller's flag).
             if let Some(next) = rehearsed(widget, sentence).and_then(|p| apply(widget, current, &p))
             {
                 return Ok(Outcome {

@@ -2,7 +2,7 @@
 
 # Pitch join: canvas, planner, and composer
 
-Status: the APP-091 record. Read against `pivot/pitch-mvp` at `1a8c9c84e889`, which descends from `phase-one-spikes` `21199f4`. The authoritative shortcut text is [APP-098](../../Tickets/0-backlog/APP-098.md). This note names the seam, the rule relaxed, and the revisit ticket. APP-097 decides keep, rework, or drop.
+Status: the APP-091 record. Read against `pivot/pitch-mvp` at `1a8c9c84e889`, which descends from `phase-one-spikes` `21199f4`. The authoritative shortcut text is [APP-098](../../Tickets/2-in-progress/APP-098.md). This note names the seam, the rule relaxed, and the revisit ticket. APP-097 decides keep, rework, or drop.
 
 ADR-011's first draft named a vector index from Forma Generative UI. That index is not in this tree. The 2026-10-30 amendment replaced it: the planner is the library matcher. A generated definition enters only through admission.
 
@@ -20,7 +20,7 @@ There is no vector index and no client-side authority. Routing is server-side, u
 
 `composer::matcher` scores the library apps the member may open now. An app whose definition digest is in the library sidecar (`contracts/fixtures/library/catalog.json`) is scored from that sidecar's routing metadata. An app outside the sidecar is scored from its title and its definition's vocabulary. The member's authoring app is never a candidate. `GET /v1/library` lists only apps the session may open. A foreign tenant's module is not in that list.
 
-A confident pick is `Retrieve` and makes no model call (`Composer::route`). A miss does not go straight to generation. A near tie or no hit is sent to the router model, whose closed reply is `Retrieve`, `Adapt`, or `Generate` (`plan::decide`). An empty library is `Generate` with no call. With the matcher on and no model configured, a near tie or miss returns the nearest catalog app as `Retrieve` (`nearest`) or `ModelError::Unavailable` when there is no candidate. If the router call itself fails while a model is configured, `compose_instant` continues as `Generate` with confidence `router_failed`.
+A confident pick is `Retrieve` and makes no model call (`Composer::route`). A miss does not go straight to generation. A near tie or no hit is sent to the router model, whose closed reply is `Retrieve`, `Adapt`, or `Generate` (`plan::decide`). An empty library is `Generate` with no call. With the matcher on and no model configured, a near tie or miss returns the nearest catalog app as `Retrieve` (`nearest`) or `ModelError::Unavailable` when there is no candidate. If the router call itself fails while a model is configured, `compose_instant` continues as `Generate` with confidence `router_failed`. *(2026-11-12, APP-098: the `nearest` answer now needs the demo switch, through `Composer::route_for`. Elsewhere it is `ModelError::Unavailable`.)*
 
 Which of those paths runs depends on the pin (`composer::routes`):
 

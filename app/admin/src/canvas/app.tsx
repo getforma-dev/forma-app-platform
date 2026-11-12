@@ -236,6 +236,7 @@ type CanvasProps = {
   memberLabel: string;
   memberInitials: string;
   demo: boolean;
+  // DS-40: the synthetic-data note (demo) and data-demo (demoMode), server-computed.
   demoMode: string;
   hasLibrary: boolean;
   library: LibraryCategory[];

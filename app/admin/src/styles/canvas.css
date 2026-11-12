@@ -119,7 +119,7 @@
   white-space: nowrap;
 }
 
-/* GENUI_DEMO_MODE (APP-098): synthetic data, in small print. */
+/* DS-40, GENUI_DEMO_MODE (APP-098): synthetic data, in small print. */
 .cv-demo-note {
   padding: 0.1rem 0.45rem;
   border: 1px dashed var(--cv-edge);

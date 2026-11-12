@@ -93,6 +93,7 @@ impl Talk {
     /// Whether this organization can be answered at all: a model, or the
     /// demo organization's rehearsed path.
     fn available(&self, organization: &str) -> bool {
+        // DS-66, DS-77, DS-78: rehearsed answers need no model, demo organization only.
         self.composer.enabled() || demo::is_demo_org(organization)
     }
 }
@@ -421,6 +422,7 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
             "ask refused"
         );
     };
+    // DS-77: rehearsed Ask answers over the records, demo organization only.
     let rehearsed = demo::is_demo_org(member.organization())
         .then(|| ask::rehearsed(&body.question, &body.address, &rows, partial))
         .flatten();
@@ -784,6 +786,7 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
             }
         }
     }
+    // DS-78 (card, app) and DS-66 (widget): rehearsed Shape sentences, demo organization only.
     let demo = demo::is_demo_org(member.organization());
     let log_refused = |code: &str| {
         tracing::info!(

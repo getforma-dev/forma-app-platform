@@ -1319,6 +1319,7 @@ pub async fn build_from_box(
         return Err(BuildRefusal::NotFound);
     }
     if !state.composer.available_for(member.organization())
+        // DS-73: a demo organization may build without a model.
         && !crate::demo::is_demo_org(member.organization())
     {
         return Err(BuildRefusal::ComposerUnavailable);
@@ -1435,6 +1436,7 @@ async fn build_with(
         view.row.name
     );
     let demo = crate::demo::is_demo_org(member.organization());
+    // DS-73: the rehearsed metrics definition, demo organization only.
     let (placed, source) = if demo && derive::rehearsed(purpose) {
         let step = Instant::now();
         let content = derive::metrics_definition(&view.row.name, purpose, &data);
@@ -2188,6 +2190,7 @@ pub async fn explain_now(
     let views_ms = ms(step);
     let step = Instant::now();
     let demo = crate::demo::is_demo_org(member.organization());
+    // DS-74: the rehearsed explanation, demo organization only.
     let (findings, source, input_bytes) = if demo {
         (explain::rehearsed(&results), "rehearsed", 0)
     } else {

@@ -176,6 +176,7 @@ pub async fn generate(
     if !view.row.owner {
         return Err(BuildRefusal::NotFound);
     }
+    // DS-75: the rehearsed brief, and its availability without a model.
     let demo = crate::demo::is_demo_org(member.organization());
     if !demo && !state.composer.enabled() {
         return Err(BuildRefusal::ComposerUnavailable);
@@ -237,6 +238,7 @@ pub async fn generate(
             continue;
         }
         sent += 1;
+        // DS-75: the demo PDF's fixture statements instead of the cited model call.
         let parts = if demo {
             REHEARSED_PDFS
                 .iter()
@@ -277,6 +279,7 @@ pub async fn generate(
     let pdf_ms = ms(step);
     // Overview, data paragraphs, key points: placeholders only.
     let step = Instant::now();
+    // DS-75: data paragraphs by rule (no model without demo was refused above).
     let (overview, data_paragraphs, key_points): Summary = if demo || !state.composer.enabled() {
         let mut paragraphs = Vec::new();
         for (file, _, ids) in &data_files {

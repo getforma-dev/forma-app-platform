@@ -1249,3 +1249,36 @@ fn real_model_smoke() {
         }
     });
 }
+
+/// APP-098 DS-03: with no model, a near tie answers the matcher's nearest
+/// candidate only where the demo switch is on; elsewhere it is refused.
+#[test]
+fn ds03_nearest_without_a_model_needs_the_demo_switch() {
+    let library = [
+        library_app(SPEND, "00000000-0000-4000-8000-0000000000d1"),
+        library_app(SPEND, "00000000-0000-4000-8000-0000000000d2"),
+    ];
+    let disabled = Composer::new(None, "r", "g");
+    runtime().block_on(async {
+        // Two identical titles: a near tie the matcher cannot settle.
+        assert_eq!(
+            disabled
+                .route_for("spend review", &library, None, false)
+                .await,
+            Err(ModelError::Unavailable),
+            "switch off: no nearest answer"
+        );
+        assert_eq!(
+            disabled.route("spend review", &library, None).await,
+            Err(ModelError::Unavailable),
+            "route is the switch-off case"
+        );
+        assert_eq!(
+            disabled
+                .route_for("spend review", &library, None, true)
+                .await,
+            Ok((Decision::Retrieve { index: 0 }, "nearest")),
+            "switch on: the nearest candidate, labeled retrieved"
+        );
+    });
+}

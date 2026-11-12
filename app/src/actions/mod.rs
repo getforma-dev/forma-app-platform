@@ -243,6 +243,7 @@ impl Parser {
                 duration_ms: elapsed(),
             });
         }
+        // DS-43, DS-69: rehearsed sentences parse without the model, demo organization only.
         if demo {
             if let Some(parsed) = rehearsed::parse(utterance, catalog, today) {
                 let parsed = guard::after(utterance, parsed);

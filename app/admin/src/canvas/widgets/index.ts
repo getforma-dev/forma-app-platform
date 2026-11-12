@@ -46,6 +46,7 @@ function newId(kind: WidgetKind): string {
 type Stored = { id: string; kind: WidgetKind; state: WidgetState; x: number; y: number };
 
 function save(): void {
+  // DS-40: demo mode keeps and restores no widgets.
   if (isDemoCanvas()) return;
   const rows: Stored[] = [];
   for (const { widget, item } of placed.values()) {
@@ -338,6 +339,7 @@ export function restoreWidgets(): void {
   if (restored || !canvasHost()) return;
   restored = true;
   onLayoutSaved(save);
+  // DS-40: demo mode keeps and restores no widgets.
   if (isDemoCanvas()) return;
   for (const row of load()) placeWidget(row.kind, row.state, { id: row.id, at: { x: row.x, y: row.y } });
 }

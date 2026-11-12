@@ -324,6 +324,7 @@ pub fn member_key(organization: &str, principal: &str) -> String {
 /// member of any other organization sees the canvas exactly as without demo
 /// mode. Empty by default.
 pub fn demo_organizations() -> std::collections::BTreeSet<String> {
+    // DS-05, DS-40: the canvas's copy of the demo organization list.
     crate::composer::demo_organizations(
         &std::env::var(crate::composer::DEMO_ORGANIZATIONS_ENV).unwrap_or_default(),
     )
@@ -331,6 +332,7 @@ pub fn demo_organizations() -> std::collections::BTreeSet<String> {
 /// Whether the canvas shows `organization` in demo mode: listed here and by
 /// [`crate::demo::is_demo_org`] (so `GENUI_DEMO_MODE` off turns it off).
 pub fn is_demo(listed: &std::collections::BTreeSet<String>, organization: &str) -> bool {
+    // DS-40: the list and the switch, both required.
     listed.contains(organization) && crate::demo::is_demo_org(organization)
 }
 
@@ -1749,6 +1751,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     let library = library(sources);
     let organization = organization_name(&canvas, &member).await;
     let principal = member.principal();
+    // DS-40: the synthetic-data note and the demo-safe layout flag (data-demo).
     let demo = is_demo(&canvas.demo_organizations, member.organization());
     let props = CanvasProps {
         csrf_signout: auth.csrf.token(csrf::Form::SignOut, &cookie),

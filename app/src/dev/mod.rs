@@ -104,6 +104,7 @@ pub(crate) struct Persona {
     pub name: &'static str,
     pub authoring: &'static str,
 }
+// DS-02, DS-44: the synthetic pitch personas and their display names (dev stand).
 const PITCH: [Persona; 3] = [
     Persona {
         key: "diego",
@@ -318,6 +319,7 @@ fn serve(env: Env) -> Result<(), String> {
     // The demo switches and display names, from the environment as a
     // deployment sets them (read once, before any request).
     let organization = env.profile.organization();
+    // DS-05: the dev stand's pitch profile turns the switch on for its own process.
     if env.profile == Profile::Pitch {
         std::env::set_var(crate::demo::MODE_ENV, "1");
         std::env::set_var(crate::demo::ORGANIZATIONS_ENV, organization);
@@ -548,6 +550,7 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         sessions.push(slots);
     }
     if env.profile == Profile::Pitch && db.marked("examples")?.is_none() {
+        // DS-45: the pitch profile's example claims, filed through the product routes.
         seed::examples(&app, &sessions[0][0], &sessions[1][0]).await?;
         db.mark("examples", "seeded")?;
     }

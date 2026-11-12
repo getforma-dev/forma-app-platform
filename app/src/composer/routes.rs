@@ -230,6 +230,8 @@ pub(crate) async fn compose_instant(
         log_refused(member, code, origin, started);
         refusal
     };
+    // DS-53, DS-03: the demo flag for the rehearsed transform and for the
+    // matcher's nearest candidate when no model is configured.
     let demo = composer.demo_for(member.organization());
     let template = match pin {
         Pin::Template(id) => Some(super::templates::find(id).ok_or_else(|| {
@@ -356,7 +358,11 @@ pub(crate) async fn compose_instant(
         },
         Pin::Generate => Ok((Decision::Generate, "requested")),
         Pin::Template(_) => unreachable!("template composition is handled above"),
-        Pin::Free | Pin::Chooser => composer.route(intent, &context.library, exclude).await,
+        Pin::Free | Pin::Chooser => {
+            composer
+                .route_for(intent, &context.library, exclude, demo)
+                .await
+        }
     };
     let (decision, confidence) = match routing {
         Ok(decision) => decision,
@@ -403,6 +409,7 @@ pub(crate) async fn compose_instant(
                 return Ok(First::Placed(standard, None));
             }
             // APP-101: the request says more than the defaults.
+            // DS-53: a rehearsed transform tailors without a model.
             let rehearsed = demo && transform::rehearsed(intent).is_some();
             let (Some(_), Some(_)) = (
                 context.authoring.as_ref(),

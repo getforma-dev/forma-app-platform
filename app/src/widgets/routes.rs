@@ -146,6 +146,7 @@ async fn weather_route(State(state): State<Arc<Widgets>>, request: Request) -> R
         return http::too_many_requests(retry_after);
     }
     let demo = demo::is_demo_org(member.organization());
+    // DS-65: the weather fixture in a demo organization.
     let (answer, outcome) = if demo {
         (weather::fixture(&location, metric), "fixture_demo")
     } else {
@@ -163,6 +164,7 @@ async fn weather_route(State(state): State<Arc<Widgets>>, request: Request) -> R
                 return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "location_not_found");
             }
             Err(FetchError::Unavailable) => {
+                // DS-65: also in every organization when Open-Meteo is unreachable (not behind the switch; labeled).
                 (weather::fixture(&location, metric), "fixture_unreachable")
             }
         }
@@ -236,6 +238,7 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
     };
     match state
         .customizer
+        // DS-66: rehearsed restyles, demo organization only.
         .customize(widget, &current, &text, demo)
         .await
     {

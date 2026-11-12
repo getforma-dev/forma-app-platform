@@ -17,6 +17,7 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
+// DS-44: display names from an operator file or JSON; behind GENUI_DEMO_MODE since 2026-11-12 (APP-098).
 pub const FILE_ENV: &str = "GENUI_DISPLAY_NAMES_FILE";
 /// The same JSON inline (the deployed task: the stack sets it at synth from a
 /// private file, APP-096); the file wins when both are set.
@@ -64,8 +65,33 @@ fn parse(bytes: &[u8]) -> Option<HashMap<String, String>> {
 }
 
 fn load_from_env() -> Option<HashMap<String, String>> {
-    let Some(path) = std::env::var_os(FILE_ENV) else {
-        let inline = std::env::var(JSON_ENV).ok()?;
+    load(
+        crate::demo::is_on(),
+        std::env::var_os(FILE_ENV),
+        std::env::var(JSON_ENV).ok(),
+    )
+}
+
+/// APP-098 DS-02, DS-44: the names are the demo personas'. The deploy passes
+/// them only to windows where `GENUI_DEMO_MODE` is on, and a clean trial
+/// refuses them. With the switch off none are loaded, even if set.
+fn load(
+    switch_on: bool,
+    file: Option<std::ffi::OsString>,
+    inline: Option<String>,
+) -> Option<HashMap<String, String>> {
+    if !switch_on {
+        if file.is_some() || inline.is_some() {
+            tracing::warn!(
+                event = "directory.refused",
+                code = "demo_mode_off",
+                "display names need GENUI_DEMO_MODE"
+            );
+        }
+        return None;
+    }
+    let Some(path) = file else {
+        let inline = inline?;
         if inline.len() as u64 > MAX_FILE_BYTES {
             tracing::warn!(
                 event = "directory.refused",
@@ -139,5 +165,22 @@ mod tests {
         assert!(!usable_name(""));
         assert!(!usable_name(&"n".repeat(81)));
         assert!(usable_name("Priya N."));
+    }
+
+    /// APP-098 DS-02, DS-44: with the demo switch off no display name is
+    /// loaded, from the inline JSON or the file; with it on, they are.
+    #[test]
+    fn display_names_load_only_with_the_demo_switch_on() {
+        let json = r#"{"members":[{"principal_id":"00000000-0000-4000-8000-00000000006d","display_name":"Sarah Chen"}]}"#;
+        assert_eq!(load(false, None, Some(json.into())), None);
+        let dir = std::env::temp_dir().join(format!("forma-directory-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("names.json");
+        std::fs::write(&file, json).unwrap();
+        assert_eq!(load(false, Some(file.clone().into()), None), None);
+        let on = load(true, Some(file.into()), None).unwrap();
+        assert_eq!(on["00000000-0000-4000-8000-00000000006d"], "Sarah Chen");
+        assert_eq!(load(true, None, Some(json.into())).unwrap().len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

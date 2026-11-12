@@ -110,6 +110,7 @@ pub const COMPOSE_DEADLINE: Duration = Duration::from_secs(120);
 /// organization only. A rehearsed transform is judged and admitted like any
 /// other; nothing bypasses admission, authorization, the audited command
 /// path, receipts or live updates.
+// DS-05, DS-39: the demo organization list (the stack names one organization).
 pub const DEMO_ORGANIZATIONS_ENV: &str = "GENUI_DEMO_ORGANIZATIONS";
 const ROUTER_MAX_TOKENS: u32 = 300;
 /// The transform call's output bound and budget (APP-101: the reshape
@@ -213,6 +214,7 @@ impl Composer {
     /// listed here and by [`crate::demo::is_demo_org`], so `GENUI_DEMO_MODE`
     /// off turns every composer shortcut off.
     pub fn demo_for(&self, organization: &str) -> bool {
+        // DS-05: the composer's list and the switch, both required.
         self.demo.contains(organization) && crate::demo::is_demo_org(organization)
     }
     /// The route may compose for this organization: a model, the instant
@@ -220,6 +222,7 @@ impl Composer {
     /// composition answers `composer_unavailable`), or the demo
     /// organization's rehearsed path.
     pub fn available_for(&self, organization: &str) -> bool {
+        // DS-53: a demo organization's rehearsed transform needs no model.
         self.enabled() || self.matcher || self.demo_for(organization)
     }
     /// Whether the instant matcher runs.
@@ -285,6 +288,21 @@ impl Composer {
         library: &[LibraryApp],
         exclude: Option<&str>,
     ) -> Result<(Decision, &'static str), ModelError> {
+        self.route_for(intent, library, exclude, false).await
+    }
+
+    /// `route` for an organization. `demo` is [`Composer::demo_for`]: only
+    /// where the demo switch is on does a candidate the matcher cannot pick
+    /// (a near tie or a weak match), with no model, answer the matcher's
+    /// nearest candidate (APP-098 DS-03). Elsewhere it is refused, as any
+    /// routing that needs a model.
+    pub async fn route_for(
+        &self,
+        intent: &str,
+        library: &[LibraryApp],
+        exclude: Option<&str>,
+        demo: bool,
+    ) -> Result<(Decision, &'static str), ModelError> {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
         }
@@ -297,10 +315,12 @@ impl Composer {
             nearest = found.ranked.first().copied();
         }
         let Some(model) = self.model.as_ref() else {
-            // No model to settle a near tie (APP-098 DS-03): the matcher's
-            // best candidate, still only an app from the catalog, labeled
-            // retrieved; with no candidate at all the caller is refused.
-            return match nearest {
+            // No model to settle what the matcher cannot pick (APP-098 DS-03,
+            // demo switch only):
+            // the matcher's best candidate, still only an app from the
+            // catalog, labeled retrieved. Without the switch, or with no
+            // candidate at all, the caller is refused.
+            return match nearest.filter(|_| demo) {
                 Some(index) => Ok((Decision::Retrieve { index }, "nearest")),
                 None => Err(ModelError::Unavailable),
             };
@@ -328,6 +348,7 @@ impl Composer {
         demo: bool,
     ) -> Result<(Transform, &'static str), TransformFailure> {
         if demo {
+            // DS-53: the rehearsed transform, demo organization only.
             if let Some(rehearsed) = transform::rehearsed(intent) {
                 return Ok((rehearsed, "rehearsed"));
             }

@@ -286,6 +286,7 @@ async fn main() {
             .ok()
             .filter(|url| url.starts_with("/v1/"))
             .unwrap_or_default(),
+        // DS-40: the canvas demo organizations (with the switch).
         demo_organizations: genui::query::canvas::demo_organizations(),
         composer: genui::composer::Composer::from_env(),
         parser: genui::actions::Parser::from_env(),

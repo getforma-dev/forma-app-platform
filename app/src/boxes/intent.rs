@@ -10,6 +10,7 @@
 //! own folders by number or name: one match acts, several are a chooser,
 //! none is not a folder request. Nothing is guessed.
 use super::routes::{numbered, Boxes};
+// DS-83: shares the rehearsed parser's matcher, in every organization.
 use crate::{actions::rehearsed::find_ignore_ascii_case, storage::TrustedRequest};
 use std::sync::{Arc, OnceLock};
 

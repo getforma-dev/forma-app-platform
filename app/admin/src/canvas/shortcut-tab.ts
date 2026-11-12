@@ -35,6 +35,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['Take it off the canvas', 'The × on it, Remove from canvas on its Library row, or ⋯ → Take off the canvas', 'Delete'],
   ]],
   ['Tell an app', [
+    // DS-82: pitch example sentences, shown in every organization.
     ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expenses …'],
     ['Approve or reject', 'Records card → Approve · Reject, or say “approve the Nobu dinner”', '/expenses approve …'],
     ['Any app', 'Click its /name chip (Library or the app card) to put it in the bar', '/name …'],
