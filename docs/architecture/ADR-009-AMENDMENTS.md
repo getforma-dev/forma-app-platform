@@ -4,7 +4,7 @@ Owner: GenUI. Status: accepted implementation direction for Phase 2 preparation.
 
 **Why this file exists.** `contracts/lock.py` hashes [ADR-009](ADR-009-PHASE-2-DATA-PLANE.md) and [ADR-002](ADR-002-CONTRACT-EDITION.md) whole into `contracts/implementation-lock.json` (edition `impl-2026-11-01.2`). ADR-002 forbids rewriting a published edition's lock in place. One byte added to either ADR therefore fails `lock.py check`, a required workflow, until a new contract edition opens. So amendments to ADR-009 live here.
 
-From its date, a section here controls over the ADR-009 text it names. When the next contract edition opens, its owner copies each section into ADR-009 as a dated amendment, and the edition decisions (E5, E6, E7 and E11) and R-m4's poll-time `queue_position` wording into `contracts/README.md`. Whichever ticket opens that edition carries the copy, even if it is not APP-018: re-locking ADR-009 without the copy would drop these amendments. That edition then writes its own lock, and this file keeps a pointer to the copy.
+From its date, a section here controls over the ADR-009 text it names. When the next contract edition opens, its owner copies each section into ADR-009 as a dated amendment, and the edition decisions (E5, E6, E7 and E11) and R-m4's poll-time `queue_position` wording into `contracts/README.md`. Whichever ticket opens that edition carries the copy, even if it is not APP-018. Re-locking without the copy loses nothing, because this record stays indexed and controls by its own rule. The copy keeps ADR-009 readable on its own. That edition then writes its own lock, and this file keeps a pointer to the copy.
 
 Line numbers such as "ADR-009:82" refer to the locked file, SHA-256 `8a52d3cb7efa6e8451633de44634c3f3fcd3107044be4c6c94b8cf85c765172f`, unchanged since `29b6ff6`.
 
@@ -97,7 +97,7 @@ This completes ADR-009:98's failure sentence, which named the code and the event
 The re-review offered two fixes. This takes the first, which edition two's contract already states: `queue_position` is "the organization position `enqueue_job` returns, 1-based" (`contracts/README.md`, edition `impl-2026-10-29.2`).
 
 - `queue_position` is the job's 1-based place among its organization's jobs that have not started.
-- Within an organization, the claim takes the queued row with the smallest `(available_at, job_id)`. At enqueue `available_at` is the job's `created_at`, so the claim order and the position order agree. A retried job, whose `available_at` is later, is within the estimate this section allows.
+- Within an organization, the claim takes the queued row with the smallest `(available_at, job_id)`. At enqueue `available_at` is the job's `created_at`, so the claim order and the position order agree.
 - `enqueue_job` returns it with `queued`. It counts the organization's queued `job_queue` rows, this one included, under its cursor lock.
 - Each poll of `GET /v1/jobs/{job}` recomputes it from `genui.jobs`: 1 + the organization's rows in state `queued` created earlier (ordered by `created_at`, then `job_id`). The workspace reads those rows under its RLS scope, so the poll needs no new definer function.
 - `expected_wait_seconds` = `queue_position` × the in-process p50 job duration (D9.2, ADR-009:45), at enqueue and on every poll.

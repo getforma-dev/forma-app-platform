@@ -1,6 +1,6 @@
 # APP-088 residuals, 2026-11-12 (APP-015 preparation)
 
-This is the dated residuals record that [APP-088](../../../Tickets/2-in-progress/APP-088.md) requires. The decisions are in [ADR-009-AMENDMENTS.md](../../../docs/architecture/ADR-009-AMENDMENTS.md); the re-review's dispositions are appended to [adr-009-review.md](../adr-009-review.md). This directory holds the run that closes the [contract-edition review](../contract-edition/independent-review.md)'s last limitation: "The Docker-backed native campaign that uses the seed was not run." It is a local synthetic qualification, not managed acceptance and not a CI pass.
+This is the dated residuals record that [APP-088](../../../Tickets/4-done/APP-088.md) requires. The decisions are in [ADR-009-AMENDMENTS.md](../../../docs/architecture/ADR-009-AMENDMENTS.md); the re-review's dispositions are appended to [adr-009-review.md](../adr-009-review.md). This directory holds the run that closes the [contract-edition review](../contract-edition/independent-review.md)'s last limitation: "The Docker-backed native campaign that uses the seed was not run." It is a local synthetic qualification, not managed acceptance and not a CI pass.
 
 ## Native campaign through the edition-one seed
 
