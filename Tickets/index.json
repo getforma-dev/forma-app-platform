@@ -5547,7 +5547,7 @@
       "Depends on": "APP-104",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`decisions/app177-fences` (decision; no fence code; the `/arrange` text in `controls.ts` was corrected on review)",
+      "Branch / PR": "`decisions/app177-fences`, PR #99 (decision; no fence code; the `/arrange` text in `controls.ts` was corrected on review)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
