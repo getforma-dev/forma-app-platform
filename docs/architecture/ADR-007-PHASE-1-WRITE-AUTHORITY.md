@@ -146,3 +146,25 @@ APP-073 (0003: `code_index`, `handle_index`, `code_grant_templates`, `code_reser
 | m11 existing principal | D7.1 `already_member`. |
 | m12 advisory key space | Moot (D7.8 head rows). |
 | m13 plan items | Plan Tasks 6, 7 and 9 corrected (operator seeding, no nonce column, oracle excludes refused literals). |
+
+## Amendment, 2026-11-12: an app under review stays under review (APP-085)
+
+Decided by Claude (Opus 5.5) under Victor's delegation of 2026-11-12 ("Make your best judgement and answer for yourself based on the product and continue with tickets"), for [APP-085](../../Tickets/2-in-progress/APP-085.md) (APP-010 review m3). Victor can reverse it.
+
+**The question.**
+- **The gap.** `Control::publish` took the policy id from the caller. Once an organization holds both an `owner_publish` and an `independent_review` policy, an owner could publish an app that had been reviewed by naming `owner_publish`.
+- **Why "per organization" does not fit.** The review's fix said to resolve the applicable policy "per organization or space". The seeded data shows policies attach to apps through their publications, not to organizations: the demo organization publishes most apps under `owner_publish` and some fixtures under `independent_review`. Making the strictest policy apply organization-wide would force review on every app.
+
+**The decision.** An app whose newest publication was under `independent_review` stays under review.
+- Naming an `owner_publish` policy for it is `Denied`, and so is naming a policy the organization does not hold.
+- Moving an app to a stricter policy stays allowed.
+- An app with no publication takes the organization's policies as before.
+- The composer owner-publishes, so it never chooses such an app as its authoring app. A member whose only owned app is under review gets an authoring shell (APP-145) instead.
+
+**Where it is enforced.**
+- `Control::publish_once` reads the app's newest `policy_kind` inside the fenced, serializable transaction.
+- `choose_authoring` treats an owned app under review as ineligible.
+
+**Tests.**
+- The definition campaign's APP-085 check: the owner of a reviewed app names `owner_publish`, and the check fails without the rule.
+- The composer campaign: generation, adaptation and keeping land on the shell, never on the reviewed app.

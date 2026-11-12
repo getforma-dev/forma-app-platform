@@ -2879,7 +2879,7 @@
       "Depends on": "APP-010",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "`app085/server-policy` (draft PR; slice 1 of several, not merged)",
+      "Branch / PR": "`app085/server-policy`, PR #101 (slices 1\u20132: box 1)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
