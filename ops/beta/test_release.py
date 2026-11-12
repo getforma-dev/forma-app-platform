@@ -335,6 +335,42 @@ class DeployFlowTests(unittest.TestCase):
                          {"live": True, "canvas": True, "entry": True, "mcp": True, "slack": True})
         self.assertNotIn("git push", self.shim_log())
 
+    def test_every_mutating_step_refuses_without_approval_and_calls_no_aws(self):
+        # APP-127 acceptance 1: each [MUTATION] step of `just deploy` refuses
+        # without --approved (exit 3, the command printed), calls no AWS API and
+        # records no approval.
+        self.new_window()
+        w = self.priv / "windows" / self.window
+        # The local inputs each step checks before its gate (their contents are
+        # never sent: a refused step runs none of the code it prints).
+        for name in ("change-set-review.json", "deployment-input.json", "receipt.json", "template.json"):
+            (w / name).write_text("{}")
+        (w / "stack-after.json").write_text(json.dumps({"Stacks": [{"Outputs": [
+            {"OutputKey": "TaskDefinition", "OutputValue": "arn:aws:ecs:r:0:task-definition/t:1"},
+            {"OutputKey": "SharedBrokerServiceName", "OutputValue": "broker"}]}]}))
+        steps = [("push",), ("change-set",), ("execute",),
+                 ("snapshot", "--name", "genui-pitch-pre-migration-schema15-20261112"), ("migrate",),
+                 ("seed", "--", "--set=--organization=00000000-0000-4000-8000-000000000001"), ("library",),
+                 ("grants", "--", "--set=--organization=00000000-0000-4000-8000-000000000001", "--set=--principal=00000000-0000-4000-8000-000000000002"),
+                 ("activate",), ("rollback-deny",)]
+        for step in steps:
+            with self.subTest(step=step[0]):
+                before = self.shim_log()
+                out = self.deploy(step[0], self.window, *step[1:], expect=3)
+                self.assertIn("[MUTATION]", out)
+                self.assertIn("refused", out)
+                added = self.shim_log()[len(before):]
+                self.assertNotIn("aws ", added, f"{step[0]}: a refused step calls no AWS API")
+                self.assertFalse((self.priv / "approvals.md").exists(), f"{step[0]}: no approval is recorded")
+        # APP-127 acceptance 2: --dry-run with --approved shows the order (the
+        # approval is appended first, then the code runs) and does neither.
+        before = self.shim_log()
+        out = self.deploy("push", self.window, "--approved", "yes, push", "--dry-run")
+        self.assertIn("would append the approval to", out)
+        self.assertIn("then run the above", out)
+        self.assertNotIn("aws ", self.shim_log()[len(before):])
+        self.assertFalse((self.priv / "approvals.md").exists(), "a dry run records no approval")
+
     def test_push_refuses_images_that_were_not_qualified(self):
         self.new_window()
         self.env["SHIM_BAD_ID"] = "1"
