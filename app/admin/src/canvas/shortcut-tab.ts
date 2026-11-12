@@ -1,7 +1,11 @@
-// The Shortcuts tab of the right pane (`pane.ts`), beside Library, Commands
-// and Ask. `/shortcuts` and ⋯ → "Shortcuts and commands" open the pane on
+// The Shortcuts tab of the right pane (`pane.ts`), beside Library and
+// Commands. `/shortcuts` and ⋯ → "Shortcuts and commands" open the pane on
 // this tab. APP-122 (amending APP-120 §3): `?` has one meaning, Ask: on the
-// canvas it puts `? ` in the bar, and `?` first in the bar opens the Ask tab.
+// canvas it puts `? ` in the bar. Since the whole-app views (ADR-018), a
+// question about one app opens that app's assistant and any other question
+// the workspace assistant on the canvas (`ask.ts`); the pane has no Ask tab.
+// APP-179: `test/shortcut-rows.test.ts` fails when a row names a menu item,
+// a pane tab or a verb that does not exist, or a removed action.
 // It replaces the separate `#cv-shortcuts` modal sheet. It lists every
 // action with both of its paths (APP-112): the click and the keys or the
 // command. A line at the top links to the Commands tab, where every command
@@ -24,7 +28,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
   ['Place', [
     ['An app for a request', 'Type it in plain words in the bar', 'Enter'],
     ['A whole app', 'Library → Apps → Add', '/app expenses · /expenses'],
-    ['A card', 'Library → expand an app → Add, or drag the card onto the canvas', '/card expenses.ledger · /card 3.2'],
+    ['A standalone card', 'Library → Cards → Add, or drag it onto the canvas', '/card name'],
     ['A widget', 'Library → Widgets → Add, or say “show the weather in Austin”', '/widget weather Austin · /weather'],
     ['A note', '⋯ → New note, or Library → Widgets → Note', '/widget note text · /note'],
     ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, drop files on the canvas, or Drop files or upload on an empty canvas', '/folder'],
@@ -36,23 +40,22 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['Any app', 'Click its /name chip (Library or the app card) to put it in the bar', '/name …'],
   ]],
   ['Ask and Shape', [
-    ['Ask about your data', 'The Ask tab, or ⋯ → Ask about this on a card', '? where are the red invoices'],
+    ['Ask about your data', 'The App assistant button on an app, or ⋯ → Ask about this; with no app selected, the workspace assistant', '? where are the red invoices'],
     ['Ask about a folder’s files', 'Folder → Ask (its tables; read-only)', '—'],
     ['Shape a card', '⋯ → Shape… on the card', '/expenses.ledger only red invoices · /shape expenses.ledger …'],
-    ['Theme an app', '⋯ → Shape… on its app card or frame', '/shape expenses dark green, compact'],
+    ['Theme an app', '⋯ → Shape… on the app', '/shape expenses dark green, compact'],
     ['Shape a widget', 'Its Shape field, or ⋯ → Shape… on it', '/shape calculator make it a TI-84'],
-    ['Undo a shape', 'Revert on the shaped card, app card or widget', '—'],
+    ['Undo a shape', 'Revert on the shaped card, app or widget', '—'],
   ]],
   ['Arrange', [
     ['Select', 'Click a header · Shift + click to add', '—'],
     ['Move', 'Drag an item’s header or background; controls stay interactive', 'Arrow keys · Shift: 10 px'],
     ['Arrange by app', '⋯ → Arrange by app', '/arrange'],
-    ['Open an app', 'App → Open, Library → Open, or ⋯ → Open app', 'U · /unite expenses'],
-    ['Focus', 'The [ ] button on a card, or ⋯ → Focus', 'F · /focus'],
+    ['Open an app', 'App → Open, Library → Open, or ⋯ → Open app', 'U · Enter · /unite expenses'],
+    ['Card view', 'App → Card: the app as one card', '—'],
+    ['Focus', 'The Focus button on an app or card, or ⋯ → Focus', 'F · /focus'],
     ['Browse an app', 'App → Browse, Library → Browse, or ⋯ → Browse app', `${MOD} + G`],
     ['Browse components', 'The ‹ › in Browse view', '← · →'],
-    ['Leaf through a stack', 'The ‹ › on the stack', '← · →'],
-    ['Rename a stack', 'Double-click its name', '—'],
   ]],
   ['Make', [
     ['One card from a folder', 'Folder → Make a card (confirm first)', '—'],
@@ -70,7 +73,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['Every command', 'The pane’s Commands tab, or the link at the top of this tab', '/commands · /help'],
     ['Show timings', '⋯ → Show timings, or say “show timings”', '#timing=1'],
     ['Shortcuts tab', '⋯ → Shortcuts and commands, or the pane’s Shortcuts tab', '/shortcuts'],
-    ['Ask', 'The pane’s Ask tab', '? · ? <question>'],
+    ['Ask', 'The App assistant button on an app, or the workspace assistant', '? · ? <question>'],
   ]],
 ];
 
