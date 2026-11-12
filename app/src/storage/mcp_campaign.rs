@@ -753,10 +753,20 @@ async fn campaign() {
     let hers = hers.json();
     assert_eq!(hers["records"][0]["record_id"], record_id);
     assert_eq!(hers["records"][0]["via"], "Claude");
+    // APP-116: the listing names the tool call that committed this version
+    // and its duration, from the access log (the first commit, not the replay).
+    assert_eq!(hers["records"][0]["via_tool"], mcp::tools::COMMIT);
+    assert!(
+        hers["records"][0]["via_ms"]
+            .as_i64()
+            .is_some_and(|ms| (0..60_000).contains(&ms)),
+        "{}",
+        hers["records"][0]
+    );
     assert_eq!(hers["records"][0]["creator"]["label"], "Diego Ramos");
     check(
         &mut checks,
-        &format!("scenario 1b: forma_commit files one audited record v1 through the command route ({} ms) and shares it with Sarah Chen: record.committed on Diego's stream, app.shared on Sarah's ({} ms); a repeated forma_commit replays the same outcome (one record, one outcome); Sarah's agent cannot commit Diego's draft (same refusal as an unknown id); Sarah's canvas records list shows the claim \"via Claude\"", timings["commit_ms"], timings["sarah_app_shared_after_commit_ms"]),
+        &format!("scenario 1b: forma_commit files one audited record v1 through the command route ({} ms) and shares it with Sarah Chen: record.committed on Diego's stream, app.shared on Sarah's ({} ms); a repeated forma_commit replays the same outcome (one record, one outcome); Sarah's agent cannot commit Diego's draft (same refusal as an unknown id); Sarah's canvas records list shows the claim \"via Claude\" with the committing tool (forma_commit) and its duration from the access log (APP-116)", timings["commit_ms"], timings["sarah_app_shared_after_commit_ms"]),
     );
 
     // --- Scenario: Sarah's agent approves it ---
@@ -805,6 +815,10 @@ async fn campaign() {
     assert_eq!(value_of(&his["records"][0], "status")["value"], "approved");
     assert_eq!(his["records"][0]["updater"]["label"], "Sarah Chen");
     assert_eq!(his["records"][0]["via"], "OpenAI");
+    assert_eq!(his["records"][0]["via_tool"], mcp::tools::COMMIT);
+    assert!(his["records"][0]["via_ms"]
+        .as_i64()
+        .is_some_and(|ms| ms >= 0));
     let again = client
         .call(
             &openai,

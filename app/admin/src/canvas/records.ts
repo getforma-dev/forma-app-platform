@@ -15,7 +15,7 @@ import { postDraft, requestDecision, type Draft } from './actions';
 import { label } from './display';
 import { el, isUuid, pulseTarget, retryButton, skeleton } from './render';
 import { liveArrival } from './board';
-import { showActivity, showLiveTiming, showTiming } from './timing';
+import { agentCall, showActivity, showLiveTiming, showTiming } from './timing';
 
 export type RecordValueJson = { field_id: string; value: unknown; display: string };
 export type RecordJson = {
@@ -24,6 +24,9 @@ export type RecordJson = {
   values: RecordValueJson[];
   /** The channel or agent that committed this version ("Slack" for APP-100, DS-59; an MCP agent's label such as "Claude" or "OpenAI" for APP-099), a display label only. */
   via?: string | null;
+  /** APP-116: the agent tool call that committed this version, and its duration. */
+  via_tool?: string | null;
+  via_ms?: number | null;
   /** APP-107: the transitions that may fire now (declared guards judged by the server). */
   next?: { to: string; rule: string | null }[];
   /** APP-107: a purchase request's PO reference; display only. */
@@ -150,7 +153,7 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
       if (!previous.has(`${record.record_id}@${record.version}`) && previous.size) {
         tr.classList.add('is-new');
         // APP-116: a change made through an agent (MCP) or Slack: who and when (the event carries no tool or duration).
-        if (record.via) showActivity(card, record.via, status ? `${valueOf(record, shown[0]?.id ?? '')?.display ?? 'record'} ${status}` : 'record changed');
+        if (record.via) showActivity(card, record.via, status ? `${valueOf(record, shown[0]?.id ?? '')?.display ?? 'record'} ${status}` : 'record changed', record.via_tool, record.via_ms);
       }
       shown.forEach((field, index) => {
         const value = valueOf(record, field.id);
@@ -165,7 +168,10 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
         tr.append(el(document_, 'td', { class: 'cv-status' }, el(document_, 'span', { class: 'cv-status-chip', 'data-status': status }, status)));
       }
       const by = el(document_, 'td', { class: 'cv-records-by', title: record.creator.principal_id }, record.creator.label);
-      if (record.via) by.append(el(document_, 'span', { class: 'cv-via-chip', title: `Version ${record.version} was committed from ${record.via}` }, `via ${record.via}`));
+      if (record.via) {
+        const call = agentCall(record.via_tool, record.via_ms);
+        by.append(el(document_, 'span', { class: 'cv-via-chip', title: `Version ${record.version} was committed from ${record.via}${call ? ` by ${call}` : ''}` }, `via ${record.via}`));
+      }
       tr.append(by);
       if (pending.length) {
         const cell = el(document_, 'td', { class: 'cv-records-actions' });

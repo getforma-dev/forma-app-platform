@@ -396,6 +396,14 @@ async fn campaign() {
                 crate::actions::Parser::new(None, "none"),
             ))),
         ),
+        // APP-108 acceptance 9: an agent builds from the folder through MCP.
+        (
+            crate::mcp::PATH,
+            crate::mcp::router(Arc::new(crate::mcp::Mcp::new(
+                work.clone(),
+                composer.clone(),
+            ))),
+        ),
     ];
     let routes = crate::http::uniform_with_many(
         axum::Router::new()
@@ -418,6 +426,7 @@ async fn campaign() {
                 },
             )))
             .merge(crate::composer::commands::router(auth.clone()))
+            .merge(crate::mcp::tokens::router(auth.clone()))
             .merge(card_routes)
             .merge(boxes::routes::router(state.clone()))
             .merge(crate::query::canvas::router(Arc::new(
@@ -910,6 +919,116 @@ async fn campaign() {
         }
     }
     check(&mut checks, &format!("derived app: \"build a metrics app from folder 1\" through POST /v1/act resolves the folder by number and the model receives only the capped context ({} bytes: file names and types, at most 3 data files with typed fields and at most 20 sample rows, the PDF by name only); the typed definition is admitted, published on Maya's authoring app and placed, labeled generated with \"Built from folder: Q3 board pack\"; its receipts name the folder's revisions", user["box"].to_string().len()));
+
+    // --- APP-108 acceptance 9: the same build from the folder through MCP ---
+    // The canvas sentence above went through `boxes::intent::act` with no
+    // selected folder, the exact call Slack's `/forma` makes
+    // (`slack::flows`; its reply formatting is `slack::tests`). An agent
+    // reaches the same `build_from_box` through `forma_folder_formation`.
+    let minted = stand
+        .call(
+            "POST",
+            "/v1/agent-tokens",
+            Some(&maya_cookie),
+            Some(&json!({"label": "Claude"}).to_string()),
+            &[],
+        )
+        .await;
+    assert_eq!(minted.status, StatusCode::CREATED, "{}", minted.text());
+    let bearer = format!("Bearer {}", minted.json()["token"].as_str().unwrap());
+    let generations_before = stub.calls("generation").len();
+    stub.script("generation", generated_reply());
+    let formation = stand
+        .call(
+            "POST",
+            crate::mcp::PATH,
+            None,
+            Some(
+                &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                    "name": crate::mcp::tools::FOLDER_FORMATION,
+                    "arguments": {"folder": "1", "instruction": "build a metrics app"}}})
+                .to_string(),
+            ),
+            &[("authorization", &bearer)],
+        )
+        .await;
+    assert_eq!(formation.status, StatusCode::OK, "{}", formation.text());
+    let result = &formation.json()["result"];
+    assert_eq!(result["isError"], false, "{result}");
+    let built_by_agent = &result["structuredContent"];
+    assert_eq!(built_by_agent["origin"], "generated");
+    assert_eq!(built_by_agent["box_id"], json!(box_id));
+    assert!(built_by_agent["label"]
+        .as_str()
+        .unwrap()
+        .starts_with("Built from folder: Q3 board pack"));
+    assert_eq!(built_by_agent["app_id"], AUTHORING_APP);
+    let agent_work = built_by_agent["work_id"].as_str().unwrap().to_owned();
+    assert_ne!(
+        agent_work, derived,
+        "a new derived work, not the canvas one"
+    );
+    assert_eq!(stub.calls("generation").len(), generations_before + 1);
+    let agent_lineage = stand
+        .get(
+            &format!("/v1/boxes/lineage/{AUTHORING_APP}/{agent_work}"),
+            Some(&maya_cookie),
+        )
+        .await
+        .json();
+    assert!(agent_lineage["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f["file_id"] == files["q3_metrics.csv"]));
+    // The teammate's token cannot reach Maya's folder by its name or its
+    // number (a folder is resolved among the caller's own): not found, and
+    // no model call.
+    let mate_minted = stand
+        .call(
+            "POST",
+            "/v1/agent-tokens",
+            Some(&mate_cookie),
+            Some(&json!({"label": "Claude"}).to_string()),
+            &[],
+        )
+        .await;
+    assert_eq!(
+        mate_minted.status,
+        StatusCode::CREATED,
+        "{}",
+        mate_minted.text()
+    );
+    let mate_bearer = format!("Bearer {}", mate_minted.json()["token"].as_str().unwrap());
+    for (id, folder) in [(2, "Q3 board pack"), (3, "1")] {
+        let foreign = stand
+            .call(
+                "POST",
+                crate::mcp::PATH,
+                None,
+                Some(
+                    &json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": {
+                        "name": crate::mcp::tools::FOLDER_FORMATION,
+                        "arguments": {"folder": folder, "instruction": "build a metrics app"}}})
+                    .to_string(),
+                ),
+                &[("authorization", &mate_bearer)],
+            )
+            .await;
+        assert_eq!(foreign.status, StatusCode::OK, "{}", foreign.text());
+        let result = &foreign.json()["result"];
+        assert_eq!(result["isError"], true, "{folder}: {result}");
+        assert_eq!(
+            result["structuredContent"]["error"], "not_found",
+            "{folder}: {result}"
+        );
+    }
+    assert_eq!(
+        stub.calls("generation").len(),
+        generations_before + 1,
+        "no model call for the teammate"
+    );
+    check(&mut checks, "APP-108 surfaces: the canvas sentence goes through boxes::intent::act with no selected folder, the call Slack's /forma makes; an agent token minted from Maya's session builds the same kind of app through MCP forma_folder_formation (folder 1): one model call, generated, \"Built from folder: Q3 board pack\", a new work whose lineage names the folder's CSV; the teammate's token naming Maya's folder by its name (Q3 board pack) or its number (1) is not_found with no model call");
 
     // --- The explanation card: placeholders filled from receipts ---
     stub.script("explain", json!({"findings": [

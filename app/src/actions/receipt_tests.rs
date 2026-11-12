@@ -103,9 +103,10 @@ fn the_multipart_body_is_strict_and_refuses_in_order() {
     assert_eq!(utterance, "Lunch with the design team, Sarah approves");
     assert_eq!(parsed.media_type, "image/png");
     assert_eq!(parsed.bytes, image);
-    assert!(
-        !format!("{parsed:?}").contains("PNG"),
-        "Debug shows no bytes"
+    assert_eq!(
+        format!("{parsed:?}"),
+        format!("Receipt(image/png, {} bytes)", image.len()),
+        "Debug shows the media type and length, never the bytes"
     );
     // The image alone is a receipt request; the words are optional.
     assert_eq!(

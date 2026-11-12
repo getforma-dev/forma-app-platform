@@ -1005,7 +1005,7 @@ pub(crate) fn approval_request(record: &RecordRow, state: &Slack) -> (String, Ve
 
 /// APP-108: a folder answer as an ephemeral Slack message (text only; every
 /// value is escaped; numbers come from receipts or page citations).
-fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer) -> Value {
+pub(super) fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer) -> Value {
     use crate::boxes::intent::Answer;
     let noun = crate::boxes::NOUN_LOWER;
     let value = match answer {

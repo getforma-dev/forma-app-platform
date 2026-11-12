@@ -2083,6 +2083,15 @@ async fn principals(run: &Run, subject: &str) -> i64 {
     ))
     .await
 }
+/// Every principal and entitlement row in the run's database. A refused public
+/// validate starts no sign-in, so it has no subject to look up by: compare the
+/// whole tables before and after it (APP-082 review N2).
+async fn minted_rows(run: &Run) -> (i64, i64) {
+    (
+        run.scalar("SELECT count(*) FROM genui.principals").await,
+        run.scalar("SELECT count(*) FROM genui.entitlements").await,
+    )
+}
 async fn active_entitlements(run: &Run, subject: &str) -> i64 {
     run.scalar(&format!("SELECT count(*) FROM genui.entitlements e JOIN genui.principals p ON p.organization_id=e.organization_id AND p.principal_id=e.principal_id WHERE p.provider_subject='{subject}' AND e.status='active' AND e.expires_at>clock_timestamp()")).await
 }
@@ -2738,6 +2747,7 @@ async fn race_campaign() {
     );
     assert_eq!(posts(&mut c.northstar), baseline_creates + 1);
     let par_before_lost = c.issuer.count(|counter| &counter.par);
+    let minted_before_lost = minted_rows(&c).await;
     c.auth.limits.clear();
     let mut lost_browser = c.browser(&next_peer());
     let lost_reply = c
@@ -2750,7 +2760,7 @@ async fn race_campaign() {
         lost_reply.body
     );
     assert_eq!(c.issuer.count(|counter| &counter.par), par_before_lost);
-    assert_eq!(principals(&c, "usr_lost_create").await, 0);
+    assert_eq!(minted_rows(&c).await, minted_before_lost);
     notes.record("create dropped before a response is unknown, not sent again; reconcile inside the grace leaves it unknown and, after the row is aged, records failed by inspection with no second POST; public validate is the neutral refusal and mints nothing");
 
     fault(
@@ -2807,6 +2817,8 @@ async fn race_campaign() {
             .as_str(),
         Some("revoked")
     );
+    let par_before_slow = c.issuer.count(|counter| &counter.par);
+    let minted_before_slow = minted_rows(&c).await;
     c.auth.limits.clear();
     let mut slow_browser = c.browser(&next_peer());
     let slow_reply = c
@@ -2818,7 +2830,8 @@ async fn race_campaign() {
         slow_reply.status,
         slow_reply.body
     );
-    assert_eq!(principals(&c, "usr_slow_create").await, 0);
+    assert_eq!(c.issuer.count(|counter| &counter.par), par_before_slow);
+    assert_eq!(minted_rows(&c).await, minted_before_slow);
     notes.record("create timeout: one POST, an unknown outcome inside the client deadline, no capability; reconcile does not judge it inside the grace and afterwards confirms the invitation by inspection and revokes it (the token was lost) without a second create; public validate mints nothing");
 
     // --- 8. Revoke timeout, retry, and signup after local revocation.
@@ -3028,6 +3041,7 @@ async fn race_campaign() {
     assert_eq!(code_status(&c, &drifted.id).await, "active");
     assert_eq!(posts(&mut c.northstar), creates_before_drift);
     let par_before_drift = c.issuer.count(|counter| &counter.par);
+    let minted_before_drift = minted_rows(&c).await;
     c.auth.limits.clear();
     let mut drifted_browser = c.browser(&next_peer());
     let drifted_reply = c.validate(&mut drifted_browser, &drifted.raw).await;
@@ -3038,7 +3052,7 @@ async fn race_campaign() {
         drifted_reply.body
     );
     assert_eq!(c.issuer.count(|counter| &counter.par), par_before_drift);
-    assert_eq!(principals(&c, "usr_remote_revoked").await, 0);
+    assert_eq!(minted_rows(&c).await, minted_before_drift);
     notes.record("remote revocation propagation: reconcile records the provider's revoked invitation, removes the capability and does not create another; the code stays active and public validate mints nothing");
 
     // --- 11. Restart and reopen.
