@@ -34,3 +34,26 @@ The convention follows restricted named access and explicit roles in [Google Dri
 Legacy same-organization workflow integrations retain their existing API while the new app Share UI uses this grant model. They are not evidence of external guest access. Live hosted signup, provider delivery and deployment must be qualified separately from local synthetic authentication.
 
 New-recipient signup obtains a single-purpose invitation through the isolated operator broker described in the [sharing runbook](../operations/LIVE-SHARING.md). The normal application receives only its broker credential. Without that configured service, existing-account sign-in remains available and signup is hidden. The broker is a single writer with durable request state; unknown provider outcomes require reconciliation, never blind invitation recreation.
+
+## Addendum, 2026-11-12: a suspended organization pauses connected links
+
+Decided by Claude (Opus 5.5) under Victor's delegation of 2026-11-12 ("Make your best judgement and answer for yourself based on the product and continue with tickets"), for [APP-178](../../Tickets/0-backlog/APP-178.md). It refines the "Offline/reconnect/account change" row above: a refusal that is not a revocation must not silently delete placement.
+
+**The question.** When the sponsor organization is suspended (`genui.organizations.status='suspended'`), what happens to a guest's connected link? Before this decision, the link was removed if the guest happened to list their canvas or open a shared page during the suspension, and restoring the organization did not bring it back. What the guest saw after a restore depended on whether they had looked. Meanwhile, management showed the grant as "paused".
+
+**The decision.** A suspension pauses connected links. It does not remove them.
+- **While suspended:** the link is hidden, and every read, query, release and resolution refuses. That fail-closed behaviour is unchanged.
+- **Kept:** the reference keeps its row, with no unlink and no `app.unlinked` event.
+- **On restore:** it shows again with no new Add, provided the grant is otherwise unchanged.
+
+**What still removes a link.** A refusal for any other reason: revocation, a changed grant version or placement permission, expiry, the sponsor losing access, or a changed app definition. Each of those removes it, audited, as before.
+
+**Why.**
+- A suspension is an administrative pause, and management already labels it "paused".
+- Each connected reference keeps its own share identity (the "Multiple grants" row).
+- Box 1 of APP-178 says restoring the organization restores access.
+- The guest's outcome no longer depends on timing.
+
+**Cost.** A paused link still counts toward the guest's placement cap while it is hidden.
+
+**Implementation.** `linked_apps` asks `link_paused` before unlinking. The question is whether the grant would be live in every respect if the organization were active: the same `live_clause`, with the organization's state as a parameter. Tested in the live-sharing campaign's `fail_closed` step.

@@ -49,15 +49,15 @@
       "passed": true
     },
     {
-      "name": "APP-178: organization shutdown (status suspended) denies the guest's final release, a result computed before it, work reads, a new query, access resolution and connected links; restoring the organization restores access; the shutdown removed the connected link (audited), and an explicit Add links it again",
+      "name": "APP-178: organization shutdown (status suspended) denies the guest's final release, a result computed before it, work reads, a new query and access resolution; connected links are paused: hidden while suspended, kept (no unlink, no app.unlinked event) and shown again when the organization is restored, with full access",
       "passed": true
     },
     {
-      "name": "APP-178: two independent grants of one work to one account: revoking the first denies it and removes its link, while the second still resolves to the same access, reads and releases",
+      "name": "APP-178: two independent grants of one work to one account, both placed: revoking the first denies it and removes only its link (one audited app.unlinked), while the second keeps its link and still resolves to the same access, reads and releases",
       "passed": true
     },
     {
-      "name": "APP-178: an invitation past its expiry cannot be accepted or resolved, and the refusal equals the one for a key that never existed",
+      "name": "APP-178: an invitation past its expiry cannot be accepted, and the refusal equals the one for a key that never existed, both when signed in (accept) and on the sign-in path (shared_auth_target); an accepted grant past its expiry no longer resolves or releases, and its link is removed (audited), unlike a suspension",
       "passed": true
     },
     {

@@ -881,20 +881,29 @@ async fn fail_closed(
     checks: &mut Vec<serde_json::Value>,
 ) {
     let (_, recipient) = account(stores, "fail-closed-recipient", "failclosed@example.test").await;
-    let share = |key: &str, add: bool| NewLiveShare {
+    let share = |key: &str| NewLiveShare {
         recipient_email: "failclosed@example.test".into(),
-        allow_add_to_canvas: add,
+        allow_add_to_canvas: true,
         expires_in_days: 7,
         idempotency_key: key.into(),
     };
-    // Two independent grants of the same work to the same account.
+    // Rows the store keeps for this account: links not removed, and audited unlinks.
+    let account_id = recipient.account_id().to_owned();
+    let count = |sql: String| -> i64 { fixture.sql(&sql, "genui").trim().parse().unwrap() };
+    let kept_links = || {
+        count(format!("SELECT count(*) FROM genui_identity.linked_apps WHERE account_id='{account_id}' AND removed_at IS NULL"))
+    };
+    let unlinks = || {
+        count(format!("SELECT count(*) FROM genui_identity.share_events WHERE account_id='{account_id}' AND kind='app.unlinked'"))
+    };
+    // Two independent grants of the same work to the same account, both placed.
     let first = stores
         .workspace
         .create_live_share(
             owner,
             APP,
             WORK,
-            &share("00000000-0000-4000-8000-00000000c301", true),
+            &share("00000000-0000-4000-8000-00000000c301"),
         )
         .await
         .unwrap();
@@ -904,7 +913,7 @@ async fn fail_closed(
             owner,
             APP,
             WORK,
-            &share("00000000-0000-4000-8000-00000000c302", false),
+            &share("00000000-0000-4000-8000-00000000c302"),
         )
         .await
         .unwrap();
@@ -919,33 +928,33 @@ async fn fail_closed(
         .accept_live_share(&recipient, &second.key)
         .await
         .unwrap();
-    stores
-        .workspace
-        .link_shared_app(&recipient, &first.key)
-        .await
-        .unwrap();
-    assert_eq!(
+    for key in [&first.key, &second.key] {
         stores
             .workspace
-            .linked_apps(&recipient)
+            .link_shared_app(&recipient, key)
             .await
-            .unwrap()
-            .len(),
-        1
+            .unwrap();
+    }
+    let linked_keys = |links: Vec<LinkedApp>| -> Vec<String> {
+        let mut keys: Vec<String> = links.into_iter().map(|l| l.key).collect();
+        keys.sort();
+        keys
+    };
+    let mut both = vec![first.key.clone(), second.key.clone()];
+    both.sort();
+    assert_eq!(
+        linked_keys(stores.workspace.linked_apps(&recipient).await.unwrap()),
+        both
     );
-    stores
-        .data
-        .release_guest_access(&first_access)
-        .await
-        .unwrap();
-    stores
-        .data
-        .release_guest_access(&second_access)
-        .await
-        .unwrap();
+    let unlinks_before = unlinks();
+    for access in [&first_access, &second_access] {
+        stores.data.release_guest_access(access).await.unwrap();
+    }
 
-    // Organization shutdown: query release, reads and connected links all refuse,
-    // including a result computed before the shutdown; restoring restores access.
+    // Organization shutdown: query release, reads and access all refuse,
+    // including a result computed before the shutdown. Connected links are
+    // paused, not removed (ADR-014 addendum, 2026-11-12): hidden while the
+    // organization is suspended, kept, and back when it is restored.
     let run = stores
         .data
         .guest_run_query(&second_access, "total", &json!({}))
@@ -984,53 +993,33 @@ async fn fail_closed(
             .await,
         Err(Error::Denied)
     ));
-    let links = stores.workspace.linked_apps(&recipient).await;
-    assert!(
-        matches!(&links, Err(Error::Denied)) || links.as_ref().is_ok_and(|l| l.is_empty()),
-        "no connected link is shown while the sponsor organization is shut down: {links:?}"
-    );
+    // Listing twice: hidden each time, and still kept afterwards.
+    for _ in 0..2 {
+        assert!(
+            stores
+                .workspace
+                .linked_apps(&recipient)
+                .await
+                .unwrap()
+                .is_empty(),
+            "no connected link is shown while the sponsor organization is suspended"
+        );
+    }
+    assert_eq!(kept_links(), 2, "a suspension keeps both connected links");
+    assert_eq!(unlinks(), unlinks_before, "a suspension unlinks nothing");
     fixture.sql(
         &format!("UPDATE genui.organizations SET status='active' WHERE organization_id='{ORG}'"),
         "genui",
     );
-    stores
-        .data
-        .release_guest_access(&first_access)
-        .await
-        .unwrap();
-    stores
-        .data
-        .release_guest_access(&second_access)
-        .await
-        .unwrap();
-    // The shutdown removed the link (linked_apps unlinks, audited, any link whose
-    // grant no longer resolves); it stays removed until an explicit Add, as when
-    // placement is disabled and re-enabled.
-    assert!(
-        stores
-            .workspace
-            .linked_apps(&recipient)
-            .await
-            .unwrap()
-            .is_empty(),
-        "the shutdown removed the link and restoring does not bring it back"
-    );
-    stores
-        .workspace
-        .link_shared_app(&recipient, &first.key)
-        .await
-        .unwrap();
+    for access in [&first_access, &second_access] {
+        stores.data.release_guest_access(access).await.unwrap();
+    }
     assert_eq!(
-        stores
-            .workspace
-            .linked_apps(&recipient)
-            .await
-            .unwrap()
-            .len(),
-        1,
-        "an explicit Add after the restore links again"
+        linked_keys(stores.workspace.linked_apps(&recipient).await.unwrap()),
+        both,
+        "restoring the organization brings both links back with no new Add"
     );
-    check(checks, "APP-178: organization shutdown (status suspended) denies the guest's final release, a result computed before it, work reads, a new query, access resolution and connected links; restoring the organization restores access; the shutdown removed the connected link (audited), and an explicit Add links it again");
+    check(checks, "APP-178: organization shutdown (status suspended) denies the guest's final release, a result computed before it, work reads, a new query and access resolution; connected links are paused: hidden while suspended, kept (no unlink, no app.unlinked event) and shown again when the organization is restored, with full access");
 
     // Overlapping independent grants: revoking one leaves the other exactly intact.
     let revoked = stores
@@ -1044,14 +1033,15 @@ async fn fail_closed(
         stores.data.release_guest_access(&first_access).await,
         Err(Error::Denied)
     ));
-    assert!(
-        stores
-            .workspace
-            .linked_apps(&recipient)
-            .await
-            .unwrap()
-            .is_empty(),
-        "the revoked grant's link is gone"
+    assert_eq!(
+        linked_keys(stores.workspace.linked_apps(&recipient).await.unwrap()),
+        vec![second.key.clone()],
+        "the revoked grant's link is removed and the other grant's link stays"
+    );
+    assert_eq!(
+        unlinks(),
+        unlinks_before + 1,
+        "the revocation's unlink is audited once"
     );
     stores
         .data
@@ -1065,10 +1055,12 @@ async fn fail_closed(
         .await
         .unwrap();
     assert_eq!(again, second_access, "the other grant is unchanged");
-    check(checks, "APP-178: two independent grants of one work to one account: revoking the first denies it and removes its link, while the second still resolves to the same access, reads and releases");
+    check(checks, "APP-178: two independent grants of one work to one account, both placed: revoking the first denies it and removes only its link (one audited app.unlinked), while the second keeps its link and still resolves to the same access, reads and releases");
 
-    // Share expiry: an expired invitation cannot be accepted, with the same
-    // refusal as a key that never existed.
+    // Share expiry. An expired invitation cannot be accepted, and neither the
+    // signed-in path nor the sign-in path reveals more than for a key that
+    // never existed. An accepted grant that expires stops resolving and
+    // releasing, and its link is removed: expiry is not a pause.
     let (_, invitee) = account(stores, "expired-invitee", "expired@example.test").await;
     let expiring = stores
         .workspace
@@ -1093,7 +1085,18 @@ async fn fail_closed(
             .unwrap(),
         "pending before expiry"
     );
-    fixture.sql(&format!("UPDATE genui.live_work_shares SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE organization_id='{ORG}' AND share_id='{}'", expiring.share_id), "genui");
+    assert!(
+        stores
+            .workspace
+            .shared_auth_target(&expiring.key)
+            .await
+            .is_ok(),
+        "the sign-in path finds a live invitation"
+    );
+    let expire = |share_id: &str| {
+        fixture.sql(&format!("UPDATE genui.live_work_shares SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second' WHERE organization_id='{ORG}' AND share_id='{share_id}'"), "genui");
+    };
+    expire(&expiring.share_id);
     let expired = stores
         .workspace
         .accept_live_share(&invitee, &expiring.key)
@@ -1110,14 +1113,44 @@ async fn fail_closed(
         format!("{never:?}"),
         "the refusal is the same as for a key that never existed"
     );
+    assert!(
+        matches!(
+            stores.workspace.shared_auth_target(&expiring.key).await,
+            Err(Error::Denied)
+        ) && matches!(
+            stores.workspace.shared_auth_target(&unknown).await,
+            Err(Error::Denied)
+        ),
+        "the sign-in path refuses an expired invitation exactly as a key that never existed"
+    );
+    expire(&second.share_id);
     assert!(matches!(
         stores
             .workspace
-            .resolve_guest_access(&invitee, &expiring.key)
+            .resolve_guest_access(&recipient, &second.key)
             .await,
         Err(Error::Denied)
     ));
-    check(checks, "APP-178: an invitation past its expiry cannot be accepted or resolved, and the refusal equals the one for a key that never existed");
+    assert!(matches!(
+        stores.data.release_guest_access(&second_access).await,
+        Err(Error::Denied)
+    ));
+    assert!(
+        stores
+            .workspace
+            .linked_apps(&recipient)
+            .await
+            .unwrap()
+            .is_empty(),
+        "the expired grant's link is not shown"
+    );
+    assert_eq!(kept_links(), 0, "expiry removes the link");
+    assert_eq!(
+        unlinks(),
+        unlinks_before + 2,
+        "the expiry's unlink is audited"
+    );
+    check(checks, "APP-178: an invitation past its expiry cannot be accepted, and the refusal equals the one for a key that never existed, both when signed in (accept) and on the sign-in path (shared_auth_target); an accepted grant past its expiry no longer resolves or releases, and its link is removed (audited), unlike a suspension");
 }
 
 async fn authority_regressions(
