@@ -936,6 +936,10 @@ pub struct WorkOutline {
     pub collections: Vec<(String, String)>,
     /// Whether the member holds `record_write` on the work now.
     pub can_write: bool,
+    /// APP-098 DS-84: the work reads at least one source of the synthetic
+    /// library catalog (sample data, not the member's own). Filled by
+    /// [`Data::work_outline`].
+    pub sample_data: bool,
 }
 
 /// The runnable views of re-admitted definition content.
@@ -1067,6 +1071,7 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         definition_digest: String::new(),
         collections: Vec::new(),
         can_write: false,
+        sample_data: false,
     })
 }
 
@@ -1117,10 +1122,14 @@ impl Data {
                     .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
                     .collect::<Result<Vec<_>>>()?
             };
+            let sample_data = !sample_works(permit.transaction(), org, &[(app, work)])
+                .await?
+                .is_empty();
             let mut outline = outline(&content)?;
             outline.definition_digest = admitted;
             outline.can_write = can_write;
             outline.collections = collections;
+            outline.sample_data = sample_data;
             if let Some(name) = super::work_labels::names(permit.transaction(), org, &[(app, work)])
                 .await?.get(&(app.to_owned(), work.to_owned())).and_then(|label| label.name.as_ref())
             {
@@ -1648,6 +1657,65 @@ impl Data {
 /// the definition digest the seed places. Metadata only: it grants nothing
 /// and names no result.
 const LIBRARY_CATALOG: &str = include_str!("../../../contracts/fixtures/library/catalog.json");
+
+/// APP-098 DS-84: the source ids of the library catalog when it declares its
+/// data synthetic (`"synthetic": true`); empty otherwise. A work bound to any
+/// of them shows sample data, not the member's own. Parsed once.
+pub fn library_sample_sources() -> Vec<String> {
+    static IDS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    IDS.get_or_init(|| {
+        let Ok(catalog) = serde_json::from_str::<Value>(LIBRARY_CATALOG) else {
+            return Vec::new();
+        };
+        if catalog.get("synthetic") != Some(&Value::Bool(true)) {
+            return Vec::new();
+        }
+        let mut ids: Vec<String> = catalog
+            .get("apps")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .flat_map(|app| {
+                app.get("sources")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter_map(|source| source.get("source_id").and_then(Value::as_str))
+            .map(str::to_owned)
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    })
+    .clone()
+}
+
+/// APP-098 DS-84: which of `keys` bind at least one of the synthetic
+/// catalog's sources, in one query. Both `work_outline` and `work_reads` use
+/// it, so their outlines agree.
+pub(super) async fn sample_works(
+    transaction: &Transaction<'_>,
+    org: &str,
+    keys: &[(&str, &str)],
+) -> Result<std::collections::HashSet<(String, String)>> {
+    let samples = library_sample_sources();
+    if samples.is_empty() || keys.is_empty() {
+        return Ok(Default::default());
+    }
+    let apps: Vec<&str> = keys.iter().map(|(app, _)| *app).collect();
+    let works: Vec<&str> = keys.iter().map(|(_, work)| *work).collect();
+    let rows = transaction.query("SELECT DISTINCT app_id::text,work_id::text FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id = ANY($2::text[]::uuid[]) AND work_id = ANY($3::text[]::uuid[]) AND source_id = ANY($4::text[]::uuid[])", &[&org,&apps,&works,&samples]).await?;
+    let wanted: std::collections::HashSet<(&str, &str)> = keys.iter().copied().collect();
+    let mut found = std::collections::HashSet::new();
+    for row in &rows {
+        let pair = (text(row, 0)?, text(row, 1)?);
+        if wanted.contains(&(pair.0.as_str(), pair.1.as_str())) {
+            found.insert(pair);
+        }
+    }
+    Ok(found)
+}
 
 /// The sidecar entries by definition digest.
 pub fn library_sidecar() -> Result<Vec<Value>> {

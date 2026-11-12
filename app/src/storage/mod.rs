@@ -83,9 +83,10 @@ pub use labels::{
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::QueryActor;
 pub use queries::{
-    command_slug, events_fields, field_type, library_sidecar, parse_parameters, query_digests,
-    LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun, RunSource, WorkOutline, WorkPart,
-    WorkView, COMMAND_MARKER, QUALIFIED_OPERATORS, QUERY_HANDLER_DEADLINE,
+    command_slug, events_fields, field_type, library_sample_sources, library_sidecar,
+    parse_parameters, query_digests, LibraryEntry, NamedWork, OpenableWork, Parameters, QueryRun,
+    RunSource, WorkOutline, WorkPart, WorkView, COMMAND_MARKER, QUALIFIED_OPERATORS,
+    QUERY_HANDLER_DEADLINE,
 };
 pub use record_components::{
     record_component_digest, RecordComponentsRun, RECORD_COMPONENT_BYTES, RECORD_COMPONENT_ROWS,

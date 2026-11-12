@@ -431,13 +431,27 @@ export function buildFormCard(document_: Document, form: FormJson): HTMLElement 
     ...(form.action.match(/^\/v1\/work\/([0-9a-f-]+)\/([0-9a-f-]+)\/commands\//) ? [el(document_, 'a', { href: form.action.replace(/^\/v1\/work\//, '/w/').replace(/\/commands\/.*$/, '') }, 'Choose a record on the app page')] : []));
 }
 
-/** An origin label's style: library, adapted, generated or seeded. */
+/** An origin label's style: library, adapted, generated, seeded or sample. */
 export function originKind(text_: string): string {
   const lower = text_.toLowerCase();
+  // APP-098 DS-84: the library's synthetic sample data, never the member's own.
+  if (lower.includes('sample data')) return 'sample';
   if (lower.includes('generat')) return 'generated';
   if (lower.includes('adapt')) return 'adapted';
   if (lower.includes('seed')) return 'seeded';
   return 'library';
+}
+
+/**
+ * A group's origin chips: the composer's honest assembly labels when it placed
+ * this app, the server's origin chips otherwise. APP-098 DS-84: the server's
+ * "Sample data" chip is about the data, not the assembly, so it is always kept.
+ */
+export function groupOrigins(labels: string[], origins: OriginJson[] | undefined): { kind: string; text: string }[] {
+  const served = (origins ?? []).filter((origin) => typeof origin?.text === 'string');
+  return labels.length
+    ? [...labels.map((text_) => ({ kind: originKind(text_), text: text_ })), ...served.filter((origin) => origin.kind === 'sample')]
+    : served;
 }
 
 /** The same group the server renders, idle, from its JSON. */
@@ -450,11 +464,7 @@ export function buildGroup(document_: Document, group: GroupJson, labels: string
     el(document_, 'div', { class: 'cv-window-actions' },
       el(document_, 'button', { type: 'submit' }, 'Refresh cards'),
       el(document_, 'a', { href: group.href, target: '_blank', rel: 'noopener' }, 'Open page ↗')));
-  // The composer's honest assembly labels when it placed this app; the
-  // server's origin chips otherwise.
-  const origins = labels.length
-    ? labels.map((text_) => ({ kind: originKind(text_), text: text_ }))
-    : (group.origins ?? []).filter((origin) => typeof origin?.text === 'string');
+  const origins = groupOrigins(labels, group.origins);
   const chips = el(document_, 'p', { class: 'cv-origins', 'aria-label': 'How this app was assembled', title: group.label },
     ...origins.map((origin) => el(document_, 'span', { class: 'cv-origin', 'data-origin': ['filter', 'box', 'data'].includes(origin.kind) ? origin.kind : originKind(origin.kind === 'seeded' ? 'seeded' : origin.text) }, origin.text)));
   const app = el(document_, 'article', { class: 'cv-card cv-app', 'data-card': group.app_card, 'data-kind': 'app', 'aria-label': group.title },

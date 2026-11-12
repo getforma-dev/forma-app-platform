@@ -387,6 +387,17 @@ async fn campaign() {
         [json!("total"), json!("timeline")]
     );
     assert_eq!(group["cards"][0]["integer_columns"], "total_bytes");
+    // APP-098 DS-84: a work bound to a fixture source outside the library
+    // catalog carries no Sample data chip.
+    assert!(
+        !group["origins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|origin| origin["kind"] == "sample"),
+        "{}",
+        group["origins"]
+    );
     let unshared = maya.get(&routes, &spend_path).await;
     assert_eq!(unshared.status, StatusCode::NOT_FOUND);
     // APP-169: saving a kind on a work she holds no grant on is the same

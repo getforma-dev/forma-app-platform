@@ -1073,6 +1073,7 @@ mod tests {
             definition_digest: String::new(),
             collections: vec![("collection".into(), "Claim".into())],
             can_write: true,
+            sample_data: false,
         };
         let form = work::FormValues {
             window_start: "2026-10-22T10:00".into(),

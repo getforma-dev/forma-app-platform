@@ -412,6 +412,16 @@ pub(crate) fn definition_provenance(description: &str, digest: &str) -> (String,
     )
 }
 
+/// APP-098 DS-84: the chip of a work that reads the library's synthetic
+/// sample sources, so sample numbers are never shown as the member's own.
+pub fn sample_origin(index: usize) -> OriginProps {
+    OriginProps {
+        id: format!("o{index}"),
+        kind: "sample".into(),
+        text: "Sample data".into(),
+    }
+}
+
 /// APP-108: the chips of a work built from a folder: "Generated" (or "Data
 /// from file") and "Built from folder: <name> · N files" (kind `box`, which
 /// the island makes a link to the folder).
@@ -1463,7 +1473,7 @@ async fn assemble(
             None
         }
     };
-    let (label, origins) = match &folder {
+    let (label, mut origins) = match &folder {
         Some(lineage) => (
             if lineage.kind == "data" {
                 format!(
@@ -1480,6 +1490,9 @@ async fn assemble(
         ),
         None => definition_provenance(&outline.description, &outline.definition_digest),
     };
+    if outline.sample_data {
+        origins.push(sample_origin(origins.len()));
+    }
     let (mut record_components, record_run) = if outline
         .parts
         .iter()

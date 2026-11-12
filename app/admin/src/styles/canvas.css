@@ -558,6 +558,7 @@
 .cv-origin[data-origin="library"] { background: var(--cv-accent-soft); color: var(--cv-accent); }
 .cv-origin[data-origin="generated"] { background: rgb(124 58 237 / 10%); color: #6d28d9; }
 .cv-origin[data-origin="adapted"] { background: rgb(181 71 8 / 10%); color: var(--cv-busy); }
+.cv-origin[data-origin="sample"] { background: transparent; border: 1px dashed currentColor; color: var(--cv-muted, #6b7280); }
 @media (prefers-color-scheme: dark) {
   .cv-origin[data-origin="generated"] { background: rgb(196 167 255 / 14%); color: #c4a7ff; }
 }
