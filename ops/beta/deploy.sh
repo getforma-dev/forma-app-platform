@@ -109,7 +109,7 @@ IMAGES="service:genui-synthetic qualification:genui-qualification operator:genui
 
 case $step in
   new)
-    priv_ready
+    priv_ready; unfenced
     [[ "$candidate" =~ ^[0-9a-f]{7,40}$ ]] || die "--candidate <commit sha> is required"
     [[ -n "$supersedes" ]] || die "--supersedes <live window id> is required (the head of the chain)"
     full=$(git -C "$REPO" rev-parse --verify "$candidate^{commit}") || die "unknown commit $candidate"
@@ -301,7 +301,11 @@ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
     load_env; window_dir "$WINDOW_ID"; need_window_dir
     [[ ! -f "$W/clean-trial.json" || "$step" == migrate ]] || die "clean trial refuses sandbox seed and library grants; provision an empty organization and issue its member invite"
     if [[ -f "$W/clean-trial.json" ]]; then
-      shown 'python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state stopped > "$W/services-stopped.json"'
+      # [read] both services stopped before the migration (sts, ecs describe-
+      # services). It runs only once approved, and only after the approval is
+      # recorded, so no AWS call precedes Victor's words (APP-127 acceptance 2).
+      if [[ -n "$APPROVED" ]] && (( ! DRY_RUN )); then record_approval "$step (services-stopped guard)"; fi
+      prepare 'python3 "$REPO/infra/scripts/shared_broker_activation.py" --outputs "$W/stack-after.json" --state stopped > "$W/services-stopped.json"'
     fi
     fwd=(--window "$WINDOW_ID"); [[ -n "$APPROVED" ]] && fwd+=(--approved "$APPROVED"); (( DRY_RUN )) && fwd+=(--dry-run)
     case $step in
@@ -324,13 +328,15 @@ aws rds wait db-snapshot-available --db-snapshot-identifier "$SNAP_NAME"'
     [[ ! -f "$W/clean-trial.json" ]] || die "clean trial refuses sandbox library upload"
     [[ -f "$W/stack-after.json" ]] || (( DRY_RUN )) || die "no $W/stack-after.json (just deploy execute)"
     ORG=${organization:-00000000-0000-4000-8000-000000000001}; export ORG
-    # [read] the live task definition's environment (bucket, tenants); [local] the files and the plan.
+    # [local] the files and the plan. The read of the live task definition's
+    # environment (bucket, tenants) is inside the gate, so the approval is
+    # recorded before any AWS call (APP-127 acceptance 2).
     prepare '
-TD=$(jq -r ".Stacks[0].Outputs[] | select(.OutputKey==\"TaskDefinition\") | .OutputValue" "$W/stack-after.json")
-aws ecs describe-task-definition --task-definition "$TD" --query "taskDefinition.containerDefinitions[0].environment" > "$W/task-env.json"
 "$PY" "$REPO/app/runtime/library_sources.py" build --organization "$ORG" --cache-root "$PRIV/library" > "$W/library-build.json"
 "$PY" "$REPO/app/runtime/library_sources.py" plan --organization "$ORG" > "$W/library-plan.json"'
     mutate library '
+TD=$(jq -r ".Stacks[0].Outputs[] | select(.OutputKey==\"TaskDefinition\") | .OutputValue" "$W/stack-after.json")
+aws ecs describe-task-definition --task-definition "$TD" --query "taskDefinition.containerDefinitions[0].environment" > "$W/task-env.json"
 "$OPVENV/bin/python" -I "$REPO/ops/beta/upload-library.py" --repo "$REPO" --priv "$PRIV" --window-dir "$W" --organization "$ORG" > "$W/library-upload.json"
 jq -c "[.objects[].state] | group_by(.) | map({(.[0]): length}) | add" "$W/library-upload.json"'
     ;;
@@ -427,7 +433,7 @@ operator $(release_get .images.operator.digest)"
       echo "no activated window with a release.json under $PRIV/windows; checking $origin only"
       exec "$REPO/ops/beta/verify.sh" "${vargs[@]}"
     fi
-    priv_ready; window_dir "$WINDOW_ID"; need_window_dir
+    priv_ready; unfenced; window_dir "$WINDOW_ID"; need_window_dir
     release_py check "$W/release.json" >/dev/null || die "$W/release.json does not match the schema (ops/beta/release.py)"
     jq -r '"release: \(.candidate_sha[0:7]) \(.git_tag.name // "(no tag yet)") window \(.window_id[0:8]) TD:\(.stack.task_definition_revision // "?") schema \(.database_version)",
            (.images | to_entries[] | "  \(.key) \(.value.digest // "(not pushed)")")' "$W/release.json"

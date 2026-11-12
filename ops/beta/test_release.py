@@ -111,6 +111,38 @@ class ReleaseRecordTests(unittest.TestCase):
         self.assertTrue(any("images.service.digest" in p for p in found))
         self.assertTrue(release.problems(release.init(WINDOW, LIVE, SHA, "b", 15), activated=True))
 
+    def test_each_activated_requirement_is_refused_on_its_own(self):
+        # APP-133 acceptance 1: `--activated` needs the digests, the task
+        # definition revision, the activation time and an `activate` approval.
+        # Each is removed from an otherwise activated record.
+        self.assertEqual(release.problems(activated(), activated=True), [])
+
+        def no_digest(r):
+            r["images"]["operator"]["digest"] = None
+
+        def no_revision(r):
+            r["stack"]["task_definition_revision"] = None
+
+        def no_time(r):
+            r["activated_at_utc"] = None
+
+        def no_approval(r):
+            r["approvals"] = [a for a in r["approvals"] if a["step"] != "activate"]
+            r["approvals"].append({"step": "push", "at_utc": "2026-11-01T09:00:00Z", "approvals_md_line": 3})
+
+        for name, change, expected in (
+                ("digest", no_digest, "images.operator.digest is not recorded (just deploy push)"),
+                ("revision", no_revision, "stack.task_definition_revision is not recorded"),
+                ("time", no_time, "activated_at_utc is not recorded"),
+                ("approval", no_approval, "no approval recorded for activate")):
+            with self.subTest(missing=name):
+                record = activated()
+                change(record)
+                self.assertEqual(release.problems(record, activated=True), [expected])
+                self.assertEqual(release.problems(record), [], "an unactivated check does not need it")
+                with self.assertRaises(ValueError):
+                    release.check(record, activated=True)
+
     def test_row_and_tag_are_non_secret_and_stable(self):
         record = activated()
         self.assertEqual(release.git_tag(record), "beta/20261101-0123456")
@@ -150,6 +182,9 @@ class ReleaseRecordTests(unittest.TestCase):
 
 AWS = r'''#!/bin/bash
 echo "aws $*" >> "$SHIM_LOG"
+# For the ordering test: how many approval lines existed when AWS was called.
+n=0; [[ -f "$GENUI_OPS_PRIV/approvals.md" ]] && n=$(grep -c . "$GENUI_OPS_PRIV/approvals.md")
+echo "$n aws $1 $2" >> "$SHIM_LOG.order"
 case "$1 $2" in
   "ecr get-login-password") echo dummy ;;
   "ecr describe-images")
@@ -334,6 +369,145 @@ class DeployFlowTests(unittest.TestCase):
         self.assertEqual({k: verified[k] for k in ("live", "canvas", "entry", "mcp", "slack")},
                          {"live": True, "canvas": True, "entry": True, "mcp": True, "slack": True})
         self.assertNotIn("git push", self.shim_log())
+
+    def test_every_mutating_step_refuses_without_approval_and_calls_no_aws(self):
+        # APP-127 acceptance 1: each [MUTATION] step of `just deploy` refuses
+        # without --approved (exit 3, the command printed), calls no AWS API and
+        # records no approval.
+        self.new_window()
+        w = self.priv / "windows" / self.window
+        # The local inputs each step checks before its gate (their contents are
+        # never sent: a refused step runs none of the code it prints).
+        for name in ("change-set-review.json", "deployment-input.json", "receipt.json", "template.json"):
+            (w / name).write_text("{}")
+        (w / "stack-after.json").write_text(json.dumps({"Stacks": [{"Outputs": [
+            {"OutputKey": "TaskDefinition", "OutputValue": "arn:aws:ecs:r:0:task-definition/t:1"},
+            {"OutputKey": "SharedBrokerServiceName", "OutputValue": "broker"}]}]}))
+        # Each step with the command its gate must print.
+        run_task = "aws ecs run-task --cli-input-json"
+        org = "--set=--organization=00000000-0000-4000-8000-000000000001"
+        steps = [(("push",), "docker push -q"),
+                 (("change-set",), "aws cloudformation create-change-set"),
+                 (("execute",), "aws cloudformation execute-change-set"),
+                 (("snapshot", "--name", "genui-pitch-pre-migration-schema15-20261112"), "aws rds create-db-snapshot"),
+                 (("migrate",), run_task),
+                 (("seed", "--", org), run_task),
+                 (("library",), "upload-library.py"),
+                 (("grants", "--", org, "--set=--principal=00000000-0000-4000-8000-000000000002"), run_task),
+                 (("activate",), "infra/scripts/preflight.py"),
+                 (("rollback-deny",), "aws ecs update-service")]
+        for step, command in steps:
+            with self.subTest(step=step[0]):
+                before = self.shim_log()
+                out = self.deploy(step[0], self.window, *step[1:], expect=3)
+                self.assertIn("[MUTATION]", out)
+                self.assertIn("refused", out)
+                gated = out[out.index("[MUTATION]"):out.index("refused")]
+                self.assertIn(command, gated, f"{step[0]}: the refusal prints the command it would run")
+                added = self.shim_log()[len(before):]
+                self.assertNotIn("aws ", added, f"{step[0]}: a refused step calls no AWS API")
+                self.assertFalse((self.priv / "approvals.md").exists(), f"{step[0]}: no approval is recorded")
+        # APP-127 acceptance 2: --dry-run with --approved shows the order (the
+        # approval is appended first, then the code runs) and does neither.
+        before = self.shim_log()
+        out = self.deploy("push", self.window, "--approved", "yes, push", "--dry-run")
+        self.assertIn("would append the approval to", out)
+        self.assertIn("then run the above", out)
+        self.assertNotIn("aws ", self.shim_log()[len(before):])
+        self.assertFalse((self.priv / "approvals.md").exists(), "a dry run records no approval")
+
+    def test_an_approved_step_records_the_words_before_any_aws_call(self):
+        # APP-127 acceptance 2: with --approved, the approval line is appended
+        # before the step's first AWS call, read calls included. The aws shim
+        # logs how many approval lines existed at each call.
+        self.new_window()
+        w = self.priv / "windows" / self.window
+        (w / "change-set-review.json").write_text("{}")
+        (w / "stack-after.json").write_text(json.dumps({"Stacks": [{"Outputs": [
+            {"OutputKey": "TaskDefinition", "OutputValue": "arn:aws:ecs:r:0:task-definition/t:1"},
+            {"OutputKey": "RollbackTaskDefinition", "OutputValue": "arn:aws:ecs:r:0:task-definition/d:1"}]}]}))
+        # library's local tools: stand-ins that answer the shapes it reads.
+        for venv in ("app/runtime/.venv", "app/operator/.venv"):
+            python = self.repo / venv / "bin/python"
+            python.parent.mkdir(parents=True)
+            python.write_text('#!/bin/bash\necho \'{"objects":[]}\'\n')
+            python.chmod(0o755)
+        order = Path(self.env["SHIM_LOG"] + ".order")
+        for step in ("library", "execute", "rollback-deny"):
+            with self.subTest(step=step):
+                approvals = self.priv / "approvals.md"
+                lines_before = len([l for l in approvals.read_text().splitlines() if l]) if approvals.exists() else 0
+                calls_before = len(order.read_text().splitlines()) if order.exists() else 0
+                self.deploy(step, self.window, "--approved", f"yes, {step}")
+                calls = order.read_text().splitlines()[calls_before:]
+                self.assertTrue(calls, f"{step}: the approved step reaches the aws shim")
+                for call in calls:
+                    self.assertGreater(int(call.split()[0]), lines_before, f"{step}: '{call}' ran before its approval")
+                self.assertIn(f"yes, {step}", approvals.read_text())
+
+    def test_the_promotion_marker_fences_window_steps(self):
+        # After APP-167's cutover, `new`, every window step and a window's
+        # `verify` refuse; none creates a window or calls AWS.
+        self.new_window()
+        (self.priv / "promotion-managed.json").write_text("{}")
+        windows = sorted(p.name for p in (self.priv / "windows").iterdir())
+        before = self.shim_log()
+        for args in (("new", "--candidate", self.sha, "--supersedes", LIVE, "--input-from", str(self.tmp / "input.json")),
+                     ("observe", self.window), ("push", self.window, "--approved", "yes"),
+                     ("verify", self.window)):
+            with self.subTest(step=args[0]):
+                out = self.deploy(*args, expect=1)
+                self.assertIn("legacy operations are fenced", out)
+        self.assertEqual(sorted(p.name for p in (self.priv / "windows").iterdir()), windows)
+        self.assertEqual(self.shim_log(), before)
+        self.assertFalse((self.priv / "approvals.md").exists())
+
+    def test_a_clean_trial_migrate_reads_aws_only_after_its_approval(self):
+        # APP-127 acceptance 1 and 2 for a clean-trial window: the services-
+        # stopped guard (sts, ecs describe-services) is a read before the
+        # migration. Refused, it calls nothing; approved, it runs only after
+        # the approval line is written.
+        self.new_window()
+        w = self.priv / "windows" / self.window
+        (w / "clean-trial.json").write_text("{}")
+        (w / "stack-after.json").write_text("{}")
+        guard = self.repo / "infra/scripts/shared_broker_activation.py"
+        guard.write_text("import subprocess\nsubprocess.run(['aws', 'sts', 'get-caller-identity'], check=True)\nprint('{}')\n")
+        out = self.deploy("migrate", self.window, expect=3)
+        self.assertIn("(runs once approved)", out)
+        self.assertNotIn("aws ", self.shim_log())
+        self.assertFalse((self.priv / "approvals.md").exists())
+        # Approved: run-step.sh's own steps may then stop on the synthetic
+        # inputs; only the order of the guard's call is asserted here.
+        subprocess.run(["bash", str(self.repo / "ops/beta/deploy.sh"), "migrate", self.window, "--approved", "yes, migrate"],
+                       cwd=self.repo, env=self.env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+        calls = Path(self.env["SHIM_LOG"] + ".order").read_text().splitlines()
+        self.assertEqual(calls[0].split()[1:], ["aws", "sts", "get-caller-identity"])
+        for call in calls:
+            self.assertGreater(int(call.split()[0]), 0, f"'{call}' ran before the approval")
+        self.assertIn("migrate (services-stopped guard)", (self.priv / "approvals.md").read_text())
+
+    def test_verify_picks_the_newest_activated_window(self):
+        # APP-133 acceptance 5: with several windows, `verify` (no window
+        # named) records its results on the newest activated one only.
+        windows = {}
+        for label, activated_at in (("older", "2026-11-01T09:30:00Z"), ("newer", "2026-11-03T09:30:00Z"), ("pending", None)):
+            self.new_window()
+            path = self.priv / "windows" / self.window / "release.json"
+            record = json.loads(path.read_text())
+            if activated_at:
+                for name in release.IMAGES:
+                    record["images"][name]["digest"] = DIGESTS[name]
+                record["stack"]["task_definition_revision"] = 13
+                record["activated_at_utc"] = activated_at
+                record["approvals"].append({"step": "activate", "at_utc": activated_at, "approvals_md_line": 3})
+            path.write_text(json.dumps(record))
+            windows[label] = path
+        self.deploy("verify")
+        verified = {label: json.loads(path.read_text()).get("verified") for label, path in windows.items()}
+        self.assertIs(verified["newer"]["live"], True, verified)
+        self.assertIsNone(verified["older"]["live"], "the older activated window is not re-verified")
+        self.assertIsNone(verified["pending"]["live"], "a window never activated is not verified")
 
     def test_push_refuses_images_that_were_not_qualified(self):
         self.new_window()

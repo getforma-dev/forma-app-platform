@@ -44,9 +44,15 @@ priv_ready() {
   [[ "$mode" == 700 ]] || die "$PRIV must be mode 0700"
 }
 
+# After APP-167's cutover the private state lives in the promotion S3 bucket.
+# The laptop path must not create or change a window beside it.
+unfenced() {
+  [[ ! -e "$PRIV/promotion-managed.json" ]] || die "private state moved to promotion S3; legacy operations are fenced"
+}
+
 load_env() {
   priv_ready
-  [[ ! -e "$PRIV/promotion-managed.json" ]] || die "private state moved to promotion S3; legacy operations are fenced"
+  unfenced
   [[ -f "$PRIV/env.sh" ]] || die "missing $PRIV/env.sh (copy ops/beta/env.example.sh and fill it in privately)"
   # shellcheck disable=SC1091
   source "$PRIV/env.sh"
