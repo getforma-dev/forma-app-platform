@@ -168,3 +168,21 @@ Edition `impl-2026-10-29.2` kept these items as "documented here" in `contracts/
 ### Consumers
 
 APP-015 implements R-M1 and R-m1–R-m6 in migration 0008 (plan Task A1) and its runtime (Task A2). APP-016 (Task A3) and APP-018 (Task A6) implement E7, APP-017 (Task A5) and APP-015 E11, APP-019 and APP-024 E6, and APP-022 E5. The Phase 2 plan's tasks name this section. The edition-two review's unrun limitation, the Docker-backed campaign that seeds through `tenant_seed.py`, is closed by the run in [evidence/APP-015/residuals-2026-11-12](../../evidence/APP-015/residuals-2026-11-12/README.md).
+
+## 2026-11-12: this record is ADR-009's amendment ledger (decision)
+
+The open question in APP-088 was whether ADR-009 itself must carry the 2026-11-12 amendments now, or whether this file may stand as its ledger until the next contract edition. Victor delegated product calls on 2026-11-12 ("Make your best judgement and answer for yourself based on the product and continue with tickets"). Claude (Opus 5.5) decided:
+
+**This file is ADR-009's controlling amendment ledger.**
+- Its sections control over the ADR-009 lines they name, from their dates.
+- The next contract edition, which APP-018 opens under decision E7, copies them into ADR-009 and `contracts/README.md`.
+
+**Why.**
+- Changing ADR-009 changes its lock hash. ADR-002 forbids rewriting a published edition's lock, so an edit needs a new edition.
+- A new edition should not be cut while APP-175's schema release waits for its approval.
+- An append-only, dated ledger is already the only text that consumers follow:
+  - the Phase 2 plan's Spec line and its 2026-11-12 change note;
+  - the APP-015, 016 and 018 logs;
+  - this file's row in `docs/README.md`, which tells a reader of ADR-009 to read it with this record.
+
+Copying the ledger into the edition loses nothing.
