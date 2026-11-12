@@ -21,8 +21,8 @@ const MOD = mac ? '⌘' : 'Ctrl';
 
 /**
  * APP-112: every action with both of its paths, the click and the keys or
- * command ("Unite app: App card → Unite · U"). Every command has a click
- * path; not every click has a command.
+ * command ("Open an app: App → Open · U"). Most commands have a click path;
+ * not every click has a command.
  */
 export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][] = [
   ['Place', [
@@ -31,8 +31,8 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
     ['A standalone card', 'Library → Cards → Add, or drag it onto the canvas', '/card name'],
     ['A widget', 'Library → Widgets → Add, or say “show the weather in Austin”', '/widget weather Austin · /weather'],
     ['A note', '⋯ → New note, or Library → Widgets → Note', '/widget note text · /note'],
-    ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, drop files on the canvas, or Drop files or upload on an empty canvas', '/folder'],
-    ['Take it off the canvas', 'The × on it, Library → Remove, or ⋯ → Take off the canvas', 'Delete'],
+    ['A folder', '+ Folder in the toolbar, Library → Widgets → Folder, drop files on the canvas, or Bring your files on an empty canvas', '/folder'],
+    ['Take it off the canvas', 'The × on it, Remove from canvas on its Library row, or ⋯ → Take off the canvas', 'Delete'],
   ]],
   ['Tell an app', [
     ['File an expense', 'Say it: “I spent $86 at Nobu, Sarah approves”', '/expenses …'],
@@ -42,7 +42,7 @@ export const SHORTCUTS: [string, [what: string, click: string, keys: string][]][
   ['Ask and Shape', [
     ['Ask about your data', 'The App assistant button on an app, or ⋯ → Ask about this; with no app selected, the workspace assistant', '? where are the red invoices'],
     ['Ask about a folder’s files', 'Folder → Ask (its tables; read-only)', '—'],
-    ['Shape a card', '⋯ → Shape… on the card', '/expenses.ledger only red invoices · /shape expenses.ledger …'],
+    ['Shape a card in an app', 'Type /shape and the card’s address in the bar (⋯ → Shape… on an app themes the whole app)', '/expenses.ledger only red invoices · /shape expenses.ledger …'],
     ['Theme an app', '⋯ → Shape… on the app', '/shape expenses dark green, compact'],
     ['Shape a widget', 'Its Shape field, or ⋯ → Shape… on it', '/shape calculator make it a TI-84'],
     ['Undo a shape', 'Revert on the shaped card, app or widget', '—'],

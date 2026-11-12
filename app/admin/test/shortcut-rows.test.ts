@@ -15,8 +15,13 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'u
 /** The labels of the canvas ⋯ menu, read from the page markup. */
 function menuItems(): Set<string> {
   const page = source('../src/canvas/app.tsx');
-  const labels = [...page.matchAll(/role="menuitem(?:checkbox)?"[^>]*data-tool="[a-z-]+"[^>]*><span>([^<]+)<\/span>/g)].map((match) => match[1]!);
+  // Only the ⋯ menu (`#cv-more-menu`), not the zoom menu before it.
+  const start = page.indexOf('id="cv-more-menu"');
+  assert.ok(start > 0, 'the ⋯ menu is in the page');
+  const more = page.slice(start, page.indexOf('</div>', start));
+  const labels = [...more.matchAll(/role="menuitem(?:checkbox)?"[^>]*data-tool="[a-z-]+"[^>]*><span>([^<]+)<\/span>/g)].map((match) => match[1]!);
   assert.ok(labels.includes('Take off the canvas') && labels.includes('Shortcuts and commands'), 'the ⋯ menu was read');
+  assert.ok(!labels.includes('Zoom in'), 'zoom items are not ⋯ items');
   return new Set(labels);
 }
 
@@ -25,13 +30,14 @@ const EXAMPLE_ADDRESSES = new Set(['expenses', 'name', 'q3']);
 
 /** Actions ADR-018 removed or made refuse; a row must not teach them. */
 const REMOVED: [phrase: RegExp, why: string][] = [
-  [/Ask tab/, 'Ask moved to the app assistant and the workspace assistant; the pane has no Ask tab'],
+  [/ask tab/i, 'Ask moved to the app assistant and the workspace assistant; the pane has no Ask tab'],
   [/expand an app/i, 'Library app rows have no expander'],
   [/drag the card/i, 'only standalone cards drag onto the canvas'],
   [/\/card [a-z]+\.[a-z]+|\/card \d+\.\d+/, '/card places only a whole standalone card, not an app part'],
-  [/\bstack\b/i, 'the legacy stack path is retired (APP-176); an app is browsed in Browse view'],
+  [/\bstacks?\b/i, 'the legacy stack path is retired (APP-176); an app is browsed in Browse view'],
   [/\bframe\b/i, 'united frames became the Open view'],
   [/Break apart|\/split|\/fan\b/i, '/split refuses since ADR-018'],
+  [/Shift \+ U/, 'Shift + U no longer breaks an app apart'],
 ];
 
 async function rows() {

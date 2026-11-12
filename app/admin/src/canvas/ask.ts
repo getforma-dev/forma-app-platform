@@ -1,5 +1,7 @@
-// APP-122 Ask: the right pane's Ask tab, a read-only conversation about the
-// records in scope. `?` as the bar's first character opens it with the text
+// APP-122 Ask: a read-only conversation about the records in scope. It was
+// the right pane's Ask tab; since ADR-018 a one-app question opens that app's
+// assistant (`openAppAssistant`) and any other the workspace assistant
+// panel. `?` as the bar's first character opens it with the text
 // (`?` pressed outside the bar puts `? ` in the bar, or only focuses it when
 // something is half-typed); ⋯ → Ask about this opens it scoped to that card;
 // `/ask [address] <question>` scopes it to the app or card the first word

@@ -52,4 +52,4 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](../0-backlog/APP-171.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](../0-backlog/APP-176.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
 | 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](../0-backlog/APP-177.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-104 |
-| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](../0-backlog/APP-179.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | S | Backlog | APP-112, APP-120 |
+| 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](../4-done/APP-179.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |

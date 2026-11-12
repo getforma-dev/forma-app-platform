@@ -10,7 +10,7 @@ Forma is a canvas where teams describe what they need and get working apps: expe
 
 ## Since November 2: whole-app views
 
-> **Dated note, 2026-11-12 ([APP-179](../../Tickets/0-backlog/APP-179.md)).** [ADR-018](../architecture/ADR-018-WHOLE-APP-VIEWS.md) changed the canvas on November 2, after this guide was written. The passages marked *Before ADR-018* below describe the pitch build of October 30 to November 1. This section is how `main` works now.
+> **Dated note, 2026-11-12 ([APP-179](../../Tickets/4-done/APP-179.md)).** [ADR-018](../architecture/ADR-018-WHOLE-APP-VIEWS.md) changed the canvas on November 2, after this guide was written. The passages marked *Before ADR-018* below describe the pitch build of October 30 to November 1. This section is how `main` works now.
 
 - **An app is one object with three views.** **Card** shows the app as one card. **Browse** (ADR-018's Stack) shows one component at a time; use ‹ › or ←/→ to move through them. **Open** shows the whole app on the canvas.
   - Switch views with the Card · Browse · Open buttons on the app.
@@ -60,7 +60,7 @@ The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape
 
 **The model (APP-120).** The canvas holds things; apps are the only governed thing.
 
-- **Apps** (governed) contain **cards**, their views. A card never exists without its app. It is addressed `app.card` (`expenses.ledger`) or by its pane number (`3.2`).
+- **Apps** (governed) contain **cards**, their views. A card never exists without its app. It is addressed `app.card` (`expenses.ledger`) or by its pane number (`3.2`). *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)*
 - **Widgets** (one-off, yours, no governed data): Weather, Calculator, Clock, Note and Folder. A folder holds files; its one power, formation, makes an app that links back to it. A note keeps its private storage but is a widget to you.
 - **Arrangements** (layout only): stacks, unite frames and focus. They are never listed in the Library. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)*
 
@@ -68,12 +68,12 @@ The full rules (what is on a canvas, names and aliases, verbs, the Ask and Shape
 
 | Group | Verb | Does |
 | --- | --- | --- |
-| Place | `/app <app name or number>` | Places every card of an app (`/app expenses`, `/app 3`). A bare `/<address>` does the same (`/expenses`). |
+| Place | `/app <app name or number>` | Places every card of an app (`/app expenses`, `/app 3`). A bare `/<address>` does the same (`/expenses`). *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)* |
 | Place | `/card <app.card or number>` | Places one card (`/card expenses.ledger` and `/card 3.2` are the same card). *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)* |
 | Place | `/widget <weather\|calculator\|clock\|note\|folder> [args]` | Places a widget (`/widget weather Austin`, `/widget note Call the auditor`). `/widget folder` opens the folder picker. |
 | Arrange | `/arrange` | Lays the board out by app. |
 | Arrange | `/unite <app>`, `/split <united app>` | Assembles an app's cards into one frame; breaks it apart again. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)* |
-| Arrange | `/focus [app.card or number]` | Opens the selected card (or the one named) in focus. |
+| Arrange | `/focus [app.card or number]` | Opens the selected card (or the one named) in focus. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)* |
 | Make | `/forma <words>` | Exactly a plain sentence: picks or builds an app from the words, behind its confirm card (APP-123). |
 | Make | `/<folder> <words>` · `/folder:<name> <words>` | Builds an app from a folder's files (`/q3 build a metrics app`, `/folder:q3 brief me`; the folder's name in lowercase with hyphens, or its number). The long form `/folder <name> formation <instruction>` still works. `/folder` alone opens the picker; `/folder new <name>` makes one. A verb or an app of the same name answers first; the full form `/folder:<name>` always reaches the folder (APP-123). |
 | Shape | `/shape <app.card\|app\|widget> <words>` | Changes how a card, an app (a theme on every card) or a widget looks or what it shows: a preview, then **Apply** (or **Add as new card**), labeled *shaped* with **Revert** (APP-122). `/<app>.<card> <words>` is the shortcut for a card (`/expenses.ledger only red invoices`). |
@@ -121,7 +121,7 @@ The hint after an address comes from the app's definition: the server derives it
 | `/deal-desk` (`/discount`, `/discounts`) | Deal desk; 10% or less approves itself by the app's rule. |
 
 **The right pane: Library | Commands | Ask | Shortcuts.** One pane, four tabs. `L` and `/apps` open it on Library. `/commands` and `/help` open it on Commands. `/ask …`, `?` first in the bar and ⋯ → Ask about this open it on Ask (APP-122: `?` now means Ask). `/shortcuts` and ⋯ → Shortcuts and commands open it on Shortcuts. `L` on another tab switches to Library; `L` on Library closes the pane. The × and Esc close it (Esc clears a search first), and focus returns to what opened it. The tabs are ARIA tabs (←/→, Home, End). At phone width the pane is the bottom sheet, with the tabs on top. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)*
-- Library: two sections. **Apps** (Category → App → numbered cards) and **Widgets** (Weather, Calculator, Clock, Note, Folder; the Note and Folder rows expand to your notes and folders). Every row shows an on-canvas dot (filled when it is on the canvas), its name in grey (an app's `/address` chip with "also /…", a card's `app.card`, a widget's `/weather`) and an Add/Remove toggle; app rows read "n of m cards". The pane is a pure projection of the board: it re-renders from one `canvas:changed` event after every add and remove.
+- Library: two sections. **Apps** (Category → App → numbered cards) and **Widgets** (Weather, Calculator, Clock, Note, Folder; the Note and Folder rows expand to your notes and folders). Every row shows an on-canvas dot (filled when it is on the canvas), its name in grey (an app's `/address` chip with "also /…", a card's `app.card`, a widget's `/weather`) and an Add/Remove toggle; app rows read "n of m cards". The pane is a pure projection of the board: it re-renders from one `canvas:changed` event after every add and remove. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)*
 - An app row also shows its hint and an example; a click on the example puts it in the bar. "Stack" brings an app as a stack; search finds by name, number, address, alias, hint or `app.card`. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)*
 - Commands: the seventeen verbs in their six groups, with arguments, aliases, examples and a search (Ask reads `/ask [app|app.card] <question>`, with `? where are the red invoices` among its examples); the footer reads "Your apps answer to /name — see /apps".
 
@@ -174,7 +174,7 @@ Start with **[DEVELOPMENT.md](../DEVELOPMENT.md)** for setup, the persona URLs, 
 | **Work (saved work)** | A member's own copy of an app, bound to their data. It is what gets opened, shared and permissioned. |
 | **Folder** | A member's files in one card (internally a "box"): PDFs, images, CSV/XLSX and text, kept as immutable objects. A confirmed CSV/XLSX becomes a registered source revision; apps built from the folder record which files they used. |
 | **Formation** | The AI keyword for a folder: everything after it is the instruction (build an app, brief me). |
-| **Card** | One view of an app on the canvas: a number, chart, table, records list, form or ledger. Apps have several cards. |
+| **Card** | One view of an app on the canvas: a number, chart, table, records list, form or ledger. Apps have several cards. *(Before ADR-018; see [Since November 2](#since-november-2-whole-app-views).)* |
 | **Widget** | A stand-alone utility card (weather, calculator, clock) with no governed data. |
 | **Library** | The app and widget catalog. The pitch profile includes 20 admitted template apps; a new clean profile starts without them. |
 | **Retrieved / adapted / generated** | How an app reached the canvas: as-is from the library, reshaped from a library app, or newly built by the model. The label is always shown. |

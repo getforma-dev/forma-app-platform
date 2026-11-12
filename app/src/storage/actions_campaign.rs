@@ -27,7 +27,7 @@
 use super::{
     admission_qualification::operator,
     command_qualification::{json_headers, send, vault_token, TestPages},
-    definition_qualification::{grant, request},
+    definition_qualification::{grant, request, revoke},
     qualification::Fixture,
     qualification_cases::{check, ORG, OTHER, PRINCIPAL, REVIEWER},
     *,
@@ -1585,6 +1585,30 @@ async fn campaign() {
         Value::Null,
         "the teammate's GET does not list the author's notes work"
     );
+    // Even when the author's notes work is shared with the teammate (read and
+    // write), it never becomes the teammate's notes: `own_works` keeps only
+    // works the caller created, so a teammate's `/note` never lands in it.
+    for permission in ["record_read", "record_write"] {
+        grant(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", notes_app, "--work", &author_work],
+        );
+    }
+    assert_eq!(
+        notes(&sarah, false).await.json()["work_id"],
+        Value::Null,
+        "a notes work shared with the teammate is still not the teammate's notes"
+    );
+    for permission in ["record_read", "record_write"] {
+        revoke(
+            &fixture,
+            REVIEWER,
+            permission,
+            &["--app", notes_app, "--work", &author_work],
+        );
+    }
     assert_eq!(
         records(&diego, notes_app, &author_work).await.status,
         StatusCode::OK
@@ -1637,7 +1661,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "APP-179 (APP-109): with both members granted the Notes app, POST /v1/notes creates each member's own notes work; GET /v1/notes answers only the caller's own work (the teammate sees none until creating one, then only that one); the author's notes work is the uniform 404 to the teammate on its records and canvas group, byte-identical to an absent work, and the teammate's is 404 to the author",
+        "APP-179 (APP-109): with both members granted the Notes app, POST /v1/notes creates each member's own notes work; GET /v1/notes answers only the caller's own work (the teammate sees none until creating one, then only that one); shared with the teammate for read and write, the author's notes work still is not the teammate's notes; unshared, it is the uniform 404 to the teammate on its records and canvas group, byte-identical to an absent work, and the teammate's is 404 to the author",
     );
 
     let notes_context = stores.workspace.composer_context(&employee).await.unwrap();

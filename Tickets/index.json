@@ -348,7 +348,7 @@
         "APP-179"
       ],
       "ticket_count": 17,
-      "done_count": 2,
+      "done_count": 3,
       "blocked_count": 0
     }
   ],
@@ -374,8 +374,7 @@
     "APP-170",
     "APP-171",
     "APP-177",
-    "APP-178",
-    "APP-179"
+    "APP-178"
   ],
   "tickets": [
     {
@@ -5589,11 +5588,11 @@
     {
       "id": "APP-179",
       "title": "Correct the Shortcuts sheet and guides after whole-app views, and test note privacy",
-      "path": "0-backlog/APP-179.md",
+      "path": "4-done/APP-179.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P2",
       "Type": "Chore",
       "Sprint": "S15",
@@ -5606,7 +5605,7 @@
       "Depends on": "APP-112, APP-120",
       "External dependencies": "None",
       "Assignee": "Unassigned \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`app179/shortcuts-guides` (2026-11-12)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
