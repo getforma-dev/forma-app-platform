@@ -230,7 +230,8 @@ pub(crate) async fn compose_instant(
         log_refused(member, code, origin, started);
         refusal
     };
-    // DS-53: the demo flag for the rehearsed transform.
+    // DS-53, DS-03: the demo flag for the rehearsed transform and for the
+    // matcher's nearest candidate when no model is configured.
     let demo = composer.demo_for(member.organization());
     let template = match pin {
         Pin::Template(id) => Some(super::templates::find(id).ok_or_else(|| {

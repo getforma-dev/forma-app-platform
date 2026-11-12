@@ -60,6 +60,13 @@ fn from_values(mode: Option<&str>, organizations: Option<&str>) -> Settings {
     }
 }
 
+/// Whether `GENUI_DEMO_MODE` is on, for any organization. Only the demo's
+/// process-wide data uses this: the persona display names (APP-098 DS-02,
+/// DS-44). Per-organization shortcuts use `is_demo_org`.
+pub fn is_on() -> bool {
+    settings().read().map(|s| s.enabled).unwrap_or(false)
+}
+
 /// Whether demo mode is on and `organization` is one of the listed demo
 /// organizations. False for every real organization, always.
 pub fn is_demo_org(organization: &str) -> bool {

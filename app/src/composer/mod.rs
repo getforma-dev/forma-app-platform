@@ -292,9 +292,10 @@ impl Composer {
     }
 
     /// `route` for an organization. `demo` is [`Composer::demo_for`]: only
-    /// where the demo switch is on does a near tie with no model answer the
-    /// matcher's nearest candidate (APP-098 DS-03). Elsewhere it is refused,
-    /// as any routing that needs a model.
+    /// where the demo switch is on does a candidate the matcher cannot pick
+    /// (a near tie or a weak match), with no model, answer the matcher's
+    /// nearest candidate (APP-098 DS-03). Elsewhere it is refused, as any
+    /// routing that needs a model.
     pub async fn route_for(
         &self,
         intent: &str,
@@ -314,7 +315,8 @@ impl Composer {
             nearest = found.ranked.first().copied();
         }
         let Some(model) = self.model.as_ref() else {
-            // No model to settle a near tie (APP-098 DS-03, demo switch only):
+            // No model to settle what the matcher cannot pick (APP-098 DS-03,
+            // demo switch only):
             // the matcher's best candidate, still only an app from the
             // catalog, labeled retrieved. Without the switch, or with no
             // candidate at all, the caller is refused.
