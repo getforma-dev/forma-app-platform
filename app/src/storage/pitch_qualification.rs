@@ -851,7 +851,12 @@ async fn campaign() {
         .iter()
         .map(|origin| origin["text"].as_str().unwrap())
         .collect();
-    assert_eq!(chips, ["Adapted to your request", "Amount > $200"]);
+    // APP-098 DS-84: the adapted library work still reads the catalog's
+    // sample source, so its data chip follows the assembly chips.
+    assert_eq!(
+        chips,
+        ["Adapted to your request", "Amount > $200", "Sample data"]
+    );
     let adapted_views: Vec<String> = adapted_group["cards"]
         .as_array()
         .unwrap()

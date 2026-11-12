@@ -446,6 +446,12 @@ pub fn seeded_work(work: &str) -> bool {
 
 /// Known seeded definition bytes: the current catalog and the two original
 /// Phase 1 fixtures. A work id or an organization alone proves no provenance.
+/// APP-098 DS-84: whether `digest` is one of the library catalog's own
+/// definitions (the sidecar only, not the older Northstar baseline).
+pub fn catalog_definition(digest: &str) -> bool {
+    sidecar().contains_key(digest)
+}
+
 pub fn seeded_definition(digest: &str) -> bool {
     static BASELINE: OnceLock<BTreeSet<String>> = OnceLock::new();
     sidecar().contains_key(digest)

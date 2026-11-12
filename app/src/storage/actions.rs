@@ -318,6 +318,8 @@ impl Data {
             // Same collections and after-fence `record_write` bit as
             // `work_outline`, whether or not this call also lists records.
             let collection_rows = collections_many(transaction, org, &readable_keys).await?;
+            // APP-098 DS-84: the same sample-data bit as `work_outline`.
+            let samples = super::queries::sample_works(transaction, org, &readable_keys).await?;
             if pinned.len() != readable.len() || collection_rows.len() != readable.len() {
                 return Err(Error::Unavailable);
             }
@@ -338,6 +340,8 @@ impl Data {
                         outline.title = name.clone();
                     }
                     outline.can_write = grants[i].record_write;
+                    outline.sample_data =
+                        samples.contains(&(keys[i].0.to_owned(), keys[i].1.to_owned()));
                     outline.collections = rows
                         .iter()
                         .map(|row| Ok((text(row, 1)?, text(row, 2)?)))

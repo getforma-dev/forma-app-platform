@@ -479,7 +479,9 @@ async fn list_apps(
         .map_err(storage_output)?;
     // APP-115: the listing narrowed to the token's scope.
     let in_scope = |app: &str| scope::allows_app(&caller.scope, app);
-    let sample_library = !crate::storage::library_sample_sources().is_empty();
+    // APP-098 DS-84: a catalog app starts on the catalog's sample data; any
+    // other app the member may start (an authoring shell, a saved app) does not.
+    let synthetic_catalog = !crate::storage::library_sample_sources().is_empty();
     let library: Vec<Value> = context
         .library
         .iter()
@@ -504,8 +506,8 @@ async fn list_apps(
                 "description": naming.description.clone().unwrap_or_else(|| app.description.clone()),
                 "files_records": record.is_some_and(|c| c.create_command().is_some()),
                 "record_fields": record.map(record_fields).unwrap_or(json!([])),
-                // APP-098 DS-84: a library app starts on the catalog's sample data.
-                "sample_data": sample_library,
+                "sample_data": synthetic_catalog
+                    && crate::composer::matcher::catalog_definition(&app.definition_digest),
             })
         })
         .collect();
@@ -531,8 +533,8 @@ async fn list_apps(
         works.len(),
         if synthetic {
             " The data is synthetic."
-        } else if sample_library && !library.is_empty() {
-            " Library apps start on sample data."
+        } else if library.iter().any(|entry| entry["sample_data"] == true) {
+            " Library apps marked sample_data start on sample data."
         } else {
             ""
         }
