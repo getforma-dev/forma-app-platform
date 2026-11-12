@@ -600,6 +600,8 @@ async fn campaign() {
     assert_eq!(apps["library"].as_array().unwrap().len(), 1);
     assert_eq!(apps["library"][0]["app_id"], EXPENSE_APP);
     assert_eq!(apps["library"][0]["files_records"], true);
+    // APP-098 DS-84: a library app starts on the catalog's sample data.
+    assert_eq!(apps["library"][0]["sample_data"], true);
     // APP-121: the agent reads the name and address people see.
     assert_eq!(apps["library"][0]["title"], "Expenses");
     assert_eq!(apps["library"][0]["address"], "/expenses");
@@ -858,6 +860,8 @@ async fn campaign() {
     assert_eq!(viewed["receipt_id"], canvas["receipt"]["digest"]);
     assert_eq!(viewed["receipt"], canvas["receipt"]);
     assert_eq!(viewed["synthetic"], true);
+    // APP-098 DS-84: the expense claims work reads the catalog's sample source.
+    assert_eq!(viewed["sample_data"], true);
     let calls = engine.calls.load(Ordering::SeqCst);
     let sarah_view = client
         .call(

@@ -797,6 +797,17 @@ async fn campaign() {
     .await;
     assert_eq!(group.status, StatusCode::OK, "{}", group.body);
     let group = group.json();
+    // APP-098 DS-84: the library's expense claims work reads the synthetic
+    // catalog's source, so its group says so.
+    assert!(
+        group["origins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|origin| origin["kind"] == "sample" && origin["text"] == "Sample data"),
+        "a library work bound to the synthetic catalog's source carries the Sample data chip: {}",
+        group["origins"]
+    );
     assert_eq!(group["records"][0]["schema"], "expense_claim");
     assert_eq!(group["records"][0]["count"], "1");
     assert_eq!(group["records"][0]["rows"][0]["status"], "submitted");

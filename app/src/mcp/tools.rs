@@ -479,6 +479,7 @@ async fn list_apps(
         .map_err(storage_output)?;
     // APP-115: the listing narrowed to the token's scope.
     let in_scope = |app: &str| scope::allows_app(&caller.scope, app);
+    let sample_library = !crate::storage::library_sample_sources().is_empty();
     let library: Vec<Value> = context
         .library
         .iter()
@@ -503,6 +504,8 @@ async fn list_apps(
                 "description": naming.description.clone().unwrap_or_else(|| app.description.clone()),
                 "files_records": record.is_some_and(|c| c.create_command().is_some()),
                 "record_fields": record.map(record_fields).unwrap_or(json!([])),
+                // APP-098 DS-84: a library app starts on the catalog's sample data.
+                "sample_data": sample_library,
             })
         })
         .collect();
@@ -519,7 +522,8 @@ async fn list_apps(
             })
         })
         .collect();
-    // DS-80: the synthetic-data sentence, demo organization only.
+    // DS-80: the synthetic-data sentence, demo organization only. Elsewhere
+    // (APP-098 DS-84) the library's sample data is still named.
     let synthetic = demo::is_demo_org(member.organization());
     let summary = format!(
         "{} library app(s) you can start and {} saved or shared work(s).{}",
@@ -527,6 +531,8 @@ async fn list_apps(
         works.len(),
         if synthetic {
             " The data is synthetic."
+        } else if sample_library && !library.is_empty() {
+            " Library apps start on sample data."
         } else {
             ""
         }
@@ -616,7 +622,8 @@ async fn run_view(
     let total = rows.len();
     let shown: Vec<Value> = rows.into_iter().take(MAX_ROWS).collect();
     let receipt_id = document["receipt"]["digest"].clone();
-    // DS-80: the synthetic-data sentence, demo organization only.
+    // DS-80: the synthetic-data sentence, demo organization only. Elsewhere
+    // (APP-098 DS-84) a work reading the library's sample sources says so.
     let synthetic = demo::is_demo_org(member.organization());
     let summary = format!(
         "{} ({}): {} row(s){}. Receipt {}.{}",
@@ -629,14 +636,20 @@ async fn run_view(
             String::new()
         },
         receipt_id.as_str().unwrap_or(""),
-        if synthetic { " Synthetic data." } else { "" }
+        if synthetic {
+            " Synthetic data."
+        } else if outline.sample_data {
+            " Sample data."
+        } else {
+            ""
+        }
     );
     Ok(Output::ok(
         "ok",
         summary,
         json!({
             "app_id": app, "work_id": work, "work_title": outline.title,
-            "view_id": chosen.id, "view_title": chosen.title,
+            "view_id": chosen.id, "view_title": chosen.title, "sample_data": outline.sample_data,
             "columns": document["columns"], "column_types": document["column_types"],
             "rows": shown, "rows_shown": total.min(MAX_ROWS), "rows_total": total,
             "truncated_page": document["truncated_page"],

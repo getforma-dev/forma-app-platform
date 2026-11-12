@@ -576,3 +576,23 @@ fn an_unreadable_kind_store_renders_the_canvas_without_kinds() {
         Some(ArtifactKinds::new())
     );
 }
+
+/// APP-098 DS-84: the synthetic catalog's sources are known, sorted and
+/// unique, and a work reading them gets the Sample data chip.
+#[test]
+fn library_sample_sources_and_the_sample_chip() {
+    let sources = crate::storage::library_sample_sources();
+    assert!(
+        sources.contains(&"00000000-0000-4000-8000-000000003000".to_owned()),
+        "the expense claims source is a sample source"
+    );
+    let mut sorted = sources.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(sources, sorted);
+    let chip = sample_origin(2);
+    assert_eq!(
+        (chip.id.as_str(), chip.kind.as_str(), chip.text.as_str()),
+        ("o2", "sample", "Sample data")
+    );
+}

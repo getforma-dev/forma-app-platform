@@ -431,9 +431,11 @@ export function buildFormCard(document_: Document, form: FormJson): HTMLElement 
     ...(form.action.match(/^\/v1\/work\/([0-9a-f-]+)\/([0-9a-f-]+)\/commands\//) ? [el(document_, 'a', { href: form.action.replace(/^\/v1\/work\//, '/w/').replace(/\/commands\/.*$/, '') }, 'Choose a record on the app page')] : []));
 }
 
-/** An origin label's style: library, adapted, generated or seeded. */
+/** An origin label's style: library, adapted, generated, seeded or sample. */
 export function originKind(text_: string): string {
   const lower = text_.toLowerCase();
+  // APP-098 DS-84: the library's synthetic sample data, never the member's own.
+  if (lower.includes('sample data')) return 'sample';
   if (lower.includes('generat')) return 'generated';
   if (lower.includes('adapt')) return 'adapted';
   if (lower.includes('seed')) return 'seeded';
