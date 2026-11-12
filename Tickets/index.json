@@ -37,7 +37,7 @@
         "APP-076"
       ],
       "ticket_count": 20,
-      "done_count": 17,
+      "done_count": 18,
       "blocked_count": 0
     },
     {
@@ -227,7 +227,7 @@
         "APP-174"
       ],
       "ticket_count": 6,
-      "done_count": 0,
+      "done_count": 1,
       "blocked_count": 1
     },
     {
@@ -314,7 +314,7 @@
         "APP-173"
       ],
       "ticket_count": 70,
-      "done_count": 6,
+      "done_count": 7,
       "blocked_count": 1
     },
     {
@@ -359,6 +359,7 @@
     "APP-088",
     "APP-092",
     "APP-098",
+    "APP-126",
     "APP-166",
     "APP-170",
     "APP-171"
@@ -795,11 +796,11 @@
     {
       "id": "APP-014",
       "title": "Prove command retries, conflicts and authorization race ordering",
-      "path": "3-in-review/APP-014.md",
+      "path": "4-done/APP-014.md",
       "Field": "Value",
       "---": "---",
       "Epic": "REC",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P0",
       "Type": "Verification",
       "Sprint": "S02",
@@ -812,7 +813,7 @@
       "Depends on": "APP-013",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok implementation, Codex independent review and fixture repair",
-      "Branch / PR": "`chore/app-014-observed`, [PR 81](https://github.com/getforma-dev/forma-app-platform/pull/81), then the identity follow-up `chore/app-014-assert-identity` (PR 44 remains the earlier race-observation pull request)",
+      "Branch / PR": "`chore/app-014-observed`, [PR 81](https://github.com/getforma-dev/forma-app-platform/pull/81), then the identity follow-up `chore/app-014-assert-identity`, [PR 86](https://github.com/getforma-dev/forma-app-platform/pull/86), merged as `32e6ac9` (PR 44 remains the earlier race-observation pull request)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -2766,11 +2767,11 @@
     {
       "id": "APP-082",
       "title": "Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)",
-      "path": "3-in-review/APP-082.md",
+      "path": "4-done/APP-082.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S13",
@@ -4021,11 +4022,11 @@
     {
       "id": "APP-125",
       "title": "Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink",
-      "path": "3-in-review/APP-125.md",
+      "path": "4-done/APP-125.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "In review",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Chore",
       "Sprint": "S14",

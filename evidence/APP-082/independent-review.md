@@ -1,5 +1,7 @@
 # APP-082 independent review
 
+> **Superseded 2026-11-12** by the attributed [independent review](independent-review-2026-11-12.md), which re-binds the receipt to `main` `5695869`. This record is unattributed (committed with the implementation) and its "stays Backlog" wording and operator line citations are out of date. It is otherwise unchanged.
+
 Date: 2026-11-05
 
 Reviewed SHA: `a9a730531dc6644d2fa6ef291a967080886f596a`

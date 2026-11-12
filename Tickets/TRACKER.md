@@ -21,7 +21,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 13 | [APP-011: Package reproducible synthetic sources and expected outcomes](4-done/APP-011.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | M | Done | APP-002, APP-007 |
 | 14 | [APP-012: Deliver a minimal authorized query with receipt](4-done/APP-012.md) | [PH01](phases/PH01.md) | S02 | QRY | P0 | L | Done | APP-003, APP-005, APP-009, APP-010, APP-011 |
 | 15 | [APP-013: Commit one declared internal record and recover outcome](4-done/APP-013.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | L | Done | APP-012 |
-| 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](3-in-review/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | In review | APP-013 |
+| 16 | [APP-014: Prove command retries, conflicts and authorization race ordering](4-done/APP-014.md) | [PH01](phases/PH01.md) | S02 | REC | P0 | M | Done | APP-013 |
 | 17 | [APP-015: Implement durable jobs, leases and cancellation](0-backlog/APP-015.md) | [PH02](phases/PH02.md) | S03 | OPS | P0 | L | Backlog | APP-008, APP-009, APP-073 |
 | 18 | [APP-016: Store original and normalized immutable revisions](0-backlog/APP-016.md) | [PH02](phases/PH02.md) | S03 | ING | P0 | L | Backlog | APP-008, APP-010 |
 | 19 | [APP-017: Build CSV and XLSX import jobs](0-backlog/APP-017.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | L | Backlog | APP-004, APP-015, APP-016 |
@@ -87,7 +87,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 79 | [APP-076: Run the beta go-live trial on the live deployment](0-backlog/APP-076.md) | [PH01](phases/PH01.md) | S02 | VAL | P0 | L | Backlog | APP-012, APP-013, APP-014, APP-074, APP-078 |
 | 80 | [APP-079: Hosted identity acceptance deferred from Phase 1](9-blocked/APP-079.md) | [PH06](phases/PH06.md) | S12 | IAM | P1 | L | Blocked | APP-076 |
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
-| 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](3-in-review/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | In review | APP-074 |
+| 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](4-done/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Done | APP-074 |
 | 83 | [APP-083: Prove concurrent redemption through the public beta API on the live deployment (deferred from APP-076)](0-backlog/APP-083.md) | [PH07](phases/PH07.md) | S13 | VAL | P1 | S | Backlog | APP-076 |
 | 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](2-in-progress/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | In progress | APP-073 |
 | 85 | [APP-085: Close the definition and publication review residuals (APP-010 review)](0-backlog/APP-085.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-010 |
@@ -130,7 +130,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 122 | [APP-122: Two AI jobs: Ask (read-only conversation about the data) and Shape (change the look or view of a card, an app or a widget), separated by where you type](0-backlog/APP-122.md) | [PH08](phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-121 |
 | 123 | [APP-123: Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /forma, /<folder> words](0-backlog/APP-123.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-122, APP-097 |
 | 124 | [APP-124: Start from your data: drop files, Ask the folder, Make a card, Make an app](0-backlog/APP-124.md) | [PH08](phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-108, APP-122, APP-123 |
-| 125 | [APP-125: Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink](3-in-review/APP-125.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | In review | None |
+| 125 | [APP-125: Developer workflow step 1: pins, dev profile, per-checkout venvs, no committed symlink](4-done/APP-125.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Done | None |
 | 126 | [APP-126: Developer workflow step 2: the front door (justfile, campaign catalog, VS Code workspace)](0-backlog/APP-126.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | S | Backlog | APP-125 |
 | 127 | [APP-127: Developer workflow step 3: the beta deploy in Git (ops/beta, $PRIV per checkout, --approved gate)](0-backlog/APP-127.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-126 |
 | 128 | [APP-128: Developer workflow step 4: the genui-dev binary under process-compose (Compose PostgreSQL, in-process personas, clean profile)](0-backlog/APP-128.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | M | Backlog | APP-125, APP-126 |
