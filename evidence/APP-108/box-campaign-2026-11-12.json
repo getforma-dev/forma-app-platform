@@ -1,0 +1,89 @@
+{
+  "checks": [
+    {
+      "name": "upload: a PDF, a PNG, two CSVs and an XLSX land in a new folder as tiles with their SHA-256; each CSV/XLSX is parsed at once by the sealed parser (one parser-host process per job) with typed columns (date, text, money, integer, decimal) and at most 20 sample rows",
+      "passed": true
+    },
+    {
+      "name": "refusals: a CSV carrying PNG bytes (422 unsupported_file), a 25 MB file (413 file_too_large) and a 21st file (409 box_full) are refused with neutral codes; no object and no row is written for any of them",
+      "passed": true
+    },
+    {
+      "name": "view: the PDF is served same-origin with Content-Disposition inline, Content-Security-Policy sandbox and nosniff (a cross-site fetch is the uniform 404); a teammate the folder was not shared with and a foreign organization's member get the uniform 404 for the folder, every file, the view and the preview, and list no folders",
+      "passed": true
+    },
+    {
+      "name": "real data: confirming the CSV's types registers an immutable source revision (original and part.parquet under o/<org>/s/<source>/r/<revision>/, the Parquet's digest the engine re-checks) and a data card; its view runs on the confined engine and its receipt names that revision, which the lineage route traces to the CSV in the folder; a confirmed type the values do not fit names the column (422 data_refused)",
+      "passed": true
+    },
+    {
+      "name": "derived app: \"build a metrics app from folder 1\" through POST /v1/act resolves the folder by number and the model receives only the capped context (3548 bytes: file names and types, at most 3 data files with typed fields and at most 20 sample rows, the PDF by name only); the typed definition is admitted, published on Maya's authoring app and placed, labeled generated with \"Built from folder: Q3 board pack\"; its receipts name the folder's revisions",
+      "passed": true
+    },
+    {
+      "name": "APP-108 surfaces: the canvas sentence goes through boxes::intent::act with no selected folder, the call Slack's /forma makes; an agent token minted from Maya's session builds the same kind of app through MCP forma_folder_formation (folder 1): one model call, generated, \"Built from folder: Q3 board pack\", a new work whose lineage names the folder's CSV; the teammate's token naming Maya's folder by its name (Q3 board pack) or its number (1) is not_found with no model call",
+      "passed": true
+    },
+    {
+      "name": "explanation: the fast model sees only the computed results; every placeholder is filled with the governed value of a receipt-carrying run (total revenue equals the KPI view's exact value); a hostile reply with an invented number (\"40%\") is refused as \"No summary\" and the accepted summary stays",
+      "passed": true
+    },
+    {
+      "name": "Ask on a folder (APP-124): POST /v1/boxes/{box}/ask reads the folder's tables in a READ ONLY snapshot under the folder's own authorization and answers exactly {text, references}, each reference the file (id, name, SHA-256 of its bytes) and the row the answer used; the model sees the rows by reference (the PDF is not a table) and a reply citing a row it was not shown, or carrying a chart, is refused (422 could_not_answer); an open body is 422; the teammate the folder was not shared with, a foreign member, no session, a malformed and an unknown id get the uniform 404 with no model call; no audit row is written",
+      "passed": true
+    },
+    {
+      "name": "Make a card (APP-124): POST /v1/boxes/{box}/apps {\"one_card\": true} makes, with no model call, a minimal app named after the folder with exactly one card (the most useful view of its confirmed table), admitted, published on Maya's authoring app, \"Built from folder: Q3 board pack\" with its one source file in the lineage, and saved under a free /name (q3-board-pack-card, since the folder holds /q3-board-pack; the next one q3-board-pack-2) that /v1/commands lists; a non-boolean, a false or an open body is 422; the teammate and the outsider get the uniform 404",
+      "passed": true
+    },
+    {
+      "name": "sharing: sharing the derived app gives the teammate the app, its explanation with the same governed values, and read access to exactly the folder files it was built from (the CSV opens; the PDF and the image stay the uniform 404, no other file is listed, no derived apps are listed); a foreign member gets the uniform 404 for the lineage and the explanation",
+      "passed": true
+    },
+    {
+      "name": "saved app answers: no-record answers retain their authorized app/work; file answers persist exact original row references and digest, remain maker-private and idempotent, reject wrong digests and files outside lineage, disappear when only their original file grant is revoked while app access remains, and reappear only after that exact grant returns",
+      "passed": true
+    },
+    {
+      "name": "brief: the small PDF goes to the model as a document block with citations enabled; the cited statement is kept with its page (p. 1) and the uncited sentence with a number is dropped; the overview and key points carry no digit",
+      "passed": true
+    },
+    {
+      "name": "reload: the folders, files, the registered revision, the derived app's provenance and the stored explanation and brief read back; the canvas page allows same-origin frames for the viewer",
+      "passed": true
+    },
+    {
+      "name": "APP-124 review: Make a card on an untitled folder walks past a newest table the sealed parser cannot read (a header, no rows) to the older readable one, Ventas ano.csv, and is named after it; its /name is judged whole before anything is published: /ventas-ano is the folder Ventas a\u00f1o as the canvas addresses it (NFKD, marks dropped), /ventas-ano-card and /ventas-ano-2 are held by organization labels of an app Maya never opened, so the card is /ventas-ano-3 with exactly one new publication (no orphan); an Idempotency-Key makes Make a card (here) and folder formation (the demo's rehearsed build, below) answer their first result (201, Idempotent-Replayed, nothing new published), the same key with another body is 422 idempotency_key_reused and a malformed key 400; Ask on a folder whose only table cannot be read answers its text (200, no references, no model call), not 503",
+      "passed": true
+    },
+    {
+      "name": "demo (DS-73..DS-75, APP-124): in the demo organization the rehearsed sentence builds the metrics app over the folder's data files by rule, admitted and labeled generated (sent again with its Idempotency-Key: the same work, nothing new published); its explanation, the folder's brief (the fixture PDF cited by page) and Ask on the folder (a row count referencing all 12 rows, the exact revenue total) answer with no model call",
+      "passed": true
+    },
+    {
+      "name": "PR42 original viewer: all 105 CSV records across three pages retain headers/leading zeroes/inert markup; original download byte-exact; both workbook sheets and lexical large/exponent numbers; malformed selection refused; anonymous/sibling/foreign/revoked readers denied; no source registration or saved app created by viewing",
+      "passed": true
+    },
+    {
+      "name": "Editable CSV apps: full 2,505-row import, exact decimal aggregates, independent app copies, assistant proposals write nothing until confirmation, add/update refresh governed totals, stale confirmation denied, replay adds no duplicate, originals byte-identical, owner-only legacy upgrade is atomic and idempotent",
+      "passed": true
+    },
+    {
+      "name": "audit: 71 box.* events on the workspace chain (created, file_added, data_registered, app_derived, shared); every Northstar chain recomputes to its head",
+      "passed": true
+    }
+  ],
+  "scope": "APP-108 folders, local Docker campaign over a loopback stand, synthetic identities and files, a loopback model stub",
+  "timings_ms": {
+    "brief": 4799,
+    "build_from_folder": 3351,
+    "confirm_register_card": 1727,
+    "context_bytes": 3548,
+    "demo_build": 2595,
+    "upload_forecast.xlsx": 1484,
+    "upload_logo.png": 203,
+    "upload_q3_metrics.csv": 824,
+    "upload_q3_metrics_brief.pdf": 222,
+    "upload_q3_pipeline.csv": 909
+  }
+}

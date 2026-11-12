@@ -1,6 +1,6 @@
 # Private live app sharing
 
-Source behavior is defined in [ADR-014](../architecture/ADR-014-LIVE-APP-SHARING.md) and tracked by [APP-154](../../Tickets/0-backlog/APP-154.md). This runbook does not record a hosted deployment. Actual hosted identity signup, email verification and a complete guest journey remain APP-139/140 prerequisites before recording them as real provider behavior.
+Source behavior is defined in [ADR-014](../architecture/ADR-014-LIVE-APP-SHARING.md) and tracked by [APP-154](../../Tickets/4-done/APP-154.md). This runbook does not record a hosted deployment. Actual hosted identity signup, email verification and a complete guest journey remain APP-139/140 prerequisites before recording them as real provider behavior.
 
 ## Service behavior
 
