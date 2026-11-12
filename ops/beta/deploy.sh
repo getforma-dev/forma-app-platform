@@ -109,7 +109,7 @@ IMAGES="service:genui-synthetic qualification:genui-qualification operator:genui
 
 case $step in
   new)
-    priv_ready
+    priv_ready; unfenced
     [[ "$candidate" =~ ^[0-9a-f]{7,40}$ ]] || die "--candidate <commit sha> is required"
     [[ -n "$supersedes" ]] || die "--supersedes <live window id> is required (the head of the chain)"
     full=$(git -C "$REPO" rev-parse --verify "$candidate^{commit}") || die "unknown commit $candidate"
@@ -429,7 +429,7 @@ operator $(release_get .images.operator.digest)"
       echo "no activated window with a release.json under $PRIV/windows; checking $origin only"
       exec "$REPO/ops/beta/verify.sh" "${vargs[@]}"
     fi
-    priv_ready; window_dir "$WINDOW_ID"; need_window_dir
+    priv_ready; unfenced; window_dir "$WINDOW_ID"; need_window_dir
     release_py check "$W/release.json" >/dev/null || die "$W/release.json does not match the schema (ops/beta/release.py)"
     jq -r '"release: \(.candidate_sha[0:7]) \(.git_tag.name // "(no tag yet)") window \(.window_id[0:8]) TD:\(.stack.task_definition_revision // "?") schema \(.database_version)",
            (.images | to_entries[] | "  \(.key) \(.value.digest // "(not pushed)")")' "$W/release.json"

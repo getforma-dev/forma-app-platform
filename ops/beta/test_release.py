@@ -445,6 +445,23 @@ class DeployFlowTests(unittest.TestCase):
                     self.assertGreater(int(call.split()[0]), lines_before, f"{step}: '{call}' ran before its approval")
                 self.assertIn(f"yes, {step}", approvals.read_text())
 
+    def test_the_promotion_marker_fences_window_steps(self):
+        # After APP-167's cutover, `new`, every window step and a window's
+        # `verify` refuse; none creates a window or calls AWS.
+        self.new_window()
+        (self.priv / "promotion-managed.json").write_text("{}")
+        windows = sorted(p.name for p in (self.priv / "windows").iterdir())
+        before = self.shim_log()
+        for args in (("new", "--candidate", self.sha, "--supersedes", LIVE, "--input-from", str(self.tmp / "input.json")),
+                     ("observe", self.window), ("push", self.window, "--approved", "yes"),
+                     ("verify", self.window)):
+            with self.subTest(step=args[0]):
+                out = self.deploy(*args, expect=1)
+                self.assertIn("legacy operations are fenced", out)
+        self.assertEqual(sorted(p.name for p in (self.priv / "windows").iterdir()), windows)
+        self.assertEqual(self.shim_log(), before)
+        self.assertFalse((self.priv / "approvals.md").exists())
+
     def test_push_refuses_images_that_were_not_qualified(self):
         self.new_window()
         self.env["SHIM_BAD_ID"] = "1"
