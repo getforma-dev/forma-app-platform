@@ -66,6 +66,18 @@ class ScanDispositionTests(unittest.TestCase):
                     self.setUp(); mutate(self.current[role]['findings'][0])
                     with self.assertRaises(Refused): self.check()
 
+    def test_a_critical_finding_refuses_even_when_the_predecessor_had_it(self):
+        # Review of cf9600e: only this case isolates the CRITICAL refusal (an
+        # introduced CRITICAL also fails the reviewed fingerprint check).
+        for role in REPOS:
+            with self.subTest(role=role):
+                self.setUp()
+                critical = copy.deepcopy(self.current[role]['findings'][0])
+                critical.update(name='CVE-2099-00001', severity='CRITICAL')
+                self.baseline[role]['findings'].append(copy.deepcopy(critical))
+                self.current[role]['findings'].append(critical)
+                with self.assertRaisesRegex(Refused, 'critical scan finding'): self.check()
+
     def test_an_unreviewed_extra_finding_refuses(self):
         self.current['service']['findings'].append(
             {'name': 'CVE-2099-12345', 'severity': 'LOW', 'attributes': [{'key': 'package_name', 'value': 'x'}]})

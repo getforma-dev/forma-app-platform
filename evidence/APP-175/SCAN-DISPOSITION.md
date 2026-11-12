@@ -38,7 +38,7 @@ The introduced set is computed with the promotion guard's own fingerprint, `regi
 | [CVE-2026-115819](https://security-tracker.debian.org/tracker/CVE-2026-115819) | MEDIUM 4.8 | glibc | wide `scanf` family | vulnerable |
 | [CVE-2026-115456](https://security-tracker.debian.org/tracker/CVE-2026-115456) | LOW 3.7 | gcc-12 12.2.0-14+deb12u1 | libstdc++ | vulnerable |
 
-The Debian security tracker, read on 2026-11-12, lists every one as vulnerable or unfixed in bookworm and bookworm-security; no fixed version exists for this base. The automated read parsed bookworm-security `1.20.1-2+deb12u5` as vulnerable for krb5 and both suites for glibc. For CVE-2026-115456 it parsed only the gcc-11 source row (vulnerable); the gcc-12 row was not parsed. On ARM64, `apt-cache` shows no newer candidate for `libkrb5-3`, `libgssapi-krb5-2`, `libk5crypto3`, `libkrb5support0`, `libc6`, `libc-bin`, `gcc-12-base`, `libgcc-s1` or `libstdc++6`.
+The Debian security tracker, read on 2026-11-12, shows no fixed version for this base. The automated read parsed krb5 in bookworm-security (`1.20.1-2+deb12u5`) as vulnerable; its bookworm row read `?`, so that suite's status was not established. It parsed glibc as vulnerable in both suites. For CVE-2026-115456 it parsed only the gcc-11 source row (vulnerable); the gcc-12 row was not parsed. On ARM64, `apt-cache` shows no newer candidate for `libkrb5-3`, `libgssapi-krb5-2`, `libk5crypto3`, `libkrb5support0`, `libc6`, `libc-bin`, `gcc-12-base`, `libgcc-s1` or `libstdc++6`.
 
 ## Applicability
 
@@ -50,9 +50,14 @@ These checks used local images built from the same Dockerfiles at `cd17f93`.
   - `libtirpc` reaches it through `libgssapi_krb5`;
   - psycopg's bundled `libgssapi_krb5` and `libsasl2` import its bundled `libkrb5`, which its `libpq` reaches through `libgssapi_krb5`.
 
-  Each is reached only by GSSAPI or Kerberos authentication, and nothing here authenticates with Kerberos. The operator connects with `gssencmode="disable"` (APP-084). The service uses tokio-postgres with IAM tokens.
+  Each is reached only through GSSAPI or Kerberos, and nothing here authenticates with Kerberos.
+  - The service's database client is tokio-postgres with IAM tokens; it does not link libpq.
+  - Two psycopg/libpq paths exist. The operator connects with `gssencmode="disable"` (APP-084). The service image's `runtime.py` `probe()` does not set `gssencmode`, so libpq's default (`prefer`) applies.
+  - `gssencmode="disable"` turns off GSS *encryption* negotiation only, not GSS *authentication*. libpq starts GSS authentication only when the server asks for it (`AuthenticationGSS`, which needs a `gss` `pg_hba` entry). Every connection here authenticates with a password over `sslmode=verify-full`: the application roles with IAM tokens, and `genui_migration` with its Secrets Manager password (`infra/src/stack.ts`).
+  - Under `prefer`, libpq attempts GSS encryption only when it finds Kerberos credentials (`pg_GSS_have_cred_cache`). The containers hold no credential cache or keytab, and the root filesystem is read-only.
+  - Limits: this rests on libpq's documented behavior and the RDS configuration (no Kerberos directory integration). The RDS `pg_hba` was not read.
 - **glibc, CVE-2026-100290.** `regcomp`/`regexec` are imported by system utilities: `grep`, `bash`, `diff`, `more`, `run-parts`, `hardlink`, `lsfd` and `localedef`. The other importers are `libapt-pkg`, `libapt-private`, `libsemanage`, `libformw`, and both `libkrb5` copies (Debian's and psycopg's). The entrypoints are `python3` and the Rust binary. Python's `re` and Rust's `regex` do not use glibc's regex.
-- **glibc, CVE-2026-115819.** Nothing in the images imports the wide `scanf` family.
+- **glibc, CVE-2026-115819.** No file outside glibc itself names a wide `scanf` function. Method: each image's filesystem was exported and every executable or shared-object file (1,035–1,038 per image) was searched for `wscanf`, `fwscanf`, `swscanf`, `vwscanf`, `vfwscanf` and `vswscanf`, with or without the `__isoc99_`/`__isoc23_` prefixes. `libc.so.6`, which defines them, was the only match. This is a string search of the dynamic symbol names, not a proof of reachability.
 - **gcc-12, CVE-2026-115456.** A vendor-open libstdc++ finding of the same class as the [APP-167 disposition](../APP-167/SCAN-DISPOSITION.md)'s gcc-12 findings.
 - **All containers** are non-root (`65532:65532`) with a read-only root filesystem (`infra/src`).
 
@@ -74,3 +79,13 @@ For each image the beta approval summary will show:
 - the expiry, 2026-11-20.
 
 Approve only if those match. Any other introduced finding still stops preparation before approval is requested.
+
+## Independent review
+
+[scan-disposition-review-2026-11-12.md](scan-disposition-review-2026-11-12.md) reviewed `cf9600e`: changes requested to the evidence text only. Dispositions by the lead, 2026-11-12:
+
+- Major (CVE-2026-119079, the service's psycopg probe and what `gssencmode` disables): fixed above. The record now names the `runtime.py` `probe()` path, distinguishes GSS encryption from GSS authentication, and states its limits.
+- Minor (tracker overclaim): fixed. The krb5 bookworm row is recorded as `?`, and the gcc-12 row as not parsed.
+- Minor (wide-`scanf` method): fixed. The method, the six symbol names, the per-image file counts and the single `libc.so.6` match are recorded.
+- Minor (recheck: `genui_migration` uses its Secrets Manager password, not an IAM token): fixed in the sentence above.
+- Minor (no test isolates the CRITICAL refusal): fixed. `test_a_critical_finding_refuses_even_when_the_predecessor_had_it` puts the same CRITICAL finding in both the baseline and the current scan. Deleting the guard's CRITICAL `require` fails it once per role (3 failures); the full suite is 178 tests OK.
