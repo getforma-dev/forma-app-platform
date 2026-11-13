@@ -198,10 +198,22 @@ export async function loadTable(source: Source): Promise<Table | string> {
 
 const REFUSALS: Record<string, string> = {
   could_not_shape: 'That came back as something other than a view, so nothing was shown. Nothing changed.',
-  composer_unavailable: 'Shaping that needs the AI model, and none is configured here. Try “only red invoices”, “total by month” or “highlight overdue in red”.',
+  composer_unavailable: 'Shaping that needs the AI model, and none is configured here. Nothing changed.',
   too_many_requests: 'Too many shapes in a short time. Try again in a moment.',
   invalid_request: 'Say it in a short sentence (up to 300 characters). Nothing changed.',
 };
+
+/**
+ * APP-135: the refusal for `code`. Only in the demo do the rehearsed
+ * sentences work without a model (APP-098 DS-53), so only there does the
+ * no-model refusal suggest them.
+ */
+export function shapeRefusal(code: string, demo: boolean): string | undefined {
+  if (code === 'composer_unavailable' && demo) {
+    return `${REFUSALS.composer_unavailable} Try “only red invoices”, “total by month” or “highlight overdue in red”.`;
+  }
+  return REFUSALS[code];
+}
 
 async function requestShape(body: Record<string, unknown>): Promise<{ target: string; spec: unknown } | string> {
   let response: Response;
@@ -215,7 +227,7 @@ async function requestShape(body: Record<string, unknown>): Promise<{ target: st
   }
   const answer = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (response.status === 404) return 'You can’t open that app, so it can’t be shaped.';
-  if (!response.ok) return REFUSALS[typeof answer?.code === 'string' ? answer.code : ''] ?? 'The shape could not be made right now. Nothing changed.';
+  if (!response.ok) return shapeRefusal(typeof answer?.code === 'string' ? answer.code : '', isDemoCanvas()) ?? 'The shape could not be made right now. Nothing changed.';
   if (!answer || typeof answer.target !== 'string') return REFUSALS.could_not_shape ?? '';
   return { target: answer.target, spec: answer.spec };
 }
