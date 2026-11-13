@@ -57,3 +57,21 @@
 | `strings app/admin/dist/shared.ae36e727.ir \| grep -i sample` | `sample-note`, `sample-data`, `sampleData` and the text are present, so the bin test rendered the committed TSX |
 
 Limitations: I ran no campaign (`live-sharing` included) and checked nothing in a browser.
+
+## Recheck (7a0625e)
+
+**Verdict: approve.** M1, m1, m2 and m3 are fixed. One minor follow-up, r1, is for the ticket only.
+
+- **`syncSampleNote`** (`admin/src/shared/document.ts:28-44`). It scopes itself to `host`, creates the note only for an available sample read when none exists, never adds a second one, and otherwise toggles `hidden` from `sampleNoteHidden`.
+- **Guest page.** `unavailable()` hides the note (:91), and the available refresh shows it (:123). Both use `.shared-page-head`, which holds the server's note, so the created note lands where the server would put it. The show runs only after the `available` check and the authority-version guard, in the same synchronous block as `replaceSharedParts`.
+- **Connected card.** `mask` hides the note (`canvas-controller.ts:58`). `refreshData` shows it (:87), only after the `available`/`can_add_to_canvas`/`added_to_canvas` checks, the epoch check and the version guard. Its host, the `.connected-owner` parent, exists both in the cards the server renders (`shared/canvas.tsx:26`) and in client cards (`canvas-controller.ts:36`). `mask` blanks the owner text but keeps the element.
+- **No unverified display.** On the page and on the card, every unavailable, error, offline, pagehide or mask path goes through the hiding call, and a removed card is gone entirely. I found no path that shows the note for an unavailable or unverified read.
+- **Wording.** `app.tsx:23` contains `SAMPLE_NOTE_TEXT` verbatim, and the test pins it. The rebuilt `dist/shared.66da3c13.ir` has the new sentence. No seed inserts records (only `storage/commands.rs` and a campaign do), so "filed by the app's members" holds.
+- **Tests.** The new test drives `syncSampleNote` on the fake DOM: created once, hidden while unverified, shown again. As the ticket now says, nothing drives `startSharedPage` or `startConnectedApps` through the hide and show.
+- **Ticket.** The corrected text matches the code. "No Rust changed" holds: the diff touches no `.rs` file. I did not reproduce "seen failing with its rule broken" or `just check admin test http-smoke`.
+- **r1 (minor, ticket).** The data-copy over-label (work page review m1) is still not recorded in `APP-098.md`. A data copy keeps the sample source bindings, so the flag stays set, but the copy's views read the member's editable records. Both notes then say charts read synthetic data. Add it to DS-84's "Remaining".
+
+| Command (in `app/admin`) | Result |
+| --- | --- |
+| `npm run -s typecheck` | clean, exit 0 |
+| `npx tsx --test test/sharing.test.ts test/connected-authority.test.ts` | 7 passed, 0 failed |
