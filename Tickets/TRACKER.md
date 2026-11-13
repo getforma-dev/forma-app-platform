@@ -184,3 +184,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](4-done/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Done | APP-104 |
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](4-done/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
 | 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](4-done/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |
+| 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](0-backlog/APP-180.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |

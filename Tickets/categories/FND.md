@@ -17,3 +17,4 @@ Released framework qualification, typed contracts and reproducible application s
 | 113 | [APP-113: Code review of the pitch (2026-10-30): findings, fixes and deferrals](../0-backlog/APP-113.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | S | Backlog | APP-099, APP-100, APP-104, APP-107, APP-108 |
 | 129 | [APP-129: Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)](../0-backlog/APP-129.md) | [PH08](../phases/PH08.md) | S14 | FND | P1 | S | Backlog | APP-107, APP-113 |
 | 146 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](../0-backlog/APP-140.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
+| 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](../0-backlog/APP-180.md) | [PH07](../phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |
