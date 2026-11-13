@@ -382,7 +382,8 @@ export function toggleNote(id: string): string {
 /** `/note <text>`: a new note through the `add` command; the first line is its title. */
 export async function newNote(text: string): Promise<string> {
   if (!(await findWork(true)) || !(listing || (await refresh()))) {
-    return 'Notes are not available to you right now. Nothing was saved.';
+    // APP-135: on a new workspace this is the usual case, so say what is needed.
+    return 'Notes are not available here yet: they use the Notes app from the library, which this workspace does not have, or your access changed. Nothing was saved.';
   }
   const words = text.trim();
   const [first = '', ...rest] = words.split(/\r?\n/);

@@ -28,7 +28,7 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 123 | [APP-123: Ask and Shape, after the demo: Make it a card, personal cards, @ mentions, /forma, /<folder> words](../0-backlog/APP-123.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-122, APP-097 |
 | 124 | [APP-124: Start from your data: drop files, Ask the folder, Make a card, Make an app](../0-backlog/APP-124.md) | [PH08](../phases/PH08.md) | S14 | UX | P2 | M | Backlog | APP-108, APP-122, APP-123 |
 | 132 | [APP-132: Clean slate: a sentence builds a first governed records app (generation refused as not_runnable without a library or sources)](../4-done/APP-132.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-128 |
-| 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](../0-backlog/APP-135.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Backlog | APP-132 |
+| 135 | [APP-135: MVP overbuild and hard-code audit: everything that only works because of the seeded library, the demo organization or fixed data](../2-in-progress/APP-135.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | In progress | APP-132 |
 | 138 | [APP-138: Forma Canvas — shared Forma brand and application design](../4-done/APP-138.md) | [PH08](../phases/PH08.md) | S14 | UX | P1 | M | Done | None |
 | 140 | [APP-141: Create an app before it reaches the canvas](../4-done/APP-141.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-093, APP-104, APP-120, APP-145 |
 | 141 | [APP-142: The app is a page: focus inside it, fan-out back to cards](../4-done/APP-142.md) | [PH08](../phases/PH08.md) | S14 | UX | P0 | M | Done | APP-106, APP-120, APP-141 |
