@@ -28,6 +28,7 @@ export type SharedPageProps = {
   needsSignIn: boolean; canSignUp: boolean; canAccept: boolean; signInAction: string; signInCsrf: string;
   canSignOut: boolean; csrfSignout: string;
   parts: SharedPart[]; views: View[]; recordCards: RecordsCard[]; recordsTruncated: boolean;
+  sampleData: boolean;
 };
 export type SharedApp = {
   presentation: PresentationProps;

@@ -717,6 +717,10 @@ async fn http_campaign(fixture: &Fixture, checks: &mut Vec<serde_json::Value>) {
         "{body}"
     );
     let props: serde_json::Value = serde_json::from_str(&body).unwrap();
+    // APP-098 DS-84: the sample check runs inside the guest's transaction
+    // (a missing grant would refuse the page); this fixture work reads no
+    // source of the synthetic catalog, so the guest sees no note.
+    assert_eq!(props["sample_data"], json!(false), "{body}");
     let parts = props["parts"].as_array().unwrap();
     assert_eq!(
         parts

@@ -56,6 +56,11 @@ impl Data {
             }
             require(outline.views.iter().all(|v| access.views.contains(&v.id)))?;
             outline.can_write = false;
+            // APP-098 DS-84: the same check as the member's outline; the
+            // bindings are read under the share's organization scope.
+            outline.sample_data = !super::queries::sample_works(&tx, org, &keys)
+                .await?
+                .is_empty();
             let collections = collections_many(&tx, org, &keys)
                 .await?
                 .pop()

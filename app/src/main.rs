@@ -1360,6 +1360,30 @@ mod tests {
                 && !shared_body.contains("/work/")
                 && !shared_body.contains("<select")
         );
+        // APP-098 DS-84: a shared work that reads the library's synthetic
+        // sample source says so to its guest; any other shows no note.
+        assert!(!shared_body.contains("data-sample-data"));
+        let (_, _, sample_shared) = html(
+            shared_page
+                .render(
+                    &genui::sharing::live::SharedPageProps {
+                        sample_data: true,
+                        ..shared.clone()
+                    },
+                    &RenderCtx::new(),
+                )
+                .unwrap()
+                .into_response(),
+        )
+        .await;
+        let note = &sample_shared[sample_shared
+            .find("data-sample-data")
+            .unwrap_or_else(|| panic!("no sample note: {sample_shared}"))..];
+        let note = &note[..note.find("</p>").unwrap()];
+        assert!(
+            note.contains(">Sample data<") && note.contains("synthetic sample data"),
+            "{note}"
+        );
         let (_, headers, document_body) = html(ssr.work(&document)).await;
         assert!(headers[header::CONTENT_SECURITY_POLICY]
             .to_str()

@@ -114,6 +114,10 @@ pub struct SharedPageProps {
     pub views: Vec<CardProps>,
     pub record_cards: Vec<SharedRecordsCardProps>,
     pub records_truncated: bool,
+    /// APP-098 DS-84: the shared work reads the library's synthetic sample
+    /// source. Set only on an authorized, available read; a neutral or
+    /// pending page never carries it.
+    pub sample_data: bool,
 }
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct SharedAppProps {
@@ -737,6 +741,7 @@ async fn guest_document(
         views,
         records_truncated: listing.truncated && !record_cards.is_empty(),
         record_cards,
+        sample_data: outline.sample_data,
         ..Default::default()
     })
 }

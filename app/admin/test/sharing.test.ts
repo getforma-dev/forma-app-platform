@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canvasPath, createShare, isShareKey, ShareError, shareSummary, sharesPath, type ShareDraft } from '../src/sharing/api.ts';
-import { sharedJson } from '../src/shared/document.ts';
+import { readFileSync } from 'node:fs';
+import { SAMPLE_NOTE_TEXT, sampleNoteHidden, sharedJson, syncSampleNote } from '../src/shared/document.ts';
+import { Document_ } from './fake-canvas-page.ts';
 import { connectedEntries } from '../src/shared/canvas-controller.ts';
 
 const ORG = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -58,4 +60,35 @@ test('uncertain creation retries keep the same idempotency body and never claim 
     globalThis.fetch = async () => new Response('{}', { status: 409 });
     await assert.rejects(createShare(sharesPath(ORG, OTHER), draft), error => error instanceof ShareError && !error.uncertain);
   } finally { globalThis.fetch = original; }
+});
+
+test('the Sample data note shows only for an available read of a sample work (APP-098 DS-84)', () => {
+  assert.equal(sampleNoteHidden(null), true, 'hidden while access is unverified');
+  assert.equal(sampleNoteHidden({ available: true, sample_data: true }), false);
+  assert.equal(sampleNoteHidden({ available: true, sample_data: false }), true);
+  assert.equal(sampleNoteHidden({ available: true }), true, 'an older response without the flag');
+  assert.equal(sampleNoteHidden({ available: false, sample_data: true }), true);
+});
+
+test('the Sample data note is created once, hidden while unverified and shown again (APP-098 DS-84 review)', () => {
+  const document_ = new Document_();
+  const host = document_.createElement('header');
+  const note = () => host.querySelectorAll('[data-sample-data]');
+  syncSampleNote(host as unknown as HTMLElement, null);
+  assert.equal(note().length, 0, 'nothing to hide, nothing created');
+  syncSampleNote(host as unknown as HTMLElement, { available: true, sample_data: false });
+  assert.equal(note().length, 0, 'a work without sample data gets no note');
+  // A page that became available in place (an invitation accepted in another tab).
+  syncSampleNote(host as unknown as HTMLElement, { available: true, sample_data: true });
+  assert.equal(note().length, 1);
+  assert.equal(note()[0]!.hidden, false);
+  assert.equal(note()[0]!.querySelector('.badge')?.textContent, 'Sample data');
+  assert.ok(note()[0]!.all().some((n) => n.textContent === ` ${SAMPLE_NOTE_TEXT}`));
+  syncSampleNote(host as unknown as HTMLElement, null);
+  assert.equal(note()[0]!.hidden, true, 'hidden while access is re-checked');
+  syncSampleNote(host as unknown as HTMLElement, { available: true, sample_data: true });
+  assert.equal(note().length, 1, 'never a second note');
+  assert.equal(note()[0]!.hidden, false);
+  // The server-rendered note and the client's say the same thing.
+  assert.ok(readFileSync(new URL('../src/shared/app.tsx', import.meta.url), 'utf8').includes(SAMPLE_NOTE_TEXT));
 });
