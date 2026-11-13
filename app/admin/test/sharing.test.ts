@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canvasPath, createShare, isShareKey, ShareError, shareSummary, sharesPath, type ShareDraft } from '../src/sharing/api.ts';
-import { sharedJson } from '../src/shared/document.ts';
+import { sampleNoteHidden, sharedJson } from '../src/shared/document.ts';
 import { connectedEntries } from '../src/shared/canvas-controller.ts';
 
 const ORG = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -58,4 +58,12 @@ test('uncertain creation retries keep the same idempotency body and never claim 
     globalThis.fetch = async () => new Response('{}', { status: 409 });
     await assert.rejects(createShare(sharesPath(ORG, OTHER), draft), error => error instanceof ShareError && !error.uncertain);
   } finally { globalThis.fetch = original; }
+});
+
+test('the Sample data note shows only for an available read of a sample work (APP-098 DS-84)', () => {
+  assert.equal(sampleNoteHidden(null), true, 'hidden while access is unverified');
+  assert.equal(sampleNoteHidden({ available: true, sample_data: true }), false);
+  assert.equal(sampleNoteHidden({ available: true, sample_data: false }), true);
+  assert.equal(sampleNoteHidden({ available: true }), true, 'an older response without the flag');
+  assert.equal(sampleNoteHidden({ available: false, sample_data: true }), true);
 });
