@@ -15,9 +15,12 @@
 //!   newest; at most [`MAX_TABLES`] that could be read: an unreadable file
 //!   is skipped and the next one tried), each read whole up to [`MAX_ROWS`]
 //!   rows. A registered file reads with its confirmed types. No readable
-//!   table is a text answer pointing to Brief me (200), never a 503.
+//!   table is a text answer pointing to Brief me (200), never a 503; a
+//!   server without its file reader says so instead (APP-135).
 //! - **The answer** is one closed shape, exactly `{"text", "references"}`:
-//!   plain text (at most 1500 characters) and every row it used, each with
+//!   plain text (at most 1500 characters, plus, when the folder holds data
+//!   files it did not read, one closing sentence saying how many it read:
+//!   APP-135) and every row it used, each with
 //!   receipt-like provenance from the server, never from the model: the file
 //!   (id, name, SHA-256 of its bytes), the sheet (XLSX) and the row (the
 //!   n-th row under the header). The model cites opaque references (`f1r3`)
@@ -235,7 +238,13 @@ pub fn user(question: &str, tables: &[FolderTable]) -> (String, BTreeSet<String>
             let item = Value::Array(item);
             let size = item.to_string().len() + 1;
             if bytes + size > MAX_MODEL_BYTES {
-                shown[index]["partial"] = json!(true);
+                // APP-135 review M1: this table and every later one with rows
+                // are shown short, so the model is told none of them is whole.
+                for (later, table) in tables.iter().enumerate().skip(index) {
+                    if !table.rows.is_empty() {
+                        shown[later]["partial"] = json!(true);
+                    }
+                }
                 break 'rows;
             }
             bytes += size;
@@ -331,11 +340,9 @@ fn summed(table: &FolderTable) -> Option<(usize, ColumnType)> {
         .or_else(|| find(|k| k == ColumnType::Integer))
 }
 
-/// A rehearsed answer, or `None` (then the model).
-// DS-79: reached only when the route's demo flag is on.
-pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
-    let words = words(question);
-    let has = |w: &str| words.iter().any(|word| word == w);
+/// A rehearsed change request ("make …", "delete …"): answered that Ask
+/// only reads, from no table, so it carries no coverage note (APP-135).
+pub fn asks_for_change(question: &str) -> bool {
     const CHANGES: &[&str] = &[
         "make",
         "build",
@@ -351,7 +358,17 @@ pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
         "plot",
         "shape",
     ];
-    if words.first().is_some_and(|w| CHANGES.contains(&w.as_str())) {
+    words(question)
+        .first()
+        .is_some_and(|w| CHANGES.contains(&w.as_str()))
+}
+
+/// A rehearsed answer, or `None` (then the model).
+// DS-79: reached only when the route's demo flag is on.
+pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
+    let words = words(question);
+    let has = |w: &str| words.iter().any(|word| word == w);
+    if asks_for_change(question) {
         return Some(Answer {
             text: "Ask only reads, so nothing changed. To build from these files, use Make an app."
                 .into(),
@@ -482,26 +499,33 @@ pub fn rehearsed(question: &str, tables: &[FolderTable]) -> Option<Answer> {
 /// confirmed first, then the newest, at most [`MAX_TABLES`] that could be
 /// read: a file that cannot be read is skipped and the next one tried, so a
 /// bad newest file never hides an older good table (APP-124 review). The
-/// second value counts the data files that could not be read.
+/// [`Coverage`] counts each other data file once: unreadable, or past the
+/// limit (never read). PDFs are not tables and are not counted.
 async fn tables(
     state: &Boxes,
     member: &crate::storage::TrustedRequest,
     files: &[BoxFile],
-) -> (Vec<FolderTable>, usize) {
+) -> (Vec<FolderTable>, Coverage) {
     let mut candidates: Vec<&BoxFile> = files
         .iter()
         .filter(|f| matches!(f.kind.as_str(), "csv" | "xlsx"))
         .collect();
     candidates.sort_by_key(|f| (f.data.is_none(), std::cmp::Reverse(f.created_at.clone())));
-    let mut unreadable = 0;
+    let mut coverage = Coverage::default();
     let mut out = Vec::new();
     for file in candidates {
         if out.len() >= MAX_TABLES {
-            break;
-        }
-        let Ok((_, table, inferred)) = routes::inspect_file(state, member, file).await else {
-            unreadable += 1;
+            // APP-135: counted, so the answer can say it did not read them.
+            coverage.beyond_cap += 1;
             continue;
+        }
+        let (table, inferred) = match routes::inspect_file(state, member, file).await {
+            Ok((_, table, inferred)) => (table, inferred),
+            Err(code) => {
+                coverage.unreadable += 1;
+                coverage.reader_missing |= code == "parser_unavailable";
+                continue;
+            }
         };
         // A registered file reads with the types its member confirmed.
         let confirmed = |id: &str| -> Option<ColumnType> {
@@ -529,7 +553,67 @@ async fn tables(
             rows: table.rows.into_iter().take(MAX_ROWS).collect(),
         });
     }
-    (out, unreadable)
+    (out, coverage)
+}
+
+/// APP-135: the data files a folder answer did not read.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Coverage {
+    /// Files whose table could not be read.
+    pub unreadable: usize,
+    /// Readable-looking files past the [`MAX_TABLES`] limit, never read.
+    pub beyond_cap: usize,
+    /// At least one read failed because this server has no file reader.
+    pub reader_missing: bool,
+}
+
+/// APP-135: the sentence an answer built from `read` tables adds when the
+/// folder holds files it did not read; `None` when it read them all. Without
+/// it the answer would silently stand for the whole folder.
+pub fn coverage_note(read: usize, coverage: Coverage) -> Option<String> {
+    if coverage.unreadable == 0 && coverage.beyond_cap == 0 {
+        return None;
+    }
+    let total = read + coverage.unreadable + coverage.beyond_cap;
+    let mut parts = Vec::new();
+    if coverage.unreadable > 0 {
+        parts.push(format!("{} could not be read", coverage.unreadable));
+    }
+    if coverage.beyond_cap > 0 {
+        let verb = if coverage.beyond_cap == 1 {
+            "is"
+        } else {
+            "are"
+        };
+        parts.push(format!(
+            "{} {verb} past the {MAX_TABLES}-table limit",
+            coverage.beyond_cap
+        ));
+    }
+    Some(format!(
+        "(This answer reads {read} of the {total} tables in this {}: {}.)",
+        super::NOUN_LOWER,
+        parts.join(" and ")
+    ))
+}
+
+/// APP-135: no table could be read because this server has no file reader,
+/// which is not the files' fault. `single`: Ask on one file (its card, app
+/// chat), which is not sent to the folder's brief.
+pub fn no_reader(single: bool) -> Answer {
+    let reason = "This server cannot read tables right now (its file reader is not available).";
+    let text = if single {
+        format!("{reason} The file is kept as it was.")
+    } else {
+        format!(
+            "{reason} The files in this {} are kept; Brief me still reads its PDFs.",
+            super::NOUN_LOWER
+        )
+    };
+    Answer {
+        text,
+        references: Vec::new(),
+    }
 }
 
 /// The answer when no table could be read: text only, pointing to Brief me.
@@ -595,7 +679,7 @@ pub async fn ask_post(
     let Some(files) = question_files(&view.files, file_id) else {
         return http::not_found();
     };
-    let (tables, unreadable) = tables(&state, &member, files).await;
+    let (tables, coverage) = tables(&state, &member, files).await;
     let log = |source: &str, code: &str, references: usize| {
         tracing::info!(
             event = "box.asked",
@@ -605,6 +689,8 @@ pub async fn ask_post(
             principal_id = member.principal(),
             box_id,
             tables = tables.len(),
+            unreadable = coverage.unreadable,
+            beyond_cap = coverage.beyond_cap,
             rows = tables.iter().map(|t| t.rows.len()).sum::<usize>(),
             references,
             duration_ms = started.elapsed().as_millis() as u64,
@@ -612,20 +698,34 @@ pub async fn ask_post(
         );
     };
     if tables.is_empty() {
-        log("none", "no_tables", 0);
-        let answer = if file_id.is_some() {
+        log(
+            "none",
+            if coverage.reader_missing {
+                "parser_unavailable"
+            } else {
+                "no_tables"
+            },
+            0,
+        );
+        let answer = if coverage.reader_missing {
+            no_reader(file_id.is_some())
+        } else if file_id.is_some() {
             Answer {
                 text: "Ask could not analyze this file. Analysis currently supports simple CSV/XLSX tables with up to 32 columns and values instead of formulas. The original viewer supports wider files and saved Excel formula results; double-click the file card to view it.".into(),
                 references: Vec::new(),
             }
         } else {
-            no_table(unreadable)
+            no_table(coverage.unreadable)
         };
         return routes::document(StatusCode::OK, &document(&answer, &tables));
     }
     // DS-79: rehearsed folder questions, demo organization only.
-    if let Some(answer) = demo.then(|| rehearsed(&question, &tables)).flatten() {
+    let note = coverage_note(tables.len(), coverage);
+    if let Some(mut answer) = demo.then(|| rehearsed(&question, &tables)).flatten() {
         log("rehearsed", "ok", answer.references.len());
+        if let Some(note) = note.as_ref().filter(|_| !asks_for_change(&question)) {
+            answer.text = format!("{} {note}", answer.text);
+        }
         return routes::document(StatusCode::OK, &document(&answer, &tables));
     }
     if !state.composer.enabled() {
@@ -645,8 +745,11 @@ pub async fn ask_post(
         }
     };
     match talk::judge(&reply.text, &known) {
-        Ok(answer) => {
+        Ok(mut answer) => {
             log("model", "ok", answer.references.len());
+            if let Some(note) = &note {
+                answer.text = format!("{} {note}", answer.text);
+            }
             routes::document(StatusCode::OK, &document(&answer, &tables))
         }
         Err(code) => {
