@@ -209,7 +209,10 @@ pub async fn show(State(state): State<Arc<Slack>>, request: Request) -> Response
     let Some((_, member)) = crate::sharing::session(&state.auth, request.headers()).await else {
         return sign_in_first();
     };
-    let who = html_escape(&crate::directory::label(member.principal()));
+    let who = html_escape(&crate::directory::label(
+        member.organization(),
+        member.principal(),
+    ));
     page(
         StatusCode::OK,
         "Link Slack to Forma",
@@ -260,7 +263,7 @@ pub async fn confirm(State(state): State<Arc<Slack>>, request: Request) -> Respo
                 principal_id = member.principal(),
                 "slack user linked"
             );
-            let label = crate::directory::label(member.principal());
+            let label = crate::directory::label(member.organization(), member.principal());
             let slack = state.clone();
             let user = claim.user.clone();
             tokio::spawn(async move {

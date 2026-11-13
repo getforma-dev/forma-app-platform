@@ -278,7 +278,7 @@ pub(crate) fn noun(schema: &str) -> String {
 
 /// The record as an approver reads it: its values (an expense claim's in
 /// the claim's order), its status aside, and the filer.
-fn claim_blocks(record: &RecordRow) -> Vec<Value> {
+fn claim_blocks(organization: &str, record: &RecordRow) -> Vec<Value> {
     let mut pairs = Vec::new();
     let expense = [
         ("amount", "Amount"),
@@ -312,7 +312,10 @@ fn claim_blocks(record: &RecordRow) -> Vec<Value> {
             pairs.push((label, resolve::display(value)));
         }
     }
-    pairs.push(("Filed by".to_owned(), directory::label(&record.creator)));
+    pairs.push((
+        "Filed by".to_owned(),
+        directory::label(organization, &record.creator),
+    ));
     if pairs.len() == 1 {
         return vec![text::section(&summary(record)), text::fields(&pairs)];
     }
@@ -336,7 +339,7 @@ async fn pending_message(state: &Slack, member: &TrustedRequest, catalog: &[Cata
             if count > MAX_PENDING {
                 continue;
             }
-            blocks.extend(claim_blocks(record));
+            blocks.extend(claim_blocks(member.organization(), record));
             blocks.push(decision_buttons(record));
         }
     }
@@ -774,7 +777,10 @@ async fn notify_filer_record(
     let text_line = format!(
         "Your {what} was *{}* by *{}*.",
         text::escape(status),
-        text::escape(&directory::label(decider.principal()))
+        text::escape(&directory::label(
+            decider.organization(),
+            decider.principal()
+        ))
     );
     for (team, user, principal) in links.into_iter().filter(|(_, _, p)| *p == record.creator) {
         // The filer's link is judged again before anything is sent to it.
@@ -912,13 +918,13 @@ async fn decide(
         Ok(CommandResult::Committed(outcome)) => {
             origins::mark(&outcome.record_id, outcome.record_version, VIA);
             notify_filer_record(&state, &member, &record, to).await;
-            let mut blocks = claim_blocks(&record);
+            let mut blocks = claim_blocks(member.organization(), &record);
             blocks.insert(
                 0,
                 text::section(&format!(
                     "*{} by {}* {}",
                     capitalized(to),
-                    text::escape(&directory::label(member.principal())),
+                    text::escape(&directory::label(member.organization(), member.principal())),
                     time_now()
                 )),
             );
@@ -927,7 +933,7 @@ async fn decide(
                 &format!(
                     "{} by {}",
                     capitalized(to),
-                    text::escape(&directory::label(member.principal()))
+                    text::escape(&directory::label(member.organization(), member.principal()))
                 ),
                 Some(blocks),
                 true,
@@ -992,13 +998,17 @@ pub fn event(state: &Arc<Slack>, body: &Value) {
 }
 
 /// The approver's DM for a pending claim (used by `notify`).
-pub(crate) fn approval_request(record: &RecordRow, state: &Slack) -> (String, Vec<Value>) {
-    let filer = text::escape(&directory::label(&record.creator));
+pub(crate) fn approval_request(
+    organization: &str,
+    record: &RecordRow,
+    state: &Slack,
+) -> (String, Vec<Value>) {
+    let filer = text::escape(&directory::label(organization, &record.creator));
     let what = noun(&record.schema);
     let mut blocks = vec![text::section(&format!(
         "*{filer}* filed a {what} for your approval"
     ))];
-    blocks.extend(claim_blocks(record));
+    blocks.extend(claim_blocks(organization, record));
     blocks.push(decision_buttons(record));
     blocks.push(text::context(&canvas_link(state)));
     (format!("{filer} filed a {what} for your approval"), blocks)

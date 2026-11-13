@@ -61,7 +61,7 @@ pub(super) async fn search(
         .await
     {
         Ok(listing) => {
-            let mut document = routes::records_document(&listing);
+            let mut document = routes::records_document(member.organization(), &listing);
             if let Some(records) = document["records"].as_array_mut() {
                 for record in records {
                     for field in record["values"].as_array_mut().into_iter().flatten() {

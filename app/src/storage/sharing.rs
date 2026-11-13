@@ -141,9 +141,9 @@ fn boolean(row: &Row, index: usize) -> Result<bool> {
 /// The member label: the operator-set display name when one exists
 /// (`crate::directory`, ADR-011 scenarios), else the neutral `Member` and the
 /// first eight hex digits.
-// DS-17, DS-44: the directory's name, else the neutral label.
-pub fn member_label(principal: &str) -> String {
-    crate::directory::label(principal)
+// DS-17, DS-44: the directory's name (demo organizations only), else the neutral label.
+pub fn member_label(organization: &str, principal: &str) -> String {
+    crate::directory::label(organization, principal)
 }
 
 /// A live entitlement of the member, judged on the statement's clock.
@@ -172,7 +172,7 @@ impl Workspace {
                 .map(|row| {
                     let principal = text(row, 0)?;
                     Ok(Member {
-                        label: member_label(&principal),
+                        label: member_label(&request.organization, &principal),
                         principal,
                     })
                 })
@@ -344,10 +344,16 @@ mod tests {
     #[test]
     fn member_labels_show_no_provider_identity() {
         assert_eq!(
-            member_label("00000000-0000-4000-8000-00000000006d"),
+            member_label(
+                "00000000-0000-4000-8000-0000000000d2",
+                "00000000-0000-4000-8000-00000000006d"
+            ),
             "Member 00000000"
         );
-        assert_eq!(member_label("abc"), "Member abc");
+        assert_eq!(
+            member_label("00000000-0000-4000-8000-0000000000d2", "abc"),
+            "Member abc"
+        );
         let shared = Shared {
             grantee: "g".into(),
             granted: vec![Granted {
