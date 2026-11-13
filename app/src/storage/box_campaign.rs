@@ -1770,7 +1770,42 @@ async fn campaign() {
         "{unreadable}"
     );
     assert_eq!(stub.calls("folder_ask").len(), asks, "no model call");
-    check(&mut checks, "APP-124 review: Make a card on an untitled folder walks past a newest table the sealed parser cannot read (a header, no rows) to the older readable one, Ventas ano.csv, and is named after it; its /name is judged whole before anything is published: /ventas-ano is the folder Ventas año as the canvas addresses it (NFKD, marks dropped), /ventas-ano-card and /ventas-ano-2 are held by organization labels of an app Maya never opened, so the card is /ventas-ano-3 with exactly one new publication (no orphan); an Idempotency-Key makes Make a card (here) and folder formation (the demo's rehearsed build, below) answer their first result (201, Idempotent-Replayed, nothing new published), the same key with another body is 422 idempotency_key_reused and a malformed key 400; Ask on a folder whose only table cannot be read answers its text (200, no references, no model call), not 503");
+    // APP-135: Ask on the untitled folder reads Ventas ano.csv, not the
+    // newer unreadable empty.csv, and its answer says so.
+    stub.script(
+        "folder_ask",
+        json!({"text": "Ventas ano.csv starts in July.", "references": ["f1r1"]}).to_string(),
+    );
+    let partial = stand
+        .post(
+            &format!("/v1/boxes/{ventas}/ask"),
+            Some(&maya_cookie),
+            &json!({"question": "where does it start?"}).to_string(),
+        )
+        .await;
+    assert_eq!(partial.status, StatusCode::OK, "{}", partial.text());
+    let partial = partial.json();
+    let partial_text = partial["text"].as_str().unwrap();
+    assert!(
+        partial_text.starts_with("Ventas ano.csv starts in July. ")
+            && partial_text.ends_with(&format!(
+                "(This answer reads 1 of the 2 tables in this {}: 1 could not be read.)",
+                crate::boxes::NOUN_LOWER
+            )),
+        "{partial}"
+    );
+    let shown: Value = serde_json::from_str(
+        stub.calls("folder_ask").last().unwrap()["messages"][0]["content"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        shown["tables"].as_array().map(Vec::len),
+        Some(1),
+        "the model is shown the one readable table: {shown}"
+    );
+    check(&mut checks, "APP-124 review: Make a card on an untitled folder walks past a newest table the sealed parser cannot read (a header, no rows) to the older readable one, Ventas ano.csv, and is named after it; its /name is judged whole before anything is published: /ventas-ano is the folder Ventas año as the canvas addresses it (NFKD, marks dropped), /ventas-ano-card and /ventas-ano-2 are held by organization labels of an app Maya never opened, so the card is /ventas-ano-3 with exactly one new publication (no orphan); an Idempotency-Key makes Make a card (here) and folder formation (the demo's rehearsed build, below) answer their first result (201, Idempotent-Replayed, nothing new published), the same key with another body is 422 idempotency_key_reused and a malformed key 400; Ask on a folder whose only table cannot be read answers its text (200, no references, no model call), not 503; APP-135: Ask on the untitled folder shows the model only its readable table and the answer closes with \"(This answer reads 1 of the 2 tables in this folder: 1 could not be read.)\"");
 
     // --- The demo organization: rehearsed sentence, explanation, brief ---
     crate::demo::configure_for_tests(true, &[ORG]);

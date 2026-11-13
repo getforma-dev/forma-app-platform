@@ -736,7 +736,7 @@ fn folder_answers_name_what_they_did_not_read() {
         },
     )
     .unwrap();
-    assert!(note.contains("uses 3 of the 6 tables"), "{note}");
+    assert!(note.contains("reads 3 of the 6 tables"), "{note}");
     assert!(note.contains("1 could not be read"), "{note}");
     assert!(
         note.contains(&format!("2 are past the {MAX_TABLES}-table limit")),
@@ -755,12 +755,64 @@ fn folder_answers_name_what_they_did_not_read() {
         one.contains("1 is past the") && !one.contains("could not be read"),
         "{one}"
     );
-    let reader = no_reader();
-    assert!(reader.text.contains("cannot read tables right now") && reader.references.is_empty());
-    assert!(
-        !reader.text.contains("could not be read"),
-        "the files are not blamed"
+    assert!(note.starts_with("(This answer reads 3 of"), "{note}");
+    for single in [false, true] {
+        let reader = no_reader(single);
+        assert!(
+            reader.text.contains("cannot read tables right now") && reader.references.is_empty()
+        );
+        assert!(
+            !reader.text.contains("could not be read"),
+            "the files are not blamed"
+        );
+        assert_eq!(
+            reader.text.contains("Brief me"),
+            !single,
+            "a one-file Ask is not sent to the folder's brief: {}",
+            reader.text
+        );
+    }
+}
+
+/// APP-135 review M1: when the model budget runs out inside one table, every
+/// later table is marked partial too, so the model is never shown an empty
+/// table as if it were whole.
+#[test]
+fn a_budget_cut_marks_every_later_table_partial() {
+    use super::ask::user;
+    let long = "x".repeat(60);
+    let wide: Vec<[&str; 3]> = (0..200).map(|_| [long.as_str(); 3]).collect();
+    let small = [
+        ["2026-07-01", "North", "1"],
+        ["2026-07-02", "South", "2"],
+        ["2026-07-03", "East", "3"],
+    ];
+    let tables = [
+        folder_table(&wide, 200),
+        folder_table(&wide, 200),
+        folder_table(&small, 3),
+    ];
+    let (message, known) = user("how many rows?", &tables);
+    let message: serde_json::Value = serde_json::from_str(&message).unwrap();
+    let shown = message["tables"].as_array().unwrap();
+    assert_eq!(
+        shown[0]["partial"],
+        serde_json::json!(false),
+        "the first table fits"
     );
+    assert_eq!(shown[0]["rows"].as_array().unwrap().len(), 200);
+    assert_eq!(
+        shown[1]["partial"],
+        serde_json::json!(true),
+        "the cut table"
+    );
+    assert_eq!(
+        shown[2]["partial"],
+        serde_json::json!(true),
+        "a later table, unshown"
+    );
+    assert_eq!(shown[2]["rows"], serde_json::json!([]));
+    assert!(!known.iter().any(|r| r.starts_with("f3")), "{known:?}");
 }
 
 /// ADR-011 I4 (APP-124 review): a folder build's idempotency key answers the
