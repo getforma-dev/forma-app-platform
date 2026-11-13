@@ -174,7 +174,7 @@ function Work(props: WorkProps) {
       </p>
       {/* APP-098 DS-84: the library's synthetic sample data, never the member's own. */}
       {createShow(() => props.sampleData, () => (
-        <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> The numbers here come from Forma's synthetic sample data, not your own.</p>
+        <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> Charts and tables here read Forma's synthetic sample data. Records you file are your own.</p>
       ))}
       <p><a href={props.canvas}>Open on the canvas</a></p>
       <div class="document-actions">

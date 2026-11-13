@@ -1213,7 +1213,9 @@ mod tests {
             .unwrap_or_else(|| panic!("no sample note: {sample_body}"))..];
         let note = &note[..note.find("</p>").unwrap()];
         assert!(
-            note.contains(">Sample data<") && note.contains("not your own"),
+            note.contains(">Sample data<")
+                && note.contains("synthetic sample data")
+                && note.contains("Records you file are your own"),
             "{note}"
         );
         // APP-144: the admitted form and current records are real native HTML;

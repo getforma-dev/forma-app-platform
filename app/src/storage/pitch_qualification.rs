@@ -877,7 +877,7 @@ async fn campaign() {
             .lock()
             .unwrap()
             .as_ref()
-            .is_some_and(|props| props.sample_data),
+            .is_some_and(|props| props.work == adapted_work && props.sample_data),
         "the adapted work's page carries the Sample data note"
     );
     let adapted_views: Vec<String> = adapted_group["cards"]
