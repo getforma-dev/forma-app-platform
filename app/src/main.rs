@@ -1187,6 +1187,37 @@ mod tests {
         assert!(records_body.contains("/canvas#g-work"));
         assert!(records_body.contains("New Claim record"));
         assert!(records_body.contains("/work/app/work/records/collection/"));
+        // APP-098 DS-84: a work that reads the library's synthetic sample
+        // source says so on its own page, as its canvas chip does; any other
+        // work shows no such note.
+        assert!(!only.sample_data && !records_body.contains("data-sample-data"));
+        let sample = work::props(
+            &genui::storage::WorkOutline {
+                sample_data: true,
+                ..outline.clone()
+            },
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            false,
+            Vec::new(),
+            work::WorkChrome {
+                canvas: work::canvas_href("work"),
+                ..Default::default()
+            },
+        );
+        assert!(sample.sample_data);
+        let (_, _, sample_body) = html(ssr.work(&sample)).await;
+        let note = &sample_body[sample_body
+            .find("data-sample-data")
+            .unwrap_or_else(|| panic!("no sample note: {sample_body}"))..];
+        let note = &note[..note.find("</p>").unwrap()];
+        assert!(
+            note.contains(">Sample data<")
+                && note.contains("synthetic sample data")
+                && note.contains("Records you file are your own"),
+            "{note}"
+        );
         // APP-144: the admitted form and current records are real native HTML;
         // values remain escaped and commands retain their existing route/key.
         let mut document = only.clone();

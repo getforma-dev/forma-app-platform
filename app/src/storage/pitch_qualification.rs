@@ -469,10 +469,11 @@ async fn campaign() {
         engine: Some(engine.clone() as Arc<dyn Executor>),
         ..Counting::default()
     });
+    let work_pages = Arc::new(RecordingPages::default());
     let work = Arc::new(Work::new(
         auth.clone(),
         Some(counting.clone() as Arc<dyn Executor>),
-        Arc::new(RecordingPages::default()),
+        work_pages.clone(),
     ));
     let mut manifest =
         forma_server::assets::try_load_manifest::<Assets>().expect("admin/dist built");
@@ -857,6 +858,28 @@ async fn campaign() {
         chips,
         ["Adapted to your request", "Amount > $200", "Sample data"]
     );
+    // Its own page says so too (the work page's "Sample data" note).
+    let adapted_page = stand
+        .get(
+            &format!("/w/{AUTHORING_APP}/{adapted_work}"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(
+        adapted_page.status,
+        StatusCode::OK,
+        "{}",
+        adapted_page.text()
+    );
+    assert!(
+        work_pages
+            .last
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|props| props.work == adapted_work && props.sample_data),
+        "the adapted work's page carries the Sample data note"
+    );
     let adapted_views: Vec<String> = adapted_group["cards"]
         .as_array()
         .unwrap()
@@ -889,7 +912,7 @@ async fn campaign() {
     assert_eq!(own_publications, 1);
     check(
         &mut checks,
-        "live transform: the adapted work (drafted on Maya's own app, owner-published, admitted whole) carries the chips Adapted to your request · Amount > $200 on its group route, runs the same four views with the filter and a contract-valid receipt (fewer than the 240 claims), and the standard work stays openable for back to standard",
+        "live transform: the adapted work (drafted on Maya's own app, owner-published, admitted whole) carries the chips Adapted to your request · Amount > $200 · Sample data on its group route and the Sample data note on its work page (APP-098 DS-84), runs the same four views with the filter and a contract-valid receipt (fewer than the 240 claims), and the standard work stays openable for back to standard",
     );
 
     // --- APP-101: the near-tie chooser and the pinned compose ---
