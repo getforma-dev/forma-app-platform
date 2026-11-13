@@ -64,6 +64,9 @@ pub struct WorkProps {
     pub records: Vec<RecordLinkProps>,
     /// `/canvas#g-{work}` for this work.
     pub canvas: String,
+    /// APP-098 DS-84: the work reads the library's synthetic sample source,
+    /// so its page says the numbers are sample data, as its canvas chip does.
+    pub sample_data: bool,
 }
 
 /// One admitted part. The discriminants and closed layout classes are made
@@ -770,6 +773,7 @@ pub fn props(
         records: chrome.records,
         canvas: chrome.canvas,
         can_share: chrome.can_share,
+        sample_data: outline.sample_data,
     }
 }
 

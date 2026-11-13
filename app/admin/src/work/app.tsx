@@ -150,6 +150,7 @@ type WorkProps = {
   records: RecordLink[];
   canvas: string;
   canShare: boolean;
+  sampleData: boolean;
 };
 
 // This explicitly registered island retains the client entry for live updates
@@ -171,6 +172,10 @@ function Work(props: WorkProps) {
       <p class="lede">
         Your app, connected to your canvas.
       </p>
+      {/* APP-098 DS-84: the library's synthetic sample data, never the member's own. */}
+      {createShow(() => props.sampleData, () => (
+        <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> The numbers here come from Forma's synthetic sample data, not your own.</p>
+      ))}
       <p><a href={props.canvas}>Open on the canvas</a></p>
       <div class="document-actions">
       {createShow(() => props.canShare, () => <button type="button" class="share-primary" data-manage-share="" data-app={props.app} data-work={props.work} data-title={props.title}>Share app</button>)}
@@ -408,6 +413,7 @@ mount(
       records: [],
       canvas: '/canvas',
       canShare: false,
+      sampleData: false,
     }),
   '#app',
 );
