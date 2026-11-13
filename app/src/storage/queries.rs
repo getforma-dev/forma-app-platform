@@ -944,37 +944,21 @@ pub struct WorkOutline {
     pub query_inputs: std::collections::BTreeSet<String>,
 }
 
-/// The input ids the definition's view queries read: every `input_id` value
-/// and every `inputs` entry under `views[*].query`. These are the typed query
-/// references a data copy redirects (`data_copy::editable_definition`), so a
-/// copy's views no longer name the source input it still binds.
+/// The input ids the definition's view queries read: the union of each
+/// `views[*].query.inputs`. Admission makes that list the complete set a query
+/// reads (an unknown input, or a field of an input outside it, is refused), and
+/// a data copy redirects it to the copy's records input
+/// (`data_copy::editable_definition`).
 pub(crate) fn query_inputs(content: &Value) -> std::collections::BTreeSet<String> {
-    fn walk(value: &Value, out: &mut std::collections::BTreeSet<String>) {
-        match value {
-            Value::Object(object) => {
-                for (key, item) in object {
-                    match (key.as_str(), item) {
-                        ("input_id", Value::String(input)) => {
-                            out.insert(input.clone());
-                        }
-                        ("inputs", Value::Array(inputs)) => {
-                            out.extend(inputs.iter().filter_map(Value::as_str).map(str::to_owned));
-                        }
-                        _ => walk(item, out),
-                    }
-                }
-            }
-            Value::Array(items) => items.iter().for_each(|item| walk(item, out)),
-            _ => {}
-        }
-    }
-    let mut out = std::collections::BTreeSet::new();
-    for view in content["views"].as_array().into_iter().flatten() {
-        if let Some(query) = view.get("query") {
-            walk(query, &mut out);
-        }
-    }
-    out
+    content["views"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|view| view["query"]["inputs"].as_array())
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
 }
 
 /// APP-098 DS-84: a work is sample data when one of its views reads an input
