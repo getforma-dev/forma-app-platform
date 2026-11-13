@@ -106,8 +106,9 @@ export function startSharedPage(document_: Document = document): void {
     recordComponents.invalidate();
     invalidatePresentation(root!);
     root!.querySelector('[data-shared-parts]')?.remove();
-    syncSampleNote(root!.querySelector<HTMLElement>('.shared-page-head'), null);
-    syncDemoNote(root!.querySelector<HTMLElement>('.shared-page-head'), null);
+    const head = root!.querySelector<HTMLElement>('.shared-page-head');
+    syncSampleNote(head, null);
+    syncDemoNote(head, null);
     const title = root!.querySelector('h1'); if (title) title.textContent = 'Private app';
     const owner = root!.querySelector<HTMLElement>('.shared-by'); if (owner) owner.hidden = true;
     for (const button of root!.querySelectorAll<HTMLButtonElement>('[data-share-add], [data-share-accept]')) button.disabled = true;
@@ -139,8 +140,9 @@ export function startSharedPage(document_: Document = document): void {
       const title = root!.querySelector('h1'); if (title) title.textContent = props.title;
       const owner = root!.querySelector<HTMLElement>('.shared-by');
       if (owner) { owner.hidden = false; owner.textContent = `Shared by ${props.owner_label} · Access expires ${props.expires_at}`; }
-      syncSampleNote(root!.querySelector<HTMLElement>('.shared-page-head'), props);
-      syncDemoNote(root!.querySelector<HTMLElement>('.shared-page-head'), props);
+      const head = root!.querySelector<HTMLElement>('.shared-page-head');
+      syncSampleNote(head, props);
+      syncDemoNote(head, props);
       const message = root!.querySelector('[data-shared-message]'); if (message) message.textContent = props.message;
       let add = root!.querySelector<HTMLButtonElement>('[data-share-add]');
       if (!add && props.can_add_to_canvas && !props.added_to_canvas) {
