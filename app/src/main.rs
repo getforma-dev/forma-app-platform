@@ -1074,6 +1074,7 @@ mod tests {
             collections: vec![("collection".into(), "Claim".into())],
             can_write: true,
             sample_data: false,
+            query_inputs: Default::default(),
         };
         let form = work::FormValues {
             window_start: "2026-10-22T10:00".into(),

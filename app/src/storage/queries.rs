@@ -940,6 +940,51 @@ pub struct WorkOutline {
     /// library catalog (sample data, not the member's own). Filled by
     /// [`Data::work_outline`].
     pub sample_data: bool,
+    /// The input ids its views' queries read ([`query_inputs`]).
+    pub query_inputs: std::collections::BTreeSet<String>,
+}
+
+/// The input ids the definition's view queries read: every `input_id` value
+/// and every `inputs` entry under `views[*].query`. These are the typed query
+/// references a data copy redirects (`data_copy::editable_definition`), so a
+/// copy's views no longer name the source input it still binds.
+pub(crate) fn query_inputs(content: &Value) -> std::collections::BTreeSet<String> {
+    fn walk(value: &Value, out: &mut std::collections::BTreeSet<String>) {
+        match value {
+            Value::Object(object) => {
+                for (key, item) in object {
+                    match (key.as_str(), item) {
+                        ("input_id", Value::String(input)) => {
+                            out.insert(input.clone());
+                        }
+                        ("inputs", Value::Array(inputs)) => {
+                            out.extend(inputs.iter().filter_map(Value::as_str).map(str::to_owned));
+                        }
+                        _ => walk(item, out),
+                    }
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|item| walk(item, out)),
+            _ => {}
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    for view in content["views"].as_array().into_iter().flatten() {
+        if let Some(query) = view.get("query") {
+            walk(query, &mut out);
+        }
+    }
+    out
+}
+
+/// APP-098 DS-84: a work is sample data when one of its views reads an input
+/// bound to a source of the synthetic catalog (`bound`, from
+/// [`sample_works`]); a binding no view reads does not count.
+pub(crate) fn reads_sample(
+    query_inputs: &std::collections::BTreeSet<String>,
+    bound: Option<&std::collections::BTreeSet<String>>,
+) -> bool {
+    bound.is_some_and(|bound| !bound.is_disjoint(query_inputs))
 }
 
 /// The runnable views of re-admitted definition content.
@@ -1072,6 +1117,7 @@ fn outline(content: &[u8]) -> Result<WorkOutline> {
         collections: Vec::new(),
         can_write: false,
         sample_data: false,
+        query_inputs: query_inputs(&content),
     })
 }
 
@@ -1122,14 +1168,15 @@ impl Data {
                     .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
                     .collect::<Result<Vec<_>>>()?
             };
-            let sample_data = !sample_works(permit.transaction(), org, &[(app, work)])
-                .await?
-                .is_empty();
+            let samples = sample_works(permit.transaction(), org, &[(app, work)]).await?;
             let mut outline = outline(&content)?;
             outline.definition_digest = admitted;
             outline.can_write = can_write;
             outline.collections = collections;
-            outline.sample_data = sample_data;
+            outline.sample_data = reads_sample(
+                &outline.query_inputs,
+                samples.get(&(app.to_owned(), work.to_owned())),
+            );
             if let Some(name) = super::work_labels::names(permit.transaction(), org, &[(app, work)])
                 .await?.get(&(app.to_owned(), work.to_owned())).and_then(|label| label.name.as_ref())
             {
@@ -1691,27 +1738,29 @@ pub fn library_sample_sources() -> Vec<String> {
     .clone()
 }
 
-/// APP-098 DS-84: which of `keys` bind at least one of the synthetic
-/// catalog's sources, in one query. Both `work_outline` and `work_reads` use
-/// it, so their outlines agree.
+/// APP-098 DS-84: for each of `keys` that binds a source of the synthetic
+/// catalog, the input ids bound to one, in one query. `work_outline`,
+/// `work_reads` and the guest read all use it with [`reads_sample`], so their
+/// outlines agree.
 pub(super) async fn sample_works(
     transaction: &Transaction<'_>,
     org: &str,
     keys: &[(&str, &str)],
-) -> Result<std::collections::HashSet<(String, String)>> {
+) -> Result<std::collections::HashMap<(String, String), std::collections::BTreeSet<String>>> {
     let samples = library_sample_sources();
     if samples.is_empty() || keys.is_empty() {
         return Ok(Default::default());
     }
     let apps: Vec<&str> = keys.iter().map(|(app, _)| *app).collect();
     let works: Vec<&str> = keys.iter().map(|(_, work)| *work).collect();
-    let rows = transaction.query("SELECT DISTINCT app_id::text,work_id::text FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id = ANY($2::text[]::uuid[]) AND work_id = ANY($3::text[]::uuid[]) AND source_id = ANY($4::text[]::uuid[])", &[&org,&apps,&works,&samples]).await?;
+    let rows = transaction.query("SELECT DISTINCT app_id::text,work_id::text,input_id::text FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id = ANY($2::text[]::uuid[]) AND work_id = ANY($3::text[]::uuid[]) AND source_id = ANY($4::text[]::uuid[])", &[&org,&apps,&works,&samples]).await?;
     let wanted: std::collections::HashSet<(&str, &str)> = keys.iter().copied().collect();
-    let mut found = std::collections::HashSet::new();
+    let mut found: std::collections::HashMap<(String, String), std::collections::BTreeSet<String>> =
+        Default::default();
     for row in &rows {
         let pair = (text(row, 0)?, text(row, 1)?);
         if wanted.contains(&(pair.0.as_str(), pair.1.as_str())) {
-            found.insert(pair);
+            found.entry(pair).or_default().insert(text(row, 2)?);
         }
     }
     Ok(found)
