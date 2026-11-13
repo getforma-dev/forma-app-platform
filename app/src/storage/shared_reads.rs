@@ -58,9 +58,11 @@ impl Data {
             outline.can_write = false;
             // APP-098 DS-84: the same check as the member's outline; the
             // bindings are read under the share's organization scope.
-            outline.sample_data = !super::queries::sample_works(&tx, org, &keys)
-                .await?
-                .is_empty();
+            let samples = super::queries::sample_works(&tx, org, &keys).await?;
+            outline.sample_data = super::queries::reads_sample(
+                &outline.query_inputs,
+                samples.get(&(access.app.clone(), access.work.clone())),
+            );
             let collections = collections_many(&tx, org, &keys)
                 .await?
                 .pop()

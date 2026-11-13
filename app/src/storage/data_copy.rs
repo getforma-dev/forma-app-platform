@@ -379,4 +379,29 @@ mod tests {
         )
         .is_err());
     }
+
+    /// APP-098 DS-84 (guest review r1): a data copy keeps its source
+    /// bindings but its views read the new editable records, so the inputs
+    /// its queries read no longer include the source, and a sample source it
+    /// still binds does not make it sample data.
+    #[test]
+    fn a_data_copy_no_longer_reads_its_source_input() {
+        use super::super::queries::{query_inputs, reads_sample};
+        let content = json!({"inputs":[{"id":"transactions","contract_id":"original_v1","contract_version":1,"kind":"source","fields":[{"id":"amount","value_type":{"type":"decimal","scale":2,"unit":"count"},"nullable":true}]}],"record_schemas":[],"commands":[],"views":[{"id":"total","kind":"summary","query":{"inputs":["transactions"],"operations":[{"type":"aggregate","measures":[{"field":{"input_id":"transactions","field_id":"amount"}}]}]}}],"default_layout":[{"view_id":"total","column":0,"row":0,"width":12}]});
+        let before = query_inputs(&content);
+        assert_eq!(before, BTreeSet::from(["transactions".to_owned()]));
+        let (copy, plans) = editable_definition(&content).unwrap();
+        let after = query_inputs(&copy);
+        assert_eq!(after, BTreeSet::from([plans[0].input.clone()]));
+        let bound = BTreeSet::from(["transactions".to_owned()]);
+        assert!(
+            reads_sample(&before, Some(&bound)),
+            "the original reads the sample source"
+        );
+        assert!(
+            !reads_sample(&after, Some(&bound)),
+            "the copy reads its own records"
+        );
+        assert!(!reads_sample(&before, None), "no sample source bound");
+    }
 }

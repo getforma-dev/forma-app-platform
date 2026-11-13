@@ -340,8 +340,10 @@ impl Data {
                         outline.title = name.clone();
                     }
                     outline.can_write = grants[i].record_write;
-                    outline.sample_data =
-                        samples.contains(&(keys[i].0.to_owned(), keys[i].1.to_owned()));
+                    outline.sample_data = super::queries::reads_sample(
+                        &outline.query_inputs,
+                        samples.get(&(keys[i].0.to_owned(), keys[i].1.to_owned())),
+                    );
                     outline.collections = rows
                         .iter()
                         .map(|row| Ok((text(row, 1)?, text(row, 2)?)))

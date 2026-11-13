@@ -1101,6 +1101,7 @@ mod tests {
             collections: Vec::new(),
             can_write: false,
             sample_data: false,
+            query_inputs: Default::default(),
         };
         let f = |id: &str, kind: &str, values: &[&str]| shape::Field {
             id: id.into(),
