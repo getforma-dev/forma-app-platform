@@ -437,7 +437,13 @@ Never return any other key: no view, chart, filter, color, theme or style.";
 
 /// The user message: the question, scope and records as JSON data.
 /// `partial`: a work in scope had more records than its listing holds.
-pub fn user(question: &str, scope: &str, rows: &[Row], partial: bool) -> String {
+pub fn user(
+    organization: &str,
+    question: &str,
+    scope: &str,
+    rows: &[Row],
+    partial: bool,
+) -> String {
     let records: Vec<Value> = rows
         .iter()
         .take(MAX_MODEL_RECORDS)
@@ -451,7 +457,7 @@ pub fn user(question: &str, scope: &str, rows: &[Row], partial: bool) -> String 
                 "ref": row.reference,
                 "app": row.address,
                 "fields": fields,
-                "filed_by": crate::directory::label(&row.record.creator),
+                "filed_by": crate::directory::label(organization, &row.record.creator),
                 "committed_at": row.record.committed_at,
             })
         })
@@ -919,10 +925,24 @@ mod tests {
             red.text
         );
         // The model is told too.
-        let sent: Value = serde_json::from_str(&user("total?", "expenses", &rows, true)).unwrap();
+        let sent: Value = serde_json::from_str(&user(
+            "00000000-0000-4000-8000-0000000000d2",
+            "total?",
+            "expenses",
+            &rows,
+            true,
+        ))
+        .unwrap();
         assert_eq!(sent["partial"], true);
         assert_eq!(sent["more_records_not_shown"], true);
-        let whole: Value = serde_json::from_str(&user("total?", "expenses", &rows, false)).unwrap();
+        let whole: Value = serde_json::from_str(&user(
+            "00000000-0000-4000-8000-0000000000d2",
+            "total?",
+            "expenses",
+            &rows,
+            false,
+        ))
+        .unwrap();
         assert_eq!(whole["partial"], false);
     }
 

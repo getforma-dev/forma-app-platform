@@ -4,9 +4,11 @@
 //!
 //! The minimal honest form for the pitch: an operator-maintained file named by
 //! `GENUI_DISPLAY_NAMES_FILE`, JSON `{"members":[{"principal_id":"<uuid>",
-//! "display_name":"Sarah Chen"}, …]}`, read once at startup. Fixtures and the
-//! demo organization get synthetic names from their campaign; beta members
-//! get a name only when the operator writes one. A name is a label for
+//! "display_name":"Sarah Chen"}, …]}`, read once at startup, with
+//! `GENUI_DEMO_MODE` on. A name shows only inside a listed demo organization
+//! (`demo::is_demo_org`): fixtures and the demo organization get synthetic
+//! names from their campaign, and every other organization sees the neutral
+//! `Member <8 hex>`, even for a principal the file lists. A name is a label for
 //! people (the members list, the approver chip, the records list), never an
 //! identity: authority still comes from the principal id and its grants.
 //! Proper fix (APP-097/APP-098): a `display_name` column on `memberships`
@@ -17,7 +19,7 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
-// DS-44: display names from an operator file or JSON; behind GENUI_DEMO_MODE since 2026-11-12 (APP-098).
+// DS-44: display names from an operator file or JSON; loaded only with GENUI_DEMO_MODE on (2026-11-12) and shown only in a listed demo organization (2026-11-13, APP-098).
 pub const FILE_ENV: &str = "GENUI_DISPLAY_NAMES_FILE";
 /// The same JSON inline (the deployed task: the stack sets it at synth from a
 /// private file, APP-096); the file wins when both are set.
@@ -127,16 +129,25 @@ fn load(
     parsed
 }
 
-/// The display name the operator set for `principal`, if any.
-pub fn display_name(principal: &str) -> Option<String> {
+/// The display name the operator set for `principal`, as seen in
+/// `organization`, if any.
+pub fn display_name(organization: &str, principal: &str) -> Option<String> {
+    // DS-44: persona names belong to the listed demo organizations only.
+    if !crate::demo::is_demo_org(organization) {
+        return None;
+    }
     names().read().ok()?.get(principal).cloned()
 }
 
-/// The label people see: the display name, else the neutral
-/// `Member <8 hex>` handle (`storage::sharing::member_label`'s rule).
-pub fn label(principal: &str) -> String {
-    display_name(principal)
-        .unwrap_or_else(|| format!("Member {}", &principal[..8.min(principal.len())]))
+/// The label people in `organization` see: the display name, else the
+/// neutral `Member <8 hex>` handle (`storage::sharing::member_label`'s rule).
+pub fn label(organization: &str, principal: &str) -> String {
+    display_name(organization, principal).unwrap_or_else(|| neutral_label(principal))
+}
+
+/// The neutral `Member <8 hex>` handle, never a name.
+pub fn neutral_label(principal: &str) -> String {
+    format!("Member {}", &principal[..8.min(principal.len())])
 }
 
 /// Tests and campaigns: replace the directory without a file.
@@ -182,5 +193,27 @@ mod tests {
         assert_eq!(on["00000000-0000-4000-8000-00000000006d"], "Sarah Chen");
         assert_eq!(load(true, None, Some(json.into())).unwrap().len(), 1);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// APP-098 DS-44 (box 5 review M3): a persona name is shown only inside a
+    /// listed demo organization. Any other organization sees the neutral
+    /// label, even for a principal the names file lists, so a file that named
+    /// a real member could not put a persona name on them.
+    #[test]
+    fn display_names_apply_only_inside_a_listed_demo_organization() {
+        let _guard = crate::demo::lock_for_tests();
+        const DEMO: &str = "00000000-0000-4000-8000-0000000000d1";
+        const OTHER: &str = "00000000-0000-4000-8000-0000000000d2";
+        const SARAH: &str = "00000000-0000-4000-8000-00000000006d";
+        set_for_tests(&[(SARAH, "Sarah Chen")]);
+        crate::demo::configure_for_tests(true, &[DEMO]);
+        assert_eq!(display_name(DEMO, SARAH).as_deref(), Some("Sarah Chen"));
+        assert_eq!(label(DEMO, SARAH), "Sarah Chen");
+        assert_eq!(display_name(OTHER, SARAH), None, "another organization");
+        assert_eq!(label(OTHER, SARAH), "Member 00000000");
+        crate::demo::configure_for_tests(false, &[DEMO]);
+        assert_eq!(label(DEMO, SARAH), "Member 00000000", "the switch is off");
+        crate::demo::configure_for_tests(false, &[]);
+        set_for_tests(&[]);
     }
 }

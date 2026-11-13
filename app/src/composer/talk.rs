@@ -437,7 +437,13 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
                 .composer
                 .complete_fast(
                     ask::SYSTEM,
-                    ask::user(&body.question, &body.address, &rows, partial),
+                    ask::user(
+                        member.organization(),
+                        &body.question,
+                        &body.address,
+                        &rows,
+                        partial,
+                    ),
                     ASK_MAX_TOKENS,
                     ASK_BUDGET,
                 )

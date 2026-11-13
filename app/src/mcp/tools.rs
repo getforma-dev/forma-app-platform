@@ -1292,7 +1292,7 @@ async fn list_pending(
                     "record_id": record.record_id, "version": record.version,
                     "summary": resolve::summarize(record),
                     "status": status,
-                    "filed_by": directory::label(&record.creator),
+                    "filed_by": directory::label(member.organization(), &record.creator),
                     "values": record.values.as_array().into_iter().flatten().filter_map(|v| Some(json!({
                         "field_id": v.get("field_id")?, "display": resolve::display(v.get("value")?),
                     }))).collect::<Vec<_>>(),

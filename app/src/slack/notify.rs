@@ -116,7 +116,7 @@ pub async fn approvers(state: &Slack, organization: &str, app: &str, work: &str)
             if !first {
                 continue;
             }
-            let (text, blocks) = flows::approval_request(record, state);
+            let (text, blocks) = flows::approval_request(organization, record, state);
             match state.api.direct(&user, &text, Some(blocks)).await {
                 Ok(()) => tracing::info!(
                     event = "slack.approver_notified",
