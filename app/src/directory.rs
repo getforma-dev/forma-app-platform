@@ -4,9 +4,11 @@
 //!
 //! The minimal honest form for the pitch: an operator-maintained file named by
 //! `GENUI_DISPLAY_NAMES_FILE`, JSON `{"members":[{"principal_id":"<uuid>",
-//! "display_name":"Sarah Chen"}, …]}`, read once at startup. Fixtures and the
-//! demo organization get synthetic names from their campaign; beta members
-//! get a name only when the operator writes one. A name is a label for
+//! "display_name":"Sarah Chen"}, …]}`, read once at startup, with
+//! `GENUI_DEMO_MODE` on. A name shows only inside a listed demo organization
+//! (`demo::is_demo_org`): fixtures and the demo organization get synthetic
+//! names from their campaign, and every other organization sees the neutral
+//! `Member <8 hex>`, even for a principal the file lists. A name is a label for
 //! people (the members list, the approver chip, the records list), never an
 //! identity: authority still comes from the principal id and its grants.
 //! Proper fix (APP-097/APP-098): a `display_name` column on `memberships`
@@ -17,7 +19,7 @@ use std::{
     sync::{OnceLock, RwLock},
 };
 
-// DS-44: display names from an operator file or JSON; behind GENUI_DEMO_MODE since 2026-11-12 (APP-098).
+// DS-44: display names from an operator file or JSON; loaded only with GENUI_DEMO_MODE on (2026-11-12) and shown only in a listed demo organization (2026-11-13, APP-098).
 pub const FILE_ENV: &str = "GENUI_DISPLAY_NAMES_FILE";
 /// The same JSON inline (the deployed task: the stack sets it at synth from a
 /// private file, APP-096); the file wins when both are set.
