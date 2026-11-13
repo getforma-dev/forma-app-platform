@@ -717,6 +717,52 @@ fn folder_ask_total_skips_cells_that_are_not_numbers() {
     assert!(no_table(2).references.is_empty());
 }
 
+/// APP-135: an answer from part of a folder says what it did not read, and a
+/// server without a file reader says so instead of blaming the files.
+#[test]
+fn folder_answers_name_what_they_did_not_read() {
+    use super::ask::{coverage_note, no_reader, Coverage, MAX_TABLES};
+    assert_eq!(
+        coverage_note(2, Coverage::default()),
+        None,
+        "every table read"
+    );
+    let note = coverage_note(
+        3,
+        Coverage {
+            unreadable: 1,
+            beyond_cap: 2,
+            reader_missing: false,
+        },
+    )
+    .unwrap();
+    assert!(note.contains("uses 3 of the 6 tables"), "{note}");
+    assert!(note.contains("1 could not be read"), "{note}");
+    assert!(
+        note.contains(&format!("2 are past the {MAX_TABLES}-table limit")),
+        "{note}"
+    );
+    let one = coverage_note(
+        1,
+        Coverage {
+            unreadable: 0,
+            beyond_cap: 1,
+            reader_missing: false,
+        },
+    )
+    .unwrap();
+    assert!(
+        one.contains("1 is past the") && !one.contains("could not be read"),
+        "{one}"
+    );
+    let reader = no_reader();
+    assert!(reader.text.contains("cannot read tables right now") && reader.references.is_empty());
+    assert!(
+        !reader.text.contains("could not be read"),
+        "the files are not blamed"
+    );
+}
+
 /// ADR-011 I4 (APP-124 review): a folder build's idempotency key answers the
 /// first result for the same member, folder and body; another body is
 /// refused; another scope is its own key.
