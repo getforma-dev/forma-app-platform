@@ -316,10 +316,19 @@ fn claim_blocks(organization: &str, record: &RecordRow) -> Vec<Value> {
         "Filed by".to_owned(),
         directory::label(organization, &record.creator),
     ));
-    if pairs.len() == 1 {
-        return vec![text::section(&summary(record)), text::fields(&pairs)];
+    let mut blocks = if pairs.len() == 1 {
+        vec![text::section(&summary(record)), text::fields(&pairs)]
+    } else {
+        vec![text::fields(&pairs)]
+    };
+    // APP-098 DS-40: a listed demo organization's people and records are
+    // synthetic; say so here as the canvas does.
+    if crate::demo::is_demo_org(organization) {
+        blocks.push(text::context(
+            "Synthetic data: The organization, people and records here are made up for the demo.",
+        ));
     }
-    vec![text::fields(&pairs)]
+    blocks
 }
 
 /// `open`: what is waiting for this member's decision.

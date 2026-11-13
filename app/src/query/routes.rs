@@ -878,6 +878,7 @@ async fn document(
         record_cards,
         records_truncated,
         canvas: page::canvas_href(saved),
+        demo: crate::demo::is_demo_org(member.organization()),
         ..Default::default()
     };
     Ok((outline, chrome))

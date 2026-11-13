@@ -151,6 +151,7 @@ type WorkProps = {
   canvas: string;
   canShare: boolean;
   sampleData: boolean;
+  demoData: boolean;
 };
 
 // This explicitly registered island retains the client entry for live updates
@@ -175,6 +176,10 @@ function Work(props: WorkProps) {
       {/* APP-098 DS-84: the library's synthetic sample data, never the member's own. */}
       {createShow(() => props.sampleData, () => (
         <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> Charts and tables here read Forma's synthetic sample data. Records you file are your own.</p>
+      ))}
+      {/* APP-098 DS-40: a listed demo organization, as the canvas's "Synthetic data" note. */}
+      {createShow(() => props.demoData, () => (
+        <p class="demo-note" data-demo-data=""><span class="badge">Synthetic data</span> The organization, people and records here are made up for the demo.</p>
       ))}
       <p><a href={props.canvas}>Open on the canvas</a></p>
       <div class="document-actions">
@@ -414,6 +419,7 @@ mount(
       canvas: '/canvas',
       canShare: false,
       sampleData: false,
+      demoData: false,
     }),
   '#app',
 );

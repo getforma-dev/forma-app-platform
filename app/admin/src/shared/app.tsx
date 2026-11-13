@@ -21,6 +21,8 @@ function SharedPage(props: SharedPageProps) {
       <p data-shared-message="">{props.message}</p>
       {/* APP-098 DS-84: the views read the library's synthetic sample data; the records are members' own. Same words as SAMPLE_NOTE_TEXT. */}
       {createShow(() => props.sampleData, () => <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> Charts and tables here read Forma's synthetic sample data. Records listed were filed by the app's members.</p>)}
+      {/* APP-098 DS-40: the sharing organization is a listed demo organization. */}
+      {createShow(() => props.demoData, () => <p class="demo-note" data-demo-data=""><span class="badge">Synthetic data</span> The organization, people and records here are made up for the demo.</p>)}
     </header>
     {createShow(() => props.needsSignIn, () => <form method="post" action={props.signInAction} class="shared-actions"><input type="hidden" name="csrf" value={props.signInCsrf} /><button type="submit" name="intent" value="sign_in" class="share-primary">Sign in</button>{createShow(() => props.canSignUp, () => <button type="submit" name="intent" value="sign_up" class="share-secondary">Create account</button>)}</form>)}
     <SharedControls canAccept={props.canAccept} canAddToCanvas={props.canAddToCanvas} addedToCanvas={props.addedToCanvas} available={props.available} />
@@ -35,4 +37,4 @@ startSharedPage();
 mount(() => SharedPage({ presentation: { hasDescription: false, description: '', mode: 'default', accent: 'default', density: 'default', font: 'default', actions: [], json: '{}' }, title: '', shareId: '', status: '', ownerLabel: '', expiresAt: '', canAddToCanvas: false,
   addedToCanvas: false, available: false, message: '', needsSignIn: false, canSignUp: false, canAccept: false, signInAction: '', signInCsrf: '',
   canSignOut: false, csrfSignout: '',
-  parts: [], views: [], recordCards: [], recordsTruncated: false, sampleData: false }), '#app');
+  parts: [], views: [], recordCards: [], recordsTruncated: false, sampleData: false, demoData: false }), '#app');

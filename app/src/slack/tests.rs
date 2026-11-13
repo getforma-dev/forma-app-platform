@@ -455,6 +455,22 @@ fn the_approver_dm_names_any_record_app() {
         assert!(rendered.contains(shown), "{shown}: {rendered}");
     }
     assert!(!rendered.contains("submitted") && !rendered.contains("Justification"));
+    // APP-098 DS-40: outside a demo organization no synthetic-data line; in a
+    // listed demo organization the DM says its people and records are made up.
+    assert!(!rendered.contains("Synthetic data"), "{rendered}");
+    {
+        let _guard = crate::demo::lock_for_tests();
+        const DEMO: &str = "00000000-0000-4000-8000-0000000000d1";
+        crate::demo::configure_for_tests(true, &[DEMO]);
+        let (_, demo_blocks) = super::flows::approval_request(DEMO, &record, &state);
+        crate::demo::configure_for_tests(false, &[]);
+        let demo_rendered = serde_json::to_string(&demo_blocks).unwrap();
+        assert!(
+            demo_rendered.contains("Synthetic data")
+                && demo_rendered.contains("made up for the demo"),
+            "{demo_rendered}"
+        );
+    }
     let mut claim = record;
     claim.schema = "expense_claim".into();
     assert!(

@@ -721,6 +721,8 @@ async fn http_campaign(fixture: &Fixture, checks: &mut Vec<serde_json::Value>) {
     // (a missing grant would refuse the page); this fixture work reads no
     // source of the synthetic catalog, so the guest sees no note.
     assert_eq!(props["sample_data"], json!(false), "{body}");
+    // APP-098 DS-40: this organization is not a listed demo organization.
+    assert_eq!(props["demo_data"], json!(false), "{body}");
     let parts = props["parts"].as_array().unwrap();
     assert_eq!(
         parts
