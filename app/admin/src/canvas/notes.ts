@@ -102,18 +102,25 @@ function freshUuid(): string {
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
 }
 
+/** APP-135: why the notes work could not be found: `missing` is the uniform 404. */
+let lastFailure: 'missing' | 'temporary' = 'temporary';
+
 async function findWork(create: boolean): Promise<boolean> {
   if (work) return true;
   try {
     const response = await fetch('/v1/notes', { method: create ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store' });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      lastFailure = response.status === 404 ? 'missing' : 'temporary';
+      return false;
+    }
     const body = (await response.json().catch(() => null)) as { app_id?: unknown; work_id?: unknown } | null;
     if (isUuid(body?.app_id) && isUuid(body?.work_id)) {
       work = { app: body.app_id, work: body.work_id };
       return true;
     }
   } catch {
-    // no notes yet
+    // no notes yet (a network error is temporary)
+    lastFailure = 'temporary';
   }
   return false;
 }
@@ -379,11 +386,22 @@ export function toggleNote(id: string): string {
   return `${note.title || 'The note'} is on your canvas.`;
 }
 
+/**
+ * APP-135: the message when a note cannot be saved. The uniform 404
+ * (`missing`) is the usual case on a new workspace, which has no Notes app;
+ * anything else (a limit, an outage, a network error, an unreadable notes
+ * work) is temporary, so it says to try again.
+ */
+export function noteFailureMessage(failure: 'missing' | 'temporary'): string {
+  return failure === 'missing'
+    ? 'Notes are not set up in this workspace (it has no Notes app), or your access changed. Nothing was saved.'
+    : 'Notes could not be reached just now. Try again in a moment. Nothing was saved.';
+}
+
 /** `/note <text>`: a new note through the `add` command; the first line is its title. */
 export async function newNote(text: string): Promise<string> {
   if (!(await findWork(true)) || !(listing || (await refresh()))) {
-    // APP-135: on a new workspace this is the usual case, so say what is needed.
-    return 'Notes are not available here yet: they use the Notes app from the library, which this workspace does not have, or your access changed. Nothing was saved.';
+    return noteFailureMessage(work ? 'temporary' : lastFailure);
   }
   const words = text.trim();
   const [first = '', ...rest] = words.split(/\r?\n/);
