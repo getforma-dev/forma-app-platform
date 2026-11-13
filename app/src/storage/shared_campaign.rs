@@ -723,6 +723,13 @@ async fn http_campaign(fixture: &Fixture, checks: &mut Vec<serde_json::Value>) {
     assert_eq!(props["sample_data"], json!(false), "{body}");
     // APP-098 DS-40: this organization is not a listed demo organization.
     assert_eq!(props["demo_data"], json!(false), "{body}");
+    // Listed as a demo organization, the same guest read carries the note.
+    crate::demo::configure_for_tests(true, &[ORG]);
+    let (demo_status, demo_body) = send(&routes, "GET", &page, &guest_header, origin, "").await;
+    crate::demo::configure_for_tests(false, &[]);
+    assert_eq!(demo_status, StatusCode::OK, "{demo_body}");
+    let demo_props: serde_json::Value = serde_json::from_str(&demo_body).unwrap();
+    assert_eq!(demo_props["demo_data"], json!(true), "{demo_body}");
     let parts = props["parts"].as_array().unwrap();
     assert_eq!(
         parts

@@ -1004,7 +1004,7 @@ async fn campaign() {
     // records are synthetic.
     assert!(
         waiting.to_string().contains(
-            "Synthetic data: The organization, people and records here are made up for the demo."
+            "*Synthetic data:* The organization, people and records here are made up for the demo."
         ),
         "{waiting}"
     );

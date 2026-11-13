@@ -751,7 +751,8 @@ async fn guest_document(
         views,
         records_truncated: listing.truncated && !record_cards.is_empty(),
         record_cards,
-        sample_data: outline.sample_data,
+        // The "Synthetic data" note wins in a demo organization (as in MCP).
+        sample_data: outline.sample_data && !crate::demo::is_demo_org(access.organization()),
         demo_data: crate::demo::is_demo_org(access.organization()),
         ..Default::default()
     })

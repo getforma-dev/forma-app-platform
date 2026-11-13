@@ -2496,6 +2496,26 @@ async fn campaign() {
     // In a demo organization (APP-098), the rehearsed question is answered
     // from the same records without a model call.
     crate::demo::configure_for_tests(true, &[ORG]);
+    // APP-098 DS-40: in the demo organization the work page carries the
+    // Synthetic data note, which replaces the sample note.
+    let demo_page = stand
+        .get(
+            &format!("/w/{AUTHORING_APP}/{adapted_work}"),
+            Some(&maya_cookie),
+        )
+        .await;
+    assert_eq!(demo_page.status, StatusCode::OK, "{}", demo_page.text());
+    assert!(
+        work_pages
+            .last
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|props| props.work == adapted_work
+                && props.demo_data
+                && !props.sample_data),
+        "the demo organization's work page carries the Synthetic data note"
+    );
     let rehearsed = stand
         .post(
             composer::talk::ASK_PATH,

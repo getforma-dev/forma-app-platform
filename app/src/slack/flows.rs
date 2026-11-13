@@ -316,19 +316,20 @@ fn claim_blocks(organization: &str, record: &RecordRow) -> Vec<Value> {
         "Filed by".to_owned(),
         directory::label(organization, &record.creator),
     ));
-    let mut blocks = if pairs.len() == 1 {
-        vec![text::section(&summary(record)), text::fields(&pairs)]
-    } else {
-        vec![text::fields(&pairs)]
-    };
-    // APP-098 DS-40: a listed demo organization's people and records are
-    // synthetic; say so here as the canvas does.
-    if crate::demo::is_demo_org(organization) {
-        blocks.push(text::context(
-            "Synthetic data: The organization, people and records here are made up for the demo.",
-        ));
+    if pairs.len() == 1 {
+        return vec![text::section(&summary(record)), text::fields(&pairs)];
     }
-    blocks
+    vec![text::fields(&pairs)]
+}
+
+/// APP-098 DS-40: in a listed demo organization, the one line a message ends
+/// with that says its people and records are synthetic, as the canvas does.
+fn demo_line(organization: &str) -> Option<Value> {
+    crate::demo::is_demo_org(organization).then(|| {
+        text::context(
+            "*Synthetic data:* The organization, people and records here are made up for the demo.",
+        )
+    })
 }
 
 /// `open`: what is waiting for this member's decision.
@@ -371,6 +372,7 @@ async fn pending_message(state: &Slack, member: &TrustedRequest, catalog: &[Cata
         }
     );
     blocks.insert(0, text::section(&headline));
+    blocks.extend(demo_line(member.organization()));
     blocks.push(text::context(&canvas_link(state)));
     text::ephemeral(
         &format!("{count} waiting for your approval"),
@@ -937,6 +939,7 @@ async fn decide(
                     time_now()
                 )),
             );
+            blocks.extend(demo_line(member.organization()));
             blocks.push(text::context(&canvas_link(&state)));
             text::ephemeral(
                 &format!(
@@ -1019,6 +1022,7 @@ pub(crate) fn approval_request(
     ))];
     blocks.extend(claim_blocks(organization, record));
     blocks.push(decision_buttons(record));
+    blocks.extend(demo_line(organization));
     blocks.push(text::context(&canvas_link(state)));
     (format!("{filer} filed a {what} for your approval"), blocks)
 }

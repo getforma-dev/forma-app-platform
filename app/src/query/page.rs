@@ -779,7 +779,9 @@ pub fn props(
         records: chrome.records,
         canvas: chrome.canvas,
         can_share: chrome.can_share,
-        sample_data: outline.sample_data,
+        // In a demo organization the "Synthetic data" note covers the records
+        // too, so the sample note (whose records are the member's own) yields.
+        sample_data: outline.sample_data && !chrome.demo,
         demo_data: chrome.demo,
     }
 }

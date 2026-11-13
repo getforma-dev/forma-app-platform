@@ -1237,6 +1237,24 @@ mod tests {
             },
         );
         assert!(demo.demo_data);
+        // In a demo organization the Synthetic data note wins over the sample
+        // note, whose "Records you file are your own" would contradict it.
+        let both = work::props(
+            &genui::storage::WorkOutline {
+                sample_data: true,
+                ..outline.clone()
+            },
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            false,
+            Vec::new(),
+            work::WorkChrome {
+                demo: true,
+                ..Default::default()
+            },
+        );
+        assert!(both.demo_data && !both.sample_data);
         let (_, _, demo_body) = html(ssr.work(&demo)).await;
         let demo_note = &demo_body[demo_body
             .find("data-demo-data")
