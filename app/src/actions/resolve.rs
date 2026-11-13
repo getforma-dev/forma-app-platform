@@ -297,9 +297,12 @@ pub fn match_approver(name: &str, members: &[Member]) -> Option<Approver> {
     }
     let mut best: Option<(u32, &Member, String)> = None;
     for member in members {
-        let Some(display) = directory::display_name(&member.principal) else {
+        // The label was judged for the member's organization
+        // (`storage::member_label`); a neutral label is not a name.
+        if member.label == directory::neutral_label(&member.principal) {
             continue;
-        };
+        }
+        let display = member.label.clone();
         let have = tokens(&display);
         let score = if have == wanted {
             4
@@ -357,6 +360,7 @@ pub fn summarize(record: &RecordRow) -> String {
 /// is at a declared `from`, the one whose values share the most words with
 /// the hint; the newest when there is no hint or no overlap.
 pub fn match_target<'a>(
+    organization: &str,
     hint: Option<&str>,
     records: &'a [RecordRow],
     field: &str,
@@ -383,7 +387,7 @@ pub fn match_target<'a>(
     let mut best: Option<(usize, &RecordRow)> = None;
     for record in &candidates {
         let mut haystack = tokens(&summarize(record));
-        haystack.extend(tokens(&directory::label(&record.creator)));
+        haystack.extend(tokens(&directory::label(organization, &record.creator)));
         // The amount as dollars and as cents both count.
         if let Some(amount) = field_value(record, "amount")
             .and_then(|v| v.get("minor_units"))
@@ -814,13 +818,15 @@ async fn decision_across(
             .filter(|r| r.schema == app.schema)
             .cloned()
             .collect();
-        let Some(record) = match_target(hint, &candidates, &field, &froms) else {
+        let Some(record) = match_target(member.organization(), hint, &candidates, &field, &froms)
+        else {
             continue;
         };
         let score = if exact.is_some() {
             usize::MAX
         } else {
-            target_score(hint, record) + usize::from(work.app == parsed.app_hint)
+            target_score(member.organization(), hint, record)
+                + usize::from(work.app == parsed.app_hint)
         };
         if best.as_ref().is_none_or(|(s, _)| score > *s) {
             let record = record.record_id.clone();
@@ -843,10 +849,10 @@ async fn decision_across(
 }
 
 /// How many words of `hint` a record's values (and its filer's label) share.
-fn target_score(hint: Option<&str>, record: &RecordRow) -> usize {
+fn target_score(organization: &str, hint: Option<&str>, record: &RecordRow) -> usize {
     let wanted = hint.map(tokens).unwrap_or_default();
     let mut haystack = tokens(&summarize(record));
-    haystack.extend(tokens(&directory::label(&record.creator)));
+    haystack.extend(tokens(&directory::label(organization, &record.creator)));
     wanted.iter().filter(|w| haystack.contains(w)).count()
 }
 
@@ -966,6 +972,7 @@ async fn decide_draft(
     let record = match &found.record {
         Some(id) => candidates.iter().find(|r| &r.record_id == id),
         None => match_target(
+            member.organization(),
             parsed.target_record_hint.as_deref(),
             &candidates,
             &field,

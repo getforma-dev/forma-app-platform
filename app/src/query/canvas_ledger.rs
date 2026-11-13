@@ -126,7 +126,12 @@ fn rows(totals: BTreeMap<String, (usize, Sum)>, prefix: &str) -> Vec<LedgerRowPr
 
 /// The ledger cards of a listing (none for a work without money and date
 /// fields).
-pub fn ledger_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<LedgerCardProps> {
+pub fn ledger_cards(
+    organization: &str,
+    app: &str,
+    work: &str,
+    listing: &RecordsListing,
+) -> Vec<LedgerCardProps> {
     listing
         .collections
         .iter()
@@ -174,7 +179,7 @@ pub fn ledger_cards(app: &str, work: &str, listing: &RecordsListing) -> Vec<Ledg
                 }
                 total = total.add(cents);
                 let person = people
-                    .entry(crate::directory::label(&record.creator))
+                    .entry(crate::directory::label(organization, &record.creator))
                     .or_default();
                 person.0 += 1;
                 person.1 = person.1.add(cents);

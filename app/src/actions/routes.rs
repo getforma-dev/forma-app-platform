@@ -702,19 +702,20 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
     }
 }
 
-fn principal_document(principal: &str) -> Value {
-    json!({"principal_id": principal, "label": directory::label(principal)})
+fn principal_document(organization: &str, principal: &str) -> Value {
+    json!({"principal_id": principal, "label": directory::label(organization, principal)})
 }
 
 /// The records listing as JSON.
-pub fn records_document(listing: &RecordsListing) -> Value {
-    records_document_with(listing, &[])
+pub fn records_document(organization: &str, listing: &RecordsListing) -> Value {
+    records_document_with(organization, listing, &[])
 }
 
 /// The records listing as JSON, each record carrying `via`: the label of the
 /// agent token that committed its current version through MCP (APP-099's
 /// "via Claude" chip; display provenance, never authority), or null.
 pub fn records_document_with(
+    organization: &str,
     listing: &RecordsListing,
     attributions: &[storage::AgentAttribution],
 ) -> Value {
@@ -757,8 +758,8 @@ pub fn records_document_with(
             "version": r.version,
             "commit_sequence": r.commit_sequence,
             "committed_at": r.committed_at,
-            "creator": principal_document(&r.creator),
-            "updater": principal_document(&r.updater),
+            "creator": principal_document(organization, &r.creator),
+            "updater": principal_document(organization, &r.updater),
             "via": via(&r.record_id, r.version),
             "values": r.values.as_array().into_iter().flatten().filter_map(|item| Some(json!({
                 "field_id": item.get("field_id")?,
@@ -844,7 +845,7 @@ async fn records(
             // reference, an invoice's PO match against the purchase requests
             // this member may read now).
             let (references, flags) = super::workflows::annotate(stores, &member, &listing).await;
-            let mut answer = records_document_with(&listing, &attributions);
+            let mut answer = records_document_with(member.organization(), &listing, &attributions);
             if let Some(rows) = answer["records"].as_array_mut() {
                 for row in rows {
                     let id = row["record_id"].as_str().unwrap_or("").to_owned();

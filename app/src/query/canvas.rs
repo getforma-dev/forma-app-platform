@@ -910,6 +910,7 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
 /// none for a work without collections. `principal` is the reader (APP-104:
 /// a pending record they filed themselves is not waiting for them).
 pub fn records_cards(
+    organization: &str,
     app: &str,
     work: &str,
     listing: &RecordsListing,
@@ -1017,7 +1018,7 @@ pub fn records_cards(
                     }
                     cells.push(CellProps {
                         id: "filed_by".into(),
-                        text: crate::directory::label(&record.creator),
+                        text: crate::directory::label(organization, &record.creator),
                         raw: String::new(),
                     });
                     RecordRowProps {
@@ -1031,7 +1032,7 @@ pub fn records_cards(
                         status,
                         pending: is_pending,
                         cells,
-                        creator: crate::directory::label(&record.creator),
+                        creator: crate::directory::label(organization, &record.creator),
                         committed_at: record.committed_at.clone(),
                         commit_sequence: record.commit_sequence.to_string(),
                     }
@@ -1261,7 +1262,7 @@ async fn read_works(
 /// The pane's card rows of one work, in canvas order (APP-104), from the
 /// same reads the group is built from: the app card, the views, a record
 /// form per collection for a writer, the records cards and the ledger.
-fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
+fn library_source(organization: &str, listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
     let (app, work) = (listed.app.as_str(), listed.work.as_str());
     let mut cards = vec![library_card(
         format!("a-{work}"),
@@ -1276,10 +1277,13 @@ fn library_source(listed: &OpenableWork, read: &WorkRead) -> LibrarySource {
         ));
     }
     if let Some(listing) = &read.listing {
-        for card in page::automatic_records(&read.outline, records_cards(app, work, listing, "")) {
+        for card in page::automatic_records(
+            &read.outline,
+            records_cards(organization, app, work, listing, ""),
+        ) {
             cards.push(library_card(card.id, card.title, "records"));
         }
-        for card in super::canvas_ledger::ledger_cards(app, work, listing) {
+        for card in super::canvas_ledger::ledger_cards(organization, app, work, listing) {
             if read.outline.parts.iter().any(|part| {
                 part.kind == "records_list"
                     && read.outline.collections.iter().any(|(collection, schema)| {
@@ -1449,9 +1453,15 @@ async fn assemble(
         Some(listing) => (
             page::automatic_records(
                 &outline,
-                records_cards(app, work, listing, member.principal()),
+                records_cards(
+                    member.organization(),
+                    app,
+                    work,
+                    listing,
+                    member.principal(),
+                ),
             ),
-            super::canvas_ledger::ledger_cards(app, work, listing)
+            super::canvas_ledger::ledger_cards(member.organization(), app, work, listing)
                 .into_iter()
                 .filter(|card| {
                     !outline.parts.iter().any(|part| {
@@ -1726,7 +1736,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
                 return refusal;
             }
         };
-        let mut source = library_source(listed, &read);
+        let mut source = library_source(member.organization(), listed, &read);
         source.artifact_kind = kinds.as_ref().and_then(|kinds| {
             kinds
                 .get(&(listed.app.clone(), listed.work.clone()))
@@ -1736,9 +1746,15 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         let verdict = routes::restore(auth, &parts.headers, &listed.app, &listed.work, &cookie);
         let restored = matches!(verdict, Restore::Parameters(_));
         let pending = read.listing.as_ref().is_some_and(|listing| {
-            records_cards(&listed.app, &listed.work, listing, member.principal())
-                .iter()
-                .any(|r| r.waiting != "0")
+            records_cards(
+                member.organization(),
+                &listed.app,
+                &listed.work,
+                listing,
+                member.principal(),
+            )
+            .iter()
+            .any(|r| r.waiting != "0")
         });
         if !(restored || pending) {
             continue;
@@ -1775,7 +1791,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         has_live: !canvas.live_events.is_empty(),
         has_organization: !organization.is_empty(),
         organization,
-        member_label: crate::storage::member_label(principal),
+        member_label: crate::storage::member_label(member.organization(), principal),
         member_initials: initials(principal),
         demo,
         demo_mode: if demo { "on" } else { "" }.to_owned(),

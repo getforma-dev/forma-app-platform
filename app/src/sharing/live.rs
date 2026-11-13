@@ -667,7 +667,13 @@ async fn guest_document(
     }
     let record_cards: Vec<SharedRecordsCardProps> = page::automatic_records(
         &outline,
-        canvas::records_cards(access.app(), access.work(), &listing, access.account_id()),
+        canvas::records_cards(
+            access.organization(),
+            access.app(),
+            access.work(),
+            &listing,
+            access.account_id(),
+        ),
     )
     .into_iter()
     .map(|c| SharedRecordsCardProps {

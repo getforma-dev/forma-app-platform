@@ -845,7 +845,13 @@ async fn document(
     };
     let record_cards = page::automatic_records(
         &outline,
-        super::canvas::records_cards(app, saved, &listing, member.principal()),
+        super::canvas::records_cards(
+            member.organization(),
+            app,
+            saved,
+            &listing,
+            member.principal(),
+        ),
     );
     let records_truncated = listing.truncated && !record_cards.is_empty();
     let chrome = page::WorkChrome {

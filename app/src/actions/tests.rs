@@ -194,14 +194,24 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
     let sarah = "00000000-0000-4000-8000-00000000006d";
     let sam = "00000000-0000-4000-8000-0000000000ca";
     let unnamed = "00000000-0000-4000-8000-00000000006f";
+    let _guard = crate::demo::lock_for_tests();
+    const DEMO: &str = "00000000-0000-4000-8000-0000000000d1";
+    const OTHER: &str = "00000000-0000-4000-8000-0000000000d2";
     crate::directory::set_for_tests(&[(sarah, "Sarah Chen"), (sam, "Samuel Okafor")]);
-    let members: Vec<Member> = [sarah, sam, unnamed]
-        .iter()
-        .map(|p| Member {
-            principal: (*p).to_owned(),
-            label: crate::directory::label(p),
-        })
-        .collect();
+    crate::demo::configure_for_tests(true, &[DEMO]);
+    let listed = |organization: &str| -> Vec<Member> {
+        [sarah, sam, unnamed]
+            .iter()
+            .map(|p| Member {
+                principal: (*p).to_owned(),
+                label: crate::storage::member_label(organization, p),
+            })
+            .collect()
+    };
+    let members = listed(DEMO);
+    // DS-44: outside a listed demo organization the same principals carry
+    // neutral labels, so no name finds an approver there.
+    assert!(match_approver("Sarah", &listed(OTHER)).is_none());
     assert_eq!(match_approver("Sarah", &members).unwrap().principal, sarah);
     assert_eq!(
         match_approver("sarah chen", &members).unwrap().label,
@@ -213,6 +223,7 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
         "a neutral label never matches a name"
     );
     assert!(match_approver("Priya", &members).is_none());
+    crate::demo::configure_for_tests(false, &[]);
     crate::directory::set_for_tests(&[]);
 
     let record = |id: &str, merchant: &str, cents: &str, status: &str, sequence: i64| RecordRow {
@@ -253,16 +264,38 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
             7,
         ),
     ];
-    let hit = match_target(Some("the Nobu dinner"), &records, "status", &["submitted"]).unwrap();
+    let hit = match_target(
+        "00000000-0000-4000-8000-0000000000d2",
+        Some("the Nobu dinner"),
+        &records,
+        "status",
+        &["submitted"],
+    )
+    .unwrap();
     assert_eq!(
         hit.record_id, "00000000-0000-4000-8000-0000000000a2",
         "the pending Nobu one, not the approved one"
     );
-    let newest = match_target(None, &records, "status", &["submitted"]).unwrap();
+    let newest = match_target(
+        "00000000-0000-4000-8000-0000000000d2",
+        None,
+        &records,
+        "status",
+        &["submitted"],
+    )
+    .unwrap();
     assert_eq!(newest.record_id, "00000000-0000-4000-8000-0000000000a3");
-    let by_amount = match_target(Some("the $86 one"), &records, "status", &["submitted"]).unwrap();
+    let by_amount = match_target(
+        "00000000-0000-4000-8000-0000000000d2",
+        Some("the $86 one"),
+        &records,
+        "status",
+        &["submitted"],
+    )
+    .unwrap();
     assert_eq!(by_amount.record_id, "00000000-0000-4000-8000-0000000000a2");
     let by_id = match_target(
+        "00000000-0000-4000-8000-0000000000d2",
         Some("00000000-0000-4000-8000-0000000000a3"),
         &records,
         "status",
@@ -271,6 +304,7 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
     .unwrap();
     assert_eq!(by_id.record_id, "00000000-0000-4000-8000-0000000000a3");
     let older_by_id = match_target(
+        "00000000-0000-4000-8000-0000000000d2",
         Some("00000000-0000-4000-8000-0000000000a2"),
         &records,
         "status",
@@ -283,6 +317,7 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
     );
     assert!(
         match_target(
+            "00000000-0000-4000-8000-0000000000d2",
             Some("00000000-0000-4000-8000-0000000000ff"),
             &records,
             "status",
@@ -291,7 +326,14 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
         .is_none(),
         "an unknown id never falls back to the newest"
     );
-    assert!(match_target(Some("x"), &records, "status", &["rejected"]).is_none());
+    assert!(match_target(
+        "00000000-0000-4000-8000-0000000000d2",
+        Some("x"),
+        &records,
+        "status",
+        &["rejected"]
+    )
+    .is_none());
 }
 
 #[test]

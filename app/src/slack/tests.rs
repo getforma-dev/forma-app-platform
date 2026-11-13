@@ -435,7 +435,8 @@ fn the_approver_dm_names_any_record_app() {
             {"field_id": "status", "value": {"type": "enum", "value": "submitted"}},
         ]),
     };
-    let (text, blocks) = super::flows::approval_request(&record, &state);
+    let (text, blocks) =
+        super::flows::approval_request("00000000-0000-4000-8000-0000000000d2", &record, &state);
     assert!(
         text.ends_with("filed a purchase request for your approval"),
         "{text}"
@@ -456,9 +457,11 @@ fn the_approver_dm_names_any_record_app() {
     assert!(!rendered.contains("submitted") && !rendered.contains("Justification"));
     let mut claim = record;
     claim.schema = "expense_claim".into();
-    assert!(super::flows::approval_request(&claim, &state)
-        .0
-        .ends_with("filed a claim for your approval"));
+    assert!(
+        super::flows::approval_request("00000000-0000-4000-8000-0000000000d2", &claim, &state)
+            .0
+            .ends_with("filed a claim for your approval")
+    );
 }
 
 /// Review: Slack drafts had only the process cap; a member holds at most
