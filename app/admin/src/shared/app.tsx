@@ -19,8 +19,8 @@ function SharedPage(props: SharedPageProps) {
     <header class="shared-page-head"><p class="share-policy">Private · Live · View only</p><h1>{props.title}</h1>
       {createShow(() => props.available, () => <p class="shared-by">Shared by {props.ownerLabel} · Access expires {props.expiresAt}</p>)}
       <p data-shared-message="">{props.message}</p>
-      {/* APP-098 DS-84: the library's synthetic sample data, never the owner's own. */}
-      {createShow(() => props.sampleData, () => <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> Charts and tables here read Forma's synthetic sample data.</p>)}
+      {/* APP-098 DS-84: the views read the library's synthetic sample data; the records are members' own. Same words as SAMPLE_NOTE_TEXT. */}
+      {createShow(() => props.sampleData, () => <p class="sample-note" data-sample-data=""><span class="badge">Sample data</span> Charts and tables here read Forma's synthetic sample data. Records listed were filed by the app's members.</p>)}
     </header>
     {createShow(() => props.needsSignIn, () => <form method="post" action={props.signInAction} class="shared-actions"><input type="hidden" name="csrf" value={props.signInCsrf} /><button type="submit" name="intent" value="sign_in" class="share-primary">Sign in</button>{createShow(() => props.canSignUp, () => <button type="submit" name="intent" value="sign_up" class="share-secondary">Create account</button>)}</form>)}
     <SharedControls canAccept={props.canAccept} canAddToCanvas={props.canAddToCanvas} addedToCanvas={props.addedToCanvas} available={props.available} />

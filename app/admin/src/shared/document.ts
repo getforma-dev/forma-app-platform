@@ -18,6 +18,31 @@ export type SharedJson = ReadOnlyProps & {
 export function sampleNoteHidden(props: Pick<SharedJson, 'available' | 'sample_data'> | null): boolean {
   return !(props?.available === true && props.sample_data === true);
 }
+/** The guest's note, the same words as the server-rendered one in `app.tsx`. */
+export const SAMPLE_NOTE_TEXT = "Charts and tables here read Forma's synthetic sample data. Records listed were filed by the app's members.";
+/**
+ * Shows or hides the "Sample data" note at the end of `host`. It creates the
+ * note when an available sample read needs one the HTML did not carry (a page
+ * that became available in place, a connected card), and never a second one.
+ */
+export function syncSampleNote(host: HTMLElement | null, props: Pick<SharedJson, 'available' | 'sample_data'> | null): void {
+  if (!host) return;
+  const hidden = sampleNoteHidden(props);
+  let note = host.querySelector<HTMLElement>('[data-sample-data]');
+  if (!note) {
+    if (hidden) return;
+    const document_ = host.ownerDocument;
+    note = document_.createElement('p');
+    note.className = 'sample-note';
+    note.setAttribute('data-sample-data', '');
+    const badge = document_.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'Sample data';
+    note.append(badge, document_.createTextNode(` ${SAMPLE_NOTE_TEXT}`));
+    host.append(note);
+  }
+  note.hidden = hidden;
+}
 export function sharedJson(value: unknown, key: string): SharedJson {
   const data = value as SharedJson | null;
   if (!data || !isShareKey(key) || data.share_id !== key || typeof data.available !== 'boolean'
@@ -63,7 +88,7 @@ export function startSharedPage(document_: Document = document): void {
     recordComponents.invalidate();
     invalidatePresentation(root!);
     root!.querySelector('[data-shared-parts]')?.remove();
-    const sample = root!.querySelector<HTMLElement>('[data-sample-data]'); if (sample) sample.hidden = sampleNoteHidden(null);
+    syncSampleNote(root!.querySelector<HTMLElement>('.shared-page-head'), null);
     const title = root!.querySelector('h1'); if (title) title.textContent = 'Private app';
     const owner = root!.querySelector<HTMLElement>('.shared-by'); if (owner) owner.hidden = true;
     for (const button of root!.querySelectorAll<HTMLButtonElement>('[data-share-add], [data-share-accept]')) button.disabled = true;
@@ -95,7 +120,7 @@ export function startSharedPage(document_: Document = document): void {
       const title = root!.querySelector('h1'); if (title) title.textContent = props.title;
       const owner = root!.querySelector<HTMLElement>('.shared-by');
       if (owner) { owner.hidden = false; owner.textContent = `Shared by ${props.owner_label} · Access expires ${props.expires_at}`; }
-      const sample = root!.querySelector<HTMLElement>('[data-sample-data]'); if (sample) sample.hidden = sampleNoteHidden(props);
+      syncSampleNote(root!.querySelector<HTMLElement>('.shared-page-head'), props);
       const message = root!.querySelector('[data-shared-message]'); if (message) message.textContent = props.message;
       let add = root!.querySelector<HTMLButtonElement>('[data-share-add]');
       if (!add && props.can_add_to_canvas && !props.added_to_canvas) {
