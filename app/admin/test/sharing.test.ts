@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canvasPath, createShare, isShareKey, ShareError, shareSummary, sharesPath, type ShareDraft } from '../src/sharing/api.ts';
 import { readFileSync } from 'node:fs';
-import { SAMPLE_NOTE_TEXT, sampleNoteHidden, sharedJson, syncSampleNote } from '../src/shared/document.ts';
+import { DEMO_NOTE_TEXT, SAMPLE_NOTE_TEXT, demoNoteHidden, sampleNoteHidden, sharedJson, syncDemoNote, syncSampleNote } from '../src/shared/document.ts';
 import { Document_ } from './fake-canvas-page.ts';
 import { connectedEntries } from '../src/shared/canvas-controller.ts';
 
@@ -91,4 +91,36 @@ test('the Sample data note is created once, hidden while unverified and shown ag
   assert.equal(note()[0]!.hidden, false);
   // The server-rendered note and the client's say the same thing.
   assert.ok(readFileSync(new URL('../src/shared/app.tsx', import.meta.url), 'utf8').includes(SAMPLE_NOTE_TEXT));
+});
+
+test('the Synthetic data note follows the same rule on the guest page and its connected card (APP-098 DS-40)', () => {
+  assert.equal(demoNoteHidden(null), true, 'hidden while access is unverified');
+  assert.equal(demoNoteHidden({ available: true, demo_data: true }), false);
+  assert.equal(demoNoteHidden({ available: true, demo_data: false }), true);
+  assert.equal(demoNoteHidden({ available: true }), true, 'an older response without the flag');
+  assert.equal(demoNoteHidden({ available: false, demo_data: true }), true);
+  const document_ = new Document_();
+  const host = document_.createElement('header');
+  const demo = () => host.querySelectorAll('[data-demo-data]');
+  syncDemoNote(host as unknown as HTMLElement, null);
+  assert.equal(demo().length, 0, 'nothing to hide, nothing created');
+  // A page or card that became available in place, in a demo organization.
+  syncDemoNote(host as unknown as HTMLElement, { available: true, demo_data: true });
+  assert.equal(demo().length, 1);
+  assert.equal(demo()[0]!.hidden, false);
+  assert.equal(demo()[0]!.querySelector('.badge')?.textContent, 'Synthetic data');
+  assert.ok(demo()[0]!.all().some((n) => n.textContent === ` ${DEMO_NOTE_TEXT}`));
+  syncDemoNote(host as unknown as HTMLElement, null);
+  assert.equal(demo()[0]!.hidden, true, 'hidden while access is re-checked');
+  syncDemoNote(host as unknown as HTMLElement, { available: true, demo_data: true });
+  assert.equal(demo().length, 1, 'never a second note');
+  assert.equal(demo()[0]!.hidden, false);
+  // The two notes are separate elements; one never stands in for the other.
+  syncSampleNote(host as unknown as HTMLElement, { available: true, sample_data: true });
+  assert.equal(host.querySelectorAll('[data-sample-data]').length, 1);
+  assert.equal(demo().length, 1);
+  // Both server-rendered pages say the same words as the client's note.
+  for (const page of ['../src/shared/app.tsx', '../src/work/app.tsx']) {
+    assert.ok(readFileSync(new URL(page, import.meta.url), 'utf8').includes(DEMO_NOTE_TEXT), page);
+  }
 });
