@@ -1,0 +1,627 @@
+{
+  "costs_alone": {
+    "catalog_checks_in_20_transactions": 0,
+    "catalog_verify": {
+      "max_ms": 111.1,
+      "min_ms": 46.3,
+      "n": 20,
+      "p50_ms": 54.9,
+      "p95_ms": 104.4
+    },
+    "data_transaction": {
+      "max_ms": 11.3,
+      "min_ms": 9.8,
+      "n": 20,
+      "p50_ms": 10.3,
+      "p95_ms": 11.1
+    }
+  },
+  "full_measurement": false,
+  "gate_c_503": 111,
+  "gate_passed": true,
+  "limits": "Local Docker PostgreSQL on a shared, loaded macOS host; HTTP through the composed router in process (no TLS to the client, no browser, no network); the replay is the APP-195 client's timing, not a browser. Each page plays both the work page's document read and the canvas board's batch and view reads at once. The test profile is unoptimized; the service image is a release build.",
+  "one_page_alone": {
+    "max_ms": 725.8,
+    "min_ms": 507.9,
+    "n": 26,
+    "p50_ms": 530.5,
+    "p95_ms": 603.0
+  },
+  "runs": [
+    {
+      "admission_saturated": {
+        "control": 0,
+        "data": 0,
+        "worker": 0,
+        "workspace": 0
+      },
+      "cadence_ms": 10000,
+      "catalog_checks": 4,
+      "engine": {
+        "record_components": {
+          "busy": 0,
+          "ok": 96,
+          "other": 0,
+          "queue_expired": 0,
+          "runs": 96
+        },
+        "typed_view": {
+          "busy": 0,
+          "ok": 96,
+          "other": 0,
+          "queue_expired": 0,
+          "runs": 96
+        }
+      },
+      "herds": 3,
+      "jitter": true,
+      "pages": 15,
+      "passed": true,
+      "per_herd": [
+        {
+          "attempts_by_read": {
+            "batch": {
+              "200": 16
+            },
+            "document": {
+              "200": 16
+            },
+            "view": {
+              "200": 16
+            }
+          },
+          "commit": {
+            "ms": 101.2,
+            "status": 200
+          },
+          "committer_refreshes": 1,
+          "criteria": {
+            "command_200": true,
+            "command_under_1500_ms": true,
+            "delivered_to_all": true,
+            "every_page_current_within_10_s": true,
+            "first_try_200_at_least_90_percent": true,
+            "no_terminal_failure": true,
+            "p95_current_within_8_s": true
+          },
+          "current_after_send": {
+            "max_ms": 4516.4,
+            "min_ms": 730.8,
+            "n": 15,
+            "p50_ms": 3892.7,
+            "p95_ms": 4447.1
+          },
+          "current_p95_ms": 4447.1,
+          "delivered": 15,
+          "delivery_after_send": {
+            "max_ms": 117.6,
+            "min_ms": 117.2,
+            "n": 15,
+            "p50_ms": 117.5,
+            "p95_ms": 117.6
+          },
+          "document_parts_not_ready": {},
+          "final": {
+            "200": 48
+          },
+          "first_attempt": {
+            "200": 48
+          },
+          "first_try_200_share": 1.0,
+          "herd": 0,
+          "pages_current_later_than_6_s": 0,
+          "pages_not_current": [],
+          "passed": true,
+          "reads": 48,
+          "reads_with_a_503": 0,
+          "refresh_start_after_send": {
+            "max_ms": 3074.2,
+            "min_ms": 101.4,
+            "n": 16,
+            "p50_ms": 1997.2,
+            "p95_ms": 3012.3
+          },
+          "refreshes": 16,
+          "terminal_failures": 0,
+          "view_429_answers": 0
+        },
+        {
+          "attempts_by_read": {
+            "batch": {
+              "200": 16
+            },
+            "document": {
+              "200": 16
+            },
+            "view": {
+              "200": 16
+            }
+          },
+          "commit": {
+            "ms": 195.8,
+            "status": 200
+          },
+          "committer_refreshes": 1,
+          "criteria": {
+            "command_200": true,
+            "command_under_1500_ms": true,
+            "delivered_to_all": true,
+            "every_page_current_within_10_s": true,
+            "first_try_200_at_least_90_percent": true,
+            "no_terminal_failure": true,
+            "p95_current_within_8_s": true
+          },
+          "current_after_send": {
+            "max_ms": 4392.7,
+            "min_ms": 863.3,
+            "n": 15,
+            "p50_ms": 4002.1,
+            "p95_ms": 4360.6
+          },
+          "current_p95_ms": 4360.6,
+          "delivered": 15,
+          "delivery_after_send": {
+            "max_ms": 210.4,
+            "min_ms": 210.2,
+            "n": 15,
+            "p50_ms": 210.3,
+            "p95_ms": 210.3
+          },
+          "document_parts_not_ready": {},
+          "final": {
+            "200": 48
+          },
+          "first_attempt": {
+            "200": 48
+          },
+          "first_try_200_share": 1.0,
+          "herd": 1,
+          "pages_current_later_than_6_s": 0,
+          "pages_not_current": [],
+          "passed": true,
+          "reads": 48,
+          "reads_with_a_503": 0,
+          "refresh_start_after_send": {
+            "max_ms": 3062.4,
+            "min_ms": 195.8,
+            "n": 16,
+            "p50_ms": 1673.3,
+            "p95_ms": 2915.7
+          },
+          "refreshes": 16,
+          "terminal_failures": 0,
+          "view_429_answers": 0
+        },
+        {
+          "attempts_by_read": {
+            "batch": {
+              "200": 16
+            },
+            "document": {
+              "200": 16
+            },
+            "view": {
+              "200": 16
+            }
+          },
+          "commit": {
+            "ms": 74.2,
+            "status": 200
+          },
+          "committer_refreshes": 1,
+          "criteria": {
+            "command_200": true,
+            "command_under_1500_ms": true,
+            "delivered_to_all": true,
+            "every_page_current_within_10_s": true,
+            "first_try_200_at_least_90_percent": true,
+            "no_terminal_failure": true,
+            "p95_current_within_8_s": true
+          },
+          "current_after_send": {
+            "max_ms": 3653.1,
+            "min_ms": 1524.9,
+            "n": 15,
+            "p50_ms": 3344.1,
+            "p95_ms": 3588.5
+          },
+          "current_p95_ms": 3588.5,
+          "delivered": 15,
+          "delivery_after_send": {
+            "max_ms": 90.3,
+            "min_ms": 90.1,
+            "n": 15,
+            "p50_ms": 90.2,
+            "p95_ms": 90.3
+          },
+          "document_parts_not_ready": {},
+          "final": {
+            "200": 48
+          },
+          "first_attempt": {
+            "200": 48
+          },
+          "first_try_200_share": 1.0,
+          "herd": 2,
+          "pages_current_later_than_6_s": 0,
+          "pages_not_current": [],
+          "passed": true,
+          "reads": 48,
+          "reads_with_a_503": 0,
+          "refresh_start_after_send": {
+            "max_ms": 1814.7,
+            "min_ms": 74.2,
+            "n": 16,
+            "p50_ms": 1131.8,
+            "p95_ms": 1725.7
+          },
+          "refreshes": 16,
+          "terminal_failures": 0,
+          "view_429_answers": 0
+        }
+      ],
+      "retry": true,
+      "run": "gate A: 15 pages, jitter 0-3 s, one retry, admitted 32",
+      "seed": 1,
+      "transaction_service": {
+        "data": {
+          "max_ms": 119.442,
+          "min_ms": 9.992,
+          "n": 597,
+          "p50_ms": 34.488,
+          "p95_ms": 55.36
+        },
+        "workspace": {
+          "max_ms": 100.067,
+          "min_ms": 11.418,
+          "n": 258,
+          "p50_ms": 20.869,
+          "p95_ms": 38.135
+        }
+      }
+    },
+    {
+      "admission_saturated": {
+        "control": 0,
+        "data": 0,
+        "worker": 0,
+        "workspace": 111
+      },
+      "cadence_ms": 10000,
+      "catalog_checks": 4,
+      "engine": {
+        "record_components": {
+          "busy": 0,
+          "ok": 23,
+          "other": 0,
+          "queue_expired": 0,
+          "runs": 23
+        },
+        "typed_view": {
+          "busy": 0,
+          "ok": 13,
+          "other": 0,
+          "queue_expired": 0,
+          "runs": 13
+        }
+      },
+      "herds": 3,
+      "jitter": false,
+      "pages": 15,
+      "passed": false,
+      "per_herd": [
+        {
+          "attempts_by_read": {
+            "batch": {
+              "200": 4,
+              "503": 11
+            },
+            "document": {
+              "200": 4,
+              "503": 11
+            },
+            "view": {
+              "503": 15
+            }
+          },
+          "commit": {
+            "ms": 122.6,
+            "status": 200
+          },
+          "committer_refreshes": 0,
+          "criteria": {
+            "command_200": true,
+            "command_under_1500_ms": true,
+            "delivered_to_all": true,
+            "every_page_current_within_10_s": false,
+            "first_try_200_at_least_90_percent": false,
+            "no_terminal_failure": false,
+            "p95_current_within_8_s": false
+          },
+          "current_after_send": {
+            "max_ms": 21253.5,
+            "min_ms": 21253.5,
+            "n": 1,
+            "p50_ms": 21253.5,
+            "p95_ms": 21253.5
+          },
+          "current_p95_ms": 21253.5,
+          "delivered": 15,
+          "delivery_after_send": {
+            "max_ms": 143.5,
+            "min_ms": 142.8,
+            "n": 15,
+            "p50_ms": 143.2,
+            "p95_ms": 143.4
+          },
+          "document_parts_not_ready": {},
+          "final": {
+            "200": 8,
+            "503": 37
+          },
+          "first_attempt": {
+            "200": 8,
+            "503": 37
+          },
+          "first_try_200_share": 0.178,
+          "herd": 0,
+          "pages_current_later_than_6_s": 1,
+          "pages_not_current": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "passed": false,
+          "reads": 45,
+          "reads_with_a_503": 37,
+          "refresh_start_after_send": {
+            "max_ms": 402.6,
+            "min_ms": 401.0,
+            "n": 15,
+            "p50_ms": 402.2,
+            "p95_ms": 402.6
+          },
+          "refreshes": 15,
+          "terminal_failures": 37,
+          "view_429_answers": 0
+        },
+        {
+          "attempts_by_read": {
+            "batch": {
+              "200": 4,
+              "503": 11
+            },
+            "document": {
+              "200": 4,
+              "503": 11
+            },
+            "view": {
+              "503": 15
+            }
+          },
+          "commit": {
+            "ms": 220.1,
+            "status": 200
+          },
+          "committer_refreshes": 0,
+          "criteria": {
+            "command_200": true,
+            "command_under_1500_ms": true,
+            "delivered_to_all": true,
+            "every_page_current_within_10_s": false,
+            "first_try_200_at_least_90_percent": false,
+            "no_terminal_failure": false,
+            "p95_current_within_8_s": false
+          },
+          "current_after_send": {
+            "max_ms": 11252.8,
+            "min_ms": 11252.8,
+            "n": 1,
+            "p50_ms": 11252.8,
+            "p95_ms": 11252.8
+          },
+          "current_p95_ms": 11252.8,
+          "delivered": 15,
+          "delivery_after_send": {
+            "max_ms": 295.0,
+            "min_ms": 294.8,
+            "n": 15,
+            "p50_ms": 294.9,
+            "p95_ms": 294.9
+          },
+          "document_parts_not_ready": {},
+          "final": {
+            "200": 8,
+            "503": 37
+          },
+          "first_attempt": {
+            "200": 8,
+            "503": 37
+          },
+          "first_try_200_share": 0.178,
+          "herd": 1,
+          "pages_current_later_than_6_s": 1,
+          "pages_not_current": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "passed": false,
+          "reads": 45,
+          "reads_with_a_503": 37,
+          "refresh_start_after_send": {
+            "max_ms": 403.7,
+            "min_ms": 402.3,
+            "n": 15,
+            "p50_ms": 403.3,
+            "p95_ms": 403.6
+          },
+          "refreshes": 15,
+          "terminal_failures": 37,
+          "view_429_answers": 0
+        },
+        {
+          "attempts_by_read": {
+            "batch": {
+              "200": 3,
+              "503": 12
+            },
+            "document": {
+              "200": 4,
+              "503": 11
+            },
+            "view": {
+              "200": 1,
+              "503": 14
+            }
+          },
+          "commit": {
+            "ms": 94.7,
+            "status": 200
+          },
+          "committer_refreshes": 0,
+          "criteria": {
+            "command_200": true,
+            "command_under_1500_ms": true,
+            "delivered_to_all": true,
+            "every_page_current_within_10_s": false,
+            "first_try_200_at_least_90_percent": false,
+            "no_terminal_failure": false,
+            "p95_current_within_8_s": false
+          },
+          "current_after_send": {
+            "max_ms": 1252.9,
+            "min_ms": 1252.9,
+            "n": 1,
+            "p50_ms": 1252.9,
+            "p95_ms": 1252.9
+          },
+          "current_p95_ms": 1252.9,
+          "delivered": 15,
+          "delivery_after_send": {
+            "max_ms": 128.0,
+            "min_ms": 127.9,
+            "n": 15,
+            "p50_ms": 127.9,
+            "p95_ms": 128.0
+          },
+          "document_parts_not_ready": {},
+          "final": {
+            "200": 8,
+            "503": 37
+          },
+          "first_attempt": {
+            "200": 8,
+            "503": 37
+          },
+          "first_try_200_share": 0.178,
+          "herd": 2,
+          "pages_current_later_than_6_s": 0,
+          "pages_not_current": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "passed": false,
+          "reads": 45,
+          "reads_with_a_503": 37,
+          "refresh_start_after_send": {
+            "max_ms": 405.9,
+            "min_ms": 403.5,
+            "n": 15,
+            "p50_ms": 405.2,
+            "p95_ms": 405.7
+          },
+          "refreshes": 15,
+          "terminal_failures": 37,
+          "view_429_answers": 0
+        }
+      ],
+      "retry": false,
+      "run": "gate C: 15 pages at one instant, no retry, admitted 8 per role (before APP-195)",
+      "seed": 2,
+      "transaction_service": {
+        "data": {
+          "max_ms": 104.35,
+          "min_ms": 9.504,
+          "n": 141,
+          "p50_ms": 33.26,
+          "p95_ms": 57.404
+        },
+        "workspace": {
+          "max_ms": 114.621,
+          "min_ms": 11.077,
+          "n": 66,
+          "p50_ms": 22.075,
+          "p95_ms": 43.625
+        }
+      }
+    }
+  ],
+  "setup": {
+    "lists": "items: one shared row the owner changes; entries: a second shared list (no per-person list on this branch), 8 entries",
+    "members": 25,
+    "owner": 1,
+    "share": "Workspace::share_work per member with record_write (25 shares); no organization-wide share on this branch",
+    "views": [
+      "current (records_list)",
+      "total (record_summary)",
+      "by_choice (record_ranking)",
+      "by_item (typed table over items)",
+      "answer_form (form)"
+    ]
+  },
+  "transactions_per_read": {
+    "batch": {
+      "control": 0,
+      "data": 2,
+      "worker": 0,
+      "workspace": 1
+    },
+    "document": {
+      "control": 0,
+      "data": 8,
+      "worker": 0,
+      "workspace": 3
+    },
+    "view": {
+      "control": 0,
+      "data": 2,
+      "worker": 0,
+      "workspace": 1
+    }
+  }
+}
