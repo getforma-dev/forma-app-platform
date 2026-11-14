@@ -199,3 +199,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 193 | [APP-193: Spike: live interaction from general primitives](0-backlog/APP-193.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
 | 194 | [APP-194: Schema release B: migration 0023](0-backlog/APP-194.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-182, APP-183, APP-186, APP-190, APP-191, APP-192 |
 | 195 | [APP-189: Go-live: build day, rehearsal, codes and the class](0-backlog/APP-189.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194 |
+| 197 | [APP-196: Tier A review of the schema restore command and the scan-delta binding](0-backlog/APP-196.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-175 |

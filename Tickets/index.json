@@ -360,9 +360,10 @@
         "APP-192",
         "APP-193",
         "APP-194",
-        "APP-189"
+        "APP-189",
+        "APP-196"
       ],
-      "ticket_count": 31,
+      "ticket_count": 32,
       "done_count": 7,
       "blocked_count": 0
     }
@@ -383,7 +384,8 @@
     "APP-165",
     "APP-170",
     "APP-171",
-    "APP-176"
+    "APP-176",
+    "APP-196"
   ],
   "tickets": [
     {
@@ -2862,7 +2864,7 @@
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok residuals, independent review of the migration",
       "Branch / PR": "`chore/app-084-residuals`, [PR 83](https://github.com/getforma-dev/forma-app-platform/pull/83), merged 2026-11-12 as `bf24e95`",
-      "Deployment": "Not deployed. Migration 0021 ships with APP-169's 0022 in one operator schema release, [APP-175](../4-done/APP-175.md).",
+      "Deployment": "Deployed to beta 2026-11-14 by release A ([APP-175](../4-done/APP-175.md); run 43564578519, `beta/20261114-511d97e`, schema 22).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5331,10 +5333,10 @@
       "External dependencies": "None",
       "Assignee": "Grok \u2014 GenUI; review fixes by Claude",
       "Branch / PR": "`feat/app-169-artifact-kind` \u2014 [PR 84](https://github.com/getforma-dev/forma-app-platform/pull/84), stacked on APP-084's PR 83, merged 2026-11-12 as `5695869`",
-      "Deployment": "Not deployed. Migration 0022 ships with APP-084's 0021 in one operator schema release, [APP-175](../4-done/APP-175.md).",
+      "Deployment": "Deployed to beta 2026-11-14 by release A ([APP-175](../4-done/APP-175.md); run 43564578519, `beta/20261114-511d97e`, schema 22).",
       "Team": "GenUI",
       "Blocked by": "None",
-      "Unblock evidence": "Explicit user direction; deployment held while redesign is implemented.",
+      "Unblock evidence": "Explicit user direction; deployed with release A on 2026-11-14.",
       "dependencies": [
         "APP-168"
       ]
@@ -6058,6 +6060,34 @@
         "APP-191",
         "APP-192",
         "APP-194"
+      ]
+    },
+    {
+      "id": "APP-196",
+      "title": "Tier A review of the schema restore command and the scan-delta binding",
+      "path": "0-backlog/APP-196.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Verification",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "197",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Fable review of PR #119, 2026-11-14 (in lieu of Victor): APP-175's independent review covered the release mode, the bootstrap scope and the runbook section. The restore command and the scan-delta binding were added after it and carry their review here.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-175",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "none yet",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-175"
       ]
     }
   ]
