@@ -59,7 +59,7 @@ def plan(runner, hours, expected_state_sha256):
             'stack budget must remain 170')
     require(state['policy'].get('budget_genui_cents') == plans['genui_cap_cents']
             and state['policy'].get('budget_total_cents') == plans['project_cap_cents'],
-            'canonical policy caps must remain 18000/21800 cents')
+            'canonical policy caps must equal the code caps (21000/24800 cents since the ADR-019 amendment of 2026-11-14)')
     identity = runner.aws.identity()
     operator_identity(identity, state)
     before = runner.boundary(1)
@@ -82,7 +82,7 @@ def plan(runner, hours, expected_state_sha256):
     require(prospective['operating_plan'] == 'always-on-beta'
             and prospective['genui_allocation_cents'] == plans['genui_cap_cents']
             and prospective['monthly_budget_cents'] == plans['project_cap_cents'],
-            '18000/21800 cent caps must remain unchanged')
+            'the code caps must remain unchanged')
     require(ledger == state['ledger'], 'budget validator mutated the original ledger')
     expected_after = copy.deepcopy(state)
     expected_after['policy']['shorten_expiry_hours'] = hours

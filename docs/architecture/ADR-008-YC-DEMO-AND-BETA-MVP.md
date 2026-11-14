@@ -34,3 +34,64 @@ The execution plan's Track C becomes the beta go-live path: FormaStack deploys f
 - **GenUI always-on figure approved:** about $150–170/month (x86-priced; ARM64 is lower) for the advertised beta, on top of FormaStack's lean fAuth (FORMA-367, about $33/month), replacing ADR-003's bounded-window $100/month for that period. The ledger basis is rewritten to this figure before the next reservation.
 - **SES sandbox accepted for the MVP:** invitation mail goes to recipients verified in SES ahead of each trial (currently `victor@getforma.dev`), which satisfies FORMA-366's controlled-inbox trial; SES production access remains pending and is not required.
 - **Window length:** hosted runs for the MVP (APP-078, APP-076) are kept to minutes and the long campaigns stay in the backlog (APP-079, APP-080), matching the existing split.
+
+## Amendment 2026-11-14: a real live test with 25 real people
+
+Victor decided on 2026-11-14 to run a real live test of the platform with real people, enforced to production standards ([plan](../planning/TRIAL-25-READINESS.md)). This amendment replaces Decision item 1's "synthetic data" for this test only. Everything else in this ADR stands.
+
+- **First cohort.** The 25 adult students of Victor's weekend class (2026-11-29 and 2026-11-30) join **Victor's organization**, today's clean-trial organization `forma-trial`, as members. Victor is its admin.
+  - Victor builds apps for the class with the platform.
+  - Students use those apps, and can build and share their own apps for anything.
+  - The platform stays general: no classroom feature, name or template is added to it. The class is a use case that tests whether the platform can be shaped to it.
+- **Access.** Invite-only. The operator issues codes, and Victor delivers them by email. Codes go out on 2026-11-28, after a rehearsal with two or three students on 2026-11-26. Real use continues through 2026-12-12.
+- **Enforced before codes go out:**
+  - durable, enforced consent to beta notice version 1 (below), stored and audited;
+  - real member names that each member sets;
+  - an Organization Admin area for the organization's admins (`admin_policy`), with member removal;
+  - record lists that keep entries private to their creator and the app's reviewers;
+  - reviewer-only commands;
+  - sharing with roles and with everyone in the organization;
+  - an app-wide daily model-call cap and a spend limit on the provider account;
+  - email alarms, one restore drill, and an operations runbook.
+- **Accepted risks** (Victor, 2026-11-14):
+  - APP-079 (hosted identity acceptance, FORMA-365) and APP-080 (RDS races, drift and restore comparison) are unfinished. The single restore drill covers only part of APP-080.
+  - The APP-078 managed isolation verdict is deferred, because there is one real organization.
+  - One Fargate task: every deploy is an outage of about four minutes that signs everyone out. No deploys from 2026-11-28 through the class, and later only in announced windows.
+  - A single-AZ `t4g.small` database. Logs are kept 30 days.
+  - No per-organization quotas beyond the daily model cap and the per-member hourly limits.
+  - Container findings carried under a temporary, reviewed disposition.
+  - Deletion during the test is limited to removing access and deleting uploaded files. All other data is purged with the organization after the test.
+  - The stack keeps its `Environment=synthetic` tag, because an infrastructure change would block promotion. That is a known mismatch.
+  - Victor is the only operator, and alarms reach him by email; no one is paged.
+  - **One classroom network.** Sign-in limits count per IP address (`app/src/http/limits.rs`), and a classroom usually shares one. Students redeem their codes at home on 2026-11-28, and the per-address limits for invitations and sign-in are raised before the last deploy.
+  - **An outage during class.** The class continues without the platform. Victor keeps an offline fallback for attendance and quizzes, and says at the start that this is a beta. During class a broken beta is observed, not repaired.
+  - **Not the record of record.** Grades and attendance in the platform are not the official record, and no export exists. Victor copies them out before 2026-12-12; the purge procedure starts with that copy-out, and students are told their apps are deleted by 2026-12-14.
+  - **Phones.** Desktop first. Phones serve check-ins and submissions; building apps on a phone isn't supported during the test. Students bring a laptop.
+  - **Withdrawal.** Declining the checkbox, or leaving, costs nothing in the class, because the fallback serves them. Victor removes the member in `/admin` at once and deletes their uploads within two days. Their entries in shared apps stay until the purge, as the notice says.
+- **End of the test** (added later on 2026-11-14 from the W3 purge review). The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook (`docs/operations/TRIAL-RUNBOOK.md`, delivered by APP-188, §10):
+  - **Content deleted:** apps, records, uploads, names, consents and memberships, plus every stored file version.
+  - **Kept:** the hash-chained audit log (identifiers, event kinds, times and hashes; no content) and the routing rows for the organization's handle.
+  - **Backups:** manual snapshots are deleted at the purge. RDS automated backups lapse seven days later, so the data is fully gone around 2026-12-21.
+  - **Sign-in accounts:** the members' sign-in accounts (email and password) live in the fAuth tenant run by FormaStack, outside this database. The purge procedure includes a written request to FormaStack to delete the tenant's users by 2026-12-14, with the confirmation recorded.
+  - **Guest shares:** the organization's guest shares and guests' links to them are deleted. Each guest account's share-event records (identifiers, kinds, sequence and hashes; no title, address or content) are kept, so the guest's hash-chained history still verifies. This relies on migration 0024 dropping the key from those records to the share rows. Until that ships, the purge refuses safely if a guest has linked a share.
+  - The beta stops about 2026-12-15 unless it is renewed again.
+
+### Beta notice, version 1
+
+Shown on the invitation page; the required checkbox records consent to this version. The text is general, because it is platform text, not text for one cohort. Approved on 2026-11-14 by the Fable advisor acting for Victor at his instruction ("Ask Fable for answers and directions in lieu of me").
+
+The notice's "Your data" paragraph was revised later on 2026-11-14 from the W3 purge review; the rest is the morning's approved text.
+
+> **Before you join this Forma workspace**
+>
+> Forma (getforma.dev) is in early beta. It may change, break or go offline without notice, and there is no service guarantee. You must be 18 or older to take part.
+>
+> You are joining an organization's workspace. Its admins can see who has joined, your agreement to this notice, when you were last active, and how much you have created. Apps shared with you may collect what you enter. The app's owner and its reviewers can see what you enter; unless the app keeps entries private, so can the other people it is shared with. Anything you build is private unless you share it. Forma's operators can access stored data to run and support the service.
+>
+> **What we keep:** your email address for sign-in, the name you choose, what you create and enter, the files you upload, and basic activity logs. Data is stored in the United States.
+>
+> **AI:** to build apps and answer questions, your prompts, and the files and entries you ask it to work with, are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
+>
+> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Your sign-in account (email and password) is held by our identity provider; we ask it to delete the account after the test. Copy out anything you want to keep before then.
+>
+> By checking the box you agree to take part on these terms.

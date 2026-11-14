@@ -183,7 +183,7 @@ class ReleaseBindingTests(unittest.TestCase):
 
     def setUp(self):
         self.value, _ = scan_disposition()
-        self.delta = json.loads((Path(__file__).resolve().parents[2] / 'evidence/APP-175/scan-delta-2026-11-12.json').read_text())
+        self.delta = json.loads((Path(__file__).resolve().parents[2] / 'evidence/APP-175/scan-delta-2026-11-14.json').read_text())
 
     def test_contract_and_expiry_are_the_schema_releases(self):
         from ops.promotion import schema_release
@@ -206,7 +206,10 @@ class ReleaseBindingTests(unittest.TestCase):
                 self.assertEqual(entry['predecessor_manifest_digest'], observed['manifest_digest'])
                 self.assertEqual(finding_set(entry['findings']), finding_set(observed['introduced']))
                 self.assertEqual(observed['introduced_count'], len(entry['findings']))
-                self.assertEqual((observed['removed_count'], observed['critical_count']), (0, 0))
+                # The one removed fingerprint is CVE-2026-76844's November 5 vector; the scanner re-vectored
+                # it on 2026-11-14 (same package, version and score), so it is also among the introduced.
+                self.assertEqual((observed['removed_count'], observed['critical_count']), (1, 0))
+                self.assertIn('CVE-2026-76844', {f['name'] for f in observed['introduced']})
                 self.assertEqual(sorted(f['name'] for f in entry['findings']), sorted(REVIEWED_DISPOSITION['findings']))
                 predecessors.add(entry['predecessor_manifest_digest'])
         self.assertEqual(len(predecessors), len(REPOS))

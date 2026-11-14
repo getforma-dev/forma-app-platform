@@ -74,7 +74,8 @@ class GithubTests(unittest.TestCase):
         for mutate in (lambda v: v.update(private_arn="secret"), lambda v: v.pop("review"),
                 lambda v: v["review"]["changes"][0].update(logical_id="arn:aws:private"),
                 lambda v: v["review"]["scan"]["service"].update(introduced=1),
-                lambda v: v["review"].update(outage_required=False), lambda v: v.update(cost_genui_cents=18001)):
+                lambda v: v["review"].update(outage_required=False), lambda v: v.update(cost_genui_cents=21001),
+                lambda v: v.update(cost_total_cents=24801)):
             changed = copy.deepcopy(value)
             mutate(changed)
             with self.assertRaises(ValueError):

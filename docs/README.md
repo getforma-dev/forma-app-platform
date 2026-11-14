@@ -28,7 +28,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [architecture/ADR-016-WORKSPACE-SIGNIN.md](architecture/ADR-016-WORKSPACE-SIGNIN.md) | Reference | Workspace entry and verified workspace discovery. | |
 | [architecture/ADR-017-BETA-PROMOTION.md](architecture/ADR-017-BETA-PROMOTION.md) | Reference | One-approval promotion. ADR-019 moves the deploy branch to `main`. | |
 | [architecture/ADR-018-WHOLE-APP-VIEWS.md](architecture/ADR-018-WHOLE-APP-VIEWS.md) | Reference | An app is one object. Card, stack and open are views. | |
-| [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) | Reference | `main` is the trunk, and the reservation ceiling is $180 / $218. | |
+| [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) | Reference | `main` is the trunk, and the reservation ceiling is $210 / $248 since the 2026-11-14 amendment (the real-user trial; $180 / $218 before). | |
 | [architecture/CANVAS-WINDOWS.md](architecture/CANVAS-WINDOWS.md) | Reference | The app-window shell and file cards decided on 2026-11-02. | |
 | [architecture/CSV-APP-DATA.md](architecture/CSV-APP-DATA.md) | Reference | Editable data in an app built from a spreadsheet. | |
 | [architecture/DECISIONS.md](architecture/DECISIONS.md) | Reference | Implementation decisions from 2026-10-28. Product order is DIRECTION.md. | |
@@ -40,6 +40,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [architecture/THEME-ROLES.md](architecture/THEME-ROLES.md) | Reference | Shared color roles for the canvas, native pages, apps and widgets. | |
 | [design-brief/README.md](design-brief/README.md) | Reference | Designer brief dated 2026-10-30 for the invite-first beta screens. | |
 | [operations/LIVE-SHARING.md](operations/LIVE-SHARING.md) | Current | Private live sharing and the separate invitation broker. | |
+| [operations/TRIAL-RUNBOOK.md](operations/TRIAL-RUNBOOK.md) | Current | The real-user trial (Nov 29–30 class): releases A and B, renewals, codes and restarts, member removal, deny-all, feedback, the restore drill and the purge. | |
 | [pitch/README.md](pitch/README.md) | Current | Why `docs/pitch/` still holds live procedures, and which file is which. | |
 | [pitch/BETA-PROMOTION.md](pitch/BETA-PROMOTION.md) | Current | The one-approval path from a merge on `main` to beta. | |
 | [pitch/CANVAS-RULES.md](pitch/CANVAS-RULES.md) | Reference | Canvas grammar. ADR-018 and CANVAS-WINDOWS override the older component-placement rules. | |
@@ -79,6 +80,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/SOURCE-GUIDE.md](planning/SOURCE-GUIDE.md) | Current | Reading order for the frozen design and which later text outranks it. Some sentences describe the repository before the application existed. | |
 | [planning/START-HERE.md](planning/START-HERE.md) | Current | Pointer to AGENTS.md, the README, DEVELOPMENT.md and this index. | |
 | [planning/SYNTHETIC-ENVIRONMENT-COST.md](planning/SYNTHETIC-ENVIRONMENT-COST.md) | Historical | APP-007 cost estimate, including the retired $100 plan. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
+| [planning/TRIAL-25-READINESS.md](planning/TRIAL-25-READINESS.md) | Current | Approved plan for the real live test with 25 real people (APP-181 to APP-194). | |
 | [planning/SYNTHETIC-ENVIRONMENT.md](planning/SYNTHETIC-ENVIRONMENT.md) | Historical | APP-007 operating record. Its current-operator section is the 2026-10-28 $100 decision. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
 | [planning/app-model/app.md](planning/app-model/app.md) | Reference | What an app is. Sentences marked proposed are not in the code yet. | |
 | [planning/app-model/box.md](planning/app-model/box.md) | Reference | A box is the folder widget. Formation can produce an app. | |
