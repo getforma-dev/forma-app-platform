@@ -1,5 +1,41 @@
 # November 12 scan disposition (APP-175 schema release)
 
+## Renewal, 2026-11-14: 16 findings (supersedes the counts and hash below)
+
+Release A's first preparation, run [43555596848](https://github.com/getforma-dev/forma-app-platform/actions/runs/43555596848) for `e1e710e`, refused at 04:57:32 UTC after publishing the three images. The scans completed at 04:55:27–04:57:23 UTC. No template or change set was created. Each candidate reports 38 findings (16 HIGH, 16 MEDIUM, 5 LOW, 1 UNDEFINED) against the canonical baseline's 23. Against that baseline it introduces the 14 findings below **and two more**, identical in every role and none CRITICAL. One baseline fingerprint is removed. The guard refused because the two extra findings are outside the November 12 set.
+
+The disposition is regenerated with `ops/promotion/scan_renewal.py` (W3's tool, carried byte-identically from `trial/w3-ops` `c7ecd5ad`). Its inputs are, privately, the canonical state's `live.registry.<role>` and each candidate image's `describe-image-scan-findings`. The output is the [sanitized delta](scan-delta-2026-11-14.json) (`sha256 8897313b…`). Nothing was retyped. The scope is otherwise unchanged:
+- the same contract `14a161a0…`, since the deployment contract hashes neither `ops/promotion` nor `evidence`;
+- the same three predecessors;
+- the same expiry, 2026-11-20 00:00 UTC, which is still the schema release's own.
+
+| Finding | Severity | Package | What changed | Applicability |
+| --- | --- | --- | --- | --- |
+| [CVE-2026-76844](https://security-tracker.debian.org/tracker/CVE-2026-76844) | HIGH, CVSS 4 8.3 | zlib 1.2.13.dfsg-1 | **Not new.** It was accepted by the [APP-173 disposition](../APP-173/SCAN-DISPOSITION.md) and has been a baseline finding since the November 5 release. The scanner re-vectored it: the same name, package, version and score, with the CVSS 4 vector changed from `AC:H/UI:N/VC:N/VI:H/VA:H` to `AC:L/UI:P/VC:H/VI:N/VA:N/SC:H`. The fingerprint includes attributes, so the old one counts as removed and the new one as introduced. | APP-173's analysis is unchanged, because the package is unchanged. The only importers of zlib's gzip file API are `dpkg-deb` and `libapt-pkg`, which run at build time only. The scanner's new description names webpack-dev-middleware, which matches neither the package it attributes nor the CVSS change. webpack-dev-middleware is in no image: it is absent from `app/admin/package-lock.json`, and the Node stage of `app/Dockerfile` is a build stage whose only output is `admin/dist`, compiled into the service binary. |
+| [CVE-2026-91094](https://security-tracker.debian.org/tracker/CVE-2026-91094) | UNDEFINED (no score) | dpkg 1.21.23 | Newly listed against the pinned `dpkg=1.21.23`. | The flaw is in unpacking `3.0 (quilt)` **source** packages, which is the job of `dpkg-source` (`Dpkg::Source`, shipped in `dpkg-dev`/`libdpkg-perl`). Neither is installed: a local build of the qualification image has `dpkg` 1.21.23 and `perl-base`, with no `/usr/bin/dpkg-source` and no `/usr/share/perl5/Dpkg`. The three final stages share the same `python:3.11.14-slim-bookworm` base and the same `--only-upgrade` package list, which installs nothing new. dpkg runs only during the image build. |
+
+All containers run non-root (`65532:65532`) with a read-only root filesystem.
+
+**Limits.**
+- The dpkg check used an earlier local amd64 build of the qualification image (`forma248-local:qualification`), not the ECR ARM64 images. Its `/etc/debian_version` reads 12.15.
+- The webpack-dev-middleware check is a lockfile search.
+- Static analysis, as before, does not prove against `dlopen`.
+
+**Checks.**
+- `python3 -m ops.promotion.scan_renewal check --delta evidence/APP-175/scan-delta-2026-11-14.json` prints `"status": "bound"`, 16 findings, `disposition_sha256 f00adb9a…`.
+- `python3 -m unittest discover -s ops/promotion -p 'test_*.py'`: 183 tests, OK.
+- The tests that bound the count to 14 now bind 16. `test_scan.py` binds the delta's one removed fingerprint and requires CVE-2026-76844 among the introduced.
+
+**Approval.** For each image the beta approval summary must show:
+- 16 introduced, 16 reviewed, 0 unreviewed;
+- this disposition's content hash, `f00adb9a047ce880535966ef5551d543b611be31c144be08efbc3e0345b5025b`;
+- the expiry, 2026-11-20.
+
+Approve only if those match. If any other finding appears, preparation stops again before approval is requested.
+
+The November 12 text below is kept as written; its 14 findings are a subset of these 16.
+
+
 **Scope.** This disposition covers only the APP-175 schema release (20 → 22). It is bound to:
 
 - that release's `to` deployment contract `14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b`, which the scan guard now checks for the candidate being promoted;
