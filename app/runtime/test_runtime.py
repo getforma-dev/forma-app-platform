@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import signal
 import shutil
@@ -329,7 +330,77 @@ class RuntimeTests(unittest.TestCase):
                              ('verify-full', 'disable', 'synthetic.invalid'))
 
 
+# APP-196 recheck NIT-R1: exit 1 means "nothing committed" only while the runner owns the one
+# transaction, so no migration may end, open or split it. A COMMIT inside a DO block or a
+# procedure fails inside a transaction block; only top-level statements can do it.
+TRANSACTION_CONTROL = re.compile(r'(BEGIN|COMMIT|END|ROLLBACK|ABORT|SAVEPOINT|RELEASE|START\s+TRANSACTION'
+                                 r'|PREPARE\s+TRANSACTION|SET\s+TRANSACTION|SET\s+SESSION\s+CHARACTERISTICS)\b', re.I)
+DOLLAR_QUOTE = re.compile(r'\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$')
+
+
+def top_level_statements(sql):
+    """The statements outside comments, string literals, quoted identifiers and dollar-quoted bodies."""
+    statements, current, i, n = [], [], 0, len(sql)
+    while i < n:
+        if sql.startswith('--', i):
+            end = sql.find('\n', i); i = n if end < 0 else end; continue
+        if sql.startswith('/*', i):  # PostgreSQL block comments nest.
+            depth = 0
+            while i < n:
+                if sql.startswith('/*', i): depth += 1; i += 2
+                elif sql.startswith('*/', i):
+                    depth -= 1; i += 2
+                    if depth == 0: break
+                else: i += 1
+            current.append(' '); continue
+        if sql[i] in "'\"":
+            quote = sql[i]
+            escapes = quote == "'" and i > 0 and sql[i - 1] in 'eE' and (i < 2 or not (sql[i - 2].isalnum() or sql[i - 2] == '_'))
+            i += 1
+            while i < n:
+                if escapes and sql[i] == '\\': i += 2; continue
+                if sql[i] == quote:
+                    if sql.startswith(quote * 2, i): i += 2; continue
+                    break
+                i += 1
+            i += 1; current.append(' '); continue
+        tag = DOLLAR_QUOTE.match(sql, i)
+        if tag and not (i > 0 and (sql[i - 1].isalnum() or sql[i - 1] == '_')):
+            end = sql.find(tag.group(0), tag.end())
+            assert end >= 0, 'unterminated dollar quote'
+            i = end + len(tag.group(0)); current.append(' '); continue
+        if sql[i] == ';':
+            statements.append(''.join(current).strip()); current = []
+        else:
+            current.append(sql[i])
+        i += 1
+    statements.append(''.join(current).strip())
+    return [s for s in statements if s]
+
+
+def transaction_control(sql):
+    return [s for s in top_level_statements(sql) if TRANSACTION_CONTROL.match(s)]
+
+
 class MigrationSourceTests(unittest.TestCase):
+    def test_no_reviewed_migration_controls_the_runner_s_transaction(self):
+        for sql in ('COMMIT;', 'commit work;', '  Begin;', 'END;', 'START TRANSACTION;', 'SAVEPOINT s;', 'ROLLBACK TO SAVEPOINT s;',
+                    'RELEASE SAVEPOINT s;', 'ABORT;', "PREPARE TRANSACTION 'x';", 'SET TRANSACTION READ ONLY;',
+                    'SELECT 1; COMMIT', "SELECT 'a'; /* c */ COMMIT;", "SELECT E'it\\'s'; END;"):
+            with self.subTest(refused=sql):
+                self.assertTrue(transaction_control(sql))
+        for sql in ('-- step one; commit comes later\nSELECT 1;', '/* BEGIN; /* nested */ COMMIT; */ SELECT 1;', "SELECT 'COMMIT;';",
+                    "SELECT E'it\\'s; COMMIT';", 'DO $$ BEGIN PERFORM 1; END $$;', 'SELECT "end" FROM t;',
+                    'CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $body$ BEGIN RETURN; END $body$;'):
+            with self.subTest(accepted=sql):
+                self.assertEqual(transaction_control(sql), [])
+        # Every reviewed file, read directly: the manifest pins are another test's job.
+        for item in json.loads((MIGRATIONS / 'manifest.json').read_text())['migrations']:
+            with self.subTest(migration=item['file']):
+                source = (MIGRATIONS / item['file']).read_text()
+                self.assertTrue(top_level_statements(source))
+                self.assertEqual(transaction_control(source), [])
+
     def test_exact_reviewed_migrations_and_original_bytes_are_required(self):
         source=Path(runtime.__file__).resolve().parent.parent/'migrations'
         reviewed=runtime.migration_manifest(source)['database_version']
@@ -512,6 +583,114 @@ class MigrationRunnerTests(unittest.TestCase):
             runtime.verify_schema_catalog(MigrationRecorder(directory, 3), directory)
             with self.assertRaises(runtime.Refused): runtime.verify_schema_catalog(MigrationRecorder(directory, 2), directory)
             runtime.verify_schema_catalog(MigrationRecorder(directory, 2), directory, 2)
+
+
+# A stand-in `psycopg` for the real `runtime.py migrate` process: one MigrationRecorder
+# at version 20 under the reviewed migrations, so the real runner applies 21 and 22.
+# Its events file records what reached the "server". Never a database.
+FAKE_PSYCOPG = r'''
+import json, os
+from pathlib import Path
+from test_runtime import MIGRATIONS, MigrationRecorder
+
+EVENTS = Path(os.environ["UNIT_MIGRATION_EVENTS"]); MODE = os.environ["UNIT_MIGRATION_MODE"]
+
+class OperationalError(Exception):
+    pass
+
+def record(**facts):
+    current = json.loads(EVENTS.read_text()) if EVENTS.exists() else {}
+    current.update(facts); EVENTS.write_text(json.dumps(current))
+
+class ForeignKeyViolation(Exception):
+    sqlstate = "23503"
+
+class Connection(MigrationRecorder):
+    def __init__(self):
+        super().__init__(MIGRATIONS, 20)
+        if MODE == "refused": self.drift[20] = "{}"
+    def execute(self, statement, params=None):
+        if statement != "SET CONSTRAINTS ALL IMMEDIATE": return super().execute(statement, params)
+        # PostgreSQL checks every pending deferred constraint here, retroactively.
+        self.statements.append(statement); self.rows = []; record(deferred_checked=True, applied=self.applied())
+        if MODE == "deferred-fk": raise ForeignKeyViolation("synthetic: a deferred foreign key fails")
+        return self
+    def commit(self):
+        record(applied=self.applied(), commit_sent=True, last_statement=self.statements[-1],
+               after_catalog_proof=self.statements[-2] == self.query)
+        if MODE == "deferred-fk": raise ForeignKeyViolation("synthetic: the server refused the COMMIT and rolled back")
+        if MODE == "lost-ack": raise OperationalError("synthetic: the server committed; its acknowledgement was lost")
+        record(committed=True)
+        if MODE == "stdout-lost": os.close(1)
+    def rollback(self):
+        record(rolled_back=True)
+    def close(self):
+        record(closed=True)
+        if MODE == "close-fails": raise OperationalError("synthetic: the connection failed after the commit")
+    # psycopg 3.3.6 Connection.__exit__: commit on a clean exit, rollback otherwise, then close.
+    def __enter__(self):
+        return self
+    def __exit__(self, kind, value, traceback):
+        if kind: self.rollback()
+        else: self.commit()
+        self.close()
+
+def connect(**kwargs):
+    record(connected=True)
+    return Connection()
+'''
+
+
+class MigrationCommitOutcomeTests(unittest.TestCase):
+    """APP-196 MAJOR-1: once COMMIT may have reached the server, no exit can read as "not committed".
+
+    Runs the real `runtime.py migrate` process. Exit 1 must mean the COMMIT was never
+    sent; any failure from the COMMIT onward, including a lost acknowledgement, exits
+    with the one reserved code the restore command refuses.
+    """
+    def run_migrate(self, mode):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / 'fake'; fake.mkdir(); (fake / 'psycopg.py').write_text(FAKE_PSYCOPG)
+            events = Path(tmp) / 'events.json'
+            env = {'PYTHONPATH': os.pathsep.join([str(fake), str(Path(runtime.__file__).resolve().parent)]),
+                   'PGDATABASE': 'genui', 'PGUSER': 'genui_migration', 'PGHOST': 'synthetic.invalid',
+                   'PGPASSWORD': 'unit-only', 'PGSSLROOTCERT': '/unit-only/ca.pem',
+                   'UNIT_MIGRATION_EVENTS': str(events), 'UNIT_MIGRATION_MODE': mode}
+            process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), 'migrate'],
+                                     env=env, capture_output=True, text=True, timeout=60)
+            return process, json.loads(events.read_text()) if events.exists() else {}
+
+    def test_a_failure_from_the_commit_onward_exits_with_the_reserved_code(self):
+        for mode in ('lost-ack', 'close-fails', 'stdout-lost'):
+            with self.subTest(mode=mode):
+                process, events = self.run_migrate(mode)
+                self.assertEqual(events.get('applied'), [21, 22])
+                self.assertTrue(events.get('commit_sent'))
+                self.assertEqual(process.returncode, 4, process.stderr[-400:])
+                self.assertEqual(process.stderr, 'migration_commit_outcome_unknown\n')
+                self.assertNotIn('unit-only', process.stdout + process.stderr)
+        self.assertEqual(runtime.MIGRATION_COMMIT_OUTCOME_UNKNOWN, 4)
+
+    def test_exit_1_means_the_commit_was_never_sent_and_0_means_committed(self):
+        process, events = self.run_migrate('refused')
+        self.assertEqual(process.returncode, 1)
+        self.assertNotIn('commit_sent', events); self.assertTrue(events.get('closed'))
+        self.assertEqual((process.stdout, process.stderr), ('', 'managed_dependency_operation_refused\n'))
+        process, events = self.run_migrate('committed')
+        self.assertEqual(process.returncode, 0, process.stderr[-400:])
+        self.assertEqual((events.get('applied'), events.get('committed'), events.get('closed')), ([21, 22], True, True))
+        self.assertEqual((process.stdout, process.stderr), ('tenant_foundation_migration_complete\n', ''))
+        # The deferred-constraint check is the last statement, after the final catalog proof.
+        self.assertEqual((events.get('last_statement'), events.get('after_catalog_proof')), ('SET CONSTRAINTS ALL IMMEDIATE', True))
+
+    def test_a_deferred_constraint_fails_before_the_commit_is_sent(self):
+        # APP-196 recheck MINOR-R1: a server that refuses the COMMIT on a deferred foreign key has
+        # rolled back. Checked at SET CONSTRAINTS ALL IMMEDIATE, it still exits 1 and the restore works.
+        process, events = self.run_migrate('deferred-fk')
+        self.assertEqual(process.returncode, 1, process.stderr[-400:])
+        self.assertEqual(events.get('applied'), [21, 22]); self.assertTrue(events.get('deferred_checked'))
+        self.assertNotIn('commit_sent', events)
+        self.assertEqual((process.stdout, process.stderr), ('', 'managed_dependency_operation_refused\n'))
 
 
 class GeneratorTests(unittest.TestCase):
