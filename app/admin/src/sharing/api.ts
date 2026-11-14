@@ -167,12 +167,13 @@ export function teamRefusal(status: number, code: string): string {
   if (code === 'reviewer_not_allowed') return 'Only someone who can review all entries can give that access.';
   if (code === 'contributor_not_allowed') return 'Only someone who can add and edit entries can give that access.';
   if (code === 'organization_share_unavailable') return UNAVAILABLE_FOR_EVERYONE;
+  // A sharing change that met another at the same moment (busy): nothing
+  // changed, and a retry is safe. It names nobody.
+  if (code === 'busy') return 'Sharing is busy right now. Nothing was changed. Try again in a moment.';
   if (status === 404) return 'That share was refused. Refresh the list and try again.';
   if (status === 400) return 'That request was not understood. Refresh the list and try again.';
   if (status === 403) return 'This page could not confirm the request. Reload the page and try again.';
   if (status === 429) return 'Too many changes at once. Wait a moment and try again.';
-  // A lock cycle between two people sharing at once (busy): nothing changed.
-  if (status === 409) return 'Someone else was changing sharing at the same moment. Nothing was changed. Try again.';
   return 'Sharing is unavailable right now. Try again in a moment.';
 }
 async function teamRequest(url: string, method: 'GET' | 'POST', body?: string): Promise<{ status: number; json: unknown }> {

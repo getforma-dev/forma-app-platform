@@ -1422,7 +1422,17 @@ async fn campaign() {
         "ownership alone does not open a member's work"
     );
     let opened =
-        crate::sharing::share_with_lineage(&stores, &ben, PRIVATE_APP, &bens_work, OWNER, true)
+        // The merged signature names the role and the mode (W2b): W4's
+        // `record_write: true` through its Ensure path.
+        crate::sharing::share_with_lineage(
+            &stores,
+            &ben,
+            PRIVATE_APP,
+            &bens_work,
+            OWNER,
+            ShareRole::Contributor,
+            ShareMode::Ensure,
+        )
             .await
             .unwrap();
     assert!(opened.changed() && opened.removed.is_empty(), "{opened:?}");

@@ -298,21 +298,24 @@ async fn share_request(
 }
 
 /// A store refusal on the share routes: `Denied` is the uniform 404; `Busy`
-/// (a lock cycle between two members, W4's r7) is the retryable 409 `busy`
-/// the command routes answer, with its `retry_after_seconds`; anything else
-/// is 503. Nothing was written in any of them.
+/// (a sharing definer aborted in a lock cycle, W4's r7) is the retryable 429
+/// `busy` with `Retry-After`, distinct from the member write limit's
+/// `too_many_requests`; anything else is 503. Nothing was written in any of
+/// them.
 fn storage_refusal(error: storage::Error) -> Response {
     match error {
         storage::Error::Denied => http::not_found(),
-        storage::Error::Busy => http::problem_with(
-            StatusCode::CONFLICT,
-            "busy",
-            json!({"retry_after_seconds": BUSY_RETRY_SECONDS}),
-        ),
+        storage::Error::Busy => {
+            let mut response = http::problem(StatusCode::TOO_MANY_REQUESTS, "busy");
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from(BUSY_RETRY_SECONDS));
+            response
+        }
         _ => http::unavailable(),
     }
 }
-/// How long a busy share asks the canvas to wait (the command routes' 2 s).
+/// How long a busy share asks the canvas to wait.
 const BUSY_RETRY_SECONDS: u64 = 2;
 
 /// The sharer's own standing on the work: the uniform 404 without share
@@ -846,17 +849,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_busy_store_is_the_retryable_409_and_nothing_else_changes() {
+    async fn a_busy_store_is_the_retryable_429_and_nothing_else_changes() {
         let body = |response: Response| async move {
             let status = response.status();
             let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
             (status, String::from_utf8(bytes.to_vec()).unwrap())
         };
+        let busy = storage_refusal(storage::Error::Busy);
+        assert_eq!(busy.headers()["retry-after"], "2");
         assert_eq!(
-            body(storage_refusal(storage::Error::Busy)).await,
+            body(busy).await,
             (
-                StatusCode::CONFLICT,
-                "{\"code\":\"busy\",\"retry_after_seconds\":2,\"status\":409}".into()
+                StatusCode::TOO_MANY_REQUESTS,
+                "{\"code\":\"busy\",\"status\":429}".into()
             )
         );
         assert_eq!(

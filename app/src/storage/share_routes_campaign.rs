@@ -1135,6 +1135,61 @@ async fn campaign() {
         "an automatic share only adds: after the owner shares with Fay as reviewer, the canvas approver path (POST /share/add, contributor) answers 200 and writes nothing, so Fay keeps record_review and is listed as reviewer; a viewer add from a viewer-only sharer changes nothing either; /share/add refuses none and record_write (400), a role the sharer may not grant (422), an exhausted write window (429), no share authority (404) and a cross-site post (403); the dialog's exact /share as contributor does lower Fay to contributor",
     );
 
+    // --- a busy share answers the retryable 429 (W4's r7) -------------------
+    // A raw session holds Fay's membership row FOR UPDATE: share_work and
+    // revoke_work_share take it FOR UPDATE, so each waits past lock_timeout
+    // and the definer answers Busy; a held per-work sharing lock does the
+    // same to the organization-wide share.
+    let busy_body = "{\"code\":\"busy\",\"status\":429}";
+    let before = footprint(&fixture).await;
+    let mut held = fixture.operator().await;
+    let hold = held.client.transaction().await.unwrap();
+    hold.execute(
+        &format!("SELECT 1 FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{FAY}' FOR UPDATE"),
+        &[],
+    )
+    .await
+    .unwrap();
+    for body in [share_body(FAY, "viewer"), share_body(FAY, "none")] {
+        let busy = post(Some(&owner_cookie), &share_uri, body.clone()).await;
+        assert_eq!(
+            (busy.status, busy.body.as_str()),
+            (StatusCode::TOO_MANY_REQUESTS, busy_body),
+            "{body}"
+        );
+        assert_eq!(busy.headers["retry-after"], "2", "{body}");
+    }
+    hold.rollback().await.unwrap();
+    let hold = held.client.transaction().await.unwrap();
+    hold.execute(
+        &format!(
+            "SELECT pg_advisory_xact_lock(hashtextextended('forma:work-share:{ORG}:{work}',0))"
+        ),
+        &[],
+    )
+    .await
+    .unwrap();
+    let busy = post(Some(&owner_cookie), &everyone_uri, role_body("viewer")).await;
+    assert_eq!(
+        (busy.status, busy.body.as_str()),
+        (StatusCode::TOO_MANY_REQUESTS, busy_body)
+    );
+    assert_eq!(busy.headers["retry-after"], "2");
+    hold.rollback().await.unwrap();
+    drop(held);
+    assert_eq!(
+        footprint(&fixture).await,
+        before,
+        "a busy share writes nothing"
+    );
+    // Released, the same requests go through.
+    let again = post(Some(&owner_cookie), &share_uri, share_body(FAY, "viewer")).await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.body);
+    check(
+        &mut checks,
+        "a busy share answers the retryable 429: with Fay's membership row held FOR UPDATE, the person share and the removal each wait past lock_timeout and answer 429 {\"code\":\"busy\"} with Retry-After: 2; with the per-work sharing lock held, the organization-wide share does the same; nothing is written, and once released the share goes through",
+    );
+
     stores.close().await.unwrap();
     if let Some(path) = std::env::var_os("GENUI_SHARE_ROUTES_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&json!({"schema_version":1,"scope":"APP-192 (trial plan D9): the share routes with roles and the organization-wide share, over real rows (W2b)","postgres_image":super::qualification::IMAGE,"server_version":fixture.server_version,"checks":checks,"passed":true,"limits":["Synthetic local password authentication is not RDS IAM.","Sessions are minted for tests; the hosted sign-in is not exercised.","Storage semantics (definers, reviewer rule, own collections, the organization-wide clause in every read) are W4's private-entries campaign.","A personal share is not revoked over a route here: the owner-side revoke is W4's pending API."]})).unwrap()).unwrap();

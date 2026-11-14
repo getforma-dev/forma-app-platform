@@ -140,9 +140,9 @@ impl fmt::Display for Error {
             Self::Unavailable => "storage unavailable",
             Self::Deadline => "storage deadline exceeded",
             Self::ProjectionLimit => "record projection bound exceeded",
-            Self::Busy => {
-                "record snapshot capacity reached (the query worker's admission, 24 slots)"
-            }
+            // Generic and retryable: a record snapshot's admission slots and
+            // a sharing definer's lock cycle (W4's r7) both answer it.
+            Self::Busy => "busy; try again in a moment",
             Self::UnknownOutcome => "transaction outcome unknown",
             Self::Stale => "record snapshot stale",
         })

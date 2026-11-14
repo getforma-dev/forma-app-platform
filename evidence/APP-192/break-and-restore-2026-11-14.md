@@ -123,5 +123,20 @@ Both breaks ran on `8c239874`, with the same method as round 1. Each restore lef
 | B32 | The canvas approver step uses the additive route | `actions.ts` builds the exact person request | `team-sharing.test.ts` 13 |
 
 The demotion check is re-verified for W4's r4: a demotion through the dialog's `Set` leaves exactly one live record, and the listing (live permissions) shows the lower role.
-| B33 | A busy store (a lock cycle between two members, W4's coming r7) is the retryable 409 `busy` with `retry_after_seconds`, never 503 | `Busy` mapped like any outage | `sharing::tests::a_busy_store_is_the_retryable_409_and_nothing_else_changes`: `(503, "unavailable")` instead of `(409, "busy")`; restored from a copy before commit (`9a71f18948f23540…`) |
-| B34 | The dialog says a busy share plainly and asks for a retry | the 409 copy removed | `team-sharing.test.ts` 7; restored from a copy before commit (`fedaa53b3c3a3130…`) |
+| B33 (superseded by B35) | A busy store (a lock cycle between two members, W4's coming r7) is the retryable 409 `busy` with `retry_after_seconds`, never 503 | `Busy` mapped like any outage | `sharing::tests::a_busy_store_is_the_retryable_409_and_nothing_else_changes`: `(503, "unavailable")` instead of `(409, "busy")`; restored from a copy before commit (`9a71f18948f23540…`) |
+| B34 (superseded by B36) | The dialog says a busy share plainly and asks for a retry | the 409 copy removed | `team-sharing.test.ts` 7; restored from a copy before commit (`fedaa53b3c3a3130…`) |
+
+## Round 5: W4's final round, and `Busy` as 429 (2026-11-14)
+
+W4's final round, `903572c7`, plus its final-check record `a32aa597`, made the sharing definers answer `Busy` after a lock cycle (r7), and ADR-007 now names 429 with `Retry-After` for it. All three share routes, the person share, the removal and the organization-wide share, answer `Busy` through one mapping (`storage_refusal`): 429 `{"code":"busy","status":429}` with `Retry-After: 2`, distinct from the member write limit's `too_many_requests`. The body names nothing else. `Error::Busy`'s text is now generic ("busy; try again in a moment"); it was "record snapshot capacity reached", which is wrong after a lock cycle. B33 and B34 answered 409 and are superseded by B35 and B36.
+
+**The route check** (`share-routes`, its 16th): a raw session holds Fay's membership row `FOR UPDATE`. `share_work` and `revoke_work_share` both take that row, so they wait past `lock_timeout` (1 s) and the definer answers `Busy`. A held per-work sharing lock does the same to the organization-wide share. Each route answers 429 `busy` with `Retry-After: 2`, nothing is written, and once the lock is released the share goes through.
+
+| # | Guard | Break | What failed |
+| --- | --- | --- | --- |
+| B35 | A share definer's `Busy` answers 429 `busy` with `Retry-After` on the route | `Busy` mapped like any outage | `share-routes`: Fay's person share under the held row answered `(503, "unavailable")` (right: `(429, "busy")`); restored from a copy (SHA-256 `3e83e570480fdb3b…`) |
+| B36 | The dialog says a busy share plainly ("Sharing is busy right now. Nothing was changed. Try again in a moment."), naming nobody | the copy removed | `team-sharing.test.ts` 7; restored from a copy |
+
+The unit test `sharing::tests::a_busy_store_is_the_retryable_429_and_nothing_else_changes` checks the mapping alone, header included.
+
+Adaptation in the merge: W4's `private-entries` campaign called `share_with_lineage` with its earlier signature (`record_write: true`). It now names `ShareRole::Contributor` and `ShareMode::Ensure`, which is what that call meant.
