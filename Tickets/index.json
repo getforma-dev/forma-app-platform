@@ -6494,7 +6494,7 @@
       "Depends on": "APP-202, APP-203, APP-204, APP-205, APP-206, APP-207",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI (builder B7); the approval is Victor's",
-      "Branch / PR": "none yet (the promotion runs from `main`)",
+      "Branch / PR": "`release/c-participation`; [PR #131](https://github.com/getforma-dev/forma-app-platform/pull/131), open; merges with `PROMOTION_ENABLED` true, the push to `main` is the trigger",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection. Release B (schema 24) must be live and read back first; APP-208 is included only if merged by its cut rule.",
