@@ -125,6 +125,28 @@ impl ShareRole {
         }
     }
 }
+/// How a personal share meets the rows the grantee already holds (recheck r5,
+/// W2b): `Set` is the exact role, the dialog's personal role choice only; a
+/// lower role deletes the surplus rows (f1), audited. `Ensure` is "at least
+/// this role": every automatic or approver path (Slack and MCP approver
+/// shares, the canvas share route, lineage shares) grants the missing rows and
+/// never deletes, so a reviewer approver stays a reviewer after an automatic
+/// contributor share. The mode is a definer parameter, never inferred. The
+/// organization-wide share is always exact (`Set`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShareMode {
+    Set,
+    Ensure,
+}
+impl ShareMode {
+    /// The definer's mode literal.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Set => "set",
+            Self::Ensure => "ensure",
+        }
+    }
+}
 impl Shared {
     /// Whether this call wrote anything (and therefore appended its event).
     pub fn changed(&self) -> bool {
@@ -256,8 +278,9 @@ impl Workspace {
     }
 
     /// `POST /v1/work/{app}/{work}/share`: shares `work` of `app` with the
-    /// `audience` in `role` (APP-192, D9), granting exactly the sharer's
-    /// subset (module notes). A member grantee receives permission rows
+    /// `audience` in `role` (APP-192, D9) and `mode` ([`ShareMode`]: `Set`
+    /// for the dialog's exact role, `Ensure` for every automatic path),
+    /// granting exactly the sharer's subset (module notes). A member grantee receives permission rows
     /// through the definer `genui_private.share_work`; the organization
     /// receives one live `work_shares` row with no grantee through
     /// `genui_private.set_work_everyone`, which every work-level clause
@@ -278,10 +301,15 @@ impl Workspace {
         work: &str,
         audience: Audience<'_>,
         role: ShareRole,
+        mode: ShareMode,
     ) -> Result<Shared> {
         require(valid_id(app) && valid_id(work))?;
-        if let Audience::Member(grantee) = audience {
-            require(valid_id(grantee) && grantee != request.principal)?;
+        match audience {
+            Audience::Member(grantee) => {
+                require(valid_id(grantee) && grantee != request.principal)?
+            }
+            // The organization-wide share is always exact (one live row).
+            Audience::Organization => require(mode == ShareMode::Set)?,
         }
         let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
@@ -302,7 +330,7 @@ impl Workspace {
             }
             let transaction = permit.transaction();
             let rows = match audience {
-                Audience::Member(grantee) => transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.share_work($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text)", &[&request.organization,&request.principal,&grantee,&app,&work,&role.name()]).await?,
+                Audience::Member(grantee) => transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.share_work($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text,$7::text)", &[&request.organization,&request.principal,&grantee,&app,&work,&role.name(),&mode.name()]).await?,
                 Audience::Organization => {
                     require(personal_only(transaction, request, app, work).await?.is_none())?;
                     transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text)", &[&request.organization,&request.principal,&app,&work,&role.name()]).await?

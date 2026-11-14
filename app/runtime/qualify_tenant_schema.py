@@ -47,7 +47,7 @@ ADMIT_FUNCTIONS = {
     # Migration 0024 (trial plan D9, APP-192) replaces it: a role (viewer,
     # contributor, reviewer) instead of the boolean, each permission copied only
     # when the sharer holds it and the reviewer role only from a reviewer.
-    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_role text',
+    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_role text, p_mode text',
                    'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
     # Migration 0024 (D9): the organization-wide share, set, replaced or revoked
     # ('none') as one unit; one live work_shares row with no grantee.

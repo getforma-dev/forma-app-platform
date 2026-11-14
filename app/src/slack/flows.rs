@@ -712,6 +712,7 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
                         &draft.work,
                         crate::storage::Audience::Member(&approver.principal),
                         crate::storage::ShareRole::Contributor,
+                        crate::storage::ShareMode::Ensure,
                     )
                     .await
                 {

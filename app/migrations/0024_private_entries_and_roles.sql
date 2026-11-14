@@ -172,7 +172,12 @@ SET LOCAL ROLE genui_admit;
 -- 0008's share_work with a role instead of a boolean. The old form is
 -- dropped: every share names its role.
 DROP FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,boolean);
-CREATE FUNCTION genui_private.share_work(p_org uuid,p_sharer uuid,p_grantee uuid,p_app uuid,p_work uuid,p_role text)
+-- Two explicit modes (recheck r5, W2b): 'set', the exact role, used only by
+-- the dialog's personal role choice, lowers a role by deleting the surplus
+-- rows (f1); 'ensure', used by every automatic or approver path, grants the
+-- missing rows and never deletes, so an automatic contributor share never
+-- demotes a reviewer approver. The mode is a parameter, never inferred.
+CREATE FUNCTION genui_private.share_work(p_org uuid,p_sharer uuid,p_grantee uuid,p_app uuid,p_work uuid,p_role text,p_mode text)
  RETURNS TABLE(scope text,resource_id uuid,permission text,inserted boolean)
  LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
  SET search_path=pg_catalog,pg_temp AS $$
@@ -181,7 +186,7 @@ DECLARE o_status text; s_status text; s_epoch bigint; g_status text; v_creator b
  v_demote text[]:='{}'; v_removed text[]:='{}'; v_demoted boolean:=false; v_marked integer:=0; v_revoke_event uuid; v_remaining text[];
  v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text; v_digest text;
 BEGIN
- IF p_sharer=p_grantee OR p_role NOT IN ('viewer','contributor','reviewer')
+ IF p_sharer=p_grantee OR p_role NOT IN ('viewer','contributor','reviewer') OR p_mode NOT IN ('set','ensure')
   OR nullif(current_setting('genui.organization_id',true),'') IS DISTINCT FROM p_org::text
   OR nullif(current_setting('genui.principal_id',true),'') IS DISTINCT FROM p_sharer::text
   OR nullif(current_setting('genui.membership_epoch',true),'') IS NULL THEN RETURN; END IF;
@@ -201,11 +206,6 @@ BEGIN
  -- another's transaction reads the state that transaction committed (each
  -- statement of a READ COMMITTED transaction takes a fresh snapshot).
  PERFORM pg_advisory_xact_lock(hashtextextended('forma:work-share:'||p_org::text||':'||p_work::text,0));
- -- Never the app's owner as grantee (recheck r1; the sharer is refused
- -- above): the owner is a reviewer by standing, and a lower re-share must not
- -- strip the owner's rows. A lower re-share sets the role whatever earlier
- -- source granted the rows (work_permissions carries no provenance).
- IF EXISTS (SELECT 1 FROM genui.apps a WHERE a.organization_id=p_org AND a.app_id=p_app AND a.owner_principal_id=p_grantee) THEN RETURN; END IF;
  -- Share authority (ADR-011, unchanged): the unrevoked creator or a
  -- `share_work` holder, with `run` on the app.
  SELECT (w.created_by=p_sharer AND w.creator_revoked_at IS NULL) INTO v_creator FROM genui.saved_work w
@@ -217,6 +217,22 @@ BEGIN
  IF NOT (v_creator OR v_share) THEN RETURN; END IF;
  IF NOT EXISTS (SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=p_org AND a.principal_id=p_sharer
   AND a.app_id=p_app AND a.permission='run') THEN RETURN; END IF;
+ -- The app's owner as grantee (recheck r1; the sharer is refused above): the
+ -- owner is a reviewer by standing, so 'set' is refused (a lower re-share
+ -- must not strip the owner's rows) and 'ensure' has nothing to add and
+ -- answers the role's rows unwritten (an automatic flow naming the owner as
+ -- approver reads "held"). A lower re-share sets the role whatever earlier
+ -- source granted the rows (work_permissions carries no provenance).
+ IF EXISTS (SELECT 1 FROM genui.apps a WHERE a.organization_id=p_org AND a.app_id=p_app AND a.owner_principal_id=p_grantee) THEN
+  IF p_mode='set' THEN RETURN; END IF;
+  FOR r IN SELECT x.permission FROM (VALUES ('app','discover'),('app','run'),('work','record_read'),('work','record_write'),('work','record_review')) AS x(kind,permission)
+   WHERE x.kind='app' OR x.permission='record_read' OR (x.permission='record_write' AND p_role IN ('contributor','reviewer'))
+    OR (x.permission='record_review' AND p_role='reviewer') LOOP
+   scope:=CASE WHEN r.permission IN ('discover','run') THEN 'app' ELSE 'work' END;
+   resource_id:=CASE WHEN scope='app' THEN p_app ELSE p_work END; permission:=r.permission; inserted:=false; RETURN NEXT;
+  END LOOP;
+  RETURN;
+ END IF;
  -- The role is copied, never conferred, from the sharer's PERSONAL standing
  -- (the app's owner, the work's unrevoked creator or a work grant; a live
  -- organization-wide share confers nothing durable, Tier A review m2): the
@@ -239,15 +255,18 @@ BEGIN
  -- the whole call is refused before any write); the grantee's earlier personal
  -- share records are marked revoked and one permission.revoked names the
  -- removed set, appended before the grant below.
- IF p_role<>'reviewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
-  AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_review') THEN
-  IF NOT v_review THEN RETURN; END IF;
-  v_demote:=v_demote||'record_review'::text;
- END IF;
- IF p_role='viewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
-  AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_write') THEN
-  IF NOT v_write THEN RETURN; END IF;
-  v_demote:=v_demote||'record_write'::text;
+ -- Only the exact mode lowers a role (recheck r5); 'ensure' never deletes.
+ IF p_mode='set' THEN
+  IF p_role<>'reviewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
+   AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_review') THEN
+   IF NOT v_review THEN RETURN; END IF;
+   v_demote:=v_demote||'record_review'::text;
+  END IF;
+  IF p_role='viewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
+   AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_write') THEN
+   IF NOT v_write THEN RETURN; END IF;
+   v_demote:=v_demote||'record_write'::text;
+  END IF;
  END IF;
  IF cardinality(v_demote)>0 THEN
   FOREACH permission IN ARRAY v_demote LOOP
@@ -348,7 +367,7 @@ BEGIN
   VALUES (p_org,gen_random_uuid(),p_sharer,p_grantee,p_app,p_work,v_inserted,v_event,v_at,p_role);
  RETURN;
 END $$;
-REVOKE ALL ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text,text) FROM PUBLIC;
 
 -- The organization-wide share: p_role 'viewer', 'contributor' or 'reviewer'
 -- sets it (replacing a live one of another role: one revocation, one grant,
@@ -562,7 +581,7 @@ BEGIN
  RETURN;
 END $$;
 REVOKE ALL ON FUNCTION genui_private.revoke_work_share(uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text),
+GRANT EXECUTE ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text,text),
  genui_private.set_work_everyone(uuid,uuid,uuid,uuid,text),
  genui_private.revoke_work_share(uuid,uuid,uuid,uuid,uuid) TO genui_workspace;
 RESET ROLE;

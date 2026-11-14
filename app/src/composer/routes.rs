@@ -973,6 +973,7 @@ impl Tailor {
                     &composed.work,
                     crate::storage::Audience::Member(&grantee),
                     crate::storage::ShareRole::from_record_write(record_write),
+                    crate::storage::ShareMode::Ensure,
                 )
                 .await;
             tracing::info!(

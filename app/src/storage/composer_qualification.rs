@@ -669,6 +669,7 @@ async fn campaign() {
             &private.work,
             Audience::Member(AUTHOR),
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();

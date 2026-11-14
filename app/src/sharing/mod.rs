@@ -217,6 +217,7 @@ pub async fn share_with_lineage(
             work,
             storage::Audience::Member(grantee),
             storage::ShareRole::from_record_write(record_write),
+            storage::ShareMode::Ensure,
         )
         .await?;
     if shared.changed() {
@@ -237,6 +238,7 @@ pub async fn share_with_lineage(
                 &adapted_work,
                 storage::Audience::Member(grantee),
                 storage::ShareRole::from_record_write(record_write),
+                storage::ShareMode::Ensure,
             )
             .await;
         tracing::info!(

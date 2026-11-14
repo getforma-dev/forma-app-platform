@@ -530,6 +530,7 @@ async fn campaign() {
             work,
             Audience::Member(REV),
             ShareRole::Reviewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -562,6 +563,7 @@ async fn campaign() {
             work,
             Audience::Member(BEN),
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1051,7 +1053,14 @@ async fn campaign() {
             assert_eq!(
                 stores
                     .workspace
-                    .share_work(who, PRIVATE_APP, work, Audience::Member(NIA), role)
+                    .share_work(
+                        who,
+                        PRIVATE_APP,
+                        work,
+                        Audience::Member(NIA),
+                        role,
+                        ShareMode::Set
+                    )
                     .await
                     .err(),
                 Some(Error::Denied),
@@ -1060,7 +1069,14 @@ async fn campaign() {
             assert_eq!(
                 stores
                     .workspace
-                    .share_work(who, PRIVATE_APP, work, Audience::Organization, role)
+                    .share_work(
+                        who,
+                        PRIVATE_APP,
+                        work,
+                        Audience::Organization,
+                        role,
+                        ShareMode::Set
+                    )
                     .await
                     .err(),
                 Some(Error::Denied),
@@ -1088,6 +1104,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1114,6 +1131,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1183,6 +1201,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Viewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1276,7 +1295,8 @@ async fn campaign() {
                 PRIVATE_APP,
                 work,
                 Audience::Member(NIA),
-                ShareRole::Reviewer
+                ShareRole::Reviewer,
+                ShareMode::Set
             )
             .await
             .err(),
@@ -1290,7 +1310,8 @@ async fn campaign() {
                 PRIVATE_APP,
                 work,
                 Audience::Organization,
-                ShareRole::Reviewer
+                ShareRole::Reviewer,
+                ShareMode::Set
             )
             .await
             .err(),
@@ -1305,6 +1326,7 @@ async fn campaign() {
             work,
             Audience::Member(NIA),
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1327,7 +1349,10 @@ async fn campaign() {
     // `Permit::also(RecordReview)` stands in front of them in production):
     // direct calls under the workspace role, rolled back.
     let share = |sharer: &str, grantee: &str, role: &str| {
-        format!("SELECT count(*) FROM genui_private.share_work('{ORG}','{sharer}','{grantee}','{PRIVATE_APP}','{work}','{role}')")
+        format!("SELECT count(*) FROM genui_private.share_work('{ORG}','{sharer}','{grantee}','{PRIVATE_APP}','{work}','{role}','set')")
+    };
+    let ensure = |sharer: &str, grantee: &str, role: &str| {
+        format!("SELECT count(*) FROM genui_private.share_work('{ORG}','{sharer}','{grantee}','{PRIVATE_APP}','{work}','{role}','ensure')")
     };
     let everyone_sql = |sharer: &str, role: &str| {
         format!("SELECT count(*) FROM genui_private.set_work_everyone('{ORG}','{sharer}','{PRIVATE_APP}','{work}','{role}')")
@@ -1353,7 +1378,8 @@ async fn campaign() {
                 PRIVATE_APP,
                 work,
                 Audience::Member(OWNER),
-                ShareRole::Viewer
+                ShareRole::Viewer,
+                ShareMode::Set
             )
             .await
             .err(),
@@ -1406,6 +1432,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Reviewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1426,7 +1453,7 @@ async fn campaign() {
                 stores.workspace.revoke_organization_share(&owner, PRIVATE_APP, work).await.unwrap();
                 let b = stores.data.list_records(&ben, PRIVATE_APP, work).await.unwrap();
                 let back = ids_in(&b, &w.claims) == sorted(&[BEN_CLAIM]);
-                stores.workspace.share_work(&owner, PRIVATE_APP, work, Audience::Organization, ShareRole::Reviewer).await.unwrap();
+                stores.workspace.share_work(&owner, PRIVATE_APP, work, Audience::Organization, ShareRole::Reviewer, ShareMode::Set).await.unwrap();
                 back
             }
     });
@@ -1461,7 +1488,8 @@ async fn campaign() {
                 PRIVATE_APP,
                 work,
                 Audience::Member(FAY),
-                ShareRole::Viewer
+                ShareRole::Viewer,
+                ShareMode::Set
             )
             .await
             .err(),
@@ -1477,6 +1505,7 @@ async fn campaign() {
             work,
             Audience::Member(KIM),
             ShareRole::Viewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1488,6 +1517,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1514,7 +1544,8 @@ async fn campaign() {
                 PRIVATE_APP,
                 work,
                 Audience::Member(FAY),
-                ShareRole::Contributor
+                ShareRole::Contributor,
+                ShareMode::Set
             )
             .await
             .err(),
@@ -1535,6 +1566,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Reviewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1629,6 +1661,7 @@ async fn campaign() {
                 work,
                 Audience::Organization,
                 ShareRole::Viewer,
+                ShareMode::Set,
             )
             .await
             .unwrap();
@@ -1788,6 +1821,7 @@ async fn campaign() {
             work,
             Audience::Organization,
             ShareRole::Viewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1812,9 +1846,50 @@ async fn campaign() {
             work,
             Audience::Member(REV),
             ShareRole::Reviewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
+    // Recheck r5: an automatic or approver share is additive ('ensure'): a
+    // reviewer approver stays a reviewer after an automatic contributor
+    // share, nothing is written and no permission.revoked is appended; the
+    // owner as grantee reads as held. Only the dialog's exact 'set' lowers a
+    // role (the f1 demotion below).
+    let revoked_before = chain(&fixture, "permission.revoked").await;
+    let ensured = stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Member(REV),
+            ShareRole::Contributor,
+            ShareMode::Ensure,
+        )
+        .await
+        .unwrap();
+    assert!(
+        ensured.removed.is_empty() && !ensured.changed(),
+        "ensure writes nothing a reviewer already holds: {ensured:?}"
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND work_id='{work}' AND permission='record_review'")).await, 1, "the reviewer approver stays a reviewer");
+    assert_eq!(chain(&fixture, "permission.revoked").await, revoked_before);
+    assert!(
+        definer_rows(&fixture, OWNER, &ensure(OWNER, REV, "viewer")).await > 0,
+        "the definer answers the role's rows under ensure"
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND work_id='{work}'")).await, 3);
+    assert!(
+        definer_rows(&fixture, BEN, &ensure(BEN, OWNER, "viewer")).await > 0,
+        "the owner as grantee reads as held under ensure"
+    );
+    assert_eq!(
+        definer_rows(&fixture, BEN, &share(BEN, OWNER, "viewer")).await,
+        0,
+        "and is refused under set"
+    );
+    assert_eq!(definer_rows(&fixture, OWNER, &format!("SELECT count(*) FROM genui_private.share_work('{ORG}','{OWNER}','{REV}','{PRIVATE_APP}','{work}','viewer','maybe')")).await, 0, "the mode is a parameter: an unknown one is refused");
+    check(&mut checks, "recheck r5: share_work's 'ensure' mode (every automatic or approver path) grants what is missing and never deletes: a reviewer approver keeps record_review after an automatic contributor share, nothing written, no permission.revoked; the owner as grantee reads as held; an unknown mode is refused; only 'set' (the dialog's exact role) lowers a role");
     // Review f1: a lower role re-share strips what the new role lacks, in the
     // same transaction, audited; the sharer must have been able to grant what
     // it strips.
@@ -1827,6 +1902,7 @@ async fn campaign() {
             work,
             Audience::Member(REV),
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1866,6 +1942,7 @@ async fn campaign() {
             work,
             Audience::Member(REV),
             ShareRole::Viewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -1886,6 +1963,7 @@ async fn campaign() {
             work,
             Audience::Member(REV),
             ShareRole::Reviewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -2033,6 +2111,7 @@ async fn campaign() {
             work2,
             Audience::Member(REV),
             ShareRole::Reviewer,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -2044,6 +2123,7 @@ async fn campaign() {
             work2,
             Audience::Member(BEN),
             ShareRole::Contributor,
+            ShareMode::Set,
         )
         .await
         .unwrap();
@@ -2202,7 +2282,7 @@ async fn campaign() {
             admit_member(&fixture, student);
             stores
                 .workspace
-                .share_work(&owner, PRIVATE_APP, work, Audience::Member(student), ShareRole::Contributor)
+                .share_work(&owner, PRIVATE_APP, work, Audience::Member(student), ShareRole::Contributor, ShareMode::Set)
                 .await
                 .unwrap();
         }
