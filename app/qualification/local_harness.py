@@ -65,7 +65,9 @@ FILES = "APP075_HARNESS_FILES "
 REFUSAL_KEYS = frozenset({"case", "reason", "pool", "stage", "step", "error", "sqlstate", "cause", "elapsed_ms", "pools",
                           "checks_passed"})
 POOL_KEYS = frozenset({"pool", "stage", "step", "error", "sqlstate", "cause", "elapsed_ms"})
-STORAGE_ERRORS = frozenset({"Configuration", "Denied", "Unavailable", "Deadline", "ProjectionLimit", "Busy", "UnknownOutcome"})
+# APP-198 added Stale (a record snapshot's release found the list moved).
+STORAGE_ERRORS = frozenset({"Configuration", "Denied", "Unavailable", "Deadline", "ProjectionLimit", "Busy", "UnknownOutcome",
+                            "Stale"})
 WRONG_PASSWORD_ROLE = "control"
 
 
