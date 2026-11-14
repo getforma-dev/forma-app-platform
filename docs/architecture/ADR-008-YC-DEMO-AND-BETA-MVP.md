@@ -68,7 +68,11 @@ Victor decided on 2026-11-14 to run a real live test of the platform with real p
   - **Not the record of record.** Grades and attendance in the platform are not the official record, and no export exists. Victor copies them out before 2026-12-12; the purge procedure starts with that copy-out, and students are told their apps are deleted by 2026-12-14.
   - **Phones.** Desktop first. Phones serve check-ins and submissions; building apps on a phone isn't supported during the test. Students bring a laptop.
   - **Withdrawal.** Declining the checkbox, or leaving, costs nothing in the class, because the fallback serves them. Victor removes the member in `/admin` at once and deletes their uploads within two days. Their entries in shared apps stay until the purge, as the notice says.
-- **End of the test.** The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook. The beta stops about 2026-12-15 unless it is renewed again.
+- **End of the test.** The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook (`docs/operations/TRIAL-RUNBOOK.md` §10):
+  - **Content deleted:** apps, records, uploads, names, consents and memberships, plus every stored file version.
+  - **Kept:** the hash-chained audit log (identifiers, event kinds, times and hashes; no content) and the routing rows for the organization's handle.
+  - **Backups:** manual snapshots are deleted at the purge. RDS automated backups lapse seven days later, so the data is fully gone around 2026-12-21.
+  - The beta stops about 2026-12-15 unless it is renewed again.
 
 ### Beta notice, version 1
 
@@ -84,6 +88,6 @@ Shown on the invitation page; the required checkbox records consent to this vers
 >
 > **AI:** to build apps and answer questions, your prompts, and the files and entries you ask it to work with, are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
 >
-> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026. Copy out anything you want to keep before then.
+> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Copy out anything you want to keep before then.
 >
 > By checking the box you agree to take part on these terms.
