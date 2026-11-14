@@ -14,9 +14,12 @@
 //! storage call.
 //!
 //! Remove answers `303` to `/admin?notice=<code>`: `removed`, `unconfirmed`
-//! (the confirmation box was not ticked; nothing was called), or the refusal
-//! storage named (`self`, `last_admin`, `not_member`), each shown in plain
-//! words on the page. A removal ends the member's sessions at their next
+//! (the confirmation box was not ticked; nothing was called), the refusal
+//! storage named (`self`, `last_admin`, `not_member`), or `unavailable` (a
+//! storage outage, a concurrent removal that PostgreSQL aborted, or an
+//! unknown outcome; recheck N6), each shown in plain words on the page. A
+//! storage outage on `GET /admin` itself is the same page with that notice
+//! and no member data (503), never a raw JSON body. A removal ends the member's sessions at their next
 //! request (storage advances the epoch). Logs carry identities and codes;
 //! never a name or a note.
 use crate::{
@@ -50,6 +53,8 @@ pub struct AdminProps {
     /// `done` or `refused` (the notice's style).
     pub notice_kind: String,
     pub has_members: bool,
+    /// The list was read and has no member ("No members yet.").
+    pub empty: bool,
     pub members: Vec<AdminMemberProps>,
     pub csrf_signout: String,
 }
@@ -84,6 +89,8 @@ pub enum Notice {
     Removed,
     Unconfirmed,
     Refused(&'static str),
+    /// Recheck N6: storage could not complete or confirm the request.
+    Unavailable,
 }
 impl Notice {
     fn parse(query: &str) -> Option<Self> {
@@ -93,6 +100,7 @@ impl Notice {
             "self" => Some(Self::Refused("self")),
             "last_admin" => Some(Self::Refused("last_admin")),
             "not_member" => Some(Self::Refused("not_member")),
+            "unavailable" => Some(Self::Unavailable),
             _ => None,
         }
     }
@@ -101,6 +109,7 @@ impl Notice {
             Self::Removed => "removed",
             Self::Unconfirmed => "unconfirmed",
             Self::Refused(code) => code,
+            Self::Unavailable => "unavailable",
         }
     }
     fn words(self) -> (&'static str, &'static str) {
@@ -122,6 +131,10 @@ impl Notice {
                 "refused",
             ),
             Self::Refused(_) => ("That person is no longer an active member.", "refused"),
+            Self::Unavailable => (
+                "That could not be completed or confirmed just now. Reload this page in a minute to see the current list.",
+                "refused",
+            ),
         }
     }
 }
@@ -242,13 +255,15 @@ pub(crate) async fn show(
     member: &TrustedRequest,
     notice: Option<Notice>,
 ) -> Response {
-    if let Err(refusal) = admin(store, member).await {
-        return refusal;
+    match admin(store, member).await {
+        Standing::Admin => {}
+        Standing::Stranger => return http::not_found(),
+        Standing::Outage => return outage(pages, csrf, cookie),
     }
     let rows = match store.overview(member).await {
         Ok(rows) => rows,
         Err(storage::Error::Denied) => return http::not_found(),
-        Err(_) => return http::unavailable(),
+        Err(_) => return outage(pages, csrf, cookie),
     };
     let organization = store.organization_name(member).await.unwrap_or_default();
     tracing::info!(
@@ -282,8 +297,10 @@ async fn remove_route(
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
     };
-    if let Err(refusal) = admin(&stores.workspace, &member).await {
-        return refusal;
+    match admin(&stores.workspace, &member).await {
+        Standing::Admin => {}
+        Standing::Stranger => return http::not_found(),
+        Standing::Outage => return notice(Notice::Unavailable),
     }
     let Some(fields) = http::form(body).await else {
         return http::payload_too_large();
@@ -353,18 +370,52 @@ pub(crate) async fn remove(
             )
         }
         Err(storage::Error::Denied) => http::not_found(),
-        Err(_) => http::unavailable(),
+        Err(error) => {
+            // Recheck N6: an outage, a concurrent removal PostgreSQL aborted
+            // (the two admins' locks), or an unknown outcome. The database
+            // is as storage left it; the page says to reload and look.
+            log(match error {
+                storage::Error::UnknownOutcome => "unknown_outcome",
+                _ => "unavailable",
+            });
+            notice(Notice::Unavailable)
+        }
     }
 }
 
-/// `Ok` for an admin of the request's organization; the uniform 404 for
-/// anyone else (any authority refusal included), 503 for a store outage.
-async fn admin(store: &dyn AdminStore, member: &TrustedRequest) -> Result<(), Response> {
+/// Where the request's member stands in its organization.
+enum Standing {
+    Admin,
+    /// Not an admin, or any authority refusal: the uniform 404.
+    Stranger,
+    /// The store could not say.
+    Outage,
+}
+async fn admin(store: &dyn AdminStore, member: &TrustedRequest) -> Standing {
     match store.is_org_admin(member).await {
-        Ok(true) => Ok(()),
-        Ok(false) | Err(storage::Error::Denied) => Err(http::not_found()),
-        Err(_) => Err(http::unavailable()),
+        Ok(true) => Standing::Admin,
+        Ok(false) | Err(storage::Error::Denied) => Standing::Stranger,
+        Err(_) => Standing::Outage,
     }
+}
+
+/// The page with the outage notice and no member data (503): the same
+/// for every member, since the store could not say who is an admin.
+fn outage(pages: &dyn AdminPages, csrf: &csrf::CsrfKey, cookie: &str) -> Response {
+    let (words, kind) = Notice::Unavailable.words();
+    let mut response = pages.page(&AdminProps {
+        organization: "Your organization".into(),
+        summary: String::new(),
+        has_notice: true,
+        notice: words.into(),
+        notice_kind: kind.into(),
+        has_members: false,
+        empty: false,
+        members: Vec::new(),
+        csrf_signout: csrf.token(csrf::Form::SignOut, cookie),
+    });
+    *response.status_mut() = axum::http::StatusCode::SERVICE_UNAVAILABLE;
+    response
 }
 
 fn notice(notice: Notice) -> Response {
@@ -440,6 +491,7 @@ pub(crate) fn props(
         notice: notice_text.into(),
         notice_kind: notice_kind.into(),
         has_members: !members.is_empty(),
+        empty: members.is_empty(),
         members,
         csrf_signout: csrf.token(csrf::Form::SignOut, cookie),
     }
@@ -482,6 +534,8 @@ mod tests {
     struct Fake {
         admin: Result<bool, storage::Error>,
         rows: Vec<MemberRow>,
+        /// The overview's own outage (recheck N6).
+        listing: Option<storage::Error>,
         outcome: Result<RemoveOutcome, storage::Error>,
         overviews: AtomicUsize,
         removed: Mutex<Vec<String>>,
@@ -491,6 +545,7 @@ mod tests {
             Self {
                 admin,
                 rows: vec![row(ADMIN, "Victor", true), row(STUDENT, "Ana <b>", false)],
+                listing: None,
                 outcome: Ok(RemoveOutcome::Removed),
                 overviews: AtomicUsize::new(0),
                 removed: Mutex::new(Vec::new()),
@@ -508,7 +563,8 @@ mod tests {
         fn overview<'a>(&'a self, _: &'a TrustedRequest) -> Pending<'a, Vec<MemberRow>> {
             self.overviews.fetch_add(1, Ordering::SeqCst);
             let rows = self.rows.clone();
-            Box::pin(async move { Ok(rows) })
+            let listing = self.listing;
+            Box::pin(async move { listing.map_or(Ok(rows), Err) })
         }
         fn remove<'a>(
             &'a self,
@@ -613,11 +669,36 @@ mod tests {
             assert_eq!(store.overviews.load(Ordering::SeqCst), 0);
             assert!(pages.0.lock().unwrap().is_none());
         }
-        // A store outage is 503, still before the overview.
+        // Recheck N6: a store outage, before or at the overview, is the
+        // plain page with the outage notice and no member data (503), never
+        // a raw JSON body; before the overview, nothing is read.
+        let outage_page = |pages: &Recorded| {
+            let props = pages.0.lock().unwrap().clone().unwrap();
+            assert!(props.has_notice && props.notice_kind == "refused");
+            assert!(props.notice.starts_with("That could not be completed"));
+            assert!(props.members.is_empty() && !props.has_members && !props.empty);
+            assert_eq!(props.organization, "Your organization");
+        };
         let store = Fake::new(Err(storage::Error::Unavailable));
-        let response = show(&store, &Recorded::default(), &key, COOKIE, &member, None).await;
+        let pages = Recorded::default();
+        let response = show(&store, &pages, &key, COOKIE, &member, None).await;
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(store.overviews.load(Ordering::SeqCst), 0);
+        outage_page(&pages);
+        let store = Fake {
+            listing: Some(storage::Error::Unavailable),
+            ..Fake::new(Ok(true))
+        };
+        let pages = Recorded::default();
+        let response = show(&store, &pages, &key, COOKIE, &member, None).await;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        outage_page(&pages);
+        let store = Fake {
+            listing: Some(storage::Error::Denied),
+            ..Fake::new(Ok(true))
+        };
+        let response = show(&store, &Recorded::default(), &key, COOKIE, &member, None).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -690,6 +771,28 @@ mod tests {
         };
         let response = remove(&store, &key, COOKIE, &member, STUDENT, &good).await;
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        // Recheck N6: an outage, an aborted concurrent removal or an unknown
+        // outcome is the plain notice, not a raw JSON body.
+        for error in [
+            storage::Error::Unavailable,
+            storage::Error::Deadline,
+            storage::Error::UnknownOutcome,
+        ] {
+            let store = Fake {
+                outcome: Err(error),
+                ..Fake::new(Ok(true))
+            };
+            let response = remove(&store, &key, COOKIE, &member, STUDENT, &good).await;
+            assert_eq!(
+                location(&response),
+                "/admin?notice=unavailable",
+                "{error:?}"
+            );
+        }
+        assert_eq!(
+            Notice::parse("notice=unavailable").map(|n| n.words().1),
+            Some("refused")
+        );
         // The notices the page shows, in plain words, from a closed set.
         let words = |query: &str| Notice::parse(query).map(|n| n.words().0);
         assert_eq!(

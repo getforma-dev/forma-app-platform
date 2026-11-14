@@ -1732,11 +1732,12 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         Ok(live) => live,
         Err(refusal) => return refusal,
     };
-    // Trial review m2: `POST /me/name`'s one notice is the only query.
-    let name_notice = match parts.uri.query() {
-        None => false,
-        Some(crate::member_name::INVALID_QUERY) => true,
-        Some(_) => return http::not_found(),
+    // Trial review m2, recheck N4: `POST /me/name`'s notices are the only
+    // query (`member_name::canvas_query`, pinned by its unit test).
+    let name_notice = match crate::member_name::canvas_query(parts.uri.query()) {
+        crate::member_name::CanvasQuery::Plain => None,
+        crate::member_name::CanvasQuery::Notice(notice) => Some(notice),
+        crate::member_name::CanvasQuery::Refused => return http::not_found(),
     };
     let member = Arc::new(member);
     let started = std::time::Instant::now();
@@ -1840,17 +1841,15 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         member_key: member_key(member.organization(), principal),
         artifact_kinds_loaded: kinds.is_some(),
         is_org_admin,
-        needs_name: name_notice
+        needs_name: name_notice.is_some()
             || crate::member_name::asks_for_name(
                 display_name.as_ref().map(Option::as_deref),
                 crate::directory::display_name(member.organization(), principal).as_deref(),
             ),
-        has_name_notice: name_notice,
-        name_notice: if name_notice {
-            crate::member_name::INVALID_NOTICE.to_owned()
-        } else {
-            String::new()
-        },
+        has_name_notice: name_notice.is_some(),
+        name_notice: name_notice
+            .map(|notice| notice.words().to_owned())
+            .unwrap_or_default(),
         display_name: display_name.flatten().unwrap_or_default(),
         csrf_display_name: auth.csrf.token(csrf::Form::DisplayName, &cookie),
     };

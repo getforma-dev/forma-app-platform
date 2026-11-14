@@ -13,7 +13,7 @@ use super::{
     admission_qualification::operator,
     command_qualification::{send, vault_token, Reply, TestPages},
     qualification::Fixture,
-    qualification_cases::{check, ORG},
+    qualification_cases::{check, ORG, OTHER},
     *,
 };
 use crate::{
@@ -36,6 +36,11 @@ struct Assets;
 const ADMIN: &str = "00000000-0000-4000-8000-000000000f00";
 /// A seeded active member with no permissions of its own.
 const PEER: &str = "00000000-0000-4000-8000-00000000006f";
+/// A member of the canary organization only, created by this campaign.
+const OUTSIDER: &str = "00000000-0000-4000-8000-000000000ab0";
+/// A member of the fixture organization only, created by this campaign
+/// (tenant_seed's members belong to both organizations).
+const INSIDER: &str = "00000000-0000-4000-8000-000000000ab2";
 const FORM: [(&str, &str); 2] = [
     ("sec-fetch-site", "same-origin"),
     ("content-type", "application/x-www-form-urlencoded"),
@@ -97,26 +102,35 @@ async fn campaign() {
         "ALTER ROLE genui_migration PASSWORD 'synthetic-migration'",
         "genui",
     );
-    operator(&fixture, &["backfill", "--organization", ORG]);
+    for org in [ORG, OTHER] {
+        operator(&fixture, &["backfill", "--organization", org]);
+    }
+    // A member of the canary organization only (operator-channel stand-in,
+    // as W1's org_admin_campaign seeds it).
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{OTHER}',true); INSERT INTO genui.principals VALUES ('{OTHER}','{OUTSIDER}','app008-fixture-only','ten_{OTHER}','usr_{OUTSIDER}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{OTHER}','{OUTSIDER}','active',1); INSERT INTO genui.entitlements VALUES ('{OTHER}','{OUTSIDER}','0000e000-0000-4000-8000-000000000ab0','active','member_invite',now(),now()+interval '30 days',NULL); COMMIT;"), "genui");
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{INSIDER}','app008-fixture-only','ten_{ORG}','usr_{INSIDER}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{INSIDER}','active',1); INSERT INTO genui.entitlements VALUES ('{ORG}','{INSIDER}','0000e000-0000-4000-8000-000000000ab2','active','member_invite',now(),now()+interval '30 days',NULL); COMMIT;"), "genui");
     let mut checks = Vec::new();
     let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
     stores.readiness().await.unwrap();
     let pages: Arc<dyn Pages> = Arc::new(TestPages);
     let auth = Arc::new(Auth::new(None, Some(stores.clone()), pages).unwrap());
-    let mint = |principal: &'static str| {
+    let mint_in = |organization: &'static str, principal: &'static str| {
         let auth = auth.clone();
         let stores = stores.clone();
         async move {
             let reference = auth.vault.insert("northstar", &vault_token()).unwrap();
             stores
                 .workspace
-                .mint_session_for_tests(ORG, principal, &reference)
+                .mint_session_for_tests(organization, principal, &reference)
                 .await
                 .unwrap()
         }
     };
-    let admin = mint(ADMIN).await;
-    let peer = mint(PEER).await;
+    let admin = mint_in(ORG, ADMIN).await;
+    let peer = mint_in(ORG, PEER).await;
+    let outsider = mint_in(OTHER, OUTSIDER).await;
+    // tenant_seed's admin is also the canary organization's admin.
+    let other_admin = mint_in(OTHER, ADMIN).await;
 
     let mut manifest =
         forma_server::assets::try_load_manifest::<Assets>().expect("admin/dist built");
@@ -182,6 +196,75 @@ async fn campaign() {
     );
     assert!(page.body.contains("href=\"mailto:feedback@getforma.dev\""));
     assert!(!page.body.contains("<script src"));
+    // --- Another organization's members (review m3) -------------------------
+    let outsider_page = get(&outsider, "/admin").await;
+    assert_eq!(outsider_page.status, StatusCode::NOT_FOUND);
+    assert_eq!(outsider_page.body, unknown.body, "the uniform 404");
+    let outsider_token = auth.csrf.token(csrf::Form::OrgAdminRemove, &outsider);
+    let outsider_remove = post(
+        &outsider,
+        &remove_peer,
+        form(&[("csrf", &outsider_token), ("confirm", "remove")]),
+    )
+    .await;
+    assert_eq!(outsider_remove.status, StatusCode::NOT_FOUND);
+    assert_eq!(outsider_remove.body, unknown.body, "the uniform 404");
+    // The other organization's own admin sees only its own members, and
+    // cannot remove a member of this organization.
+    let other_page = get(&other_admin, "/admin").await;
+    assert_eq!(other_page.status, StatusCode::OK, "{}", other_page.body);
+    assert!(other_page
+        .body
+        .contains(&format!("data-member=\"{OUTSIDER}\"")));
+    let operator_client = fixture.operator().await;
+    let other_members: Vec<String> = operator_client
+        .client
+        .query(
+            &format!(
+                "SELECT principal_id::text FROM genui.memberships WHERE organization_id='{OTHER}'"
+            ),
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.get(0))
+        .collect();
+    let listed: Vec<&str> = other_page
+        .body
+        .split("data-member=\"")
+        .skip(1)
+        .filter_map(|rest| rest.split('"').next())
+        .collect();
+    assert!(!listed.is_empty());
+    assert!(
+        listed.iter().all(|p| other_members.iter().any(|m| m == p)),
+        "only the canary organization's members: {listed:?}"
+    );
+    assert!(
+        !listed.contains(&INSIDER),
+        "a member of this organization only"
+    );
+    drop(operator_client);
+    let this_only = INSIDER;
+    let other_token = auth.csrf.token(csrf::Form::OrgAdminRemove, &other_admin);
+    let across = post(
+        &other_admin,
+        &format!("/admin/members/{this_only}/remove"),
+        form(&[("csrf", &other_token), ("confirm", "remove")]),
+    )
+    .await;
+    assert_eq!(location(&across), "/admin?notice=not_member");
+    assert_eq!(
+        members(&fixture).await,
+        before,
+        "this organization unchanged"
+    );
+    check(
+        &mut checks,
+        "another organization over real rows (review m3): a member of the canary organization only gets the uniform 404 on GET /admin and on Remove (with their own valid token), byte-identical to an unknown path; the canary organization's own admin sees only its own members and removing a member of this organization is the plain not_member notice; no membership of this organization changed",
+    );
+
     let anonymous = send(&app, "GET", "/admin", None, "", &[]).await;
     let peer_page = get(&peer, "/admin").await;
     for refused in [&anonymous, &peer_page] {
@@ -274,13 +357,15 @@ async fn campaign() {
     )
     .await;
     assert_eq!(location(&blank), "/canvas?name=invalid");
-    let disguised = post(
-        &peer,
-        member_name::PATH,
-        form(&[("csrf", &name_token), ("name", "Sarah\u{200B}Chen")]),
-    )
-    .await;
-    assert_eq!(location(&disguised), "/canvas?name=invalid");
+    for refused in ["Sarah\u{200B}Chen", "\u{3164}", "Ana\u{2028}Lopez"] {
+        let disguised = post(
+            &peer,
+            member_name::PATH,
+            form(&[("csrf", &name_token), ("name", refused)]),
+        )
+        .await;
+        assert_eq!(location(&disguised), "/canvas?name=invalid", "{refused:?}");
+    }
     let asked_again = get(&peer, "/canvas?name=invalid").await;
     assert_eq!(asked_again.status, StatusCode::OK);
     assert!(asked_again.body.contains("class=\"cv-name-notice\""));
@@ -307,7 +392,7 @@ async fn campaign() {
     assert!(page.body.contains("Ana María"));
     check(
         &mut checks,
-        "D6 over real rows: a member with no name sees \"What should others call you?\" and no Admin link, the admin sees the Admin link; POST /me/name refuses another form's token (403), and a blank name or one with a zero-width space with a 303 to /canvas?name=invalid where the canvas asks again in plain words (any other canvas query is the uniform 404), without a write; stores the trimmed name, the prompt disappears, the top bar's form shows it and the admin's table lists it",
+        "D6 over real rows: a member with no name sees \"What should others call you?\" and no Admin link, the admin sees the Admin link; POST /me/name refuses another form's token (403), and a blank name, one with a zero-width space, a Hangul filler alone or a line separator with a 303 to /canvas?name=invalid where the canvas asks again in plain words (any other canvas query is the uniform 404), without a write; stores the trimmed name, the prompt disappears, the top bar's form shows it and the admin's table lists it",
     );
 
     // --- The removal ends the member's sessions -----------------------------
