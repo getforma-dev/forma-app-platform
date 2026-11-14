@@ -5950,7 +5950,7 @@
       "Depends on": "APP-181, APP-191",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`trial/w1-consent-admin` (grant) and `trial/w2-admin-cap` (dialog)",
+      "Branch / PR": "`trial/w4-private-entries` (storage, migration 0024) and `trial/w2b-share-dialog` (routes and dialog); neither merged",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
