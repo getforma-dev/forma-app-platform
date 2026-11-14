@@ -79,6 +79,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/SOURCE-GUIDE.md](planning/SOURCE-GUIDE.md) | Current | Reading order for the frozen design and which later text outranks it. Some sentences describe the repository before the application existed. | |
 | [planning/START-HERE.md](planning/START-HERE.md) | Current | Pointer to AGENTS.md, the README, DEVELOPMENT.md and this index. | |
 | [planning/SYNTHETIC-ENVIRONMENT-COST.md](planning/SYNTHETIC-ENVIRONMENT-COST.md) | Historical | APP-007 cost estimate, including the retired $100 plan. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
+| [planning/TRIAL-25-READINESS.md](planning/TRIAL-25-READINESS.md) | Current | Draft readiness plan and checklist for a 25-person real-user trial; awaiting Victor's decisions. | |
 | [planning/SYNTHETIC-ENVIRONMENT.md](planning/SYNTHETIC-ENVIRONMENT.md) | Historical | APP-007 operating record. Its current-operator section is the 2026-10-28 $100 decision. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
 | [planning/app-model/app.md](planning/app-model/app.md) | Reference | What an app is. Sentences marked proposed are not in the code yet. | |
 | [planning/app-model/box.md](planning/app-model/box.md) | Reference | A box is the folder widget. Formation can produce an app. | |
