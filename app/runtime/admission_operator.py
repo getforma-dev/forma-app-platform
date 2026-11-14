@@ -164,12 +164,20 @@ OPERATOR_KINDS = ("organization.provisioned", "handle.rotated", "code.issued", "
                   "app.seeded")
 # ADR-007 amendment (APP-010 review M2, m7): what grant-permission/revoke-permission
 # may write, and the resource each permission names. A closed subset of what the
-# 0002 permission tables allow: never admin_policy (governance), share_work or
-# export (no Phase 1 path uses them).
+# 0002 permission tables allow: never share_work or export (no Phase 1 path uses
+# them). admin_policy (the organization's governance row, 0002 organization_permissions)
+# is grantable since the real-user trial decision of 2026-11-14 (D2, D4: the
+# organization's admin is a member the operator names); it takes no app, work or
+# source, and an access code still never carries it (parse_grant).
 GRANTABLE = {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
-             "record_read": "work", "record_write": "work", "source_read": "source"}
+             "record_read": "work", "record_write": "work", "source_read": "source", "admin_policy": "organization"}
 # The (app, work, source) arguments each resource takes, exactly.
-RESOURCE_SHAPE = {"app": (True, False, False), "work": (True, True, False), "source": (False, False, True)}
+RESOURCE_SHAPE = {"app": (True, False, False), "work": (True, True, False), "source": (False, False, True),
+                  "organization": (False, False, False)}
+# `issue --note`: the operator's own label for a code (who it is for), stored in
+# access_codes.note once migration 0023 adds that column (the real-user trial, W1).
+# Before it, a note refuses `note_unsupported` before any write. Never an address.
+NOTE_BYTES_MAX = 200
 CODE_DOMAIN = b"forma:access-code:v1"
 HANDLE_DOMAIN = b"forma:signin-handle:v1"
 EMAIL_DOMAIN = b"forma:intended-email:v1"
@@ -344,6 +352,8 @@ def parser():
     # issuer and tenant come from the injected input secret's entry for this digest, so none
     # of them appears in argv, the override, CloudTrail or the log.
     q.add_argument("--provider-input-from-secret", action="store_true")
+    # The real-user trial (W3): the operator's label for the code, kept in access_codes.note (0023).
+    q.add_argument("--note")
     for name in ("revoke", "extend"):
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
@@ -395,6 +405,13 @@ def parser():
     q.add_argument("--record-write", action="store_true")
     for arg in ("--authoring-app", "--space"):
         q.add_argument(arg)
+    # The real-user trial (W3, deletion): the object keys of one member's uploaded box files,
+    # read-only, so the operator's own identity can delete every S3 version of them.
+    q = sub.add_parser("list-box-files")
+    for arg in ("--organization", "--principal"):
+        q.add_argument(arg, required=True)
+    # The real-user trial (W3, restore drill and purge): row counts of the organization's tables, read-only.
+    sub.add_parser("stats").add_argument("--organization", required=True)
     return p
 
 
@@ -448,6 +465,9 @@ def validate(args):
             require(args.provider_email is None, "code_digest_with_invitation_refused")
         if args.provider_email is not None:
             check_invitation(args)
+        if args.note is not None:
+            require(isinstance(args.note, str) and 1 <= len(args.note.encode("utf-8")) <= NOTE_BYTES_MAX
+                    and args.note.isprintable() and args.note == args.note.strip(), "malformed_note")
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
     if args.command in ("issue-handle", "rotate-handle", "retire-handle"):
@@ -814,11 +834,35 @@ def backfill(c, args):
     return {"organization_id": org, "created": created, "existing": existing, "sequence": sequence}
 
 
+def note_column_present(c):
+    """True once migration 0023's access_codes.note exists (the catalog proof in begin() already
+    bound the whole schema; this only chooses the statement). Read from pg_catalog, never from
+    the untrusted information_schema views."""
+    return c.execute("""SELECT 1 FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class t ON t.oid=a.attrelid
+                        JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                        WHERE n.nspname='genui' AND t.relname='access_codes' AND a.attname='note' AND NOT a.attisdropped""").fetchone() is not None
+
+
+def access_code_insert(with_note):
+    """The one INSERT of a new code, with or without the 0023 note column; parameters follow issue()."""
+    columns = ("organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,"
+               "redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at")
+    values = "%s,%s,%s,%s,'active',%s,%s,0,now(),now()+make_interval(days=>%s),%s,%s,NULL"
+    if with_note:
+        columns += ",note"
+        values += ",%s"
+    return "INSERT INTO genui.access_codes(" + columns + ") VALUES (" + values + ")"
+
+
 def issue(c, args):
     org = args.organization
     invited = args.provider_email is not None
     client = None
+    note = getattr(args, "note", None)
     begin(c, org)
+    # Before any lock or write: a note needs 0023's column, or the command refuses whole.
+    with_note = note is not None and note_column_present(c)
+    require(note is None or with_note, "note_unsupported")
     if invited:
         # After the operator identity proof and before any lock or write: the
         # management key's tenant must be the code's bound, invite-only provider
@@ -849,11 +893,9 @@ def issue(c, args):
     digest = args.code_digest if raw is None else code_digest(raw)
     code_id = str(uuid.uuid4())
     c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (digest, org))
-    c.execute("""INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,
-                 redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at)
-                 VALUES (%s,%s,%s,%s,'active',%s,%s,0,now(),now()+make_interval(days=>%s),%s,%s,NULL)""",
+    c.execute(access_code_insert(with_note),
               (org, code_id, digest, args.kind, org, args.max_redemptions, args.expires_days,
-               DEFAULTS["trial_entitlement_days"], "genui_migration:" + args.issued_by))
+               DEFAULTS["trial_entitlement_days"], "genui_migration:" + args.issued_by) + ((note,) if with_note else ()))
     for permission, app, work, source in args.templates:
         c.execute("""INSERT INTO genui.code_grant_templates(organization_id,code_id,permission,app_id,work_id,source_id)
                      VALUES (%s,%s,%s,%s,%s,%s)""", (org, code_id, permission, app, work, source))
@@ -871,6 +913,8 @@ def issue(c, args):
     # Only after the commit succeeded: the one and only appearance of the secret
     # (printed by main once the provider phase below has finished).
     result = {"code_id": code_id, "kind": args.kind, "max_redemptions": args.max_redemptions, "expires_at": timestamp(expires)}
+    if with_note:
+        result["note"] = note
     if raw is None:
         result["code_digest"] = digest
     else:
@@ -899,6 +943,8 @@ def lock_binding(c, org, issuer, tenant):
 def list_codes(c, args):
     org = args.organization
     begin(c, org)
+    # The 0023 note, when the column exists; NULL before it, so the listing's shape never changes.
+    note = "a.note" if note_column_present(c) else "NULL::text"
     rows = c.execute("""SELECT a.code_id::text,a.kind,CASE WHEN a.status='active' AND a.expires_at<=now() THEN 'expired' ELSE a.status END,
           a.max_redemptions,a.redeemed_count,
           (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=a.organization_id AND r.code_id=a.code_id
@@ -912,7 +958,7 @@ def list_codes(c, args):
           (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=a.organization_id AND r.code_id=a.code_id
             AND r.kind='pending' AND r.state='live' AND r.expires_at<=now()),
           (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=a.organization_id AND r.code_id=a.code_id
-            AND r.kind='pending' AND r.state='denied_for_reconciliation')
+            AND r.kind='pending' AND r.state='denied_for_reconciliation'),""" + note + """
         FROM genui.access_codes a WHERE a.organization_id=%s ORDER BY a.issued_at DESC,a.code_id LIMIT %s""",
                      (org, DEFAULTS["list_rows_max"] + 1)).fetchall()
     invitations = {}
@@ -938,9 +984,51 @@ def list_codes(c, args):
               "live_pending_admissions": r[5], "lapsed_pending_admissions": r[10], "denied_for_reconciliation": r[11],
               "live_reservations": r[6], "issued_at": timestamp(r[7]),
               "expires_at": timestamp(r[8]), "revoked_at": timestamp(r[9]) if r[9] else None,
-              "provider_invitations": invitations.get(r[0], []), "redemptions": redemptions.get(r[0], [])}
+              "provider_invitations": invitations.get(r[0], []), "redemptions": redemptions.get(r[0], []), "note": r[12]}
              for r in rows[:DEFAULTS["list_rows_max"]]]
     return {"organization_id": org, "codes": codes, "truncated": len(rows) > DEFAULTS["list_rows_max"]}
+
+
+def list_box_files(c, args):
+    """The object keys of every box file one member uploaded (read-only; identifiers, sizes and
+    digests only). The operator's own identity then deletes every S3 version of each key; the
+    rows stay until the end-of-trial purge, so a listing after the deletion still names them."""
+    org, principal = args.organization, args.principal
+    begin(c, org)
+    lock_organization(c, org, lock=False)
+    require(c.execute("SELECT 1 FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (org, principal)).fetchone() is not None,
+            "member_unknown")
+    rows = c.execute("""SELECT f.box_id::text,f.file_id::text,f.object_key,f.byte_length,f.content_digest::text,f.kind
+          FROM genui.box_files f WHERE f.organization_id=%s AND f.uploaded_by=%s ORDER BY f.created_at,f.box_id,f.file_id LIMIT %s""",
+                     (org, principal, DEFAULTS["list_rows_max"] + 1)).fetchall()
+    c.commit()
+    files = [{"box_id": r[0], "file_id": r[1], "object_key": r[2], "byte_length": r[3], "content_digest": r[4], "kind": r[5]}
+             for r in rows[:DEFAULTS["list_rows_max"]]]
+    return {"organization_id": org, "principal_id": principal, "files": files, "count": len(files),
+            "truncated": len(rows) > DEFAULTS["list_rows_max"]}
+
+
+# The closed list of organization-scoped tables `stats` counts: what a restore drill compares
+# between the live database and a restored snapshot, and what the end-of-trial purge proves empty.
+STATS_TABLES = ("principals", "memberships", "entitlements", "organization_permissions", "access_codes", "code_redemptions",
+                "provider_invitations", "spaces", "apps", "app_permissions", "definition_revisions", "publications", "saved_work",
+                "work_permissions", "work_shares", "live_work_shares", "sources", "source_permissions", "boxes", "box_files",
+                "internal_records", "member_cards", "sessions", "audit_events")
+
+
+def stats(c, args):
+    """Row counts per table for one organization, and the schema version proved by begin(): identifiers and counts only."""
+    org = args.organization
+    begin(c, org)
+    lock_organization(c, org, lock=False)
+    version = c.execute("SELECT version FROM genui_meta.schema_version WHERE singleton").fetchone()[0]
+    counts = {}
+    for table in STATS_TABLES:
+        counts[table] = c.execute("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s", (org,)).fetchone()[0]
+    heads = c.execute("SELECT writer_role,chain_sequence FROM genui.audit_heads WHERE organization_id=%s ORDER BY writer_role", (org,)).fetchall()
+    c.commit()
+    return {"organization_id": org, "schema_version": version, "counts": counts,
+            "audit_heads": {role: sequence for role, sequence in heads}}
 
 
 def lock_code(c, org, code_id):
@@ -1083,6 +1171,13 @@ def permission_statements(args):
                     ON CONFLICT DO NOTHING""", (org, principal, args.app, args.work, permission)),
                 ("""DELETE FROM genui.work_permissions WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND work_id=%s
                     AND permission=%s""", (org, principal, args.app, args.work, permission)))
+    if resource == "organization":
+        # The organization row itself is the resource; lock_active_member has already proved it exists.
+        return (("SELECT 1 FROM genui.organizations WHERE organization_id=%s", (org,)),
+                ("""INSERT INTO genui.organization_permissions(organization_id,principal_id,permission) VALUES (%s,%s,%s)
+                    ON CONFLICT DO NOTHING""", (org, principal, permission)),
+                ("""DELETE FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s AND permission=%s""",
+                 (org, principal, permission)))
     return (("SELECT 1 FROM genui.sources WHERE organization_id=%s AND source_id=%s", (org, args.source)),
             ("""INSERT INTO genui.source_permissions(organization_id,principal_id,source_id,permission) VALUES (%s,%s,%s,%s)
                 ON CONFLICT DO NOTHING""", (org, principal, args.source, permission)),
@@ -2151,7 +2246,8 @@ COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
             "register-source-revision": register_source_revision, "create-bound-work": create_bound_work,
-            "seed-spend-review": seed_spend_review, "seed-library": seed_library, "grant-library-access": grant_library_access}
+            "seed-spend-review": seed_spend_review, "seed-library": seed_library, "grant-library-access": grant_library_access,
+            "list-box-files": list_box_files, "stats": stats}
 
 
 def provider_configuration(args):

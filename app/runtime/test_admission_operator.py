@@ -88,12 +88,14 @@ class PureTests(unittest.TestCase):
 
     def test_permission_commands_are_a_closed_set(self):
         """ADR-007 amendment (APP-010 review M2): grant/revoke take only the permissions the tables allow,
-        never admin_policy, share_work or export, and each permission names exactly its resource."""
+        never share_work or export, and each permission names exactly its resource. admin_policy (the
+        real-user trial, D2/D4) names the organization alone: no app, work or source."""
         app, work, source, principal = (str(uuid.uuid4()) for _ in range(4))
         parser = op.parser()
         base = ["--organization", ORG, "--principal", principal]
         self.assertEqual(op.GRANTABLE, {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
-                                        "record_read": "work", "record_write": "work", "source_read": "source"})
+                                        "record_read": "work", "record_write": "work", "source_read": "source",
+                                        "admin_policy": "organization"})
         self.assertEqual(op.OPERATOR_KINDS[:10], ("organization.provisioned", "handle.rotated", "code.issued", "code.revoked",
                                                   "code.extended", "membership.revoked", "entitlement.revoked",
                                                   "permission.granted", "permission.revoked", "creator_authority.revoked"))
@@ -102,10 +104,12 @@ class PureTests(unittest.TestCase):
                                                   "provider_tenant.bound", "app.seeded"))
         for command in ("grant-permission", "revoke-permission"):
             for good in (["--permission", "run", "--app", app], ["--permission", "review_publish", "--app", app],
-                         ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source]):
+                         ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source],
+                         ["--permission", "admin_policy"]):
                 with self.subTest(command=command, good=good[1]):
                     op.validate(parser.parse_args([command, *base, *good]))
-            for bad in (["--permission", "admin_policy"], ["--permission", "share_work", "--app", app, "--work", work],
+            for bad in (["--permission", "admin_policy", "--app", app], ["--permission", "admin_policy", "--source", source],
+                        ["--permission", "share_work", "--app", app, "--work", work],
                         ["--permission", "export", "--app", app, "--work", work], ["--permission", "owner", "--app", app],
                         ["--permission", "run"], ["--permission", "run", "--app", app, "--work", work],
                         ["--permission", "record_read", "--app", app], ["--permission", "source_read", "--app", app],
@@ -177,6 +181,86 @@ class PureTests(unittest.TestCase):
         base[12] = "Events"
         with self.assertRaises(op.Refused):
             op.validate(parser.parse_args(base))
+
+    def test_issue_note_is_bounded_and_chooses_the_0023_insert(self):
+        """The real-user trial (W3): --note is 1..200 printable bytes with no surrounding space; the INSERT
+        carries the column only once 0023 exists, and the statement text itself is fixed."""
+        parser = op.parser()
+        base = ["issue", "--organization", ORG, "--issued-by", "unit", "--authoring-only"]
+        self.assertIsNone(op.validate(parser.parse_args(base)).note)
+        self.assertEqual(op.validate(parser.parse_args(base + ["--note", "Ada L. (wave 1)"])).note, "Ada L. (wave 1)")
+        for bad in ("", " ", " Ada", "Ada ", "a\tb", "a\nb", "x" * 201, "é" * 101):
+            with self.subTest(bad=bad[:8]):
+                with self.assertRaises(op.Refused) as refused:
+                    op.validate(parser.parse_args(base + ["--note", bad]))
+                self.assertEqual(str(refused.exception), "malformed_note")
+        self.assertEqual(op.NOTE_BYTES_MAX, 200)
+        without, with_note = op.access_code_insert(False), op.access_code_insert(True)
+        self.assertNotIn("note", without)
+        self.assertEqual(without.count("%s"), 9)
+        self.assertTrue(with_note.endswith(",note) VALUES (%s,%s,%s,%s,'active',%s,%s,0,now(),now()+make_interval(days=>%s),%s,%s,NULL,%s)"))
+        self.assertEqual(with_note.count("%s"), 10)
+        # The column probe reads pg_catalog for exactly genui.access_codes.note, never information_schema.
+        class Probe:
+            def __init__(self, row): self.row, self.statements = row, []
+            def execute(self, statement, params=None): self.statements.append(statement); return self
+            def fetchone(self): return self.row
+        for row, expected in ((None, False), ((1,), True)):
+            probe = Probe(row)
+            self.assertIs(op.note_column_present(probe), expected)
+            self.assertEqual(len(probe.statements), 1)
+            for fragment in ("pg_catalog.pg_attribute", "nspname='genui'", "relname='access_codes'", "attname='note'", "attisdropped"):
+                self.assertIn(fragment, probe.statements[0])
+            self.assertNotIn("information_schema", probe.statements[0])
+
+    def test_issue_with_a_note_binds_it_to_the_insert_and_the_result(self):
+        """With the column present (mocked: the proof of the real schema is begin()'s), the note is the
+        INSERT's last parameter and the printed result names it; without the column nothing is written."""
+        import datetime as dt
+        parser = op.parser()
+        args = op.validate(parser.parse_args(["issue", "--organization", ORG, "--issued-by", "unit", "--authoring-only",
+                                              "--code-digest", VECTOR_DIGEST, "--note", "Ada L."]))
+        class Connection:
+            def __init__(self): self.calls, self.committed = [], 0
+            def execute(self, statement, params=None): self.calls.append((statement, params)); return self
+            def fetchone(self): return (dt.datetime(2026, 12, 1, tzinfo=dt.timezone.utc),)
+            def commit(self): self.committed += 1
+        for present in (True, False):
+            with self.subTest(present=present):
+                c = Connection()
+                with mock.patch.object(op, "begin"), mock.patch.object(op, "lock_organization"), \
+                        mock.patch.object(op, "claim_provider_tenants"), mock.patch.object(op, "append"), \
+                        mock.patch.object(op, "note_column_present", return_value=present):
+                    if not present:
+                        with self.assertRaises(op.Refused) as refused:
+                            op.issue(c, args)
+                        self.assertEqual(str(refused.exception), "note_unsupported")
+                        self.assertEqual((c.calls, c.committed), ([], 0))
+                        continue
+                    result = op.issue(c, args)
+                inserts = [(s, p) for s, p in c.calls if s.startswith("INSERT INTO genui.access_codes")]
+                self.assertEqual(len(inserts), 1)
+                self.assertEqual(inserts[0][0], op.access_code_insert(True))
+                self.assertEqual(inserts[0][1][-1], "Ada L.")
+                self.assertEqual(inserts[0][1][2], VECTOR_DIGEST)
+                self.assertEqual((result["note"], result["code_digest"], c.committed), ("Ada L.", VECTOR_DIGEST, 1))
+                self.assertNotIn("code", result)
+
+    def test_list_box_files_takes_two_identifiers(self):
+        parser = op.parser()
+        principal = str(uuid.uuid4())
+        parsed = op.validate(parser.parse_args(["list-box-files", "--organization", ORG, "--principal", principal]))
+        self.assertEqual((parsed.command, parsed.principal), ("list-box-files", principal))
+        for bad in (["list-box-files", "--organization", ORG], ["list-box-files", "--organization", ORG, "--principal", "x"],
+                    ["list-box-files", "--organization", ORG.upper(), "--principal", principal]):
+            with self.subTest(bad=bad[-1]), self.assertRaises(op.Refused):
+                op.validate(parser.parse_args(bad))
+        self.assertIs(op.COMMANDS["list-box-files"], op.list_box_files)
+        self.assertEqual(op.validate(parser.parse_args(["stats", "--organization", ORG])).command, "stats")
+        with self.assertRaises(op.Refused):
+            op.validate(parser.parse_args(["stats", "--organization", "x"]))
+        self.assertIs(op.COMMANDS["stats"], op.stats)
+        self.assertEqual(len(op.STATS_TABLES), len(set(op.STATS_TABLES)))
 
     def test_issue_argument_bounds(self):
         parser = op.parser()
@@ -615,7 +699,8 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         entry = next(item for item in listed["codes"] if item["code_id"] == out["code_id"])
         self.assertEqual(set(entry), {"code_id", "kind", "status", "max_redemptions", "redeemed_count", "live_pending_admissions",
                                       "lapsed_pending_admissions", "denied_for_reconciliation", "live_reservations", "issued_at",
-                                      "expires_at", "revoked_at", "provider_invitations", "redemptions"})
+                                      "expires_at", "revoked_at", "provider_invitations", "redemptions", "note"})
+        self.assertIsNone(entry["note"])  # before migration 0023 the column does not exist
         self.assertEqual((entry["status"], entry["redeemed_count"], entry["live_pending_admissions"], entry["lapsed_pending_admissions"],
                           entry["denied_for_reconciliation"]), ("active", 0, 0, 0, 0))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
@@ -654,6 +739,84 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                 self.cli("issue", "--organization", ORG, "--issued-by", "unit-operator", *args, expect=1)
         self.cli("issue", "--organization", str(uuid.uuid4()), "--issued-by", "unit-operator", "--grant", "source_read:" + self.source, expect=1)
         self.assertEqual(self.dump(), before)
+
+    def test_issue_note_refuses_before_0023_and_writes_nothing(self):
+        """The real-user trial (W3): this tree's schema has no access_codes.note, so a note refuses whole
+        with its fixed reason before the code index, the code or the audit event is written."""
+        self.ensure_backfill()
+        before = self.dump()
+        p = self.cli("issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
+                     "--note", "Ada L.", expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "note_unsupported"})
+        self.assertEqual(self.dump(), before)
+        self.assertEqual(self.query("SELECT count(*) FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class t ON t.oid=a.attrelid "
+                                    "JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='genui' "
+                                    "AND t.relname='access_codes' AND a.attname='note'"), [(0,)])
+
+    def test_grant_and_revoke_admin_policy_are_operator_events(self):
+        """The real-user trial (D2, D4): admin_policy is one organization_permissions row for an active member,
+        granted and revoked like any closed permission; a repeat changes nothing; a revoked member refuses."""
+        self.ensure_backfill()
+        admin, revoked = self.member(), self.member("revoked")
+        epoch = self.epoch(admin)
+        granted = self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy")
+        self.assertEqual(granted, {"principal_id": admin, "permission": "admin_policy", "changed": True, "membership_epoch": epoch})
+        self.assertEqual(self.query("SELECT permission FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s",
+                                    (ORG, admin)), [("admin_policy",)])
+        self.assertEqual(self.last_operator_event(), ("permission.granted", admin, None, None))
+        events = len(self.operator_events())
+        again = self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy")
+        self.assertEqual((again["changed"], len(self.operator_events())), (False, events))
+        before = self.dump()
+        for principal in (revoked, str(uuid.uuid4())):
+            self.cli("grant-permission", "--organization", ORG, "--principal", principal, "--permission", "admin_policy", expect=1)
+        self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy", "--app", str(uuid.uuid4()), expect=1)
+        self.assertEqual(self.dump(), before)
+        gone = self.cli("revoke-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy")
+        self.assertEqual(gone, {"principal_id": admin, "permission": "admin_policy", "changed": True, "membership_epoch": epoch + 1})
+        self.assertEqual(self.query("SELECT count(*) FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s",
+                                    (ORG, admin)), [(0,)])
+        self.assertEqual(self.last_operator_event(), ("permission.revoked", admin, None, None))
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_list_box_files_names_only_the_members_uploads(self):
+        """The real-user trial (deletion): the keys of one member's uploads, read-only, in a stable order;
+        another member's files and an unknown member are not listed."""
+        self.ensure_backfill()
+        uploader, other = self.member(), self.member()
+        box, other_box = str(uuid.uuid4()), str(uuid.uuid4())
+        files = [str(uuid.uuid4()) for _ in range(3)]
+        with self.connect("postgres") as c:
+            for owner, identifier in ((uploader, box), (other, other_box)):
+                c.execute("INSERT INTO genui.boxes VALUES (%s,%s,%s,'Uploads','uploads',NULL,now())", (ORG, identifier, owner))
+            for n, file in enumerate(files):
+                c.execute("""INSERT INTO genui.box_files VALUES (%s,%s,%s,%s,'pdf','application/pdf',%s,%s,%s,%s,now()+make_interval(secs=>%s))""",
+                          (ORG, box, file, "file-%d.pdf" % n, 1000 + n, "sha256:" + ("%02x" % n) * 32, "o/%s/b/%s/f/%s" % (ORG, box, file),
+                           uploader, n))
+            c.execute("""INSERT INTO genui.box_files VALUES (%s,%s,%s,'other.csv','csv','text/csv',5,%s,%s,%s,now())""",
+                      (ORG, other_box, str(uuid.uuid4()), "sha256:" + "ab" * 32, "o/%s/b/%s/f/%s" % (ORG, other_box, str(uuid.uuid4())), other))
+        listed = self.cli("list-box-files", "--organization", ORG, "--principal", uploader)
+        self.assertEqual((listed["organization_id"], listed["principal_id"], listed["count"], listed["truncated"]), (ORG, uploader, 3, False))
+        self.assertEqual([f["file_id"] for f in listed["files"]], files)
+        for n, entry in enumerate(listed["files"]):
+            self.assertEqual(set(entry), {"box_id", "file_id", "object_key", "byte_length", "content_digest", "kind"})
+            self.assertEqual((entry["box_id"], entry["object_key"], entry["byte_length"], entry["kind"]),
+                             (box, "o/%s/b/%s/f/%s" % (ORG, box, files[n]), 1000 + n, "pdf"))
+        self.assertEqual(self.cli("list-box-files", "--organization", ORG, "--principal", self.member())["files"], [])
+        p = self.cli("list-box-files", "--organization", ORG, "--principal", str(uuid.uuid4()), expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "member_unknown"})
+        # Read-only: no operator event and no row changed.
+        self.assertNotIn(("permission.granted",), self.operator_events()[-1:])
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+        # stats counts every closed table for the organization and names the proved schema version.
+        counted = self.cli("stats", "--organization", ORG)
+        self.assertEqual(set(counted), {"organization_id", "schema_version", "counts", "audit_heads"})
+        self.assertEqual(set(counted["counts"]), set(op.STATS_TABLES))
+        self.assertEqual(counted["schema_version"], runtime.migration_manifest(runtime.migration_directory())["database_version"])
+        self.assertEqual((counted["counts"]["boxes"], counted["counts"]["box_files"]), (2, 4))
+        self.assertGreaterEqual(counted["counts"]["memberships"], 3)
+        self.assertEqual(set(counted["audit_heads"]), set(op.CHAINS))
+        self.cli("stats", "--organization", str(uuid.uuid4()), expect=1)
 
     def test_revoke_and_extend_are_audited_and_bounded(self):
         out = self.issue("--expires-days", "5")
@@ -770,7 +933,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                                  (other, ["--permission", "run", "--app", str(uuid.uuid4())]),
                                  (other, ["--permission", "record_read", "--app", app, "--work", str(uuid.uuid4())]),
                                  (other, ["--permission", "source_read", "--source", str(uuid.uuid4())]),
-                                 (other, ["--permission", "admin_policy"])):
+                                 (other, ["--permission", "admin_policy", "--app", app])):  # the organization permission names no app
             with self.subTest(extra=extra[1]):
                 self.cli("grant-permission", "--organization", ORG, "--principal", principal, *extra, expect=1)
         self.cli("grant-permission", "--organization", str(uuid.uuid4()), "--principal", other, "--permission", "run", "--app", app, expect=1)
