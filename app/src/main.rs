@@ -2002,6 +2002,20 @@ mod tests {
         assert!(body.contains("What should others call you?"));
         assert_eq!(body.matches("action=\"/me/name\"").count(), 2);
         assert_eq!(body.matches(&"N".repeat(43)).count(), 2);
+        assert!(!body.contains("class=\"cv-name-notice\""));
+        // Review m2: a refused name comes back as the prompt with plain words.
+        let refused = canvas::CanvasProps {
+            needs_name: true,
+            has_name_notice: true,
+            name_notice: genui::member_name::INVALID_NOTICE.into(),
+            ..empty.clone()
+        };
+        let (_, _, body) = html(ssr.canvas(&refused)).await;
+        assert!(body.contains("class=\"cv-name-notice\""));
+        assert!(
+            body.contains("That name can&#39;t be used.")
+                || body.contains("That name can't be used.")
+        );
         let named = canvas::CanvasProps {
             display_name: "Ana <María>".into(),
             ..empty.clone()

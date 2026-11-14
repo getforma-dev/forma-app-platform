@@ -176,6 +176,10 @@ async fn campaign() {
     assert!(page.body.contains(&format!("data-member=\"{PEER}\"")));
     assert!(page.body.contains(&format!("data-member=\"{ADMIN}\"")));
     assert!(page.body.contains(&format!("action=\"{remove_peer}\"")));
+    assert!(
+        !page.body.contains(&format!("action=\"{remove_admin}\"")),
+        "no Remove on the admin's own row (review m5)"
+    );
     assert!(page.body.contains("href=\"mailto:feedback@getforma.dev\""));
     assert!(!page.body.contains("<script src"));
     let anonymous = send(&app, "GET", "/admin", None, "", &[]).await;
@@ -186,7 +190,7 @@ async fn campaign() {
     }
     check(
         &mut checks,
-        "GET /admin over real rows: the organization admin's page lists every member (rows keyed by principal) with a Remove form per active member and the feedback link, no script; a member without admin_policy and an anonymous caller get the uniform 404, byte-identical to an unknown path",
+        "GET /admin over real rows: the organization admin's page lists every member (rows keyed by principal) with a Remove form per active member other than the admin, and the feedback link, no script; a member without admin_policy and an anonymous caller get the uniform 404, byte-identical to an unknown path",
     );
 
     // --- Remove: token, confirmation, refusals, and the removal itself ------
@@ -269,8 +273,20 @@ async fn campaign() {
         form(&[("csrf", &name_token), ("name", "   ")]),
     )
     .await;
-    assert_eq!(blank.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(blank.json()["code"], "invalid_name");
+    assert_eq!(location(&blank), "/canvas?name=invalid");
+    let disguised = post(
+        &peer,
+        member_name::PATH,
+        form(&[("csrf", &name_token), ("name", "Sarah\u{200B}Chen")]),
+    )
+    .await;
+    assert_eq!(location(&disguised), "/canvas?name=invalid");
+    let asked_again = get(&peer, "/canvas?name=invalid").await;
+    assert_eq!(asked_again.status, StatusCode::OK);
+    assert!(asked_again.body.contains("class=\"cv-name-notice\""));
+    assert!(asked_again.body.contains("What should others call you?"));
+    let other_query = get(&peer, "/canvas?name=valid").await;
+    assert_eq!(other_query.status, StatusCode::NOT_FOUND);
     assert_eq!(members(&fixture).await, before);
     let named = post(
         &peer,
@@ -291,7 +307,7 @@ async fn campaign() {
     assert!(page.body.contains("Ana María"));
     check(
         &mut checks,
-        "D6 over real rows: a member with no name sees \"What should others call you?\" and no Admin link, the admin sees the Admin link; POST /me/name refuses another form's token (403) and a blank name (422 invalid_name) without a write, stores the trimmed name, the prompt disappears, the top bar's form shows it and the admin's table lists it",
+        "D6 over real rows: a member with no name sees \"What should others call you?\" and no Admin link, the admin sees the Admin link; POST /me/name refuses another form's token (403), and a blank name or one with a zero-width space with a 303 to /canvas?name=invalid where the canvas asks again in plain words (any other canvas query is the uniform 404), without a write; stores the trimmed name, the prompt disappears, the top bar's form shows it and the admin's table lists it",
     );
 
     // --- The removal ends the member's sessions -----------------------------

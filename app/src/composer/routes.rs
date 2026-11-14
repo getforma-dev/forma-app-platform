@@ -417,6 +417,22 @@ pub(crate) async fn compose_instant(
     let composed = match decision {
         Decision::Retrieve { index } => {
             let library = &context.library[index];
+            // D10 (review M3): a request that needs the live transform asks
+            // the cap first. At the cap it is the 429 every model route
+            // answers, before the standard work is placed, rather than a
+            // silent `kept`.
+            let tailors = matches!(confidence, "matched" | "pinned")
+                && transform::wants(intent, library)
+                && context.authoring.is_some()
+                && context.owner_publish_policy.is_some()
+                && !(demo && transform::rehearsed(intent).is_some());
+            if tailors && composer.enabled() && composer.daily_cap_reached() {
+                return Err(refused(
+                    "model_daily_cap",
+                    Some(Origin::Adapted),
+                    Refused::DailyLimit,
+                ));
+            }
             let standard = retrieve(stores, member, &context, library, intent, started).await?;
             if !matches!(confidence, "matched" | "pinned") || !transform::wants(intent, library) {
                 return Ok(First::Placed(standard, None));

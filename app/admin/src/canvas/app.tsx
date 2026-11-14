@@ -246,8 +246,11 @@ type CanvasProps = {
   artifactKindsLoaded: boolean;
   /** Trial plan D4: the member is an admin of the organization (the Admin link). */
   isOrgAdmin: boolean;
-  /** Trial plan D6: no display name yet, so the canvas asks for one. */
+  /** Trial plan D6: no display name yet (or a refused one), so the canvas asks. */
   needsName: boolean;
+  /** `POST /me/name` refused the name: the plain words. */
+  hasNameNotice: boolean;
+  nameNotice: string;
   displayName: string;
   csrfDisplayName: string;
 };
@@ -377,6 +380,9 @@ function Canvas(props: CanvasProps) {
       {createShow(() => props.needsName, () => (
         <form method="post" action="/me/name" class="cv-name-prompt">
           <input type="hidden" name="csrf" value={props.csrfDisplayName} />
+          {createShow(() => props.hasNameNotice, () => (
+            <p class="cv-name-notice" role="alert">{props.nameNotice}</p>
+          ))}
           <label for="cv-name-input">What should others call you?</label>
           <input id="cv-name-input" name="name" required maxLength={80} pattern=".*\S.*" title="1 to 80 characters, not only spaces" autocomplete="name" placeholder="Your name" />
           <button type="submit">Save</button>
@@ -979,6 +985,8 @@ mount(
       artifactKindsLoaded: false,
       isOrgAdmin: false,
       needsName: false,
+      hasNameNotice: false,
+      nameNotice: '',
       displayName: '',
       csrfDisplayName: '',
     }),

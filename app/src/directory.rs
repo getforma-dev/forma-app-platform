@@ -99,12 +99,43 @@ pub fn replace_member_names(organization: &str, entries: &[(String, String)]) {
     }
 }
 
-/// A usable display name: bounded, printable, no control characters.
+/// A usable display name: bounded, printable, no control characters (Cc)
+/// and no Unicode format characters (Cf: zero-width, bidi controls and the
+/// like), so one name cannot pass for another in a list (trial review m1).
 pub fn usable_name(value: &str) -> bool {
     let count = value.chars().count();
     (1..=MAX_NAME_CHARACTERS).contains(&count)
         && !value.trim().is_empty()
-        && !value.chars().any(char::is_control)
+        && !value.chars().any(|c| c.is_control() || format_character(c))
+}
+
+/// Unicode general category Cf (format characters), Unicode 15.1.
+fn format_character(c: char) -> bool {
+    const CF: &[(u32, u32)] = &[
+        (0x00AD, 0x00AD),
+        (0x0600, 0x0605),
+        (0x061C, 0x061C),
+        (0x06DD, 0x06DD),
+        (0x070F, 0x070F),
+        (0x0890, 0x0891),
+        (0x08E2, 0x08E2),
+        (0x180E, 0x180E),
+        (0x200B, 0x200F),
+        (0x202A, 0x202E),
+        (0x2060, 0x2064),
+        (0x2066, 0x206F),
+        (0xFEFF, 0xFEFF),
+        (0xFFF9, 0xFFFB),
+        (0x110BD, 0x110BD),
+        (0x110CD, 0x110CD),
+        (0x13430, 0x1343F),
+        (0x1BCA0, 0x1BCA3),
+        (0x1D173, 0x1D17A),
+        (0xE0001, 0xE0001),
+        (0xE0020, 0xE007F),
+    ];
+    let code = u32::from(c);
+    CF.iter().any(|(low, high)| (*low..=*high).contains(&code))
 }
 
 fn parse(bytes: &[u8]) -> Option<HashMap<String, String>> {
@@ -235,6 +266,35 @@ mod tests {
         assert!(!usable_name(""));
         assert!(!usable_name(&"n".repeat(81)));
         assert!(usable_name("Priya N."));
+    }
+
+    /// Trial review m1: no name passes for another through invisible or
+    /// direction-changing characters (Unicode Cf), wherever they sit.
+    #[test]
+    fn format_characters_make_a_name_unusable() {
+        for invisible in [
+            '\u{00AD}',
+            '\u{061C}',
+            '\u{200B}',
+            '\u{200D}',
+            '\u{200E}',
+            '\u{202E}',
+            '\u{2066}',
+            '\u{2069}',
+            '\u{FEFF}',
+            '\u{E0041}',
+        ] {
+            assert!(
+                !usable_name(&format!("Sarah{invisible}Chen")),
+                "{invisible:?}"
+            );
+            assert!(!usable_name(&format!("{invisible}Sarah")), "{invisible:?}");
+            assert!(!usable_name(&invisible.to_string()), "{invisible:?}");
+        }
+        // Ordinary letters, accents, scripts and emoji stay usable.
+        for name in ["Ana María", "Zoë O'Brien", "李小龍", "محمد", "Priya 🌱"] {
+            assert!(usable_name(name), "{name}");
+        }
     }
 
     /// APP-098 DS-02, DS-44: with the demo switch off no display name is

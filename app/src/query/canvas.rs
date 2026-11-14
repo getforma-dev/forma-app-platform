@@ -106,8 +106,12 @@ pub struct CanvasProps {
     /// the top bar links the admin area (`/admin`). False when unknown.
     pub is_org_admin: bool,
     /// Trial plan D6: the member has no display name yet, so the canvas
-    /// asks "What should others call you?". False when it cannot be read.
+    /// asks "What should others call you?" (false when it cannot be read);
+    /// also true after a refused name, to ask again.
     pub needs_name: bool,
+    /// `POST /me/name` refused the name (`?name=invalid`): the plain words.
+    pub has_name_notice: bool,
+    pub name_notice: String,
     /// The display name the member chose (the top bar's form to change it).
     pub display_name: String,
     /// The synchronizer token of `POST /me/name` (`csrf::Form::DisplayName`).
@@ -1728,9 +1732,12 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         Ok(live) => live,
         Err(refusal) => return refusal,
     };
-    if parts.uri.query().is_some() {
-        return http::not_found();
-    }
+    // Trial review m2: `POST /me/name`'s one notice is the only query.
+    let name_notice = match parts.uri.query() {
+        None => false,
+        Some(crate::member_name::INVALID_QUERY) => true,
+        Some(_) => return http::not_found(),
+    };
     let member = Arc::new(member);
     let started = std::time::Instant::now();
     let mut groups = Vec::new();
@@ -1833,10 +1840,17 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         member_key: member_key(member.organization(), principal),
         artifact_kinds_loaded: kinds.is_some(),
         is_org_admin,
-        needs_name: crate::member_name::asks_for_name(
-            display_name.as_ref().map(Option::as_deref),
-            crate::directory::display_name(member.organization(), principal).as_deref(),
-        ),
+        needs_name: name_notice
+            || crate::member_name::asks_for_name(
+                display_name.as_ref().map(Option::as_deref),
+                crate::directory::display_name(member.organization(), principal).as_deref(),
+            ),
+        has_name_notice: name_notice,
+        name_notice: if name_notice {
+            crate::member_name::INVALID_NOTICE.to_owned()
+        } else {
+            String::new()
+        },
         display_name: display_name.flatten().unwrap_or_default(),
         csrf_display_name: auth.csrf.token(csrf::Form::DisplayName, &cookie),
     };

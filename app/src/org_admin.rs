@@ -70,8 +70,8 @@ pub struct AdminMemberProps {
     pub works: String,
     pub records: String,
     pub uploads: String,
-    /// An active member: the Remove form is offered (storage still judges
-    /// `self` and `last_admin`).
+    /// An active member other than the viewer: the Remove form is offered
+    /// (storage still judges `self` and `last_admin`).
     pub removable: bool,
     pub action: String,
     pub csrf: String,
@@ -417,7 +417,7 @@ pub(crate) fn props(
                 works: row.works.to_string(),
                 records: row.records.to_string(),
                 uploads: row.uploads.to_string(),
-                removable: row.status == "active",
+                removable: row.status == "active" && !mine,
                 action: format!("/admin/members/{}/remove", row.principal),
                 csrf: remove_token.clone(),
                 confirm_label: format!("Yes, remove {}", row.label),
@@ -579,6 +579,7 @@ mod tests {
             (mine.label.as_str(), mine.role.as_str(), mine.note.as_str()),
             ("Victor", "Admin · you", "teacher")
         );
+        assert!(!mine.removable, "no Remove on the admin's own row");
         let student = &props.members[1];
         assert_eq!(
             student.label, "Ana <b>",

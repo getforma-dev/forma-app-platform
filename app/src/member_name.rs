@@ -10,7 +10,8 @@
 //! one `name`, in either order; any other shape, or a missing or wrong
 //! synchronizer token, tied to the session cookie and
 //! `csrf::Form::DisplayName`, is 403 `cross_site`) → the name
-//! (`directory::usable_name` after trimming; else 422 `invalid_name`) →
+//! (`directory::usable_name` after trimming; else `303` to
+//! `/canvas?name=invalid`, where the canvas asks again in plain words) →
 //! storage → `303` to `/canvas`. Logs carry identities and codes, never the
 //! name.
 use crate::{
@@ -21,7 +22,6 @@ use crate::{
 };
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
     response::Response,
     routing::post,
     Router,
@@ -29,6 +29,11 @@ use axum::{
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub const PATH: &str = "/me/name";
+/// The canvas query `POST /me/name` answers a refused name with (review m2).
+pub const INVALID_QUERY: &str = "name=invalid";
+/// What the canvas then says.
+pub const INVALID_NOTICE: &str =
+    "That name can't be used. Use 1 to 80 characters, with no invisible or control characters.";
 
 /// Whether the canvas asks the member "What should others call you?": the
 /// stored name was read and is empty, and no other name is known for them
@@ -108,8 +113,9 @@ pub(crate) async fn set(
     };
     let name = name.trim();
     if !directory::usable_name(name) {
+        // A plain form post: back to the canvas with one closed notice.
         log("invalid_name");
-        return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "invalid_name");
+        return http::see_other(&format!("/canvas?{INVALID_QUERY}"));
     }
     match store.set(member, name).await {
         Ok(()) => {
@@ -125,7 +131,7 @@ pub(crate) async fn set(
 mod tests {
     use super::*;
     use crate::auth::{DeniedView, InviteView, Pages, PendingView, SigninView, WorkspaceView};
-    use axum::{body::Body, response::IntoResponse};
+    use axum::{body::Body, http::StatusCode, response::IntoResponse};
     use std::sync::Mutex;
     use tower::ServiceExt;
 
@@ -246,7 +252,14 @@ mod tests {
             assert_eq!(response.status(), StatusCode::FORBIDDEN, "{bad:?}");
         }
         let long = "x".repeat(directory::MAX_NAME_CHARACTERS + 1);
-        for invalid in ["", "   ", "line\nbreak", long.as_str()] {
+        for invalid in [
+            "",
+            "   ",
+            "line\nbreak",
+            long.as_str(),
+            "Sarah\u{200B}Chen",
+            "\u{202E}nehC haraS",
+        ] {
             let response = set(
                 &store,
                 &key,
@@ -255,7 +268,11 @@ mod tests {
                 &fields(&[("csrf", &token), ("name", invalid)]),
             )
             .await;
-            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            assert_eq!(response.status(), StatusCode::SEE_OTHER, "{invalid:?}");
+            assert_eq!(
+                response.headers()[axum::http::header::LOCATION],
+                "/canvas?name=invalid"
+            );
         }
         assert!(
             store.set.lock().unwrap().is_empty(),

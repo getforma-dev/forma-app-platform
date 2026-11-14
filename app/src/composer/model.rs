@@ -97,6 +97,17 @@ impl DailyCap {
         used.1 += 1;
         true
     }
+    /// Whether a call at `now` would be refused (the day's count is at the
+    /// limit); takes nothing.
+    pub fn reached(&self, now: u64) -> bool {
+        let day = now / DAY_SECONDS;
+        let used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if day > used.0 {
+            self.limit == 0
+        } else {
+            used.1 >= self.limit
+        }
+    }
 }
 
 /// The daily limit `value` names: a decimal count, else the default.
@@ -264,6 +275,12 @@ pub trait Model: Send + Sync {
         Box::pin(async { Err(ModelError::Refused) })
     }
     fn complete<'a>(&'a self, request: &'a ModelRequest) -> Completion<'a>;
+    /// D10: whether the next call would be refused by the daily cap (a stub
+    /// has none). A caller that is about to write before a model call asks
+    /// first, so the cap is refused before anything is placed.
+    fn daily_cap_reached(&self) -> bool {
+        false
+    }
     /// `request` with `image` before the user text (one Messages image
     /// content block, base64). A model without vision refuses.
     fn complete_with_image<'a>(
@@ -477,6 +494,9 @@ fn parse_reply(bytes: &[u8]) -> Option<ModelReply> {
 }
 
 impl Model for Anthropic {
+    fn daily_cap_reached(&self) -> bool {
+        self.cap.reached(unix_now())
+    }
     fn complete_with_documents<'a>(
         &'a self,
         request: &'a ModelRequest,
@@ -713,6 +733,14 @@ mod tests {
         // A zero cap refuses everything.
         let closed = DailyCap::new(0);
         assert!(!closed.take(MIDNIGHT));
+        assert!(closed.reached(MIDNIGHT) && closed.reached(MIDNIGHT + DAY_SECONDS));
+        // `reached` peeks without taking: at the limit until midnight, then free.
+        let peek = DailyCap::new(1);
+        assert!(!peek.reached(MIDNIGHT));
+        assert!(!peek.reached(MIDNIGHT), "peeking took nothing");
+        assert!(peek.take(MIDNIGHT));
+        assert!(peek.reached(MIDNIGHT + 1));
+        assert!(!peek.reached(MIDNIGHT + DAY_SECONDS));
     }
 
     #[test]

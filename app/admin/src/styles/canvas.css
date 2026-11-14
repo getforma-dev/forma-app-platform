@@ -3004,6 +3004,7 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 /* Out of the shell's grid flow: a banner over the top of the canvas. */
 .cv-name-prompt { position: absolute; top: calc(var(--cv-header-height) + 12px); left: 50%; transform: translateX(-50%); z-index: 40; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--cv-line); border-radius: 6px; background: var(--cv-surface); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); font-size: 13px; }
 .cv-name-prompt label { font-weight: 600; }
+.cv-name-notice { flex-basis: 100%; margin: 0; color: #9a3412; }
 .cv-name-prompt input { min-width: 14rem; padding: 4px 8px; }
 .cv-name-menu { position: relative; }
 .cv-name-menu > summary { list-style: none; cursor: pointer; }

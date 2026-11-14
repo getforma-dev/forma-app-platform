@@ -50,8 +50,10 @@ pub const CALLBACK_ADDRESS: &[Window] = &[per(45, 60), per(250, 3600)];
 pub const CALLBACK_GLOBAL: &[Window] = &[per(800, 3600)];
 /// Failed cookie lookups (no record, an unregistered organization) on
 /// `GET /workspace` and `GET /auth/pending` per address class, at the
-/// callback's ADR-006 size: a legitimate browser fails a lookup at most once
-/// per arrival before its cookie is replaced, so a room of 25 fits.
+/// callback's ADR-006 size (15/minute, 80/hour): a legitimate browser fails a
+/// lookup at most once per arrival before its cookie is replaced. A room of
+/// 25 arriving in the same minute with stale cookies could pass 15; an ended
+/// session is not counted here and `/canvas` does not use this window.
 pub const LOOKUP_FAILURE_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
 
 /// APP-113 review: per member, the routes that create or change rows with

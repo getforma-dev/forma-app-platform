@@ -690,6 +690,40 @@ async fn campaign() {
         "D10: with the real client over a loopback stub and a daily cap of one call, the router takes the call and generation is refused by the cap before any request leaves; the next composition is refused at the router; both are Refused::DailyLimit (429 daily_limit) with nothing sent past the cap and no row written",
     );
 
+    // --- D10 (review M3): a pinned app with a request for more, at the cap ---
+    // The pick needs no model, but the request asks for more than the app's
+    // defaults (a number), so the live transform would call the model. At
+    // the cap that is the daily limit before the standard work is placed,
+    // not a silent `kept` answer.
+    static SPENT: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let spent = Composer::new(
+        Some(Arc::new(
+            crate::composer::model::Anthropic::new("sk-ant-synthetic-not-a-real-key", &endpoint)
+                .unwrap()
+                .with_daily_cap(&SPENT),
+        ) as Arc<dyn Model>),
+        "router-model",
+        "generation-model",
+    );
+    let answer = crate::composer::routes::compose_instant(
+        &stores,
+        &spent,
+        &member,
+        "Northstar investigation for the last 7 days",
+        &crate::composer::routes::Pin::App(APP.into()),
+    )
+    .await;
+    assert!(
+        matches!(answer, Err(Refused::DailyLimit)),
+        "the daily limit"
+    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(footprint(&fixture).await, before, "no standard work placed");
+    check(
+        &mut checks,
+        "D10 (review M3): a composition pinned to a library app whose words ask for more than its defaults, with the composer's real client at a reached daily cap, is Refused::DailyLimit (429 daily_limit) before the standard work is placed: no request leaves and no row is written",
+    );
+
     // --- APP-145: one shell when an active member owns no eligible app ---
     // The member above owns APP, which is under review and so not eligible
     // (APP-085), and the shell its first compose created. A fresh context
