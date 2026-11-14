@@ -6037,7 +6037,7 @@
       "Order": "195",
       "Size": "M",
       "Repos": "forma-app-platform",
-      "Decision": "Fable advisor in lieu of Victor, 2026-11-14 (his delegation: \"Ask fable for answers and directions in lue of me\"): fix before the class in release B, client jitter with one retry plus a deeper bounded waiter set at the pool, no connection-count change ([finding](../../evidence/APP-193/finding-2026-11-14.md), G6)",
+      "Decision": "Fable advisor in lieu of Victor, 2026-11-14 (his delegation: \"Ask fable for answers and directions in lue of me\"): fix before the class in release B, client jitter with one retry plus a deeper bounded waiter set at the pool, no connection-count change ([finding](../../evidence/APP-193/finding-2026-11-14.md), G6). **Revised 2026-11-14** by the Fable advisor after the [campaign](../../evidence/APP-195/refresh-herd-2026-11-14.md): add a visibility deferral, revise run A's \"current\" criterion, quarantine the campaign until APP-197 (the catalog check's cadence) makes it pass; the pre-approved fallback is superseded",
       "Requirements": "SR1, C11",
       "Depends on": "APP-181",
       "External dependencies": "None",
