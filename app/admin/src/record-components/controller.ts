@@ -2,8 +2,56 @@ import { renderRecordComponents, type WireRecordComponent } from './render';
 
 type Identity = { app: string; work: string } | { share: string };
 type Filter = { id: string; value: string } | { id: string; start: string; end: string };
-type Batch = { components: WireRecordComponent[]; filter_epoch: number };
+type Batch = { components: WireRecordComponent[]; filter_epoch: number; server_time?: string };
 const ID = /^[a-z][a-z0-9_]{0,63}$/;
+const INSTANT = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$/;
+
+/** Seconds since the epoch of a contract timestamp; a calendar computation, never a clock read. */
+function instant(text: string): number | null {
+  const m = INSTANT.exec(text);
+  if (!m) return null;
+  const at = new Date(0);
+  at.setUTCFullYear(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  at.setUTCHours(Number(m[4]), Number(m[5]), Number(m[6]), 0);
+  const ms = at.getTime();
+  return Number.isFinite(ms) ? ms / 1000 : null;
+}
+
+/** ADR-020 C1: `m:ss`, `h:mm:ss` from one hour, "Closed" at zero (the server's `countdown_text` rule). */
+export function countdownText(remaining: number): string {
+  if (!(remaining > 0)) return 'Closed';
+  const hours = Math.floor(remaining / 3600), minutes = Math.floor(remaining / 60) % 60, seconds = remaining % 60;
+  const ss = String(seconds).padStart(2, '0');
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${ss}` : `${minutes}:${ss}`;
+}
+
+/**
+ * ADR-020 C1: whole seconds left, `elapsedMs` (monotonic) after the response
+ * that carried `serverTime`. The browser's wall clock never enters.
+ */
+export function remainingSeconds(target: string, serverTime: string, elapsedMs: number): number | null {
+  const end = instant(target), start = instant(serverTime);
+  if (end === null || start === null || !Number.isFinite(elapsedMs) || elapsedMs < 0) return null;
+  return Math.ceil(((end - start) * 1000 - elapsedMs) / 1000);
+}
+
+type Timer = { dataset: DOMStringMap | Record<string, string | undefined>; textContent: string | null };
+/**
+ * Advances every open countdown to `now` (a monotonic `performance.now()`).
+ * A timer is anchored when first seen (or when its response arrived, set by
+ * the caller), so its first text is the server's.
+ */
+export function tickCountdowns(timers: Iterable<Timer>, seen: WeakMap<object, number>, now: number): void {
+  for (const timer of timers) {
+    if (timer.dataset.countdown !== 'open') continue;
+    let anchor = seen.get(timer);
+    if (anchor === undefined) { anchor = now; seen.set(timer, anchor); }
+    const left = remainingSeconds(timer.dataset.countdownTarget || '', timer.dataset.serverTime || '', now - anchor);
+    if (left === null) continue;
+    const text = countdownText(left);
+    if (timer.textContent !== text) timer.textContent = text;
+  }
+}
 
 /** A response from an older input generation can never replace a newer result. */
 export function matchingBatch(value: unknown, epoch: number, ids: ReadonlySet<string>): value is Batch {
@@ -39,6 +87,10 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
     return scope?.dataset.app === identity.app && scope.dataset.work === identity.work;
   };
   const components = () => Array.from(root.querySelectorAll<HTMLElement>('[data-record-component]')).filter(belongs);
+  // ADR-020 C1: countdowns tick from the server's instant on a monotonic clock.
+  const seen = new WeakMap<object, number>();
+  const timers = () => components().flatMap(component => Array.from(component.querySelectorAll<HTMLElement>('[data-countdown]')));
+  const ticker = setInterval(() => { if (!disposed) tickCountdowns(timers(), seen, performance.now()); }, 500);
   const enable = () => {
     for (const component of components()) for (const button of component.querySelectorAll<HTMLButtonElement>('[data-record-filter-enable]')) button.disabled = false;
   };
@@ -96,6 +148,7 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
       if (disposed || suspended || token !== generation) return;
       if (!response.ok) throw new Error(response.status === 404 ? 'denied' : 'unavailable');
       const body: unknown = await response.json();
+      const arrived = performance.now();
       if (disposed || suspended || token !== generation) return;
       if (!matchingBatch(body, atEpoch, ids)) throw new Error('invalid');
       // Construct all replacements before changing any visible component.
@@ -108,6 +161,8 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
       }
       restore();
       enable();
+      for (const timer of timers()) if (!seen.has(timer)) seen.set(timer, arrived);
+      tickCountdowns(timers(), seen, performance.now());
     } catch (error) {
       if (disposed || suspended || token !== generation) return;
       const denied = error instanceof Error && error.message === 'denied';
@@ -175,6 +230,6 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
       // including dialogs. Clearing values here fences its outstanding read.
       mask('This app is not available.');
     },
-    dispose() { disposed = true; suspended = true; generation++; request?.abort(); listeners.abort(); drafts.clear(); focus = null; },
+    dispose() { disposed = true; suspended = true; generation++; request?.abort(); listeners.abort(); clearInterval(ticker); drafts.clear(); focus = null; },
   };
 }
