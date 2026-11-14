@@ -5989,7 +5989,7 @@
     },
     {
       "id": "APP-194",
-      "title": "Schema release B: migration 0023",
+      "title": "Schema release B: migrations 0023 and 0024",
       "path": "0-backlog/APP-194.md",
       "Field": "Value",
       "---": "---",

@@ -44,7 +44,7 @@ What works:
 | D11 | **Live interaction (stretch):** a Kahoot-style live quiz is attempted only if a design spike shows it can be built from general primitives (a shared "current item", timed responses, a live summary). Go or no-go on **Nov 24**; if no, the class uses formative quizzes. |
 | D12 | Invite codes go out from Victor's own email. No app-sent email. Feedback goes to `feedback@getforma.dev`, linked in the app. |
 | D13 | Alarms to Victor's email, plus one restore drill, before codes go out. APP-078 is deferred (one real organization). |
-| D14 | **Two schema releases.** Release A: today's `main` (schema 20→22) before the Nov 20 scan expiry. Release B: migration 0023, all new data capabilities, on Nov 23, with a renewed scan disposition. |
+| D14 | **Two schema releases.** Release A: today's `main` (schema 20→22) before the Nov 20 scan expiry. Release B: migrations 0023 and 0024 (schema 22→24; amended 2026-11-14, when W4's private entries and roles became 0024), all new data capabilities, on Nov 23, with a renewed scan disposition. |
 
 Assumptions: adults; no regulated data; English; desktop Chrome and Safari plus phones for check-ins; Victor is the only operator; the class needs internet access.
 Out of scope: anything classroom-specific in the platform; public sign-up; organization per person; app-sent email; more than 25 students; a separate production stack.
@@ -59,7 +59,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Sat Nov 15 | After the 65-minute fence: `maintenance inspect`/`abandon`, `reconcile`, re-enable promotion, approve **Release A** (main, 20→22). | **Victor** (agents prepare the checklist) |
 | Nov 15–21 | Parallel build: W1–W4. W5 spike Nov 17–18. | agents |
 | Sat Nov 22 | Tier A reviews closed; merge W1–W4. | agents |
-| Sun Nov 23 | Renewed scan disposition. **Release B** (22→23). Expiry renewal to Dec 15 plus the December month. Alarm template deployed. Anthropic limit set. FormaStack raises the fAuth tenant limit to at least 30. Restore drill. | **Victor** |
+| Sun Nov 23 | Renewed scan disposition. **Release B** (22→24). Expiry renewal to Dec 15 plus the December month. Alarm template deployed. Anthropic limit set. FormaStack raises the fAuth tenant limit to at least 30. Restore drill. | **Victor** |
 | Mon Nov 24 | W5 go or no-go. Victor builds his class apps on beta with the composer, using a fresh alias plus one helper account. | **Victor** + agents fix forward |
 | Wed Nov 26 | Rehearsal with 2–3 real students: sign-up, consent, names, his apps, private entries, grading, sharing, building their own app. | **Victor** |
 | Fri Nov 28 | Issue 25 codes, then one restart in the evening. Victor emails the codes. No deploys after this. | **Victor** |
@@ -130,7 +130,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 ## Go/no-go for the 25 codes (Nov 28)
 
 All yes, or no codes go out.
-1. **Release B read back:** schema 23, `/health/ready`, expiry 2026-12-16, November and December ledger months, scan disposition valid to Dec 15, nothing left to deploy.
+1. **Release B read back:** schema 24, `/health/ready`, expiry 2026-12-16, November and December ledger months, scan disposition valid to Dec 15, nothing left to deploy.
 2. **Rehearsal of Nov 26 passed** on Chrome, Safari and a phone with at least two students. Each red item is fixed and re-run, or accepted in writing. The verification mail reached a Gmail and an Outlook address within five minutes, and not in spam.
 3. **Guards live:** the daily cap and its message seen on beta; Anthropic limits set for November ($150) and December ($100), with 50% alerts; alarms OK and the test email received; the restore drill recorded.
 4. **`/admin`:** Victor is admin, consent v1 shows for the rehearsal members, Remove is tested, and the test members are removed.
@@ -145,7 +145,7 @@ All yes, or no codes go out.
 - **Release A (Nov 15):** `/health/ready` passes; the schema version reads 22.
 - **Release B (Nov 23):**
   - `/health/ready`;
-  - the schema version reads 23;
+  - the schema version reads 24;
   - the expiry reads Dec 15;
   - alarms OK;
   - a test alarm email arrives;
