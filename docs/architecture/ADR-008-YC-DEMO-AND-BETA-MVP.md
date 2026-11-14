@@ -34,3 +34,46 @@ The execution plan's Track C becomes the beta go-live path: FormaStack deploys f
 - **GenUI always-on figure approved:** about $150–170/month (x86-priced; ARM64 is lower) for the advertised beta, on top of FormaStack's lean fAuth (FORMA-367, about $33/month), replacing ADR-003's bounded-window $100/month for that period. The ledger basis is rewritten to this figure before the next reservation.
 - **SES sandbox accepted for the MVP:** invitation mail goes to recipients verified in SES ahead of each trial (currently `victor@getforma.dev`), which satisfies FORMA-366's controlled-inbox trial; SES production access remains pending and is not required.
 - **Window length:** hosted runs for the MVP (APP-078, APP-076) are kept to minutes and the long campaigns stay in the backlog (APP-079, APP-080), matching the existing split.
+
+## Amendment 2026-11-14: a bounded real-user trial
+
+Victor decided on 2026-11-14 to admit 25 named real people to the beta, enforced to production standards ([plan](../planning/TRIAL-25-READINESS.md)). This amendment replaces Decision item 1's "synthetic data" for this trial only. Everything else in this ADR stands.
+
+- **Who and when.** 25 people, invite-only. The operator issues codes, and Victor delivers them by email. Wave 1 is 5 people on 2026-11-21; wave 2 is 20 people on 2026-11-24. The trial ends 2026-12-05.
+- **Where.** One shared trial organization, `forma-trial`, on `https://beta.getforma.dev`. Each member's apps are private unless they share them. The beta is labeled beta, with no SLA.
+- **Enforced before wave 1:**
+  - durable, enforced consent to notice version 1 (below), stored and audited;
+  - an Organization Admin area for the organization's admins (`admin_policy`), with member removal;
+  - an app-wide daily model-call cap and a spend limit on the provider account;
+  - email alarms;
+  - one restore drill;
+  - a trial runbook.
+- **Accepted risks** (Victor, 2026-11-14):
+  - APP-079 (hosted identity acceptance, FORMA-365) and APP-080 (RDS races, drift and restore comparison) are unfinished. The single restore drill covers only part of APP-080.
+  - The APP-078 managed isolation verdict is deferred, because there is one real organization.
+  - One Fargate task: every deploy is an outage of about four minutes that signs everyone out. Deploys during the trial happen only in announced windows.
+  - A single-AZ `t4g.small` database. Logs are kept 30 days.
+  - No per-organization quotas beyond the daily model cap and the per-member hourly limits.
+  - Container findings carried under a temporary, reviewed disposition.
+  - Deletion during the trial is limited to removing access and deleting uploaded files. All other trial data is purged with the trial organization after the trial.
+  - The stack keeps its `Environment=synthetic` tag, because an infrastructure change would block promotion. That is a known mismatch.
+  - Victor is the only operator, and alarms reach him by email; no one is paged.
+- **End of trial.** The trial organization's data is purged by 2026-12-08, by the procedure in the trial runbook.
+
+### Beta notice, version 1
+
+Shown on the invitation page. The required checkbox records consent to this version.
+
+> **Before you join the Forma beta**
+>
+> This is an early beta of Forma (getforma.dev). It may change, break or go offline without notice, and there is no service guarantee.
+>
+> You join a shared trial workspace with other testers. What you build is private unless you share it.
+>
+> **What we keep:** your email address for sign-in, what you create (apps, records, notes), the files you upload, and basic logs of what happened.
+>
+> **AI:** to build apps and answer questions, your prompts and parts of your files are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
+>
+> **Your data:** you can ask us at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded. All trial data is deleted after the trial, by December 8, 2026.
+>
+> By checking the box you agree to take part on these terms.

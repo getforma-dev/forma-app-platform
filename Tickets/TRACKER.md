@@ -185,3 +185,12 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](4-done/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
 | 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](4-done/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |
 | 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](0-backlog/APP-180.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |
+| 181 | [APP-181: Record the real-user trial charter and the beta notice](0-backlog/APP-181.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-139 |
+| 182 | [APP-182: Require and record consent to the beta notice at invitation](0-backlog/APP-182.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
+| 183 | [APP-183: Organization Admin: see the members and remove one](0-backlog/APP-183.md) | [PH09](phases/PH09.md) | S15 | SHR | P0 | M | Backlog | APP-181 |
+| 184 | [APP-184: An app-wide daily cap on model calls, with a plain message](0-backlog/APP-184.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-181 |
+| 185 | [APP-185: Operator back office for admissions after the cutover](0-backlog/APP-185.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | M | Backlog | APP-181 |
+| 186 | [APP-186: Renew the beta and the budget for the trial window](0-backlog/APP-186.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-181 |
+| 187 | [APP-187: Email alarms and a budget alert for the trial](0-backlog/APP-187.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-181 |
+| 188 | [APP-188: Trial runbook, restore drill and end-of-trial purge](0-backlog/APP-188.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-185 |
+| 189 | [APP-189: Trial go-live: rehearsal and the two waves](0-backlog/APP-189.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-175 |
