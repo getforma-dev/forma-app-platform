@@ -376,9 +376,10 @@
         "APP-207",
         "APP-208",
         "APP-209",
-        "APP-211"
+        "APP-211",
+        "APP-213"
       ],
-      "ticket_count": 47,
+      "ticket_count": 48,
       "done_count": 7,
       "blocked_count": 0
     }
@@ -6533,6 +6534,35 @@
       "dependencies": [
         "APP-204",
         "APP-205"
+      ]
+    },
+    {
+      "id": "APP-213",
+      "title": "A replacing entry keeps a reviewer's work; generated answer keys are private",
+      "path": "0-backlog/APP-213.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Bug",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "214",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "The coordinator (Claude, in lieu of Victor), 2026-11-14, from the Release C authorization review's MAJOR-1 (\"locked once reviewed\") and its residual; both decisions are final and recorded as [ADR-020](../../docs/architecture/ADR-020-PARTICIPATION-PRIMITIVES.md) \u00a717.43 and \u00a717.44.",
+      "Requirements": "SR1, SR3, C06, C07",
+      "Depends on": "APP-203, APP-207",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI (builder B8)",
+      "Branch / PR": "`release/c-b8-replace-guard` (pushed; no PR: it merges into `release/c-participation`, ADR-020 \u00a713)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-203",
+        "APP-207"
       ]
     }
   ]
