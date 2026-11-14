@@ -110,3 +110,16 @@ The breaks ran on `e90fc96a` (B23–B29) and on the uncommitted owner-exclusion 
 | B30 | The person picker leaves out the app owner (W4 r1: no share names them) | the filter removed | `team-sharing-dialog.test.ts` 10; restored from a copy before commit (SHA-256 `b75559361102244a…`) |
 
 **MAJOR-1 at the route** is a regression check in `share-routes`. It holds the owner's change uncommitted, puts Hal's stop in flight, commits, and then requires the final state to match the final answer. It also checks the other order. The lock itself is W4's definer; W4 broke it in their own record (`evidence/APP-191/break-and-restore-2026-11-14.md`), and it was not broken again here.
+
+## Round 4: W4's explicit share modes (2026-11-14)
+
+W4's round `1aa84fda` made the share mode a parameter: `Set` is exact and demotes, `Ensure` only adds. The dialog's person route passes `Set`. The new `POST .../share/add` passes `Ensure`; it is the canvas approver step (`actions.ts`), and the dev seed and the `actions` and `workflows` campaigns use it in that role. MCP, Slack, the composer and a lineage adaptation pass `Ensure`.
+
+Both breaks ran on `8c239874`, with the same method as round 1. Each restore left `git status --short` empty and the SHA-256 equal to the committed one (`app/src/sharing/mod.rs` `694bf2d7c1037d4d…`, `app/admin/src/canvas/actions.ts` `c8e912ff850a5b92…`).
+
+| # | Guard | Break | What failed |
+| --- | --- | --- | --- |
+| B31 | The automatic share only adds: a reviewer approver keeps `record_review` | `/share/add` passes `Set` | `share-routes`: after the owner's contributor add, Fay held `["record_read","record_write"]` (right: also `record_review`), so the approver share demoted a reviewer |
+| B32 | The canvas approver step uses the additive route | `actions.ts` builds the exact person request | `team-sharing.test.ts` 13 |
+
+The demotion check is re-verified for W4's r4: a demotion through the dialog's `Set` leaves exactly one live record, and the listing (live permissions) shows the lower role.
