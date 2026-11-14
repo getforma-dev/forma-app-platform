@@ -468,13 +468,11 @@ impl RoleManager {
         // read only after a pg_catalog check that it is the same plain table,
         // without row security, that the last comparison saw.
         trace::step("verify_identity");
-        verify_identity(client, self.role).await?;
+        let relation = verify_identity(client, self.role).await?;
         if compared.is_none() {
             trace::step("catalog_verify");
             self.catalog.verify(client).await?;
         }
-        trace::step("version_relation");
-        let relation = version_relation(client).await?;
         if compared.is_some_and(|seen| seen != relation) {
             return Err(trace::refuse("version_relation_changed"));
         }
@@ -741,8 +739,13 @@ impl Lease {
     }
 }
 
-async fn verify_identity(client: &Client, role: Role) -> Result<()> {
-    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path') FROM pg_catalog.pg_roles WHERE rolname=current_user", &[])
+/// The connection's identity checks. The same statement also reads, from
+/// `pg_catalog` alone, the schema-version relation's identity (ADR-004 A5):
+/// returned once it is a plain table without row security whose columns are
+/// exactly a `boolean` and an `integer`, so that reading it runs nothing but
+/// the table scan. One round trip.
+async fn verify_identity(client: &Client, role: Role) -> Result<i64> {
+    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path'),v.relation,v.shape FROM pg_catalog.pg_roles LEFT JOIN LATERAL (SELECT c.oid::pg_catalog.int8 AS relation,c.relkind::pg_catalog.text||':'||(c.relrowsecurity OR c.relforcerowsecurity)::pg_catalog.text||':'||pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.int8 FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum),',') AS shape FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui_meta' AND c.relname='schema_version') v ON true WHERE rolname=current_user", &[])
         .await.map_err(trace::unavailable)?;
     let text = |index| row.try_get::<_, String>(index).map_err(trace::unavailable);
     let boolean = |index| row.try_get::<_, bool>(index).map_err(trace::unavailable);
@@ -771,28 +774,14 @@ async fn verify_identity(client: &Client, role: Role) -> Result<()> {
     if !rows.is_empty() {
         return Err(trace::refuse("identity_extra_membership"));
     }
-    Ok(())
-}
-
-/// The schema-version relation's identity, from `pg_catalog` alone: it must
-/// be a plain table without row security, with exactly a `boolean` and an
-/// `integer` column. Reading it then runs nothing but the table scan.
-async fn version_relation(client: &Client) -> Result<i64> {
-    let rows = client
-        .query(
-            "SELECT c.oid::pg_catalog.int8,c.relkind::pg_catalog.text,c.relrowsecurity OR c.relforcerowsecurity,pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.regtype::pg_catalog.text FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum),',') FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui_meta' AND c.relname='schema_version'",
-            &[],
-        )
-        .await
-        .map_err(trace::unavailable)?;
-    let [row] = rows.as_slice() else {
+    // The version relation: a plain table ("r"), no row security ("false"),
+    // a boolean (oid 16) and an integer (oid 23) column, in that order.
+    let relation: Option<i64> = row.try_get(14).map_err(trace::unavailable)?;
+    let shape: Option<String> = row.try_get(15).map_err(trace::unavailable)?;
+    let Some(relation) = relation else {
         return Err(trace::refuse("version_relation_missing"));
     };
-    let relation: i64 = row.try_get(0).map_err(trace::unavailable)?;
-    let kind: String = row.try_get(1).map_err(trace::unavailable)?;
-    let secured: bool = row.try_get(2).map_err(trace::unavailable)?;
-    let columns: String = row.try_get(3).map_err(trace::unavailable)?;
-    if kind != "r" || secured || columns != "boolean,integer" {
+    if shape.as_deref() != Some("r:false:16,23") {
         return Err(trace::refuse("version_relation_shape"));
     }
     Ok(relation)
