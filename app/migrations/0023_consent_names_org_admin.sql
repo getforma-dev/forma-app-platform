@@ -3,7 +3,13 @@
 -- notice, D6 member display names, D4 an in-product organization admin area,
 -- plus the operator's note on an access code. Additive: three nullable
 -- columns, one insert-only table, three new genui_admit definers, two
--- replaced in place, and no stored value is rewritten.
+-- replaced in place, and no stored value is rewritten; with one recorded
+-- deviation from ADR-009 D9.15's additive rule: reserve_code(uuid,text,text)
+-- is DROPPED and recreated with p_notice_version, not overloaded, because an
+-- overload without a version would still let a caller reserve (and so admit)
+-- without the consent the notice version records. Every caller in this tree
+-- passes the version (storage::admission, storage::sessions, the Rust and
+-- Python campaigns); nothing deployed calls the three-argument form.
 --
 -- Consent. The invitation page shows notice version N and refuses without the
 -- checkbox; reserve_code stores N on the presignup reservation (the row the
@@ -50,9 +56,11 @@ ALTER TABLE genui.code_reservations ADD COLUMN notice_version integer
 GRANT SELECT(notice_version),INSERT(notice_version) ON genui.code_reservations TO genui_admit;
 
 -- One row per member and notice version, written only by admit_redemption
--- (genui_admit, INSERT); no application role holds UPDATE or DELETE. The
--- event id names the `admission.consented` event (no foreign key into the
--- insert-only audit log, 0007's decision).
+-- (genui_admit, INSERT) and read only through org_admin_overview; no
+-- application role holds any privilege on it (review m3: a workspace read is
+-- granted when a surface consumes it). The event id names the
+-- `admission.consented` event (no foreign key into the insert-only audit
+-- log, 0007's decision).
 CREATE TABLE genui.member_consents (
  organization_id uuid NOT NULL, principal_id uuid NOT NULL,
  notice_version integer NOT NULL CHECK (notice_version BETWEEN 1 AND 1000000),
@@ -65,7 +73,6 @@ CREATE TABLE genui.member_consents (
 ALTER TABLE genui.member_consents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE genui.member_consents FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_scope ON genui.member_consents USING (organization_id = nullif(current_setting('genui.organization_id',true),'')::uuid) WITH CHECK (organization_id = nullif(current_setting('genui.organization_id',true),'')::uuid);
-GRANT SELECT(organization_id,principal_id,notice_version,consented_at) ON genui.member_consents TO genui_workspace;
 GRANT SELECT(organization_id,principal_id,notice_version,consented_at),
  INSERT(organization_id,principal_id,notice_version,consented_at,audit_event_id) ON genui.member_consents TO genui_admit;
 
