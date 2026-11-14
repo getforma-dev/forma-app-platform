@@ -350,3 +350,36 @@ Each break was an exact-string replacement, then a run, then a restore with the 
 - Local Docker PostgreSQL on a shared host at load 6–11, with other worktrees' campaigns running at the same time. I did not run `refresh-herd`, so the gate and 26-page numbers are the builder's reports, which I read and cross-checked.
 - R-M1's proof uses the campaign's own test-only corruption model, a pooled object changed while idle. I know of no production path that produces that state.
 - An untracked file I did not write, `evidence/APP-197/release-measurement-recipe.md`, appeared in this worktree during the recheck. It is not part of this commit.
+
+## Final check (2026-11-14)
+
+I checked only the recheck items, on `48e342e6..3718cf23` (head `3718cf23`; `pool.rs` `7e62055c…`, `qualification.rs` `037f4c6c…`), against [recheck-fixes-2026-11-14.md](recheck-fixes-2026-11-14.md).
+
+**Verdict: R-M1 is fixed. No BLOCKER or MAJOR remains in APP-197.** The A5 text is accurate, apart from one overstatement that belongs with the new MINOR below. R-m1 is recorded; its open items belong to the APP-200 integration and APP-188.
+
+- **The first baseline check runs before any statement that resolves through the search path, on every reuse path.**
+  - Before `verify_baseline` (`pool.rs:524`), `recycle` sends no SQL: it checks `clean` and `is_closed`, reads the credential file and compares the generation.
+  - `BASELINE_CHECK` itself uses only `pg_catalog.current_setting(…)`, the `session_user` and `current_user` keywords and `::pg_catalog.text` casts. Nothing in it resolves through the search path.
+  - Every reuse reaches a connection through `Pool::get`, and so through `recycle`. That covers `Lease::acquire`, readiness and its diagnosis.
+  - A new backend's first statement, `IDENTITY`, runs under the search path its startup options fix. The builder is right that those options take precedence over database and role defaults.
+- **Break A redone** (the first `verify_baseline` dropped): failed at `qualification.rs:1251`, "the baseline refuses the shadowed reuse first". Left `(Some("verify_identity"), Some("identity_search_path"), Some(Unavailable))`, right `(None, Some("baseline_search_path"), Some(Unavailable))`. This matches the record. Restored to `7e62055c…`.
+- **Break C redone** (`a.attnum>0` unqualified): the unit test failed ("an unqualified operator in …"). The campaign's trap plants only `=` on names, so for every other operator the unit test is the guard.
+- **Is the operator scan sound? Yes, for operators.**
+  - Its character set is PostgreSQL's whole operator alphabet (`+ - * / < > = ~ ! @ # % ^ & | ` ?`), so no symbolic operator outside a string literal escapes it. Literal stripping handles `''`.
+  - It also catches the keyword forms that expand to an operator: `IN`, `LIKE`, `ILIKE`, `SIMILAR`, `BETWEEN`, `ANY`/`SOME`/`ALL`, `IS [NOT] DISTINCT FROM`, simple `CASE`, `NULLIF`, `GREATEST`/`LEAST`, `OVERLAPS` and `JOIN … USING`. Probe U3 (`IS NOT DISTINCT FROM`) failed with "DISTINCT resolves an operator".
+  - `ORDER BY` and set operations use a type's default operator class. That lookup does not use the search path, and creating an operator class needs a superuser.
+- **New MINOR F-m1: the guard covers operators, but not the other names that resolve through the search path.**
+  - **What I showed.** Probe U1 (`c.relkind::text`, an unqualified cast type) and probe U2 (`array_to_string(` without `pg_catalog.`) each **passed** the unit test. In a throwaway PG 16.15 container under `search_path = evil, pg_catalog`, both forms ran planted code: `evil.array_to_string`, and a cast from `name` to `evil.text`, which a non-superuser can create because it owns `evil.text`. The qualified forms ran nothing.
+  - **Why the campaign would not see it.** The shadow trap defines neither object. I reasoned this from the trap's SQL and did not run the campaign with U1 or U2.
+  - **No live defect.** Today's three statements qualify every relation, function and cast type.
+  - **The overstatement.** A5 and the code comment say "a unit test holds the three statements to this", where "this" includes relations and functions. The test holds them only to the operator rule.
+  - **Fix.** Extend the static test. After literals and `OPERATOR(pg_catalog.…)` are stripped:
+    - every `::` and every `CAST(… AS` must be followed by `pg_catalog.`;
+    - every identifier directly followed by `(` must be `pg_catalog.`-qualified, or a syntax word such as `ARRAY` or `EXISTS`;
+    - every `FROM` or `JOIN` target must be `pg_catalog.`-qualified.
+
+    Alternatively, plant a `text` type with a cast and an `array_to_string` in the shadow trap. Either way, narrow A5's sentence to what is enforced.
+- **Commands at `3718cf23`.**
+  - `just campaign postgres`: ok (49.96 s), 37 checks, from a clean tree after the restores.
+  - `cargo test --locked -p forma-app-platform --lib statement_tests`: ok, 1 passed.
+  - Every probe and break was restored, and `pool.rs` hashed equal to HEAD after each.
