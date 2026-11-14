@@ -668,8 +668,23 @@ fn groups(result: &projections::RecordComponentsResult, id: &str) -> Vec<(String
 fn group(label: &str, score: &str, count: u64) -> (String, String, u64) {
     (label.to_owned(), score.to_owned(), count)
 }
+/// APP-211: whether the engine's result has no outcome for component `id`.
+fn absent(result: &projections::RecordComponentsResult, id: &str) -> bool {
+    result.document["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|v| v["id"] != id)
+}
+/// APP-211: the ids of the components the run withheld, in definition order.
+fn withheld_ids(run: &RecordComponentsRun) -> Vec<&str> {
+    run.withheld()
+        .iter()
+        .map(|v| v["id"].as_str().unwrap())
+        .collect()
+}
 /// How many revisions of `input` the run's provenance (the receipt's
-/// `snapshot`) lists.
+/// `snapshot`) lists; `usize::MAX` when the input was not captured.
 fn listed(run: &RecordComponentsRun, input: &str) -> usize {
     run.snapshot()
         .as_array()
@@ -816,7 +831,9 @@ async fn participation(
     let shown = props.iter().find(|p| p.id == "timer").unwrap();
     assert!(!shown.has_countdown && shown.empty);
     assert_eq!(shown.message, "Nothing is open yet");
-    assert_eq!(value(&empty, "leaderboard")["state"], "empty");
+    // APP-211: the contributor's `matches` components are withheld, not empty.
+    assert!(absent(&empty, "leaderboard"));
+    assert_eq!(withheld_ids(&run), ["right", "leaderboard", "top"]);
     check(checks, "APP-204 C1: before any item a contributor's countdown is empty: no target, \"Nothing is open yet\", no timer");
 
     // --- the owner posts two items and files the expected key -----------------
@@ -1020,35 +1037,216 @@ async fn participation(
             .unwrap()
             .iter()
             .any(|c| c["kind"] == "countdown"));
+        // APP-211: a reader of the key withholds nothing.
+        assert!(run.withheld().is_empty());
         if who.principal() == P_OWNER {
             owner_view = json!({"result": result.document, "receipt": receipt});
         }
     }
-    check(checks, "APP-204 C4: on the owner's and a reviewer's page the ranking by creator lists every contributor by label (Ben Okafor 2, Ana Lima 1, the neutral Member c0000c05 1 for a member with no display name), sorted by score then label; the limit-1 ranking is truncated and says so; the receipt lists items, responses and expected revisions and validates (Rust and contracts)");
+    check(checks, "APP-204 C4: on the owner's and a reviewer's page the ranking by creator lists every contributor by label (Ben Okafor 2, Ana Lima 1, the neutral Member c0000c05 1 for a member with no display name), sorted by score then label; the limit-1 ranking is truncated and says so; the receipt lists items, responses and expected revisions and validates (Rust and contracts); nothing is withheld");
+    // ADR-020 §17.34 (APP-211): a contributor cannot read the owner's `own`
+    // key list, so every component scoring against it is withheld: never
+    // computed (no misleading zero), shown as the one note on every path.
     let mut contributor_view = Value::Null;
-    for (who, label, count) in [
-        (&ben, "Ben Okafor", 2),
-        (&ana, "Ana Lima", 2),
-        (&cal, "Member c0000c05", 1),
-    ] {
+    let withheld_views = ["right", "leaderboard", "top"];
+    for who in [&ben, &ana, &cal] {
         let (run, result) = computed(stores, engine, who, work).await;
+        // The capture: the three declarations, in definition order; the key
+        // input is not captured at all, nor the responses here, whose only
+        // readers are the withheld components (the snapshot lists items only).
+        assert_eq!(withheld_ids(&run), withheld_views);
         assert_eq!(
-            groups(&result, "leaderboard"),
-            vec![group(label, "0", count)]
+            run.snapshot()
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s["input_id"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["items"]
         );
-        assert_eq!(value(&result, "right")["value"], "0");
-        assert_eq!(
-            (listed(&run, "responses"), listed(&run, "expected")),
-            (count as usize, 0)
-        );
+        assert!(run.payload()["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| !withheld_views.contains(&c["id"].as_str().unwrap())));
+        // The engine: no outcome for them; the countdown and the list compute.
+        assert!(withheld_views.iter().all(|id| absent(&result, id)));
+        assert_eq!(value(&result, "timer")["state"], "ready");
+        assert_eq!(value(&result, "item_list")["population"], 2);
+        // The receipt: truthful, no coverage and no value for a withheld view.
+        let receipt =
+            projections::receipt(&run, &result, &projections::default_parameters()).unwrap();
+        admission::admit_record_components_receipt(&receipt).unwrap();
+        assert!(super::query_qualification::contract_valid(&receipt));
+        assert!(receipt["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| !withheld_views.contains(&c["view_id"].as_str().unwrap())));
+        // The page path (the work page's and the record page's props) and the
+        // canvas path (the JSON batch the canvas and the live refresh receive)
+        // agree: the state `withheld`, the note, and nothing else.
+        let page = projections::props(&run, &result, &projections::default_parameters()).unwrap();
+        let canvas = crate::query::record_routes::compute(
+            Some(engine as &dyn crate::query::routes::Executor),
+            &run,
+            &projections::default_parameters(),
+        )
+        .await;
+        let batch = serde_json::to_value(crate::query::record_routes::released(
+            canvas.clone(),
+            &projections::default_parameters(),
+            run.clone(),
+            at(OPENED_2),
+        ))
+        .unwrap();
+        assert_eq!(page.len(), 5);
+        assert_eq!(page, canvas);
+        for id in withheld_views {
+            let p = page.iter().find(|p| p.id == id).unwrap();
+            assert_eq!(
+                (p.state.as_str(), p.message.as_str()),
+                ("withheld", projections::WITHHELD_NOTE)
+            );
+            assert_eq!(p.message, "Scores are shown to this app's reviewers.");
+            assert!(
+                !p.ready
+                    && !p.empty
+                    && !p.failed
+                    && !p.has_summary
+                    && !p.has_groups
+                    && !p.has_table
+                    && !p.has_receipt
+                    && !p.has_filters
+                    && !p.has_countdown
+            );
+            assert!(
+                p.summary.is_empty()
+                    && p.summary_raw.is_empty()
+                    && p.groups.is_empty()
+                    && p.rows.is_empty()
+                    && p.population.is_empty()
+                    && p.receipt_json.is_empty()
+            );
+            let wire = batch["components"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["id"] == id)
+                .unwrap();
+            assert_eq!(
+                (
+                    wire["state"].as_str(),
+                    wire["message"].as_str(),
+                    wire["has_summary"].as_bool(),
+                    wire["has_groups"].as_bool(),
+                    wire["has_receipt"].as_bool()
+                ),
+                (
+                    Some("withheld"),
+                    Some(projections::WITHHELD_NOTE),
+                    Some(false),
+                    Some(false),
+                    Some(false)
+                )
+            );
+            assert_eq!(
+                (
+                    wire["summary"].as_str(),
+                    wire["groups"].as_array().map(Vec::len)
+                ),
+                (Some(""), Some(0))
+            );
+        }
+        assert!(page.iter().filter(|p| p.state == "withheld").count() == 3);
         if who.principal() == P_BEN {
-            let receipt =
-                projections::receipt(&run, &result, &projections::default_parameters()).unwrap();
-            assert!(super::query_qualification::contract_valid(&receipt));
-            contributor_view = json!({"result": result.document, "receipt": receipt});
+            contributor_view = json!({"result": result.document, "receipt": receipt, "withheld": run.withheld(), "props": page});
         }
     }
-    check(checks, "APP-204 C4: on each contributor's page the ranking lists only that contributor, scored 0 against zero visible key rows; their receipt lists no expected revision");
+    check(checks, "APP-211 (ADR-020 §17.34): on each contributor's page the three components scoring against the owner's own key (the matches summary and both rankings) are withheld: the capture lists them and reads no key row, the engine never receives them, the result document and the receipt carry no value and no coverage for them, and the page props and the canvas batch alike show the state withheld with exactly \"Scores are shown to this app's reviewers.\" and no number, rows, groups or receipt; the countdown and the item list still compute");
+
+    // --- APP-211 (ADR-020 §17.35): the record chooser names the creator ------
+    // The labels an update or transition form's chooser shows, as
+    // `query::routes::document_forms` builds them from the same detail and
+    // listing: over the `own` responses each names its creator, over the
+    // shared items none does.
+    async fn chooser(
+        stores: &Stores,
+        who: &TrustedRequest,
+        work: &str,
+        schema: &str,
+    ) -> (bool, Vec<String>) {
+        let collection = stores
+            .data
+            .list_records(who, QUIZ_APP, work)
+            .await
+            .unwrap()
+            .collections
+            .iter()
+            .find(|c| c.schema == schema)
+            .unwrap()
+            .collection
+            .clone();
+        let fresh = crate::auth::capability::random_uuid().unwrap();
+        let detail = stores
+            .data
+            .read_record_detail(who, QUIZ_APP, work, &collection, &fresh)
+            .await
+            .unwrap();
+        let listing = stores.data.list_records(who, QUIZ_APP, work).await.unwrap();
+        let labels: Vec<String> = listing
+            .records
+            .iter()
+            .filter(|row| row.collection == collection)
+            .map(|row| {
+                crate::query::routes::record_choice_label(
+                    detail
+                        .own
+                        .then(|| crate::directory::label(ORG, &row.creator)),
+                    &row.values,
+                    row.version,
+                )
+            })
+            .collect();
+        (detail.own, labels)
+    }
+    let names = |labels: &[String]| {
+        let mut seen: Vec<String> = labels
+            .iter()
+            .map(|l| l.split(" · ").next().unwrap().to_owned())
+            .collect();
+        seen.sort();
+        seen.dedup();
+        seen
+    };
+    for who in [&owner, &rev] {
+        let (own, labels) = chooser(stores, who, work, "responses").await;
+        assert!(own);
+        assert_eq!(labels.len(), 5);
+        assert_eq!(
+            names(&labels),
+            ["Ana Lima", "Ben Okafor", "Member c0000c05"]
+        );
+        assert!(
+            labels
+                .iter()
+                .all(|l| l.split(" · ").count() == 3 && l.contains(" · revision ")),
+            "{labels:?}"
+        );
+        let (shared, items) = chooser(stores, who, work, "items").await;
+        assert!(!shared);
+        assert_eq!(
+            items,
+            ["Which colour? · revision 2", "Which shape? · revision 2"]
+        );
+    }
+    let (own, labels) = chooser(stores, &ben, work, "responses").await;
+    assert!(own);
+    assert_eq!(labels.len(), 2);
+    assert_eq!(names(&labels), ["Ben Okafor"]);
+    let (_, labels) = chooser(stores, &cal, work, "responses").await;
+    assert_eq!(names(&labels), ["Member c0000c05"]);
+    check(checks, "APP-211 (ADR-020 §17.35): the record chooser over the own responses labels every entry <creator> · <text> · revision n for the owner and the reviewer (Ana Lima, Ben Okafor and the neutral Member c0000c05, five entries), a contributor sees only their own entries under their own name, and the shared items keep today's label, newest commit first (\"Which colour? · revision 2\", \"Which shape? · revision 2\")");
 
     // --- labels, never principal ids -----------------------------------------
     let principals = [P_OWNER, P_REV, P_BEN, P_ANA, P_CAL];
@@ -1072,16 +1270,22 @@ async fn participation(
     check(checks, "APP-204 §14.4: the result document carries labels and no principal id; the page props name no member but the viewer (in their own receipt)");
 
     // --- D7 under bypass ------------------------------------------------------
-    judged!(checks, "APP-204 D7: a contributor's ranking by creator lists only themselves, scored from zero visible key rows", {
-        let (_, result) = computed(stores, engine, &ben, work).await;
-        groups(&result, "leaderboard") == vec![group("Ben Okafor", "0", 2)] && value(&result, "right")["value"] == "0"
+    judged!(checks, "APP-211 D7: a contributor's components scoring against the owner's own key are withheld (no value, the one note) because the key is hidden from them by the row rule; a reviewer's compute", {
+        let (run, result) = computed(stores, engine, &ben, work).await;
+        let props = projections::props(&run, &result, &projections::default_parameters()).unwrap();
+        let (_, reviewed) = computed(stores, engine, &rev, work).await;
+        withheld_ids(&run) == ["right", "leaderboard", "top"]
+            && absent(&result, "leaderboard") && absent(&result, "right") && absent(&result, "top")
+            && props.iter().filter(|p| p.state == "withheld").count() == 3
+            && props.iter().filter(|p| p.state == "withheld").all(|p| p.message == projections::WITHHELD_NOTE && !p.has_summary && !p.has_groups && !p.has_receipt)
+            && groups(&reviewed, "leaderboard") == full
     });
-    judged!(checks, "APP-204 D7: a contributor's capture reads their own responses and none of the owner's own key list; a reviewer's reads all", {
+    judged!(checks, "APP-204 D7: a contributor's capture reads none of the owner's own key list (APP-211: neither the key input nor the responses, whose only readers are withheld, is captured; the creators map names the owner alone, from the items); a reviewer's reads all", {
         let b = stores.data.record_components(&ben, QUIZ_APP, work).await.unwrap();
         let r = stores.data.record_components(&rev, QUIZ_APP, work).await.unwrap();
         let ben_creators: Vec<String> = b.payload()["creators"].as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap().to_owned()).collect();
-        listed(&b, "responses") == 2 && listed(&b, "expected") == 0 && listed(&r, "responses") == 5 && listed(&r, "expected") == 2
-            && ben_creators == [P_OWNER.to_owned(), P_BEN.to_owned()]
+        listed(&b, "responses") == usize::MAX && listed(&b, "expected") == usize::MAX && listed(&b, "items") == 2 && listed(&r, "responses") == 5 && listed(&r, "expected") == 2
+            && ben_creators == [P_OWNER.to_owned()]
     });
     judged!(checks, "APP-204 D7 (APP-191's delivery rule, the ranking card open): a contributor's response reaches its creator, the reviewers and the owner, never another contributor", {
         let judged = stores.data.openable_principals(&owner, QUIZ_APP, work, Some(ben_response.commit_sequence), &principals.map(str::to_owned)).await.unwrap();

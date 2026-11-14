@@ -702,6 +702,32 @@ pub(crate) struct DocumentForms {
     pub choices: std::collections::BTreeMap<String, Vec<page::SelectionProps>>,
 }
 
+/// The text part of a record chooser's label: at most this many characters
+/// of the record's first string value, never the creator's name.
+const CHOICE_TEXT_CHARACTERS: usize = 100;
+
+/// The label of one record in an update or transition form's chooser:
+/// `<first text value or "Record"> · revision n`, and (ADR-020 §17.35,
+/// APP-211) over an `own` collection `<creator label> · <text> · revision n`,
+/// with `creator` the label `directory::label` gives the viewer. The text
+/// part is bounded ([`CHOICE_TEXT_CHARACTERS`]); the name is never cut.
+pub(crate) fn record_choice_label(creator: Option<String>, values: &Value, version: i64) -> String {
+    let text: String = values
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item["value"]["value"].as_str())
+        .next()
+        .unwrap_or("Record")
+        .chars()
+        .take(CHOICE_TEXT_CHARACTERS)
+        .collect();
+    match creator {
+        Some(name) => format!("{name} · {text} · revision {version}"),
+        None => format!("{text} · revision {version}"),
+    }
+}
+
 /// Shared native/canvas form preparation, still backed by fresh record details.
 /// Callers must release their whole response after this helper and any queries.
 pub(crate) async fn document_forms(
@@ -765,28 +791,23 @@ pub(crate) async fn document_forms(
                 return Err(http::not_found());
             }
             if !part.creates {
+                // ADR-020 §17.35 (APP-211): over an `own` collection each
+                // choice names its creator, as the Records card's "Filed by"
+                // does; a shared collection keeps today's label.
                 let mut choices: Vec<_> = listing
                     .records
                     .iter()
                     .filter(|row| row.collection == *collection)
-                    .map(|row| {
-                        let label = row
-                            .values
-                            .as_array()
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|item| item["value"]["value"].as_str())
-                            .next()
-                            .unwrap_or("Record");
-                        page::SelectionProps {
-                            id: row.record_id.clone(),
-                            label: format!(
-                                "{} · revision {}",
-                                label.chars().take(100).collect::<String>(),
-                                row.version
-                            ),
-                            selected: row.record_id == record,
-                        }
+                    .map(|row| page::SelectionProps {
+                        id: row.record_id.clone(),
+                        label: record_choice_label(
+                            detail.own.then(|| {
+                                crate::directory::label(member.organization(), &row.creator)
+                            }),
+                            &row.values,
+                            row.version,
+                        ),
+                        selected: row.record_id == record,
                     })
                     .collect();
                 if part.operation == "create" {

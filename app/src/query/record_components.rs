@@ -6,6 +6,11 @@
 //! only a countdown carries them. The server's instant is stamped on its
 //! props as the response is built ([`stamp`]), so the first text and the
 //! client's ticking start from the server's clock, never the browser's.
+//!
+//! ADR-020 §17.34 (APP-211): a component storage withheld (its key input is
+//! unreadable to the viewer) is never in the engine's payload or result, so it
+//! has no value, no rows and no receipt; its props carry the state `withheld`
+//! and exactly [`WITHHELD_NOTE`] ([`withheld_props`]), on every path alike.
 use super::{
     page,
     worker::{ColumnType, Failure, QueryError},
@@ -502,6 +507,31 @@ fn base(run: &RecordComponentsRun, parameters: &Value) -> Vec<RecordComponentPro
         })
         .collect()
 }
+/// ADR-020 §17.34 (APP-211): the one note a withheld component shows, on
+/// every path (the canvas, the pages, the live refresh): no number, no rows.
+pub const WITHHELD_NOTE: &str = "Scores are shown to this app's reviewers.";
+/// ADR-020 §17.34 (APP-211): the props of the components storage withheld
+/// from this viewer, in definition order: the state `withheld`, the note, and
+/// no value, rows, groups, filters or receipt. Built from the declarations
+/// only; no engine result exists for them.
+pub fn withheld_props(run: &RecordComponentsRun, parameters: &Value) -> Vec<RecordComponentProps> {
+    run.withheld()
+        .iter()
+        .map(|v| RecordComponentProps {
+            id: v["id"].as_str().unwrap_or_default().into(),
+            title: v["title"].as_str().unwrap_or_default().into(),
+            kind: v["kind"].as_str().unwrap_or_default().into(),
+            schema: v["records"]["schema_id"]
+                .as_str()
+                .unwrap_or_default()
+                .into(),
+            state: "withheld".into(),
+            message: WITHHELD_NOTE.into(),
+            filter_epoch: parameters["filter_epoch"].as_i64().unwrap_or(0),
+            ..Default::default()
+        })
+        .collect()
+}
 pub fn unavailable(run: &RecordComponentsRun, message: &str) -> Vec<RecordComponentProps> {
     unavailable_with_parameters(run, &default_parameters(), message)
 }
@@ -518,6 +548,7 @@ pub fn unavailable_with_parameters(
             p.message = message.into();
             p
         })
+        .chain(withheld_props(run, parameters))
         .collect()
 }
 pub fn props(
@@ -529,6 +560,8 @@ pub fn props(
     let wire: WireResult =
         serde_json::from_value(result.document.clone()).map_err(|_| failure())?;
     let mut props = base(run, parameters);
+    // `parse_result` matched the engine's components to the payload's, one to
+    // one in order; a withheld component is in neither and follows them.
     for (p, r) in props.iter_mut().zip(wire.components) {
         p.state = r.state;
         p.ready = true;
@@ -669,6 +702,7 @@ pub fn props(
             format!("{} matching records", p.population)
         };
     }
+    props.extend(withheld_props(run, parameters));
     Ok(props)
 }
 /// ADR-020 C1: stamps the server's instant (`now`, whole seconds since the
@@ -784,6 +818,125 @@ mod tests {
     }
     fn ben() -> Value {
         json!([{"label": "Ben Okafor", "missing": false, "value": "2", "count": 2}, {"label": "Member c0000b05", "missing": false, "value": "0", "count": 1}])
+    }
+    /// ADR-020 §17.34 (APP-211): the contributor's run of the same
+    /// definition: storage withheld the board (its key is unreadable), so
+    /// the payload holds the timer alone and the board is only declared.
+    fn contributor_run() -> RecordComponentsRun {
+        let full = participation_run();
+        let mut components = full.payload()["components"].as_array().unwrap().clone();
+        let board = components.remove(1);
+        RecordComponentsRun::for_tests_withholding(
+            json!({"components": components, "filters": [], "datasets": [], "creators": []}),
+            vec![board],
+        )
+    }
+    #[test]
+    fn a_withheld_component_shows_the_note_and_never_a_value() {
+        let run = contributor_run();
+        let parameters = json!({"filter_epoch": 4, "filters": []});
+        let mut bytes = admission::encode(&json!({"outcome": "record_components", "filter_epoch": 4, "elapsed_ms": 3, "components": [timer(json!("2026-11-29T15:05:30Z"), json!("Second"), json!(false), 2)]})).unwrap();
+        bytes.push(b'\n');
+        let result = parse_result(&run, &parameters, &bytes).unwrap();
+        // The receipt covers the computed component only: no claim for the board.
+        let receipt = receipt(&run, &result, &parameters).unwrap();
+        assert_eq!(receipt["components"].as_array().unwrap().len(), 1);
+        assert_eq!(receipt["components"][0]["view_id"], "timer");
+        // The props: the timer as computed, then the board withheld, in that order.
+        let props = props(&run, &result, &parameters).unwrap();
+        assert_eq!(props.len(), 2);
+        assert_eq!(
+            (
+                props[0].id.as_str(),
+                props[0].state.as_str(),
+                props[0].has_receipt
+            ),
+            ("timer", "ready", true)
+        );
+        let shown = &props[1];
+        assert_eq!(
+            (
+                shown.id.as_str(),
+                shown.title.as_str(),
+                shown.kind.as_str(),
+                shown.schema.as_str()
+            ),
+            ("board", "Leaderboard", "record_ranking", "responses")
+        );
+        assert_eq!(
+            (shown.state.as_str(), shown.message.as_str()),
+            ("withheld", WITHHELD_NOTE)
+        );
+        assert_eq!(shown.message, "Scores are shown to this app's reviewers.");
+        assert!(!shown.ready && !shown.empty && !shown.failed);
+        assert!(
+            !shown.has_summary
+                && !shown.has_groups
+                && !shown.has_table
+                && !shown.has_budget
+                && !shown.has_countdown
+                && !shown.has_filters
+                && !shown.has_receipt
+        );
+        assert!(
+            shown.summary.is_empty()
+                && shown.summary_raw.is_empty()
+                && shown.groups.is_empty()
+                && shown.rows.is_empty()
+                && shown.population.is_empty()
+                && shown.receipt_json.is_empty()
+                && shown.receipt_digest.is_empty()
+        );
+        assert_eq!(shown.filter_epoch, 4);
+        // A failure shows the failure on the computed component and still the note on the board.
+        let failed = unavailable_with_parameters(
+            &run,
+            &parameters,
+            "Record views are temporarily unavailable.",
+        );
+        assert_eq!(failed.len(), 2);
+        assert_eq!(
+            (failed[0].state.as_str(), failed[0].message.as_str()),
+            ("failed", "Record views are temporarily unavailable.")
+        );
+        assert_eq!(
+            (
+                failed[1].state.as_str(),
+                failed[1].message.as_str(),
+                failed[1].failed
+            ),
+            ("withheld", WITHHELD_NOTE, false)
+        );
+        // A result that carries a value for the withheld component is refused:
+        // the engine never received it, so nothing may claim it was computed.
+        let smuggled = wire(
+            timer(
+                json!("2026-11-29T15:05:30Z"),
+                json!("Second"),
+                json!(false),
+                2,
+            ),
+            board(ben(), false),
+        );
+        assert!(parse_result(&run, &default_parameters(), &smuggled).is_err());
+        // Nothing to compute: the note alone, and the run is empty for the engine.
+        let only = RecordComponentsRun::for_tests_withholding(
+            json!({"components": [], "filters": [], "datasets": [], "creators": []}),
+            run.withheld().to_vec(),
+        );
+        assert!(only.is_empty());
+        let note = withheld_props(&only, &parameters);
+        assert_eq!(note.len(), 1);
+        assert_eq!(
+            (
+                note[0].id.as_str(),
+                note[0].state.as_str(),
+                note[0].message.as_str()
+            ),
+            ("board", "withheld", WITHHELD_NOTE)
+        );
+        // A reader of the key (the owner, a reviewer) withholds nothing.
+        assert!(withheld_props(&participation_run(), &parameters).is_empty());
     }
     #[test]
     fn a_countdown_projection_carries_an_instant_a_label_and_closed_only() {

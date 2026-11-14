@@ -32,3 +32,4 @@ Released framework qualification, typed contracts and reproducible application s
 | 206 | [APP-204: Countdown, and a ranking by person scored against a reviewer-only key list](../0-backlog/APP-204.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-202 |
 | 207 | [APP-205: The reference picker in forms, and read-only stamped fields](../0-backlog/APP-205.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-202 |
 | 210 | [APP-208: Multi-select fields (stretch): checkboxes with per-option counts](../0-backlog/APP-208.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-202, APP-203, APP-204, APP-205 |
+| 213 | [APP-211: No misleading score for a viewer who cannot read the key; grading by name in the record chooser](../0-backlog/APP-211.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-204, APP-205 |
