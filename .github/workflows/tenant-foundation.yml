@@ -69,6 +69,8 @@ jobs:
         run: GENUI_ORG_ADMIN_REPORT="$RUNNER_TEMP/tenant-foundation/org-admin.json" cargo test --locked -p forma-app-platform --lib storage::org_admin_campaign::native_org_admin_campaign -- --ignored --exact --nocapture
       - name: Qualify the organization admin and display-name routes (trial plan D4/D6)
         run: GENUI_ORG_ADMIN_ROUTES_REPORT="$RUNNER_TEMP/tenant-foundation/org-admin-routes.json" cargo test --locked -p forma-app-platform --lib storage::org_admin_routes_campaign::native_org_admin_routes_campaign -- --ignored --exact --nocapture
+      - name: Qualify the share routes with roles and with everyone (APP-192)
+        run: GENUI_SHARE_ROUTES_REPORT="$RUNNER_TEMP/tenant-foundation/share-routes.json" cargo test --locked -p forma-app-platform --lib storage::share_routes_campaign::native_share_routes_campaign -- --ignored --exact --nocapture
       - name: Qualify explicit record commands, outcomes and audit (APP-013)
         run: GENUI_COMMAND_REPORT="$RUNNER_TEMP/tenant-foundation/command.json" cargo test --locked -p forma-app-platform --lib storage::command_qualification::native_command_campaign -- --ignored --exact --nocapture
       - name: Qualify command races, revocation and restart (APP-014)

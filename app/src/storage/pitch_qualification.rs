@@ -1077,7 +1077,7 @@ async fn campaign() {
         .post(
             &format!("/v1/work/{EXPENSE_APP}/{work_id}/share"),
             Some(&maya_cookie),
-            &json!({"grantee_principal_id": mate_id, "record_write": true}).to_string(),
+            &json!({"grantee_principal_id": mate_id, "role": "contributor"}).to_string(),
         )
         .await;
     assert_eq!(share.status, StatusCode::OK, "{}", share.text());
@@ -1450,7 +1450,7 @@ async fn campaign() {
         (
             "POST",
             format!("/v1/work/{EXPENSE_APP}/{work_id}/share"),
-            Some(json!({"grantee_principal_id": mate_id}).to_string()),
+            Some(json!({"grantee_principal_id": mate_id, "role": "viewer"}).to_string()),
         ),
         (
             "POST",

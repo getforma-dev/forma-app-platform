@@ -826,7 +826,7 @@ async fn campaign() {
         "POST",
         &format!("/v1/work/{app_id}/{work_id}/share"),
         Some(&diego),
-        &json!({"grantee_principal_id": REVIEWER, "record_write": true}).to_string(),
+        &json!({"grantee_principal_id": REVIEWER, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
     )
     .await;
@@ -1003,7 +1003,7 @@ async fn campaign() {
         "POST",
         &format!("/v1/work/{app_id}/{work_id}/share"),
         Some(&diego),
-        &json!({"grantee_principal_id": REVIEWER, "record_write": true}).to_string(),
+        &json!({"grantee_principal_id": REVIEWER, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
     )
     .await;
@@ -1150,7 +1150,7 @@ async fn campaign() {
         "POST",
         &format!("/v1/work/{app_id}/{work_id}/share"),
         Some(&sarah),
-        &json!({"grantee_principal_id": PRINCIPAL, "record_write": true}).to_string(),
+        &json!({"grantee_principal_id": PRINCIPAL, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
     )
     .await;

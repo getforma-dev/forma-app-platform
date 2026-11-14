@@ -998,7 +998,7 @@ impl Tailor {
             &composed.app,
             &composed.work,
         );
-        for (grantee, record_write) in shares {
+        for (grantee, role) in shares {
             let shared = stores
                 .workspace
                 .share_work(
@@ -1006,7 +1006,7 @@ impl Tailor {
                     &composed.app,
                     &composed.work,
                     crate::storage::Audience::Member(&grantee),
-                    crate::storage::ShareRole::from_record_write(record_write),
+                    role,
                 )
                 .await;
             tracing::info!(

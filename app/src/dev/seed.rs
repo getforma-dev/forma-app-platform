@@ -139,7 +139,7 @@ async fn share(app: &Router, cookie: &str, draft: &Value) -> Result<(), String> 
         approvers.push(SARAH.to_owned());
     }
     for principal in approvers {
-        let body = json!({"grantee_principal_id": principal, "record_write": true}).to_string();
+        let body = json!({"grantee_principal_id": principal, "role": "contributor"}).to_string();
         // A work the filer did not create (the library's seeded work, which
         // every persona holds by `grant-library-access`) is not his to share:
         // the approver already reads it.

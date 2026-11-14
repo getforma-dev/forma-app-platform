@@ -1370,13 +1370,15 @@ async fn share(
     // another organization is never named).
     let grantee = resolve::match_approver(&name, &members).ok_or_else(Output::not_found)?;
     // The canvas route's own path, the composition's adaptation included.
+    // The agent tool keeps its `record_write` flag (its own published
+    // argument list); it maps to the viewer or contributor role.
     let shared = crate::sharing::share_with_lineage(
         stores,
         member,
         &app,
         &work,
         &grantee.principal,
-        record_write,
+        crate::storage::ShareRole::from_record_write(record_write),
     )
     .await
     .map_err(storage_output)?;

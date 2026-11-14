@@ -7,20 +7,45 @@
 //!   (labels only; no provider identity; ADR-011 debt: 0002 principals carry
 //!   no display name).
 //! - `POST /v1/work/{app}/{work}/share`: body `{"grantee_principal_id":
-//!   "<uuid>","record_write":false}` (`record_write` optional, default false;
-//!   no other member), `application/json`, at most `JSON_BODY_LIMIT`. 200
-//!   `{"app_id","work_id","grantee_principal_id","granted":[{"scope":"app"|
-//!   "work"|"source","resource_id":"<uuid>","permission":"<name>"}, …]}`: the
-//!   sharer's subset now held by the teammate, the same shape whether this
-//!   call inserted rows or found them (review m1: the sharer learns nothing of
-//!   the teammate's prior holdings). Refusal order: fetch metadata (403
-//!   `cross_site`), the ids (uniform 404), the session (uniform 404), the body
-//!   (413, then 400 `malformed_share`), then storage: `Denied` is the uniform
-//!   404 (a work the sharer cannot open, no authority to share, a
-//!   `record_write` the sharer does not hold, a grantee who is not an active
-//!   member of the same organization or is the sharer; identical for existing
-//!   and nonexistent works), 503 for a store outage. A share that wrote a
-//!   grant announces `app.shared` on the event hub (`events`).
+//!   "<uuid>","role":"viewer"|"contributor"|"reviewer"}` (APP-192: both
+//!   members required, no other member; the earlier `record_write` flag is
+//!   refused, so a role has one encoding), `application/json`, at most
+//!   `JSON_BODY_LIMIT`. 200 `{"app_id","work_id","grantee_principal_id",
+//!   "granted":[{"scope":"app"|"work"|"source","resource_id":"<uuid>",
+//!   "permission":"<name>"}, …]}`: the sharer's subset now held by the
+//!   teammate, the same shape whether this call inserted rows or found them
+//!   (review m1: the sharer learns nothing of the teammate's prior holdings).
+//! - `POST /v1/work/{app}/{work}/share/organization` (APP-192, D9): body
+//!   `{"role":"viewer"|"contributor"|"reviewer"|"none"}`: shares the work with
+//!   every current and future active member of the organization in that role
+//!   (replacing a live one of another role), or `none` ends it for all of
+//!   them at once. 200 `{"app_id","work_id","role":"<role>"|"none"}`.
+//! - `GET /v1/work/{app}/{work}/share` (APP-192): what the share dialog shows
+//!   a member with share authority: `{"app_id","work_id","roles":[…],
+//!   "can_revoke_members":false,"organization":{"available":bool,
+//!   "role":"<role>"|null},"members":
+//!   [{"principal_id","label","role"}, …]}` (`Workspace::work_sharing`; the
+//!   roles this sharer may grant; members by label, never by provider
+//!   identity).
+//!
+//! Refusal order on both POSTs: fetch metadata (403 `cross_site`), the ids
+//! (uniform 404), the session (uniform 404), the member write limit (429),
+//! the body (413, then 400 `malformed_share`), then the sharer's own
+//! standing (`Workspace::work_sharing`): `Denied` is the uniform 404 (a work
+//! the sharer cannot open, no authority to share; identical for existing and
+//! nonexistent works). A sharer **with** share authority then learns, in 422,
+//! only what concerns its own standing, judged before any grantee is
+//! considered: `reviewer_not_allowed` (a reviewer role from a sharer who is
+//! not a reviewer of the work), `contributor_not_allowed` (a contributor
+//! role without the sharer's `record_write`), `organization_share_unavailable`
+//! (the work has source dependencies or folder files: shared person by
+//! person, the v1 limit). Then storage: `Denied` is the uniform 404 (a
+//! grantee who is not an active member of the same organization or is the
+//! sharer; the standing changed meanwhile), 503 for a store outage. The
+//! definers still judge every rule on their own (`share_work`,
+//! `set_work_everyone`) and write the audit rows. A share that wrote a grant
+//! announces `app.shared` on the event hub (`events`); every member who can
+//! now open the work receives it.
 //!
 //! Session resolution (`session`): an absent or ended session and a store
 //! error alike answer the uniform 404 (fail closed; review m2: the deliberate
@@ -32,7 +57,7 @@ use crate::{
     auth::{cookies, csrf, Auth},
     events,
     http::{self, UniformPath},
-    storage::{self, Lookup, TrustedRequest},
+    storage::{self, Lookup, ShareRole, TrustedRequest},
 };
 use axum::{
     extract::{Request, State},
@@ -47,7 +72,11 @@ use std::sync::Arc;
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
         .route("/v1/members", get(members))
-        .route("/v1/work/{app}/{work}/share", post(share))
+        .route("/v1/work/{app}/{work}/share", get(sharing).post(share))
+        .route(
+            "/v1/work/{app}/{work}/share/organization",
+            post(share_organization),
+        )
         .with_state(auth)
 }
 
@@ -85,13 +114,15 @@ fn document(status: StatusCode, value: &Value) -> Response {
     response
 }
 
-/// The closed share body: the grantee and the optional `record_write`.
-pub(crate) fn parse_share(bytes: &[u8]) -> Option<(String, bool)> {
+/// The closed share body: the grantee and the role, both required, nothing
+/// else (APP-192: `record_write` is refused, so a role has one encoding).
+pub(crate) fn parse_share(bytes: &[u8]) -> Option<(String, ShareRole)> {
     let body = crate::admission::decode(bytes).ok()?;
     let object = body.as_object()?;
-    if !object
-        .keys()
-        .all(|k| matches!(k.as_str(), "grantee_principal_id" | "record_write"))
+    if object.len() != 2
+        || !object
+            .keys()
+            .all(|k| matches!(k.as_str(), "grantee_principal_id" | "role"))
     {
         return None;
     }
@@ -99,11 +130,59 @@ pub(crate) fn parse_share(bytes: &[u8]) -> Option<(String, bool)> {
     if !storage::valid_identifier(grantee) {
         return None;
     }
-    let record_write = match object.get("record_write") {
-        None => false,
-        Some(value) => value.as_bool()?,
-    };
-    Some((grantee.to_owned(), record_write))
+    let role = ShareRole::from_name(object.get("role")?.as_str()?)?;
+    Some((grantee.to_owned(), role))
+}
+
+/// The closed organization-wide share body: `{"role": …}` and nothing else;
+/// `none` (no role) ends the share.
+pub(crate) fn parse_organization_share(bytes: &[u8]) -> Option<Option<ShareRole>> {
+    let body = crate::admission::decode(bytes).ok()?;
+    let object = body.as_object()?;
+    if object.len() != 1 {
+        return None;
+    }
+    match object.get("role")?.as_str()? {
+        "none" => Some(None),
+        name => ShareRole::from_name(name).map(Some),
+    }
+}
+
+/// The plain code a sharer with share authority receives for a role it may
+/// not grant (`roles`: `WorkSharing::roles`), or none when it may.
+pub(crate) fn role_refusal(role: ShareRole, roles: &[ShareRole]) -> Option<&'static str> {
+    if roles.contains(&role) {
+        return None;
+    }
+    Some(match role {
+        ShareRole::Reviewer => "reviewer_not_allowed",
+        ShareRole::Contributor => "contributor_not_allowed",
+        // Viewer is always among the roles of a sharer with authority.
+        ShareRole::Viewer => "viewer_not_allowed",
+    })
+}
+
+/// Whether the dialog may offer to remove one person's access. False until
+/// the owner-side revoke of a personal share (W4's pending
+/// `Workspace::revoke_work_share`) and its route exist; the canvas shows the
+/// control only when this is true.
+pub(crate) const MEMBER_REVOKE: bool = false;
+
+/// The share dialog's document (`GET /v1/work/{app}/{work}/share`).
+pub(crate) fn sharing_json(app: &str, work: &str, sharing: &storage::WorkSharing) -> Value {
+    json!({
+        "app_id": app,
+        "work_id": work,
+        "roles": sharing.roles.iter().map(|r| r.name()).collect::<Vec<_>>(),
+        "can_revoke_members": MEMBER_REVOKE,
+        "organization": {
+            "available": sharing.organization_available,
+            "role": sharing.organization.map(|r| r.name()),
+        },
+        "members": sharing.members.iter().map(|m| json!({
+            "principal_id": m.principal, "label": m.label, "role": m.role.name(),
+        })).collect::<Vec<_>>(),
+    })
 }
 
 fn content_type(headers: &HeaderMap) -> String {
@@ -135,40 +214,102 @@ async fn members(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     }
 }
 
-async fn share(
-    State(auth): State<Arc<Auth>>,
-    UniformPath((app, work)): UniformPath<(String, String)>,
+/// The common front of both share POSTs, in the module's refusal order: the
+/// fetch-metadata rule, the ids, the session, the member write limit and a
+/// bounded `application/json` body. `Err` is the answer to send.
+async fn share_request(
+    auth: &Auth,
+    app: &str,
+    work: &str,
     request: Request,
-) -> Response {
+) -> Result<(TrustedRequest, axum::body::Bytes), Response> {
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, auth.origin()) {
-        return http::cross_site();
+        return Err(http::cross_site());
     }
-    if !(storage::valid_identifier(&app) && storage::valid_identifier(&work)) {
-        return http::not_found();
+    if !(storage::valid_identifier(app) && storage::valid_identifier(work)) {
+        return Err(http::not_found());
     }
-    let Some((_, trusted)) = session(&auth, &parts.headers).await else {
-        return http::not_found();
+    let Some((_, trusted)) = session(auth, &parts.headers).await else {
+        return Err(http::not_found());
     };
     if let Err(retry_after) = auth
         .limits
         .admit_member_write(trusted.organization(), trusted.principal())
     {
-        return http::too_many_requests(retry_after);
+        return Err(http::too_many_requests(retry_after));
     }
+    if auth.stores.is_none() {
+        return Err(http::not_found());
+    }
+    let Some(bytes) = http::bounded(body, http::JSON_BODY_LIMIT).await else {
+        return Err(http::payload_too_large());
+    };
+    if content_type(&parts.headers) != "application/json" {
+        return Err(http::problem(StatusCode::BAD_REQUEST, "malformed_share"));
+    }
+    Ok((trusted, bytes))
+}
+
+/// The sharer's own standing on the work: the uniform 404 without share
+/// authority (or for a work it cannot open), 503 for a store outage.
+async fn standing(
+    stores: &storage::Stores,
+    trusted: &TrustedRequest,
+    app: &str,
+    work: &str,
+) -> Result<storage::WorkSharing, Response> {
+    match stores.workspace.work_sharing(trusted, app, work).await {
+        Ok(sharing) => Ok(sharing),
+        Err(storage::Error::Denied) => Err(http::not_found()),
+        Err(_) => Err(http::unavailable()),
+    }
+}
+
+async fn sharing(
+    State(auth): State<Arc<Auth>>,
+    UniformPath((app, work)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    if !(storage::valid_identifier(&app) && storage::valid_identifier(&work)) {
+        return http::not_found();
+    }
+    let Some((_, trusted)) = session(&auth, request.headers()).await else {
+        return http::not_found();
+    };
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
-    let Some(bytes) = http::bounded(body, http::JSON_BODY_LIMIT).await else {
-        return http::payload_too_large();
-    };
-    if content_type(&parts.headers) != "application/json" {
-        return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
+    match standing(stores, &trusted, &app, &work).await {
+        Ok(sharing) => document(StatusCode::OK, &sharing_json(&app, &work, &sharing)),
+        Err(refusal) => refusal,
     }
-    let Some((grantee, record_write)) = parse_share(&bytes) else {
+}
+
+async fn share(
+    State(auth): State<Arc<Auth>>,
+    UniformPath((app, work)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    let (trusted, bytes) = match share_request(&auth, &app, &work, request).await {
+        Ok(admitted) => admitted,
+        Err(refusal) => return refusal,
+    };
+    let Some(stores) = &auth.stores else {
+        return http::not_found();
+    };
+    let Some((grantee, role)) = parse_share(&bytes) else {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
     };
-    let result = share_with_lineage(stores, &trusted, &app, &work, &grantee, record_write).await;
+    let sharing = match standing(stores, &trusted, &app, &work).await {
+        Ok(sharing) => sharing,
+        Err(refusal) => return refusal,
+    };
+    if let Some(code) = role_refusal(role, &sharing.roles) {
+        tracing::info!(outcome = code, role = role.name(), "share.submit");
+        return http::problem(StatusCode::UNPROCESSABLE_ENTITY, code);
+    }
+    let result = share_with_lineage(stores, &trusted, &app, &work, &grantee, role).await;
     tracing::info!(
         outcome = match &result {
             Ok(shared) if shared.changed() => "shared",
@@ -176,6 +317,7 @@ async fn share(
             Err(storage::Error::Denied) => "denied",
             Err(_) => "unavailable",
         },
+        role = role.name(),
         "share.submit"
     );
     match result {
@@ -196,6 +338,76 @@ async fn share(
     }
 }
 
+async fn share_organization(
+    State(auth): State<Arc<Auth>>,
+    UniformPath((app, work)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    let (trusted, bytes) = match share_request(&auth, &app, &work, request).await {
+        Ok(admitted) => admitted,
+        Err(refusal) => return refusal,
+    };
+    let Some(stores) = &auth.stores else {
+        return http::not_found();
+    };
+    let Some(role) = parse_organization_share(&bytes) else {
+        return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
+    };
+    let sharing = match standing(stores, &trusted, &app, &work).await {
+        Ok(sharing) => sharing,
+        Err(refusal) => return refusal,
+    };
+    let name = role.map_or("none", ShareRole::name);
+    if let Some(role) = role {
+        let refusal = if sharing.organization_available {
+            role_refusal(role, &sharing.roles)
+        } else {
+            Some("organization_share_unavailable")
+        };
+        if let Some(code) = refusal {
+            tracing::info!(outcome = code, role = name, "share.organization");
+            return http::problem(StatusCode::UNPROCESSABLE_ENTITY, code);
+        }
+    }
+    let result = match role {
+        Some(role) => stores
+            .workspace
+            .share_work(&trusted, &app, &work, storage::Audience::Organization, role)
+            .await
+            .map(|shared| shared.changed()),
+        None => {
+            stores
+                .workspace
+                .revoke_organization_share(&trusted, &app, &work)
+                .await
+        }
+    };
+    tracing::info!(
+        outcome = match &result {
+            Ok(true) if role.is_some() => "shared",
+            Ok(true) => "revoked",
+            Ok(false) => "unchanged",
+            Err(storage::Error::Denied) => "denied",
+            Err(_) => "unavailable",
+        },
+        role = name,
+        "share.organization"
+    );
+    match result {
+        Ok(changed) => {
+            if changed && role.is_some() {
+                events::hub().app_shared(trusted.organization(), &app, &work);
+            }
+            document(
+                StatusCode::OK,
+                &json!({"app_id": app, "work_id": work, "role": name}),
+            )
+        }
+        Err(storage::Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
+    }
+}
+
 /// Shares a work with a teammate under the sharer's own authority, with its
 /// event, and (APP-101) a composition's standard work shared by the member
 /// who composed it carries its live adaptation through this same path
@@ -207,17 +419,11 @@ pub async fn share_with_lineage(
     app: &str,
     work: &str,
     grantee: &str,
-    record_write: bool,
+    role: ShareRole,
 ) -> Result<storage::Shared, storage::Error> {
     let shared = stores
         .workspace
-        .share_work(
-            trusted,
-            app,
-            work,
-            storage::Audience::Member(grantee),
-            storage::ShareRole::from_record_write(record_write),
-        )
+        .share_work(trusted, app, work, storage::Audience::Member(grantee), role)
         .await?;
     if shared.changed() {
         events::hub().app_shared(trusted.organization(), app, work);
@@ -227,7 +433,7 @@ pub async fn share_with_lineage(
         trusted.principal(),
         work,
         grantee,
-        record_write,
+        role,
     ) {
         let adapted = stores
             .workspace
@@ -236,7 +442,7 @@ pub async fn share_with_lineage(
                 &adapted_app,
                 &adapted_work,
                 storage::Audience::Member(grantee),
-                storage::ShareRole::from_record_write(record_write),
+                role,
             )
             .await;
         tracing::info!(
@@ -266,24 +472,151 @@ mod tests {
 
     #[test]
     fn share_body_is_closed() {
-        let ok = format!("{{\"grantee_principal_id\":\"{GRANTEE}\"}}");
-        assert_eq!(parse_share(ok.as_bytes()), Some((GRANTEE.into(), false)));
-        let write = format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"record_write\":true}}");
-        assert_eq!(parse_share(write.as_bytes()), Some((GRANTEE.into(), true)));
+        for (role, expected) in [
+            ("viewer", ShareRole::Viewer),
+            ("contributor", ShareRole::Contributor),
+            ("reviewer", ShareRole::Reviewer),
+        ] {
+            let ok = format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"{role}\"}}");
+            assert_eq!(
+                parse_share(ok.as_bytes()),
+                Some((GRANTEE.into(), expected)),
+                "{ok}"
+            );
+            // The members may come in either order.
+            let swapped = format!("{{\"role\":\"{role}\",\"grantee_principal_id\":\"{GRANTEE}\"}}");
+            assert_eq!(
+                parse_share(swapped.as_bytes()),
+                Some((GRANTEE.into(), expected))
+            );
+        }
         for bad in [
             String::from("{}"),
             String::from("[]"),
             String::from("not json"),
-            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"permission\":\"admin_policy\"}}"),
-            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"record_write\":\"yes\"}}"),
-            String::from("{\"grantee_principal_id\":\"not-an-id\"}"),
+            // One encoding (APP-192): the role is named; the earlier
+            // `record_write` flag is refused alone and beside a role.
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"record_write\":true}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"record_write\":false}}"),
             format!(
-                "{{\"grantee_principal_id\":\"{}\"}}",
+                "{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"viewer\",\"record_write\":false}}"
+            ),
+            // Unknown members, a permission name, other roles and spellings.
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"permission\":\"admin_policy\"}}"),
+            format!(
+                "{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"viewer\",\"permission\":\"share_work\"}}"
+            ),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"owner\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"none\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"Viewer\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"record_read\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":true}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":null}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":[\"viewer\"]}}"),
+            // The grantee is required and canonical.
+            String::from("{\"role\":\"viewer\"}"),
+            String::from("{\"grantee_principal_id\":\"not-an-id\",\"role\":\"viewer\"}"),
+            format!(
+                "{{\"grantee_principal_id\":\"{}\",\"role\":\"viewer\"}}",
                 GRANTEE.to_uppercase()
             ),
         ] {
             assert_eq!(parse_share(bad.as_bytes()), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn organization_body_names_a_role_or_none() {
+        for (role, expected) in [
+            ("viewer", Some(ShareRole::Viewer)),
+            ("contributor", Some(ShareRole::Contributor)),
+            ("reviewer", Some(ShareRole::Reviewer)),
+            ("none", None),
+        ] {
+            let ok = format!("{{\"role\":\"{role}\"}}");
+            assert_eq!(
+                parse_organization_share(ok.as_bytes()),
+                Some(expected),
+                "{ok}"
+            );
+        }
+        for bad in [
+            String::from("{}"),
+            String::from("[]"),
+            String::from("not json"),
+            String::from("{\"role\":\"everyone\"}"),
+            String::from("{\"role\":\"None\"}"),
+            String::from("{\"role\":\"\"}"),
+            String::from("{\"role\":null}"),
+            String::from("{\"role\":false}"),
+            String::from("{\"record_write\":true}"),
+            String::from("{\"role\":\"viewer\",\"record_write\":false}"),
+            format!("{{\"role\":\"viewer\",\"grantee_principal_id\":\"{GRANTEE}\"}}"),
+            String::from("{\"role\":\"viewer\",\"everyone\":true}"),
+        ] {
+            assert_eq!(parse_organization_share(bad.as_bytes()), None, "{bad}");
+        }
+    }
+
+    /// A sharer with share authority learns which role it may not grant, in
+    /// one plain code per role; a viewer share is never refused here.
+    #[test]
+    fn a_role_the_sharer_may_not_grant_has_its_own_code() {
+        use ShareRole::*;
+        let all = [Viewer, Contributor, Reviewer];
+        for role in all {
+            assert_eq!(role_refusal(role, &all), None);
+        }
+        assert_eq!(
+            role_refusal(Reviewer, &[Viewer, Contributor]),
+            Some("reviewer_not_allowed")
+        );
+        assert_eq!(
+            role_refusal(Reviewer, &[Viewer]),
+            Some("reviewer_not_allowed")
+        );
+        assert_eq!(
+            role_refusal(Contributor, &[Viewer]),
+            Some("contributor_not_allowed")
+        );
+        assert_eq!(role_refusal(Viewer, &[Viewer]), None);
+    }
+
+    #[test]
+    fn the_sharing_answer_names_roles_and_labels_only() {
+        let sharing = storage::WorkSharing {
+            roles: vec![ShareRole::Viewer, ShareRole::Contributor],
+            organization_available: true,
+            organization: Some(ShareRole::Viewer),
+            members: vec![storage::ShareEntry {
+                principal: GRANTEE.into(),
+                label: "Ana".into(),
+                role: ShareRole::Contributor,
+            }],
+        };
+        assert_eq!(
+            sharing_json(GRANTEE, GRANTEE, &sharing),
+            json!({
+                "app_id": GRANTEE,
+                "work_id": GRANTEE,
+                "roles": ["viewer", "contributor"],
+                "can_revoke_members": false,
+                "organization": {"available": true, "role": "viewer"},
+                "members": [{"principal_id": GRANTEE, "label": "Ana", "role": "contributor"}],
+            })
+        );
+        let alone = storage::WorkSharing {
+            roles: vec![ShareRole::Viewer],
+            organization_available: false,
+            organization: None,
+            members: vec![],
+        };
+        assert_eq!(
+            sharing_json(GRANTEE, GRANTEE, &alone)["organization"],
+            json!({"available": false, "role": null})
+        );
     }
 
     /// Without a configured store every protected answer is the uniform 404
@@ -336,6 +669,58 @@ mod tests {
             .await
             .0,
             StatusCode::NOT_FOUND
+        );
+        // APP-192: the dialog's read and the organization-wide share.
+        let not_found = (
+            StatusCode::NOT_FOUND,
+            String::from("{\"code\":\"not_found\",\"status\":404}"),
+        );
+        assert_eq!(send("GET", &uri, &[]).await, not_found);
+        assert_eq!(send("GET", "/v1/work/x/y/share", &[]).await, not_found);
+        let everyone = format!("{uri}/organization");
+        for refused in [
+            vec![("sec-fetch-site", "cross-site")],
+            vec![("sec-fetch-site", "same-site")],
+            vec![("sec-fetch-site", "none")],
+            // No fetch metadata and no matching Origin (none is configured).
+            vec![],
+            vec![("origin", "https://elsewhere.example")],
+            // Two values are refused, even if one is same-origin.
+            vec![
+                ("sec-fetch-site", "same-origin"),
+                ("sec-fetch-site", "cross-site"),
+            ],
+        ] {
+            for path in [&uri, &everyone] {
+                assert_eq!(
+                    send("POST", path, &refused).await,
+                    (
+                        StatusCode::FORBIDDEN,
+                        String::from("{\"code\":\"cross_site\",\"status\":403}")
+                    ),
+                    "{path} {refused:?}"
+                );
+            }
+        }
+        assert_eq!(
+            send("POST", &everyone, &[("sec-fetch-site", "same-origin")]).await,
+            not_found
+        );
+        assert_eq!(
+            send(
+                "POST",
+                "/v1/work/x/y/share/organization",
+                &[("sec-fetch-site", "same-origin")]
+            )
+            .await,
+            not_found
+        );
+        // Only GET and POST are routed; another method is refused.
+        assert_ne!(
+            send("DELETE", &everyone, &[("sec-fetch-site", "same-origin")])
+                .await
+                .0,
+            StatusCode::OK
         );
     }
 }

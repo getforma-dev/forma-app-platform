@@ -17,6 +17,7 @@
 //! [`CAPACITY`] compositions (oldest dropped first); after a restart, or on
 //! another task, a share of the standard work no longer carries the adapted
 //! one (the member can share the adapted card itself).
+use crate::storage::ShareRole;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Mutex, OnceLock},
@@ -25,8 +26,8 @@ use std::{
 /// Compositions remembered.
 pub const CAPACITY: usize = 4096;
 
-/// A share to repeat: the grantee and whether `record_write` was asked for.
-pub type Share = (String, bool);
+/// A share to repeat: the grantee and the role asked for (APP-192).
+pub type Share = (String, ShareRole);
 
 #[derive(Default)]
 struct Entry {
@@ -113,7 +114,7 @@ impl Lineage {
         sharer: &str,
         work: &str,
         grantee: &str,
-        record_write: bool,
+        role: ShareRole,
     ) -> Option<(String, String)> {
         let mut state = self.state.lock().ok()?;
         let entry = state
@@ -122,12 +123,8 @@ impl Lineage {
         if entry.owner != sharer {
             return None;
         }
-        if !entry
-            .shares
-            .iter()
-            .any(|(g, w)| g == grantee && *w == record_write)
-        {
-            entry.shares.push((grantee.to_owned(), record_write));
+        if !entry.shares.iter().any(|(g, r)| g == grantee && *r == role) {
+            entry.shares.push((grantee.to_owned(), role));
         }
         entry.adapted.clone()
     }
@@ -139,26 +136,38 @@ mod tests {
 
     #[test]
     fn whichever_comes_second_sees_the_other_and_only_the_owner_counts() {
+        use ShareRole::*;
         let lineage = Lineage::default();
         lineage.begin("o", "maya", "w1");
-        // A share before the adaptation is remembered...
-        assert_eq!(lineage.shared("o", "maya", "w1", "sarah", true), None);
-        // ...and handed to the adaptation.
+        // A share before the adaptation is remembered, with its role...
+        assert_eq!(
+            lineage.shared("o", "maya", "w1", "sarah", Contributor),
+            None
+        );
+        assert_eq!(lineage.shared("o", "maya", "w1", "rita", Reviewer), None);
+        assert_eq!(lineage.shared("o", "maya", "w1", "rita", Reviewer), None);
+        // ...and handed to the adaptation (a repeat is remembered once).
         assert_eq!(
             lineage.adapted("o", "w1", "a2", "w2"),
-            vec![("sarah".to_owned(), true)]
+            vec![
+                ("sarah".to_owned(), Contributor),
+                ("rita".to_owned(), Reviewer)
+            ]
         );
         // A share after it names the adapted work.
         assert_eq!(
-            lineage.shared("o", "maya", "w1", "diego", false),
+            lineage.shared("o", "maya", "w1", "diego", Viewer),
             Some(("a2".into(), "w2".into()))
         );
         // Someone else's share of the same work carries nothing.
-        assert_eq!(lineage.shared("o", "sarah", "w1", "diego", false), None);
+        assert_eq!(lineage.shared("o", "sarah", "w1", "diego", Viewer), None);
         // Another organization's key is another composition.
-        assert_eq!(lineage.shared("p", "maya", "w1", "sarah", false), None);
+        assert_eq!(lineage.shared("p", "maya", "w1", "sarah", Viewer), None);
         lineage.kept("o", "w1");
-        assert_eq!(lineage.shared("o", "maya", "w1", "sarah", true), None);
+        assert_eq!(
+            lineage.shared("o", "maya", "w1", "sarah", Contributor),
+            None
+        );
     }
 
     #[test]

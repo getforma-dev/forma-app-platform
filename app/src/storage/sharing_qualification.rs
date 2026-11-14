@@ -683,8 +683,10 @@ async fn campaign() {
         ("sec-fetch-site", "same-origin"),
         ("content-type", "application/json"),
     ];
+    // APP-192: every share names its role (contributor carries record_write).
     let body = |grantee: &str, write: bool| {
-        format!("{{\"grantee_principal_id\":\"{grantee}\",\"record_write\":{write}}}")
+        let role = if write { "contributor" } else { "viewer" };
+        format!("{{\"grantee_principal_id\":\"{grantee}\",\"role\":\"{role}\"}}")
     };
     let http_before = footprint(&fixture).await;
     // Refusals before any write: cross-site, no session, a non-creator, a
@@ -750,6 +752,44 @@ async fn campaign() {
         (malformed.status, malformed.json()["code"].as_str()),
         (StatusCode::BAD_REQUEST, Some("malformed_share"))
     );
+    // APP-192: one encoding: the earlier `record_write` flag is refused,
+    // alone or beside a role.
+    for old in [
+        format!("{{\"grantee_principal_id\":\"{PRINCIPAL}\",\"record_write\":true}}"),
+        format!("{{\"grantee_principal_id\":\"{PRINCIPAL}\",\"record_write\":false}}"),
+        format!("{{\"grantee_principal_id\":\"{PRINCIPAL}\",\"role\":\"viewer\",\"record_write\":false}}"),
+    ] {
+        let refused = send(&app, "POST", &share_uri, Some(&author_cookie), &old, &same_origin).await;
+        assert_eq!(
+            (refused.status, refused.json()["code"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("malformed_share")),
+            "{old}"
+        );
+    }
+    // The S05 work reads a source: it is shared person by person (the v1
+    // limit). Its creator is told so in plain terms; nothing is written.
+    let everyone = send(
+        &app,
+        "POST",
+        &format!("{share_uri}/organization"),
+        Some(&author_cookie),
+        "{\"role\":\"viewer\"}",
+        &same_origin,
+    )
+    .await;
+    assert_eq!(
+        (everyone.status, everyone.json()["code"].as_str()),
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Some("organization_share_unavailable")
+        )
+    );
+    let dialog = send(&app, "GET", &share_uri, Some(&author_cookie), "", &[]).await;
+    assert_eq!(dialog.status, StatusCode::OK, "{}", dialog.body);
+    assert_eq!(
+        dialog.json()["organization"],
+        json!({"available": false, "role": null})
+    );
     let form = send(
         &app,
         "POST",
@@ -766,7 +806,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, http_before);
     check(
         &mut checks,
-        "over HTTP: the members route answers labels only under a session and the uniform 404 without one; the share route refuses a cross-site post (403), no session, a member without authority and a nonexistent work with byte-identical uniform 404s, and a body naming a permission or not JSON with 400, writing nothing",
+        "over HTTP: the members route answers labels only under a session and the uniform 404 without one; the share route refuses a cross-site post (403), no session, a member without authority and a nonexistent work with byte-identical uniform 404s, and a body naming a permission, the earlier `record_write` flag or not JSON with 400; the organization-wide share of a work that reads a source answers 422 `organization_share_unavailable` and the dialog read says it is unavailable; nothing is written",
     );
 
     // Two streams: the teammate (can open the work) and the author.

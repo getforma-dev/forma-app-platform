@@ -277,6 +277,7 @@ contracts/fixtures/impl-2026-11-01.2/stored/**
 !app/src/storage/org_admin.rs
 !app/src/storage/org_admin_campaign.rs
 !app/src/storage/private_entries_campaign.rs
+!app/src/storage/share_routes_campaign.rs
 !app/src/storage/org_admin_routes_campaign.rs
 !app/migrations/0022_work_artifact_kinds.sql
 !app/src/storage/artifact_kind.rs

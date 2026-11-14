@@ -108,8 +108,8 @@ pub use shared_access::{
 pub use shared_identity::*;
 pub use shared_reads::GuestQueryRun;
 pub use sharing::{
-    member_label, Audience, Granted, Member, Openable, ShareRole, Shared, Standing, JUDGMENT_LIMIT,
-    SHARE_HANDLER_DEADLINE,
+    member_label, Audience, Granted, Member, Openable, ShareEntry, ShareRole, Shared, Standing,
+    WorkSharing, JUDGMENT_LIMIT, SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};
 pub use work_presentation::WorkPresentation;
@@ -208,6 +208,7 @@ mod org_admin_campaign;
 mod org_admin_routes_campaign;
 #[cfg(test)]
 mod private_entries_campaign;
+// APP-192 (D9): the share routes with roles and the organization-wide share.
 #[cfg(test)]
 pub(crate) mod qualification;
 #[cfg(test)]
@@ -220,6 +221,8 @@ mod race_qualification;
 mod record_components_campaign;
 #[cfg(test)]
 mod record_query_campaign;
+#[cfg(test)]
+mod share_routes_campaign;
 #[cfg(test)]
 mod shared_campaign;
 #[cfg(test)]

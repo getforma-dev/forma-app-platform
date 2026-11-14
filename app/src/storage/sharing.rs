@@ -376,6 +376,131 @@ async fn personal_only(
 
 impl Workspace {}
 
+// --- APP-192: what the share dialog shows (`GET /v1/work/{app}/{work}/share`)
+
+impl ShareRole {
+    /// The role named by a request or a `work_shares` row; anything else is
+    /// no role.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "viewer" => Some(Self::Viewer),
+            "contributor" => Some(Self::Contributor),
+            "reviewer" => Some(Self::Reviewer),
+            _ => None,
+        }
+    }
+}
+
+/// One member a work is shared with person by person: the label others see
+/// (`member_label`, never the principal id) and the strongest role of the
+/// member's live share rows of the work.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ShareEntry {
+    pub principal: String,
+    pub label: String,
+    pub role: ShareRole,
+}
+/// The sharing of one work as a member with share authority over it sees it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkSharing {
+    /// The roles this sharer may grant now, weakest first: viewer always, a
+    /// contributor with the sharer's `record_write`, a reviewer when the
+    /// sharer is also a reviewer of the work (`Action::RecordReview`): the
+    /// same clauses `share_work` re-reads after its fence.
+    pub roles: Vec<ShareRole>,
+    /// False when the work may be shared only person by person (source
+    /// dependencies or folder files: `personal_only`).
+    pub organization_available: bool,
+    /// The role of the live organization-wide share, if one is live.
+    pub organization: Option<ShareRole>,
+    /// The other active members it is shared with personally, by label.
+    pub members: Vec<ShareEntry>,
+}
+
+impl Workspace {
+    /// The sharing of `work` of `app` for its share dialog (APP-192): the
+    /// roles the member may grant, whether the organization-wide share is
+    /// available, its live role, and the members the work is shared with.
+    /// One `REPEATABLE READ READ ONLY` snapshot with no fence (review m4: a
+    /// listing writes nothing and takes no `genui_lock` row lock): the
+    /// member precheck (`record_read` on the work), then share authority as
+    /// the definers judge it (the unrevoked creator or a `share_work`
+    /// holder, with `run` on the app). `Denied` for anyone else, for a work
+    /// the member cannot open and for a malformed id alike (the uniform 404).
+    ///
+    /// A personal share row written before 0024 carries no role; it counts
+    /// as a contributor when the grantee holds `record_write` on the work
+    /// (what that share could have copied), else as a viewer. Only active
+    /// members are listed, never the member asking, at most
+    /// [`MEMBER_LIMIT`].
+    pub async fn work_sharing(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+    ) -> Result<WorkSharing> {
+        require(valid_id(app) && valid_id(work))?;
+        let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            transaction
+                .precheck(Action::RecordRead, Resource::Work { app, work })
+                .await?;
+            let authority = transaction.query("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$2::text::uuid AND w.work_id=$3::text::uuid AND ((w.created_by=$4::text::uuid AND w.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=$4::text::uuid AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='share_work')) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=$4::text::uuid AND a.app_id=w.app_id AND a.permission='run')", &[&request.organization,&app,&work,&request.principal]).await?;
+            require(!authority.is_empty())?;
+            let grants = transaction.read_only_grants(&[(app, work)]).await?;
+            let held = grants.first().ok_or(Error::Unavailable)?;
+            let mut roles = vec![ShareRole::Viewer];
+            if held.record_write {
+                roles.push(ShareRole::Contributor);
+                if held.record_review {
+                    roles.push(ShareRole::Reviewer);
+                }
+            }
+            let organization_available = personal_only(&transaction, request, app, work)
+                .await?
+                .is_none();
+            let live = transaction.query("SELECT role FROM genui.work_shares WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND grantee_id IS NULL AND revoked_at IS NULL", &[&request.organization,&app,&work]).await?;
+            let organization = match live.first() {
+                Some(row) => Some(ShareRole::from_name(&text(row, 0)?).ok_or(Error::Unavailable)?),
+                None => None,
+            };
+            let rows = transaction.query("SELECT s.grantee_id::text,max(CASE s.role WHEN 'reviewer' THEN 3 WHEN 'contributor' THEN 2 WHEN 'viewer' THEN 1 ELSE CASE WHEN EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=s.organization_id AND p.principal_id=s.grantee_id AND p.app_id=s.app_id AND p.work_id=s.work_id AND p.permission='record_write') THEN 2 ELSE 1 END END)::bigint FROM genui.work_shares s JOIN genui.memberships m ON m.organization_id=s.organization_id AND m.principal_id=s.grantee_id AND m.status='active' WHERE s.organization_id=$1::text::uuid AND s.app_id=$2::text::uuid AND s.work_id=$3::text::uuid AND s.grantee_id IS NOT NULL AND s.grantee_id<>$4::text::uuid AND s.revoked_at IS NULL GROUP BY s.grantee_id ORDER BY s.grantee_id LIMIT $5", &[&request.organization,&app,&work,&request.principal,&MEMBER_LIMIT]).await?;
+            let mut members = rows
+                .iter()
+                .map(|row| {
+                    let principal = text(row, 0)?;
+                    let role = match integer(row, 1)? {
+                        3 => ShareRole::Reviewer,
+                        2 => ShareRole::Contributor,
+                        _ => ShareRole::Viewer,
+                    };
+                    Ok(ShareEntry {
+                        label: member_label(&request.organization, &principal),
+                        principal,
+                        role,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            members.sort_by(|a, b| {
+                a.label
+                    .to_lowercase()
+                    .cmp(&b.label.to_lowercase())
+                    .then_with(|| a.principal.cmp(&b.principal))
+            });
+            Ok(WorkSharing {
+                roles,
+                organization_available,
+                organization,
+                members,
+            })
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+}
+
 impl Data {
     /// The event stream's one read per event (review M2): among
     /// `principals` (the organization's subscribed principals, at most
