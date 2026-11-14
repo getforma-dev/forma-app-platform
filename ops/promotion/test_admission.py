@@ -46,6 +46,7 @@ class TrialAWS(FakeAWS):
         self.objects = {}  # (bucket, key) -> [version ids]
         self.deleted = []
         self.forced = 0
+        self.page_size = None
         self.account = guards.ACCOUNT
 
     def identity(self):
@@ -76,9 +77,26 @@ class TrialAWS(FakeAWS):
             _, result, _ = self.tasks[task]
             return {'events': [{'message': 'not json'}, {'message': json.dumps(result)}]}
         if s == 's3' and o == 'list_object_versions':
-            versions = self.objects.get((a['Bucket'], a['Prefix']), [])
-            return {'IsTruncated': False, 'Versions': [{'Key': a['Prefix'], 'VersionId': v} for v in versions if not v.startswith('dm-')],
-                    'DeleteMarkers': [{'Key': a['Prefix'], 'VersionId': v} for v in versions if v.startswith('dm-')]}
+            rows = sorted((key, v) for (bucket, key), versions in self.objects.items() if bucket == a['Bucket'] and key.startswith(a['Prefix']) for v in versions)
+            start = 0
+            if a.get('KeyMarker'):
+                start = rows.index((a['KeyMarker'], a['VersionIdMarker'])) + 1
+            page = rows[start:start + self.page_size] if self.page_size else rows[start:]
+            truncated = start + len(page) < len(rows)
+            result = {'IsTruncated': truncated, 'Versions': [{'Key': k, 'VersionId': v} for k, v in page if not v.startswith('dm-')],
+                      'DeleteMarkers': [{'Key': k, 'VersionId': v} for k, v in page if v.startswith('dm-')]}
+            if truncated:
+                result.update(NextKeyMarker=page[-1][0], NextVersionIdMarker=page[-1][1])
+            return result
+        if s == 's3' and o == 'delete_objects':
+            intents = [k for k in self.s3.objects if k.endswith('/purge-objects-intent.json')]
+            assert intents, 'delete_objects before the intent receipt'
+            intent = json.loads(self.s3.objects[intents[-1]])
+            for item in a['Delete']['Objects']:
+                assert any(o2['Key'] == item['Key'] and o2['VersionId'] == item['VersionId'] for o2 in intent['objects']), 'deletion outside the intent'
+                self.deleted.append((a['Bucket'], item['Key'], item['VersionId']))
+                self.objects[a['Bucket'], item['Key']].remove(item['VersionId'])
+            return {'Deleted': [{'Key': i['Key'], 'VersionId': i['VersionId']} for i in a['Delete']['Objects']]}
         if s == 's3' and o == 'delete_object':
             # m1: the intent receipt names every key and version before the first deletion.
             intents = [k for k in self.s3.objects if k.endswith('/delete-uploads-intent.json')]
@@ -386,6 +404,54 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(self.aws.deleted, [])
                 self.assertFalse(any(k.endswith('delete-uploads-intent.json') for k in list(self.receipts())[before:]))
 
+    def test_purge_runs_stats_purge_stats_then_deletes_every_object_under_the_prefix_with_an_intent(self):
+        trial = self.trial()
+        box, file = '33333333-4444-4555-8666-777777777777', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee1'
+        keys = ['o/%s/b/%s/f/%s' % (ORG, box, file), 'o/%s/s/%s/r/abc.csv' % (ORG, file), 'o/%s/s/plain' % ORG]
+        foreign = 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, file)
+        self.aws.objects = {(BUCKET, keys[0]): ['v1', 'dm-1'], (BUCKET, keys[1]): ['v2'], (BUCKET, keys[2]): ['v3', 'v4'], (BUCKET, foreign): ['v9']}
+        self.aws.page_size = 2  # five versions over three pages
+        zero = {t: 0 for t in ('principals', 'memberships', 'box_files')}
+        self.aws.results = [(0, {'organization_id': ORG, 'schema_version': 23, 'counts': {'principals': 2, 'memberships': 2, 'box_files': 1}, 'audit_heads': {}}),
+                            (0, {'organization_id': ORG, 'status': 'purged', 'tables': 60, 'rows_deleted': 40, 'audit_events_kept': 12, 'kept': ['organizations']}),
+                            (0, {'organization_id': ORG, 'schema_version': 23, 'counts': zero, 'audit_heads': {}})]
+        with self.assertRaises(Refused): trial.purge(OTHER_ORG)
+        self.assertEqual(self.aws.run_requests, [])
+        result = trial.purge(ORG)
+        self.assertEqual((result['status'], result['rows_deleted'], result['audit_events_kept'], result['objects_deleted']), ('purged', 40, 12, 5))
+        self.assertEqual((result['counts_before']['principals'], result['counts_after']), (2, zero))
+        self.assertEqual([r['overrides']['containerOverrides'][0]['command'][1] for r in self.aws.run_requests], ['stats', 'purge-organization', 'stats'])
+        self.assertEqual(sorted(self.aws.deleted), sorted([(BUCKET, keys[0], 'v1'), (BUCKET, keys[0], 'dm-1'), (BUCKET, keys[1], 'v2'), (BUCKET, keys[2], 'v3'), (BUCKET, keys[2], 'v4')]))
+        self.assertEqual(self.aws.objects[BUCKET, foreign], ['v9'])  # another organization's prefix is never listed or touched
+        receipts = self.receipts()
+        intent = next(v for k, v in receipts.items() if k.endswith('purge-objects-intent.json'))
+        self.assertEqual((intent['prefix'], intent['count'], sorted(o['Key'] for o in intent['objects'])), ('o/%s/' % ORG, 5, sorted(keys + keys[:1] + keys[2:])))
+        done = next(v for k, v in receipts.items() if k.endswith('purge-objects-done.json'))
+        self.assertEqual((done['deleted'], done['remaining']), (5, []))
+        self.assertEqual(len([k for k in receipts if '-run.json' in k]), 3)
+        # Refusals that delete nothing: content rows remaining after the task, a failed purge task, a foreign key under the prefix.
+        for name, results, objects in [
+            ('rows remain', [self.aws.results and None] and [(0, {'counts': {'a': 1}}), (0, {'organization_id': ORG, 'status': 'purged'}), (0, {'counts': {'principals': 1}})], {}),
+            ('purge refused', [(0, {'counts': {'a': 1}}), (1, {'refused': 'active_memberships_remain'})], {}),
+            ('stats failed', [(1, {'refused': 'organization_unknown'})], {}),
+            ('foreign object under the prefix', [(0, {'counts': {'a': 1}}), (0, {'organization_id': ORG, 'status': 'purged'}), (0, {'counts': {'a': 0}})],
+             {(BUCKET, 'o/%s/x/evil' % ORG): ['v1']}),
+            ('traversal', [(0, {'counts': {'a': 1}}), (0, {'organization_id': ORG, 'status': 'purged'}), (0, {'counts': {'a': 0}})],
+             {(BUCKET, 'o/%s/s/../other' % ORG): ['v1']})]:
+            with self.subTest(case=name):
+                self.setUp(); trial = self.trial(); self.aws.results = results; self.aws.objects = objects
+                with self.assertRaises(Refused): trial.purge(ORG)
+                self.assertEqual(self.aws.deleted, [])
+                self.assertFalse(any(k.endswith('purge-objects-intent.json') for k in self.receipts()))
+
+    def test_suspend_runs_its_override(self):
+        trial = self.trial()
+        self.aws.results = [(0, {'organization_id': ORG, 'status': 'suspended', 'changed': True, 'audit_event': None})]
+        self.assertEqual(trial.suspend()['changed'], True)
+        self.assertEqual(self.aws.run_requests[0]['overrides']['containerOverrides'][0]['command'], ['admission', 'suspend-organization', '--organization', ORG])
+        self.aws.results = [(1, {'refused': 'organization_unknown'})]
+        with self.assertRaises(Refused): trial.suspend()
+
     def test_restart_needs_the_announcement_then_forces_one_deployment_and_proves_the_boundary(self):
         trial = self.trial()
         with self.assertRaises(Refused): trial.restart(False)
@@ -406,8 +472,9 @@ class AdmissionTests(unittest.TestCase):
     def test_overrides_file_names_no_private_organization(self):
         document = json.loads(admission.OVERRIDES.read_text())
         trial_entries = [e for e in document['overrides'] if e['name'] in set(admission.ISSUE_OVERRIDES.values())
-                         | {'admission-list-trial', 'admission-revoke-trial', 'admission-grant-admin', 'admission-revoke-admin', 'admission-list-box-files'}]
-        self.assertEqual(len(trial_entries), 7)
+                         | {'admission-list-trial', 'admission-revoke-trial', 'admission-grant-admin', 'admission-revoke-admin', 'admission-list-box-files',
+                            'admission-stats', 'admission-suspend-organization', 'admission-purge-organization'}]
+        self.assertEqual(len(trial_entries), 10)
         for entry in trial_entries:
             command = entry['overrides']['containerOverrides'][0]['command']
             self.assertEqual(command[command.index('--organization') + 1], OTHER_ORG)  # the documented example id, never a real one

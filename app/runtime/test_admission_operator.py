@@ -262,6 +262,24 @@ class PureTests(unittest.TestCase):
         self.assertIs(op.COMMANDS["stats"], op.stats)
         self.assertEqual(len(op.STATS_TABLES), len(set(op.STATS_TABLES)))
 
+    def test_purge_order_is_children_first_and_the_kept_set_is_closed(self):
+        self.assertEqual(op.deletion_order(["apps", "boxes", "box_files", "spaces"], [("boxes", "apps"), ("box_files", "boxes"), ("apps", "spaces")]),
+                         ["box_files", "boxes", "apps", "spaces"])
+        self.assertEqual(op.deletion_order(["a", "b"], []), ["a", "b"])  # independent tables, a stable order
+        self.assertEqual(op.deletion_order(["a", "b"], [("a", "a"), ("b", "zz")]), ["a", "b"])  # self-references and foreign parents do not block
+        with self.assertRaisesRegex(op.Refused, "purge_order_cycle"):
+            op.deletion_order(["a", "b"], [("a", "b"), ("b", "a")])
+        self.assertEqual(op.PURGE_KEEPS, {"organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads", "audit_events"})
+        self.assertEqual(op.PURGE_PRIVATE, ("code_index",))
+        self.assertFalse(set(op.STATS_TABLES) & op.PURGE_KEEPS)
+        parser = op.parser()
+        for name in ("suspend-organization", "purge-organization"):
+            self.assertEqual(op.validate(parser.parse_args([name, "--organization", ORG])).command, name)
+            with self.assertRaises(op.Refused):
+                op.validate(parser.parse_args([name, "--organization", "x"]))
+        self.assertIs(op.COMMANDS["purge-organization"], op.purge_organization)
+        self.assertIs(op.COMMANDS["suspend-organization"], op.suspend_organization)
+
     def test_issue_argument_bounds(self):
         parser = op.parser()
         base = ["issue", "--organization", ORG, "--issued-by", "unit", "--grant", "source_read:" + str(uuid.uuid4())]
@@ -810,13 +828,85 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
         # stats counts every closed table for the organization and names the proved schema version.
         counted = self.cli("stats", "--organization", ORG)
-        self.assertEqual(set(counted), {"organization_id", "schema_version", "counts", "audit_heads"})
+        self.assertEqual(set(counted), {"organization_id", "schema_version", "counts", "audit_heads", "audit_events"})
+        self.assertEqual(counted["audit_events"], self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,))[0][0])
         self.assertEqual(set(counted["counts"]), set(op.STATS_TABLES))
         self.assertEqual(counted["schema_version"], runtime.migration_manifest(runtime.migration_directory())["database_version"])
         self.assertEqual((counted["counts"]["boxes"], counted["counts"]["box_files"]), (2, 4))
         self.assertGreaterEqual(counted["counts"]["memberships"], 3)
         self.assertEqual(set(counted["audit_heads"]), set(op.CHAINS))
         self.cli("stats", "--organization", str(uuid.uuid4()), expect=1)
+
+    def test_purge_empties_every_content_table_of_a_suspended_memberless_organization_and_keeps_the_chains(self):
+        """The end-of-trial purge (ADR-008 amendment, W3): refuses while active or while a member is active;
+        then one transaction empties every content table and the code digests, keeps the organization row,
+        its binding, its handle, its sequence and the audit chains, and never touches another organization."""
+        org = str(uuid.uuid4()); tenant = "ten_" + org[-12:]
+        self.ensure_backfill()
+        fixture_before = self.cli("stats", "--organization", ORG)
+        self.cli("provision", "--organization", org, "--display-name", "Purge test", "--issuer", ISSUER, "--provider-tenant", tenant)
+        issued = self.cli("issue", "--organization", org, "--issued-by", "operator-test", "--kind", "member_invite", "--authoring-only")
+        digest = op.code_digest(op.normalize_code(issued["code"]))
+        members = []
+        with self.connect("postgres") as c:
+            for n in range(2):
+                principal = str(uuid.uuid4()); members.append(principal)
+                c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (org, principal, ISSUER, tenant, "usr_" + principal))
+                c.execute("INSERT INTO genui.memberships VALUES (%s,%s,'active',1)", (org, principal))
+            space = c.execute("SELECT space_id::text FROM genui.spaces WHERE organization_id=%s", (org,)).fetchone()[0]
+            box, file = str(uuid.uuid4()), str(uuid.uuid4())
+            c.execute("INSERT INTO genui.boxes VALUES (%s,%s,%s,'Uploads','uploads',NULL,now())", (org, box, members[0]))
+            c.execute("INSERT INTO genui.box_files VALUES (%s,%s,%s,'notes.pdf','pdf','application/pdf',12,%s,%s,%s,now())",
+                      (org, box, file, "sha256:" + "cd" * 32, "o/%s/b/%s/f/%s" % (org, box, file), members[0]))
+        app = str(uuid.uuid4())
+        self.cli("create-app", "--organization", org, "--app", app, "--space", space, "--owner", members[0])
+        self.cli("grant-permission", "--organization", org, "--principal", members[1], "--permission", "admin_policy")
+        populated = self.cli("stats", "--organization", org)["counts"]
+        for table, expected in (("principals", 2), ("memberships", 2), ("access_codes", 1), ("apps", 1), ("app_permissions", 1),
+                                ("organization_permissions", 1), ("boxes", 1), ("box_files", 1), ("spaces", 1)):
+            self.assertEqual(populated[table], expected, table)
+        self.assertEqual(self.query("SELECT count(*) FROM genui_private.code_index WHERE organization_id=%s", (org,)), [(1,)])
+        # Refusals, each writing nothing: active organization, then an active member.
+        before = self.dump()
+        p = self.cli("purge-organization", "--organization", org, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "organization_not_suspended"})
+        self.assertEqual(self.dump(), before)
+        suspended = self.cli("suspend-organization", "--organization", org)
+        self.assertEqual(suspended, {"organization_id": org, "status": "suspended", "changed": True, "audit_event": None})
+        self.assertEqual(self.cli("suspend-organization", "--organization", org)["changed"], False)
+        self.assertEqual(self.query("SELECT status FROM genui.organizations WHERE organization_id=%s", (org,)), [("suspended",)])
+        before = self.dump()
+        p = self.cli("purge-organization", "--organization", org, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "active_memberships_remain"})
+        self.assertEqual(self.dump(), before)
+        for principal in members:
+            self.assertTrue(self.cli("revoke-membership", "--organization", org, "--principal", principal)["changed"])
+        events_before = self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,))[0][0]
+        heads_before = self.query("SELECT writer_role,chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s ORDER BY 1", (org,))
+        # The purge.
+        purged = self.cli("purge-organization", "--organization", org)
+        self.assertEqual((purged["status"], purged["audit_events_kept"], purged["audit_event"]), ("purged", events_before, None))
+        self.assertGreaterEqual(purged["rows_deleted"], 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1)  # the rows above plus the code's index row
+        self.assertEqual(purged["deleted"]["genui_private.code_index"], 1)
+        self.assertEqual(sorted(purged["kept"]), sorted(["organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads",
+                                                        "audit_events", "genui_private.handle_index", "genui_private.provider_tenant_index"]))
+        after = self.cli("stats", "--organization", org)
+        self.assertEqual(set(after["counts"].values()), {0})
+        self.assertEqual(after["audit_events"], events_before)
+        self.assertEqual(after["audit_heads"], {role: sequence for role, sequence, _ in heads_before})
+        self.assertEqual(self.query("SELECT status FROM genui.organizations WHERE organization_id=%s", (org,)), [("suspended",)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.provider_tenant_bindings WHERE organization_id=%s", (org,)), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui_private.handle_index WHERE organization_id=%s", (org,)), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui_private.provider_tenant_index WHERE organization_id=%s", (org,)), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui_private.code_index WHERE organization_id=%s", (org,)), [(0,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.organization_sequences WHERE organization_id=%s", (org,)), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)), [(events_before,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui_private.code_index WHERE code_digest=%s", (digest,)), [(0,)])
+        self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
+        # Idempotent on an already purged organization, and the fixture organization is untouched.
+        self.assertEqual(self.cli("purge-organization", "--organization", org)["rows_deleted"], 0)
+        self.assertEqual(self.cli("stats", "--organization", ORG)["counts"], fixture_before["counts"])
+        self.cli("purge-organization", "--organization", str(uuid.uuid4()), expect=1)
 
     def test_revoke_and_extend_are_audited_and_bounded(self):
         out = self.issue("--expires-days", "5")

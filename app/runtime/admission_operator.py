@@ -412,6 +412,10 @@ def parser():
         q.add_argument(arg, required=True)
     # The real-user trial (W3, restore drill and purge): row counts of the organization's tables, read-only.
     sub.add_parser("stats").add_argument("--organization", required=True)
+    # The end-of-trial purge the charter promises (ADR-008 amendment; W3): suspend first, then delete every
+    # content row of the organization in one transaction, keeping the hash-chained audit rows.
+    for name in ("suspend-organization", "purge-organization"):
+        sub.add_parser(name).add_argument("--organization", required=True)
     return p
 
 
@@ -1008,12 +1012,99 @@ def list_box_files(c, args):
             "truncated": len(rows) > DEFAULTS["list_rows_max"]}
 
 
-# The closed list of organization-scoped tables `stats` counts: what a restore drill compares
+# The closed list of organization-scoped content tables `stats` counts: what a restore drill compares
 # between the live database and a restored snapshot, and what the end-of-trial purge proves empty.
+# The audit chain is counted apart: the purge keeps it (PURGE_KEEPS).
 STATS_TABLES = ("principals", "memberships", "entitlements", "organization_permissions", "access_codes", "code_redemptions",
                 "provider_invitations", "spaces", "apps", "app_permissions", "definition_revisions", "publications", "saved_work",
                 "work_permissions", "work_shares", "live_work_shares", "sources", "source_permissions", "boxes", "box_files",
-                "internal_records", "member_cards", "sessions", "audit_events")
+                "internal_records", "member_cards", "sessions")
+
+
+# The end-of-trial purge keeps exactly these: the organization row (suspended), its provider binding,
+# the record sequence and the hash-chained audit heads and events (identifiers and hashes, no content).
+# Every other genui table with an organization_id column is content and is emptied for the organization;
+# the set comes from pg_catalog, so a later migration's table is purged too. In genui_private, the
+# organization's code digests go; its sign-in handle and provider tenant routing stay with the row.
+PURGE_KEEPS = frozenset({"organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads", "audit_events"})
+PURGE_PRIVATE = ("code_index",)
+RELNAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
+
+
+def content_tables(c):
+    """Every genui table with an organization_id column, by catalog name, minus PURGE_KEEPS."""
+    rows = c.execute("""SELECT t.relname FROM pg_catalog.pg_class t JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                        JOIN pg_catalog.pg_attribute a ON a.attrelid=t.oid
+                        WHERE n.nspname='genui' AND t.relkind='r' AND a.attname='organization_id' AND NOT a.attisdropped
+                        ORDER BY t.relname""").fetchall()
+    tables = [r[0] for r in rows]
+    require(all(RELNAME.fullmatch(t) for t in tables) and PURGE_KEEPS <= set(tables), "purge_catalog_refused")
+    return [t for t in tables if t not in PURGE_KEEPS]
+
+
+def foreign_keys(c):
+    """(child, parent) for every non-deferrable foreign key among genui tables; deferrable ones are checked at commit."""
+    return [tuple(r) for r in c.execute("""SELECT child.relname,parent.relname FROM pg_catalog.pg_constraint k
+          JOIN pg_catalog.pg_class child ON child.oid=k.conrelid JOIN pg_catalog.pg_class parent ON parent.oid=k.confrelid
+          JOIN pg_catalog.pg_namespace n ON n.oid=child.relnamespace JOIN pg_catalog.pg_namespace pn ON pn.oid=parent.relnamespace
+          WHERE k.contype='f' AND NOT k.condeferrable AND n.nspname='genui' AND pn.nspname='genui' ORDER BY 1,2""").fetchall()]
+
+
+def deletion_order(tables, edges):
+    """Children before parents: a table is emptied only after every table that references it is."""
+    remaining, order = set(tables), []
+    children = {t: {child for child, parent in edges if parent == t and child != t} for t in tables}
+    while remaining:
+        ready = sorted(t for t in remaining if not (children[t] & remaining))
+        require(ready, "purge_order_cycle")
+        order += ready
+        remaining -= set(ready)
+    return order
+
+
+def suspend_organization(c, args):
+    """Step one of the purge, reversible only by a reviewed operator change: no sign-in, no sharing read."""
+    org = args.organization
+    begin(c, org)
+    row = c.execute("SELECT status FROM genui.organizations WHERE organization_id=%s FOR UPDATE", (org,)).fetchone()
+    require(row is not None, "organization_unknown")
+    if row[0] == "suspended":
+        c.commit()
+        return {"organization_id": org, "status": "suspended", "changed": False}
+    c.execute("UPDATE genui.organizations SET status='suspended' WHERE organization_id=%s", (org,))
+    c.commit()
+    # D7.8 names no organization.suspended kind; the operator's receipt is the record (ADR-007 D7.19 amendment).
+    return {"organization_id": org, "status": "suspended", "changed": True, "audit_event": None}
+
+
+def purge_organization(c, args):
+    """The end-of-trial purge: every content row of a suspended organization with no active member, in one
+    transaction, children before parents; the organization row, its binding, its sequence and the audit
+    chains stay. The S3 objects under o/<org>/ are the caller's (ops/promotion/admission.py purge)."""
+    org = args.organization
+    begin(c, org)
+    row = c.execute("SELECT status FROM genui.organizations WHERE organization_id=%s FOR UPDATE", (org,)).fetchone()
+    require(row is not None, "organization_unknown")
+    require(row[0] == "suspended", "organization_not_suspended")
+    require(c.execute("SELECT count(*) FROM genui.memberships WHERE organization_id=%s AND status='active'", (org,)).fetchone() == (0,),
+            "active_memberships_remain")
+    tables = content_tables(c)
+    require(set(STATS_TABLES) <= set(tables), "purge_tables_differ")
+    events = c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0]
+    deleted = {}
+    for table in deletion_order(tables, foreign_keys(c)):
+        deleted[table] = c.execute("DELETE FROM genui." + table + " WHERE organization_id=%s", (org,)).rowcount
+    for table in PURGE_PRIVATE:
+        deleted["genui_private." + table] = c.execute("DELETE FROM genui_private." + table + " WHERE organization_id=%s", (org,)).rowcount
+    remaining = {t: c.execute("SELECT count(*) FROM genui." + t + " WHERE organization_id=%s", (org,)).fetchone()[0] for t in tables}
+    require(not any(remaining.values()), "purge_incomplete")
+    require(c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0] == events
+            and c.execute("SELECT count(*) FROM genui.audit_heads WHERE organization_id=%s", (org,)).fetchone()[0] == len(CHAINS),
+            "purge_audit_changed")
+    c.commit()
+    return {"organization_id": org, "status": "purged", "tables": len(tables), "rows_deleted": sum(deleted.values()), "deleted": deleted,
+            "kept": sorted(PURGE_KEEPS) + ["genui_private.handle_index", "genui_private.provider_tenant_index"],
+            "audit_events_kept": events, "audit_event": None}
 
 
 def stats(c, args):
@@ -1026,9 +1117,10 @@ def stats(c, args):
     for table in STATS_TABLES:
         counts[table] = c.execute("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s", (org,)).fetchone()[0]
     heads = c.execute("SELECT writer_role,chain_sequence FROM genui.audit_heads WHERE organization_id=%s ORDER BY writer_role", (org,)).fetchall()
+    events = c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0]
     c.commit()
     return {"organization_id": org, "schema_version": version, "counts": counts,
-            "audit_heads": {role: sequence for role, sequence in heads}}
+            "audit_heads": {role: sequence for role, sequence in heads}, "audit_events": events}
 
 
 def lock_code(c, org, code_id):
@@ -2247,7 +2339,8 @@ COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
             "register-source-revision": register_source_revision, "create-bound-work": create_bound_work,
             "seed-spend-review": seed_spend_review, "seed-library": seed_library, "grant-library-access": grant_library_access,
-            "list-box-files": list_box_files, "stats": stats}
+            "list-box-files": list_box_files, "stats": stats, "suspend-organization": suspend_organization,
+            "purge-organization": purge_organization}
 
 
 def provider_configuration(args):

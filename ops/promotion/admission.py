@@ -22,6 +22,12 @@ delete-uploads  list one member's uploaded box files through the task, then dele
                 S3 version and delete marker of those keys with the operator's identity.
 restart         force a new deployment of the service, behind --announced: the service
                 reloads the capability secret at task start, and sessions sign out.
+suspend         step one of the end-of-trial purge: the organization's status becomes
+                suspended (no sign-in, no share reads); reversible only by a reviewed change.
+purge           step two, behind --confirm <organization>: stats, the operator's
+                purge-organization task (every content row, in one transaction, keeping the
+                audit chains), stats again proving zero, then every S3 version and delete
+                marker under o/<org>/ (box files and source objects), with an intent first.
 
 Not here: changing the organization's display name (the operator has only `provision
 --display-name`, which creates), membership removal (the in-product Admin page), and
@@ -44,7 +50,7 @@ from .expiry_policy import operator_identity, reviewed_state
 from .guards import ROLE_KEYS
 from . import guards
 from .runner import ROOT, Runner
-from .state import Store, digest, encoded, require
+from .state import Refused, Store, digest, encoded, require
 
 OVERRIDES = ROOT / 'app/operator/overrides.json'
 WINDOW_REQUESTS = ROOT / 'infra/scripts/window_requests.py'
@@ -342,6 +348,64 @@ class Trial:
                     found.append({'VersionId': item['VersionId'], 'kind': group})
         return found
 
+    def suspend(self):
+        outcome = self.operator_task('admission-suspend-organization', [('--organization', self.organization)], 'suspend')
+        require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict) and outcome['result'].get('status') == 'suspended',
+                'suspend task did not succeed')
+        return dict(outcome['result'], receipts=self.receipts)
+
+    def purge(self, confirm):
+        """The end-of-trial purge the charter promises: the rows through the task, the objects with this identity."""
+        require(confirm == self.organization, '--confirm must repeat the organization id exactly')
+        before = self.operator_task('admission-stats', [('--organization', self.organization)], 'stats-before')
+        require(before['exit_code'] == 0 and isinstance(before['result'], dict) and isinstance(before['result'].get('counts'), dict), 'stats task did not succeed')
+        purged = self.operator_task('admission-purge-organization', [('--organization', self.organization)], 'purge')
+        result = purged['result'] if isinstance(purged['result'], dict) else {}
+        require(purged['exit_code'] == 0 and result.get('status') == 'purged' and result.get('organization_id') == self.organization,
+                'purge task did not succeed: ' + str(result.get('refused') or 'no result'))
+        after = self.operator_task('admission-stats', [('--organization', self.organization)], 'stats-after')
+        counts = after['result'].get('counts') if isinstance(after['result'], dict) else None
+        require(after['exit_code'] == 0 and isinstance(counts, dict) and counts and all(v == 0 for v in counts.values()),
+                'content rows remain after the purge task; inspect before deleting any object')
+        bucket, prefix = self.outputs['EvidenceBucket'], 'o/%s/' % self.organization
+        objects = self.prefix_versions(bucket, prefix)
+        self.receipt('purge-objects-intent', {'bucket': bucket, 'prefix': prefix, 'count': len(objects), 'objects': objects,
+                                              'rows_deleted': result.get('rows_deleted'), 'audit_events_kept': result.get('audit_events_kept')})
+        batches = 0
+        for start in range(0, len(objects), 1000):
+            batch = objects[start:start + 1000]
+            response = self.aws.call('s3', 'delete_objects', Bucket=bucket,
+                                     Delete={'Objects': [{'Key': o['Key'], 'VersionId': o['VersionId']} for o in batch], 'Quiet': True})
+            require(not response.get('Errors'), 'object deletion reported errors; inspect the receipt and retry the purge')
+            batches += 1
+        remaining = self.prefix_versions(bucket, prefix)
+        self.receipt('purge-objects-done', {'bucket': bucket, 'prefix': prefix, 'deleted': len(objects), 'batches': batches, 'remaining': remaining})
+        require(not remaining, 'object versions remain under the prefix after the purge')
+        return {'status': 'purged', 'organization_id': self.organization, 'rows_deleted': result.get('rows_deleted'), 'tables': result.get('tables'),
+                'audit_events_kept': result.get('audit_events_kept'), 'kept': result.get('kept'), 'counts_before': before['result']['counts'],
+                'counts_after': counts, 'objects_deleted': len(objects), 'receipts': self.receipts,
+                'next': 'Delete the manual snapshots (forma-schema-release-*, the drill) by hand; automated backups lapse after their 7-day retention.'}
+
+    def prefix_versions(self, bucket, prefix):
+        """Every version and delete marker under the organization's prefix, bounded and exactly shaped."""
+        pattern = re.compile(r'o/' + re.escape(self.organization) + r'/(b/' + UUID_RE.pattern + r'/f/' + UUID_RE.pattern + r'|s/[A-Za-z0-9._/-]+)')
+        found, markers, seen = [], {}, set()
+        for _ in range(200):
+            response = self.aws.call('s3', 'list_object_versions', Bucket=bucket, Prefix=prefix, **markers)
+            for group in ('Versions', 'DeleteMarkers'):
+                for item in response.get(group) or []:
+                    key = item.get('Key')
+                    require(isinstance(key, str) and pattern.fullmatch(key) and '..' not in key.split('/'), 'object outside the organization\'s box and source keys: refused')
+                    require(isinstance(item.get('VersionId'), str) and item['VersionId'], 'object version without an id')
+                    require((key, item['VersionId']) not in seen, 'object version listed twice')
+                    seen.add((key, item['VersionId']))
+                    found.append({'Key': key, 'VersionId': item['VersionId'], 'kind': group})
+            if not response.get('IsTruncated'):
+                return found
+            markers = {'KeyMarker': response.get('NextKeyMarker'), 'VersionIdMarker': response.get('NextVersionIdMarker')}
+            require(all(isinstance(v, str) and v for v in markers.values()), 'object listing continuation incomplete')
+        raise Refused('object listing exceeds the bounded read; inspect the prefix')
+
     def restart(self, announced):
         require(announced is True, 'a restart signs every member out: announce it first, then pass --announced')
         cluster, service = self.outputs['ClusterName'], self.outputs['ServiceName']
@@ -391,7 +455,7 @@ def _unique(pairs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'revoke-admin', 'delete-uploads', 'restart'])
+    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'revoke-admin', 'delete-uploads', 'restart', 'suspend', 'purge'])
     parser.add_argument('--state-bucket', required=True)
     parser.add_argument('--state-prefix', default='beta')
     parser.add_argument('--expected-state-sha256', required=True)
@@ -405,6 +469,7 @@ def main(argv=None):
     parser.add_argument('--code', help='revoke: the code id')
     parser.add_argument('--principal', help='grant-admin, revoke-admin, delete-uploads: the member\'s principal id')
     parser.add_argument('--announced', action='store_true', help='restart: the members were told the service restarts now')
+    parser.add_argument('--confirm', help='purge: the organization id again, typed, for the irreversible deletion')
     args = parser.parse_args(argv)
     if args.command == 'issue' and not (args.count and args.notes_file and args.identifiers):
         parser.error('issue needs --count, --notes-file and --identifiers')
@@ -412,6 +477,8 @@ def main(argv=None):
         parser.error('revoke needs --code')
     if args.command in ('grant-admin', 'revoke-admin', 'delete-uploads') and not args.principal:
         parser.error(args.command + ' needs --principal')
+    if args.command == 'purge' and not args.confirm:
+        parser.error('purge needs --confirm <organization>')
     output = None
     try:
         # Reserve the private output before any AWS work; never overwrite an attempt.
@@ -437,6 +504,10 @@ def main(argv=None):
             result = trial.revoke_admin(args.principal)
         elif args.command == 'delete-uploads':
             result = trial.delete_uploads(args.principal)
+        elif args.command == 'suspend':
+            result = trial.suspend()
+        elif args.command == 'purge':
+            result = trial.purge(args.confirm)
         else:
             result = trial.restart(args.announced)
         if args.command != 'issue':

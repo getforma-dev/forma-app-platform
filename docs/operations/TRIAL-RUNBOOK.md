@@ -328,11 +328,42 @@ Record the snapshot id, the two task ARNs and the diff result in the trial's pri
 
 ## 10. The end-of-trial purge (by Sunday Dec 14)
 
-The charter promises the organization's data is purged by Dec 14; the beta then stops at its Dec 15 14:00 UTC schedule. In order:
+The charter promises the organization's data is deleted by Dec 14; the beta then stops at its Dec 15 14:00 UTC schedule. The purge is two operator tasks and one object sweep, all through `admission.py`, after the memberships are gone. **What it keeps**, and what the charter and the notice must say: the organization row (suspended), its provider binding and sign-in routing, its record sequence, and the hash-chained audit heads and events (identifiers, kinds and hashes; no content, no name, no address). Everything else of the organization goes: members, principals, codes, apps, works, records, uploads, shares, sessions, cards, and every object version under `o/<org>/`. Manual snapshots are deleted the same day; automated backups lapse seven days later, so the bytes are fully gone about **Dec 21**.
 
-1. `admission list`; `admission revoke --code` for every code that is still `active` (so nobody can join after the class).
-2. `admission delete-uploads --principal` for every member who uploaded (the Admin page's per-member upload count, W1's overview, tells you who): every S3 version of their files is gone.
-3. On `/admin`, remove every member but yourself (the last admin cannot be removed).
-4. `admission stats` (through the operator task, as in the drill, against the live database): the counts after steps 1–3 are the record of what remains.
-5. **The organization's rows.** No operator command deletes an organization's rows today: memberships are revoked, not deleted; `box_files`, records, apps and audit chains stay. The purge of those rows is a Tier A operator command that does not exist yet (`admission purge-organization`, refusing a live member and requiring the organization inactive), or a reviewed one-off procedure under Victor's word. Decide before Dec 7; this runbook will carry the command once it is reviewed. Until then, step 4's `stats` output and the Dec 15 stop are the honest record, and the snapshots of the trial period are deleted when the charter's retention says so.
-6. After the stop (Dec 15 14:00 UTC): both services at count 0 (`aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount}"` → 0 / 0); the alarms stack deleted (section 6); the retained database, keys and load balancer still cost money until a separate decision.
+1. **Codes.** `admission list`; `admission revoke --code` for every code still `active`.
+2. **Members.** On `/admin`, remove every member but yourself; then your own membership through the operator channel, which the Admin page refuses for the last admin:
+
+   ```sh
+   # compose and run the documented override with your principal id, as in section 9's task loop:
+   python3 infra/scripts/window_requests.py operator-task --outputs "$TRIAL/stack.json" --window-id "$(python3 -c 'import uuid;print(uuid.uuid4())')" \
+     --step revoke-self --override admission-revoke-membership --set=--organization="$TRIAL_ORG" --set=--principal="<your principal id>" --output "$TRIAL/revoke-self.json"
+   aws ecs run-task --cli-input-json "file://$TRIAL/revoke-self.json"
+   ```
+
+   Expected log line: `{"principal_id": ..., "changed": true, "membership_epoch": N}`. Every session is now dead.
+3. **Suspend** (no sign-in, no share reads; reversible only by a reviewed change):
+
+   ```sh
+   $PY -m ops.promotion.admission suspend --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --output "$TRIAL/suspend.json"
+   ```
+
+   Expected: `{"organization_id": ..., "status": "suspended", "changed": true, "audit_event": null, ...}`. There is no `organization.suspended` audit kind (D7.8); the receipt is the record.
+4. **Purge**, typing the organization id a second time:
+
+   ```sh
+   $PY -m ops.promotion.admission purge --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --confirm "$TRIAL_ORG" --output "$TRIAL/purge.json"
+   ```
+
+   It runs `admission stats` (the counts before), `admission purge-organization` (refuses `organization_not_suspended` or `active_memberships_remain`; otherwise one transaction, children before parents over every `genui` table with an `organization_id` except the five kept ones, plus the organization's `code_index` rows; refuses `purge_incomplete` or `purge_audit_changed` and rolls back if anything remains or the chains moved), `admission stats` again (every count `0`, or it stops before touching an object), then lists every version and delete marker under `o/<org>/` (box files `b/…/f/…` and source objects `s/…`; any other key refuses), writes the intent receipt, deletes in batches of 1000 and lists again. Expected: `{"status": "purged", "rows_deleted": R, "tables": T, "audit_events_kept": E, "counts_after": {all 0}, "objects_deleted": O, "next": "Delete the manual snapshots ...", ...}`. The file keeps the counts before and after. A repeat is harmless (`rows_deleted: 0`, `objects_deleted: 0`).
+5. **Snapshots.** Delete every manual snapshot of the instance the same day; the automated ones expire with the seven-day retention:
+
+   ```sh
+   aws rds describe-db-snapshots --db-instance-identifier "$DB" --snapshot-type manual --query "DBSnapshots[].DBSnapshotIdentifier" --output text
+   for s in <each forma-schema-release-* and drill snapshot listed>; do aws rds delete-db-snapshot --db-snapshot-identifier "$s"; done
+   aws rds describe-db-instances --db-instance-identifier "$DB" --query "DBInstances[0].BackupRetentionPeriod"     # 7
+   ```
+
+   Record the snapshot ids and the date; seven days later the last automated backup containing the data is gone.
+6. **After the stop** (Dec 15 14:00 UTC): both services at count 0 (`aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount}"` → 0 / 0); the alarms stack deleted (section 6); the retained database, keys and load balancer still cost money until a separate decision.
