@@ -73,7 +73,7 @@ Computed at the integration branch's head with this repository's own functions (
 | `to.schema_manifest_sha256` | `176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1` | SHA-256 of `git show HEAD:app/migrations/manifest.json`; its `database_version` is 24 |
 | `to.deployment_contract_sha256` | `88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356` | `candidate.deployment_contract_digest(repo, 'HEAD')` |
 | `infrastructure_sha256` | `e74b620e4d9749b5eb47819a1546be1adc00765008f042abbb0b747d9e549da1` | `candidate.infrastructure_digest(repo, rev)` over `infra/src/*` and the four `infra/` project files. It is the same at `511d97e3`, at `main` (`8bdbabf6`) and at `HEAD`, and is release A's value, so the stack is unchanged. |
-| file bytes | see the PR | SHA-256 of the committed `schema-release.json`. The approval summary shows it as `spec_sha256`. |
+| file bytes | `c3d1c055a02867da30ea7b43474bec6fafae9792ebae998e37aecf5877a2d5a4` | SHA-256 of the committed `schema-release.json` (`json.dumps(indent=2, sort_keys=True)` plus a newline, release A's form). The approval summary shows it as `spec_sha256`. |
 
 `git diff --stat 511d97e3 HEAD` over the deployment contract's paths changes only these:
 - `.dockerignore`, `app/operator/Dockerfile.dockerignore` and `app/qualification/Dockerfile.dockerignore`, which admit the new compiled sources;
