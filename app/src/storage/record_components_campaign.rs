@@ -1123,15 +1123,21 @@ const MULTI_REVISION: &str = "00000000-0000-4000-8000-000000000c31";
 const SPECIMEN: &str = include_str!("../../../contracts/fixtures/participation.json");
 
 /// The specimen's multi-select definition under this campaign's organization
-/// and app, at its own schema version, re-digested.
+/// and app, at definition schema version 1 (storage stores edition 1 only,
+/// `definitions::create_definition_revision`), derived as B0's
+/// `make_fixtures.records_input` derives `definition_v1` from the version-2
+/// content: every input drops its version-2-only `coverage`; nothing else
+/// changes. Re-digested over that content.
 fn multi_select_definition() -> Value {
     let specimen: Value = serde_json::from_str(SPECIMEN).unwrap();
-    let document = &specimen["multi_select"];
-    let content = document["content"].clone();
+    let mut content = specimen["multi_select"]["content"].clone();
+    for input in content["inputs"].as_array_mut().unwrap() {
+        input.as_object_mut().unwrap().remove("coverage");
+    }
     let canonical = admission::encode(&content).unwrap();
     json!({
         "kind": "app_definition",
-        "schema_version": document["schema_version"],
+        "schema_version": 1,
         "organization_id": ORG,
         "app_id": MULTI_APP,
         "revision_id": MULTI_REVISION,
@@ -1416,7 +1422,17 @@ async fn multi_select(
     let (submitted, collection) =
         crate::commands::routes::parse_form_for_tests(&posted, MULTI_APP, work, "pick").unwrap();
     assert_eq!(collection, choices);
-    assert_eq!(submitted.values[1]["value"], tags(&["green", "blue"]));
+    let posted_value = |request: &CommandRequest, id: &str| {
+        request
+            .values
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["field_id"] == id)
+            .unwrap()["value"]
+            .clone()
+    };
+    assert_eq!(posted_value(&submitted, "tags"), tags(&["green", "blue"]));
     let picked = commits(stores, &ben, &submitted).await;
     assert_eq!(picked.record_id, record(4));
     let held = multi_form(stores, &ben, work, &choices, 4).await;
@@ -1439,7 +1455,7 @@ async fn multi_select(
     ]);
     let (nothing, _) =
         crate::commands::routes::parse_form_for_tests(&unchecked, MULTI_APP, work, "pick").unwrap();
-    assert_eq!(nothing.values[1]["value"], json!({"type": "null"}));
+    assert_eq!(posted_value(&nothing, "tags"), json!({"type": "null"}));
     assert_eq!(
         stores.data.commit_record(&ben, &nothing).await,
         Err(Error::Denied)
@@ -1489,10 +1505,8 @@ async fn multi_select(
         })
         .collect();
     assert_eq!(texts, ["red, blue"]);
-    assert_eq!(
-        value(&result, "by_day")["groups"].as_array().unwrap().len(),
-        3
-    );
+    // The trend buckets by month (APP-159): three November days, one group.
+    assert_eq!(groups(&result, "by_day"), vec![group("2026-11", "4", 4)]);
     assert_eq!(value(&result, "matched")["value"], "0");
     check(checks, "APP-208 ranking: over four rows selecting [red, blue], [blue], [red, green, blue] and [green, blue], a reviewer's ranking by tags counts blue 4, green 2, red 2 (a row adds one to each option it selected) while its population and total count the four rows once; the list's cell carries the typed selection and reads \"red, blue\"; the trend and the matches summary run beside it");
 
@@ -1524,4 +1538,36 @@ async fn multi_select(
         "reviewer_ranking": value(&result, "by_tag")["groups"],
         "reviewer_rows": typed_rows(stores, engine, &rev, work).await,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    /// APP-208: the specimen's multi-select app admits at the stored edition
+    /// (version 1, `coverage` dropped from its inputs) with its `multi_enum`
+    /// field, its ranking by that field and its typed query intact.
+    #[test]
+    fn the_multi_select_definition_admits_at_the_stored_edition() {
+        let document = super::multi_select_definition();
+        assert_eq!(document["schema_version"], 1);
+        let admitted = crate::admission::admit_definition(&serde_json::to_vec(&document).unwrap())
+            .expect("admits");
+        assert_eq!(admitted.schema_version, 1);
+        let content = crate::admission::decode(&admitted.canonical).unwrap();
+        let inputs = content["inputs"].as_array().unwrap();
+        assert!(inputs.iter().all(|i| i.get("coverage").is_none()));
+        let tags = &content["record_schemas"][0]["fields"][1];
+        assert_eq!(tags["value_type"]["type"], "multi_enum");
+        let kinds: Vec<&Value> = content["views"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| &v["kind"])
+            .collect();
+        assert!(
+            kinds.contains(&&Value::from("record_ranking"))
+                && kinds.contains(&&Value::from("table"))
+        );
+    }
 }
