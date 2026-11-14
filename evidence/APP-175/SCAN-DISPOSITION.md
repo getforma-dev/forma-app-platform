@@ -14,6 +14,18 @@ The disposition is regenerated with `ops/promotion/scan_renewal.py` (W3's tool, 
 | [CVE-2026-76844](https://security-tracker.debian.org/tracker/CVE-2026-76844) | HIGH, CVSS 4 8.3 | zlib 1.2.13.dfsg-1 | **Not new.** It was accepted by the [APP-173 disposition](../APP-173/SCAN-DISPOSITION.md) and has been a baseline finding since the November 5 release. The scanner re-vectored it: the same name, package, version and score, with the CVSS 4 vector changed from `AC:H/UI:N/VC:N/VI:H/VA:H` to `AC:L/UI:P/VC:H/VI:N/VA:N/SC:H`. The fingerprint includes attributes, so the old one counts as removed and the new one as introduced. | APP-173's analysis is unchanged, because the package is unchanged. The only importers of zlib's gzip file API are `dpkg-deb` and `libapt-pkg`, which run at build time only. The scanner's new description names webpack-dev-middleware, which matches neither the package it attributes nor the CVSS change. webpack-dev-middleware is in no image: it is absent from `app/admin/package-lock.json`, and the Node stage of `app/Dockerfile` is a build stage whose only output is `admin/dist`, compiled into the service binary. |
 | [CVE-2026-91094](https://security-tracker.debian.org/tracker/CVE-2026-91094) | UNDEFINED (no score) | dpkg 1.21.23 | Newly listed against the pinned `dpkg=1.21.23`. | The flaw is in unpacking `3.0 (quilt)` **source** packages, which is the job of `dpkg-source` (`Dpkg::Source`, shipped in `dpkg-dev`/`libdpkg-perl`). Neither is installed: a local build of the qualification image has `dpkg` 1.21.23 and `perl-base`, with no `/usr/bin/dpkg-source` and no `/usr/share/perl5/Dpkg`. The three final stages share the same `python:3.11.14-slim-bookworm` base and the same `--only-upgrade` package list, which installs nothing new. dpkg runs only during the image build. |
 
+**Debian status** (security tracker, read 2026-11-14 at 05:26 UTC):
+- **CVE-2026-76844 (zlib):**
+  - vulnerable in bookworm `1:1.2.13.dfsg-1`, and there is no bookworm-security row;
+  - fixed in trixie only through trixie-security (`1:1.3.dfsg+really1.3.1-1+deb13u1`, DSA-6613-1) and in forky/sid (`1:1.3.dfsg+really1.3.2-4`);
+  - the tracker notes the same fixing change as CVE-2026-85091.
+- **CVE-2026-91094 (dpkg):**
+  - vulnerable in bookworm `1.21.23`, trixie `1.22.22` and forky `1.23.11`; fixed only in sid `1.23.12`;
+  - trixie is marked `<no-dsa> (Minor issue)`;
+  - there is no DSA or DLA.
+
+No bookworm fix exists for either. Waiting for Debian is therefore not an option before this disposition's expiry, and pinning newer packages would change the Dockerfiles and so the deployment contract.
+
 All containers run non-root (`65532:65532`) with a read-only root filesystem.
 
 **Limits.**
