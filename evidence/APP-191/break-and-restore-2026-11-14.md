@@ -1,0 +1,29 @@
+# APP-191 / APP-192: break-and-restore proofs (W4, 2026-11-14)
+
+Branch `trial/w4-private-entries`, built on W1's final `d8e88489` (migration 0023). Every test below was first shown to fail with its rule removed, then to pass with the rule restored. Where a rule lives in SQL that `catalog-v24.json` pins, the catalog was regenerated for the broken SQL (`app/runtime/generate_schema_catalog.py`) and the manifest re-pinned, so the fixture started and the test judged the rule, not the pin (the lesson from W1's proofs). The tree was restored byte-identically each time (`git status --short` empty on `app/migrations`).
+
+| Rule | Where | Break | Result with the break | Restored |
+| --- | --- | --- | --- | --- |
+| Grammar: `visibility: "own"`, `reviewer_only: true`; `"shared"` and `false` refused | `admission/validate.rs` | `git checkout` of the validator change | `admission::tests::private_entries_and_reviewer_only_commands_match_validate_py` panicked at the first admit (`"own"` refused) | passes; the Python suite (43 tests), `verify_vectors.mjs`, `lock.py check` and `make_library.py --check` pass |
+| D8 gate in `compose` | `storage/commands.rs` | the `require(... !declaration.reviewer_only || reviewer)` line replaced by a no-op | `storage::commands::tests::reviewer_only_commands_are_refused_for_contributors` failed at the contributor's approve (Ok instead of Denied) | passes |
+| One row rule on every record statement | `storage/tests.rs` scan | one statement's `own = own_rows(...)` replaced by `own = "TRUE"` | `every_record_statement_carries_own_rows` failed naming the statement | passes (14 statements carry the rule, 7 allowlisted, each matching once) |
+| `own_rows`, `hidden`, `own_collections`, the D8 gate at run time | Rust, `authorization::BYPASS` | the campaign sets the flag and re-runs each enforcement check | every check marked `(fails under bypass)` returned false under the flag (17 checks); the shared `notes` listing stayed byte-equal | all 33 checks pass as shipped |
+| Reviewer-grant rule in the definers: only a reviewer grants the reviewer role | `0024` SQL, `share_work` and `set_work_everyone` | both `IF p_role='reviewer' AND NOT v_review THEN RETURN; END IF;` lines removed; catalog regenerated for the broken SQL; manifest re-pinned (`check-schema-pins.py` agree) | the campaign failed at the direct definer check: `share_work(BEN, FAY, 'reviewer')` answered 5 rows instead of 0 (30 earlier API-level checks still passed, because `Permit::also(RecordReview)` stands in front of the definer in production, which is why the direct call under the workspace role was added) | restored, catalog regenerated, tree byte-identical |
+| `owner_only` derived from the canonical schema | `0024` SQL, the generated column | `IS NOT DISTINCT FROM 'own'` changed to `'never'`; catalog regenerated; manifest re-pinned | the campaign failed at its first check: no `owner_only` row (0 instead of 1) | restored, catalog regenerated, tree byte-identical |
+
+Share authority (`share_work` never copied; a reviewer or contributor without it shares nothing) is asserted as shipped through the API and through the direct definer calls (`share_work(REV, FAY, 'viewer')` and `set_work_everyone(REV, 'viewer')` answer no rows); it was not broken separately: the guard is 0008's unchanged clause.
+
+## Commands and results
+
+- `cargo test --lib -p forma-app-platform` (417 unit tests, incl. the three new ones) and `just check fmt admin clippy clippy-dev test http-smoke msrv catalog infra py-scripts py-runtime shared-broker py-app-scripts py-ops py-infra schema-pins contracts bash-n board py-qualification`: ok.
+- `just check schema-qualifier`: ok on the merged tree (73 passed checks; the 0024 expectations are in `app/runtime/qualify_tenant_schema.py`).
+- `just campaign private-entries`: ok, 33 checks (`.cache/reports/private-entries.json`).
+- Regression campaigns: `sharing`, `record-components`, `live-sharing`, `mcp`, `slack`, `pitch`, `actions`, `canvas`: ok. `query`: see the hand-over (its saturation check read `failed` instead of `loading/busy` while other campaigns and `just check` ran concurrently; rerun alone).
+- `just check py-promotion`: fails on this branch and on W1's alike: `ops/promotion/schema-release.json` is release A's committed record, bound to the deployment-contract digest of HEAD (`app/migrations/**`, the runtime and the image contexts). Any branch that adds a migration fails `test_committed_release_is_bound_to_this_tree` until the release owner commits release B's record (22→24 once W1 and W4 are merged). Not written here: the release record belongs to W1/W3 and needs Victor's approval.
+
+## Limits
+
+- The bypass flag is test-only (`#[cfg(test)]`) and process-global; a campaign runs alone, so no other test reads it.
+- Presentation (which commands a listing shows) and the D9 share grants are asserted as shipped only; the bypass disables enforcement, not presentation or sharing.
+- A pinned answer is its maker's alone today (0015's `CHECK (kind = 'card' OR NOT everyone)` and `share_card`), so the `member_cards` clause that would hide an answer over hidden rows is defence in depth; the campaign asserts the outcome (no other member lists it).
+- MCP and Slack reach the records through the same storage reads the campaign exercises directly (`list_records`, `search_records`, `list_record_target`, `commit_record`, `dry_run_command`); their own campaigns stay green.
