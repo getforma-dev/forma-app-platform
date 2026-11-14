@@ -29,7 +29,7 @@ pitch	storage::query_qualification::pitch_campaign::native_pitch_campaign	campai
 live-sharing	storage::shared_campaign::native_live_sharing_campaign	campaign	tenant-foundation	GENUI_LIVE_SHARING_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
 shared-identity	auth::shared_tests::native_shared_identity_campaign	campaign	tenant-foundation	GENUI_SHARED_IDENTITY_REPORT	-	Docker, OpenSSL, runtime venv
 record-components	storage::record_components_campaign::native_record_components_campaign	campaign	tenant-foundation	GENUI_RECORD_COMPONENTS_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
-refresh-herd	storage::qualification::refresh_herd::native_refresh_herd_campaign	campaign	-	GENUI_REFRESH_HERD_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
+refresh-herd	storage::qualification::refresh_herd::native_refresh_herd_campaign	campaign	tenant-foundation	GENUI_REFRESH_HERD_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv; GENUI_REFRESH_HERD_FULL=1 adds the 26-page measurement
 sharing	storage::sharing_qualification::native_sharing_campaign	campaign	pitch	GENUI_SHARING_REPORT	-	Docker, OpenSSL, runtime venv
 slack	storage::slack_campaign::native_slack_campaign	campaign	pitch	GENUI_SLACK_CAMPAIGN_REPORT	-	Docker, runtime venv
 workflows	storage::workflows_campaign::native_workflows_campaign	campaign	pitch	GENUI_WORKFLOWS_CAMPAIGN_REPORT	-	Docker, runtime venv

@@ -102,11 +102,7 @@ The workflow source is [`.github/workflows`](../.github/workflows). All twelve w
 | Released baseline / Published canvas / Auth consumer | The owning frozen spike and released consumer contract |
 | Parser / Parser release / Bounded query / Synthetic fixture | The owning parser, query or fixture qualification and its source-bound report |
 
-APP-131 repaired the missing `jsonschema` dependency, updated command/race fixtures to use a separate reviewer while retaining self-approval denials, and corrected the library-count expectation. Do not weaken authorization to make a campaign pass. Under ADR-012, a broken workflow is fixed or explicitly quarantined to `workflow_dispatch` with an owning ticket and a row here naming the limitation; red-and-ignored is not an accepted state. No workflow is quarantined. One catalog campaign is kept out of CI until its fix lands:
-
-| Quarantined | Since | Limitation | Owning ticket; what makes it pass |
-| --- | --- | --- | --- |
-| `refresh-herd` (catalog `ci` column `-`; not a tenant-foundation step) | 2026-11-14 | Run A fails: a 26-page refresh herd exceeds two connections per role, because every lease reuse repeats the catalog comparison ([evidence](../evidence/APP-195/refresh-herd-2026-11-14.md)). It still runs with `just campaign refresh-herd`, and its report is kept as evidence. | [APP-195](../Tickets/0-backlog/APP-195.md); [APP-197](../Tickets/0-backlog/APP-197.md), the catalog check's cadence, is meant to make it pass, and restores the step and the `ci` value |
+APP-131 repaired the missing `jsonschema` dependency, updated command/race fixtures to use a separate reviewer while retaining self-approval denials, and corrected the library-count expectation. Do not weaken authorization to make a campaign pass. Under ADR-012, a broken workflow is fixed or explicitly quarantined to `workflow_dispatch` with an owning ticket and a row here naming the limitation; red-and-ignored is not an accepted state. No quarantine is currently recorded.
 
 ## Campaigns
 
@@ -119,7 +115,7 @@ just campaign command
 
 The [catalog](../scripts/dev/campaigns.tsv) maps short names to exact ignored tests, prerequisites, report variables and CI workflow. `--all` includes external smokes and managed helpers; helpers cannot run alone. Reports, when the campaign defines one, go to `.cache/reports/<name>.json`. Fixtures use disposable labeled Docker databases, separate from the persistent dev profiles.
 
-The current tenant-foundation catalog also includes `live-sharing` and `shared-identity`; pitch campaigns retain the legacy same-organization sharing qualification. The box campaign and parser-sandbox probe require a sealed parser; real-model and Open-Meteo smokes use external services and are not run by `just ci`. Follow the named prerequisite/wrapper for a smoke rather than putting a key on its command line. A campaign's synthetic provider test is not evidence of a real-provider run.
+The current tenant-foundation catalog also includes `live-sharing`, `shared-identity` and `refresh-herd`. `refresh-herd` runs as a 15-page gate; `GENUI_REFRESH_HERD_FULL=1 just campaign refresh-herd` adds the recorded 26-page measurement and its page-count and cadence searches; pitch campaigns retain the legacy same-organization sharing qualification. The box campaign and parser-sandbox probe require a sealed parser; real-model and Open-Meteo smokes use external services and are not run by `just ci`. Follow the named prerequisite/wrapper for a smoke rather than putting a key on its command line. A campaign's synthetic provider test is not evidence of a real-provider run.
 
 ## Parser and release images
 
