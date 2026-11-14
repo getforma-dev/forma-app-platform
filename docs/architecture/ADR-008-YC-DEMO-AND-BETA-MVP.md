@@ -74,6 +74,7 @@ Victor decided on 2026-11-14 to run a real live test of the platform with real p
   - **Backups:** manual snapshots are deleted at the purge. RDS automated backups lapse seven days later, so the data is fully gone around 2026-12-21.
   - **Sign-in accounts:** the members' sign-in accounts (email and password) live in the fAuth tenant run by FormaStack, outside this database. The purge procedure includes a written request to FormaStack to delete the tenant's users by 2026-12-14, with the confirmation recorded.
   - **Guest shares:** the organization's guest shares and guests' links to them are deleted. Each guest account's share-event records (identifiers, kinds, sequence and hashes; no title, address or content) are kept, so the guest's hash-chained history still verifies. This relies on migration 0024 dropping the key from those records to the share rows. Until that ships, the purge refuses safely if a guest has linked a share.
+    - *Amendment 2026-11-14 (APP-212), after migration 0024 went live on beta:* the follow-up is built. At schema 24 or later the purge deletes the organization's guests' links (`genui_identity.linked_apps`) before the shares and keeps every share-event record, proving both afterwards; below schema 24 it still refuses, as the sentence above says. The ticket records the review and the release that carries it.
   - The beta stops about 2026-12-15 unless it is renewed again.
 
 ### Beta notice, version 1
