@@ -89,7 +89,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 81 | [APP-080: Qualify tenant races, drift and recovery on managed RDS](0-backlog/APP-080.md) | [PH05](phases/PH05.md) | S11 | OPS | P1 | L | Backlog | APP-077, APP-078 |
 | 82 | [APP-082: Prove route-level admission races and provider faults on the local public entry (deferred from APP-074)](4-done/APP-082.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Done | APP-074 |
 | 83 | [APP-083: Prove concurrent redemption through the public beta API on the live deployment (deferred from APP-076)](0-backlog/APP-083.md) | [PH07](phases/PH07.md) | S13 | VAL | P1 | S | Backlog | APP-076 |
-| 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](2-in-progress/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | In progress | APP-073 |
+| 84 | [APP-084: Close the admission and provider review residuals (APP-073 reviews)](4-done/APP-084.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | M | Done | APP-073 |
 | 85 | [APP-085: Close the definition and publication review residuals (APP-010 review)](2-in-progress/APP-085.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | In progress | APP-010 |
 | 86 | [APP-086: Close the managed qualification and native campaign residuals (APP-075 and APP-008 reviews)](0-backlog/APP-086.md) | [PH07](phases/PH07.md) | S13 | OPS | P2 | M | Backlog | APP-075, APP-078 |
 | 87 | [APP-087: Decide the parser fuel bound and close the parser packaging residuals (APP-017 preparation review)](0-backlog/APP-087.md) | [PH02](phases/PH02.md) | S03 | ING | P1 | M | Backlog | APP-004 |
@@ -173,13 +173,13 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](4-done/APP-166.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Done | APP-138 |
 | 167 | [APP-167: Promote merged beta releases through GitHub Actions](4-done/APP-167.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | L | Done | None |
 | 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](4-done/APP-168.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | L | Done | None |
-| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](2-in-progress/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | In progress | APP-168 |
+| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](4-done/APP-169.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Done | APP-168 |
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](0-backlog/APP-170.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](0-backlog/APP-171.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](4-done/APP-172.md) | [PH08](phases/PH08.md) | S14 | OPS | P1 | L | Done | APP-167 |
 | 173 | [APP-173: Review the November 5 base-image scan findings so beta promotion can continue](4-done/APP-173.md) | [PH08](phases/PH08.md) | S14 | OPS | P0 | S | Done | APP-167 |
 | 174 | [APP-174: Detach the Northstar management secret, rotate its key and clean up the invitation input secret](9-blocked/APP-174.md) | [PH07](phases/PH07.md) | S13 | IAM | P1 | S | Blocked | APP-084 |
-| 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](0-backlog/APP-175.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | M | Backlog | APP-084, APP-169, APP-167 |
+| 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](4-done/APP-175.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | M | Done | APP-084, APP-169, APP-167 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](0-backlog/APP-176.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |
 | 177 | [APP-177: Decide and, if kept, build canvas fences for whole apps](4-done/APP-177.md) | [PH09](phases/PH09.md) | S15 | UX | P3 | S | Done | APP-104 |
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](4-done/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
@@ -199,3 +199,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 193 | [APP-193: Spike: live interaction from general primitives](0-backlog/APP-193.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
 | 194 | [APP-194: Schema release B: migration 0023](0-backlog/APP-194.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-182, APP-183, APP-186, APP-190, APP-191, APP-192 |
 | 195 | [APP-189: Go-live: build day, rehearsal, codes and the class](0-backlog/APP-189.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194 |
+| 197 | [APP-196: Tier A review of the schema restore command and the scan-delta binding](0-backlog/APP-196.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-175 |
