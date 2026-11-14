@@ -457,7 +457,8 @@ impl ShareRole {
 /// (`member_label`, never the principal id) and the role their live
 /// permission rows on the work carry now (review of W2b, item 1): a reviewer
 /// with `record_review`, else a contributor with `record_write`, else a
-/// viewer. An operator revocation or a demotion shows at once.
+/// viewer. An operator revocation, a demotion and an owner's removal show at
+/// once.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ShareEntry {
     pub principal: String,
@@ -483,6 +484,9 @@ pub struct ShareStanding {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkSharing {
     pub standing: ShareStanding,
+    /// Whether this member may remove one person's access: the app's owner
+    /// alone, as `genui_private.revoke_work_share` judges it.
+    pub can_revoke_members: bool,
     /// Whether the work has a private (`visibility: "own"`) list, where a
     /// member sees and changes only their own entries unless a reviewer.
     pub private_lists: bool,
@@ -497,11 +501,15 @@ impl Workspace {
     /// snapshot with no fence (review m4: a listing writes nothing and takes
     /// no `genui_lock` row lock). `Denied` as [`Workspace::share_standing`].
     ///
-    /// A member is listed while they have a live personal share row of the
-    /// work **and** still hold `record_read` on it; the role shown is that of
-    /// their live permission rows ([`ShareEntry`]), never the share rows'
-    /// (a pre-0024 row without a role needs no special case). Only active
-    /// members are listed, never the member asking, at most [`MEMBER_LIMIT`].
+    /// A member is listed while they hold `record_read` on the work by a grant
+    /// of their own (a personal share, or an operator grant): exactly what
+    /// the owner's [`Workspace::revoke_work_share`] removes. The role shown is
+    /// that of their live permission rows ([`ShareEntry`]). Personal share
+    /// records are the definers' alone (0024's RESTRICTIVE policy
+    /// `work_shares_everyone`), so nothing here reads them, and a demotion
+    /// that leaves no live record still lists the member with the lower
+    /// role. Only active members are listed, never the member asking nor the
+    /// app's owner, at most [`MEMBER_LIMIT`].
     pub async fn work_sharing(
         &self,
         request: &TrustedRequest,
@@ -521,8 +529,10 @@ impl Workspace {
             )
             .await?
                 > 0;
-            let held = |permission: &str| format!("EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=$1::text::uuid AND p.principal_id=g.grantee_id AND p.app_id=$2::text::uuid AND p.work_id=$3::text::uuid AND p.permission='{permission}')");
-            let rows = transaction.query(&format!("SELECT g.grantee_id::text,{},{} FROM (SELECT DISTINCT s.grantee_id FROM genui.work_shares s JOIN genui.memberships m ON m.organization_id=s.organization_id AND m.principal_id=s.grantee_id AND m.status='active' WHERE s.organization_id=$1::text::uuid AND s.app_id=$2::text::uuid AND s.work_id=$3::text::uuid AND s.grantee_id IS NOT NULL AND s.grantee_id<>$4::text::uuid AND s.revoked_at IS NULL) g WHERE {} ORDER BY g.grantee_id LIMIT $5", held("record_review"), held("record_write"), held("record_read")), &[&request.organization,&app,&work,&request.principal,&MEMBER_LIMIT]).await?;
+            let owner = transaction.query("SELECT 1 FROM genui.apps WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND owner_principal_id=$3::text::uuid", &[&request.organization,&app,&request.principal]).await?;
+            let can_revoke_members = !owner.is_empty();
+            let held = |permission: &str| format!("EXISTS(SELECT 1 FROM genui.work_permissions x WHERE x.organization_id=p.organization_id AND x.principal_id=p.principal_id AND x.app_id=p.app_id AND x.work_id=p.work_id AND x.permission='{permission}')");
+            let rows = transaction.query(&format!("SELECT p.principal_id::text,{},{} FROM genui.work_permissions p JOIN genui.memberships m ON m.organization_id=p.organization_id AND m.principal_id=p.principal_id AND m.status='active' WHERE p.organization_id=$1::text::uuid AND p.app_id=$2::text::uuid AND p.work_id=$3::text::uuid AND p.permission='record_read' AND p.principal_id<>$4::text::uuid AND NOT EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=p.organization_id AND a.app_id=p.app_id AND a.owner_principal_id=p.principal_id) ORDER BY p.principal_id LIMIT $5", held("record_review"), held("record_write")), &[&request.organization,&app,&work,&request.principal,&MEMBER_LIMIT]).await?;
             let mut members = rows
                 .iter()
                 .map(|row| {
@@ -551,6 +561,7 @@ impl Workspace {
             });
             Ok(WorkSharing {
                 standing,
+                can_revoke_members,
                 private_lists,
                 members,
             })

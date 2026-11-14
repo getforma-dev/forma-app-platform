@@ -315,7 +315,7 @@ async fn campaign() {
         json!({
             "app_id": app, "work_id": work,
             "roles": ["viewer", "contributor", "reviewer"],
-            "can_revoke_members": false,
+            "can_revoke_members": true,
             "private_lists": true,
             "organization": {"available": true, "role": null},
             "members": [],
@@ -331,7 +331,7 @@ async fn campaign() {
     }
     check(
         &mut checks,
-        "GET /v1/work/{app}/{work}/share: the work's creator reads the roles it may grant (viewer, contributor, reviewer), that the app has private lists, the organization-wide share (available, none live) and no members yet, no-store; an anonymous caller, a member without share authority and a nonexistent work get the byte-identical uniform 404",
+        "GET /v1/work/{app}/{work}/share: the app's owner, the work's creator, reads the roles it may grant (viewer, contributor, reviewer), that it may remove a person's access, that the app has private lists, the organization-wide share (available, none live) and no members yet, no-store; an anonymous caller, a member without share authority and a nonexistent work get the byte-identical uniform 404",
     );
 
     // --- one encoding, closed bodies, fetch metadata ------------------------
@@ -364,7 +364,7 @@ async fn campaign() {
             json!({"grantee_principal_id": REV, "role": "viewer", "permission": "share_work"})
                 .to_string(),
         ),
-        (&share_uri, share_body(REV, "none")),
+        (&share_uri, share_body(REV, "None")),
         (&everyone_uri, role_body("everyone")),
         (
             &everyone_uri,
@@ -428,7 +428,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, before);
     check(
         &mut checks,
-        "one encoding: a share body with the earlier `record_write` flag (alone or beside a role), without a role, with an unknown role or spelling, an unknown member, `none` for a person, and an organization body naming anything but a role, are 400 `malformed_share`; a non-JSON body is 400; a cross-site, same-site, metadata-less or foreign-Origin POST on both routes is 403 `cross_site`; nothing is written",
+        "one encoding: a share body with the earlier `record_write` flag (alone or beside a role), without a role, with an unknown role or spelling, an unknown member, `None` for a person, and an organization body naming anything but a role, are 400 `malformed_share`; a non-JSON body is 400; a cross-site, same-site, metadata-less or foreign-Origin POST on both routes is 403 `cross_site`; nothing is written",
     );
 
     // --- a personal reviewer share by the owner -----------------------------
@@ -475,6 +475,8 @@ async fn campaign() {
     let hal_dialog = get(Some(&hal_cookie), &share_uri).await;
     assert_eq!(hal_dialog.status, StatusCode::OK, "{}", hal_dialog.body);
     assert_eq!(hal_dialog.json()["roles"], json!(["viewer", "contributor"]));
+    // Removing one person's access is the app owner's alone (W4's rule).
+    assert_eq!(hal_dialog.json()["can_revoke_members"], false);
     let before = footprint(&fixture).await;
     // The refusal concerns the sharer alone: the same bytes whoever the
     // grantee is (a member, nobody, a revoked member, the sharer itself).
@@ -853,6 +855,181 @@ async fn campaign() {
     check(
         &mut checks,
         "the dialog lists each person with the role of their live permissions on the work, not of their share rows: after an operator revoke-permission of record_write Ana shows as a viewer, after a demotion Rev shows as a contributor, and once record_read is gone Ana is not listed although her share row is still live",
+    );
+
+    // --- a demotion over the route keeps the person listed -----------------
+    // W4 (f1): a lower re-share takes the surplus away and revokes the
+    // grantee's earlier share rows; when nothing new is granted no live row
+    // remains, and the person must still be listed with the lower role.
+    let before = footprint(&fixture).await;
+    let demoted = post(Some(&owner_cookie), &share_uri, share_body(HAL, "viewer")).await;
+    assert_eq!(demoted.status, StatusCode::OK, "{}", demoted.body);
+    assert_eq!(
+        work_permissions(&fixture, HAL, work).await,
+        ["record_read", "share_work"]
+    );
+    let after = footprint(&fixture).await;
+    assert_eq!(after[1], before[1] - 1, "record_write removed");
+    assert_eq!(after[5], before[5] + 1, "one permission.revoked");
+    assert_eq!(after[4], before[4], "nothing granted");
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id='{HAL}' AND revoked_at IS NULL")).await,
+        0,
+        "the demotion left Hal no live share row"
+    );
+    assert_eq!(
+        people().await,
+        [
+            pair("Hal Moreno", "viewer"),
+            pair("Member 00000000", "viewer"),
+            pair("Rita Okafor", "contributor"),
+        ]
+    );
+    check(
+        &mut checks,
+        "a demotion over the route (Hal re-shared as viewer) removes record_write with one permission.revoked and nothing granted, leaves Hal no live share row, and the dialog still lists him, now as a viewer",
+    );
+
+    // --- removing one person's access: the owner alone ---------------------
+    let removal = share_body(REV, "none");
+    let before = footprint(&fixture).await;
+    for (cookie, body) in [
+        // A share_work holder who is not the app's owner.
+        (&hal_cookie, share_body(VIC, "none")),
+        (&hal_cookie, removal.clone()),
+        // A member without any share authority, another organization.
+        (&rev_cookie, share_body(VIC, "none")),
+        (&oz_cookie, removal.clone()),
+        // The owner naming themselves.
+        (&owner_cookie, share_body(OWNER, "none")),
+    ] {
+        let refused = post(Some(cookie), &share_uri, body.clone()).await;
+        assert_eq!(refused.status, StatusCode::NOT_FOUND, "{body}");
+        assert_eq!(refused.body, anonymous.body, "{body}");
+    }
+    let missing_removal = post(Some(&owner_cookie), &missing_uri, removal.clone()).await;
+    assert_eq!(missing_removal.body, anonymous.body);
+    assert_eq!(
+        footprint(&fixture).await,
+        before,
+        "no refusal wrote anything"
+    );
+    let removed = post(Some(&owner_cookie), &share_uri, removal.clone()).await;
+    assert_eq!(removed.status, StatusCode::OK, "{}", removed.body);
+    assert_eq!(
+        removed.json(),
+        json!({"app_id": app, "work_id": work, "grantee_principal_id": REV, "role": "none"})
+    );
+    assert_eq!(
+        work_permissions(&fixture, REV, work).await,
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id='{REV}' AND revoked_at IS NULL")).await,
+        0
+    );
+    let after = footprint(&fixture).await;
+    assert_eq!(after[5], before[5] + 1, "one permission.revoked");
+    assert_eq!(
+        stores
+            .data
+            .can_open(&request(&stores, ORG, REV, 1), app, work)
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert!(!people()
+        .await
+        .iter()
+        .any(|(label, _)| label == "Rita Okafor"));
+    // Again, and for someone who holds nothing: the same answer, nothing
+    // written (nothing tells the owner what the person held).
+    let replay = post(Some(&owner_cookie), &share_uri, removal.clone()).await;
+    assert_eq!(replay.body, removed.body);
+    let nobody = post(Some(&owner_cookie), &share_uri, share_body(NOBODY, "none")).await;
+    assert_eq!(nobody.status, StatusCode::OK);
+    assert_eq!(footprint(&fixture).await, after);
+    check(
+        &mut checks,
+        "removing one person's access ({\"grantee_principal_id\",\"role\":\"none\"}): the app's owner removes Rev's record_read, record_write and record_review in one unit with one permission.revoked, his share rows are revoked, he can no longer open the work and is no longer listed; a share_work holder who is not the owner, a member without share authority, a member of another organization, the owner naming themselves and a nonexistent work get the byte-identical uniform 404 and write nothing; a repeat, or a person who holds nothing, answers 200 and writes nothing",
+    );
+
+    // --- MAJOR-1 at the route: a stop queued behind a role change ----------
+    let set = post(Some(&owner_cookie), &everyone_uri, role_body("viewer")).await;
+    assert_eq!(set.status, StatusCode::OK, "{}", set.body);
+    // The owner's change to contributor, held uncommitted in a session of
+    // the workspace role (it holds the per-work sharing lock).
+    let mut held = fixture.operator().await;
+    let change = held.client.transaction().await.unwrap();
+    change
+        .batch_execute("SET LOCAL ROLE genui_workspace")
+        .await
+        .unwrap();
+    change
+        .execute(
+            "SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)",
+            &[&ORG, &OWNER],
+        )
+        .await
+        .unwrap();
+    let rows: i64 = change
+        .query_one(&format!("SELECT count(*) FROM genui_private.set_work_everyone('{ORG}','{OWNER}','{app}','{work}','contributor')"), &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert!(rows > 0, "the held change is a grant");
+    // Hal's "Stop sharing with everyone" over the route, in flight.
+    let stop = tokio::spawn(post(Some(&hal_cookie), &everyone_uri, role_body("none")));
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    assert!(!stop.is_finished(), "the stop waits on the per-work lock");
+    change.commit().await.unwrap();
+    drop(held);
+    let stopped = stop.await.unwrap();
+    assert_eq!(stopped.status, StatusCode::OK, "{}", stopped.body);
+    assert_eq!(stopped.json()["role"], "none");
+    assert_eq!(
+        everyone_role(&fixture, work).await,
+        None,
+        "the final state is the final answer: nothing is shared with everyone"
+    );
+    assert_eq!(
+        stores.data.can_open(&nia, app, work).await.err(),
+        Some(Error::Denied)
+    );
+    // The other order: a stop held, a share with everyone in flight.
+    let set = post(Some(&owner_cookie), &everyone_uri, role_body("viewer")).await;
+    assert_eq!(set.status, StatusCode::OK, "{}", set.body);
+    let mut held = fixture.operator().await;
+    let stop = held.client.transaction().await.unwrap();
+    stop.batch_execute("SET LOCAL ROLE genui_workspace")
+        .await
+        .unwrap();
+    stop.execute(
+        "SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)",
+        &[&ORG, &OWNER],
+    )
+    .await
+    .unwrap();
+    stop.query_one(&format!("SELECT count(*) FROM genui_private.set_work_everyone('{ORG}','{OWNER}','{app}','{work}','none')"), &[])
+        .await
+        .unwrap();
+    let share = tokio::spawn(post(Some(&hal_cookie), &everyone_uri, role_body("viewer")));
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    assert!(!share.is_finished(), "the share waits on the per-work lock");
+    stop.commit().await.unwrap();
+    drop(held);
+    let shared = share.await.unwrap();
+    assert_eq!(shared.status, StatusCode::OK, "{}", shared.body);
+    assert_eq!(shared.json()["role"], "viewer");
+    assert_eq!(
+        everyone_role(&fixture, work).await.as_deref(),
+        Some("viewer"),
+        "the final state is the final answer: shared with everyone as viewer"
+    );
+    stores.data.can_open(&nia, app, work).await.unwrap();
+    check(
+        &mut checks,
+        "MAJOR-1 at the route: with the owner's change to contributor held uncommitted, Hal's \"Stop sharing with everyone\" waits on the per-work lock and, once the change commits, stops the new share: it answers none and nothing is shared with everyone (Nia cannot open the work); in the other order, with a stop held, Hal's share as viewer waits, then answers viewer and the share with everyone is live as viewer",
     );
 
     stores.close().await.unwrap();

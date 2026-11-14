@@ -130,6 +130,21 @@ impl Lineage {
     }
 }
 
+impl Lineage {
+    /// The owner removed `grantee`'s access to the standard `work`: a later
+    /// adaptation is not shared with them (APP-192).
+    pub fn forget(&self, organization: &str, work: &str, grantee: &str) {
+        if let Ok(mut state) = self.state.lock() {
+            if let Some(entry) = state
+                .entries
+                .get_mut(&(organization.to_owned(), work.to_owned()))
+            {
+                entry.shares.retain(|(g, _)| g != grantee);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +182,20 @@ mod tests {
         assert_eq!(
             lineage.shared("o", "maya", "w1", "sarah", Contributor),
             None
+        );
+    }
+
+    #[test]
+    fn a_removed_person_is_not_shared_the_adaptation() {
+        let lineage = Lineage::default();
+        lineage.begin("o", "maya", "w1");
+        lineage.shared("o", "maya", "w1", "sarah", ShareRole::Reviewer);
+        lineage.shared("o", "maya", "w1", "diego", ShareRole::Viewer);
+        lineage.forget("o", "w1", "sarah");
+        lineage.forget("o", "missing", "sarah");
+        assert_eq!(
+            lineage.adapted("o", "w1", "a2", "w2"),
+            vec![("diego".to_owned(), ShareRole::Viewer)]
         );
     }
 

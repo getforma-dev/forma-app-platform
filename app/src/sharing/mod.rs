@@ -7,14 +7,21 @@
 //!   (labels only; no provider identity; ADR-011 debt: 0002 principals carry
 //!   no display name).
 //! - `POST /v1/work/{app}/{work}/share`: body `{"grantee_principal_id":
-//!   "<uuid>","role":"viewer"|"contributor"|"reviewer"}` (APP-192: both
-//!   members required, no other member; the earlier `record_write` flag is
-//!   refused, so a role has one encoding), `application/json`, at most
+//!   "<uuid>","role":"viewer"|"contributor"|"reviewer"|"none"}` (APP-192:
+//!   both members required, no other member; the earlier `record_write` flag
+//!   is refused, so a role has one encoding), `application/json`, at most
 //!   `JSON_BODY_LIMIT`. 200 `{"app_id","work_id","grantee_principal_id",
 //!   "granted":[{"scope":"app"|"work"|"source","resource_id":"<uuid>",
 //!   "permission":"<name>"}, …]}`: the sharer's subset now held by the
 //!   teammate, the same shape whether this call inserted rows or found them
 //!   (review m1: the sharer learns nothing of the teammate's prior holdings).
+//!   A lower role than the teammate holds takes the surplus away (W4, f1).
+//!   `none` removes the teammate's access to the work
+//!   (`Workspace::revoke_work_share`: the app's owner alone; anyone else,
+//!   the owner naming themselves and a nonexistent work get the uniform 404
+//!   before any standing is judged): 200 `{"app_id","work_id",
+//!   "grantee_principal_id","role":"none"}`, the same body whether anything
+//!   was held.
 //! - `POST /v1/work/{app}/{work}/share/organization` (APP-192, D9): body
 //!   `{"role":"viewer"|"contributor"|"reviewer"|"none"}`: shares the work with
 //!   every current and future active member of the organization in that role
@@ -22,10 +29,11 @@
 //!   them at once. 200 `{"app_id","work_id","role":"<role>"|"none"}`.
 //! - `GET /v1/work/{app}/{work}/share` (APP-192): what the share dialog shows
 //!   a member with share authority: `{"app_id","work_id","roles":[…],
-//!   "can_revoke_members":false,"private_lists":bool,"organization":
+//!   "can_revoke_members":bool,"private_lists":bool,"organization":
 //!   {"available":bool,"role":"<role>"|null},"members":
 //!   [{"principal_id","label","role"}, …]}` (`Workspace::work_sharing`; the
-//!   roles this sharer may grant; whether the app has private lists; members
+//!   roles this sharer may grant; whether it may remove a person's access
+//!   (the app's owner); whether the app has private lists; members
 //!   by label, never by provider identity, each with the role of their live
 //!   permissions on the work).
 //!
@@ -118,9 +126,10 @@ fn document(status: StatusCode, value: &Value) -> Response {
     response
 }
 
-/// The closed share body: the grantee and the role, both required, nothing
-/// else (APP-192: `record_write` is refused, so a role has one encoding).
-pub(crate) fn parse_share(bytes: &[u8]) -> Option<(String, ShareRole)> {
+/// The closed share body: the grantee and the role (`none`: no role, the
+/// owner's removal of the grantee's access), both required, nothing else
+/// (APP-192: `record_write` is refused, so a role has one encoding).
+pub(crate) fn parse_share(bytes: &[u8]) -> Option<(String, Option<ShareRole>)> {
     let body = crate::admission::decode(bytes).ok()?;
     let object = body.as_object()?;
     if object.len() != 2
@@ -134,7 +143,10 @@ pub(crate) fn parse_share(bytes: &[u8]) -> Option<(String, ShareRole)> {
     if !storage::valid_identifier(grantee) {
         return None;
     }
-    let role = ShareRole::from_name(object.get("role")?.as_str()?)?;
+    let role = match object.get("role")?.as_str()? {
+        "none" => None,
+        name => Some(ShareRole::from_name(name)?),
+    };
     Some((grantee.to_owned(), role))
 }
 
@@ -166,12 +178,6 @@ pub(crate) fn role_refusal(role: ShareRole, roles: &[ShareRole]) -> Option<&'sta
     })
 }
 
-/// Whether the dialog may offer to remove one person's access. False until
-/// the owner-side revoke of a personal share (W4's pending
-/// `Workspace::revoke_work_share`) and its route exist; the canvas shows the
-/// control only when this is true.
-pub(crate) const MEMBER_REVOKE: bool = false;
-
 /// Whether an organization-wide change that `changed` the rows, from the
 /// role live `before` to the role live `after`, gives members something to
 /// be told about: a first share, or a wider role. A narrower or equal role,
@@ -198,7 +204,7 @@ pub(crate) fn sharing_json(app: &str, work: &str, sharing: &storage::WorkSharing
         "app_id": app,
         "work_id": work,
         "roles": standing.roles.iter().map(|r| r.name()).collect::<Vec<_>>(),
-        "can_revoke_members": MEMBER_REVOKE,
+        "can_revoke_members": sharing.can_revoke_members,
         "private_lists": sharing.private_lists,
         "organization": {
             "available": standing.organization_available,
@@ -327,6 +333,9 @@ async fn share(
     let Some((grantee, role)) = parse_share(&bytes) else {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
     };
+    let Some(role) = role else {
+        return remove_access(stores, &trusted, &app, &work, &grantee).await;
+    };
     let standing = match standing(stores, &trusted, &app, &work).await {
         Ok(standing) => standing,
         Err(refusal) => return refusal,
@@ -436,6 +445,45 @@ async fn share_organization(
     }
 }
 
+/// The owner's removal of one person's access (`role: none`): storage alone
+/// judges it (`Workspace::revoke_work_share`: the app's owner, not naming
+/// themselves, an existing work), so no share standing is asked first and a
+/// refusal is the uniform 404. The answer is the same whether the person held
+/// anything (nothing tells the owner what they held). The composer lineage
+/// forgets the person, so a later adaptation is not shared with them.
+async fn remove_access(
+    stores: &storage::Stores,
+    trusted: &TrustedRequest,
+    app: &str,
+    work: &str,
+    grantee: &str,
+) -> Response {
+    let result = stores
+        .workspace
+        .revoke_work_share(trusted, app, work, grantee)
+        .await;
+    tracing::info!(
+        outcome = match &result {
+            Ok(revoked) if revoked.changed() => "revoked",
+            Ok(_) => "unchanged",
+            Err(storage::Error::Denied) => "denied",
+            Err(_) => "unavailable",
+        },
+        "share.remove"
+    );
+    match result {
+        Ok(_) => {
+            crate::composer::lineage::lineage().forget(trusted.organization(), work, grantee);
+            document(
+                StatusCode::OK,
+                &json!({"app_id": app, "work_id": work, "grantee_principal_id": grantee, "role": "none"}),
+            )
+        }
+        Err(storage::Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
+    }
+}
+
 /// Shares a work with a teammate under the sharer's own authority, with its
 /// event, and (APP-101) a composition's standard work shared by the member
 /// who composed it carries its live adaptation through this same path
@@ -453,7 +501,9 @@ pub async fn share_with_lineage(
         .workspace
         .share_work(trusted, app, work, storage::Audience::Member(grantee), role)
         .await?;
-    if shared.changed() {
+    // Announced only when something was granted: a demotion that only took
+    // rows away gives nobody news (review of W2b, item 6).
+    if shared.granted.iter().any(|g| g.inserted) {
         events::hub().app_shared(trusted.organization(), app, work);
     }
     if let Some((adapted_app, adapted_work)) = crate::composer::lineage::lineage().shared(
@@ -508,16 +558,19 @@ mod tests {
             let ok = format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"{role}\"}}");
             assert_eq!(
                 parse_share(ok.as_bytes()),
-                Some((GRANTEE.into(), expected)),
+                Some((GRANTEE.into(), Some(expected))),
                 "{ok}"
             );
             // The members may come in either order.
             let swapped = format!("{{\"role\":\"{role}\",\"grantee_principal_id\":\"{GRANTEE}\"}}");
             assert_eq!(
                 parse_share(swapped.as_bytes()),
-                Some((GRANTEE.into(), expected))
+                Some((GRANTEE.into(), Some(expected)))
             );
         }
+        // `none`: the owner's removal of the grantee's access.
+        let none = format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"none\"}}");
+        assert_eq!(parse_share(none.as_bytes()), Some((GRANTEE.into(), None)));
         for bad in [
             String::from("{}"),
             String::from("[]"),
@@ -536,7 +589,7 @@ mod tests {
                 "{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"viewer\",\"permission\":\"share_work\"}}"
             ),
             format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"owner\"}}"),
-            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"none\"}}"),
+            format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"None\"}}"),
             format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"Viewer\"}}"),
             format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"record_read\"}}"),
             format!("{{\"grantee_principal_id\":\"{GRANTEE}\",\"role\":\"\"}}"),
@@ -620,6 +673,7 @@ mod tests {
                 organization_available: true,
                 organization: Some(ShareRole::Viewer),
             },
+            can_revoke_members: true,
             private_lists: true,
             members: vec![storage::ShareEntry {
                 principal: GRANTEE.into(),
@@ -633,7 +687,7 @@ mod tests {
                 "app_id": GRANTEE,
                 "work_id": GRANTEE,
                 "roles": ["viewer", "contributor"],
-                "can_revoke_members": false,
+                "can_revoke_members": true,
                 "private_lists": true,
                 "organization": {"available": true, "role": "viewer"},
                 "members": [{"principal_id": GRANTEE, "label": "Ana", "role": "contributor"}],
@@ -645,6 +699,7 @@ mod tests {
                 organization_available: false,
                 organization: None,
             },
+            can_revoke_members: false,
             private_lists: false,
             members: vec![],
         };
