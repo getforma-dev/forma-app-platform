@@ -30,6 +30,7 @@ live-sharing	storage::shared_campaign::native_live_sharing_campaign	campaign	ten
 shared-identity	auth::shared_tests::native_shared_identity_campaign	campaign	tenant-foundation	GENUI_SHARED_IDENTITY_REPORT	-	Docker, OpenSSL, runtime venv
 record-components	storage::record_components_campaign::native_record_components_campaign	campaign	tenant-foundation	GENUI_RECORD_COMPONENTS_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
 sharing	storage::sharing_qualification::native_sharing_campaign	campaign	pitch	GENUI_SHARING_REPORT	-	Docker, OpenSSL, runtime venv
+private-entries	storage::private_entries_campaign::native_private_entries_campaign	campaign	tenant-foundation	GENUI_PRIVATE_ENTRIES_REPORT	-	Docker, OpenSSL, runtime venv
 slack	storage::slack_campaign::native_slack_campaign	campaign	pitch	GENUI_SLACK_CAMPAIGN_REPORT	-	Docker, runtime venv
 workflows	storage::workflows_campaign::native_workflows_campaign	campaign	pitch	GENUI_WORKFLOWS_CAMPAIGN_REPORT	-	Docker, runtime venv
 parser-sandbox	imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets	probe	-	-	-	GENUI_TEST_PARSER_MANIFEST naming a built parser

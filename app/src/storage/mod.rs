@@ -201,6 +201,8 @@ mod managed_qualification;
 #[cfg(test)]
 mod mcp_campaign;
 #[cfg(test)]
+mod private_entries_campaign;
+#[cfg(test)]
 pub(crate) mod qualification;
 #[cfg(test)]
 pub(crate) mod qualification_cases;

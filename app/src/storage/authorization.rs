@@ -745,8 +745,10 @@ const SCOPED_ORG: &str = "nullif(current_setting('genui.organization_id',true),'
 pub(super) const SCOPED: &str = "nullif(current_setting('genui.principal_id',true),'')::uuid";
 
 /// The `private-entries` campaign's bypass (APP-191 acceptance: every check
-/// fails with the enforcement bypassed): `own_rows` becomes TRUE and
-/// `compose` skips the `reviewer_only` gate while set. Test builds only.
+/// fails with the enforcement bypassed): `own_rows` becomes TRUE, `hidden`
+/// empty, `own_collections` zero and `compose` skips the `reviewer_only` gate
+/// while set. Test builds only; a campaign runs alone, so no other test
+/// reads it.
 #[cfg(test)]
 pub(crate) static BYPASS: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
@@ -786,6 +788,9 @@ pub(super) fn own_rows(row: &str, app: &str, work: &str, principal: &str) -> Str
 /// InitPlan) and each row costs one array comparison. Aliases are private
 /// (`hc`, `hp`, `hd`).
 pub(super) fn hidden(app: &str, work: &str, principal: &str) -> String {
+    if bypassed() {
+        return "ARRAY[]::uuid[]".to_owned();
+    }
     format!(
         "ARRAY(SELECT hc.collection_id FROM genui.record_collections hc JOIN genui.publication_record_schemas hp ON hp.organization_id=hc.organization_id AND hp.app_id=hc.app_id AND hp.publication_id=hc.publication_id AND hp.schema_id=hc.schema_id AND hp.schema_version=hc.schema_version JOIN genui.definition_record_schemas hd ON hd.organization_id=hp.organization_id AND hd.app_id=hp.app_id AND hd.revision_id=hp.definition_revision_id AND hd.schema_id=hp.schema_id AND hd.schema_version=hp.schema_version AND hd.digest=hp.digest WHERE hc.organization_id={SCOPED_ORG} AND hc.app_id={app} AND hc.work_id={work} AND hd.owner_only AND NOT {})",
         reviewer_clause(app, work, principal)
@@ -811,6 +816,9 @@ pub(super) async fn own_collections(
     app: &str,
     work: &str,
 ) -> Result<i64> {
+    if bypassed() {
+        return Ok(0);
+    }
     let rows = transaction.query("SELECT count(*)::bigint FROM genui.record_collections hc JOIN genui.publication_record_schemas hp ON hp.organization_id=hc.organization_id AND hp.app_id=hc.app_id AND hp.publication_id=hc.publication_id AND hp.schema_id=hc.schema_id AND hp.schema_version=hc.schema_version JOIN genui.definition_record_schemas hd ON hd.organization_id=hp.organization_id AND hd.app_id=hp.app_id AND hd.revision_id=hp.definition_revision_id AND hd.schema_id=hp.schema_id AND hd.schema_version=hp.schema_version AND hd.digest=hp.digest WHERE hc.organization_id=$1::text::uuid AND hc.app_id=$2::text::uuid AND hc.work_id=$3::text::uuid AND hd.owner_only", &[&organization,&app,&work]).await?;
     integer(rows.first().ok_or(Error::Unavailable)?, 0)
 }
