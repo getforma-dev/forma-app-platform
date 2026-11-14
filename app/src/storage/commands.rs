@@ -648,7 +648,7 @@ pub(super) async fn copy_capacity(
     if manifest.is_empty() {
         return Ok(());
     }
-    let rows=t.query("SELECT count(*)::bigint,coalesce(sum(octet_length(v.canonical_values)),0)::bigint,coalesce(max(CASE WHEN r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid THEN octet_length(v.canonical_values) ELSE 0 END),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid", &[&org,&app,&work,&collection,&record]).await?;
+    let rows=t.query(&format!("SELECT count(*)::bigint,coalesce(sum(octet_length(v.canonical_values)),0)::bigint,coalesce(max(CASE WHEN r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid THEN octet_length(v.canonical_values) ELSE 0 END),0)::bigint FROM genui.internal_records r {} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid", super::record_query::CURRENT), &[&org,&app,&work,&collection,&record]).await?;
     let row = rows.first().ok_or(Error::Unavailable)?;
     let count: i64 = row.try_get(0).map_err(|_| Error::Unavailable)?;
     let bytes: i64 = row.try_get(1).map_err(|_| Error::Unavailable)?;

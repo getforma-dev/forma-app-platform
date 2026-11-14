@@ -10,6 +10,15 @@ use std::sync::{Arc, OnceLock};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 pub const MAX_ROWS: i64 = 100_000;
+/// Each record's current revision `v`, by its full primary key: one index
+/// probe per `genui.internal_records r` row. The `LIMIT 1` keeps the
+/// subquery lateral (PostgreSQL does not flatten it into a join), so the
+/// lookup stays parameterized by the record's key whatever the planner's
+/// statistics say; the plain keyed join, after a bulk import of 2,505 records
+/// left the statistics stale, ran as a nested loop over every revision of the
+/// collection (3.1 million join-filter rejections) and, with the row rule's
+/// per-row cost, exceeded the statement budget (APP-191, the box campaign).
+pub(super) const CURRENT: &str = "CROSS JOIN LATERAL (SELECT v.* FROM genui.internal_record_revisions v WHERE v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version LIMIT 1) v";
 pub const MAX_BYTES: i64 = 64 * 1024 * 1024;
 static SNAPSHOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
@@ -130,8 +139,13 @@ pub(super) async fn capture(
     // canonical row bytes at all when the complete collection exceeds a bound.
     // APP-191: the row rule on the bounds and on the row read alike, so a
     // contributor's snapshot of an `own` collection is their own rows only
-    // (queries, summaries and ranks count exactly those).
-    let rows=tx.query(&format!("WITH bounds AS MATERIALIZED (SELECT count(*)::bigint AS n,coalesce(sum(octet_length(v.canonical_values)),0)::bigint AS bytes,coalesce(max(v.commit_sequence),0)::bigint AS last FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own}) SELECT b.n,b.bytes,b.last,(SELECT next_commit_sequence-1 FROM genui.organization_sequences WHERE organization_id=$1::text::uuid)::bigint,d.canonical_values FROM bounds b LEFT JOIN LATERAL (SELECT v.canonical_values,r.record_id FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE b.n<=$5 AND b.bytes<=$6 AND r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own} ORDER BY r.record_id) d ON true ORDER BY d.record_id", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[&org,&app,&work,&collection,&MAX_ROWS,&MAX_BYTES]).await?;
+    // (queries, summaries and ranks count exactly those). Each record's
+    // current revision is looked up by its full key (`LATERAL ... LIMIT 1`),
+    // one index probe per record whatever the statistics say: a join the
+    // planner left unparameterized after a bulk import was quadratic and,
+    // with the rule's per-row cost, exceeded the statement budget at 2,505
+    // records (the box campaign's editable import).
+    let rows=tx.query(&format!("WITH bounds AS MATERIALIZED (SELECT count(*)::bigint AS n,coalesce(sum(octet_length(v.canonical_values)),0)::bigint AS bytes,coalesce(max(v.commit_sequence),0)::bigint AS last FROM genui.internal_records r {CURRENT} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own}) SELECT b.n,b.bytes,b.last,(SELECT next_commit_sequence-1 FROM genui.organization_sequences WHERE organization_id=$1::text::uuid)::bigint,d.canonical_values FROM bounds b LEFT JOIN LATERAL (SELECT v.canonical_values,r.record_id FROM genui.internal_records r {CURRENT} WHERE b.n<=$5 AND b.bytes<=$6 AND r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own} ORDER BY r.record_id) d ON true ORDER BY d.record_id", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[&org,&app,&work,&collection,&MAX_ROWS,&MAX_BYTES]).await?;
     let first = rows.first().ok_or(Error::Unavailable)?;
     let number = |i| first.try_get::<_, i64>(i).map_err(|_| Error::Unavailable);
     let count = number(0)?;
@@ -185,13 +199,19 @@ pub(super) async fn release(
                 snapshot.schema_version,
             ),
     )?;
-    let rows=tx.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own}", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[&org,&app,&work,&snapshot.collection]).await?;
+    let rows=tx.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_records r {CURRENT} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own}", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[&org,&app,&work,&snapshot.collection]).await?;
     let current: i64 = rows
         .first()
         .ok_or(Error::Unavailable)?
         .try_get(0)
         .map_err(|_| Error::Unavailable)?;
-    require(current == snapshot.last_commit)
+    // APP-198: the list moved between capture and release (a commit landed):
+    // the snapshot is stale, which is typed, not refused. `Denied` above is
+    // the binding that changed; authority is the callers' fences.
+    if current != snapshot.last_commit {
+        return Err(Error::Stale);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

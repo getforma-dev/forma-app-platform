@@ -59,6 +59,13 @@ pub struct StoreGate {
     stores: Arc<Stores>,
     request: TrustedRequest,
 }
+impl StoreGate {
+    /// The gate of one subscriber's stream (the campaigns open streams with
+    /// the production gate, without the HTTP route).
+    pub fn new(stores: Arc<Stores>, request: TrustedRequest) -> Self {
+        Self { stores, request }
+    }
+}
 impl Gate for StoreGate {
     type Judgment = storage::Openable;
     async fn judge(

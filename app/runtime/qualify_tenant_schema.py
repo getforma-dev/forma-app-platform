@@ -53,6 +53,10 @@ ADMIT_FUNCTIONS = {
     # ('none') as one unit; one live work_shares row with no grantee.
     'set_work_everyone': ('p_org uuid, p_sharer uuid, p_app uuid, p_work uuid, p_role text',
                           'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
+    # Migration 0024 (APP-191 review M1): the app owner's revocation of a member's
+    # personal share, every work row the grantee holds removed as one unit.
+    'revoke_work_share': ('p_org uuid, p_actor uuid, p_app uuid, p_work uuid, p_grantee uuid',
+                          'TABLE(permission text, removed boolean)'),
     # Migration 0011 (ADR-011 pitch, APP-108): the eighth definer; a member's
     # confirmed folder CSV/XLSX becomes a source, revision and source_read.
     'register_box_source': ('p_org uuid, p_principal uuid, p_box uuid, p_file uuid, p_source uuid, p_revision uuid, p_content_digest text, '
@@ -142,6 +146,9 @@ ADMIT_GRANTS = set().union(
     # revoke it in place; nothing else on work_shares is writable.
     _columns('work_shares','UPDATE','revoked_at','revoked_by','revoke_event_id'),
     _columns('work_shares','SELECT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','role','revoked_at','granted'),
+    # 0024 (APP-191 review M1): revoke_work_share deletes a grantee's work rows
+    # (a table-level DELETE; the only one any definer holds on a permission table).
+    {('genui_admit','work_permissions','DELETE',None)},
     _columns('entitlements','INSERT','organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at'),
     _columns('code_redemptions','SELECT','organization_id','redemption_id','principal_id','pending_admission_id','entitlement_id','payload_digest'),
     _columns('code_redemptions','INSERT','organization_id','redemption_id','code_id','principal_id','pending_admission_id',
@@ -511,8 +518,10 @@ def admission_checks(pg, passed, denied):
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",(list(SHARING_TABLES),)).fetchall()
         assert rows==[(t,True,True,'genui_owner') for t in SHARING_TABLES],rows
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
-          AND tablename = ANY(%s) ORDER BY tablename""",(list(SHARING_TABLES),)).fetchall()
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES],rows
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(SHARING_TABLES),)).fetchall()
+        # 0024 (review n2): the application roles read the organization-wide rows only.
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES]+[
+            ('work_shares','RESTRICTIVE',['genui_control','genui_data','genui_workspace'],'SELECT','(grantee_id IS NULL)',None)],rows
         shares=c.execute("""SELECT grantee,privilege_type,count(*) FROM information_schema.column_privileges
           WHERE table_schema='genui' AND table_name='work_shares' AND grantee<>'genui_owner' GROUP BY 1,2 ORDER BY 1,2""").fetchall()
         assert shares==[('genui_admit','INSERT',10),('genui_admit','SELECT',9),('genui_admit','UPDATE',3),
@@ -569,8 +578,10 @@ def admission_checks(pg, passed, denied):
         executes=set(c.execute("""SELECT p.proname,pg_get_userbyid(a.grantee) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
           CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
+        # 0024: genui.canonical_jsonb (the owner_only derivation) is executable by
+        # the writer of definition_record_schemas, genui_workspace, and no one else.
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
-            (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
+            (name,'genui_workspace') for name in ADMIT_FUNCTIONS}|{('canonical_jsonb','genui_workspace')},executes
     passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the admit functions is genui_workspace only',
            admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS),session_grant_count=len(SESSION_GRANTS),
            command_grant_count=len(COMMAND_GRANTS))
@@ -595,7 +606,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle','expire_shared_identity')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; fourteen exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work as 0024 replaced it, the 0011 register_box_source, the 0015 steward_card, the 0016 ensure_authoring_shell, the 0024 set_work_everyone and the three 0023 name and admin definers) with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; fifteen exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work as 0024 replaced it, the 0011 register_box_source, the 0015 steward_card, the 0016 ensure_authoring_shell, the 0024 set_work_everyone and revoke_work_share and the three 0023 name and admin definers) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---
@@ -2025,6 +2036,7 @@ def qualify():
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_labels' AND policyname='member_labels_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_cards' AND policyname='member_cards_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='work_artifact_kinds' AND policyname='work_artifact_kinds_principal')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='work_shares' AND policyname='work_shares_everyone')
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'

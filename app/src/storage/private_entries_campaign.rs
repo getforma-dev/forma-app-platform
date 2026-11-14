@@ -22,14 +22,21 @@
 use super::{
     admission_qualification::operator,
     authorization::BYPASS,
-    definition_qualification::{grant, request, POLICY},
+    definition_qualification::{
+        grant, request, spend_review_definition, spend_review_s05, EXPENSES, EXPENSES_REVISION,
+        POLICY,
+    },
     qualification::Fixture,
     qualification_cases::{check, ORG},
     *,
 };
-use crate::admission::{self, digest};
+use crate::{
+    admission::{self, digest},
+    events,
+};
+use genui_auth_verifier::VerifiedIdentity;
 use serde_json::{json, Value};
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc};
 
 /// The seeded fixture space (tenant_seed.py).
 const SPACE: &str = "00000000-0000-4000-8000-000000000384";
@@ -40,6 +47,15 @@ const BEN: &str = "00000000-0000-4000-8000-000000000a03";
 const ANA: &str = "00000000-0000-4000-8000-000000000a04";
 const NIA: &str = "00000000-0000-4000-8000-000000000a05";
 const FAY: &str = "00000000-0000-4000-8000-000000000a06";
+/// A `share_work` holder who is neither the creator nor a reviewer (review m1, m2).
+const KIM: &str = "00000000-0000-4000-8000-000000000a07";
+/// The second app: a source view beside an own collection (review m4).
+const PRIVATE_APP2: &str = "00000000-0000-4000-8000-000000000a20";
+const BEN_CLAIM2: &str = "00000000-0000-4000-8000-00000000a111";
+const OWNER_CLAIM2: &str = "00000000-0000-4000-8000-00000000a112";
+const GUEST_SHARE: &str = "00000000-0000-4000-8000-00000000a601";
+const GUEST_SHARE2: &str = "00000000-0000-4000-8000-00000000a602";
+const REFRESH: &str = "00000000-0000-4000-8000-00000000a6ff";
 const OWNER_CLAIM: &str = "00000000-0000-4000-8000-00000000a101";
 const BEN_CLAIM: &str = "00000000-0000-4000-8000-00000000a102";
 const REV_CLAIM: &str = "00000000-0000-4000-8000-00000000a103";
@@ -73,7 +89,8 @@ pub(super) fn definition() -> Value {
     let claim_fields = json!([
         {"id": "amount", "value_type": {"type": "integer", "unit": "count"}, "nullable": false},
         {"id": "status", "value_type": {"type": "enum", "values": ["filed", "approved"]}, "nullable": false},
-        {"id": "note", "value_type": {"type": "text"}, "nullable": true}
+        {"id": "note", "value_type": {"type": "text"}, "nullable": true},
+        {"id": "grade", "value_type": {"type": "text"}, "nullable": true}
     ]);
     let note_fields = json!([
         {"id": "title", "value_type": {"type": "text"}, "nullable": false},
@@ -99,6 +116,7 @@ pub(super) fn definition() -> Value {
         "commands": [
             {"id": "submit", "record_schema_id": "claim", "operation": "create", "writable_fields": ["amount", "status", "note"], "transitions": [], "initial": [{"field_id": "status", "value": "filed"}]},
             {"id": "edit", "record_schema_id": "claim", "operation": "update", "writable_fields": ["note"], "transitions": []},
+            {"id": "grade", "record_schema_id": "claim", "operation": "update", "writable_fields": ["grade"], "transitions": [], "reviewer_only": true},
             {"id": "approve", "record_schema_id": "claim", "operation": "create", "writable_fields": ["status"], "transitions": [{"field_id": "status", "from": "filed", "to": "approved"}], "reviewer_only": true},
             {"id": "add_note", "record_schema_id": "note", "operation": "create", "writable_fields": ["title", "state"], "transitions": [], "initial": [{"field_id": "state", "value": "open"}]},
             {"id": "close", "record_schema_id": "note", "operation": "create", "writable_fields": ["state"], "transitions": [{"field_id": "state", "from": "open", "to": "closed"}], "reviewer_only": true}
@@ -118,6 +136,49 @@ pub(super) fn definition() -> Value {
         "organization_id": ORG,
         "app_id": PRIVATE_APP,
         "revision_id": "00000000-0000-4000-8000-000000000a11",
+        "content": content,
+        "digest": digest::digest(digest::APP_DEFINITION, &canonical),
+    })
+}
+
+/// The second campaign app (review m4): the S05 expenses source beside an own
+/// `claims` collection, so a source view's snapshot sequence is judged by the
+/// rule for members and guests. The input contract is the fixture's, verbatim.
+fn second_definition() -> Value {
+    let expenses = spend_review_definition(ORG)["content"]["inputs"][0].clone();
+    let claim_fields = json!([
+        {"id": "amount", "value_type": {"type": "integer", "unit": "count"}, "nullable": false}
+    ]);
+    let content = json!({
+        "title": "Spend and claims",
+        "description": "Synthetic campaign app: a source view beside each member's own claims.",
+        "inputs": [
+            expenses,
+            {"id": "claims", "contract_id": "claim2_v1", "contract_version": 1, "kind": "records", "fields": claim_fields}
+        ],
+        "views": [
+            {"id": "spend", "kind": "summary", "renderer_version": 1, "title": "Spend", "query": {"operator_version": 1, "inputs": ["expenses"], "operations": [{"type": "aggregate", "group_by": [], "measures": [{"id": "n", "operation": "count", "field": {"input_id": "expenses", "field_id": "expense_id"}}]}], "null_policy": "unknown"}},
+            {"id": "submit", "kind": "form", "renderer_version": 1, "title": "Submit a claim", "command_id": "submit"}
+        ],
+        "record_schemas": [
+            {"id": "claim", "version": 1, "visibility": "own", "fields": claim_fields}
+        ],
+        "commands": [
+            {"id": "submit", "record_schema_id": "claim", "operation": "create", "writable_fields": ["amount"], "transitions": []}
+        ],
+        "links": [],
+        "default_layout": [
+            {"view_id": "spend", "column": 0, "row": 0, "width": 12},
+            {"view_id": "submit", "column": 0, "row": 1, "width": 12}
+        ]
+    });
+    let canonical = admission::encode(&content).unwrap();
+    json!({
+        "kind": "app_definition",
+        "schema_version": 1,
+        "organization_id": ORG,
+        "app_id": PRIVATE_APP2,
+        "revision_id": "00000000-0000-4000-8000-000000000a21",
         "content": content,
         "digest": digest::digest(digest::APP_DEFINITION, &canonical),
     })
@@ -159,6 +220,79 @@ async fn definer_rows(fixture: &Fixture, principal: &str, sql: &str) -> i64 {
     rows
 }
 
+/// A guest's synthetic identity proof (as the live-sharing campaign mints it).
+fn proof(subject: &str, email: &str) -> ShareIdentityProof {
+    ShareIdentityProof::verified(
+        &VerifiedIdentity {
+            key_id: "synthetic-key".into(),
+            issuer: "app008-fixture-only".into(),
+            tenant_id: "ten_guests".into(),
+            subject: subject.into(),
+            issued_at: 1,
+            expires_at: 2,
+        },
+        email,
+        true,
+    )
+    .unwrap()
+}
+async fn guest_account(stores: &Stores, subject: &str, email: &str) -> ShareAccount {
+    let cookie = stores
+        .workspace
+        .mint_shared_session(&proof(subject, email), REFRESH)
+        .await
+        .unwrap();
+    stores
+        .workspace
+        .resolve_shared_session(&cookie, &|_| true)
+        .await
+        .unwrap()
+        .unwrap()
+}
+/// A live share the product refuses to create (its work has an own
+/// collection), written by the operator stand-in so that the guest read sites
+/// can be judged: the row rule, not the share's pinned collection list, must
+/// be what keeps a guest out of the own rows.
+#[allow(clippy::too_many_arguments)]
+fn insert_guest_share(
+    fixture: &Fixture,
+    share: &str,
+    app: &str,
+    work: &str,
+    publication: &str,
+    definition_digest: &str,
+    views: &[&str],
+    collections: &[&str],
+    email: &str,
+) {
+    let views = views
+        .iter()
+        .map(|v| format!("\"{v}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let collections = collections
+        .iter()
+        .map(|c| format!("\"{c}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,version,idempotency_key,request_digest,created_at,expires_at) VALUES ('{ORG}','{share}','{app}','{work}','{OWNER}',1,'{email}','{publication}','{definition_digest}',1,'{{{views}}}','{{{collections}}}','campaign guest share',false,1,'{share}','{definition_digest}',clock_timestamp(),clock_timestamp()+interval '7 days'); COMMIT;"), "genui");
+}
+
+/// Whether, within five seconds, another backend waits on a lock while
+/// running a statement that names `needle` (`pg_stat_activity`): the
+/// deterministic sign that a second session queued behind the first's open
+/// transaction instead of reading past it.
+async fn lock_wait(fixture: &Fixture, needle: &str) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        let waiting = scalar(fixture, &format!("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND state='active' AND pid<>pg_backend_pid() AND query LIKE '%{needle}%'")).await;
+        if waiting > 0 {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    false
+}
 async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     fixture
         .operator()
@@ -189,6 +323,7 @@ fn claim_values(amount: &str, status: &str, note: &str) -> Value {
 }
 
 struct Work {
+    app: String,
     work: String,
     publication: String,
     claims: String,
@@ -206,7 +341,7 @@ fn command(
     key: &str,
 ) -> CommandRequest {
     CommandRequest {
-        app: PRIVATE_APP.into(),
+        app: w.app.clone(),
         work: w.work.clone(),
         publication: w.publication.clone(),
         command: command.into(),
@@ -225,9 +360,14 @@ async fn committed(
     who: &TrustedRequest,
     request: &CommandRequest,
 ) -> CommandOutcome {
-    match stores.data.commit_record(who, request).await.unwrap() {
-        CommandResult::Committed(outcome) => outcome,
-        other => panic!("{} must commit: {other:?}", request.command),
+    match stores.data.commit_record(who, request).await {
+        Ok(CommandResult::Committed(outcome)) => outcome,
+        other => panic!(
+            "{} on {} by {} must commit: {other:?}",
+            request.command,
+            request.work,
+            who.principal()
+        ),
     }
 }
 
@@ -265,6 +405,10 @@ async fn chain(fixture: &Fixture, kind: &str) -> i64 {
 }
 
 /// An enforcement check: holds as shipped, fails with the rule bypassed.
+/// The live-hint acceptance case runs twice (as shipped, then bypassed); each
+/// round admits its own members and commits its own rows.
+static LIVE_HINT_ROUND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 macro_rules! judged {
     ($checks:expr, $name:expr, $body:block) => {{
         BYPASS.store(false, Ordering::SeqCst);
@@ -289,10 +433,10 @@ async fn campaign() {
         "genui",
     );
     operator(&fixture, &["backfill", "--organization", ORG]);
-    let stores = Stores::new(fixture.settings()).unwrap();
+    let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
     stores.readiness().await.unwrap();
     let mut checks = Vec::new();
-    for member in [OWNER, REV, BEN, ANA, NIA] {
+    for member in [OWNER, REV, BEN, ANA, NIA, KIM] {
         admit_member(&fixture, member);
     }
     let owner = request(&stores, ORG, OWNER, 1);
@@ -359,6 +503,7 @@ async fn campaign() {
         format!("SELECT collection_id::text FROM genui.record_collections WHERE organization_id='{ORG}' AND work_id='{work_id}' AND schema_id='{schema}'")
     };
     let w = Work {
+        app: PRIVATE_APP.into(),
         work: work_id.clone(),
         publication: publication.publication_id.clone(),
         claims: text(&fixture, &collection("claim")).await,
@@ -502,7 +647,6 @@ async fn campaign() {
     .await;
     let all_claims = sorted(&[OWNER_CLAIM, BEN_CLAIM, REV_CLAIM]);
     let all_notes = sorted(&[OWNER_NOTE, BEN_NOTE]);
-
     // --- list, search, target (canvas, MCP and Slack share these reads) ------
     judged!(&mut checks, "list: a contributor sees only their own claims and every note; a reviewer and the owner see all claims", {
         let b = stores.data.list_records(&ben, PRIVATE_APP, work).await.unwrap();
@@ -798,7 +942,10 @@ async fn campaign() {
         .await
         .unwrap();
     assert_eq!(commands_of(&b, &w.claims), ["edit", "submit"]);
-    assert_eq!(commands_of(&r, &w.claims), ["approve", "edit", "submit"]);
+    assert_eq!(
+        commands_of(&r, &w.claims),
+        ["approve", "edit", "grade", "submit"]
+    );
     assert_eq!(commands_of(&b, &w.notes), ["add_note"]);
     assert_eq!(commands_of(&r, &w.notes), ["add_note", "close"]);
     let detail = stores
@@ -1260,6 +1407,685 @@ async fn campaign() {
         .await
         .unwrap();
 
+    // --- review m1, m2: the definers judge PERSONAL standing ---------------------
+    // Kim holds share_work, discover and run but no record_read: nothing to copy.
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.work_permissions(organization_id,principal_id,app_id,work_id,permission) VALUES ('{ORG}','{KIM}','{PRIVATE_APP}','{work}','share_work'); COMMIT;"), "genui");
+    for permission in ["discover", "run"] {
+        grant(&fixture, KIM, permission, &["--app", PRIVATE_APP]);
+    }
+    let kim = request(&stores, ORG, KIM, 1);
+    assert_eq!(
+        definer_rows(&fixture, KIM, &share(KIM, FAY, "viewer")).await,
+        0,
+        "m1: a sharer without record_read confers nothing, not even record_read"
+    );
+    assert_eq!(
+        definer_rows(&fixture, KIM, &everyone_sql(KIM, "viewer")).await,
+        0,
+        "m1: nor an organization-wide share"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .share_work(
+                &kim,
+                PRIVATE_APP,
+                work,
+                Audience::Member(FAY),
+                ShareRole::Viewer
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    // Kim now reads personally (the owner's viewer share); a live contributor
+    // share for everyone gives Kim write standing that is not Kim's to copy.
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Member(KIM),
+            ShareRole::Viewer,
+        )
+        .await
+        .unwrap();
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Organization,
+            ShareRole::Contributor,
+        )
+        .await
+        .unwrap();
+    assert!(stores.data.dry_run_command(&kim, &command(&w, "add_note", "note", "00000000-0000-4000-8000-00000000a2a1", 0, json!([{"field_id": "title", "value": {"type": "text", "value": "kim"}}, {"field_id": "state", "value": {"type": "enum", "value": "open"}}]), &"b1".repeat(16))).await.is_ok(), "Kim writes through the organization-wide share");
+    assert!(
+        definer_rows(&fixture, KIM, &share(KIM, FAY, "viewer")).await > 0,
+        "m1: with record_read held, a viewer share copies"
+    );
+    assert_eq!(
+        definer_rows(&fixture, KIM, &share(KIM, FAY, "contributor")).await,
+        0,
+        "m2: write held only through the organization-wide share is not copied"
+    );
+    assert_eq!(
+        definer_rows(&fixture, KIM, &everyone_sql(KIM, "contributor")).await,
+        0,
+        "m2: nor re-shared organization-wide"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .share_work(
+                &kim,
+                PRIVATE_APP,
+                work,
+                Audience::Member(FAY),
+                ShareRole::Contributor
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert!(stores
+        .workspace
+        .revoke_organization_share(&owner, PRIVATE_APP, work)
+        .await
+        .unwrap());
+    check(&mut checks, "review m1, m2: share_work and set_work_everyone copy only what the sharer holds personally: a sharer without record_read confers nothing; write standing held only through a live organization-wide share is never copied into a personal grant (direct definer calls and the storage API)");
+    // Review n7: a live reviewer share is the owner's (or a reviewer's) to lower or revoke.
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Organization,
+            ShareRole::Reviewer,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        definer_rows(&fixture, BEN, &everyone_sql(BEN, "viewer")).await,
+        0,
+        "n7: a non-reviewer cannot lower the owner's reviewer share"
+    );
+    assert_eq!(
+        definer_rows(&fixture, BEN, &everyone_sql(BEN, "none")).await,
+        0,
+        "n7: nor revoke it"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .revoke_organization_share(&ben, PRIVATE_APP, work)
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert!(stores
+        .workspace
+        .revoke_organization_share(&owner, PRIVATE_APP, work)
+        .await
+        .unwrap());
+    check(&mut checks, "review n7: a share_work holder who is no reviewer can neither lower nor revoke a live organization-wide reviewer share; the owner can");
+
+    // --- review m3: concurrent organization-wide shares both answer ---------------
+    {
+        let mut first = fixture.operator().await;
+        let mut second = fixture.operator().await;
+        let t1 = first.client.transaction().await.unwrap();
+        t1.batch_execute("SET LOCAL ROLE genui_workspace")
+            .await
+            .unwrap();
+        t1.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+        let rows1: i64 = t1
+            .query_one(&everyone_sql(OWNER, "contributor"), &[])
+            .await
+            .unwrap()
+            .get(0);
+        assert!(rows1 > 0);
+        // The second call starts while the first holds its row and lock.
+        let second_sql = everyone_sql(OWNER, "viewer");
+        let racing = tokio::spawn(async move {
+            let t2 = second.client.transaction().await.unwrap();
+            t2.batch_execute("SET LOCAL ROLE genui_workspace")
+                .await
+                .unwrap();
+            t2.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+            let rows2 = t2
+                .query_one(&second_sql, &[])
+                .await
+                .map(|r| r.get::<_, i64>(0));
+            match rows2 {
+                Ok(n) => {
+                    t2.commit().await.unwrap();
+                    Ok(n)
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        assert!(!racing.is_finished(), "the second call waits on the first");
+        t1.commit().await.unwrap();
+        let rows2 = racing.await.unwrap();
+        assert!(
+            matches!(rows2, Ok(n) if n > 0),
+            "the second call answers a result after the first commits: {rows2:?}"
+        );
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id IS NULL AND revoked_at IS NULL")).await, 1);
+        assert_eq!(text(&fixture, &format!("SELECT role FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id IS NULL AND revoked_at IS NULL")).await, "viewer");
+        assert!(stores
+            .workspace
+            .revoke_organization_share(&owner, PRIVATE_APP, work)
+            .await
+            .unwrap());
+        check(&mut checks, "review m3: two concurrent set_work_everyone calls for one work serialize on the advisory lock; the second waits, then replaces the first's role as one unit, and both answer rows (no unique violation, no 503); one live row remains");
+    }
+
+    // --- W2b review MAJOR-1: a queued call reads the committed state ---------------
+    // Two sessions, deterministic: the first holds its change open, the second
+    // (the storage path) starts, is seen waiting, the first commits, the
+    // second's outcome is judged.
+    {
+        stores
+            .workspace
+            .share_work(
+                &owner,
+                PRIVATE_APP,
+                work,
+                Audience::Organization,
+                ShareRole::Viewer,
+            )
+            .await
+            .unwrap();
+        let mut first = fixture.operator().await;
+        let t1 = first.client.transaction().await.unwrap();
+        t1.batch_execute("SET LOCAL ROLE genui_workspace")
+            .await
+            .unwrap();
+        t1.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+        let rows1: i64 = t1
+            .query_one(&everyone_sql(OWNER, "contributor"), &[])
+            .await
+            .unwrap()
+            .get(0);
+        assert!(rows1 > 0, "viewer to contributor, left uncommitted");
+        let waiter = stores
+            .workspace
+            .revoke_organization_share(&owner, PRIVATE_APP, work);
+        let committer = async {
+            let waited = lock_wait(&fixture, "set_work_everyone").await;
+            t1.commit().await.unwrap();
+            waited
+        };
+        let (revoked, waited) = tokio::join!(waiter, committer);
+        assert!(waited, "the 'none' call waits behind the open change");
+        assert_eq!(
+            revoked,
+            Ok(true),
+            "the queued 'none' revokes the contributor share the first call committed"
+        );
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id IS NULL AND revoked_at IS NULL")).await, 0, "no organization-wide share stays live");
+        check(&mut checks, "W2b review MAJOR-1: a 'none' queued behind an uncommitted viewer-to-contributor change waits on the per-work lock (taken before any read), then revokes the committed contributor share (storage answers true, no live organization-wide row) instead of answering 'nothing to revoke' over a stale read");
+    }
+    {
+        let mut first = fixture.operator().await;
+        let t1 = first.client.transaction().await.unwrap();
+        t1.batch_execute("SET LOCAL ROLE genui_workspace")
+            .await
+            .unwrap();
+        t1.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+        let rows1: i64 = t1
+            .query_one(&share(OWNER, FAY, "reviewer"), &[])
+            .await
+            .unwrap()
+            .get(0);
+        assert!(
+            rows1 > 0,
+            "the owner's reviewer share to Fay, left uncommitted"
+        );
+        let waiter = stores
+            .workspace
+            .revoke_work_share(&owner, PRIVATE_APP, work, FAY);
+        let committer = async {
+            let waited = lock_wait(&fixture, "revoke_work_share").await;
+            t1.commit().await.unwrap();
+            waited
+        };
+        let (revoked, waited) = tokio::join!(waiter, committer);
+        assert!(waited, "the revocation waits behind the open share");
+        let revoked = revoked.unwrap();
+        assert_eq!(
+            revoked.removed,
+            ["record_read", "record_review", "record_write"],
+            "the queued revocation removes the rows the share committed"
+        );
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{FAY}' AND work_id='{work}'")).await, 0);
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{FAY}' AND work_id='{work}' AND revoked_at IS NULL")).await, 0);
+        check(&mut checks, "W2b review MAJOR-1, the same ordering in share_work and revoke_work_share: an owner's revocation queued behind an uncommitted reviewer share waits on the per-work lock, then removes the three rows that share committed (Fay keeps nothing, her share record marked revoked), instead of answering 'nothing to remove' and leaving the grant live");
+    }
+
+    // --- review M1: the owner revokes a member's personal share ------------------
+    assert_eq!(
+        stores
+            .workspace
+            .revoke_work_share(&ben, PRIVATE_APP, work, REV)
+            .await
+            .err(),
+        Some(Error::Denied),
+        "only the owner revokes"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .revoke_work_share(&rev, PRIVATE_APP, work, BEN)
+            .await
+            .err(),
+        Some(Error::Denied),
+        "a reviewer does not"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .revoke_work_share(&owner, PRIVATE_APP, work, OWNER)
+            .await
+            .err(),
+        Some(Error::Denied),
+        "never the owner's own rows"
+    );
+    let nothing = stores
+        .workspace
+        .revoke_work_share(&owner, PRIVATE_APP, work, FAY)
+        .await
+        .unwrap();
+    assert!(!nothing.changed());
+    let revoked_before = chain(&fixture, "permission.revoked").await;
+    let revoked = stores
+        .workspace
+        .revoke_work_share(&owner, PRIVATE_APP, work, REV)
+        .await
+        .unwrap();
+    assert_eq!(
+        revoked.removed,
+        ["record_read", "record_review", "record_write"]
+    );
+    assert_eq!(
+        chain(&fixture, "permission.revoked").await,
+        revoked_before + 1
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND work_id='{work}'")).await, 0, "no row left to revive");
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{REV}' AND work_id='{work}' AND revoked_at IS NULL")).await, 0, "the share record is marked revoked");
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND app_id='{PRIVATE_APP}'")).await, 2, "app-level discover and run stay");
+    assert_eq!(
+        stores
+            .data
+            .list_records(&rev, PRIVATE_APP, work)
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    let digest_ok = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-revoke:v1','UTF8')||'\\x00'::bytea||convert_to('{REV}','UTF8')||'\\x00'::bytea||convert_to('work:{work}:record_read,work:{work}:record_review,work:{work}:record_write','UTF8')),'hex')")).await;
+    assert_eq!(digest_ok, 1);
+    check(&mut checks, "review M1: the app owner revokes a member's personal share in one unit (record_read, record_review and record_write removed, the share record marked revoked, one permission.revoked whose digest recomputes); non-owners and the owner's own rows are refused; nothing held is an unchanged outcome");
+    // The resurrection sequence: a later organization-wide viewer share must
+    // not revive the revoked reviewer.
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Organization,
+            ShareRole::Viewer,
+        )
+        .await
+        .unwrap();
+    judged!(&mut checks, "review M1: after the owner's revocation a later organization-wide viewer share gives the former reviewer their own rows only and no reviewer-only command", {
+        let r = stores.data.list_records(&rev, PRIVATE_APP, work).await.unwrap();
+        let approve = command(&w, "approve", "claim", OWNER_CLAIM, 1, json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]), &"d1".repeat(16));
+        ids_in(&r, &w.claims) == sorted(&[REV_CLAIM])
+            && stores.data.dry_run_command(&rev, &approve).await.err() == Some(Error::Denied)
+            && stores.data.read_record(&rev, PRIVATE_APP, work, &w.claims, OWNER_CLAIM).await.is_err()
+    });
+    assert!(stores
+        .workspace
+        .revoke_organization_share(&owner, PRIVATE_APP, work)
+        .await
+        .unwrap());
+    // Rev is a reviewer again for the checks below.
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Member(REV),
+            ShareRole::Reviewer,
+        )
+        .await
+        .unwrap();
+    // Review f1: a lower role re-share strips what the new role lacks, in the
+    // same transaction, audited; the sharer must have been able to grant what
+    // it strips.
+    let revoked_before = chain(&fixture, "permission.revoked").await;
+    let demoted = stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Member(REV),
+            ShareRole::Contributor,
+        )
+        .await
+        .unwrap();
+    assert_eq!(demoted.removed, ["record_review"]);
+    assert!(demoted.changed());
+    assert_eq!(
+        chain(&fixture, "permission.revoked").await,
+        revoked_before + 1
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND work_id='{work}' AND permission='record_review'")).await, 0);
+    judged!(&mut checks, "review f1: re-shared as contributor, a former reviewer has no reviewer standing left: their own rows only and no reviewer-only command", {
+        let r = stores.data.list_records(&rev, PRIVATE_APP, work).await.unwrap();
+        let approve = command(&w, "approve", "claim", OWNER_CLAIM, 1, json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]), &"d2".repeat(16));
+        ids_in(&r, &w.claims) == sorted(&[REV_CLAIM])
+            && stores.data.dry_run_command(&rev, &approve).await.err() == Some(Error::Denied)
+            && commands_of(&r, &w.claims) == ["edit", "submit"]
+    });
+    // Down to viewer strips record_write too; a sharer who could not have
+    // granted what a demotion strips is refused (Kim holds share_work and
+    // read only).
+    let viewer = stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Member(REV),
+            ShareRole::Viewer,
+        )
+        .await
+        .unwrap();
+    assert_eq!(viewer.removed, ["record_write"]);
+    assert!(
+        !stores
+            .data
+            .list_records(&rev, PRIVATE_APP, work)
+            .await
+            .unwrap()
+            .can_write
+    );
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP,
+            work,
+            Audience::Member(REV),
+            ShareRole::Reviewer,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        definer_rows(&fixture, KIM, &share(KIM, REV, "viewer")).await,
+        0,
+        "f1: a read-only sharer cannot strip a reviewer's standing by re-sharing lower"
+    );
+    check(&mut checks, "review f1: share_work with a lower role deletes the rows the new role lacks in the same transaction (reviewer to contributor drops record_review, to viewer also record_write) with one permission.revoked; a sharer who could not have granted the stripped rows is refused");
+
+    // --- review m4: receipts, release, the reviewer-only update on one's own row --
+    let owner_version = stores
+        .data
+        .read_record(&owner, PRIVATE_APP, work, &w.claims, OWNER_CLAIM)
+        .await
+        .unwrap()
+        .version;
+    judged!(&mut checks, "receipts: a receipt citing another member's own-collection row is unknown to a contributor, known to a reviewer", {
+        let key = ReceiptKey { app: PRIVATE_APP.into(), work: work.into(), collection: w.claims.clone(), record: OWNER_CLAIM.into(), version: owner_version, commit_sequence: owner_claim.commit_sequence, publication: w.publication.clone(), definition_digest: revision.digest.clone() };
+        !stores.data.receipts_known(&ben, &[(PRIVATE_APP, work)], std::slice::from_ref(&key)).await.unwrap()
+            && stores.data.receipts_known(&rev, &[(PRIVATE_APP, work)], std::slice::from_ref(&key)).await.unwrap()
+    });
+    BYPASS.store(false, Ordering::SeqCst);
+    let shipped_run = stores
+        .data
+        .run_query(&ben, PRIVATE_APP, work, "count", &json!({}))
+        .await
+        .unwrap();
+    judged!(&mut checks, "query release: a contributor's snapshot (their rows only) is released against the same rule; judged over every row it would be stale", {
+        stores.data.release_result(&ben, &shipped_run).await.is_ok()
+    });
+    let ben_version = stores
+        .data
+        .read_record(&owner, PRIVATE_APP, work, &w.claims, BEN_CLAIM)
+        .await
+        .unwrap()
+        .version;
+    judged!(&mut checks, "D8 on one's own entry over the command path: a contributor's reviewer-only update (grade) of their own claim is refused on the dry run and the commit, nothing written", {
+        let grade = |key: &str| command(&w, "grade", "claim", BEN_CLAIM, ben_version, json!([{"field_id": "grade", "value": {"type": "text", "value": "A"}}]), key);
+        let before = revisions(&fixture, work).await;
+        let dry = stores.data.dry_run_command(&ben, &grade(&"e1".repeat(16))).await;
+        let commit = if dry.is_err() {
+            matches!(stores.data.commit_record(&ben, &grade(&"e2".repeat(16))).await, Err(Error::Denied))
+        } else {
+            false
+        };
+        dry.err() == Some(Error::Denied) && commit && revisions(&fixture, work).await == before
+    });
+    let graded = committed(
+        &stores,
+        &rev,
+        &command(
+            &w,
+            "grade",
+            "claim",
+            BEN_CLAIM,
+            ben_version,
+            json!([{"field_id": "grade", "value": {"type": "text", "value": "A"}}]),
+            &"e3".repeat(16),
+        ),
+    )
+    .await;
+    assert_eq!(graded.record_version, ben_version + 1);
+    let self_graded = committed(
+        &stores,
+        &owner,
+        &command(
+            &w,
+            "grade",
+            "claim",
+            OWNER_CLAIM,
+            owner_version,
+            json!([{"field_id": "grade", "value": {"type": "text", "value": "self"}}]),
+            &"e4".repeat(16),
+        ),
+    )
+    .await;
+    assert_eq!(self_graded.record_version, owner_version + 1);
+    check(&mut checks, "D8: a reviewer's grade of a contributor's claim commits (the same update a contributor was refused); a reviewer-only update is the owner's way to advance a row they created themselves (a declared transition would refuse its filer)");
+
+    // --- review m4: the source-view sequence, for a member and for a guest --------
+    let _s05 = spend_review_s05(&fixture, &stores).await;
+    let created = operator(
+        &fixture,
+        &[
+            "create-app",
+            "--organization",
+            ORG,
+            "--app",
+            PRIVATE_APP2,
+            "--space",
+            SPACE,
+            "--owner",
+            OWNER,
+        ],
+    );
+    assert_eq!(created["granted"], json!(["edit_definition"]));
+    for permission in ["discover", "run"] {
+        grant(&fixture, OWNER, permission, &["--app", PRIVATE_APP2]);
+    }
+    grant(&fixture, OWNER, "source_read", &["--source", EXPENSES]);
+    let admitted2 = admission::admit_definition(&serde_json::to_vec(&second_definition()).unwrap())
+        .expect("the second definition admits");
+    let revision2 = stores
+        .workspace
+        .create_definition_revision(&owner, PRIVATE_APP2, &admitted2)
+        .await
+        .unwrap();
+    let PublishResult::Published(publication2) = stores
+        .control
+        .publish(&owner, PRIVATE_APP2, &revision2.revision, POLICY)
+        .await
+        .unwrap()
+    else {
+        panic!("uncontended publication is not stale")
+    };
+    let saved2 = stores
+        .workspace
+        .create_work(
+            &owner,
+            PRIVATE_APP2,
+            &publication2.publication_id,
+            "Spend and claims (synthetic campaign)",
+            &[
+                WorkBinding::Source {
+                    input: "expenses".into(),
+                    source: EXPENSES.into(),
+                    revision: EXPENSES_REVISION.into(),
+                },
+                WorkBinding::Records {
+                    input: "claims".into(),
+                    schema: "claim".into(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+    let work2 = saved2.work.as_str();
+    let w2 = Work { app: PRIVATE_APP2.into(), work: work2.to_owned(), publication: publication2.publication_id.clone(), claims: text(&fixture, &format!("SELECT collection_id::text FROM genui.record_collections WHERE organization_id='{ORG}' AND work_id='{work2}' AND schema_id='claim'")).await, notes: String::new() };
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP2,
+            work2,
+            Audience::Member(REV),
+            ShareRole::Reviewer,
+        )
+        .await
+        .unwrap();
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            PRIVATE_APP2,
+            work2,
+            Audience::Member(BEN),
+            ShareRole::Contributor,
+        )
+        .await
+        .unwrap();
+    let ben_claim2 = committed(&stores, &ben, &command(&w2, "submit", "claim", BEN_CLAIM2, 0, json!([{"field_id": "amount", "value": {"type": "integer", "value": "5", "unit": "count"}}]), &"c1".repeat(16))).await;
+    let owner_claim2 = committed(&stores, &owner, &command(&w2, "submit", "claim", OWNER_CLAIM2, 0, json!([{"field_id": "amount", "value": {"type": "integer", "value": "9", "unit": "count"}}]), &"c2".repeat(16))).await;
+    assert!(owner_claim2.commit_sequence > ben_claim2.commit_sequence);
+    judged!(&mut checks, "source-view sequence: a contributor's source view carries the sequence of their own rows, a reviewer's the work's latest", {
+        let b = stores.data.run_query(&ben, PRIVATE_APP2, work2, "spend", &json!({})).await.unwrap();
+        let r = stores.data.run_query(&rev, PRIVATE_APP2, work2, "spend", &json!({})).await.unwrap();
+        b.record_snapshot_sequence() == ben_claim2.commit_sequence && r.record_snapshot_sequence() == owner_claim2.commit_sequence
+    });
+    // Guests, through live shares the operator stand-in wrote (the product
+    // refuses to create them for a work with an own collection).
+    let guest = guest_account(&stores, "guest-191", "guest-191@example.invalid").await;
+    insert_guest_share(
+        &fixture,
+        GUEST_SHARE,
+        PRIVATE_APP,
+        work,
+        &w.publication,
+        &revision.digest,
+        &["count", "claims_list", "notes_list"],
+        &[w.claims.as_str(), w.notes.as_str()],
+        "guest-191@example.invalid",
+    );
+    insert_guest_share(
+        &fixture,
+        GUEST_SHARE2,
+        PRIVATE_APP2,
+        work2,
+        &w2.publication,
+        &revision2.digest,
+        &["spend"],
+        &[w2.claims.as_str()],
+        "guest-191@example.invalid",
+    );
+    let access = stores
+        .workspace
+        .accept_live_share(&guest, &format!("{ORG}.{GUEST_SHARE}"))
+        .await
+        .unwrap();
+    let access2 = stores
+        .workspace
+        .accept_live_share(&guest, &format!("{ORG}.{GUEST_SHARE2}"))
+        .await
+        .unwrap();
+    judged!(&mut checks, "guest listing: a guest of a share that names the own collection still sees only the shared notes; the row rule, not the share's collection list, keeps every own row out", {
+        let reads = stores.data.guest_work_reads(&access).await.unwrap();
+        let listing = reads.records.unwrap().unwrap();
+        ids_in(&listing, &w.claims).is_empty() && ids_in(&listing, &w.notes) == all_notes
+    });
+    judged!(
+        &mut checks,
+        "guest source-view sequence: a guest's source view carries no own row's sequence",
+        {
+            let run = stores
+                .data
+                .guest_run_query(&access2, "spend", &json!({}))
+                .await
+                .unwrap();
+            run.engine_plan().record_snapshot_sequence() == 0
+        }
+    );
+    stores
+        .workspace
+        .revoke_live_share(&owner, PRIVATE_APP, work, GUEST_SHARE, 1)
+        .await
+        .ok();
+    stores
+        .workspace
+        .revoke_live_share(&owner, PRIVATE_APP2, work2, GUEST_SHARE2, 1)
+        .await
+        .ok();
+
+    // --- review m5: owner_only is a real JSON parse of the stored bytes -----------
+    {
+        let op = fixture.operator().await;
+        let revision_id = revision.revision.as_str();
+        let digest_ok = format!("sha256:{}", "1".repeat(64));
+        let own_utf8 =
+            r#"{"fields":[],"id":"probe_utf8","title":"café über","version":1,"visibility":"own"}"#
+                .replace("\\u00e9", "é")
+                .replace("\\u00fc", "ü");
+        op.client.execute(&format!("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES ('{ORG}','{PRIVATE_APP}','{revision_id}','probe_utf8',1,$1::text,convert_to($2,'UTF8'))"), &[&digest_ok, &own_utf8]).await.unwrap();
+        let derived: bool = op.client.query_one(&format!("SELECT owner_only FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{PRIVATE_APP}' AND schema_id='probe_utf8'"), &[]).await.unwrap().get(0);
+        assert!(derived, "non-ASCII bytes beside visibility own derive true");
+        let escaped = op.client.execute(&format!("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES ('{ORG}','{PRIVATE_APP}','{revision_id}','probe_escaped',1,$1::text,convert_to($2,'UTF8'))"), &[&digest_ok, &r#"{"fields":[],"id":"probe_escaped","version":1,"visibility":"own"}"#]).await;
+        assert!(escaped.is_ok());
+        let derived: bool = op.client.query_one(&format!("SELECT owner_only FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{PRIVATE_APP}' AND schema_id='probe_escaped'"), &[]).await.unwrap().get(0);
+        assert!(
+            derived,
+            "an escaped spelling decodes to own (admission never stores one, the unit test shows)"
+        );
+        let invalid = op.client.execute(&format!("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES ('{ORG}','{PRIVATE_APP}','{revision_id}','probe_invalid',1,$1::text,'\\xff7b7d'::bytea)"), &[&digest_ok]).await;
+        assert!(invalid.is_err(), "invalid UTF-8 fails closed");
+        op.client.execute(&format!("DELETE FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{PRIVATE_APP}' AND schema_id LIKE 'probe_%'"), &[]).await.unwrap();
+        check(&mut checks, "review m5: owner_only is derived by a real JSON parse (genui.canonical_jsonb): non-ASCII bytes derive, an escaped spelling of own reads own, invalid UTF-8 is refused at write time");
+    }
+
     // --- guests ---------------------------------------------------------------
     judged!(
         &mut checks,
@@ -1299,6 +2125,115 @@ async fn campaign() {
             refused && unwritten
         }
     );
+
+    // --- APP-191 acceptance: live hints over an own list, 26 pages ------------
+    // 25 members (contributors through the owner's share) each commit one
+    // claim to the `own` list; 26 pages hold a stream each (the 25 and the
+    // owner's, the reviewer page) through the production gate. A non-reviewer
+    // page receives the hint for its own row only; the reviewer page has all
+    // 25 within 6 s of the last commit. Under bypass every page receives
+    // every hint, so the check fails there.
+    judged!(&mut checks, "APP-191 acceptance: 25 commits to an own list in under 60 s, 26 pages open: no non-reviewer page receives a hint for another member's row, each receives its own, and the reviewer page is current within 6 s of the last commit", {
+        // One counter outside the macro's two expansions of this block: the
+        // bypassed round admits and commits as new members and rows.
+        let round = LIVE_HINT_ROUND.fetch_add(1, Ordering::SeqCst);
+        let students: Vec<String> = (0..25)
+            .map(|i| format!("00000000-0000-4000-8000-00000000b{:03x}", round * 32 + i))
+            .collect();
+        for student in &students {
+            admit_member(&fixture, student);
+            stores
+                .workspace
+                .share_work(&owner, PRIVATE_APP, work, Audience::Member(student), ShareRole::Contributor)
+                .await
+                .unwrap();
+        }
+        let hub = events::hub();
+        let mut pages = Vec::new();
+        for (n, principal) in students.iter().chain(std::iter::once(&OWNER.to_owned())).enumerate() {
+            let registration = hub
+                .register(ORG, principal, &format!("page-{round}-{n}"))
+                .unwrap();
+            let (tx, rx) = events::sink();
+            tokio::spawn(events::pump(
+                events::routes::StoreGate::new(stores.clone(), request(&stores, ORG, principal, 1)),
+                ORG.to_owned(),
+                hub.subscribe(),
+                registration,
+                tx,
+                events::RECHECK,
+                events::STREAM_LIFETIME,
+            ));
+            pages.push((principal.clone(), rx));
+        }
+        let started = std::time::Instant::now();
+        let mut sequences = std::collections::BTreeMap::new();
+        for (i, student) in students.iter().enumerate() {
+            let who = request(&stores, ORG, student, 1);
+            let outcome = committed(
+                &stores,
+                &who,
+                &command(
+                    &w,
+                    "submit",
+                    "claim",
+                    &format!("00000000-0000-4000-8000-0000000c{:04x}", round * 64 + i),
+                    0,
+                    claim_values("7", "filed", &format!("claim {i} of round {round}")),
+                    &format!("{:032x}", 0xc0000 + round * 64 + i),
+                ),
+            )
+            .await;
+            // The command route's hook, after `CommandResult::Committed`.
+            hub.record_committed(ORG, PRIVATE_APP, work, outcome.commit_sequence);
+            sequences.insert(student.clone(), outcome.commit_sequence);
+        }
+        let last_commit = std::time::Instant::now();
+        let commits_within = last_commit.duration_since(started);
+        // The reviewer page: all 25 hints, judged current within 6 s.
+        let (_, reviewer_rx) = pages.last_mut().unwrap();
+        let mut reviewer_seen = std::collections::BTreeSet::new();
+        let reviewer_current = tokio::time::timeout(std::time::Duration::from_secs(6), async {
+            while reviewer_seen.len() < 25 {
+                match reviewer_rx.recv().await {
+                    Some(event) if event.kind == events::Kind::RecordCommitted => {
+                        reviewer_seen.insert(event.sequence.unwrap_or(-1));
+                    }
+                    Some(_) => {}
+                    None => break,
+                }
+            }
+        })
+        .await
+        .is_ok();
+        let reviewer_within = last_commit.elapsed();
+        // The other pumps judged the same announcements (one judgment per
+        // event, shared); a short grace for their deliveries to land.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let mut own_only = true;
+        for (principal, rx) in pages.iter_mut().take(25) {
+            let mut seen = std::collections::BTreeSet::new();
+            while let Ok(event) = rx.try_recv() {
+                if event.kind == events::Kind::RecordCommitted {
+                    seen.insert(event.sequence.unwrap_or(-1));
+                }
+            }
+            let expected: std::collections::BTreeSet<i64> = [sequences[principal]].into_iter().collect();
+            if seen != expected {
+                own_only = false;
+            }
+        }
+        let all_sequences: std::collections::BTreeSet<i64> = sequences.values().copied().collect();
+        println!(
+            "APP-191 live hints: 25 commits in {commits_within:?}; reviewer current {reviewer_current} after {reviewer_within:?}; non-reviewer pages own-only {own_only}"
+        );
+        drop(pages);
+        commits_within < std::time::Duration::from_secs(60)
+            && reviewer_current
+            && reviewer_seen == all_sequences
+            && reviewer_within < std::time::Duration::from_secs(6)
+            && own_only
+    });
 
     // --- the purge's exception (0024, W3 R1): a guest's share_events row
     // survives deleting its live_work_shares row; linked_apps still holds ---
@@ -1351,9 +2286,15 @@ mod tests {
         let content = crate::admission::decode(&admitted.canonical).unwrap();
         assert_eq!(content["record_schemas"][0]["visibility"], "own");
         assert_eq!(content["record_schemas"][1].get("visibility"), None);
-        assert_eq!(content["commands"][2]["reviewer_only"], true);
-        assert_eq!(content["commands"][4]["reviewer_only"], true);
-        assert_eq!(content["commands"][0].get("reviewer_only"), None);
-        assert_eq!(content["commands"][3].get("reviewer_only"), None);
+        for index in [2, 3, 5] {
+            assert_eq!(content["commands"][index]["reviewer_only"], true, "{index}");
+        }
+        for index in [0, 1, 4] {
+            assert_eq!(
+                content["commands"][index].get("reviewer_only"),
+                None,
+                "{index}"
+            );
+        }
     }
 }

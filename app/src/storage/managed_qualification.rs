@@ -1046,6 +1046,7 @@ fn storage_error(error: super::Error) -> &'static str {
         super::Error::ProjectionLimit => "ProjectionLimit",
         super::Error::Busy => "Busy",
         super::Error::UnknownOutcome => "UnknownOutcome",
+        super::Error::Stale => "Stale",
     }
 }
 fn probe_value(pool: &'static str, probe: &Probe) -> Value {

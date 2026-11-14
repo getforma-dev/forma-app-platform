@@ -353,6 +353,12 @@ fn id_arg(arguments: &Map<String, Value>, key: &str) -> Result<String, Output> {
 fn storage_output(error: storage::Error) -> Output {
     match error {
         storage::Error::Denied => Output::not_found(),
+        // APP-198: the list moved while the view computed (twice over, after
+        // the route's one re-capture): a typed not-ready, never the denial.
+        storage::Error::Stale => Output::error(
+            "stale",
+            "The list changed while this view was computed. Run it again.",
+        ),
         _ => Output::unavailable(),
     }
 }

@@ -108,8 +108,8 @@ pub use shared_access::{
 pub use shared_identity::*;
 pub use shared_reads::GuestQueryRun;
 pub use sharing::{
-    member_label, Audience, Granted, Member, Openable, ShareEntry, ShareRole, ShareStanding,
-    Shared, Standing, WorkSharing, JUDGMENT_LIMIT, SHARE_HANDLER_DEADLINE,
+    member_label, Audience, Granted, Member, Openable, Revoked, ShareEntry, ShareRole,
+    ShareStanding, Shared, Standing, WorkSharing, JUDGMENT_LIMIT, SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};
 pub use work_presentation::WorkPresentation;
@@ -125,6 +125,11 @@ pub enum Error {
     ProjectionLimit,
     Busy,
     UnknownOutcome,
+    /// APP-198: a record snapshot's release found the list moved since its
+    /// capture (a commit landed in between). Not a refusal: the caller
+    /// captures once more, or answers a typed not-ready. Never the uniform
+    /// 404 (`Denied` keeps authority and a changed binding).
+    Stale,
 }
 
 impl fmt::Display for Error {
@@ -137,6 +142,7 @@ impl fmt::Display for Error {
             Self::ProjectionLimit => "record projection bound exceeded",
             Self::Busy => "record snapshot capacity reached",
             Self::UnknownOutcome => "transaction outcome unknown",
+            Self::Stale => "record snapshot stale",
         })
     }
 }

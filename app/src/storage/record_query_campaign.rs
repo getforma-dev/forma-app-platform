@@ -153,13 +153,16 @@ pub(super) async fn qualify(
         .await
         .unwrap();
     assert!(matches!(changed, CommandResult::Committed(_)));
+    // APP-198: a commit between capture and release makes the snapshot
+    // `Stale` (typed; the route captures once more), not `Denied`: the member
+    // reads the list under RLS already, so staleness discloses nothing.
     assert!(matches!(
         stores.data.release_result(owner, &member_run).await,
-        Err(Error::Denied)
+        Err(Error::Stale)
     ));
     assert!(matches!(
         stores.data.release_guest_result(&access, &guest_run).await,
-        Err(Error::Denied)
+        Err(Error::Stale)
     ));
     let previous_sequence = member_run.record_snapshot_sequence();
     drop((member_run, guest_run));

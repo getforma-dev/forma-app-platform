@@ -47,7 +47,11 @@ fn command(mut command: Command, input: &[u8], label: &str) -> String {
         std::thread::sleep(Duration::from_millis(20));
     }
     let output = child.wait_with_output().expect("fixture output");
-    assert!(output.status.success(), "fixture command refused: {label}");
+    assert!(
+        output.status.success(),
+        "fixture command refused: {label}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     String::from_utf8(output.stdout).expect("fixture UTF-8 output")
 }
 pub(crate) fn docker(args: &[&str], input: &[u8], label: &str) -> String {
