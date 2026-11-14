@@ -838,6 +838,62 @@ fn the_client_retries_server_failures_once_each_and_never_a_client_refusal() {
     });
 }
 
+/// D10: the client takes a slot of its daily cap before anything leaves; a
+/// refused call sends nothing, on every kind of request, and is not retried.
+#[test]
+fn the_client_sends_nothing_once_its_daily_cap_is_reached() {
+    runtime().block_on(async {
+        static CAP: model::DailyCap = model::DailyCap::new(2);
+        let (endpoint, stub) = stub_server(vec![503, 200]).await;
+        let client = Anthropic::new("sk-ant-synthetic-test-key", &endpoint)
+            .unwrap()
+            .with_daily_cap(&CAP);
+        let request = ModelRequest {
+            model: "stub-model".into(),
+            system: "s".into(),
+            user: "u".into(),
+            max_tokens: 10,
+            budget: std::time::Duration::from_secs(20),
+        };
+        // One call is one slot, its retry included (503 then 200).
+        client.complete(&request).await.unwrap();
+        assert_eq!(stub.calls.load(Ordering::SeqCst), 2);
+        client.complete(&request).await.unwrap();
+        assert_eq!(stub.calls.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            client.complete(&request).await.unwrap_err(),
+            ModelError::DailyCap
+        );
+        let image = model::ImageInput {
+            media_type: "image/png",
+            bytes: b"png",
+        };
+        assert_eq!(
+            client
+                .complete_with_image(&request, &image)
+                .await
+                .unwrap_err(),
+            ModelError::DailyCap
+        );
+        let documents = [model::DocumentInput {
+            title: "brief.pdf",
+            bytes: b"%PDF-1.4",
+        }];
+        assert_eq!(
+            client
+                .complete_with_documents(&request, &documents)
+                .await
+                .unwrap_err(),
+            ModelError::DailyCap
+        );
+        assert_eq!(
+            stub.calls.load(Ordering::SeqCst),
+            3,
+            "nothing reached the endpoint after the cap"
+        );
+    });
+}
+
 // --- The route without a store: the refusal order and the composition ---
 
 struct NoPages;

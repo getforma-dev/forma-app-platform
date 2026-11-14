@@ -2574,6 +2574,138 @@ async fn campaign() {
         "ask and shape (APP-122): POST /v1/ask answered exactly {text, receipts, references} for \"where are all the red invoices?\", each receipt storage's (record id, version, publication, definition digest), with record, revision, audit and receipt row counts and saved-work versions identical before and after; a model reply carrying a view spec was refused server-side (422 could_not_answer); a forced write in the Ask transaction failed with SQLSTATE 25006 (READ ONLY); POST /v1/shape answered only a closed spec per target (a card highlight, an app theme dark/green/compact, a widget's TI-84 state through the customizer); prose, an answer object and a view with receipts:false were refused (422 could_not_shape); card fields outside the records card's published schema (an unknown field, an undeclared enum value, a wrong type, another collection, no source) were refused 422 invalid_request with no model call; namespaced addresses (card:…, app:…) were accepted on both routes; an app-scoped Ask and a card-scoped Ask (its collection only; an unknown collection 422) answered; a rehearsed count cited every record it counted; a foreign organization's member, an anonymous caller and a forged session got the uniform 404 on both routes with no model call; in a demo organization the rehearsed question and shape answered without a model call; no row was written by either route",
     );
 
+    // --- D10: the daily model-call cap on compose, Ask, Shape and the widget restyle ---
+    // The binary's model routes over a composer whose real client counts
+    // against a reached cap (zero calls left): every model path answers 429
+    // daily_limit with a Retry-After of at most a day, nothing reaches the
+    // endpoint, and no row is written.
+    auth.limits.clear();
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let capped_client =
+        crate::composer::model::Anthropic::new("sk-ant-synthetic-pitch-campaign-key", &endpoint)
+            .unwrap()
+            .with_daily_cap(&DAILY);
+    let capped_composer = composer::Composer::new(
+        Some(Arc::new(capped_client) as Arc<dyn crate::composer::model::Model>),
+        composer.router_model(),
+        composer.generation_model(),
+    );
+    let capped_talk = composer::talk::router(Arc::new(composer::talk::Talk::new(
+        auth.clone(),
+        capped_composer.clone(),
+    )));
+    let capped_widgets =
+        crate::widgets::routes::router(Arc::new(crate::widgets::routes::Widgets::new(
+            auth.clone(),
+            capped_composer.customizer(),
+            crate::widgets::weather::OpenMeteo::new(),
+        )));
+    let capped_routes = crate::http::uniform_with_many(
+        axum::Router::new(),
+        vec![
+            (
+                composer::routes::PATH,
+                composer::routes::router(Arc::new(Compose::new(
+                    auth.clone(),
+                    capped_composer.clone(),
+                ))),
+            ),
+            (crate::widgets::CUSTOMIZE_PATH, capped_widgets),
+            (composer::talk::ASK_PATH, capped_talk.clone()),
+            (composer::talk::SHAPE_PATH, capped_talk),
+        ],
+    );
+    let capped_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let capped_stand = Stand {
+        origin: format!("http://{}", capped_listener.local_addr().unwrap()),
+        client: reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap(),
+    };
+    let capped_server = tokio::spawn(async move {
+        let _ = axum::serve(
+            capped_listener,
+            capped_routes.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
+    });
+    let calls_before_cap = stub.calls();
+    let widget_state = crate::widgets::state::Widget::Calculator.default_state();
+    for (surface, path, body) in [
+        (
+            "compose",
+            composer::routes::PATH,
+            json!({"intent": "zqxv flurb gromp quarterly telemetry"}),
+        ),
+        (
+            "ask records",
+            composer::talk::ASK_PATH,
+            json!({"question": "where are all the red invoices?", "scope": ask_scope("card", "expense-review.records")}),
+        ),
+        (
+            "ask widget",
+            composer::talk::ASK_PATH,
+            json!({"question": "How do these controls work?", "scope": {"kind": "widget",
+                "widget_id": "w-calculator-abc123", "widget": "calculator", "state": widget_state}}),
+        ),
+        (
+            "shape card",
+            composer::talk::SHAPE_PATH,
+            json!({"address": "expense-review.records", "words": "highlight overdue in red", "target": card_target}),
+        ),
+        (
+            "shape app",
+            composer::talk::SHAPE_PATH,
+            json!({"address": "expense-review", "words": "dark", "target": {"kind": "app", "app_id": EXPENSE_APP, "work_id": work_id}}),
+        ),
+        (
+            "shape widget",
+            composer::talk::SHAPE_PATH,
+            json!({"address": "calculator", "words": "make it a TI-84", "target": {"kind": "widget", "widget": "calculator", "state": widget_state}}),
+        ),
+        (
+            "widget restyle",
+            crate::widgets::CUSTOMIZE_PATH,
+            json!({"widget": "calculator", "state": widget_state, "text": "make it a TI-84"}),
+        ),
+    ] {
+        let reply = capped_stand
+            .post(path, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(
+            reply.status,
+            StatusCode::TOO_MANY_REQUESTS,
+            "{surface}: {}",
+            reply.text()
+        );
+        assert_eq!(
+            reply.json(),
+            json!({"code": "daily_limit", "status": 429}),
+            "{surface}"
+        );
+        let wait: u64 = reply.headers[reqwest::header::RETRY_AFTER]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((1..=86_400).contains(&wait), "{surface}: {wait}");
+    }
+    capped_server.abort();
+    assert_eq!(
+        stub.calls(),
+        calls_before_cap,
+        "nothing reached the endpoint"
+    );
+    assert_eq!(scalar(&c.fixture, counts).await, rows_before);
+    assert_eq!(scalar(&c.fixture, saved).await, saved_before);
+    check(
+        &mut checks,
+        "D10: with the composer's real client at a reached daily cap, POST /v1/compose (an intent the matcher cannot pick), POST /v1/ask (records and widget), POST /v1/shape (card, app and widget) and POST /v1/widgets/customize each answer 429 {\"code\":\"daily_limit\"} with a Retry-After of at most a day; nothing reaches the endpoint and no record, revision, audit, receipt or saved-work row changes",
+    );
+
     // --- APP-123: cards made by you, add for everyone, pinned answers ---
     // The member write windows are fresh for this part (one cooldown period).
     auth.limits.clear();

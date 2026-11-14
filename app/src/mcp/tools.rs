@@ -710,6 +710,7 @@ async fn compose_app(
                 "could_not_compose",
                 "That could not be composed into an admitted app. Nothing was placed.",
             ),
+            Refused::DailyLimit => Output::error("daily_limit", composer::model::DAILY_LIMIT_TEXT),
         })?;
     attribute(stores, caller, &composed.app, &composed.work, None).await;
     let origin = composed.origin.as_str();
@@ -1554,6 +1555,9 @@ fn folder_refused(refused: crate::boxes::routes::BuildRefusal) -> Output {
             "too_many_requests",
             "Too many folder requests in the last hour. Try again later.",
         ),
+        crate::boxes::routes::BuildRefusal::DailyLimit => {
+            Output::error("daily_limit", composer::model::DAILY_LIMIT_TEXT)
+        }
         _ => Output::unavailable(),
     }
 }

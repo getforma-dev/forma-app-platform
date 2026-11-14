@@ -13,7 +13,7 @@
 //! sentences (`rehearsed`) map to fixed state changes with no model call.
 //! Outside a demo organization every sentence goes to the model.
 use super::state::{self, Widget, ACCENTS, FONTS, SKINS, UNITS, ZONES};
-use crate::composer::model::{self, Model, ModelRequest};
+use crate::composer::model::{self, Model, ModelError, ModelRequest};
 use serde_json::{json, Map, Value};
 use std::{
     sync::Arc,
@@ -54,6 +54,8 @@ pub enum Failure {
     /// The model failed, or answered outside the closed state (422
     /// `could_not_customize`): the widget keeps its state.
     Refused(&'static str),
+    /// D10: the app's daily model-call cap is reached (429 `daily_limit`).
+    DailyLimit,
 }
 
 /// A member's sentence: 1 to 300 characters, no control characters.
@@ -326,7 +328,10 @@ impl Customizer {
         let reply = model
             .complete(&request)
             .await
-            .map_err(|error| Failure::Refused(error.code()))?;
+            .map_err(|error| match error {
+                ModelError::DailyCap => Failure::DailyLimit,
+                error => Failure::Refused(error.code()),
+            })?;
         decode(widget, &reply.text)
             .map(|state| Outcome {
                 state,

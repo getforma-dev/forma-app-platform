@@ -1605,6 +1605,103 @@ async fn campaign() {
     );
     check(&mut checks, "brief: the small PDF goes to the model as a document block with citations enabled; the cited statement is kept with its page (p. 1) and the uncited sentence with a number is dropped; the overview and key points carry no digit");
 
+    // --- D10: the folder routes at the daily model-call cap ---
+    // The folder routes over a composer whose real client is at a reached
+    // cap (zero calls left): Ask, the explanation, building an app and the
+    // brief each answer 429 daily_limit; nothing reaches the endpoint and no
+    // audit row is written (no partial brief or summary is saved).
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let capped_boxes = Arc::new(boxes::routes::Boxes {
+        auth: auth.clone(),
+        work: work.clone(),
+        composer: composer::Composer::new(
+            Some(Arc::new(
+                crate::composer::model::Anthropic::new(
+                    "sk-ant-synthetic-box-campaign-key",
+                    &endpoint,
+                )
+                .unwrap()
+                .with_daily_cap(&DAILY),
+            ) as Arc<dyn crate::composer::model::Model>),
+            composer.router_model(),
+            composer.generation_model(),
+        ),
+        store: boxes::store::ObjectStore::Local {
+            root: objects.clone(),
+        },
+        normalizer: state.normalizer.clone(),
+        parser: Some(parser_identity()),
+    });
+    let capped_routes = crate::http::uniform_with_many(
+        axum::Router::new().merge(boxes::routes::router(capped_boxes)),
+        Vec::new(),
+    );
+    let capped_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let capped_stand = Stand {
+        origin: format!("http://{}", capped_listener.local_addr().unwrap()),
+        client: reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap(),
+    };
+    let capped_server = tokio::spawn(async move {
+        let _ = axum::serve(
+            capped_listener,
+            capped_routes.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
+    });
+    c.auth.limits.clear();
+    let sent_before = stub.bodies.lock().unwrap().len();
+    let audit_before_cap = audit().await;
+    for (surface, path, body) in [
+        (
+            "folder ask",
+            format!("/v1/boxes/{box_id}/ask"),
+            json!({"question": "which region led July?"}),
+        ),
+        (
+            "explain",
+            format!("/v1/boxes/explain/{app}/{derived}"),
+            json!({}),
+        ),
+        (
+            "build from the folder",
+            format!("/v1/boxes/{box_id}/apps"),
+            json!({"purpose": "a metrics app for the board"}),
+        ),
+        ("brief", format!("/v1/boxes/{box_id}/brief"), json!({})),
+    ] {
+        let reply = capped_stand
+            .post(&path, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(
+            reply.status,
+            StatusCode::TOO_MANY_REQUESTS,
+            "{surface}: {}",
+            reply.text()
+        );
+        assert_eq!(
+            reply.json(),
+            json!({"code": "daily_limit", "status": 429}),
+            "{surface}"
+        );
+        assert!(
+            reply.headers.contains_key(reqwest::header::RETRY_AFTER),
+            "{surface}"
+        );
+    }
+    capped_server.abort();
+    assert_eq!(
+        stub.bodies.lock().unwrap().len(),
+        sent_before,
+        "nothing reached the endpoint"
+    );
+    assert_eq!(audit().await, audit_before_cap);
+    check(&mut checks, "D10: with the folder routes' composer at a reached daily cap, POST /v1/boxes/{box}/ask, POST /v1/boxes/explain/{app}/{work}, POST /v1/boxes/{box}/apps (a purpose) and POST /v1/boxes/{box}/brief each answer 429 {\"code\":\"daily_limit\"} with Retry-After; nothing reaches the endpoint and no audit row is written (no partial brief, summary or app)");
+
     // --- Reload: everything reads back ---
     let listed = stand.get("/v1/boxes", Some(&maya_cookie)).await.json();
     assert_eq!(listed["boxes"].as_array().unwrap().len(), 2);

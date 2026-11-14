@@ -9,13 +9,26 @@
 //! only thing that ever leaves this module is a `String` the caller treats
 //! as data. Tests use a [`Model`] stub; nothing in the test executable calls
 //! the real endpoint.
+//!
+//! D10 (trial-25 plan): every call through [`Anthropic`] first takes one
+//! slot of the process-wide [`DailyCap`] ([`daily_cap`]). It is one static
+//! because the binary holds several clients (the composer, the folders, the
+//! parser, the customizer, Slack's parser), and the cap is for the whole app.
+//! The count starts again at 00:00 UTC; a call refused by the cap sends
+//! nothing and is [`ModelError::DailyCap`], which every model route answers
+//! as 429 `daily_limit` ([`daily_limit`]).
+use axum::{
+    http::{header, HeaderValue, StatusCode},
+    response::Response,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
     fmt,
     future::Future,
     pin::Pin,
-    time::{Duration, Instant},
+    sync::{Mutex, OnceLock, PoisonError},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 /// The environment variable the service reads the key from. In the managed
@@ -38,6 +51,100 @@ pub const MAX_ATTEMPTS: u32 = 3;
 const BACKOFF: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(3)];
 /// Reply bodies beyond this are a protocol failure (a definition is ≤ 256 KiB).
 const MAX_REPLY_BYTES: usize = 1024 * 1024;
+/// D10: model calls allowed per UTC day for the whole app, unless
+/// [`DAILY_CALLS_ENV`] says otherwise. 1,000 (trial decision of 2026-11-14,
+/// not the plan's first 400): a composition is one router call plus up to
+/// three generation attempts, so 400 was about six compositions a person on
+/// a class day.
+pub const DEFAULT_DAILY_CALLS: u32 = 1000;
+/// The daily cap override (tests and dev), read once, at the first client.
+/// Not set in the managed deployment: there the code's default holds.
+pub const DAILY_CALLS_ENV: &str = "GENUI_MODEL_DAILY_CALLS";
+const DAY_SECONDS: u64 = 86_400;
+
+/// Model calls taken per UTC day, against a limit. A call is one request to
+/// the client (its retries included), counted before anything is sent.
+#[derive(Debug)]
+pub struct DailyCap {
+    limit: u32,
+    /// The UTC day number (days since the UNIX epoch) and the calls taken in it.
+    used: Mutex<(u64, u32)>,
+}
+impl DailyCap {
+    pub const fn new(limit: u32) -> Self {
+        Self {
+            limit,
+            used: Mutex::new((0, 0)),
+        }
+    }
+    pub fn limit(&self) -> u32 {
+        self.limit
+    }
+    /// Takes one call at `now` (seconds since the UNIX epoch; UNIX days are
+    /// UTC days of exactly 86 400 s): `true` when the day's count was below
+    /// the limit (it is now one higher), `false` when the limit is reached
+    /// (nothing is taken). A later day starts at zero; a clock that steps
+    /// back keeps counting in the latest day it saw.
+    pub fn take(&self, now: u64) -> bool {
+        let day = now / DAY_SECONDS;
+        let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if day > used.0 {
+            *used = (day, 0);
+        }
+        if used.1 >= self.limit {
+            return false;
+        }
+        used.1 += 1;
+        true
+    }
+}
+
+/// The daily limit `value` names: a decimal count, else the default.
+pub fn limit_from(value: Option<&str>) -> u32 {
+    value
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(DEFAULT_DAILY_CALLS)
+}
+
+/// The app's one cap, shared by every [`Anthropic`] client of the process.
+pub fn daily_cap() -> &'static DailyCap {
+    static CAP: OnceLock<DailyCap> = OnceLock::new();
+    CAP.get_or_init(|| {
+        let limit = limit_from(std::env::var(DAILY_CALLS_ENV).ok().as_deref());
+        tracing::info!(
+            event = "composer.model_daily_cap_set",
+            limit,
+            "daily model-call cap"
+        );
+        DailyCap::new(limit)
+    })
+}
+
+/// Seconds until the next 00:00 UTC after `now` (1 to 86 400).
+pub fn seconds_to_reset(now: u64) -> u64 {
+    DAY_SECONDS - now % DAY_SECONDS
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0)
+}
+
+/// What a person reads when the cap is reached (the canvas has its own copy).
+pub const DAILY_LIMIT_TEXT: &str = "Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working.";
+
+/// The answer of every model route to [`ModelError::DailyCap`]: 429
+/// `daily_limit`, `Retry-After` the seconds until the count starts again.
+pub fn daily_limit() -> Response {
+    let mut response = crate::http::problem(StatusCode::TOO_MANY_REQUESTS, "daily_limit");
+    response.headers_mut().insert(
+        header::RETRY_AFTER,
+        HeaderValue::from(seconds_to_reset(unix_now())),
+    );
+    response
+}
 
 /// A key that is usable: non-empty, printable ASCII, not the secret's initial
 /// placeholder. Anything else means "no key": disabled, never an attempt.
@@ -79,6 +186,8 @@ pub enum ModelError {
     Refused,
     /// A reply the protocol does not describe.
     Malformed,
+    /// D10: the app's daily model-call cap is reached; nothing was sent.
+    DailyCap,
 }
 impl ModelError {
     pub fn code(self) -> &'static str {
@@ -87,6 +196,7 @@ impl ModelError {
             Self::Timeout => "model_timeout",
             Self::Refused => "model_refused",
             Self::Malformed => "model_malformed",
+            Self::DailyCap => "model_daily_cap",
         }
     }
 }
@@ -180,6 +290,8 @@ pub struct Anthropic {
     key: ApiKey,
     endpoint: String,
     http: reqwest::Client,
+    /// [`daily_cap`] for every client the binary builds.
+    cap: &'static DailyCap,
 }
 impl fmt::Debug for Anthropic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -204,7 +316,29 @@ impl Anthropic {
             key: ApiKey(key.to_owned()),
             endpoint: endpoint.to_owned(),
             http,
+            cap: daily_cap(),
         })
+    }
+    /// Tests and campaigns: this client counts against `cap` instead of the
+    /// process's, so a low cap can be reached without touching the others.
+    #[cfg(test)]
+    pub(crate) fn with_daily_cap(mut self, cap: &'static DailyCap) -> Self {
+        self.cap = cap;
+        self
+    }
+    /// One slot of the daily cap for `request`, before anything is sent.
+    fn admit(&self, request: &ModelRequest) -> Result<(), ModelError> {
+        if self.cap.take(unix_now()) {
+            return Ok(());
+        }
+        tracing::warn!(
+            event = "composer.model_daily_cap",
+            code = ModelError::DailyCap.code(),
+            limit = self.cap.limit(),
+            requested_model = request.model,
+            "daily model-call cap reached; nothing sent"
+        );
+        Err(ModelError::DailyCap)
     }
     /// The client the environment configures: `KEY_ENV` (the only source of
     /// the key) and the optional endpoint override. `None`: disabled.
@@ -350,6 +484,7 @@ impl Model for Anthropic {
     ) -> CitedCompletion<'a> {
         use base64::Engine as _;
         Box::pin(async move {
+            self.admit(request)?;
             let started = Instant::now();
             let mut content: Vec<Value> = documents
                 .iter()
@@ -435,6 +570,7 @@ impl Anthropic {
     /// image block and text); the body is never logged.
     fn send<'a>(&'a self, request: &'a ModelRequest, content: Value) -> Completion<'a> {
         Box::pin(async move {
+            self.admit(request)?;
             let started = Instant::now();
             let deadline = started + request.budget;
             let body = json!({
@@ -547,6 +683,72 @@ mod tests {
             Err(ModelError::Malformed)
         );
         assert_eq!(capped_body(reply(""), 5).await.unwrap(), b"");
+    }
+
+    /// 2026-11-30T00:00:00Z, a UTC midnight.
+    const MIDNIGHT: u64 = 1_795_996_800;
+
+    #[test]
+    fn the_daily_cap_counts_calls_and_starts_again_at_utc_midnight() {
+        assert_eq!(MIDNIGHT % DAY_SECONDS, 0);
+        let cap = DailyCap::new(3);
+        assert_eq!(cap.limit(), 3);
+        let evening = MIDNIGHT - 120;
+        // Three calls fit in the day; the fourth and later are refused, and
+        // a refusal takes nothing.
+        assert!(cap.take(evening));
+        assert!(cap.take(evening + 1));
+        assert!(cap.take(evening + 2));
+        assert!(!cap.take(evening + 3));
+        assert!(!cap.take(MIDNIGHT - 1));
+        // 00:00:00 UTC: a new day, a new count of three.
+        assert!(cap.take(MIDNIGHT));
+        assert!(cap.take(MIDNIGHT + 1));
+        assert!(cap.take(MIDNIGHT + 2));
+        assert!(!cap.take(MIDNIGHT + 3));
+        // A clock that steps back over midnight does not reopen the old day.
+        assert!(!cap.take(MIDNIGHT - 10));
+        // A day later the count is fresh again.
+        assert!(cap.take(MIDNIGHT + DAY_SECONDS + 7));
+        // A zero cap refuses everything.
+        let closed = DailyCap::new(0);
+        assert!(!closed.take(MIDNIGHT));
+    }
+
+    #[test]
+    fn the_daily_limit_is_the_default_unless_a_count_is_named() {
+        assert_eq!(DEFAULT_DAILY_CALLS, 1000);
+        assert_eq!(limit_from(None), 1000);
+        assert_eq!(limit_from(Some("3")), 3);
+        assert_eq!(limit_from(Some(" 12 ")), 12);
+        assert_eq!(limit_from(Some("0")), 0);
+        assert_eq!(limit_from(Some("")), 1000);
+        assert_eq!(limit_from(Some("-1")), 1000);
+        assert_eq!(limit_from(Some("many")), 1000);
+        assert_eq!(seconds_to_reset(MIDNIGHT), DAY_SECONDS);
+        assert_eq!(seconds_to_reset(MIDNIGHT - 1), 1);
+        assert_eq!(seconds_to_reset(MIDNIGHT + 3600), DAY_SECONDS - 3600);
+    }
+
+    #[tokio::test]
+    async fn the_daily_limit_answer_is_429_with_the_seconds_to_midnight() {
+        assert_eq!(ModelError::DailyCap.code(), "model_daily_cap");
+        let response = daily_limit();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let wait: u64 = response.headers()[header::RETRY_AFTER]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((1..=DAY_SECONDS).contains(&wait));
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], br#"{"code":"daily_limit","status":429}"#);
     }
 
     #[test]

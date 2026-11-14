@@ -1120,6 +1120,54 @@ async fn campaign() {
         &mut checks,
         &format!("forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in {} ms, app.placed live on Diego's stream, the work attributed to his token; an active canary member's first compose creates only their own unpublished shell with three grants and one audit; model absence returns could_not_compose, Northstar is unchanged and no source/work grant is added", timings["compose_ms"]),
     );
+
+    // --- D10: forma_compose_app at the daily model-call cap ---
+    // A composer whose real client is at a reached cap. Its endpoint is a
+    // loopback port nothing listens on: a request that left would fail as
+    // model_unavailable (could_not_compose), so daily_limit also shows that
+    // nothing was sent. An intent the matcher cannot pick needs the router.
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let capped = Composer::new(
+        Some(Arc::new(
+            crate::composer::model::Anthropic::new(
+                "sk-ant-synthetic-not-a-real-key",
+                "http://127.0.0.1:9/v1/messages",
+            )
+            .unwrap()
+            .with_daily_cap(&DAILY),
+        ) as Arc<dyn crate::composer::model::Model>),
+        "router",
+        "generator",
+    )
+    .with_demo_organizations([ORG.to_owned()]);
+    let capped_client = Client {
+        app: http::uniform_with_many(
+            Router::new(),
+            vec![(
+                mcp::PATH,
+                mcp::router(Arc::new(mcp::Mcp::new(work.clone(), capped))),
+            )],
+        ),
+        next: AtomicUsize::new(1),
+    };
+    let northstar_before = footprint_in(&fixture, Some(ORG)).await;
+    let capped_reply = capped_client
+        .call(
+            &claude,
+            mcp::tools::COMPOSE_APP,
+            json!({"description": "zqxv flurb gromp quarterly telemetry"}),
+        )
+        .await;
+    assert_eq!(error_code(&capped_reply), "daily_limit");
+    assert_eq!(
+        capped_reply["structuredContent"]["message"],
+        "Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working."
+    );
+    assert_eq!(footprint_in(&fixture, Some(ORG)).await, northstar_before);
+    check(
+        &mut checks,
+        "D10: forma_compose_app over a composer whose real client is at a reached daily cap answers the tool error daily_limit with the plain sentence (\"Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working.\"); nothing was sent (its endpoint has no listener) and Northstar is unchanged",
+    );
     drop(diego_stream);
 
     // --- APP-115: scoped agent tokens, the access log, the timeline ---
