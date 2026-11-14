@@ -219,8 +219,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertFalse([k for k in self.s3.objects if k.endswith('/approval.json')])
         self.assertEqual(self.store.load()['active']['phase'], 'prepared')
     def test_real_disposition_expiring_during_final_network_checks_cannot_stop(self):
-        from ops.promotion.registry import scan_disposition
-        disposition, _ = scan_disposition()
+        from ops.promotion.test_scan import release_a_disposition
+        disposition, _ = release_a_disposition(self)
         contract = disposition['deployment_contract_sha256']
         self.manifest['source']['deployment_contract_sha256'] = contract
         candidate_path = self.directory/'candidate.json'

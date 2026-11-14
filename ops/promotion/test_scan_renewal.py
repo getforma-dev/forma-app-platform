@@ -1,4 +1,4 @@
-"""The disposition renewal tool: a synthetic delta round-trips through the real guard; the committed APP-175 file is bound to its delta."""
+"""The disposition renewal tool: a synthetic delta round-trips through the real guard; release A's approved file regenerates from its delta."""
 import copy
 import json
 from pathlib import Path
@@ -9,6 +9,7 @@ from unittest.mock import patch
 from ops.promotion import registry, scan_renewal
 from ops.promotion.guards import REPOS
 from ops.promotion.state import Refused
+from ops.promotion.test_scan import RELEASE_A_PIN, RELEASE_A_SHA256, release_a_disposition
 
 ROOT = Path(__file__).resolve().parents[2]
 APP175_DELTA = ROOT / 'evidence/APP-175/scan-delta-2026-11-14.json'
@@ -75,7 +76,7 @@ class ScanRenewalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'scan-disposition.json'
             path.write_bytes(scan_renewal.encoded(disposition))
-            with patch.object(registry, 'DISPOSITION', path), patch.dict(registry.REVIEWED_DISPOSITION, pin, clear=True):
+            with patch.object(registry, 'DISPOSITION', path), patch.object(registry, 'REVIEWED_DISPOSITION', pin):
                 loaded, sha = registry.scan_disposition()
                 self.assertEqual(loaded, disposition)
                 baseline = {role: {'manifest_digest': predecessor(role), 'findings': self.old} for role in REPOS}
@@ -120,13 +121,31 @@ class ScanRenewalTests(unittest.TestCase):
             with self.subTest(evidence=evidence, expiry=expiry), self.assertRaises(Refused):
                 scan_renewal.generate(document, evidence, expiry)
 
-    def test_the_committed_app175_disposition_is_exactly_what_its_delta_generates(self):
+    def test_release_a_disposition_is_exactly_what_its_delta_generates(self):
+        # The approved file (f00adb9a..., removed once spent) and its registry pin, from the committed delta.
+        import hashlib
         document = json.loads(APP175_DELTA.read_text())
-        result = scan_renewal.check(document)
-        self.assertEqual((result['status'], result['findings'], result['expires_at_utc']), ('bound', 16, '2026-11-20T00:00:00Z'))
         disposition, pin = scan_renewal.generate(document, 'evidence/APP-175/SCAN-DISPOSITION.md', '2026-11-20T00:00:00Z')
-        self.assertEqual(scan_renewal.encoded(disposition), registry.DISPOSITION.read_bytes())
-        self.assertEqual(dict(registry.REVIEWED_DISPOSITION['findings']), pin['findings'])
+        self.assertEqual(hashlib.sha256(scan_renewal.encoded(disposition)).hexdigest(), RELEASE_A_SHA256)
+        self.assertEqual(pin, RELEASE_A_PIN)
+        release_a_disposition(self)
+        result = scan_renewal.check(document)
+        self.assertEqual((result['status'], result['findings'], result['expires_at_utc'], result['disposition_sha256']),
+                         ('bound', 16, '2026-11-20T00:00:00Z', RELEASE_A_SHA256))
+        # A pin that names other findings than the delta refuses.
+        with patch.dict(registry.REVIEWED_DISPOSITION['findings'], {'CVE-2026-76844': ('LOW', 'zlib')}):
+            with self.assertRaises(Refused): scan_renewal.check(document)
+
+    def test_check_refuses_cleanly_when_no_disposition_is_committed(self):
+        import contextlib, io
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(registry, 'DISPOSITION', Path(directory) / 'scan-disposition.json'), patch.object(registry, 'REVIEWED_DISPOSITION', None):
+            with self.assertRaisesRegex(Refused, 'no scan disposition is committed'):
+                scan_renewal.check(json.loads(APP175_DELTA.read_text()))
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                self.assertEqual(scan_renewal.main(['check', '--delta', str(APP175_DELTA)]), 1)
+            self.assertEqual(json.loads(err.getvalue()), {'refused': 'no scan disposition is committed'})
 
     def test_cli_writes_once_and_prints_counts_only(self):
         with tempfile.TemporaryDirectory() as directory:
