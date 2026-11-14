@@ -17,6 +17,7 @@ session	auth::tests::native_session_campaign	campaign	tenant-foundation	GENUI_SE
 invite	auth::invite_tests::native_invite_campaign	campaign	tenant-foundation	GENUI_INVITE_REPORT	-	Docker, OpenSSL, runtime venv
 invite-races	auth::invite_tests::native_invite_race_campaign	campaign	tenant-foundation	GENUI_INVITE_RACE_REPORT	-	Docker, OpenSSL, runtime venv
 org-admin	storage::org_admin_campaign::native_org_admin_campaign	campaign	tenant-foundation	GENUI_ORG_ADMIN_REPORT	-	Docker, OpenSSL, runtime venv
+org-admin-routes	storage::org_admin_routes_campaign::native_org_admin_routes_campaign	campaign	tenant-foundation	GENUI_ORG_ADMIN_ROUTES_REPORT	-	Docker, OpenSSL, runtime venv
 command	storage::command_qualification::native_command_campaign	campaign	tenant-foundation	GENUI_COMMAND_REPORT	-	Docker, OpenSSL, runtime venv
 race	storage::race_qualification::native_race_campaign	campaign	tenant-foundation	GENUI_RACE_REPORT	-	Docker, OpenSSL, runtime venv
 engine-child	query::tests::engine_child_campaign	campaign	tenant-foundation	GENUI_QUERY_LATENCY_REPORT	GENUI_QUERY_PYTHON=@VENV@	runtime venv (DuckDB 2.0.0)

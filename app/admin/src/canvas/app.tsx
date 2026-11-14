@@ -361,7 +361,7 @@ function Canvas(props: CanvasProps) {
             <summary class="cv-link" title="The name others see">Your name</summary>
             <form method="post" action="/me/name" class="cv-name-form">
               <input type="hidden" name="csrf" value={props.csrfDisplayName} />
-              <label>The name others see <input name="name" value={props.displayName} required maxLength={80} autocomplete="name" /></label>
+              <label>The name others see <input name="name" value={props.displayName} required maxLength={80} pattern=".*\S.*" title="1 to 80 characters, not only spaces" autocomplete="name" /></label>
               <button type="submit">Save</button>
             </form>
           </details>
@@ -378,7 +378,7 @@ function Canvas(props: CanvasProps) {
         <form method="post" action="/me/name" class="cv-name-prompt">
           <input type="hidden" name="csrf" value={props.csrfDisplayName} />
           <label for="cv-name-input">What should others call you?</label>
-          <input id="cv-name-input" name="name" required maxLength={80} autocomplete="name" placeholder="Your name" />
+          <input id="cv-name-input" name="name" required maxLength={80} pattern=".*\S.*" title="1 to 80 characters, not only spaces" autocomplete="name" placeholder="Your name" />
           <button type="submit">Save</button>
         </form>
       ))}
