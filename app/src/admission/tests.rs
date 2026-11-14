@@ -23,7 +23,37 @@ const LOCK: &str = include_str!("../../../contracts/implementation-lock.json");
 /// `storage::queries::every_library_definition_is_admitted_and_in_the_sidecar`.
 /// `stored/` holds edition four's stored-data vectors (documents admitted
 /// before a later rule, which keep their verdict).
-const FIXTURES: [(&str, &str); 20] = [
+const FIXTURES: [(&str, &str); 27] = [
+    (
+        "contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/command-recovery.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/negative-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/northstar.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/spend-review.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/shared-v1/query-receipt.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/shared-v1/query-receipt.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json",
+        include_str!(
+            "../../../contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json"
+        ),
+    ),
     (
         "contracts/fixtures/shared-v1/query-receipt.json",
         include_str!("../../../contracts/fixtures/shared-v1/query-receipt.json"),
@@ -580,6 +610,23 @@ fn schema_vector(name: &str) -> (&'static str, &'static str) {
         ),
         "missing layout refused" => ("encoding", "$.content.default_layout"),
         "trailing newline identifier refused" => ("encoding", "$.content.views[0].id"),
+        // Edition impl-2026-11-14.1 (APP-191): one encoding per meaning, each
+        // member on its own shape.
+        "record schema visibility shared refused"
+        | "record schema unknown visibility refused"
+        | "record schema visibility must be a word" => {
+            ("encoding", "$.content.record_schemas[0].visibility")
+        }
+        "command reviewer_only false refused" | "command reviewer_only must be true" => {
+            ("encoding", "$.content.commands[0].reviewer_only")
+        }
+        "visibility on a command refused" => ("unknown_field", "$.content.commands[0].visibility"),
+        "reviewer_only on a record schema refused" => {
+            ("unknown_field", "$.content.record_schemas[0].reviewer_only")
+        }
+        "visibility on an input contract refused" => {
+            ("unknown_field", "$.content.inputs[0].visibility")
+        }
         other => panic!("unclassified schema vector: {other}"),
     }
 }
@@ -628,7 +675,7 @@ fn sized_definition(target: usize) -> Value {
 fn canonical_vectors_match_contracts_lock() {
     // The embedded vectors and specimens are exactly the locked edition's set.
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-11-01.2");
+    assert_eq!(lock["edition"], "impl-2026-11-14.1");
     assert_eq!(lock["canonical_encoding"], "forma-json-v1");
     let locked_fixtures: BTreeSet<&str> = lock["artifacts"]
         .as_object()
@@ -1397,7 +1444,7 @@ fn shape_and_reference_rules_match_validate_py() {
 /// streams, one job payload and four exact rationals.
 const EDITION_TWO_VECTORS: usize = 13;
 /// Edition two's negative vectors that mutate a definition.
-const EDITION_TWO_DEFINITION_VECTORS: usize = 25;
+const EDITION_TWO_DEFINITION_VECTORS: usize = 33;
 
 /// Edition impl-2026-10-28.1's locked fixture identities; edition two retains
 /// these copies byte-identically and the lock names them again.
@@ -1420,6 +1467,23 @@ const EDITION_ONE: [(&str, &str); 4] = [
     ),
 ];
 
+/// A retained specimen or vector file is the current one, except the negative
+/// vectors, which a later edition may only extend: the retained list then
+/// leads the current list unchanged (edition impl-2026-11-14.1).
+fn retained_unchanged_or_leading(current: &str, retained: &str) {
+    let (now, kept) = (locked(current), locked(retained));
+    if retained.ends_with("negative-vectors.json") {
+        let kept = kept.as_array().unwrap();
+        assert_eq!(
+            &now.as_array().unwrap()[..kept.len()],
+            kept.as_slice(),
+            "{retained}"
+        );
+    } else {
+        assert_eq!(now, kept, "{retained}");
+    }
+}
+
 fn retained(name: &str) -> Value {
     locked(&format!("contracts/fixtures/impl-2026-10-28.1/{name}.json"))
 }
@@ -1427,7 +1491,7 @@ fn retained(name: &str) -> Value {
 #[test]
 fn edition_two_vectors_match_contracts_lock() {
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-11-01.2");
+    assert_eq!(lock["edition"], "impl-2026-11-14.1");
     let retained_lock = &lock["retained_editions"]["impl-2026-10-28.1"]["artifacts"];
     for (path, identity) in EDITION_ONE {
         assert_eq!(retained_lock[path], identity, "{path}");
@@ -1452,7 +1516,7 @@ fn edition_two_vectors_match_contracts_lock() {
             "{path}"
         );
         let current = path.replace("impl-2026-10-29.2/", "");
-        assert_eq!(locked(&current), locked(path), "{path}");
+        retained_unchanged_or_leading(&current, path);
     }
     // Edition four (APP-129) retains edition three byte for byte, the same way.
     let retained_three = lock["retained_editions"]["impl-2026-10-29.3"]["artifacts"]
@@ -1462,7 +1526,18 @@ fn edition_two_vectors_match_contracts_lock() {
     for (path, identity) in retained_three {
         assert_eq!(lock["artifacts"][path], *identity, "{path}");
         let current = path.replace("impl-2026-10-29.3/", "");
-        assert_eq!(locked(&current), locked(path), "{path}");
+        retained_unchanged_or_leading(&current, path);
+    }
+    // Edition impl-2026-11-14.1 (APP-191) retains edition impl-2026-11-01.2
+    // the same way: seven artifacts, the negative vectors extended only.
+    let retained_six = lock["retained_editions"]["impl-2026-11-01.2"]["artifacts"]
+        .as_object()
+        .unwrap();
+    assert_eq!(retained_six.len(), 7);
+    for (path, identity) in retained_six {
+        assert_eq!(lock["artifacts"][path], *identity, "{path}");
+        let current = path.replace("impl-2026-11-01.2/", "");
+        retained_unchanged_or_leading(&current, path);
     }
 
     // Every vector reproduces in its own registered domain; new domains appear.
@@ -1857,4 +1932,96 @@ fn stored_definitions_that_predate_the_authoring_rules_still_admit() {
     );
     let admitted = admit(definition).unwrap();
     assert_eq!(admitted.digest, definition["digest"].as_str().unwrap());
+}
+
+#[test]
+fn private_entries_and_reviewer_only_commands_match_validate_py() {
+    // Edition impl-2026-11-14.1 (APP-191, D7 and D8): a record schema may
+    // declare `visibility: "own"` and a command `reviewer_only: true`, at
+    // schema versions 1 and 2. Absence means shared and contributor; the
+    // explicit alternatives (`"shared"`, `false`) are refused so that each
+    // meaning has one encoding, and each member is refused on the other shape.
+    for (label, mut definition) in [("v2", northstar_definition()), ("v1", rich_definition())] {
+        set(
+            &mut definition,
+            "/content/record_schemas/0/visibility",
+            Some(json!("own")),
+        );
+        set(
+            &mut definition,
+            "/content/commands/0/reviewer_only",
+            Some(json!(true)),
+        );
+        rehash(&mut definition);
+        let admitted = admit(&definition).unwrap_or_else(|e| panic!("{label}: {e}"));
+        let content = decode(&admitted.canonical).unwrap();
+        assert_eq!(content["record_schemas"][0]["visibility"], "own", "{label}");
+        assert_eq!(content["commands"][0]["reviewer_only"], true, "{label}");
+    }
+    for (pointer, value, code, detail) in [
+        (
+            "/content/record_schemas/0/visibility",
+            json!("shared"),
+            "encoding",
+            "$.content.record_schemas[0].visibility: expected one of own",
+        ),
+        (
+            "/content/record_schemas/0/visibility",
+            json!("everyone"),
+            "encoding",
+            "$.content.record_schemas[0].visibility",
+        ),
+        (
+            "/content/record_schemas/0/visibility",
+            json!(true),
+            "encoding",
+            "$.content.record_schemas[0].visibility",
+        ),
+        (
+            "/content/commands/0/reviewer_only",
+            json!(false),
+            "encoding",
+            "$.content.commands[0].reviewer_only: expected true",
+        ),
+        (
+            "/content/commands/0/reviewer_only",
+            json!("reviewer"),
+            "encoding",
+            "$.content.commands[0].reviewer_only",
+        ),
+        (
+            "/content/commands/0/reviewer_only",
+            json!(1),
+            "encoding",
+            "$.content.commands[0].reviewer_only",
+        ),
+        (
+            "/content/commands/0/visibility",
+            json!("own"),
+            "unknown_field",
+            "$.content.commands[0].visibility",
+        ),
+        (
+            "/content/record_schemas/0/reviewer_only",
+            json!(true),
+            "unknown_field",
+            "$.content.record_schemas[0].reviewer_only",
+        ),
+        (
+            "/content/inputs/0/visibility",
+            json!("own"),
+            "unknown_field",
+            "$.content.inputs[0].visibility",
+        ),
+    ] {
+        let mut definition = northstar_definition();
+        set(&mut definition, pointer, Some(value.clone()));
+        rehash(&mut definition);
+        let error = admit(&definition).expect_err(pointer);
+        assert_eq!(error.code(), code, "{pointer} = {value}: {error}");
+        assert!(
+            error.to_string().contains(detail),
+            "{pointer} = {value}: {error}"
+        );
+    }
 }

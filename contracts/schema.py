@@ -68,12 +68,18 @@ DEFS = {
     "value": {"oneOf": VALUES},
     "field": obj({"id": ID, "value_type": {"oneOf": VALUE_TYPES}, "nullable": {"type": "boolean"}}),
     "input_contract": obj({"id": ID, "contract_id": ID, "contract_version": VERSION, "kind": enum("source", "records"), "fields": arr(ref("field"), 32, 1)}),
-    "record_schema": obj({"id": ID, "version": VERSION, "fields": arr(ref("field"), 32, 1)}),
+    # Edition impl-2026-11-14.1 (APP-191, D7): optional `visibility: "own"`, a collection whose entries each member sees and
+    # changes only when they created them; the app's reviewers see all. Absent means shared; `"shared"` is refused so that
+    # the meaning has one encoding.
+    "record_schema": obj({"id": ID, "version": VERSION, "fields": arr(ref("field"), 32, 1), "visibility": enum("own")}, optional=("visibility",)),
     # Edition impl-2026-10-31.4 (APP-129) records the APP-107 amendment (additive, optional): a declared guard on a transition (`when`, a typed comparison over a field of
     # the same record schema, judged on the record as the command composes it) and `initial`, the starting value of an
     # enum field on a create (the first entry whose guard holds; an entry without a guard always holds).
     "guard": obj({"field_id": ID, "comparison": enum("eq", "ne", "lt", "lte", "gt", "gte"), "value": ref("value")}),
-    "command_declaration": obj({"id": ID, "record_schema_id": ID, "operation": enum("create", "update"), "writable_fields": {**arr(ID, 32, 1), "uniqueItems": True}, "transitions": arr(obj({"field_id": ID, "from": ID, "to": ID, "when": ref("guard")}, optional=("when",)), 32), "initial": arr(obj({"field_id": ID, "value": ID, "when": ref("guard")}, optional=("when",)), 8, 1)}, optional=("initial",)),
+    "command_declaration": obj({"id": ID, "record_schema_id": ID, "operation": enum("create", "update"), "writable_fields": {**arr(ID, 32, 1), "uniqueItems": True}, "transitions": arr(obj({"field_id": ID, "from": ID, "to": ID, "when": ref("guard")}, optional=("when",)), 32), "initial": arr(obj({"field_id": ID, "value": ID, "when": ref("guard")}, optional=("when",)), 8, 1),
+                                # Edition impl-2026-11-14.1 (APP-191, D8): optional `reviewer_only: true`, a command the app's reviewers alone may run.
+                                # Absent means every contributor; `false` is refused so that the meaning has one encoding.
+                                "reviewer_only": {"const": True}}, optional=("initial", "reviewer_only")),
     "query": obj({"operator_version": VERSION, "inputs": {**arr(ID, 8, 1), "uniqueItems": True}, "operations": arr({"oneOf": OPERATORS}, 8, 1), "null_policy": {"const": "unknown"}, "window": obj({"start": TIME, "end": TIME, "bounds": {"const": "half_open"}})}, optional=("window",)),
     "view": obj({"id": ID, "kind": enum(*RENDERERS), "renderer_version": VERSION, "title": TEXT, "query": ref("query"), "command_id": ID, "text": TEXT}, optional=("query", "command_id", "text")),
     "definition_content": obj({"title": TEXT, "description": TEXT, "inputs": arr(ref("input_contract"), 8), "views": arr(ref("view"), 24, 1), "record_schemas": arr(ref("record_schema"), 8), "commands": arr(ref("command_declaration"), 16), "links": arr(obj({"from_view": ID, "to_view": ID, "input_id": ID}), 48), "default_layout": arr(obj({"view_id": ID, "column": {"type": "integer", "minimum": 0, "maximum": 11}, "row": {"type": "integer", "minimum": 0, "maximum": 100}, "width": {"type": "integer", "minimum": 1, "maximum": 12}}), 24, 1)}),
@@ -222,7 +228,7 @@ DEFS["record_components_receipt"] = receipt_schema(UUID, DIGEST, ID, INT, POS)
 ENTITIES = ("record_components_receipt", "app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state",
             "app_definition_v2", "publication_v2", "source_revision_v2", "query_receipt_v2", "job_state_v2",
             "recovery_view", "command_claim")
-SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-11-01.2/schema.json", "$defs": DEFS,
+SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-11-14.1/schema.json", "$defs": DEFS,
           "oneOf": [ref(n) for n in ENTITIES]}
 
 if __name__ == "__main__":
