@@ -47,3 +47,13 @@ Restore: `git checkout --` of the broken files back to the committed `62f4e082`;
 Restore:
 - First break: `git checkout -- app/src/http/limits.rs` back to `fb9b002c`.
 - Second break: the same checkout also dropped the uncommitted 40-a-minute change, so it was applied again and committed as `b790d11b`. The limits tests passed, then the auth unit tests and the invite and session campaigns passed.
+
+## Recheck fix round (`f8864d52`)
+
+No cap guard changed in this round. The one new limit is N1: `POST /me/name` now shares the member's `MEMBER_WRITES` window, APP-113's 120 an hour. Its break and restore is round 1 of the [APP-183 record](../APP-183/break-and-restore-2026-11-14.md): with the window check disabled, write 121 was admitted. After the restore, on `f8864d52`:
+
+- `just campaign composer`: exit 0, 20 checks, including the D10 (review M3) phase.
+- `cargo test -p forma-app-platform --lib`: 432 passed, including the cap's unit tests.
+
+Recheck N3 (the last-slot race) is recorded as accepted in [the recheck file](../APP-183/recheck-w2-2026-11-14.md).
+
