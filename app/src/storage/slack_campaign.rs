@@ -658,6 +658,14 @@ async fn campaign() {
                 "{}",
                 page.body
             );
+            // APP-098 DS-40: the persona named is labelled synthetic in the
+            // demo organization (Northstar's team), not in the canary.
+            assert_eq!(
+                page.body.contains("made up for the demo"),
+                team == TEAM,
+                "{}",
+                page.body
+            );
             let form = format!("t={token}");
             let linked = send(
                 &app,
@@ -761,6 +769,12 @@ async fn campaign() {
         bound, 1,
         "the outsider's link is written in the outsider's own organization"
     );
+    // APP-098 DS-40: the canary organization is not a demo, so its DM has no suffix.
+    stub.wait_for(&format!("dm:{STRANGER}"), Duration::from_secs(5), |m| {
+        let text = m["text"].as_str().unwrap_or("");
+        text.contains("linked to Forma as") && !text.contains("Synthetic data")
+    })
+    .await;
     stub.wait_for(&format!("dm:{DIEGO}"), Duration::from_secs(5), |m| {
         m["text"]
             .as_str()

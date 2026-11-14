@@ -217,10 +217,16 @@ pub async fn show(State(state): State<Arc<Slack>>, request: Request) -> Response
         StatusCode::OK,
         "Link Slack to Forma",
         &format!(
-            "<p>Slack user <code>{user}</code> in workspace <code>{team}</code> will act as <strong>{who}</strong> in Forma: filing, approving and seeing what you can see on the canvas, nothing more.</p><p>Only continue if you ran <code>/forma link</code> yourself.</p><form method=\"post\" action=\"{PATH}\"><input type=\"hidden\" name=\"t\" value=\"{token}\"><button type=\"submit\">Link my Slack account</button></form>",
+            "<p>Slack user <code>{user}</code> in workspace <code>{team}</code> will act as <strong>{who}</strong> in Forma: filing, approving and seeing what you can see on the canvas, nothing more.</p>{demo}<p>Only continue if you ran <code>/forma link</code> yourself.</p><form method=\"post\" action=\"{PATH}\"><input type=\"hidden\" name=\"t\" value=\"{token}\"><button type=\"submit\">Link my Slack account</button></form>",
             user = html_escape(&claim.user),
             team = html_escape(&claim.team),
             token = html_escape(&token),
+            // DS-40: the persona named above is synthetic in a demo organization.
+            demo = if crate::demo::is_demo_org(member.organization()) {
+                format!("<p><em>Synthetic data: {}</em></p>", html_escape(super::flows::DEMO_NOTE))
+            } else {
+                String::new()
+            },
         ),
     )
 }

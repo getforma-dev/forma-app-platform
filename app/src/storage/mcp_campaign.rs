@@ -779,6 +779,8 @@ async fn campaign() {
     assert_eq!(pending["pending"].as_array().unwrap().len(), 1);
     assert_eq!(pending["pending"][0]["record_id"], record_id);
     assert_eq!(pending["pending"][0]["filed_by"], "Diego Ramos");
+    // APP-098 DS-40: the persona named is synthetic, and the result says so.
+    assert_eq!(pending["synthetic"], true);
     let diego_pending = client
         .call(&claude, mcp::tools::LIST_PENDING, json!({}))
         .await;

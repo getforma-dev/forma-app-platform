@@ -326,15 +326,16 @@ fn claim_blocks(organization: &str, record: &RecordRow) -> Vec<Value> {
 /// APP-098 DS-40: in a listed demo organization, the one line a message ends
 /// with that says its people and records are synthetic, as the canvas does.
 fn demo_line(organization: &str) -> Option<Value> {
-    crate::demo::is_demo_org(organization).then(|| {
-        text::context(
-            "*Synthetic data:* The organization, people and records here are made up for the demo.",
-        )
-    })
+    crate::demo::is_demo_org(organization)
+        .then(|| text::context(&format!("*Synthetic data:* {DEMO_NOTE}")))
 }
 
-/// The same words for a plain-text message (the filed line, the filer's DM,
-/// the link DM): empty outside a listed demo organization.
+/// DS-40: the words every demo-organization surface uses for its synthetic data.
+pub(super) const DEMO_NOTE: &str =
+    "The organization, people and records here are made up for the demo.";
+
+// DS-40: the same words for a plain-text message (the filed line, the
+// filer's DM, the link DM); empty outside a listed demo organization.
 pub(super) fn demo_suffix(organization: &str) -> &'static str {
     if crate::demo::is_demo_org(organization) {
         " _Synthetic data: The organization, people and records here are made up for the demo._"

@@ -1320,7 +1320,19 @@ async fn list_pending(
             lines.join("; ")
         )
     };
-    Ok(Output::ok("ok", summary, json!({"pending": pending})))
+    // APP-098 DS-40: in a demo organization the people and records listed
+    // are synthetic, as `forma_list_apps` and `forma_run_view` already say.
+    let synthetic = demo::is_demo_org(member.organization());
+    let summary = if synthetic {
+        format!("{summary} Synthetic data.")
+    } else {
+        summary
+    };
+    Ok(Output::ok(
+        "ok",
+        summary,
+        json!({"pending": pending, "synthetic": synthetic}),
+    ))
 }
 
 // --- forma_share ---
