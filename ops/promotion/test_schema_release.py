@@ -750,14 +750,14 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.assertEqual(result['review']['deployment_contract_sha256'], disposition['deployment_contract_sha256'])
         for role in guards.REPOS:
             scan = result['review']['scan'][role]
-            self.assertEqual((scan['introduced'], scan['reviewed_count'], scan['unreviewed']), (14, 14, 0))
+            self.assertEqual((scan['introduced'], scan['reviewed_count'], scan['unreviewed']), (16, 16, 0))
             self.assertEqual((scan['disposition_sha256'], scan['review_expires_at_utc']), (disposition_sha, disposition['expires_at_utc']))
         summary = self.run_execute(); validate_summary(summary, self.request['candidate_sha'])
         final = self.store.load()
         self.assertEqual(final['baseline']['deployment_contract_sha256'], disposition['deployment_contract_sha256'])
         self.assertEqual(final['policy']['schema_version'], 22)
         for role in guards.REPOS:
-            self.assertEqual(len(final['live']['registry'][role]['findings']), 14)
+            self.assertEqual(len(final['live']['registry'][role]['findings']), 16)
 
     def test_the_scan_delta_binds_the_promoted_candidates_contract(self):
         """Fable dry run, 2026-11-12: a schema release must be able to carry a disposition, or no

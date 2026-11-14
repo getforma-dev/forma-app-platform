@@ -1,0 +1,1212 @@
+{
+  "deployment_contract_sha256": "14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b",
+  "method": "ECR describe-image-scan-findings of each candidate or live image, then the promotion guard fingerprint (name, severity, sorted attributes) against the canonical baseline findings",
+  "roles": {
+    "operator": {
+      "baseline_counts": {
+        "HIGH": 10,
+        "LOW": 3,
+        "MEDIUM": 10
+      },
+      "baseline_findings": 23,
+      "baseline_scan_completed_at": null,
+      "critical_count": 0,
+      "index_digest": "sha256:9dbe284eb1f244f4b85c2beb741e7e18ba31607023aee98a497182ddbf59518a",
+      "introduced": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "description": "The regcomp and regexec functions in the GNU C Library version 2.3 to version 2.44 may read freed memory and free the same heap block twice when a memory allocation fails while a regular expression is compiled or matched. The re_dfa_add_node (the NFA node table) and build_range_exp (bracket ranges) grow several arrays with consecutive realloc calls and store the new pointers only after all of them succeed. When a later call fails, the pattern buffer keeps pointers to blocks that were already freed, and the error cleanup frees them again. In regexec, the back-reference cache (match_ctx_add_entry) frees its array when a realloc fails but keeps the pointer, which is freed again on the error path. An attacker does not need to supply a crafted regular expression: patterns large enough to grow these arrays are common. The failure has to hit a specific allocation, though, so the issue can only be reached when the system is already under memory pressure. An attacker who supplies the pattern or the subject string has little control over which allocation fails, so the expected impact is a crash of the process. This issue affects all architectures and ABIs supported by the GNU C Library.",
+          "name": "CVE-2026-100290",
+          "severity": "LOW",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-100290"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "clnttcp_call() in lib/rpc/clnt_tcp.c in MIT Kerberos 5 (aka krb5) does not free the RPC reply verifier between retries, which allows remote attackers to cause a denial of service (memory leak in GSS-RPC client programs) by injecting RPC replies with mismatched XIDs or by triggering authentication retries.",
+          "name": "CVE-2026-112314",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112314"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The RPCSEC_GSS authentication routines in lib/rpc/authgss_prot.c in MIT Kerberos 5 (aka krb5) 1.4 and later do not free partially decoded buffers on failure, which allows remote attackers to cause a denial of service (memory leak in kadmind) via crafted RPCSEC_GSS messages.",
+          "name": "CVE-2026-112315",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112315"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "xdr_krb5_tl_data() in lib/kadm5/kadm_rpc_xdr.c in MIT Kerberos 5 (aka krb5) does not free partially decoded data on failure, which allows remote authenticated users to cause a denial of service (memory leak in kadmind) via crafted RPC requests that trigger a decode failure.",
+          "name": "CVE-2026-112316",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112316"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "krb5_ktkdb_get_entry() in lib/kdb/keytab.c in MIT Kerberos 5 (aka krb5) 1.2.8 and later does not free decrypted key material when a post-decryption check fails, which allows remote attackers to cause a denial of service (memory leak in the KDC or kadmind) via requests that repeatedly trigger key decryption failures.",
+          "name": "CVE-2026-112317",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112317"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The policy RPC stubs in kadmin/server/server_stubs.c in MIT Kerberos 5 (aka krb5) 1.5.3 and later do not reject a NULL policy name decoded by xdr_nullstring(), which allows remote authenticated users to cause a denial of service (kadmind crash via NULL pointer dereference) by sending a policy request with an empty policy name that reaches authorization checks or logging code.",
+          "name": "CVE-2026-112318",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112318"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The GSS-RPC layer in MIT Kerberos 5 (aka krb5) does not enforce size limits on XDR-decoded data, which allows remote authenticated users to cause a denial of service (memory exhaustion or excessive CPU consumption in kadmind) via crafted RPC requests that trigger unbounded memory allocations during XDR decoding.",
+          "name": "CVE-2026-112319",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112319"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The GSS-RPC transport layer in MIT Kerberos 5 (aka krb5) 1.4 and later does not release the previous authentication context when a client switches from an RPCSEC_GSS or AUTH_GSSAPI flavor to a non-GSS flavor on the same TCP connection. This allows remote attackers to cause a denial of service (memory exhaustion in kadmind) by repeatedly establishing and abandoning GSS authentication contexts.",
+          "name": "CVE-2026-112320",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112320"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The AUTH_GSSAPI handler in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) does not free decoded arguments on certain error paths, which allows remote attackers to cause a denial of service (memory exhaustion in kadmind) via crafted AUTH_GSSAPI_INIT requests that trigger authentication failures.",
+          "name": "CVE-2026-112321",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112321"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "clean_client() in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) restarts its scan from the head of the client list after each removal, resulting in quadratic CPU cost. Remote attackers can cause a denial of service (CPU consumption in kadmind) by accumulating a large number of AUTH_GSSAPI client entries.",
+          "name": "CVE-2026-112322",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112322"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The AUTH_GSSAPI handler in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) 1.5.2 and later allows remote attackers to cause a denial of service (memory exhaustion in kadmind) by sending repeated failed AUTH_GSSAPI_INIT requests. Each failed request allocates client state that is only freed after a 15-minute expiration timeout, allowing an attacker to accumulate memory faster than it is reclaimed.",
+          "name": "CVE-2026-112323",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112323"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "12.2.0-14+deb12u1"
+            },
+            {
+              "key": "package_name",
+              "value": "gcc-12"
+            }
+          ],
+          "description": "A flaw was found in gcc. An attacker could cause a Denial of Service (DoS) by passing a string that is not null-terminated to the std::from_chars() function in the libstdc++ library. This issue triggers an out-of-bounds read beyond the allocated buffer, potentially leading to invalid data parsing or an application crash.",
+          "name": "CVE-2026-115456",
+          "severity": "LOW",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-115456"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "4.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "description": "Calling the wide scanf family of functions (swscanf, fwscanf, wscanf, vswscanf, vfwscanf and vwscanf) with a %s or %[ conversion without the 'l' length modifier in the GNU C Library version 2.2 to version 2.44 writes an extra null byte one past the end of the destination array when the converted multibyte string and its terminating null byte exactly fill that array. These conversions store each wide input character into the caller's char array as a multibyte sequence. The conversion ends with the sequence that returns to the initial shift state, which also stores the terminating null byte, and the functions then append a second null byte. A destination sized for the converted string and one terminator, as the C standard requires the caller to provide, is therefore written one byte past its end. The out-of-bounds byte is always a null byte, which may corrupt adjacent data or crash the process. An attacker who supplies the input can trigger the overflow with a string whose converted length exactly fills the destination. The narrow scanf functions, the %ls and %l[ conversions into a wchar_t array, and the 'a' and 'm' allocation modifiers are not affected, and storing a wide scanf conversion into a narrow char array is uncommon. This issue affects all architectures and ABIs supported by the GNU C Library.",
+          "name": "CVE-2026-115819",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-115819"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "decode_sequence_of() in lib/krb5/asn.1/asn1_encode.c in MIT Kerberos 5 (aka krb5) 1.11 and later grows the decoded element array one entry at a time, which allows remote attackers to cause a denial of service (CPU consumption in the KDC) by sending an unauthenticated AS-REQ or TGS-REQ with a large number of elements in a SEQUENCE OF field over TCP.",
+          "name": "CVE-2026-119079",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-119079"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "description": "webpack-dev-middleware 5.3.4, 6.1.2 through 6.1.3, 7.1.0 before 7.4.6, and 8.0.0 before 8.3.0 contains a path traversal vulnerability in getFilenameFromUrl that bypasses the fix for CVE-2024-29180: a publicPath without a trailing slash is matched by string prefix, and the '..' guard runs before that prefix is stripped. Unauthenticated attackers can request a path such as /assets../secret to read files one directory above the output directory when the middleware serves from the physical filesystem through writeToDisk or a custom outputFileSystem.",
+          "name": "CVE-2026-76844",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-76844"
+        },
+        {
+          "attributes": [
+            {
+              "key": "package_version",
+              "value": "1.21.23"
+            },
+            {
+              "key": "package_name",
+              "value": "dpkg"
+            }
+          ],
+          "description": "A directory traversal bug was discovered when unpacking 3.0 (quilt) source packages, where the packaging tarball could contain the quilt database directory (.pc) with attacker controlled symlinks, where that in combination with patches that would fail to apply, could be used to make the code used to restore the backup files to either modify or remove the files pointed to by the attacker controlled symlinks.",
+          "name": "CVE-2026-91094",
+          "severity": "UNDEFINED",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-91094"
+        }
+      ],
+      "introduced_count": 16,
+      "manifest_digest": "sha256:9dbe284eb1f244f4b85c2beb741e7e18ba31607023aee98a497182ddbf59518a",
+      "removed_count": 1,
+      "repository": "genui-operator",
+      "rescan_completed_at": "2026-11-13T23:55:27-05:00",
+      "rescan_counts": {
+        "HIGH": 16,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "rescan_findings": 38,
+      "vulnerability_source_updated_at": "2026-11-13T23:55:27-05:00"
+    },
+    "qualification": {
+      "baseline_counts": {
+        "HIGH": 10,
+        "LOW": 3,
+        "MEDIUM": 10
+      },
+      "baseline_findings": 23,
+      "baseline_scan_completed_at": null,
+      "critical_count": 0,
+      "index_digest": "sha256:152088e1d77bd0c15621a896951ff70ac9b6cb2e6f6033b0a8742d6d9c8233a0",
+      "introduced": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "description": "The regcomp and regexec functions in the GNU C Library version 2.3 to version 2.44 may read freed memory and free the same heap block twice when a memory allocation fails while a regular expression is compiled or matched. The re_dfa_add_node (the NFA node table) and build_range_exp (bracket ranges) grow several arrays with consecutive realloc calls and store the new pointers only after all of them succeed. When a later call fails, the pattern buffer keeps pointers to blocks that were already freed, and the error cleanup frees them again. In regexec, the back-reference cache (match_ctx_add_entry) frees its array when a realloc fails but keeps the pointer, which is freed again on the error path. An attacker does not need to supply a crafted regular expression: patterns large enough to grow these arrays are common. The failure has to hit a specific allocation, though, so the issue can only be reached when the system is already under memory pressure. An attacker who supplies the pattern or the subject string has little control over which allocation fails, so the expected impact is a crash of the process. This issue affects all architectures and ABIs supported by the GNU C Library.",
+          "name": "CVE-2026-100290",
+          "severity": "LOW",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-100290"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "clnttcp_call() in lib/rpc/clnt_tcp.c in MIT Kerberos 5 (aka krb5) does not free the RPC reply verifier between retries, which allows remote attackers to cause a denial of service (memory leak in GSS-RPC client programs) by injecting RPC replies with mismatched XIDs or by triggering authentication retries.",
+          "name": "CVE-2026-112314",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112314"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The RPCSEC_GSS authentication routines in lib/rpc/authgss_prot.c in MIT Kerberos 5 (aka krb5) 1.4 and later do not free partially decoded buffers on failure, which allows remote attackers to cause a denial of service (memory leak in kadmind) via crafted RPCSEC_GSS messages.",
+          "name": "CVE-2026-112315",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112315"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "xdr_krb5_tl_data() in lib/kadm5/kadm_rpc_xdr.c in MIT Kerberos 5 (aka krb5) does not free partially decoded data on failure, which allows remote authenticated users to cause a denial of service (memory leak in kadmind) via crafted RPC requests that trigger a decode failure.",
+          "name": "CVE-2026-112316",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112316"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "krb5_ktkdb_get_entry() in lib/kdb/keytab.c in MIT Kerberos 5 (aka krb5) 1.2.8 and later does not free decrypted key material when a post-decryption check fails, which allows remote attackers to cause a denial of service (memory leak in the KDC or kadmind) via requests that repeatedly trigger key decryption failures.",
+          "name": "CVE-2026-112317",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112317"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The policy RPC stubs in kadmin/server/server_stubs.c in MIT Kerberos 5 (aka krb5) 1.5.3 and later do not reject a NULL policy name decoded by xdr_nullstring(), which allows remote authenticated users to cause a denial of service (kadmind crash via NULL pointer dereference) by sending a policy request with an empty policy name that reaches authorization checks or logging code.",
+          "name": "CVE-2026-112318",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112318"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The GSS-RPC layer in MIT Kerberos 5 (aka krb5) does not enforce size limits on XDR-decoded data, which allows remote authenticated users to cause a denial of service (memory exhaustion or excessive CPU consumption in kadmind) via crafted RPC requests that trigger unbounded memory allocations during XDR decoding.",
+          "name": "CVE-2026-112319",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112319"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The GSS-RPC transport layer in MIT Kerberos 5 (aka krb5) 1.4 and later does not release the previous authentication context when a client switches from an RPCSEC_GSS or AUTH_GSSAPI flavor to a non-GSS flavor on the same TCP connection. This allows remote attackers to cause a denial of service (memory exhaustion in kadmind) by repeatedly establishing and abandoning GSS authentication contexts.",
+          "name": "CVE-2026-112320",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112320"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The AUTH_GSSAPI handler in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) does not free decoded arguments on certain error paths, which allows remote attackers to cause a denial of service (memory exhaustion in kadmind) via crafted AUTH_GSSAPI_INIT requests that trigger authentication failures.",
+          "name": "CVE-2026-112321",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112321"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "clean_client() in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) restarts its scan from the head of the client list after each removal, resulting in quadratic CPU cost. Remote attackers can cause a denial of service (CPU consumption in kadmind) by accumulating a large number of AUTH_GSSAPI client entries.",
+          "name": "CVE-2026-112322",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112322"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The AUTH_GSSAPI handler in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) 1.5.2 and later allows remote attackers to cause a denial of service (memory exhaustion in kadmind) by sending repeated failed AUTH_GSSAPI_INIT requests. Each failed request allocates client state that is only freed after a 15-minute expiration timeout, allowing an attacker to accumulate memory faster than it is reclaimed.",
+          "name": "CVE-2026-112323",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112323"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "12.2.0-14+deb12u1"
+            },
+            {
+              "key": "package_name",
+              "value": "gcc-12"
+            }
+          ],
+          "description": "A flaw was found in gcc. An attacker could cause a Denial of Service (DoS) by passing a string that is not null-terminated to the std::from_chars() function in the libstdc++ library. This issue triggers an out-of-bounds read beyond the allocated buffer, potentially leading to invalid data parsing or an application crash.",
+          "name": "CVE-2026-115456",
+          "severity": "LOW",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-115456"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "4.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "description": "Calling the wide scanf family of functions (swscanf, fwscanf, wscanf, vswscanf, vfwscanf and vwscanf) with a %s or %[ conversion without the 'l' length modifier in the GNU C Library version 2.2 to version 2.44 writes an extra null byte one past the end of the destination array when the converted multibyte string and its terminating null byte exactly fill that array. These conversions store each wide input character into the caller's char array as a multibyte sequence. The conversion ends with the sequence that returns to the initial shift state, which also stores the terminating null byte, and the functions then append a second null byte. A destination sized for the converted string and one terminator, as the C standard requires the caller to provide, is therefore written one byte past its end. The out-of-bounds byte is always a null byte, which may corrupt adjacent data or crash the process. An attacker who supplies the input can trigger the overflow with a string whose converted length exactly fills the destination. The narrow scanf functions, the %ls and %l[ conversions into a wchar_t array, and the 'a' and 'm' allocation modifiers are not affected, and storing a wide scanf conversion into a narrow char array is uncommon. This issue affects all architectures and ABIs supported by the GNU C Library.",
+          "name": "CVE-2026-115819",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-115819"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "decode_sequence_of() in lib/krb5/asn.1/asn1_encode.c in MIT Kerberos 5 (aka krb5) 1.11 and later grows the decoded element array one entry at a time, which allows remote attackers to cause a denial of service (CPU consumption in the KDC) by sending an unauthenticated AS-REQ or TGS-REQ with a large number of elements in a SEQUENCE OF field over TCP.",
+          "name": "CVE-2026-119079",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-119079"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "description": "webpack-dev-middleware 5.3.4, 6.1.2 through 6.1.3, 7.1.0 before 7.4.6, and 8.0.0 before 8.3.0 contains a path traversal vulnerability in getFilenameFromUrl that bypasses the fix for CVE-2024-29180: a publicPath without a trailing slash is matched by string prefix, and the '..' guard runs before that prefix is stripped. Unauthenticated attackers can request a path such as /assets../secret to read files one directory above the output directory when the middleware serves from the physical filesystem through writeToDisk or a custom outputFileSystem.",
+          "name": "CVE-2026-76844",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-76844"
+        },
+        {
+          "attributes": [
+            {
+              "key": "package_version",
+              "value": "1.21.23"
+            },
+            {
+              "key": "package_name",
+              "value": "dpkg"
+            }
+          ],
+          "description": "A directory traversal bug was discovered when unpacking 3.0 (quilt) source packages, where the packaging tarball could contain the quilt database directory (.pc) with attacker controlled symlinks, where that in combination with patches that would fail to apply, could be used to make the code used to restore the backup files to either modify or remove the files pointed to by the attacker controlled symlinks.",
+          "name": "CVE-2026-91094",
+          "severity": "UNDEFINED",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-91094"
+        }
+      ],
+      "introduced_count": 16,
+      "manifest_digest": "sha256:152088e1d77bd0c15621a896951ff70ac9b6cb2e6f6033b0a8742d6d9c8233a0",
+      "removed_count": 1,
+      "repository": "genui-qualification",
+      "rescan_completed_at": "2026-11-13T23:56:18-05:00",
+      "rescan_counts": {
+        "HIGH": 16,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "rescan_findings": 38,
+      "vulnerability_source_updated_at": "2026-11-13T23:56:18-05:00"
+    },
+    "service": {
+      "baseline_counts": {
+        "HIGH": 10,
+        "LOW": 3,
+        "MEDIUM": 10
+      },
+      "baseline_findings": 23,
+      "baseline_scan_completed_at": null,
+      "critical_count": 0,
+      "index_digest": "sha256:1bbf0e4db54db2bc898a5fd19f4042bfbd6e17331382a6d269b4052e532ac466",
+      "introduced": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "description": "The regcomp and regexec functions in the GNU C Library version 2.3 to version 2.44 may read freed memory and free the same heap block twice when a memory allocation fails while a regular expression is compiled or matched. The re_dfa_add_node (the NFA node table) and build_range_exp (bracket ranges) grow several arrays with consecutive realloc calls and store the new pointers only after all of them succeed. When a later call fails, the pattern buffer keeps pointers to blocks that were already freed, and the error cleanup frees them again. In regexec, the back-reference cache (match_ctx_add_entry) frees its array when a realloc fails but keeps the pointer, which is freed again on the error path. An attacker does not need to supply a crafted regular expression: patterns large enough to grow these arrays are common. The failure has to hit a specific allocation, though, so the issue can only be reached when the system is already under memory pressure. An attacker who supplies the pattern or the subject string has little control over which allocation fails, so the expected impact is a crash of the process. This issue affects all architectures and ABIs supported by the GNU C Library.",
+          "name": "CVE-2026-100290",
+          "severity": "LOW",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-100290"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "clnttcp_call() in lib/rpc/clnt_tcp.c in MIT Kerberos 5 (aka krb5) does not free the RPC reply verifier between retries, which allows remote attackers to cause a denial of service (memory leak in GSS-RPC client programs) by injecting RPC replies with mismatched XIDs or by triggering authentication retries.",
+          "name": "CVE-2026-112314",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112314"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The RPCSEC_GSS authentication routines in lib/rpc/authgss_prot.c in MIT Kerberos 5 (aka krb5) 1.4 and later do not free partially decoded buffers on failure, which allows remote attackers to cause a denial of service (memory leak in kadmind) via crafted RPCSEC_GSS messages.",
+          "name": "CVE-2026-112315",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112315"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "xdr_krb5_tl_data() in lib/kadm5/kadm_rpc_xdr.c in MIT Kerberos 5 (aka krb5) does not free partially decoded data on failure, which allows remote authenticated users to cause a denial of service (memory leak in kadmind) via crafted RPC requests that trigger a decode failure.",
+          "name": "CVE-2026-112316",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112316"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "5.3"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "krb5_ktkdb_get_entry() in lib/kdb/keytab.c in MIT Kerberos 5 (aka krb5) 1.2.8 and later does not free decrypted key material when a post-decryption check fails, which allows remote attackers to cause a denial of service (memory leak in the KDC or kadmind) via requests that repeatedly trigger key decryption failures.",
+          "name": "CVE-2026-112317",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112317"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The policy RPC stubs in kadmin/server/server_stubs.c in MIT Kerberos 5 (aka krb5) 1.5.3 and later do not reject a NULL policy name decoded by xdr_nullstring(), which allows remote authenticated users to cause a denial of service (kadmind crash via NULL pointer dereference) by sending a policy request with an empty policy name that reaches authorization checks or logging code.",
+          "name": "CVE-2026-112318",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112318"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "6.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The GSS-RPC layer in MIT Kerberos 5 (aka krb5) does not enforce size limits on XDR-decoded data, which allows remote authenticated users to cause a denial of service (memory exhaustion or excessive CPU consumption in kadmind) via crafted RPC requests that trigger unbounded memory allocations during XDR decoding.",
+          "name": "CVE-2026-112319",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112319"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The GSS-RPC transport layer in MIT Kerberos 5 (aka krb5) 1.4 and later does not release the previous authentication context when a client switches from an RPCSEC_GSS or AUTH_GSSAPI flavor to a non-GSS flavor on the same TCP connection. This allows remote attackers to cause a denial of service (memory exhaustion in kadmind) by repeatedly establishing and abandoning GSS authentication contexts.",
+          "name": "CVE-2026-112320",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112320"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The AUTH_GSSAPI handler in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) does not free decoded arguments on certain error paths, which allows remote attackers to cause a denial of service (memory exhaustion in kadmind) via crafted AUTH_GSSAPI_INIT requests that trigger authentication failures.",
+          "name": "CVE-2026-112321",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112321"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "clean_client() in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) restarts its scan from the head of the client list after each removal, resulting in quadratic CPU cost. Remote attackers can cause a denial of service (CPU consumption in kadmind) by accumulating a large number of AUTH_GSSAPI client entries.",
+          "name": "CVE-2026-112322",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112322"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "The AUTH_GSSAPI handler in lib/rpc/svc_auth_gssapi.c in MIT Kerberos 5 (aka krb5) 1.5.2 and later allows remote attackers to cause a denial of service (memory exhaustion in kadmind) by sending repeated failed AUTH_GSSAPI_INIT requests. Each failed request allocates client state that is only freed after a 15-minute expiration timeout, allowing an attacker to accumulate memory faster than it is reclaimed.",
+          "name": "CVE-2026-112323",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-112323"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "3.7"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "12.2.0-14+deb12u1"
+            },
+            {
+              "key": "package_name",
+              "value": "gcc-12"
+            }
+          ],
+          "description": "A flaw was found in gcc. An attacker could cause a Denial of Service (DoS) by passing a string that is not null-terminated to the std::from_chars() function in the libstdc++ library. This issue triggers an out-of-bounds read beyond the allocated buffer, potentially leading to invalid data parsing or an application crash.",
+          "name": "CVE-2026-115456",
+          "severity": "LOW",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-115456"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "4.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:L"
+            },
+            {
+              "key": "package_version",
+              "value": "2.36-9+deb12u14"
+            },
+            {
+              "key": "package_name",
+              "value": "glibc"
+            }
+          ],
+          "description": "Calling the wide scanf family of functions (swscanf, fwscanf, wscanf, vswscanf, vfwscanf and vwscanf) with a %s or %[ conversion without the 'l' length modifier in the GNU C Library version 2.2 to version 2.44 writes an extra null byte one past the end of the destination array when the converted multibyte string and its terminating null byte exactly fill that array. These conversions store each wide input character into the caller's char array as a multibyte sequence. The conversion ends with the sequence that returns to the initial shift state, which also stores the terminating null byte, and the functions then append a second null byte. A destination sized for the converted string and one terminator, as the C standard requires the caller to provide, is therefore written one byte past its end. The out-of-bounds byte is always a null byte, which may corrupt adjacent data or crash the process. An attacker who supplies the input can trigger the overflow with a string whose converted length exactly fills the destination. The narrow scanf functions, the %ls and %l[ conversions into a wchar_t array, and the 'a' and 'm' allocation modifiers are not affected, and storing a wide scanf conversion into a narrow char array is uncommon. This issue affects all architectures and ABIs supported by the GNU C Library.",
+          "name": "CVE-2026-115819",
+          "severity": "MEDIUM",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-115819"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.5"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.20.1-2+deb12u5"
+            },
+            {
+              "key": "package_name",
+              "value": "krb5"
+            }
+          ],
+          "description": "decode_sequence_of() in lib/krb5/asn.1/asn1_encode.c in MIT Kerberos 5 (aka krb5) 1.11 and later grows the decoded element array one entry at a time, which allows remote attackers to cause a denial of service (CPU consumption in the KDC) by sending an unauthenticated AS-REQ or TGS-REQ with a large number of elements in a SEQUENCE OF field over TCP.",
+          "name": "CVE-2026-119079",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-119079"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "description": "webpack-dev-middleware 5.3.4, 6.1.2 through 6.1.3, 7.1.0 before 7.4.6, and 8.0.0 before 8.3.0 contains a path traversal vulnerability in getFilenameFromUrl that bypasses the fix for CVE-2024-29180: a publicPath without a trailing slash is matched by string prefix, and the '..' guard runs before that prefix is stripped. Unauthenticated attackers can request a path such as /assets../secret to read files one directory above the output directory when the middleware serves from the physical filesystem through writeToDisk or a custom outputFileSystem.",
+          "name": "CVE-2026-76844",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-76844"
+        },
+        {
+          "attributes": [
+            {
+              "key": "package_version",
+              "value": "1.21.23"
+            },
+            {
+              "key": "package_name",
+              "value": "dpkg"
+            }
+          ],
+          "description": "A directory traversal bug was discovered when unpacking 3.0 (quilt) source packages, where the packaging tarball could contain the quilt database directory (.pc) with attacker controlled symlinks, where that in combination with patches that would fail to apply, could be used to make the code used to restore the backup files to either modify or remove the files pointed to by the attacker controlled symlinks.",
+          "name": "CVE-2026-91094",
+          "severity": "UNDEFINED",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2026-91094"
+        }
+      ],
+      "introduced_count": 16,
+      "manifest_digest": "sha256:1bbf0e4db54db2bc898a5fd19f4042bfbd6e17331382a6d269b4052e532ac466",
+      "removed_count": 1,
+      "repository": "genui-synthetic",
+      "rescan_completed_at": "2026-11-13T23:57:23-05:00",
+      "rescan_counts": {
+        "HIGH": 16,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "rescan_findings": 38,
+      "vulnerability_source_updated_at": "2026-11-13T23:57:23-05:00"
+    }
+  }
+}
