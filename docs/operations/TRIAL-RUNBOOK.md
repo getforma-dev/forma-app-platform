@@ -158,7 +158,8 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
    ```
 
    The expiry is in the live parameters of the state the apply wrote; `aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "Stacks[0].Parameters[?ParameterKey=='DeploymentExpiresAtUtc'].ParameterValue" --output text` prints `2026-12-15T14:00:00Z`, and `aws scheduler get-schedule --group-name <DeploymentExpiryGroup output> --name <schedule>` shows `at(2026-12-15T14:00:00)`.
-5. **Deploy the alarms** (section 6), **set the Anthropic spend limit** (about $150 for the month, in the Anthropic console), **ask FormaStack to raise the fAuth tenant limit to at least 30**, and run the **restore drill** (section 9) while only Victor's account exists.
+5. **Deploy the alarms** (section 6), **set the Anthropic spend limit** (about $150 for the month, in the Anthropic console), and run the **restore drill** (section 9) while only Victor's account exists.
+6. **Write to FormaStack** (one email, kept with the trial's private evidence): raise the fAuth tenant's user limit to at least 30 by Nov 28, and **delete the tenant's users (or the tenant) by Dec 14** on your word, because the students' sign-in accounts and addresses live there, not in the beta's database (section 10 step 6). Ask for a written acknowledgement now and a written confirmation after the deletion; record both. Without the acknowledgement the notice's "deleted by December 14" is not true for the sign-in accounts, and the Nov 28 go/no-go says no.
 6. **Victor's admin row** (Monday Nov 24, before building the class apps; the Admin page requires it). Your principal id is in `admission list`'s redemption of the owner code:
 
    ```sh
@@ -170,9 +171,11 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
 
 ## 4. Codes by wave and the one announced restart (Friday Nov 28)
 
+**Go/no-go before the first wave**, each with its evidence: release B executed and `/health/ready` 200; the caps, December month and expiry applied (section 2) and the stop reads 2026-12-15 14:00 UTC; the alarms stack deployed and the test email received; the restore drill's diff empty; FormaStack's written acknowledgement of the user-limit raise and the Dec 14 deletion (section 3 step 6); the purge path proven on the dev stand with no guest-linked share open, or the R1 decision taken (section 10); your `admin_policy` row granted and `/admin` opening; the rehearsal of Nov 26 done on Safari and a phone. Any "no" delays the codes, not the class date.
+
 The back office is `ops/promotion/admission.py`. It mints the codes on your machine, writes the one-shot `OperatorInvitationInput` secret, runs one operator task per code (`admission issue --code-digest --provider-input-from-secret --authoring-only --note`), and **always empties the secret afterwards, even on failure**. The codes go only to the private `--output` file (0600). Nothing reaches the service until the restart: the service loads the capability secret once per task start (at most 128 entries), so one restart covers every code issued before it.
 
-1. **Recipients.** `$TRIAL/wave-1.json`, one entry per student. The note is what you will see in `list`: **a seat number or initials, never a full name or an address**, because it travels in the RunTask override and so in CloudTrail's request parameters, `DescribeTasks`, the operator log and the receipt. The address stays in this file and the one-shot secret only:
+1. **Recipients.** `$TRIAL/wave-1.json`, one entry per student. The note is what you will see in `list` and what every organization admin sees beside the code on `/admin`: **a seat number or initials, never a full name or an address**, because it travels in the RunTask override and so in CloudTrail's request parameters, `DescribeTasks`, the operator log and the receipt. The address stays in this file and the one-shot secret only:
 
    ```json
    {"recipients": [{"email": "student@example.org", "note": "Ada L."}, {"email": "...", "note": "..."}]}
@@ -216,6 +219,7 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
 ## 5. Removing a member
 
 1. On **`/admin`** (W2; requires your `admin_policy` row): the member's row, **Remove**, confirm. W1's `admin_remove_member` revokes the membership and entitlement, advances the epoch (their session ends at the next request) and audits; it refuses yourself and the last admin.
+   Reading the audit afterwards: a removal from `/admin` writes `membership.revoked` and `entitlement.revoked` on the **admission** chain with the actor being you (the admin) and the target's digest in the outcome; the operator channel's `revoke-membership` and `revoke-entitlement` write the same kinds on the **operator** chain with the actor being the target and no digest. Branch on `writer_role` before reading the actor. Your own membership was operator-seeded, so `/admin` shows no consent row for you; that is expected, every student has one.
 2. If their code was never redeemed, `admission revoke --code <code_id>` instead.
 3. **Their uploads**, with your own identity (the task lists, you delete every S3 version and delete marker):
 
@@ -368,4 +372,15 @@ The charter promises the organization's data is deleted by Dec 14; the beta then
    ```
 
    Record the snapshot ids and the date; seven days later the last automated backup containing the data is gone.
-6. **After the stop** (Dec 15 14:00 UTC): both services at count 0 (`aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount}"` → 0 / 0); the alarms stack deleted (section 6); the retained database, keys and load balancer still cost money until a separate decision.
+6. **FormaStack.** Send the deletion request agreed on Nov 23 (section 3 step 6): delete the trial tenant's users, or the tenant, by Dec 14. The beta's `principals` rows (issuer, tenant, subject) and `provider_invitations` are gone with step 4; the sign-in accounts and addresses are FormaStack's. Record their written confirmation with the purge receipt; until it arrives the notice's "deleted by December 14" is not true for the accounts.
+7. **The capability secret.** `revoke` removes a code's capability; redeemed and exhausted codes leave theirs until the operator's reconcile sweep removes every capability that can no longer be handed off. Run it once, after step 4, so the secret names no code of the purged organization (the override takes the attached management secret, never argv):
+
+   ```sh
+   python3 infra/scripts/window_requests.py operator-task --outputs "$TRIAL/stack.json" --window-id "$(python3 -c 'import uuid;print(uuid.uuid4())')" \
+     --step reconcile-final --override admission-reconcile --set=--organization="$TRIAL_ORG" --output "$TRIAL/reconcile-final.json"
+   aws ecs run-task --cli-input-json "file://$TRIAL/reconcile-final.json"      # then wait, read the log line as in section 9
+   aws secretsmanager get-secret-value --secret-id "$(out ProviderCapabilitySecretArn)" --query SecretString --output text | python3 -c 'import json,sys; m=json.load(sys.stdin); print(len(m), "entries;", sum(k.startswith(sys.argv[1]) for k in m), "for the trial organization")' "$TRIAL_ORG"
+   ```
+
+   Expected: the task's log line names the capabilities it ended, and the second command prints `0 for the trial organization`.
+8. **After the stop** (Dec 15 14:00 UTC): both services at count 0 (`aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount}"` → 0 / 0); the alarms stack deleted (section 6); the retained database, keys and load balancer still cost money until a separate decision.
