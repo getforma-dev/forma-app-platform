@@ -86,9 +86,10 @@ pub(super) async fn qualify(
         Err(Error::Denied)
     ));
     // Whole snapshots remain reserved through execution/release. Saturation
-    // refuses before materializing a fifth copy, and dropping one frees it.
+    // (APP-200: the worker's admission, 24) refuses before materializing the
+    // copy past the ceiling, and dropping one frees it.
     let mut capacity = Vec::new();
-    for _ in 0..2 {
+    for _ in 0..(super::record_query::SNAPSHOT_SLOTS - 2) {
         capacity.push(
             stores
                 .data
@@ -153,13 +154,16 @@ pub(super) async fn qualify(
         .await
         .unwrap();
     assert!(matches!(changed, CommandResult::Committed(_)));
+    // APP-198: a commit between capture and release makes the snapshot
+    // `Stale` (typed; the route captures once more), not `Denied`: the member
+    // reads the list under RLS already, so staleness discloses nothing.
     assert!(matches!(
         stores.data.release_result(owner, &member_run).await,
-        Err(Error::Denied)
+        Err(Error::Stale)
     ));
     assert!(matches!(
         stores.data.release_guest_result(&access, &guest_run).await,
-        Err(Error::Denied)
+        Err(Error::Stale)
     ));
     let previous_sequence = member_run.record_snapshot_sequence();
     drop((member_run, guest_run));

@@ -173,3 +173,178 @@ function streamLive(
     onState('off');
   };
 }
+
+/** What a member is told when an app is shared with them (APP-192 review:
+ * the announcement says nothing of a private link, which a member share has
+ * none of). Null when this canvas already has the app: a role change, or a
+ * share the member already reached, tells them nothing new. */
+export const SHARED_NOTICE = 'An app was shared with you. Reload the page to find it in My apps.';
+export function sharedAppNotice(known: boolean): string | null {
+  return known ? null : SHARED_NOTICE;
+}
+
+// --- APP-195: when a refresh that a live hint triggered runs, and its one retry.
+//
+// One save on a shared page sends the same hint to every member who has the
+// page open. When every page re-read at once, the data pool refused most of
+// them (APP-193 finding, G6). So a hinted refresh starts after a uniform random
+// delay of 0–3 s, and a read that fails with a 503 or a network error is tried
+// once more after a uniform random 1–3 s before the page shows that it failed.
+// The page that committed reads at once. Refreshes the member starts (Refresh,
+// coming back to the tab) do not use this section. Coming back online does,
+// like a hint: every device on one network comes back at the same moment.
+// A hidden page schedules nothing for a hint: it is marked stale and reads
+// once when it is shown again (APP-195, Fable decision of 2026-11-14).
+// The random source, the clock and the page's visibility are injectable, so
+// tests are exact.
+
+/** Hinted refreshes start uniformly within this window after the hint. */
+export const HINT_SPREAD_MS = 3000;
+/** The one retry waits uniformly between these. */
+export const RETRY_MIN_MS = 1000;
+export const RETRY_MAX_MS = 3000;
+
+export type Timing = {
+  /** Uniform in [0, 1). */
+  random(): number;
+  setTimeout(run: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+  /** Whether the page is hidden now (absent: never). */
+  hidden?(): boolean;
+  /** Calls `listener` each time the page is shown again; returns the unsubscribe. */
+  onVisible?(listener: () => void): () => void;
+};
+const pageDocument = () => (typeof document === 'undefined' ? null : document);
+export const browserTiming: Timing = {
+  random: () => Math.random(),
+  setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
+  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  hidden: () => pageDocument()?.visibilityState === 'hidden',
+  onVisible: (listener) => {
+    const page = pageDocument();
+    if (!page) return () => undefined;
+    const shown = () => { if (page.visibilityState === 'visible') listener(); };
+    page.addEventListener('visibilitychange', shown);
+    return () => page.removeEventListener('visibilitychange', shown);
+  },
+};
+
+export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** A whole number of milliseconds in [from, to), whatever the source returns. */
+function uniform(timing: Timing, from: number, to: number): number {
+  const value = timing.random();
+  const unit = Number.isFinite(value) && value > 0 ? Math.min(value, 1) : 0;
+  return Math.min(to - 1, from + Math.floor(unit * (to - from)));
+}
+
+/** A hinted refresh's start delay, in [0, 3000) ms. */
+export function hintDelay(timing: Timing = browserTiming): number {
+  return uniform(timing, 0, HINT_SPREAD_MS);
+}
+
+/** The wait before the one retry, in [1000, 3000) ms. */
+export function retryDelay(timing: Timing = browserTiming): number {
+  return uniform(timing, RETRY_MIN_MS, RETRY_MAX_MS);
+}
+
+/**
+ * Hinted refreshes, at most one waiting per key (a page, or one work on the
+ * canvas). The first hint for a key waits 0–3 s; hints for the key while it
+ * waits join it, because the read that starts later covers them all. `now`
+ * runs at once in place of a waiting hint (the page that committed), for the
+ * same reason. This is the hints' coalescing; each caller keeps its own.
+ *
+ * A hint that arrives while the page is hidden schedules nothing: the key is
+ * marked stale. With `resumeWhenShown` (the canvas, which has no refresh of
+ * its own on visibility) each stale key's latest run happens once, at once,
+ * when the page is shown again. Without it (the work document, whose own
+ * `visibilitychange` refresh covers the hint) `shown` clears the mark.
+ */
+export function hintSchedule(timing: Timing = browserTiming, options: { resumeWhenShown?: boolean } = {}) {
+  const waiting = new Map<string, unknown>();
+  const stale = new Map<string, () => void>();
+  let unsubscribe: (() => void) | null = null;
+  const cancel = (key: string) => {
+    stale.delete(key);
+    if (!waiting.has(key)) return;
+    timing.clearTimeout(waiting.get(key));
+    waiting.delete(key);
+  };
+  const resume = () => {
+    unsubscribe?.();
+    unsubscribe = null;
+    const runs = [...stale.values()];
+    stale.clear();
+    for (const run of runs) run();
+  };
+  return {
+    hint(key: string, run: () => void): void {
+      if (timing.hidden?.()) {
+        stale.set(key, run);
+        if (options.resumeWhenShown && !unsubscribe && timing.onVisible) unsubscribe = timing.onVisible(resume);
+        return;
+      }
+      if (waiting.has(key)) return;
+      waiting.set(key, timing.setTimeout(() => {
+        waiting.delete(key);
+        run();
+      }, hintDelay(timing)));
+    },
+    now(key: string, run: () => void): void {
+      cancel(key);
+      run();
+    },
+    /** The page's own refresh on being shown covered every stale key. */
+    shown(): void {
+      stale.clear();
+    },
+    waiting: (key: string) => waiting.has(key),
+    stale: (key: string) => stale.has(key),
+    clear(): void {
+      for (const key of [...waiting.keys()]) cancel(key);
+      stale.clear();
+      unsubscribe?.();
+      unsubscribe = null;
+    },
+  };
+}
+
+function pause(timing: Timing, ms: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const stop = () => {
+      timing.clearTimeout(handle);
+      reject(signal?.reason);
+    };
+    const handle = timing.setTimeout(() => {
+      signal?.removeEventListener('abort', stop);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+}
+
+/**
+ * `request` that, after a 503 or a network error, waits 1–3 s and asks once
+ * more: the second answer, or its error, is final and the page shows it as
+ * before. Any other answer is returned at once. A read whose signal was
+ * aborted (the page stopped, or its own timeout) is never retried.
+ */
+export function retryOnce(timing: Timing = browserTiming, request: Fetch = (input, init) => fetch(input, init)): Fetch {
+  return async (input, init) => {
+    try {
+      const response = await request(input, init);
+      if (response.status !== 503) return response;
+      // Free the refused answer's connection now, not at garbage collection.
+      void response.body?.cancel().catch(() => undefined);
+    } catch (error) {
+      if (init?.signal?.aborted) throw error;
+    }
+    await pause(timing, retryDelay(timing), init?.signal);
+    return request(input, init);
+  };
+}

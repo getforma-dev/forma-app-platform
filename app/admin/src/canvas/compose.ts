@@ -11,6 +11,7 @@ import { showTiming, type Chip, type Step } from './timing';
 import { showChooser } from './slash';
 import { isUuid } from './render';
 import { unite } from './unite';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 /** The composer route (`app/src/composer/routes.rs` PATH). */
 export const COMPOSE_URL = '/v1/compose';
@@ -34,7 +35,7 @@ export type Choice = { app_id: string; title: string; purpose: string };
 export type ComposeAnswer = ComposeResult | { kind: 'choose'; choices: Choice[] };
 /** APP-101: a slash command or chooser click pins the app; "Build something new" asks for generation. */
 export type Pin = { app_id: string } | { generate: true } | { template_id: string } | null;
-export type ComposeCode = 'not_connected' | 'unavailable' | 'refused' | 'invalid' | 'too_many' | 'failed';
+export type ComposeCode = 'not_connected' | 'unavailable' | 'refused' | 'invalid' | 'too_many' | 'daily_limit' | 'failed';
 export class ComposeError extends Error {
   constructor(
     readonly code: ComposeCode,
@@ -72,7 +73,11 @@ export async function composeIntent(text: string, pin: Pin = null): Promise<Comp
   }
   // The uniform 404: no session, nothing composable, or no composer route on this server.
   if (response.status === 404) throw new ComposeError('not_connected');
-  if (response.status === 429) throw new ComposeError('too_many', retryAfter(response));
+  if (response.status === 429) {
+    // D10: the app's daily model-call cap is its own 429; the wait is until midnight UTC.
+    if ((await refusalCode(response)) === DAILY_LIMIT_CODE) throw new ComposeError('daily_limit');
+    throw new ComposeError('too_many', retryAfter(response));
+  }
   if (response.status === 422 || response.status === 400 || response.status === 413) {
     const code = await refusalCode(response);
     throw new ComposeError(code === 'could_not_compose' ? 'refused' : 'invalid');
@@ -108,6 +113,7 @@ const MESSAGES: Record<ComposeCode, string> = {
   refused: 'That request could not be composed into an app. Nothing was placed.',
   invalid: 'Describe what you need in a few words (3 to 500 characters). Nothing was placed.',
   too_many: 'You have composed a few apps recently. Please try again later. Nothing was placed.',
+  daily_limit: `${DAILY_LIMIT_MESSAGE} Nothing was placed.`,
   failed: 'The app could not be composed right now. Nothing was placed.',
 };
 

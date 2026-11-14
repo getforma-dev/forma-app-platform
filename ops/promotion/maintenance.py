@@ -18,7 +18,7 @@ from .aws import AWS, body
 from .candidate import api
 from .github import run_identity
 from .runner import Runner, preflight
-from .state import Store, closed, digest, encoded, no_duplicates, now, require
+from .state import Refused, Store, closed, digest, encoded, no_duplicates, now, require
 from .guards import ACCOUNT, IMAGE_KEYS, REGION, REPOSITORY, REPOS, ROLE_KEYS, definition, parameters, runtime_parameters, schedule, service
 
 
@@ -74,24 +74,25 @@ def confirmed_registry_only(active, state, store):
 
 
 
-def operation_receipt(store, entry, window):
+def operation_receipt(store, entry, window, label='registry'):
+    """One confirmed journal entry's immutable receipt, bound to its hash. `label` is a fixed word naming it in refusals."""
     request = entry['request']; name = entry['name']
     require(entry.get('request_sha256') == digest(request)
             and entry.get('receipt') == 'promotions/' + window + '/' + name + '.json'
-            and re.fullmatch(r'[0-9a-f]{64}', entry.get('receipt_sha256', '')), 'confirmed registry receipt missing or changed')
+            and re.fullmatch(r'[0-9a-f]{64}', entry.get('receipt_sha256', '')), 'confirmed ' + label + ' receipt missing or changed')
     try:
         response = store.s3.get_object(Bucket=store.bucket, Key=store.prefix + '/' + entry['receipt'])
         with response['Body'] as stream:
             raw = stream.read(MAX_REGISTRY_RECEIPT_BYTES + 1)
     except Exception:
-        raise RuntimeError('confirmed registry receipt unavailable; keep the lock') from None
+        raise RuntimeError('confirmed ' + label + ' receipt unavailable; keep the lock') from None
     require(len(raw) <= MAX_REGISTRY_RECEIPT_BYTES
-            and hashlib.sha256(raw).hexdigest() == entry['receipt_sha256'], 'registry receipt bytes changed or oversized')
+            and hashlib.sha256(raw).hexdigest() == entry['receipt_sha256'], label + ' receipt bytes changed or oversized')
     receipt = json.loads(raw, object_pairs_hook=no_duplicates)
     closed(receipt, ['request', 'response', 'observed_at_utc'], 'operation receipt')
-    require(receipt['request'] == request and isinstance(receipt['response'], dict), 'registry receipt request or response differs')
+    require(receipt['request'] == request and isinstance(receipt['response'], dict), label + ' receipt request or response differs')
     observed = receipt['observed_at_utc']
-    require(isinstance(observed, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', observed), 'registry receipt observation missing')
+    require(isinstance(observed, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', observed), label + ' receipt observation missing')
     datetime.fromisoformat(observed.replace('Z', '+00:00'))
     return receipt
 
@@ -474,13 +475,16 @@ def main(argv=None):
             else:
                 result=abandon(runner,args.expected_state_sha256,reconcile_failed_create=args.reconcile_bootstrap_create_rejection)
         print(json.dumps(result));return 0
-    except Exception:
+    except Exception as error:
         if output is not None and not output.closed:
             try:
-                # Never an exception text, identity or claim that nothing was written.
+                # Never an AWS exception text, identity or claim that nothing was written. A
+                # Refused reason is a fixed string from this code, so the private file names it.
+                failure={'status':'refused-or-outcome-unknown',
+                    'instruction':'Inspect the lock, journal and restore receipts before any retry; nothing is repeated automatically.'}
+                if isinstance(error,Refused):failure['reason']=str(error)
                 output.seek(0);output.truncate()
-                output.write(encoded({'status':'refused-or-outcome-unknown',
-                    'instruction':'Inspect the lock, journal and restore receipts before any retry; nothing is repeated automatically.'}))
+                output.write(encoded(failure))
                 output.flush();os.fsync(output.fileno());output.close()
             except OSError:
                 pass

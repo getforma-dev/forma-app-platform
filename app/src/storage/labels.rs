@@ -201,7 +201,11 @@ fn outcome(kind: &str, parts: &[&str]) -> String {
 }
 
 /// Every app of the organization the member can open (`discover`).
-pub(super) const DISCOVER: &str = "EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=a.app_id AND p.permission='discover')";
+/// `discover` on the `genui.apps` row `a` for `$2` (APP-192: a grant, or a
+/// live organization-wide share of a work of the app).
+pub(super) fn discover_clause() -> String {
+    super::authorization::app_discover_clause("a", "$2::text::uuid")
+}
 /// The app is open to someone besides its owner (`discover`).
 const SHARED: &str = "EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id AND p.permission='discover' AND p.principal_id IS DISTINCT FROM a.owner_principal_id)";
 /// The member owns the app or holds `admin_policy` in the organization.
@@ -510,13 +514,16 @@ impl Workspace {
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
                 let mut labels = Labels::default();
-                for row in t.query(&format!("SELECT l.app_id::text,l.card,l.name,l.description,l.address,l.kept FROM genui.app_labels l JOIN genui.apps a USING(organization_id,app_id) WHERE l.organization_id=$1::text::uuid AND {DISCOVER} ORDER BY l.app_id,l.card"), &[&request.organization,&request.principal]).await? {
+                let discover = discover_clause();
+                for row in t.query(&format!("SELECT l.app_id::text,l.card,l.name,l.description,l.address,l.kept FROM genui.app_labels l JOIN genui.apps a USING(organization_id,app_id) WHERE l.organization_id=$1::text::uuid AND {discover} ORDER BY l.app_id,l.card"), &[&request.organization,&request.principal]).await? {
                     labels.organization.push(Label { app: text(&row, 0)?, card: text(&row, 1)?, name: optional(&row, 2)?, description: optional(&row, 3)?, address: optional(&row, 4)?, kept: texts(&row, 5)? });
                 }
-                for row in t.query(&format!("SELECT l.app_id::text,l.card,l.name,l.aliases FROM genui.member_labels l JOIN genui.apps a USING(organization_id,app_id) WHERE l.organization_id=$1::text::uuid AND l.principal_id=$2::text::uuid AND {DISCOVER} ORDER BY l.app_id,l.card"), &[&request.organization,&request.principal]).await? {
+                let discover = discover_clause();
+                for row in t.query(&format!("SELECT l.app_id::text,l.card,l.name,l.aliases FROM genui.member_labels l JOIN genui.apps a USING(organization_id,app_id) WHERE l.organization_id=$1::text::uuid AND l.principal_id=$2::text::uuid AND {discover} ORDER BY l.app_id,l.card"), &[&request.organization,&request.principal]).await? {
                     labels.mine.push(MemberLabel { app: text(&row, 0)?, card: text(&row, 1)?, name: optional(&row, 2)?, aliases: texts(&row, 3)? });
                 }
-                for row in t.query(&format!("SELECT a.app_id::text FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND {DISCOVER} AND {OWNER_OR_ADMIN}"), &[&request.organization,&request.principal]).await? {
+                let discover = discover_clause();
+                for row in t.query(&format!("SELECT a.app_id::text FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND {discover} AND {OWNER_OR_ADMIN}"), &[&request.organization,&request.principal]).await? {
                     labels.labelable.insert(text(&row, 0)?);
                 }
                 Ok(labels)
@@ -543,7 +550,8 @@ impl Workspace {
                 confirm_identity(transaction, request).await?;
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
-                let allowed = t.query(&format!("SELECT 1 FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {DISCOVER} AND {OWNER_OR_ADMIN}"), &[&request.organization,&request.principal,&app]).await?;
+                let discover = discover_clause();
+                let allowed = t.query(&format!("SELECT 1 FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {discover} AND {OWNER_OR_ADMIN}"), &[&request.organization,&request.principal,&app]).await?;
                 require(allowed.len() == 1)?;
                 lock_names(t, &request.organization).await?;
                 let rows = t.query("SELECT name,description,address,kept FROM genui.app_labels WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND card=$3", &[&request.organization,&app,&card]).await?;
@@ -595,7 +603,8 @@ impl Workspace {
                 confirm_identity(transaction, request).await?;
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
-                let allowed = t.query(&format!("SELECT 1 FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {DISCOVER}"), &[&request.organization,&request.principal,&app]).await?;
+                let discover = discover_clause();
+                let allowed = t.query(&format!("SELECT 1 FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {discover}"), &[&request.organization,&request.principal,&app]).await?;
                 require(allowed.len() == 1)?;
                 lock_names(t, &request.organization).await?;
                 let rows = t.query("SELECT name,aliases FROM genui.member_labels WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND app_id=$3::text::uuid AND card=$4", &[&request.organization,&request.principal,&app,&card]).await?;

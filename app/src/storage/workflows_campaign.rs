@@ -425,7 +425,7 @@ async fn campaign() {
         let app = app.clone();
         let cookie = cookie.to_owned();
         let uri = format!(
-            "/v1/work/{}/{}/share",
+            "/v1/work/{}/{}/share/add",
             draft["app_id"].as_str().unwrap(),
             draft["work_id"].as_str().unwrap()
         );
@@ -438,7 +438,7 @@ async fn campaign() {
         async move {
             for principal in approvers {
                 let body =
-                    json!({"grantee_principal_id": principal, "record_write": true}).to_string();
+                    json!({"grantee_principal_id": principal, "role": "contributor"}).to_string();
                 let reply = send(&app, "POST", &uri, Some(&cookie), &body, &SAME_ORIGIN).await;
                 assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
             }

@@ -128,3 +128,128 @@ fn production_settings_allow_only_fixed_rds_endpoint() {
     )
     .is_ok());
 }
+
+/// APP-191 (D7): the one row rule. Every non-test statement of `storage`
+/// that reads or writes an internal record table carries
+/// `authorization::own_rows(`, or is one of the named exceptions: the
+/// version and lock reads of `internal_records` (they disclose no value and
+/// precede the rule's judgment), `copy_capacity` (a work-wide bound by
+/// design), and the inserts and updates of a commit. A statement is the
+/// source from the previous `;` to the next one; fragments (`const`s naming
+/// the tables) count through every statement that interpolates them. Each
+/// exception must match exactly one statement, so the list cannot rot.
+#[test]
+fn every_record_statement_carries_own_rows() {
+    const ALLOWED: [(&str, &str); 7] = [
+        ("commands.rs", "let sql = if lock {"),
+        (
+            "commands.rs",
+            "let Some(current) = locked(transaction, \"SELECT current_version::bigint FROM genui.internal_records",
+        ),
+        ("commands.rs", "INSERT INTO genui.internal_record_revisions("),
+        ("commands.rs", "INSERT INTO genui.internal_records("),
+        (
+            "commands.rs",
+            "UPDATE genui.internal_records SET current_version=$6::bigint",
+        ),
+        (
+            "commands.rs",
+            "coalesce(max(CASE WHEN r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid THEN octet_length(v.canonical_values) ELSE 0 END),0)",
+        ),
+        (
+            "actions.rs",
+            "UPDATE genui.internal_records SET current_version=current_version WHERE organization_id=$1::text::uuid",
+        ),
+    ];
+    let storage = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/storage");
+    let mut files: Vec<_> = fs::read_dir(&storage)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|e| e == "rs"))
+        .filter(|path| {
+            let name = path.file_name().unwrap().to_str().unwrap();
+            !(name.ends_with("_campaign.rs")
+                || name.ends_with("_qualification.rs")
+                || name == "qualification_cases.rs"
+                || name == "qualification.rs"
+                || name == "tests.rs"
+                || name == "work_presentation_checks.rs")
+        })
+        .collect();
+    files.sort();
+    let mut with_rule = 0usize;
+    let mut allowed_hits = vec![0usize; ALLOWED.len()];
+    let mut unguarded = Vec::new();
+    for path in &files {
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        let raw = fs::read_to_string(path).unwrap();
+        // Non-test source only, without comments.
+        let code = raw
+            .split("#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap()
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut needles = vec!["internal_record".to_owned()];
+        for line in code.lines() {
+            let trimmed = line.trim_start();
+            if let Some(rest) = trimmed
+                .strip_prefix("pub(super) const ")
+                .or_else(|| trimmed.strip_prefix("pub(crate) const "))
+                .or_else(|| trimmed.strip_prefix("pub const "))
+                .or_else(|| trimmed.strip_prefix("const "))
+            {
+                if line.contains("internal_record") {
+                    let name = rest.split(':').next().unwrap().trim();
+                    needles.push(format!("{{{name}}}"));
+                }
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for needle in &needles {
+            for (at, _) in code.match_indices(needle.as_str()) {
+                let start = code[..at].rfind(';').map_or(0, |i| i + 1);
+                let end = code[at..].find(';').map_or(code.len(), |i| at + i + 1);
+                if !seen.insert(start) {
+                    continue;
+                }
+                let statement = &code[start..end];
+                let head = statement.trim_start();
+                if head.starts_with("const ") || head.starts_with("pub(super) const ") {
+                    continue; // a fragment, judged through its uses
+                }
+                if statement.contains("own_rows(") {
+                    with_rule += 1;
+                    continue;
+                }
+                let hit = ALLOWED
+                    .iter()
+                    .position(|(file, text)| *file == name && statement.contains(text));
+                match hit {
+                    Some(index) => allowed_hits[index] += 1,
+                    None => unguarded.push(format!("{name}: {}", statement.trim())),
+                }
+            }
+        }
+    }
+    assert!(
+        unguarded.is_empty(),
+        "statements naming an internal record table without own_rows( and not on the allowlist:\n{}",
+        unguarded.join("\n---\n")
+    );
+    for (index, hits) in allowed_hits.iter().enumerate() {
+        assert_eq!(
+            *hits, 1,
+            "allowlist entry {:?} matched {hits} statements",
+            ALLOWED[index]
+        );
+    }
+    // The scan found the rule where it is expected (a broken scanner cannot
+    // pass vacuously): the listings (batch, list, search, target), the query
+    // snapshot and its release, the record components (bounds and rows),
+    // `Permit::record`, `current_state`, the receipts, the source-view
+    // sequences (member and guest) and the event judgment.
+    assert!(with_rule >= 14, "own_rows statements found: {with_rule}");
+}

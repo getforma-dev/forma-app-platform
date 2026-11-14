@@ -1112,6 +1112,51 @@ async fn campaign() {
     );
     check(&mut checks, &format!("Approve by button: decided as Sarah through the audited route (version 2, approved, updater Sarah, via Slack); the DM is replaced in {} ms with \"Approved by Sarah Chen\" and no buttons; record.committed on both canvases; Diego's DM \"Your Nobu claim ($86.00) was approved by Sarah Chen\" in {} ms; a second Approve or a Reject on the decided record is refused without a change; the audit chains verify", timings["approve_to_replaced_ms"], timings["approve_to_filer_dm_ms"]));
 
+    // --- D10: /forma at the daily model-call cap ---
+    // The same Slack app over a parser whose real client is at a reached cap:
+    // an unrehearsed sentence is acknowledged, then answered with the plain
+    // sentence; nothing reaches the model stub and nothing is written.
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let capped_state = Slack::new(
+        auth.clone(),
+        Config {
+            signing_secret: Secret::new(SIGNING_SECRET.into()).unwrap(),
+            bot_token: Secret::new(BOT_TOKEN.into()).unwrap(),
+            api_base: format!("{slack_origin}/api"),
+        },
+        Parser::new(
+            Some(Arc::new(
+                crate::composer::model::Anthropic::new(
+                    "sk-ant-synthetic-not-a-real-key",
+                    &endpoint,
+                )
+                .unwrap()
+                .with_daily_cap(&DAILY),
+            ) as Arc<dyn crate::composer::model::Model>),
+            crate::composer::model::DEFAULT_ROUTER_MODEL,
+        ),
+    )
+    .unwrap();
+    let capped = Harness {
+        app: http::uniform(Router::new().merge(slack::router(Some(capped_state)))),
+        hook_base: slack_origin.clone(),
+        hooks: AtomicUsize::new(1000),
+    };
+    let frozen = footprint(&fixture).await;
+    let model_before = model_calls.load(Ordering::SeqCst);
+    let (status, ack, took, route) = capped
+        .command(TEAM, DIEGO, "log the quarterly gromp for the team")
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(took < 3000 && ack["text"].as_str().unwrap().contains("Working"));
+    assert_eq!(
+        stub.wait(&route, Duration::from_secs(5)).await["text"],
+        "Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working."
+    );
+    assert_eq!(model_calls.load(Ordering::SeqCst), model_before);
+    assert_eq!(footprint(&fixture).await, frozen);
+    check(&mut checks, "D10: /forma with an unrehearsed sentence over a parser whose real client is at a reached daily cap is acknowledged, then answered \"Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working.\"; nothing reaches the model stub and nothing is written");
+
     // --- A bumped epoch and a revoked link end Slack authority ---
     let sarah_request = stores
         .workspace

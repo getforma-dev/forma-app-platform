@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     auth::{capability, csrf},
-    composer::model::ModelRequest,
+    composer::model::{ModelError, ModelRequest},
     http::{self, UniformPath},
     storage::{
         self, CollectionSummary, CommandRequest, DryRun, RecordCommand, RecordRow, RecordsListing,
@@ -348,9 +348,16 @@ impl Parser {
                 budget: PARSE_BUDGET,
             })
             .await
-            .map_err(|_| {
-                tracing::info!(event = "assistant.proposal_refused", stage = "model_failed");
-                "could_not_draft"
+            .map_err(|error| {
+                tracing::info!(
+                    event = "assistant.proposal_refused",
+                    stage = "model_failed",
+                    code = error.code()
+                );
+                match error {
+                    ModelError::DailyCap => "daily_limit",
+                    _ => "could_not_draft",
+                }
             })?;
         decode_values(&reply.text).ok_or_else(|| {
             tracing::info!(
@@ -370,6 +377,7 @@ fn problem(code: &'static str) -> Response {
         "stale" => http::problem(StatusCode::PRECONDITION_FAILED, code),
         "conflict" => http::problem(StatusCode::CONFLICT, code),
         "composer_unavailable" => http::problem(StatusCode::SERVICE_UNAVAILABLE, code),
+        "daily_limit" => crate::composer::model::daily_limit(),
         "app_data_limit" => http::problem(StatusCode::UNPROCESSABLE_ENTITY, code),
         _ => http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_draft"),
     }

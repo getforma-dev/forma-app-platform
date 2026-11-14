@@ -16,6 +16,8 @@ definition	storage::definition_qualification::native_definition_campaign	campaig
 session	auth::tests::native_session_campaign	campaign	tenant-foundation	GENUI_SESSION_REPORT	-	Docker, OpenSSL, runtime venv
 invite	auth::invite_tests::native_invite_campaign	campaign	tenant-foundation	GENUI_INVITE_REPORT	-	Docker, OpenSSL, runtime venv
 invite-races	auth::invite_tests::native_invite_race_campaign	campaign	tenant-foundation	GENUI_INVITE_RACE_REPORT	-	Docker, OpenSSL, runtime venv
+org-admin	storage::org_admin_campaign::native_org_admin_campaign	campaign	tenant-foundation	GENUI_ORG_ADMIN_REPORT	-	Docker, OpenSSL, runtime venv
+org-admin-routes	storage::org_admin_routes_campaign::native_org_admin_routes_campaign	campaign	tenant-foundation	GENUI_ORG_ADMIN_ROUTES_REPORT	-	Docker, OpenSSL, runtime venv
 command	storage::command_qualification::native_command_campaign	campaign	tenant-foundation	GENUI_COMMAND_REPORT	-	Docker, OpenSSL, runtime venv
 race	storage::race_qualification::native_race_campaign	campaign	tenant-foundation	GENUI_RACE_REPORT	-	Docker, OpenSSL, runtime venv
 engine-child	query::tests::engine_child_campaign	campaign	tenant-foundation	GENUI_QUERY_LATENCY_REPORT	GENUI_QUERY_PYTHON=@VENV@	runtime venv (DuckDB 2.0.0)
@@ -29,7 +31,10 @@ pitch	storage::query_qualification::pitch_campaign::native_pitch_campaign	campai
 live-sharing	storage::shared_campaign::native_live_sharing_campaign	campaign	tenant-foundation	GENUI_LIVE_SHARING_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
 shared-identity	auth::shared_tests::native_shared_identity_campaign	campaign	tenant-foundation	GENUI_SHARED_IDENTITY_REPORT	-	Docker, OpenSSL, runtime venv
 record-components	storage::record_components_campaign::native_record_components_campaign	campaign	tenant-foundation	GENUI_RECORD_COMPONENTS_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv
+refresh-herd	storage::qualification::refresh_herd::native_refresh_herd_campaign	campaign	tenant-foundation	GENUI_REFRESH_HERD_REPORT	GENUI_QUERY_PYTHON=@VENV@	Docker, OpenSSL, runtime venv; GENUI_REFRESH_HERD_FULL=1 adds the 26-page measurement
 sharing	storage::sharing_qualification::native_sharing_campaign	campaign	pitch	GENUI_SHARING_REPORT	-	Docker, OpenSSL, runtime venv
+private-entries	storage::private_entries_campaign::native_private_entries_campaign	campaign	tenant-foundation	GENUI_PRIVATE_ENTRIES_REPORT	-	Docker, OpenSSL, runtime venv
+share-routes	storage::share_routes_campaign::native_share_routes_campaign	campaign	tenant-foundation	GENUI_SHARE_ROUTES_REPORT	-	Docker, OpenSSL, runtime venv
 slack	storage::slack_campaign::native_slack_campaign	campaign	pitch	GENUI_SLACK_CAMPAIGN_REPORT	-	Docker, runtime venv
 workflows	storage::workflows_campaign::native_workflows_campaign	campaign	pitch	GENUI_WORKFLOWS_CAMPAIGN_REPORT	-	Docker, runtime venv
 parser-sandbox	imports::sandbox::tests::actual_parser_host_parses_refuses_and_lists_sheets	probe	-	-	-	GENUI_TEST_PARSER_MANIFEST naming a built parser

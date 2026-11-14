@@ -17,7 +17,8 @@
 //! the uniform 404 (no session, a storage denial, a member who may act on
 //! nothing), 403 `cross_site`, 413, 422 `invalid_utterance`, 422
 //! `could_not_parse`, 422 `could_not_draft` (neutral), 429 with `Retry-After`
-//! (`ACT_MEMBER`), 503 `composer_unavailable` (no model key and nothing
+//! (`ACT_MEMBER`; or `daily_limit`, D10: the app's daily model-call cap, for
+//! an utterance or a receipt), 503 `composer_unavailable` (no model key and nothing
 //! rehearsed applies), 503 `unavailable`. The session is checked before the
 //! body is read (bounded in size and time) and the member's windows before
 //! anything acts, the folder path included. The route runs under
@@ -553,6 +554,10 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                     log_refused(&member, code, started);
                     return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_parse");
                 }
+                Err(ParseFailure::DailyLimit) => {
+                    log_refused(&member, "model_daily_cap", started);
+                    return crate::composer::model::daily_limit();
+                }
             }
         }
         (Body::Utterance(utterance) | Body::Pinned { utterance, .. }, _) => {
@@ -572,6 +577,10 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 Err(ParseFailure::CouldNotParse(code)) => {
                     log_refused(&member, code, started);
                     return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_parse");
+                }
+                Err(ParseFailure::DailyLimit) => {
+                    log_refused(&member, "model_daily_cap", started);
+                    return crate::composer::model::daily_limit();
                 }
             }
         }

@@ -541,6 +541,151 @@ fn a_clean_workspace_generates_a_records_app_from_a_sentence() {
     ));
 }
 
+/// APP-191 (D7, D8): the composer turns "each person sees only their own"
+/// and "only reviewers can accept" into `visibility: "own"` on the record
+/// schema and `reviewer_only: true` on the command, both admitted into the
+/// canonical bytes storage keeps; the explicit alternatives and a member on
+/// the wrong shape are refused with admission's codes.
+#[test]
+fn private_entries_and_reviewer_only_commands_are_generated_from_plain_words() {
+    let script = Script::new(vec![Ok(prompt::private_entries_example().to_string())]);
+    let intent = "Collect suggestions from everyone; each person sees only the suggestions they sent in, and only reviewers can accept one";
+    let generated = runtime()
+        .block_on(composer(&script).generate(intent, &[], ORG, APP, far()))
+        .unwrap();
+    assert!(generated.refused.is_empty());
+    assert_eq!(generated.planned.origin, Origin::Generated);
+    assert_eq!(generated.planned.title, "Suggestion box");
+    let requests = script.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .system
+        .contains("PRIVATE ENTRIES AND REVIEWER-ONLY COMMANDS"));
+    assert!(requests[0].system.contains(
+        "visibility: \"own\" when the member says each person should see only their own entries"
+    ));
+    let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+    assert_eq!(content["record_schemas"][0]["visibility"], "own");
+    assert_eq!(content["commands"][1]["id"], "accept");
+    assert_eq!(content["commands"][1]["reviewer_only"], true);
+    assert!(content["commands"][0].get("reviewer_only").is_none());
+    let inputs = routes::published_inputs(&content);
+    let schemas = routes::record_schemas(&content);
+    let bindings = crate::storage::composer_bindings(&inputs, &schemas, &[]).unwrap();
+    assert_eq!(bindings.len(), 1);
+    // The explicit alternatives and each member on the other shape are refused.
+    for (pointer, value, code) in [
+        ("/record_schemas/0/visibility", json!("shared"), "encoding"),
+        ("/commands/1/reviewer_only", json!(false), "encoding"),
+        ("/commands/0/visibility", json!("own"), "unknown_field"),
+        (
+            "/record_schemas/0/reviewer_only",
+            json!(true),
+            "unknown_field",
+        ),
+    ] {
+        let broken = with(prompt::private_entries_example(), pointer, value);
+        let refusal = plan::plan_generated(&broken.to_string(), &[], ORG, APP).unwrap_err();
+        assert_eq!(refusal.code, code, "{pointer}");
+    }
+}
+
+/// A one-row shared item its owner advances (APP-193 finding): the advancing
+/// command is a reviewer-only update of a state field with no transition.
+fn current_item() -> Value {
+    let fields = json!([
+        {"id": "title", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "state", "value_type": {"type": "enum", "values": ["open", "closed"]}, "nullable": false}
+    ]);
+    json!({
+        "title": "Current item",
+        "description": "One shared item at a time: its owner opens the next one and closes it.",
+        "inputs": [{"id": "items", "contract_id": "item_v1", "contract_version": 1, "kind": "records", "fields": fields}],
+        "views": [
+            {"id": "open_item", "kind": "form", "renderer_version": 1, "title": "Open an item", "command_id": "open_item"},
+            {"id": "how", "kind": "note", "renderer_version": 1, "title": "How it works", "text": "Everyone sees the current item; its owner advances it."}
+        ],
+        "record_schemas": [{"id": "item", "version": 1, "fields": fields}],
+        "commands": [
+            {"id": "open_item", "record_schema_id": "item", "operation": "create", "writable_fields": ["title", "state"], "transitions": [],
+             "initial": [{"field_id": "state", "value": "open"}]},
+            {"id": "advance", "record_schema_id": "item", "operation": "update", "writable_fields": ["state"], "transitions": [], "reviewer_only": true}
+        ],
+        "links": [],
+        "default_layout": [{"view_id": "open_item", "column": 0, "row": 0, "width": 12}, {"view_id": "how", "column": 0, "row": 1, "width": 12}]
+    })
+}
+
+/// APP-193 finding (advisor decisions, 2026-11-14): "which X" is an enum or
+/// short text, never a `reference` (a form shows a raw identifier box), and an
+/// owner-advanced shared item is a reviewer-only update with no transition
+/// (its creator could never fire one). Both as fixtures the planner judges.
+#[test]
+fn which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update() {
+    // Replaces an existing array element or object member at a JSON pointer.
+    fn set_at(mut content: Value, pointer: &str, value: Value) -> Value {
+        *content.pointer_mut(pointer).unwrap() = value;
+        content
+    }
+    // A submission naming its assignment by reference is refused; by enum it admits.
+    let reference = json!({"id": "assignment", "value_type": {"type": "reference", "target_input": "suggestions"}, "nullable": false});
+    let by_reference = set_at(
+        prompt::private_entries_example(),
+        "/record_schemas/0/fields/1",
+        reference.clone(),
+    );
+    let by_reference = set_at(by_reference, "/inputs/0/fields/1", reference);
+    let by_reference = set_at(
+        by_reference,
+        "/commands/0/writable_fields",
+        json!(["title", "assignment", "status"]),
+    );
+    assert!(
+        plan::admit(&by_reference, ORG, APP).is_ok(),
+        "the grammar admits a reference"
+    );
+    let refusal = plan::plan_generated(&by_reference.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "reference_field");
+    assert_ne!(prompt::hint("reference_field"), prompt::hint("unknown"));
+    let assignment = json!({"id": "assignment", "value_type": {"type": "enum", "values": ["week_one", "week_two", "final"]}, "nullable": false});
+    let by_enum = set_at(
+        prompt::private_entries_example(),
+        "/record_schemas/0/fields/1",
+        assignment.clone(),
+    );
+    let by_enum = set_at(by_enum, "/inputs/0/fields/1", assignment);
+    let by_enum = set_at(
+        by_enum,
+        "/commands/0/writable_fields",
+        json!(["title", "assignment", "status"]),
+    );
+    let planned = plan::plan_generated(&by_enum.to_string(), &[], ORG, APP).unwrap();
+    let content = admission::decode(&planned.admitted.canonical).unwrap();
+    assert_eq!(
+        content["record_schemas"][0]["fields"][1]["value_type"]["type"],
+        "enum"
+    );
+    // The owner-advanced item: the advancing command is a reviewer-only
+    // update with no transition, which the planner admits; storage's
+    // `compose` lets the record's own creator run such an update when they
+    // are a reviewer (`storage::commands::tests`), where a declared
+    // transition would refuse the filer.
+    let planned = plan::plan_generated(&current_item().to_string(), &[], ORG, APP).unwrap();
+    let content = admission::decode(&planned.admitted.canonical).unwrap();
+    let advance = &content["commands"][1];
+    assert_eq!(advance["id"], "advance");
+    assert_eq!(advance["operation"], "update");
+    assert_eq!(advance["reviewer_only"], true);
+    assert_eq!(advance["transitions"], json!([]));
+    assert!(
+        content["record_schemas"][0].get("visibility").is_none(),
+        "the item is shared"
+    );
+    let system = prompt::generation_system();
+    assert!(system.contains("WHICH-X FIELDS"));
+    assert!(system.contains("OWNER-ADVANCED STATE"));
+}
+
 /// APP-132: generated content is new content: the authoring verdict of
 /// edition impl-2026-10-31.4 (`validate.py` `new_content=True`) and an entry
 /// form when nothing else shows; admission alone admits all three.
@@ -834,6 +979,62 @@ fn the_client_retries_server_failures_once_each_and_never_a_client_refusal() {
         assert_eq!(
             stub.calls.load(Ordering::SeqCst),
             model::MAX_ATTEMPTS as usize
+        );
+    });
+}
+
+/// D10: the client takes a slot of its daily cap before anything leaves; a
+/// refused call sends nothing, on every kind of request, and is not retried.
+#[test]
+fn the_client_sends_nothing_once_its_daily_cap_is_reached() {
+    runtime().block_on(async {
+        static CAP: model::DailyCap = model::DailyCap::new(2);
+        let (endpoint, stub) = stub_server(vec![503, 200]).await;
+        let client = Anthropic::new("sk-ant-synthetic-test-key", &endpoint)
+            .unwrap()
+            .with_daily_cap(&CAP);
+        let request = ModelRequest {
+            model: "stub-model".into(),
+            system: "s".into(),
+            user: "u".into(),
+            max_tokens: 10,
+            budget: std::time::Duration::from_secs(20),
+        };
+        // One call is one slot, its retry included (503 then 200).
+        client.complete(&request).await.unwrap();
+        assert_eq!(stub.calls.load(Ordering::SeqCst), 2);
+        client.complete(&request).await.unwrap();
+        assert_eq!(stub.calls.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            client.complete(&request).await.unwrap_err(),
+            ModelError::DailyCap
+        );
+        let image = model::ImageInput {
+            media_type: "image/png",
+            bytes: b"png",
+        };
+        assert_eq!(
+            client
+                .complete_with_image(&request, &image)
+                .await
+                .unwrap_err(),
+            ModelError::DailyCap
+        );
+        let documents = [model::DocumentInput {
+            title: "brief.pdf",
+            bytes: b"%PDF-1.4",
+        }];
+        assert_eq!(
+            client
+                .complete_with_documents(&request, &documents)
+                .await
+                .unwrap_err(),
+            ModelError::DailyCap
+        );
+        assert_eq!(
+            stub.calls.load(Ordering::SeqCst),
+            3,
+            "nothing reached the endpoint after the cap"
         );
     });
 }

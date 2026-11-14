@@ -265,6 +265,10 @@ pub async fn generate(
                     tokens.1 += reply.output_tokens.unwrap_or(0);
                     Some(cited_parts(&reply, &file.file_id))
                 }
+                // D10: no brief rather than one that silently lost its documents.
+                Err(crate::composer::model::ModelError::DailyCap) => {
+                    return Err(BuildRefusal::DailyLimit)
+                }
                 Err(_) => None,
             }
         };
@@ -311,6 +315,9 @@ pub async fn generate(
             ok = reply.is_ok(),
             "brief summary call"
         );
+        if matches!(reply, Err(crate::composer::model::ModelError::DailyCap)) {
+            return Err(BuildRefusal::DailyLimit);
+        }
         let judged = reply
             .ok()
             .and_then(|reply| judge_summary(&reply.text, &results, &data_files));

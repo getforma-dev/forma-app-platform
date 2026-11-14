@@ -271,5 +271,9 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
             log_refused(code);
             http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_customize")
         }
+        Err(Failure::DailyLimit) => {
+            log_refused("model_daily_cap");
+            crate::composer::model::daily_limit()
+        }
     }
 }

@@ -24,7 +24,7 @@ LAYERS = {
     0: ["config", "roles", "readiness", "supervise", "origins", "directory", "demo", "http"],
     1: ["storage", "auth", "admission"],
     2: ["query", "composer", "actions", "commands", "boxes", "sharing", "widgets", "imports", "events"],
-    3: ["pages", "mcp", "slack"],
+    3: ["pages", "mcp", "slack", "org_admin", "member_name"],
     4: ["product", "main"],
 }
 LAYER = {module: layer for layer, modules in LAYERS.items() for module in modules}

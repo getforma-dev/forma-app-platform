@@ -59,6 +59,25 @@ fn qualification_router() -> Option<Router> {
     })
 }
 
+/// One read of the stored member display names into the directory cache
+/// (0023, D6); `false` when the store refused, so the caller retries later.
+async fn load_display_names(stores: &Arc<genui::storage::Stores>) -> bool {
+    match stores.workspace.load_display_names().await {
+        Ok(count) => {
+            tracing::info!(
+                event = "directory.members_loaded",
+                count,
+                "display names loaded"
+            );
+            true
+        }
+        Err(error) => {
+            tracing::warn!(event = "directory.members_deferred", code = %error, "display names not loaded yet");
+            false
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // The image names its parser bytes in parser-manifest.json and sets this
@@ -96,6 +115,14 @@ async fn main() {
         Err(_) => refuse("tenant storage configuration refused"),
     };
     drop(config);
+    // 0023 (D6): the member display names the synchronous directory label
+    // reads, filled once from the database; a store that is not reachable yet
+    // is retried by the sweep task below until one fill succeeds.
+    let mut names_loaded = false;
+    if let Some(stores) = &stores {
+        names_loaded = load_display_names(stores).await;
+    }
+    let name_stores = stores.clone();
     // ADR-006 provider routing; absent: sign-in fails neutrally and every
     // protected route stays the uniform 404.
     let auth_config = match std::env::var(auth::CONFIG_ENV) {
@@ -137,6 +164,7 @@ async fn main() {
         "/record",
         "/w/{app}/{work}",
         "/canvas",
+        "/admin",
     ] {
         require_ssr(manifest.route(route).map(|entry| entry.mode))
             .unwrap_or_else(|reason| panic!("required SSR route {route}: {reason}"));
@@ -196,6 +224,12 @@ async fn main() {
     let canvas_page = Arc::new(genui::query::canvas::SsrCanvasPages {
         page: pages
             .bind::<genui::query::canvas::CanvasProps>("canvas")
+            .unwrap_or_else(bind_errors),
+    });
+    // Trial plan D4: the organization admin page.
+    let org_admin_pages = Arc::new(genui::org_admin::SsrAdminPages {
+        page: pages
+            .bind::<genui::org_admin::AdminProps>("orgAdmin")
             .unwrap_or_else(bind_errors),
     });
     let shared_pages = Arc::new(genui::sharing::live::SsrSharedPages {
@@ -294,6 +328,7 @@ async fn main() {
         customizer: genui::widgets::customize::Customizer::from_env(),
         weather: genui::widgets::weather::OpenMeteo::new(),
         boxes: box_state,
+        org_admin_pages,
     });
     let readiness = genui::readiness::Readiness::start(
         credential_path.into(),
@@ -347,6 +382,11 @@ async fn main() {
         loop {
             interval.tick().await;
             sweeper.sweep().await;
+            if !names_loaded {
+                if let Some(stores) = &name_stores {
+                    names_loaded = load_display_names(stores).await;
+                }
+            }
         }
     });
 
@@ -496,6 +536,7 @@ mod tests {
         modules
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
+        let _ = modules.bind::<genui::org_admin::AdminProps>("orgAdmin");
         modules.finalize().unwrap();
         let ctx = RenderCtx::new().with_title("Forma Canvas");
         let (status, headers, body) = html(respond("/", home.render(&HomeProps {}, &ctx))).await;
@@ -539,6 +580,7 @@ mod tests {
         pages
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
+        let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
         pages.finalize().unwrap();
         ssr
     }
@@ -578,6 +620,7 @@ mod tests {
             app: modules.bind::<SharedPageProps>("shared").unwrap(),
             canvas: modules.bind::<SharedCanvasProps>("sharedCanvas").unwrap(),
         };
+        let _ = modules.bind::<genui::org_admin::AdminProps>("orgAdmin");
         modules.finalize().unwrap();
         let key = "11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222";
         let mut entry = SharedPageProps {
@@ -652,7 +695,10 @@ mod tests {
     /// APP-074: the invitation entry renders natively with no script and
     /// `no-store`; one labeled, keyboard-reachable code field posts to
     /// `/invite/validate`; the neutral refusal and the limit are announced
-    /// and tied to the field; no code value is ever rendered.
+    /// and tied to the field; no code value is ever rendered. Trial plan D5:
+    /// the whole beta notice (version `NOTICE_VERSION`, from the one
+    /// constant) is on the page, and the form carries the required `consent`
+    /// checkbox with value `1`, the only value attribute on the page.
     #[tokio::test]
     async fn invite_page_renders_entry_refusal_and_limit_without_javascript() {
         let pages = pages();
@@ -672,9 +718,35 @@ mod tests {
         assert!(body.contains("method=\"post\""));
         assert!(body.contains("for=\"invite-code\"") && body.contains("id=\"invite-code\""));
         assert!(body.contains("name=\"code\"") && body.contains("autocomplete=\"off\""));
-        assert!(!body.contains("<script src") && !body.contains("value=\""));
+        assert!(!body.contains("<script src"));
         assert!(!body.contains("role=\"alert\""));
         assert!(body.contains("aria-describedby=\"invite-help\""));
+        // D5: the notice, in full and from the constant, and the consent box.
+        assert!(body.contains(auth::notice::NOTICE_TITLE));
+        for paragraph in auth::notice::NOTICE_PARAGRAPHS {
+            let (lead, text) = auth::notice::lead_in(paragraph);
+            assert!(body.contains(text), "{text:.40}");
+            if let Some(lead) = lead {
+                assert!(body.contains(&format!("<strong>{lead}</strong>")), "{lead}");
+            }
+        }
+        assert!(body.contains(&format!(
+            "data-notice-version=\"{}\"",
+            auth::notice::NOTICE_VERSION
+        )));
+        assert!(body.contains("name=\"consent\"") && body.contains("type=\"checkbox\""));
+        assert!(body.contains("id=\"invite-consent\"") && body.contains("for=\"invite-consent\""));
+        assert!(body.contains(auth::notice::CONSENT_LABEL));
+        assert!(body.contains("value=\"1\""));
+        assert_eq!(
+            body.matches("value=\"").count(),
+            1,
+            "only the consent checkbox carries a value; a code is never rendered"
+        );
+        assert!(
+            body.matches("required").count() >= 2,
+            "the code and the consent are required"
+        );
         let (_, _, refused) = html(pages.invite(&InviteView {
             failed: true,
             ..InviteView::default()
@@ -957,6 +1029,7 @@ mod tests {
         pages
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
+        let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
         pages.finalize().unwrap();
         let view = |id: &str, kind: &str| genui::storage::WorkView {
             id: id.into(),
@@ -1541,6 +1614,7 @@ mod tests {
         pages
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
+        let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
         pages.finalize().unwrap();
         let (app, northstar, spend) = (
             "00000000-0000-4000-8000-000000000065",
@@ -1909,6 +1983,48 @@ mod tests {
         // No stream configured: no live chip; no organization read: no name.
         assert!(!body.contains("id=\"cv-live\"") && !body.contains("class=\"cv-org\""));
         assert!(!body.contains("Synthetic data") && !body.contains("data-demo=\"on\""));
+        // Trial plan D12: feedback by mail from the top bar. D4: no Admin
+        // link unless the member is an organization admin. D6: the name form
+        // is always in the top bar; the first-sign-in prompt only without a
+        // name.
+        assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
+        assert!(!body.contains("href=\"/admin\""));
+        assert!(body.contains("action=\"/me/name\""));
+        assert!(!body.contains("What should others call you?"));
+        let admin = canvas::CanvasProps {
+            is_org_admin: true,
+            needs_name: true,
+            csrf_display_name: "N".repeat(43),
+            ..empty.clone()
+        };
+        let (_, _, body) = html(ssr.canvas(&admin)).await;
+        assert!(body.contains("href=\"/admin\""));
+        assert!(body.contains("What should others call you?"));
+        assert_eq!(body.matches("action=\"/me/name\"").count(), 2);
+        assert_eq!(body.matches(&"N".repeat(43)).count(), 2);
+        assert!(!body.contains("class=\"cv-name-notice\""));
+        // Review m2: a refused name comes back as the prompt with plain words.
+        let refused = canvas::CanvasProps {
+            needs_name: true,
+            has_name_notice: true,
+            name_notice: genui::member_name::NameNotice::Invalid.words().into(),
+            ..empty.clone()
+        };
+        let (_, _, body) = html(ssr.canvas(&refused)).await;
+        assert!(body.contains("class=\"cv-name-notice\""));
+        assert!(
+            body.contains("That name can&#39;t be used.")
+                || body.contains("That name can't be used.")
+        );
+        let named = canvas::CanvasProps {
+            display_name: "Ana <María>".into(),
+            ..empty.clone()
+        };
+        let (_, _, body) = html(ssr.canvas(&named)).await;
+        assert!(
+            body.contains("value=\"Ana &lt;María&gt;\""),
+            "the chosen name, escaped"
+        );
         // APP-169: an explicit `app` is rendered as such. Kinds that could
         // not be read leave the canvas without `data-artifact-kinds`, so the
         // island keeps this browser's choices.
@@ -1932,5 +2048,100 @@ mod tests {
         let (_, _, body) = html(ssr.canvas(&unread)).await;
         assert!(body.contains("data-artifact-kind=\"app\""));
         assert!(!body.contains("data-artifact-kinds"));
+    }
+
+    /// Trial plan D4: the organization admin page renders natively, no
+    /// script: the members table as text, each active member's Remove form
+    /// with the synchronizer token and a required confirmation, the notice,
+    /// the feedback link and the page security headers.
+    #[tokio::test]
+    async fn org_admin_page_renders_the_members_table_without_javascript() {
+        use genui::org_admin::{AdminMemberProps, AdminPages as _, AdminProps, SsrAdminPages};
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        require_ssr(manifest.route("/admin").map(|entry| entry.mode)).unwrap();
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        let ssr = SsrAdminPages {
+            page: pages.bind::<AdminProps>("orgAdmin").unwrap(),
+        };
+        let _ = pages.bind::<HomeProps>("home");
+        let _ = pages.bind::<AboutProps>("about");
+        let _ = pages.bind::<SigninProps>("signin");
+        let _ = pages.bind::<PendingProps>("pending");
+        let _ = pages.bind::<DeniedProps>("denied");
+        let _ = pages.bind::<WorkspaceProps>("workspace");
+        let _ = pages.bind::<InviteProps>("invite");
+        let _ = pages.bind::<RecordProps>("record");
+        let _ = pages.bind::<genui::query::page::WorkProps>("work");
+        let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
+        let _ = pages.bind::<genui::sharing::live::SharedPageProps>("shared");
+        let _ = pages.bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas");
+        pages.finalize().unwrap();
+        let student = "00000000-0000-4000-8000-0000000000b2";
+        let member = |id: &str, label: &str, removable: bool| AdminMemberProps {
+            id: id.into(),
+            label: label.into(),
+            note: "front row".into(),
+            status: if removable { "Active" } else { "Removed" }.into(),
+            role: "Member".into(),
+            consent: "Notice v1, 2026-11-29".into(),
+            last_active: "2026-11-29 14:03 UTC".into(),
+            apps: "2".into(),
+            works: "3".into(),
+            records: "41".into(),
+            uploads: "1".into(),
+            removable,
+            action: format!("/admin/members/{id}/remove"),
+            csrf: "R".repeat(43),
+            confirm_label: format!("Yes, remove {label}"),
+        };
+        let props = AdminProps {
+            organization: "Weekend <class>".into(),
+            summary: "2 members · 1 active".into(),
+            has_notice: true,
+            notice: "You can't remove the last admin of this organization.".into(),
+            notice_kind: "refused".into(),
+            has_members: true,
+            empty: false,
+            members: vec![
+                member(student, "Ana <b>bold</b>", true),
+                member("00000000-0000-4000-8000-0000000000c3", "Bea", false),
+            ],
+            csrf_signout: "S".repeat(43),
+        };
+        let (status, headers, body) = html(ssr.page(&props)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("no-store"));
+        assert!(policy(&headers).contains("frame-ancestors 'none'"));
+        assert!(!body.contains("<script src"));
+        assert!(body.contains("Weekend &lt;class&gt;"));
+        assert!(body.contains("Ana &lt;b&gt;bold&lt;/b&gt;") && !body.contains("<b>bold"));
+        assert!(body.contains("You can't remove the last admin of this organization."));
+        for cell in [
+            "front row",
+            "Notice v1, 2026-11-29",
+            "2026-11-29 14:03 UTC",
+            ">41<",
+        ] {
+            assert!(body.contains(cell), "{cell}");
+        }
+        assert!(body.contains(&format!("action=\"/admin/members/{student}/remove\"")));
+        assert_eq!(
+            body.matches(&"R".repeat(43)).count(),
+            1,
+            "only the active row"
+        );
+        assert!(body.contains("name=\"confirm\"") && body.contains("value=\"remove\""));
+        assert!(body.contains("required"));
+        assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
+        assert!(body.contains("action=\"/auth/signout\""));
+        let (_, _, empty) = html(ssr.page(&AdminProps {
+            empty: true,
+            ..AdminProps::default()
+        }))
+        .await;
+        assert!(empty.contains("No members yet.") && !empty.contains("<table"));
     }
 }

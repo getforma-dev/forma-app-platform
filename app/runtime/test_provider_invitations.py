@@ -972,7 +972,7 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.code_status(out["code_id"]), "revoked")
         self.assertEqual(self.fake.status_of(created["remote_invitation_id"]), "pending")
         with self.workspace() as c:
-            self.assertEqual(c.execute("SELECT outcome FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "c" * 64)).fetchone(),
+            self.assertEqual(c.execute("SELECT outcome FROM genui_private.reserve_code(%s,%s,%s,1)", (ORG, digest, "sha256:" + "c" * 64)).fetchone(),
                              ("revoked",))
         own = {r[0] for r in self.rows(out["code_id"])}
         self.fake.fault("revoke", "status", status=401, error="invalid_api_key")

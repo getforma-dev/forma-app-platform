@@ -19,6 +19,7 @@ pub mod capability;
 pub mod cookies;
 pub mod csrf;
 pub mod invite;
+pub mod notice;
 pub mod pending;
 pub mod pkce;
 pub mod provider;

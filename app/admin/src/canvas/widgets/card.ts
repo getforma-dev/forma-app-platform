@@ -10,6 +10,7 @@
 import { el } from '../render';
 import { showTiming } from '../timing';
 import { validState, type WidgetKind, type WidgetState } from './state';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from '../daily-limit';
 
 export const CUSTOMIZE_URL = '/v1/widgets/customize';
 
@@ -120,6 +121,7 @@ const REFUSALS: Record<string, string> = {
   could_not_customize: 'That shape is outside what this widget can show. Nothing changed.',
   composer_unavailable: 'Shaping in words is not available on this server right now. Nothing changed.',
   too_many_requests: 'Too many shapes in a short time. Try again in a moment.',
+  [DAILY_LIMIT_CODE]: DAILY_LIMIT_MESSAGE,
   invalid_request: 'Say it in a short sentence (up to 300 characters). Nothing changed.',
 };
 

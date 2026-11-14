@@ -1394,7 +1394,7 @@ async fn campaign() {
         .post(
             &format!("/v1/work/{app}/{derived}/share"),
             Some(&maya_cookie),
-            &json!({"grantee_principal_id": mate_id}).to_string(),
+            &json!({"grantee_principal_id": mate_id, "role": "viewer"}).to_string(),
         )
         .await;
     assert_eq!(shared.status, StatusCode::OK, "{}", shared.text());
@@ -1604,6 +1604,103 @@ async fn campaign() {
         true
     );
     check(&mut checks, "brief: the small PDF goes to the model as a document block with citations enabled; the cited statement is kept with its page (p. 1) and the uncited sentence with a number is dropped; the overview and key points carry no digit");
+
+    // --- D10: the folder routes at the daily model-call cap ---
+    // The folder routes over a composer whose real client is at a reached
+    // cap (zero calls left): Ask, the explanation, building an app and the
+    // brief each answer 429 daily_limit; nothing reaches the endpoint and no
+    // audit row is written (no partial brief or summary is saved).
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let capped_boxes = Arc::new(boxes::routes::Boxes {
+        auth: auth.clone(),
+        work: work.clone(),
+        composer: composer::Composer::new(
+            Some(Arc::new(
+                crate::composer::model::Anthropic::new(
+                    "sk-ant-synthetic-box-campaign-key",
+                    &endpoint,
+                )
+                .unwrap()
+                .with_daily_cap(&DAILY),
+            ) as Arc<dyn crate::composer::model::Model>),
+            composer.router_model(),
+            composer.generation_model(),
+        ),
+        store: boxes::store::ObjectStore::Local {
+            root: objects.clone(),
+        },
+        normalizer: state.normalizer.clone(),
+        parser: Some(parser_identity()),
+    });
+    let capped_routes = crate::http::uniform_with_many(
+        axum::Router::new().merge(boxes::routes::router(capped_boxes)),
+        Vec::new(),
+    );
+    let capped_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let capped_stand = Stand {
+        origin: format!("http://{}", capped_listener.local_addr().unwrap()),
+        client: reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap(),
+    };
+    let capped_server = tokio::spawn(async move {
+        let _ = axum::serve(
+            capped_listener,
+            capped_routes.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await;
+    });
+    c.auth.limits.clear();
+    let sent_before = stub.bodies.lock().unwrap().len();
+    let audit_before_cap = audit().await;
+    for (surface, path, body) in [
+        (
+            "folder ask",
+            format!("/v1/boxes/{box_id}/ask"),
+            json!({"question": "which region led July?"}),
+        ),
+        (
+            "explain",
+            format!("/v1/boxes/explain/{app}/{derived}"),
+            json!({}),
+        ),
+        (
+            "build from the folder",
+            format!("/v1/boxes/{box_id}/apps"),
+            json!({"purpose": "a metrics app for the board"}),
+        ),
+        ("brief", format!("/v1/boxes/{box_id}/brief"), json!({})),
+    ] {
+        let reply = capped_stand
+            .post(&path, Some(&maya_cookie), &body.to_string())
+            .await;
+        assert_eq!(
+            reply.status,
+            StatusCode::TOO_MANY_REQUESTS,
+            "{surface}: {}",
+            reply.text()
+        );
+        assert_eq!(
+            reply.json(),
+            json!({"code": "daily_limit", "status": 429}),
+            "{surface}"
+        );
+        assert!(
+            reply.headers.contains_key(reqwest::header::RETRY_AFTER),
+            "{surface}"
+        );
+    }
+    capped_server.abort();
+    assert_eq!(
+        stub.bodies.lock().unwrap().len(),
+        sent_before,
+        "nothing reached the endpoint"
+    );
+    assert_eq!(audit().await, audit_before_cap);
+    check(&mut checks, "D10: with the folder routes' composer at a reached daily cap, POST /v1/boxes/{box}/ask, POST /v1/boxes/explain/{app}/{work}, POST /v1/boxes/{box}/apps (a purpose) and POST /v1/boxes/{box}/brief each answer 429 {\"code\":\"daily_limit\"} with Retry-After; nothing reaches the endpoint and no audit row is written (no partial brief, summary or app)");
 
     // --- Reload: everything reads back ---
     let listed = stand.get("/v1/boxes", Some(&maya_cookie)).await.json();
@@ -2180,12 +2277,14 @@ async fn campaign() {
         &stub,
         &c.fixture,
         &c.stores,
+        &counting,
         &_maya_request,
         &maya_cookie,
         &mate_cookie,
         &outsider_cookie,
     )
     .await;
+    check(&mut checks, "APP-198: a commit landing between a record query's capture and its release is a typed stale snapshot, never the uniform 404: the route captures, runs and releases the view once more and answers 200 over the current list (the engine ran twice); a second commit during that re-capture answers 409 `stale` (a problem document, no `not_found`); the next read is current");
     check(&mut checks, "Editable CSV apps: full 2,505-row import, exact decimal aggregates, independent app copies, assistant proposals write nothing until confirmation, add/update refresh governed totals, stale confirmation denied, replay adds no duplicate, originals byte-identical, owner-only legacy upgrade is atomic and idempotent");
 
     // The local stand for a browser walk (scratch only, synthetic sessions).
@@ -2226,6 +2325,7 @@ async fn qualify_editable_csv(
     stub: &Stub,
     fixture: &Fixture,
     stores: &Stores,
+    counting: &Counting,
     owner_request: &TrustedRequest,
     owner: &str,
     mate: &str,
@@ -2554,6 +2654,68 @@ async fn qualify_editable_csv(
         "313125",
     );
     assert_eq!(scalar(fixture, &format!("SELECT count(*) FROM genui.internal_records WHERE organization_id='{ORG}' AND work_id='{legacy_work}'")).await, 2505);
+
+    // --- APP-198: a commit between capture and release is stale, never 404 ---
+    // The engine is paused after it computed; a commit lands through the
+    // assistant's proposal and confirmation; the release then finds the list
+    // moved. Once: the route captures again and answers the current list.
+    // Twice (the re-capture paused and another commit): the typed `stale`.
+    {
+        let totals_path = format!("/v1/work/{app}/{work}/queries/editable_kpis");
+        let (proposal_path, body) = (&proposal_path, &body);
+        let commit_one = |item: &'static str, amount: &'static str| async move {
+            stub.script(
+                "app_action",
+                json!({"values":{"item":item,"amount":amount,"date":"2026-11-03"}}).to_string(),
+            );
+            let draft = stand
+                .post(proposal_path, Some(owner), &body.to_string())
+                .await;
+            assert_eq!(draft.status, StatusCode::OK, "{}", draft.text());
+            let saved = confirm_csv_action(stand, owner, &draft.json()).await;
+            assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+        };
+        let rows_before = scalar(fixture, &count_sql).await;
+        let calls = counting.calls();
+        let (computed, resume) = counting.pause_next();
+        let poster = stand.post(&totals_path, Some(owner), r#"{"parameters":{}}"#);
+        let committer = async {
+            computed.await.unwrap();
+            commit_one("Stale one", "1.00").await;
+            resume.send(()).unwrap();
+        };
+        let (reply, ()) = tokio::join!(poster, committer);
+        assert_eq!(
+            reply.status,
+            StatusCode::OK,
+            "the stale snapshot is captured once more: {}",
+            reply.text()
+        );
+        assert_eq!(counting.calls(), calls + 2, "the view ran twice");
+        assert_totals(&reply.json(), &(rows_before + 1).to_string(), "313900");
+        let calls = counting.calls();
+        let (computed, resume) = counting.pause_next();
+        let poster = stand.post(&totals_path, Some(owner), r#"{"parameters":{}}"#);
+        let committer = async {
+            computed.await.unwrap();
+            let (computed_again, resume_again) = counting.pause_next();
+            commit_one("Stale two", "1.00").await;
+            resume.send(()).unwrap();
+            computed_again.await.unwrap();
+            commit_one("Stale three", "1.00").await;
+            resume_again.send(()).unwrap();
+        };
+        let (reply, ()) = tokio::join!(poster, committer);
+        assert_eq!(reply.status, StatusCode::CONFLICT, "{}", reply.text());
+        assert_eq!(reply.text(), r#"{"code":"stale","status":409}"#);
+        assert!(!reply.uniform_404());
+        assert_eq!(counting.calls(), calls + 2, "one re-capture, no third run");
+        assert_totals(
+            &editable_totals(stand, owner, app, work).await,
+            &(rows_before + 3).to_string(),
+            "314100",
+        );
+    }
     super::record_query_campaign::qualify(fixture, stores, owner_request, app, work).await;
 }
 

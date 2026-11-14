@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://getforma.dev/contracts/impl-2026-11-01.2/schema.json",
+  "$id": "https://getforma.dev/contracts/impl-2026-11-14.1/schema.json",
   "$defs": {
     "value": {
       "oneOf": [
@@ -430,6 +430,11 @@
           },
           "minItems": 1,
           "maxItems": 32
+        },
+        "visibility": {
+          "enum": [
+            "own"
+          ]
         }
       },
       "required": [
@@ -550,6 +555,9 @@
           },
           "minItems": 1,
           "maxItems": 8
+        },
+        "reviewer_only": {
+          "const": true
         }
       },
       "required": [

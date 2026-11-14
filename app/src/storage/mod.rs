@@ -22,6 +22,9 @@ mod data_copy;
 mod definitions;
 mod governance;
 mod labels;
+// Trial plan D4/D6 (ADR-008 amendment 2026-11-14): organization admins and
+// member display names.
+mod org_admin;
 mod pool;
 mod queries;
 mod record_components;
@@ -80,6 +83,7 @@ pub use labels::{
     address_shaped, card_shaped, label_description, label_name, merge_label, shortcut_shaped,
     Label, LabelChange, Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
 };
+pub use org_admin::{MemberRow, RemoveOutcome};
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::QueryActor;
 pub use queries::{
@@ -104,8 +108,8 @@ pub use shared_access::{
 pub use shared_identity::*;
 pub use shared_reads::GuestQueryRun;
 pub use sharing::{
-    member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
-    SHARE_HANDLER_DEADLINE,
+    member_label, Audience, Granted, Member, Openable, Revoked, ShareEntry, ShareMode, ShareRole,
+    ShareStanding, Shared, Standing, WorkSharing, JUDGMENT_LIMIT, SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};
 pub use work_presentation::WorkPresentation;
@@ -121,6 +125,11 @@ pub enum Error {
     ProjectionLimit,
     Busy,
     UnknownOutcome,
+    /// APP-198: a record snapshot's release found the list moved since its
+    /// capture (a commit landed in between). Not a refusal: the caller
+    /// captures once more, or answers a typed not-ready. Never the uniform
+    /// 404 (`Denied` keeps authority and a changed binding).
+    Stale,
 }
 
 impl fmt::Display for Error {
@@ -131,8 +140,11 @@ impl fmt::Display for Error {
             Self::Unavailable => "storage unavailable",
             Self::Deadline => "storage deadline exceeded",
             Self::ProjectionLimit => "record projection bound exceeded",
-            Self::Busy => "record snapshot capacity reached",
+            // Generic and retryable: a record snapshot's admission slots and
+            // a sharing definer's lock cycle (W4's r7) both answer it.
+            Self::Busy => "busy; try again in a moment",
             Self::UnknownOutcome => "transaction outcome unknown",
+            Self::Stale => "record snapshot stale",
         })
     }
 }
@@ -196,6 +208,14 @@ mod definition_qualification;
 mod managed_qualification;
 #[cfg(test)]
 mod mcp_campaign;
+// Trial plan D4/D5/D6: consent, names and the organization admin definers.
+#[cfg(test)]
+mod org_admin_campaign;
+// Trial plan D4/D6: the /admin and /me/name routes over real rows (W2).
+#[cfg(test)]
+mod org_admin_routes_campaign;
+#[cfg(test)]
+mod private_entries_campaign;
 #[cfg(test)]
 pub(crate) mod qualification;
 #[cfg(test)]
@@ -208,6 +228,9 @@ mod race_qualification;
 mod record_components_campaign;
 #[cfg(test)]
 mod record_query_campaign;
+// APP-192 (D9): the share routes with roles and the organization-wide share.
+#[cfg(test)]
+mod share_routes_campaign;
 #[cfg(test)]
 mod shared_campaign;
 #[cfg(test)]

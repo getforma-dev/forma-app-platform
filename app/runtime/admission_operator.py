@@ -1036,11 +1036,11 @@ STATS_TABLES = ("principals", "memberships", "entitlements", "organization_permi
 PURGE_KEEPS = frozenset({"organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads", "audit_events"})
 PURGE_PRIVATE = ("code_index",)
 # genui_identity (0017) holds guest accounts, never the organization's: its rows that name an organization
-# are the sign-in flows of its shares (deleted outright) and guests' linked_apps and share_events, whose
-# non-deferrable keys reach the organization's live_work_shares, which in turn reach saved_work,
-# publications and memberships. While a guest has linked or accepted one of the organization's shares the
-# purge refuses (guest_linked_shares_present) instead of failing on a key or deleting a guest's chain
-# (APP-185 recheck R1; decision pending). Any other table outside genui that references a purged table
+# are the sign-in flows of its shares (deleted outright) and guests' linked_apps and share_events; linked_apps'
+# non-deferrable key reaches the organization's live_work_shares (share_events' key did until migration
+# 0024 dropped it), which in turn reach saved_work, publications and memberships. While a guest has linked
+# or accepted one of the organization's shares the purge refuses (guest_linked_shares_present) instead of
+# failing on a key or deleting a guest's chain (APP-185 recheck R1; decision pending). Any other table outside genui that references a purged table
 # is unknown and refuses too.
 IDENTITY_FLOWS = "genui_identity.shared_auth_flows"
 IDENTITY_GUEST_ROWS = ("genui_identity.linked_apps", "genui_identity.share_events")

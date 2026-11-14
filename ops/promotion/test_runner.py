@@ -210,9 +210,17 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaises(Refused): self.run_execute()
         self.assertFalse(any(o in ['update_service', 'execute_change_set'] for _,o,_ in self.aws.calls))
         self.assertEqual(self.store.load()['active']['phase'], 'prepared')
+    def test_execute_rechecks_the_scan_delta_before_recording_the_approval(self):
+        # APP-196 MINOR-3 (S4): the recheck at the start of execute, before the approval
+        # receipt; the final checks would refuse the same delta later.
+        self.prepared()
+        with patch('ops.promotion.runner.guard_scan_delta', return_value={}):
+            with self.assertRaisesRegex(Refused, 'scan disposition changed after preparation'): self.run_execute()
+        self.assertFalse([k for k in self.s3.objects if k.endswith('/approval.json')])
+        self.assertEqual(self.store.load()['active']['phase'], 'prepared')
     def test_real_disposition_expiring_during_final_network_checks_cannot_stop(self):
-        from ops.promotion.registry import scan_disposition
-        disposition, _ = scan_disposition()
+        from ops.promotion.test_scan import release_a_disposition
+        disposition, _ = release_a_disposition(self)
         contract = disposition['deployment_contract_sha256']
         self.manifest['source']['deployment_contract_sha256'] = contract
         candidate_path = self.directory/'candidate.json'

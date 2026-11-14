@@ -115,7 +115,7 @@ just campaign command
 
 The [catalog](../scripts/dev/campaigns.tsv) maps short names to exact ignored tests, prerequisites, report variables and CI workflow. `--all` includes external smokes and managed helpers; helpers cannot run alone. Reports, when the campaign defines one, go to `.cache/reports/<name>.json`. Fixtures use disposable labeled Docker databases, separate from the persistent dev profiles.
 
-The current tenant-foundation catalog also includes `live-sharing` and `shared-identity`; pitch campaigns retain the legacy same-organization sharing qualification. The box campaign and parser-sandbox probe require a sealed parser; real-model and Open-Meteo smokes use external services and are not run by `just ci`. Follow the named prerequisite/wrapper for a smoke rather than putting a key on its command line. A campaign's synthetic provider test is not evidence of a real-provider run.
+The current tenant-foundation catalog also includes `live-sharing`, `shared-identity` and `refresh-herd`. `refresh-herd` runs as a 15-page gate; `GENUI_REFRESH_HERD_FULL=1 just campaign refresh-herd` adds the recorded 26-page measurement and its page-count and cadence searches; pitch campaigns retain the legacy same-organization sharing qualification. The box campaign and parser-sandbox probe require a sealed parser; real-model and Open-Meteo smokes use external services and are not run by `just ci`. Follow the named prerequisite/wrapper for a smoke rather than putting a key on its command line. A campaign's synthetic provider test is not evidence of a real-provider run.
 
 ## Parser and release images
 

@@ -34,11 +34,16 @@
 //! apart); 403 `cross_site`; 413; 422 `invalid_request`; 422
 //! `could_not_answer` (Ask: the model's reply was not an answer, a view spec
 //! included) or `could_not_shape` (Shape: the reply was not the target's
-//! spec, prose included); 429; 503 `composer_unavailable` (no model and
+//! spec, prose included); 429 (the member's window, or `daily_limit`: D10,
+//! the app's daily model-call cap); 503 `composer_unavailable` (no model and
 //! nothing rehearsed); 503 `unavailable`. Logs carry identities, the target
 //! kind, codes, counts and durations; never the question, the words, a record
 //! value or a spec.
-use super::{ask, shape, Composer};
+use super::{
+    ask,
+    model::{self, ModelError},
+    shape, Composer,
+};
 use crate::{
     auth::{cookies, csrf, Auth},
     demo,
@@ -358,6 +363,9 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
                 ASK_BUDGET,
             )
             .await;
+        if matches!(reply, Err(ModelError::DailyCap)) {
+            return model::daily_limit();
+        }
         let answer = match reply
             .ok()
             .and_then(|reply| ask::judge_widget(&reply.text).ok())
@@ -452,6 +460,9 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
                 Ok(reply) => reply,
                 Err(error) => {
                     log_refused(error.code());
+                    if error == ModelError::DailyCap {
+                        return model::daily_limit();
+                    }
                     return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_answer");
                 }
             };
@@ -807,6 +818,11 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
     };
     let unavailable = || http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
     let refused = || http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_shape");
+    // D10: a model failure is `could_not_shape`, the daily cap `daily_limit`.
+    let model_refused = |error: ModelError| match error {
+        ModelError::DailyCap => model::daily_limit(),
+        _ => refused(),
+    };
     let model = |system: String| {
         let composer = state.composer.clone();
         let user = shape::user(&address, &words);
@@ -837,7 +853,7 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
                     },
                     Err(error) => {
                         log_refused(error.code());
-                        return refused();
+                        return model_refused(error);
                     }
                 },
             }
@@ -858,7 +874,7 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
                 },
                 Err(error) => {
                     log_refused(error.code());
-                    return refused();
+                    return model_refused(error);
                 }
             },
         },
@@ -880,6 +896,10 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
                 Err(Failure::Refused(code)) => {
                     log_refused(code);
                     return refused();
+                }
+                Err(Failure::DailyLimit) => {
+                    log_refused("model_daily_cap");
+                    return model::daily_limit();
                 }
             }
         }

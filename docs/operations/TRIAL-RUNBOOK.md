@@ -148,10 +148,10 @@ After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packe
 
 ## 3. Release B: migrations 0023 and 0024 and the trial capabilities (Sunday Nov 23)
 
-W1 commits `ops/promotion/schema-release.json` for 22 → 24 (migrations 0023 and 0024) with its pins; W3's operator changes (`--note`, `admin_policy`, `list-box-files`, `stats`) ride the same operator image. Within 24 hours of section 2:
+The release-B pull request (APP-194) commits `ops/promotion/schema-release.json` for 22 → 24 (migrations 0023 and 0024) with its pins, expiring 2026-11-26 00:00 UTC ([record](../../evidence/APP-194/SCHEMA-RELEASE.md)); W3's operator changes (`--note`, `admin_policy`, `list-box-files`, `stats`) ride the same operator image. Within 24 hours of section 2:
 
 1. If `main` carries new scanner findings, preparation refuses before approval: section 8 (the scan disposition renewal). Otherwise:
-2. `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-B pull request, read the summary: `schema_release: {from_version: 22, to_version: 24}`, the stop time **2026-12-15T14:00:00Z**, the disposition (if any) with its Dec 16 expiry.
+2. `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-B pull request, read the summary: `schema_release: {from_version: 22, to_version: 24}`, the stop time **2026-12-15T14:00:00Z**, the disposition (if any) with its 2026-11-26 expiry, the release file's.
 3. Approve outside 05:00–05:45 UTC. Then `/health/ready` → 200, `gh run view ... --json conclusion` → `"success"`.
 4. **Verify from the back office** (the operator task now has `stats`):
 
@@ -279,7 +279,7 @@ Feedback arrives at `feedback@getforma.dev` (the link in the app, D12). Read it 
 
 ## 8. Scan disposition renewal (if release B's preparation refuses on new findings)
 
-The current disposition was release A's (APP-175, renewed 2026-11-14: contract 14a161a0…, 16 findings per role, `f00adb9a…`, expiry Nov 20). Release A landed on 2026-11-14, so those findings are now baseline, and B needs a disposition only if the scanner introduces more. If B's preparation refuses with `new scan findings require separately reviewed disposition`:
+No disposition is committed. Release A's (APP-175, renewed 2026-11-14: contract 14a161a0…, 16 findings per role, `f00adb9a…`, expiry Nov 20) was spent when release A landed on 2026-11-14, and was removed with release B's record (APP-194). Its findings are baseline now, so B needs a disposition only if the scanner introduces more. If B's preparation refuses with `new scan findings require separately reviewed disposition`:
 
 1. `gh variable set PROMOTION_ENABLED --body false`; after the 65-minute fence, `maintenance abandon` (section 1 step 3; the pre-change-set case needs every journal entry to be a confirmed ECR upload, which this refusal leaves).
 2. Extract, privately, each role's baseline findings from the canonical state (`live.registry.<role>` → `{"manifest_digest": ..., "findings": [...]}`) and fetch each candidate image's scan: `aws ecr describe-image-scan-findings --repository-name genui-synthetic --image-id imageDigest=<the summary's digest> > $TRIAL/scan-service.json` (and `genui-qualification`, `genui-operator`).
@@ -291,10 +291,10 @@ The current disposition was release A's (APP-175, renewed 2026-11-14: contract 1
      --current service=$TRIAL/scan-service.json --current qualification=... --current operator=... \
      --output evidence/APP-<ticket>/scan-delta-<date>.json
    $PY -m ops.promotion.scan_renewal generate --delta evidence/APP-<ticket>/scan-delta-<date>.json \
-     --evidence evidence/APP-<ticket>/SCAN-DISPOSITION.md --expires-at-utc 2026-12-16T00:00:00Z --output ops/promotion/scan-disposition.json
+     --evidence evidence/APP-<ticket>/SCAN-DISPOSITION.md --expires-at-utc 2026-11-26T00:00:00Z --output ops/promotion/scan-disposition.json
    ```
 
-   `--contract` is release B's `to` deployment contract: `schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256']` (W1's release-B pin; until it lands, `REVIEWED_SCHEMA_RELEASE` is release A's spent 20→22 record and `schema-release.json` is absent on main); the guard checks the disposition against the contract of the candidate being promoted. `scan_renewal check` binds the file to its delta but not to that pin; `test_scan.py`'s `ReleaseBindingTests` does (`test_contract_and_expiry_are_the_schema_releases`), so edit `ReleaseBindingTests.setUp` (`test_scan.py:186`) to read the new delta file and expect the new evidence path. The tool prints the finding names and the exact `REVIEWED_DISPOSITION` block for `ops/promotion/registry.py`. It refuses a CRITICAL finding and roles whose introduced sets differ. Paste the pin, write the evidence record in the APP-175 form (scope, method, each CVE's applicability, limits), and keep `schema-release.json`'s expiry equal to the disposition's (the tests bind them; W1 owns that file). `scan_renewal check --delta <the delta>` must print `"status": "bound"` and `python3 -m unittest ops.promotion.test_scan` must pass.
+   `--contract` is release B's `to` deployment contract: `schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256']`, `88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356` (APP-194); the guard checks the disposition against the contract of the candidate being promoted. `scan_renewal check` binds the file to its delta but not to that pin; `test_scan.py`'s `ReleaseBindingTests` do, and run whenever a disposition is committed: they bind it to that contract and to the release file's expiry, and read the one `scan-delta-*.json` beside its evidence record, so keep exactly one delta there. The tool prints the finding names and the exact `REVIEWED_DISPOSITION` block for `ops/promotion/registry.py`. It refuses a CRITICAL finding and roles whose introduced sets differ. Replace `REVIEWED_DISPOSITION = None` with the printed pin (the file and its pin land together, and a test checks it), write the evidence record in the APP-175 form (scope, method, each CVE's applicability, limits), and keep the disposition's expiry equal to `schema-release.json`'s, 2026-11-26T00:00:00Z (the tests bind them). `scan_renewal check --delta <the delta>` must print `"status": "bound"` and `python3 -m unittest ops.promotion.test_scan` must pass.
 4. An independent review of the record, merge, `PROMOTION_ENABLED=true`, merge release B again.
 
 (Release A landed on 2026-11-14, so the earlier "if release A has not landed by Nov 19" extension no longer applies.)

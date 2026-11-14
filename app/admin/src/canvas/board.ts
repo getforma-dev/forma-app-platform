@@ -16,7 +16,7 @@ import {
 import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
 import { clearLayouts, loadCamera, loadLayout, loadPlaced, mergeArtifactKinds, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
-import { subscribeLive, type LiveEvent } from './live';
+import { hintSchedule, retryOnce, sharedAppNotice, subscribeLive, type Fetch, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { announce, buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
 import { refreshRecords, wireRecordsCard } from './records';
@@ -768,6 +768,10 @@ function pulse(card: HTMLElement): void {
 
 /** Pending live re-runs by work (APP-113). */
 const liveRuns = new Map<string, number>();
+/** APP-195: each live hint's re-reads wait a random 0–3 s, one wait per hint key; a hidden page re-reads once when shown (`live.ts`). */
+const hints = hintSchedule(undefined, { resumeWhenShown: true });
+/** APP-195: a hinted re-read tries a 503 or a network error once more, 1–3 s later. */
+const liveRead = retryOnce();
 /**
  * Runs every view card of a group with its window form's parameters;
  * `live` marks a re-run a live event asked for (the cards pulse on arrival).
@@ -787,7 +791,19 @@ export function runGroup(work: string, live = false): void {
   runGroupNow(work, false);
 }
 
-function runGroupNow(work: string, live: boolean): void {
+/**
+ * APP-195: a live hint's re-run of `work`, once its wait is over: the record
+ * views and every shown card, each read retried once. A 250 ms re-run still
+ * waiting is dropped: this one starts later than whatever it was waiting for.
+ */
+function runGroupHinted(work: string): void {
+  void recordControllers.get(work)?.refresh(true);
+  window.clearTimeout(liveRuns.get(work));
+  liveRuns.delete(work);
+  runGroupNow(work, true, liveRead);
+}
+
+function runGroupNow(work: string, live: boolean, request?: Fetch): void {
   const group = groups.get(work);
   if (!group) return;
   const parameters = parametersOf(windowForm(group));
@@ -795,15 +811,15 @@ function runGroupNow(work: string, live: boolean): void {
   // APP-106: every shown card, wherever it is (its item, a frame, the focus view).
   const shown = shownCards(group);
   for (const card of shown) {
-    if (card.dataset.kind === 'records') void refreshRecords(card, live);
-    if (card.dataset.kind === 'ledger') void refreshLedger(card, live);
+    if (card.dataset.kind === 'records') void refreshRecords(card, live, request);
+    if (card.dataset.kind === 'ledger') void refreshLedger(card, live, request);
   }
   for (const card of shown) {
     if (!card.classList.contains('cv-view')) continue;
     if (parameters === null) {
       renderNoValue(card, 'failed', 'failed', 'That time range isn’t valid: the start must come before the end.');
     } else {
-      void runView(card, parameters).then(() => {
+      void runView(card, parameters, request).then(() => {
         if (live) pulse(card);
       });
     }
@@ -1481,25 +1497,36 @@ export function onLiveEvent(listener: (event: LiveEvent) => void): void {
   liveListeners.push(listener);
 }
 
-function onLive(event: LiveEvent): void {
+/** The board's reaction to one live event (exported for its wiring test). */
+export function onLive(event: LiveEvent): void {
   if (event.kind !== 'stream.lagged') liveArrivals.set(event.work_id, performance.now());
-  for (const listener of liveListeners) listener(event);
+  // APP-195: every page that has the work open gets the same hint at once, so
+  // what a hint re-reads (the cards here and the listeners' own reads) starts
+  // after a random 0–3 s. Hints for the same key while one waits join it.
   if (event.kind === 'stream.lagged') {
-    // Hints were dropped for this stream: re-run what is shown (APP-095 review).
-    for (const work of groups.keys()) runGroup(work, true);
+    hints.hint('stream.lagged', () => {
+      for (const listener of liveListeners) listener(event);
+      // Hints were dropped for this stream: re-run what is shown (APP-095 review).
+      for (const work of groups.keys()) runGroupHinted(work);
+    });
     return;
   }
   if (event.kind === 'record.committed') {
-    const group = groups.get(event.work_id);
-    const shown = group ? shownCards(group) : [];
-    if (shown.length) runGroup(event.work_id, true);
-    // APP-104: a record may now wait for this member in a work not on the board.
-    stackHooks.live(event.work_id);
-    if (!shown.some((card) => card.dataset.kind === 'records') && !group?.cards.some((card) => card.dataset.kind === 'records' && isOnBoard(card.dataset.card ?? ''))) {
-      void showWaiting(event.app_id, event.work_id);
-    }
+    const { app_id: app, work_id: work } = event;
+    hints.hint(`record.committed:${work}`, () => {
+      for (const listener of liveListeners) listener(event);
+      const group = groups.get(work);
+      const shown = group ? shownCards(group) : [];
+      if (shown.length) runGroupHinted(work);
+      // APP-104: a record may now wait for this member in a work not on the board.
+      stackHooks.live(work);
+      if (!shown.some((card) => card.dataset.kind === 'records') && !group?.cards.some((card) => card.dataset.kind === 'records' && isOnBoard(card.dataset.card ?? ''))) {
+        void showWaiting(app, work);
+      }
+    });
     return;
   }
+  for (const listener of liveListeners) listener(event);
   if (event.kind === 'app.adapted') {
     void onAdapted(event);
     return;
@@ -1515,7 +1542,10 @@ function onLive(event: LiveEvent): void {
   if (event.kind === 'app.shared') {
     // Permission is not placement. The recipient explicitly adds a live ref.
     host?.ownerDocument.dispatchEvent(new CustomEvent('forma:connected-refresh'));
-    announce('An app was shared. Open its private link to review access.');
+    // Only an app this canvas does not have yet is news (the id is a UUID).
+    const known = groups.has(event.work_id) || !!host?.ownerDocument.querySelector(`.cv-lib-app[data-work="${event.work_id}"]`);
+    const notice = sharedAppNotice(known);
+    if (notice) announce(notice);
     return;
   }
   void placeWork(event.app_id, event.work_id).then(announce);

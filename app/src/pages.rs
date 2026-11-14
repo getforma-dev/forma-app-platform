@@ -14,6 +14,15 @@ use forma_server::{PageHandle, PageResponse, PolicyExtensions, RenderCtx, Render
 
 // APP-009 (ADR-006) pages: typed props only; no page reads a request value.
 // APP-074: the invitation entry never shows a submitted code back.
+// Trial plan D5: one paragraph of the beta notice (`auth::notice`), with its
+// optional bold lead-in split out so the page renders it without markup.
+#[derive(PageProps)]
+pub struct NoticeParagraphProps {
+    pub id: String,
+    pub lead: String,
+    pub has_lead: bool,
+    pub text: String,
+}
 #[derive(PageProps)]
 pub struct InviteProps {
     pub failed: bool,
@@ -23,6 +32,30 @@ pub struct InviteProps {
     pub limit_service: bool,
     pub unavailable: bool,
     pub described_by: String,
+    /// The beta notice shown above the form, and the version the required
+    /// `consent` checkbox agrees to (D5).
+    pub notice_title: String,
+    pub notice_version: String,
+    pub notice: Vec<NoticeParagraphProps>,
+    pub consent_label: String,
+}
+impl InviteProps {
+    /// The notice paragraphs as typed rows, from the one constant.
+    fn notice() -> Vec<NoticeParagraphProps> {
+        auth::notice::NOTICE_PARAGRAPHS
+            .iter()
+            .enumerate()
+            .map(|(index, paragraph)| {
+                let (lead, text) = auth::notice::lead_in(paragraph);
+                NoticeParagraphProps {
+                    id: format!("notice-{index}"),
+                    lead: lead.unwrap_or("").into(),
+                    has_lead: lead.is_some(),
+                    text: text.into(),
+                }
+            })
+            .collect()
+    }
 }
 #[derive(PageProps)]
 pub struct SigninProps {
@@ -215,6 +248,10 @@ impl auth::Pages for SsrPages {
                         "invite-help"
                     }
                     .into(),
+                    notice_title: auth::notice::NOTICE_TITLE.into(),
+                    notice_version: auth::notice::NOTICE_VERSION.to_string(),
+                    notice: InviteProps::notice(),
+                    consent_label: auth::notice::CONSENT_LABEL.into(),
                 },
                 &self.handoff("Enter your invitation code"),
             ),

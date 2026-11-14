@@ -16,6 +16,7 @@ import { label } from './display';
 import { el, isUuid, pulseTarget, retryButton, skeleton } from './render';
 import { liveArrival } from './board';
 import { agentCall, showActivity, showLiveTiming, showTiming } from './timing';
+import type { Fetch } from './live';
 
 export type RecordValueJson = { field_id: string; value: unknown; display: string };
 export type RecordJson = {
@@ -207,14 +208,15 @@ export function renderRecords(card: HTMLElement, listing: RecordsJson): void {
 }
 
 /** Fetches the listing and redraws the card; a refusal shows no row. */
-export async function refreshRecords(card: HTMLElement, live = false): Promise<void> {
+/** `request`: the read; a live hint's run passes one that retries once (APP-195). */
+export async function refreshRecords(card: HTMLElement, live = false, request: Fetch = (input, init) => fetch(input, init)): Promise<void> {
   const url = card.dataset.records ?? '';
   if (!url.startsWith('/v1/work/')) return;
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
   card.dataset.epoch = epoch;
   let response: Response | null = null;
   try {
-    response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    response = await request(url, { credentials: 'same-origin', cache: 'no-store' });
   } catch {
     // APP-113: a network error shows the failed state below, never "Loading…" forever.
   }

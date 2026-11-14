@@ -33,6 +33,8 @@ use std::{
 use tokio::time::timeout;
 
 const ISSUER: &str = "app008-fixture-only";
+/// The beta notice version every fixture reservation consents to.
+const NOTICE_VERSION: i32 = crate::auth::notice::NOTICE_VERSION;
 
 fn sha(label: &str) -> String {
     let hash = Sha256::digest(label.as_bytes());
@@ -227,7 +229,7 @@ fn listed(fixture: &Fixture, code_id: &str) -> Value {
 async fn reserved(stores: &Stores, digest: &str, context: &str) -> String {
     match stores
         .workspace
-        .reserve_code(ORG, digest, &sha(context))
+        .reserve_code(ORG, digest, &sha(context), NOTICE_VERSION)
         .await
         .unwrap()
     {
@@ -296,7 +298,7 @@ pub(crate) async fn consume_last_slot(
     };
     let Reservation::Reserved { reservation, .. } = stores
         .workspace
-        .reserve_code(organization, code_digest, &sha(label))
+        .reserve_code(organization, code_digest, &sha(label), NOTICE_VERSION)
         .await
         .expect("competing reservation")
     else {
@@ -866,14 +868,19 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .reserve_code(OTHER, &a.digest, &sha("foreign"))
+            .reserve_code(OTHER, &a.digest, &sha("foreign"), NOTICE_VERSION)
             .await,
         Err(Error::Denied)
     );
     assert_eq!(
         stores
             .workspace
-            .reserve_code("00000000-0000-0000-0000-000000000001", &a.digest, &sha("x"))
+            .reserve_code(
+                "00000000-0000-0000-0000-000000000001",
+                &a.digest,
+                &sha("x"),
+                NOTICE_VERSION
+            )
             .await,
         Err(Error::Denied)
     );
@@ -969,7 +976,7 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .reserve_code(ORG, &a.digest, &sha("late"))
+            .reserve_code(ORG, &a.digest, &sha("late"), NOTICE_VERSION)
             .await,
         Ok(Reservation::Exhausted)
     );
@@ -1104,7 +1111,7 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .reserve_code(ORG, &b.digest, &sha("after-revoke"))
+            .reserve_code(ORG, &b.digest, &sha("after-revoke"), NOTICE_VERSION)
             .await,
         Ok(Reservation::Revoked)
     );
@@ -1348,7 +1355,7 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .reserve_code(ORG, &g.digest, &sha("expired"))
+            .reserve_code(ORG, &g.digest, &sha("expired"), NOTICE_VERSION)
             .await,
         Ok(Reservation::Expired)
     );

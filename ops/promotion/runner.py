@@ -313,8 +313,9 @@ class Runner:
 
         Runs after the stopped-after-execute boundary and before activation intent.
         Any failure raises with phase 'executing' and the lease held: no activation,
-        no retry and no replay. The migration runner is one transaction, so a failed
-        migration leaves the database at its prior version.
+        no retry and no replay. The migration runner is one transaction: its exit 1
+        leaves the database at its prior version, and its reserved exit 4 means the
+        COMMIT may have reached the server (schema_release.MIGRATION_COMMIT_OUTCOME_UNKNOWN).
         """
         release = packet['schema_release']; outputs = after['outputs']
         request = schema_release.migration_request(outputs, promotion)

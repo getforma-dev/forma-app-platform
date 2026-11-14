@@ -287,6 +287,8 @@ async fn refusal_mapping_matches_design_section_nine() {
             "query_failed",
         ),
         (storage_refusal(&Error::Denied), 404, "not_found"),
+        // APP-198: a stale snapshot is typed and never the uniform 404.
+        (storage_refusal(&Error::Stale), 409, "stale"),
         (storage_refusal(&Error::Busy), 429, "too_many_requests"),
         (
             storage_refusal(&Error::ProjectionLimit),
@@ -618,6 +620,14 @@ fn view_states_loading_empty_failed_denied_never_zero() {
     );
     assert_eq!(loading.badge, "busy");
     assert!(loading.message.starts_with("Busy"));
+    // APP-198: the stale card is a loading card labelled stale, not denied.
+    let stale = card(&total, Outcome::Stale);
+    assert_eq!(
+        (stale.state.as_str(), stale.badge.as_str()),
+        ("loading", "stale")
+    );
+    assert!(stale.loading && !stale.denied && shows_no_number(&stale) && !stale.has_receipt);
+    assert!(stale.message.starts_with("Updating"));
     for reason in [
         Reason::Deadline,
         Reason::Engine,

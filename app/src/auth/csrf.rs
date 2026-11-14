@@ -36,6 +36,10 @@ pub enum Form {
     Query,
     SharedStart,
     SharedSignOut,
+    /// Trial plan D4: an organization admin's Remove form (`org_admin`).
+    OrgAdminRemove,
+    /// Trial plan D6: the member's display-name form (`member_name`).
+    DisplayName,
 }
 impl Form {
     fn name(self) -> &'static [u8] {
@@ -47,6 +51,8 @@ impl Form {
             Self::Query => b"query",
             Self::SharedStart => b"shared-start",
             Self::SharedSignOut => b"shared-signout",
+            Self::OrgAdminRemove => b"org-admin-remove",
+            Self::DisplayName => b"display-name",
         }
     }
 }

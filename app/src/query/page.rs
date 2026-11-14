@@ -215,6 +215,11 @@ pub enum Outcome<'a> {
     Released(&'a WorkerResult, &'a QueryReceipt),
     Failed(Reason),
     Denied,
+    /// APP-198: the list moved between the snapshot's capture and its
+    /// release, twice over (the route captured once more); nothing is shown
+    /// until a re-read, and access is not in question (`loading`, badge
+    /// `stale`).
+    Stale,
 }
 
 /// Exact decimal strings gain digit grouping; anything else is unchanged.
@@ -502,6 +507,14 @@ pub fn card(view: &WorkView, outcome: Outcome<'_>) -> CardProps {
             card.denied = true;
             card.message = "You do not have access to this result. Nothing is shown.".into();
             "denied"
+        }
+        Outcome::Stale => {
+            card.loading = true;
+            badge = Some("stale");
+            card.message =
+                "Updating: the list changed while this view was computed. It is read again; nothing is shown until then."
+                    .into();
+            "loading"
         }
         Outcome::Released(result, receipt) => {
             card.has_receipt = true;

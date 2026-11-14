@@ -12,6 +12,7 @@
 import { label, money } from './display';
 import { recordsJson, type RecordJson, type RecordsJson } from './records';
 import { el, pulseTarget, retryButton, skeleton } from './render';
+import type { Fetch } from './live';
 
 export const LEDGER_SCOPE = 'live records, last 200';
 
@@ -242,14 +243,15 @@ function statusOptions(card: HTMLElement, listing: RecordsJson): void {
 }
 
 /** Fetches the listing and redraws the card; a refusal shows no amount. */
-export async function refreshLedger(card: HTMLElement, live = false): Promise<void> {
+/** `request`: the read; a live hint's run passes one that retries once (APP-195). */
+export async function refreshLedger(card: HTMLElement, live = false, request: Fetch = (input, init) => fetch(input, init)): Promise<void> {
   const url = card.dataset.records ?? '';
   if (!url.startsWith('/v1/work/')) return;
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
   card.dataset.epoch = epoch;
   let response: Response | null = null;
   try {
-    response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    response = await request(url, { credentials: 'same-origin', cache: 'no-store' });
   } catch {
     // APP-113: a network error shows the failed state below, never "Loading…" forever.
   }

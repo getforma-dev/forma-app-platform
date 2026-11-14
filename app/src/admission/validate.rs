@@ -964,10 +964,16 @@ impl Walk {
     }
 
     fn record_schema(&mut self, path: &str, value: &Value) -> Option<Contract> {
-        let map = self.object(path, value, &["id", "version", "fields"], &[])?;
+        let map = self.object(path, value, &["id", "version", "fields"], &["visibility"])?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
         self.version(&at("version"), map.get("version"), 1, None);
+        // Edition impl-2026-11-14.1 (APP-191, D7): an `own` collection shows
+        // and changes each member's own entries only. Absent means shared;
+        // `"shared"` is refused so that the meaning has one encoding.
+        if let Some(visibility) = map.get("visibility") {
+            self.choice(&at("visibility"), Some(visibility), &["own"], None);
+        }
         let fields = self.each(&at("fields"), map.get("fields"), 1..=32, Self::field);
         Some(Contract {
             id: id?,
@@ -1574,10 +1580,22 @@ impl Walk {
             "writable_fields",
             "transitions",
         ];
-        let map = self.object(path, value, &required, &["initial"])?;
+        let map = self.object(path, value, &required, &["initial", "reviewer_only"])?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
         let record_schema_id = self.id(&at("record_schema_id"), map.get("record_schema_id"));
+        // Edition impl-2026-11-14.1 (APP-191, D8): a command the app's
+        // reviewers alone may run. Absent means every contributor; `false` is
+        // refused so that the meaning has one encoding.
+        if let Some(flag) = map.get("reviewer_only") {
+            if flag.as_bool() != Some(true) {
+                self.mistyped(
+                    &at("reviewer_only"),
+                    flag,
+                    refused(&at("reviewer_only"), "expected true"),
+                );
+            }
+        }
         let operation = self.choice(
             &at("operation"),
             map.get("operation"),

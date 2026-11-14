@@ -158,12 +158,37 @@ pub fn plan_generated(
     let admitted = admit(&content, organization, app)?;
     require_runnable(&content)?;
     require_authored(&content)?;
+    require_usable_fields(&content)?;
     require_entry(&content)?;
     Ok(Planned {
         title: title(&content),
         admitted,
         origin: Origin::Generated,
     })
+}
+
+/// APP-193 finding (advisor decision, 2026-11-14): a `reference` field is
+/// refused in generated content. A form renders it as a raw identifier box
+/// members cannot use (`query/canvas.rs`); "which X" is an enum of the known
+/// values or a short text field. Library and adapted content are untouched.
+pub(crate) fn require_usable_fields(content: &Value) -> Result<(), Refusal> {
+    let fields = list(content, "inputs")
+        .iter()
+        .chain(list(content, "record_schemas"))
+        .flat_map(|item| list(item, "fields"));
+    for field in fields {
+        if field
+            .get("value_type")
+            .and_then(|t| t.get("type"))
+            .and_then(Value::as_str)
+            == Some("reference")
+        {
+            return Err(Refusal {
+                code: "reference_field",
+            });
+        }
+    }
+    Ok(())
 }
 
 /// The adapted path: a typed patch (title, description) of a library

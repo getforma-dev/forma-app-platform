@@ -174,6 +174,8 @@ pub enum ParseFailure {
     Unavailable,
     /// The model failed or answered outside the shape (422 `could_not_parse`).
     CouldNotParse(&'static str),
+    /// D10: the app's daily model-call cap is reached (429 `daily_limit`).
+    DailyLimit,
 }
 
 /// A parse and how it was obtained.
@@ -282,6 +284,9 @@ impl Parser {
 
 impl From<ModelError> for ParseFailure {
     fn from(error: ModelError) -> Self {
-        Self::CouldNotParse(error.code())
+        match error {
+            ModelError::DailyCap => Self::DailyLimit,
+            error => Self::CouldNotParse(error.code()),
+        }
     }
 }

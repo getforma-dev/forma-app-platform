@@ -387,6 +387,10 @@ impl Workspace {
             // Source-query execution still uses outline.views only.
             let views:Vec<String>=outline.parts.iter().filter(|v|v.kind!="form").map(|v|v.id.clone()).collect();
             let collections=tx.query("SELECT collection_id::text FROM genui.record_collections WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid ORDER BY collection_id", &[&request.organization,&app,&work]).await?.iter().map(|r|text(r,0)).collect::<Result<Vec<_>>>()?;
+            // APP-191 (Victor, 2026-11-14): a guest is nobody's creator and no
+            // reviewer, so a live share of a work with any `own` collection is
+            // refused (the uniform 404); nothing is written.
+            require(super::authorization::own_collections(tx,&request.organization,app,work).await?==0)?;
             let rows=tx.query(&format!("INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,version,idempotency_key,request_digest,created_at,expires_at) VALUES($1::text::uuid,gen_random_uuid(),$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::bigint,$6,$7::text::uuid,$8::text,$9::bigint,$10::text[],$11::text[],$12,$13,1,$14,$15::text,clock_timestamp(),clock_timestamp()+$16::bigint*interval '1 day') RETURNING {SHARE_COLUMNS}"), &[&request.organization,&app,&work,&request.principal,&request.epoch,&email,&premise.publication,&premise.definition_digest,&premise.work_version,&views,&collections,&outline.title,&input.allow_add_to_canvas,&input.idempotency_key,&fingerprint,&input.expires_in_days]).await?;
             let share=share_row(tx,&request.organization,rows.first().ok_or(Error::Unavailable)?).await?;
             require(share.status=="pending")?;

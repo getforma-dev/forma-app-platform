@@ -17,6 +17,8 @@ await build({
     { entry: 'src/shared/app.tsx', outfile: 'shared.js' },
     { entry: 'src/shared/canvas.tsx', outfile: 'sharedCanvas.js' },
     { entry: 'src/canvas/app.tsx', outfile: 'canvas.js' },
+    // Trial plan D4: the organization's admin area.
+    { entry: 'src/org-admin/app.tsx', outfile: 'orgAdmin.js' },
   ],
   cssEntries: [
     { input: ['src/styles/themes.css', 'src/styles/app.css', 'src/styles/ask.css', 'src/styles/presentation.css', 'src/styles/presentation-editor.css'], outfile: 'app.css' },
@@ -32,6 +34,8 @@ await build({
     { input: 'src/styles/widgets.css', outfile: 'widgets.css' },
     // APP-115: agent token scopes and the "Agents" activity panel.
     { input: 'src/styles/governance.css', outfile: 'governance.css' },
+    // Trial plan D4: the organization admin table.
+    { input: 'src/styles/org-admin.css', outfile: 'org-admin.css' },
   ],
   // APP-009 (ADR-006): the sign-in page also serves /signin/{handle}; the
   // denial page is rendered by the callback and the pending route. APP-074:
@@ -53,6 +57,8 @@ await build({
     // ADR-011 (APP-092): the pitch canvas, one island; a declared canvas
     // route (365 KiB JavaScript ceiling; Forma's own code stays at N2's).
     '/canvas': { js: ['canvas'], css: ['app', 'canvas-vendor', 'canvas', 'actions', 'ledger', 'widgets', 'governance', 'sharing'], canvas: true },
+    // Trial plan D4: server-rendered for organization admins only.
+    '/admin': { js: ['orgAdmin'], css: ['app', 'org-admin'] },
   },
   outputDir: 'dist',
   // APP-138: the same self-hosted Space Grotesk face as getforma.dev.
@@ -74,6 +80,7 @@ await build({
     shared: 'src/shared/app.tsx',
     sharedCanvas: 'src/shared/canvas.tsx',
     canvas: 'src/canvas/app.tsx',
+    orgAdmin: 'src/org-admin/app.tsx',
   } } : {}),
   // Unsupported native source is a mandatory coded refusal. Strict mode also
   // rejects advisory diagnostics; FORMA_STRICT=1 enables it without the flag.

@@ -209,7 +209,7 @@ async fn callback_floods_hit_class_and_global_limits_before_any_work() {
     assert_eq!(
         (limited.status, limited.body.as_str()),
         (StatusCode::TOO_MANY_REQUESTS, neutral_signin),
-        "the 16th callback from one class"
+        "the callback past the class's minute window"
     );
     let retry: u64 = limited.headers[header::RETRY_AFTER]
         .to_str()
@@ -372,17 +372,25 @@ async fn invite_entry_refuses_before_any_work() {
     );
     let code = unissued_code();
     let mut neutral = Vec::new();
+    // Trial plan D5: the form is exactly `code` and `consent=1`; a missing,
+    // different or repeated consent refuses like any extra field.
     for body in [
         String::new(),
         "code=".into(),
-        "code=not-a-code".into(),
-        format!("code={code}&organization_id={ORG}"),
-        format!("code={code}&tenant={NORTHSTAR_TENANT}"),
-        format!("code={code}&role=admin"),
-        format!("code={code}&roles=admin"),
-        format!("code={code}&redirect_uri=https://evil.example.test/cb"),
-        format!("code={code}&code={code}"),
-        format!("invite_token=tinv_x&code={code}"),
+        "code=&consent=1".into(),
+        "code=not-a-code&consent=1".into(),
+        format!("code={code}"),
+        "consent=1".into(),
+        format!("code={code}&consent=0"),
+        format!("code={code}&consent=on"),
+        format!("code={code}&consent=1&consent=1"),
+        format!("code={code}&consent=1&organization_id={ORG}"),
+        format!("code={code}&consent=1&tenant={NORTHSTAR_TENANT}"),
+        format!("code={code}&consent=1&role=admin"),
+        format!("code={code}&consent=1&roles=admin"),
+        format!("code={code}&consent=1&redirect_uri=https://evil.example.test/cb"),
+        format!("code={code}&code={code}&consent=1"),
+        format!("invite_token=tinv_x&code={code}&consent=1"),
     ] {
         auth.limits.clear();
         let reply = browser.post(&app, "/invite/validate", &body).await;
@@ -510,8 +518,13 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
     // Sign-in: many handles from one class share the per-class window.
     let mut signin = Browser::new("198.51.100.32:4000", &log);
     let mut signin_statuses = Vec::new();
-    for i in 0..11 {
-        let handle = format!("{}{}", &UNKNOWN_HANDLE[..25], (b'a' + i) as char);
+    let per_minute = http::limits::SIGNIN_ADDRESS[0].limit;
+    for i in 0..=per_minute {
+        let handle = format!(
+            "{}{}",
+            &UNKNOWN_HANDLE[..25],
+            (b'a' + (i % 26) as u8) as char
+        );
         signin_statuses.push(
             signin
                 .post(&app, &format!("/signin/{handle}"), "")
@@ -520,8 +533,10 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
                 .as_u16(),
         );
     }
-    assert_eq!(signin_statuses[..10], [400; 10]);
-    assert_eq!(signin_statuses[10], 429);
+    assert!(signin_statuses[..per_minute]
+        .iter()
+        .all(|status| *status == 400));
+    assert_eq!(signin_statuses[per_minute], 429);
     // Sign-in global: 600 per hour across the service.
     auth.limits.clear();
     let mut count = 0;
@@ -763,7 +778,11 @@ impl Run {
     }
     async fn validate(&self, browser: &mut Browser, raw: &str) -> Reply {
         browser
-            .post(&self.app, "/invite/validate", &format!("code={raw}"))
+            .post(
+                &self.app,
+                "/invite/validate",
+                &format!("code={raw}&consent=1"),
+            )
             .await
     }
     /// The whole invited signup: validate → hosted registration → callback.
@@ -1010,6 +1029,33 @@ async fn campaign() {
     assert!(flow.get::<_, bool>(2) && flow.get::<_, bool>(3));
     assert_eq!(flow.get::<_, String>(4), "v4:192.0.2.10");
     assert_eq!(c.scalar(&format!("SELECT count(*) FROM genui.code_reservations WHERE code_id='{}' AND kind='presignup' AND state='live' AND expires_at BETWEEN now()+interval '9 minutes 50 seconds' AND now()+interval '10 minutes'", a.id)).await, 1);
+    // Trial plan D5: the reservation records the notice version the page
+    // showed and the visitor agreed to; the same code without the consent
+    // box (or with any other value) is the neutral refusal before any
+    // reservation, flow or provider call.
+    assert_eq!(c.scalar(&format!("SELECT notice_version::bigint FROM genui.code_reservations WHERE code_id='{}' AND kind='presignup'", a.id)).await, i64::from(notice::NOTICE_VERSION));
+    let counted = c.counts().await;
+    let mut unconsenting = c.browser("192.0.2.11:2000");
+    for body in [
+        format!("code={}", a.raw),
+        format!("code={}&consent=0", a.raw),
+        format!("code={}&consent=on", a.raw),
+    ] {
+        c.auth.limits.clear();
+        let refused = unconsenting.post(&c.app, "/invite/validate", &body).await;
+        assert_eq!(
+            (refused.status, refused.body.as_str()),
+            (StatusCode::BAD_REQUEST, NEUTRAL),
+            "{body:.8}"
+        );
+        assert!(refused.headers.get(header::SET_COOKIE).is_none());
+    }
+    assert_eq!(
+        c.counts().await,
+        counted,
+        "no reservation, flow or PAR without consent"
+    );
+    c.record("D5: a valid code is refused without `consent=1` (or with any other consent value) before any reservation, flow or provider call, and the reservation the consented form makes records the notice version it agreed to");
     assert_eq!(
         c.scalar(&format!(
             "SELECT redeemed_count FROM genui.access_codes WHERE code_id='{}' AND status='active'",
@@ -1063,6 +1109,12 @@ async fn campaign() {
     let arrived = c.sign_in(&mut maya, NORTHSTAR_HANDLE, maya_subject).await;
     assert_eq!(arrived.location(), "/workspace");
     assert_eq!(c.scalar(&format!("SELECT count(*) FROM genui.access_codes WHERE code_id='{}' AND status='exhausted' AND redeemed_count=1", a.id)).await, 1);
+    // Trial plan D5: the redemption stored the consent the reservation
+    // carried, in the admission transaction, and appended admission.consented
+    // right after admission.redeemed with the version's digest.
+    assert_eq!(c.scalar(&format!("SELECT count(*) FROM genui.member_consents c JOIN genui.principals p ON p.organization_id=c.organization_id AND p.principal_id=c.principal_id WHERE p.provider_subject='{maya_subject}' AND c.notice_version={}", notice::NOTICE_VERSION)).await, 1);
+    assert_eq!(c.scalar(&format!("SELECT count(*) FROM genui.member_consents c JOIN genui.audit_events e ON e.organization_id=c.organization_id AND e.event_id=c.audit_event_id JOIN genui.audit_events r ON r.organization_id=e.organization_id AND r.writer_role='admission' AND r.chain_sequence=e.chain_sequence-1 JOIN genui.principals p ON p.organization_id=c.organization_id AND p.principal_id=c.principal_id WHERE p.provider_subject='{maya_subject}' AND e.kind='admission.consented' AND e.actor_principal_id=c.principal_id AND e.code_id='{}' AND r.kind='admission.redeemed' AND r.actor_principal_id=c.principal_id", a.id)).await, 1);
+    c.record("D5: the verified sign-in that redeems also stores the member's consent to the notice version (one member_consents row naming its admission.consented event, the event right after admission.redeemed on the admission chain)");
     c.record("item 2: the hosted registration consumes the bound invitation and the callback lands on /auth/pending with a 24-hour pending admission; the registered account and its pre-access session mint no principal, redemption or workspace session (uniform 404); only the later verified sign-in redeems (code exhausted at 1 of 1)");
 
     // --- 3. Honest, identical refusals; no slot, no provider call ------------
@@ -1258,7 +1310,8 @@ async fn campaign() {
         }
     }
     // A registered organization's forged pre-login cookie still costs one
-    // flow lookup, at most 15 a minute from one class: the 16th is 429 with
+    // flow lookup, at most CALLBACK_ADDRESS's minute window from one class
+    // (45 since the ADR-006 amendment of 2026-11-14): the next is 429 with
     // `Retry-After` before any work.
     let mut flood = c.browser("198.51.100.71:7100");
     let mut statuses = Vec::new();
@@ -1272,12 +1325,15 @@ async fn campaign() {
             assert!(reply.headers.contains_key(header::RETRY_AFTER));
         }
     }
-    assert_eq!(statuses.iter().filter(|s| **s == 400).count(), 15);
+    assert_eq!(
+        statuses.iter().filter(|s| **s == 400).count(),
+        http::limits::CALLBACK_ADDRESS[0].limit
+    );
     assert_eq!(statuses.last(), Some(&429));
     assert_eq!(c.counts().await, before);
     assert_eq!(c.issuer.count(|x| &x.exchange), exchanges);
     c.auth.limits.clear();
-    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (15/minute, 80/hour) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 16th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
+    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (45/minute, 250/hour; ADR-006 amendment 2026-11-14) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 46th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
 
     // --- 5. Provider invitation mismatches cannot create an account ----------
     c.auth.limits.clear();
@@ -1475,7 +1531,7 @@ async fn campaign() {
             .post(
                 &c.app,
                 "/invite/validate",
-                &format!("code={}&{extra}", h.raw),
+                &format!("code={}&consent=1&{extra}", h.raw),
             )
             .await;
         assert_eq!(
@@ -1495,7 +1551,7 @@ async fn campaign() {
                 &c.app,
                 "POST",
                 "/invite/validate",
-                &format!("code={}", h.raw),
+                &format!("code={}&consent=1", h.raw),
                 headers,
             )
             .await;
@@ -1517,6 +1573,7 @@ async fn campaign() {
             FlowKind::SignUp {
                 code_digest: &f.digest,
                 handoff: None,
+                notice_version: notice::NOTICE_VERSION,
             },
             &sealed,
             "v4:192.0.2.64",
@@ -2350,7 +2407,7 @@ async fn race_campaign() {
         c.app.clone(),
         c.browser(&next_peer()),
         "/invite/validate",
-        format!("code={}", slot.raw),
+        format!("code={}&consent=1", slot.raw),
     );
     lock_wait(&c.fixture, 1).await;
     hooks.release.notify_one();
@@ -3141,7 +3198,7 @@ async fn race_campaign() {
         .post(
             &restarted_app,
             "/invite/validate",
-            &format!("code={}", fresh.raw),
+            &format!("code={}&consent=1", fresh.raw),
         )
         .await;
     assert_eq!(

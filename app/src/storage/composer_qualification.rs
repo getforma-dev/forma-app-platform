@@ -89,6 +89,32 @@ impl Model for Script {
     }
 }
 
+/// A loopback Messages endpoint answering every request with `text`; the
+/// count is of the requests it received.
+async fn messages_stub(text: String) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = calls.clone();
+    let reply = json!({"id": "msg", "model": "stub-model",
+        "content": [{"type": "text", "text": text}],
+        "usage": {"input_tokens": 5, "output_tokens": 7}})
+    .to_string();
+    let app = axum::Router::new().route(
+        "/v1/messages",
+        axum::routing::post(move || {
+            let seen = seen.clone();
+            let reply = reply.clone();
+            async move {
+                seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                ([("content-type", "application/json")], reply)
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/v1/messages", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (endpoint, calls)
+}
+
 fn router_reply(choice: &str, confidence: &str, title: &str) -> String {
     json!({"choice": choice, "confidence": confidence, "reason": "campaign", "title": title})
         .to_string()
@@ -598,6 +624,183 @@ async fn campaign() {
         "APP-132/APP-135: a generated records-only definition (records input, filing create with initial, decision command, form and note; no source input and no data view) is admitted, drafted, owner-published and saved with one records binding and its record collection, still labeled generated from the persisted definition on reload, with no source dependency, app, permission or grant row",
     );
 
+    // --- APP-191 (D7, D8): private entries and a reviewer-only command from plain words ---
+    let (script, composer) = Script::composer(vec![
+        Ok(router_reply("none", "low", "")),
+        Ok(prompt::private_entries_example().to_string()),
+    ]);
+    let private = compose_for(
+        &stores,
+        &composer,
+        &member,
+        "Collect suggestions from everyone; each person sees only the suggestions they sent in, and only reviewers can accept one",
+    )
+    .await
+    .unwrap();
+    assert_eq!(script.calls(), 2);
+    assert_eq!(private.origin, Origin::Generated);
+    assert_eq!(private.title, "Suggestion box");
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{}' AND schema_id='suggestion' AND owner_only", private.app)).await,
+        1,
+        "the stored canonical schema derives owner_only"
+    );
+    let listing = stores
+        .data
+        .list_records(&member, &private.app, &private.work)
+        .await
+        .unwrap();
+    let suggestions = listing.collections[0].collection.clone();
+    let commands = |listing: &RecordsListing| -> Vec<String> {
+        listing.collections[0]
+            .commands
+            .iter()
+            .map(|c| c.id.clone())
+            .collect()
+    };
+    assert_eq!(
+        commands(&listing),
+        ["accept", "suggest"],
+        "the owner, a reviewer, sees accept"
+    );
+    let suggest = CommandRequest {
+        app: private.app.clone(),
+        work: private.work.clone(),
+        publication: listing.publication.clone(),
+        command: "suggest".into(),
+        schema: "suggestion".into(),
+        schema_version_expected: 1,
+        record: "00000000-0000-4000-8000-000000000a91".into(),
+        expected_record_version: 0,
+        expected_work_version: listing.work_version,
+        values: json!([
+            {"field_id": "title", "value": {"type": "text", "value": "a suggestion"}},
+            {"field_id": "details", "value": {"type": "null"}},
+            {"field_id": "status", "value": {"type": "enum", "value": "new"}}
+        ]),
+        idempotency_key: "a9".repeat(16),
+    };
+    assert!(matches!(
+        stores.data.commit_record(&member, &suggest).await.unwrap(),
+        CommandResult::Committed(_)
+    ));
+    // A contributor shared in (D9) sees no accept, cannot run it, and sees no
+    // suggestion but their own.
+    let shared_in = request(&stores, ORG, AUTHOR, 1);
+    stores
+        .workspace
+        .share_work(
+            &member,
+            &private.app,
+            &private.work,
+            Audience::Member(AUTHOR),
+            ShareRole::Contributor,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    let theirs = stores
+        .data
+        .list_records(&shared_in, &private.app, &private.work)
+        .await
+        .unwrap();
+    assert_eq!(commands(&theirs), ["suggest"]);
+    assert!(
+        theirs.records.is_empty(),
+        "the owner's suggestion is not theirs to see"
+    );
+    let accept = CommandRequest {
+        command: "accept".into(),
+        values: json!([{"field_id": "status", "value": {"type": "enum", "value": "accepted"}}]),
+        expected_record_version: 1,
+        idempotency_key: "a8".repeat(16),
+        ..suggest.clone()
+    };
+    assert_eq!(
+        stores.data.dry_run_command(&shared_in, &accept).await.err(),
+        Some(Error::Denied)
+    );
+    let _ = suggestions;
+    // APP-193 finding: an owner-advanced shared item is a reviewer-only update
+    // the owner can run on the row they created (a declared transition would
+    // refuse its filer).
+    let item_fields = json!([
+        {"id": "title", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "state", "value_type": {"type": "enum", "values": ["open", "closed"]}, "nullable": false}
+    ]);
+    let current_item = json!({
+        "title": "Current item",
+        "description": "One shared item at a time: its owner opens the next one and closes it.",
+        "inputs": [{"id": "items", "contract_id": "item_v1", "contract_version": 1, "kind": "records", "fields": item_fields}],
+        "views": [
+            {"id": "open_item", "kind": "form", "renderer_version": 1, "title": "Open an item", "command_id": "open_item"},
+            {"id": "how", "kind": "note", "renderer_version": 1, "title": "How it works", "text": "Everyone sees the current item; its owner advances it."}
+        ],
+        "record_schemas": [{"id": "item", "version": 1, "fields": item_fields}],
+        "commands": [
+            {"id": "open_item", "record_schema_id": "item", "operation": "create", "writable_fields": ["title", "state"], "transitions": [], "initial": [{"field_id": "state", "value": "open"}]},
+            {"id": "advance", "record_schema_id": "item", "operation": "update", "writable_fields": ["state"], "transitions": [], "reviewer_only": true}
+        ],
+        "links": [],
+        "default_layout": [{"view_id": "open_item", "column": 0, "row": 0, "width": 12}, {"view_id": "how", "column": 0, "row": 1, "width": 12}]
+    });
+    let (script, composer) = Script::composer(vec![
+        Ok(router_reply("none", "low", "")),
+        Ok(current_item.to_string()),
+    ]);
+    let item = compose_for(
+        &stores,
+        &composer,
+        &member,
+        "One shared current item that I advance and close",
+    )
+    .await
+    .unwrap();
+    assert_eq!(script.calls(), 2);
+    let listing = stores
+        .data
+        .list_records(&member, &item.app, &item.work)
+        .await
+        .unwrap();
+    let open = CommandRequest {
+        app: item.app.clone(),
+        work: item.work.clone(),
+        publication: listing.publication.clone(),
+        command: "open_item".into(),
+        schema: "item".into(),
+        schema_version_expected: 1,
+        record: "00000000-0000-4000-8000-000000000a92".into(),
+        expected_record_version: 0,
+        expected_work_version: listing.work_version,
+        values: json!([
+            {"field_id": "title", "value": {"type": "text", "value": "first"}},
+            {"field_id": "state", "value": {"type": "enum", "value": "open"}}
+        ]),
+        idempotency_key: "a7".repeat(16),
+    };
+    assert!(matches!(
+        stores.data.commit_record(&member, &open).await.unwrap(),
+        CommandResult::Committed(_)
+    ));
+    let advance = CommandRequest {
+        command: "advance".into(),
+        values: json!([{"field_id": "state", "value": {"type": "enum", "value": "closed"}}]),
+        expected_record_version: 1,
+        idempotency_key: "a6".repeat(16),
+        ..open.clone()
+    };
+    let CommandResult::Committed(advanced) =
+        stores.data.commit_record(&member, &advance).await.unwrap()
+    else {
+        panic!("the owner advances their own item");
+    };
+    assert_eq!(advanced.record_version, 2);
+    check(
+        &mut checks,
+        "APP-191 (D7, D8), APP-193: from plain words the composer generates a collection private to each member (owner_only derived in the database) and a reviewer-only accept the owner sees and a shared-in contributor neither sees nor runs; an owner-advanced shared item is a reviewer-only update its creator can commit",
+    );
+    let after = footprint(&fixture).await;
+
     // --- A model failure writes nothing ---
     let before = after;
     let (_, composer) = Script::composer(vec![
@@ -622,6 +825,80 @@ async fn campaign() {
     check(
         &mut checks,
         "a model failure after the router is the neutral could_not_compose with no row written; a revoked member stays refused and no row is written",
+    );
+
+    // --- D10: the daily model-call cap writes nothing and sends nothing ---
+    // The real client over a loopback Messages stub, counting against a cap
+    // of one call: the router takes the call, generation is refused by the
+    // cap before anything leaves, and the next composition is refused at the
+    // router. Both are the daily limit, and no row is written.
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(1);
+    let (endpoint, calls) = messages_stub(router_reply("none", "low", "")).await;
+    let client =
+        crate::composer::model::Anthropic::new("sk-ant-synthetic-not-a-real-key", &endpoint)
+            .unwrap()
+            .with_daily_cap(&DAILY);
+    let capped = Composer::new(
+        Some(Arc::new(client) as Arc<dyn Model>),
+        "router-model",
+        "generation-model",
+    );
+    assert_eq!(
+        compose_for(&stores, &capped, &member, intent).await,
+        Err(Refused::DailyLimit)
+    );
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the router call only"
+    );
+    assert_eq!(
+        compose_for(&stores, &capped, &member, intent).await,
+        Err(Refused::DailyLimit)
+    );
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "nothing reached the endpoint after the cap"
+    );
+    assert_eq!(footprint(&fixture).await, before);
+    check(
+        &mut checks,
+        "D10: with the real client over a loopback stub and a daily cap of one call, the router takes the call and generation is refused by the cap before any request leaves; the next composition is refused at the router; both are Refused::DailyLimit (429 daily_limit) with nothing sent past the cap and no row written",
+    );
+
+    // --- D10 (review M3): a pinned app with a request for more, at the cap ---
+    // The pick needs no model, but the request asks for more than the app's
+    // defaults (a number), so the live transform would call the model. At
+    // the cap that is the daily limit before the standard work is placed,
+    // not a silent `kept` answer.
+    static SPENT: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let spent = Composer::new(
+        Some(Arc::new(
+            crate::composer::model::Anthropic::new("sk-ant-synthetic-not-a-real-key", &endpoint)
+                .unwrap()
+                .with_daily_cap(&SPENT),
+        ) as Arc<dyn Model>),
+        "router-model",
+        "generation-model",
+    );
+    let answer = crate::composer::routes::compose_instant(
+        &stores,
+        &spent,
+        &member,
+        "Northstar investigation for the last 7 days",
+        &crate::composer::routes::Pin::App(APP.into()),
+    )
+    .await;
+    assert!(
+        matches!(answer, Err(Refused::DailyLimit)),
+        "the daily limit"
+    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(footprint(&fixture).await, before, "no standard work placed");
+    check(
+        &mut checks,
+        "D10 (review M3): a composition pinned to a library app whose words ask for more than its defaults, with the composer's real client at a reached daily cap, is Refused::DailyLimit (429 daily_limit) before the standard work is placed: no request leaves and no row is written",
     );
 
     // --- APP-145: one shell when an active member owns no eligible app ---

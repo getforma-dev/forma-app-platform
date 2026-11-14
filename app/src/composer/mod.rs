@@ -271,6 +271,12 @@ impl Composer {
     pub fn router_model(&self) -> &str {
         &self.router_model
     }
+    /// D10: whether the next model call would be refused by the daily cap.
+    pub fn daily_cap_reached(&self) -> bool {
+        self.model
+            .as_ref()
+            .is_some_and(|model| model.daily_cap_reached())
+    }
     pub fn generation_model(&self) -> &str {
         &self.generation_model
     }

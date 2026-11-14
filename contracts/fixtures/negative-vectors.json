@@ -888,5 +888,109 @@
     "value": true,
     "expected": "receipt partial must equal",
     "rehash_receipt": true
+  },
+  {
+    "name": "record schema visibility shared refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      0,
+      "visibility"
+    ],
+    "value": "shared",
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "record schema unknown visibility refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      0,
+      "visibility"
+    ],
+    "value": "everyone",
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "record schema visibility must be a word",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      0,
+      "visibility"
+    ],
+    "value": true,
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "command reviewer_only false refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "reviewer_only"
+    ],
+    "value": false,
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "command reviewer_only must be true",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "reviewer_only"
+    ],
+    "value": "reviewer",
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "visibility on a command refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "visibility"
+    ],
+    "value": "own",
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "reviewer_only on a record schema refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      0,
+      "reviewer_only"
+    ],
+    "value": true,
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "visibility on an input contract refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      0,
+      "visibility"
+    ],
+    "value": "own",
+    "expected": "schema:",
+    "rehash_definition": true
   }
 ]

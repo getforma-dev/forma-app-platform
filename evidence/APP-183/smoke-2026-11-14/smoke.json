@@ -1,0 +1,9 @@
+{
+  "scope": "W2 local dev stand smoke, synthetic personas; not hosted acceptance",
+  "checks": [
+    "invite: the notice and one required consent checkbox are shown",
+    "name: the prompt shows for a member with no name, saving \"Priya N.\" returns to the canvas without the prompt",
+    "admin: the Admin link opens /admin with 6 members, the new name \"Priya N.\" among them, and the feedback link"
+  ],
+  "errors": []
+}

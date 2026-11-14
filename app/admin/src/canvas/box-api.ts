@@ -6,6 +6,7 @@
 // through `refusalText`.
 import { amount } from './display';
 import { isUuid } from './ids';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 /**
  * The member-facing noun (Victor, 2026-10-30): "Folder" everywhere on the
@@ -142,6 +143,7 @@ const REFUSALS: Record<string, string> = {
   data_copy_refused: 'This data could not be copied into an editable app safely. No app was created. The unchanged original is still available to view or download.',
   no_data_files: `This ${noun} has no table (CSV or XLSX) to build from yet. Nothing was placed.`,
   composer_unavailable: 'Building apps is not available on this server right now.',
+  [DAILY_LIMIT_CODE]: DAILY_LIMIT_MESSAGE,
   cross_site: 'That request was refused.',
   unavailable: 'The service is unavailable right now. Try again in a moment.',
   network: 'The request could not be sent. Check your connection.',

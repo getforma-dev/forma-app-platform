@@ -1,5 +1,6 @@
 // One read-only Ask transport for the board, focus and standalone document.
 import type { WidgetKind, WidgetState } from '../canvas/widgets/state';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from '../canvas/daily-limit';
 export type AskWork = { app_id: string; work_id: string; address: string; collection?: string };
 export type RecordScope = { kind: 'card' | 'app' | 'canvas'; address: string; works: AskWork[] };
 export type WidgetScope = { kind: 'widget'; address: string; works: []; widget_id: string; widget: WidgetKind; state: WidgetState };
@@ -14,6 +15,7 @@ export const ASK_REFUSALS: Record<string, string> = {
   could_not_answer: 'Ask could not produce a verified answer. No answer was shown and nothing changed.',
   too_many_requests: 'Too many questions in a short time. Try again in a moment.',
   invalid_request: 'This question or context is not supported. Nothing changed.',
+  [DAILY_LIMIT_CODE]: DAILY_LIMIT_MESSAGE,
 };
 export function requestScope(scope: AskScope): Record<string, unknown> {
   if (scope.kind === 'widget') return { kind: scope.kind, address: scope.address, widget_id: scope.widget_id, widget: scope.widget, state: scope.state };

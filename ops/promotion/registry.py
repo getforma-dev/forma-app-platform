@@ -126,34 +126,20 @@ DISPOSITION = Path(__file__).with_name('scan-disposition.json')
 # name, severity and package. A different finding, severity, package, role or expiry
 # needs a reviewed change to this constant. The JSON adds only what binds the review
 # to real images: each role's predecessor manifest, the deployment contract and the
-# complete scanner fingerprints. This one covers the APP-175 schema release only: its
-# contract is the release's `to` contract and it expires with the release. It
-# supersedes APP-173's (zlib and apt, expired 2026-11-12), which followed APP-167's
-# operator-only one (three MEDIUM gcc-12 findings, expired 2026-11-09); both records
-# stay under evidence/.
-REVIEWED_DISPOSITION = {
-    'evidence': 'evidence/APP-175/SCAN-DISPOSITION.md',
-    'roles': frozenset(REPOS),
-    'expires_at_utc': '2026-11-20T00:00:00Z',
-    'findings': {
-        'CVE-2026-100290': ('LOW', 'glibc'),
-        'CVE-2026-112314': ('HIGH', 'krb5'),
-        'CVE-2026-112315': ('MEDIUM', 'krb5'),
-        'CVE-2026-112316': ('MEDIUM', 'krb5'),
-        'CVE-2026-112317': ('MEDIUM', 'krb5'),
-        'CVE-2026-112318': ('MEDIUM', 'krb5'),
-        'CVE-2026-112319': ('MEDIUM', 'krb5'),
-        'CVE-2026-112320': ('HIGH', 'krb5'),
-        'CVE-2026-112321': ('HIGH', 'krb5'),
-        'CVE-2026-112322': ('HIGH', 'krb5'),
-        'CVE-2026-112323': ('HIGH', 'krb5'),
-        'CVE-2026-115456': ('LOW', 'gcc-12'),
-        'CVE-2026-115819': ('MEDIUM', 'glibc'),
-        'CVE-2026-119079': ('HIGH', 'krb5'),
-        'CVE-2026-76844': ('HIGH', 'zlib'),
-        'CVE-2026-91094': ('UNDEFINED', 'dpkg'),
-    },
-}
+# complete scanner fingerprints. The file and this pin land and leave together; a
+# disposition covers one release (its contract is that release's `to` contract and it
+# expires with it).
+#
+# None: no disposition is pending, and any newly introduced finding refuses
+# ('new scan findings require separately reviewed disposition'). Release A's
+# (APP-175: 16 findings, f00adb9a..., expired 2026-11-20) was spent when release A
+# went live on 2026-11-14, because its predecessors are no longer live; it was removed
+# with release B's schema record (APP-194) and stays a test fixture
+# (test_scan.release_a_disposition). If release B's preparation introduces findings,
+# ops.promotion.scan_renewal generates the next file and this pin against release B's
+# `to` contract (docs/operations/TRIAL-RUNBOOK.md section 8). Earlier records
+# (APP-173, APP-167) stay under evidence/.
+REVIEWED_DISPOSITION = None
 
 
 def reviewed_finding(finding):
@@ -172,7 +158,10 @@ def reviewed_finding(finding):
 
 
 def scan_disposition():
-    raw = DISPOSITION.read_bytes()
+    """The committed disposition and the sha256 of its bytes, or (None, None) when none is pending."""
+    try: raw = DISPOSITION.read_bytes()
+    except FileNotFoundError: return None, None
+    require(REVIEWED_DISPOSITION is not None, 'scan disposition has no reviewed source pin')
     try: value = json.loads(raw, object_pairs_hook=no_duplicates)
     except ValueError as error: raise Refused('invalid scan disposition') from error
     require(isinstance(value, dict)
@@ -207,6 +196,7 @@ def guard_scan_delta(current, baseline, deployment_contract=None, clock=None):
         reviewed = []; disposition_sha = None; expiry = None
         if introduced:
             disposition, disposition_sha = scan_disposition()
+            require(disposition is not None, 'new scan findings require separately reviewed disposition: ' + role)
             entry = disposition['roles'][role]
             require(baseline[role]['manifest_digest'] == entry['predecessor_manifest_digest']
                 and deployment_contract == disposition['deployment_contract_sha256']
