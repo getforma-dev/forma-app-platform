@@ -28,7 +28,7 @@ Decided in the [trial plan](../../docs/planning/TRIAL-25-READINESS.md) (D14, ame
 - **The exception** (W3's purge review R1). The key from `genui_identity.share_events` to `live_work_shares` is dropped (`:90`). This lets the end-of-test purge delete an organization's shares while a guest's hash chain stays verifiable. The operator's purge still refuses while a guest's rows exist (runbook §10; the follow-up is APP-188).
 - Own collections (D7, APP-191):
   - `genui.canonical_jsonb` (`:104–109`) is a real UTF-8 JSON parse of the canonical bytes;
-  - `definition_record_schemas.owner_only` (`:110–111`) is a STORED generated column derived from it. Nothing is rewritten, and no writer changes.
+  - `definition_record_schemas.owner_only` (`:110–111`) is a STORED generated column derived from it. Adding it rewrites the table to compute the column, but no stored value changes and no writer changes.
 - Reviewers (D8): `record_review` joins the work-permission CHECK (`:114–116`).
 - Shares with roles and with everyone (D9, APP-192):
   - `work_shares` gains a nullable grantee (meaning everyone), a role, revocation columns, `removed`, and a widened `granted` CHECK (`:121–140`);
