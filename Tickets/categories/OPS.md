@@ -40,4 +40,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 187 | [APP-187: Email alarms and a budget alert](../0-backlog/APP-187.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-181 |
 | 188 | [APP-188: Operations runbook, restore drill and end-of-test purge](../0-backlog/APP-188.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-185 |
 | 194 | [APP-194: Schema release B: migrations 0023 and 0024](../0-backlog/APP-194.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-182, APP-183, APP-186, APP-190, APP-191, APP-192 |
-| 195 | [APP-189: Go-live: build day, rehearsal, codes and the class](../0-backlog/APP-189.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194 |
+| 196 | [APP-189: Go-live: build day, rehearsal, codes and the class](../0-backlog/APP-189.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194, APP-195 |

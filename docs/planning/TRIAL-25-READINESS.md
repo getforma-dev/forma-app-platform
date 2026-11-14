@@ -1,6 +1,6 @@
 # Real live test: 25 real people on the beta (Victor's class, Nov 29–30)
 
-Status: **approved by Victor on 2026-11-14; executing.** Tickets: APP-175 (release A), APP-181 to APP-194; go-live is APP-189. Earlier drafts of this file are superseded.
+Status: **approved by Victor on 2026-11-14; executing.** Tickets: APP-175 (release A), APP-181 to APP-195; go-live is APP-189. Earlier drafts of this file are superseded.
 
 ## Context
 
@@ -41,7 +41,7 @@ What works:
 | D8 | **Who may do what (general):** a command can be limited to reviewers (approve, grade, close). Contributors can't run it, even on their own entries. |
 | D9 | **Share with many (general):** share an app with "everyone in the organization", and choose a role when sharing: viewer, contributor or reviewer. A sharer may grant reviewer only if they hold `record_review`, and `share_work` is never copied (ADR-011), so the owner controls who reviews. (Fable advisor, 2026-11-14.) |
 | D10 | **Spend:** an app-wide daily model-call cap, default **1,000 a day** in code (env override for tests). The plain message says building and Ask pause until 00:00 UTC, while apps and entries keep working. Anthropic limits: **$150 for November and $100 for December**, with 50% alerts; raise November to $200 if Nov 29 spends over $60. Per-member hourly limits stay; the per-address limits for invitations and sign-in are raised for one classroom network. (Fable advisor, 2026-11-14.) |
-| D11 | **Live interaction (stretch):** a Kahoot-style live quiz is attempted only if a design spike shows it can be built from general primitives (a shared "current item", timed responses, a live summary). Go or no-go on **Nov 24**; if no, the class uses formative quizzes. |
+| D11 | **Live interaction (stretch):** a Kahoot-style live quiz is attempted only if a design spike shows it can be built from general primitives (a shared "current item", timed responses, a live summary). Go or no-go on **Nov 24**; if no, the class uses formative quizzes. **Decided 2026-11-14: NO-GO** (Fable advisor in lieu of Victor, from the [APP-193 finding](../../evidence/APP-193/finding-2026-11-14.md)). Fair timed play needs several new primitives, and a leaderboard needs an exception to D7. The class uses formative quizzes: an `own` responses list and a reviewer summary that Victor can project. |
 | D12 | Invite codes go out from Victor's own email. No app-sent email. Feedback goes to `feedback@getforma.dev`, linked in the app. |
 | D13 | Alarms to Victor's email, plus one restore drill, before codes go out. APP-078 is deferred (one real organization). |
 | D14 | **Two schema releases.** Release A: today's `main` (schema 20→22) before the Nov 20 scan expiry. Release B: migrations 0023 and 0024 (schema 22→24; amended 2026-11-14, when W4's private entries and roles became 0024), all new data capabilities, on Nov 23, with a renewed scan disposition. |
@@ -60,7 +60,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Nov 15–21 | Parallel build: W1–W4. W5 spike Nov 17–18. | agents |
 | Sat Nov 22 | Tier A reviews closed; merge W1–W4. | agents |
 | Sun Nov 23 | Renewed scan disposition. **Release B** (22→24). Expiry renewal to Dec 15 plus the December month. Alarm template deployed. Anthropic limit set. FormaStack raises the fAuth tenant limit to at least 30. Restore drill. | **Victor** |
-| Mon Nov 24 | W5 go or no-go. Victor builds his class apps on beta with the composer, using a fresh alias plus one helper account. | **Victor** + agents fix forward |
+| Mon Nov 24 | Victor builds his class apps on beta with the composer, using a fresh alias plus one helper account. | **Victor** + agents fix forward |
 | Wed Nov 26 | Rehearsal with 2–3 real students: sign-up, consent, names, his apps, private entries, grading, sharing, building their own app. | **Victor** |
 | Fri Nov 28 | Issue 25 codes, then one restart in the evening. Victor emails the codes. No deploys after this. | **Victor** |
 | Nov 29–30 | Class. | Victor + students |
@@ -113,8 +113,16 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
   - composer Ask (`composer/ask.rs`), MCP (`mcp/tools.rs`) and Slack (`slack/flows.rs`).
 - **Composer:** it can generate both properties from plain words, such as "each person sees only their own responses" or "only reviewers can grade". Generation prompts and admission tests are added; there are no templates with classroom names.
 
-### W5: live-interaction spike (Nov 17–18; build only on a "go" by Nov 24)
+### W5: live-interaction spike (done 2026-11-14: NO-GO)
 - Show whether a live quiz can be expressed with general primitives: a shared current item the owner advances, responses in an `own` list, and a live summary or leaderboard view. Report what is missing. A "go" means a small general primitive, never a quiz feature.
+- **Result** ([finding](../../evidence/APP-193/finding-2026-11-14.md)): NO-GO.
+  - Gaps: one answer per person (G1), closing an item (G2), a reference picker (G3), a clock (G4) and a published leaderboard (G5).
+  - The spike also found the refresh herd (G6), which affects every shared app at 25 members. It is fixed before the class as **APP-195**:
+    - live refreshes start after a random 0–3 s delay, with one retry;
+    - the data pool's bounded waiter set grows from 8 to 32, within the same 5 s deadline;
+    - a `refresh-herd` load campaign proves it;
+    - it ships in release B, with no migration. The pool change is W1's area and the client change W2's.
+  - Post-class order: G1, then G2 with G3 (and G4), then G5 only after an ADR decides the D7 exception.
 
 ## Rules for the agents
 
@@ -135,9 +143,13 @@ All yes, or no codes go out.
 3. **Guards live:** the daily cap and its message seen on beta; Anthropic limits set for November ($150) and December ($100), with 50% alerts; alarms OK and the test email received; the restore drill recorded.
 4. **`/admin`:** Victor is admin, consent v1 shows for the rehearsal members, Remove is tested, and the test members are removed.
 5. **Victor's apps are built and verified** with the helper account (own entries, the reviewer command, summaries) and shared with everyone in the organization with the intended roles.
-6. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
-7. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
-8. **No open Tier A blocker,** CI green on main, and a known-issues list for students written.
+   - The helper account fills every form field of every app, and no form shows an ID text box (G3). "Which X" fields are enums or short text.
+   - "Advance" or "close" is a reviewer-only update of a state field, never a transition, because a record's creator can't fire a transition on it.
+   - A shared student page holds at most one typed query view; record summaries are used otherwise.
+6. **`refresh-herd` green on main** (APP-195). The sustainable commit cadence it measured is written in the runbook.
+7. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
+8. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
+9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved (the newest counts), a late answer still counts, and there is no timer.
 
 ## Verification (end to end)
 
@@ -155,7 +167,7 @@ All yes, or no codes go out.
   - a homework app with shared assignments, private submissions and a reviewer-only Grade command;
   - a quiz app with private answers and a summary.
 
-  Using a helper account, confirm that each person sees only their own entries, Victor sees all, a contributor can't grade, and the summaries match.
+  Using a helper account, confirm that each person sees only their own entries, Victor sees all, a contributor can't grade, and the summaries match. The helper fills every field of every form. The 25-member herd is proved by the `refresh-herd` evidence (APP-195), because a rehearsal with 2–3 students can't show it.
 - **Rehearsal (Nov 26) with 2–3 students:**
   1. Code, notice and checkbox; sign up; the verification email arrives.
   2. Set a name.

@@ -360,9 +360,10 @@
         "APP-192",
         "APP-193",
         "APP-194",
+        "APP-195",
         "APP-189"
       ],
-      "ticket_count": 31,
+      "ticket_count": 32,
       "done_count": 5,
       "blocked_count": 0
     }
@@ -6022,6 +6023,34 @@
       ]
     },
     {
+      "id": "APP-195",
+      "title": "Refresh herd: bounded waiting at the data pool and jittered live refreshes",
+      "path": "0-backlog/APP-195.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Bug",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "195",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Fable advisor in lieu of Victor, 2026-11-14 (his delegation: \"Ask fable for answers and directions in lue of me\"): fix before the class in release B, client jitter with one retry plus a deeper bounded waiter set at the pool, no connection-count change ([finding](../../evidence/APP-193/finding-2026-11-14.md), G6)",
+      "Requirements": "SR1, C11",
+      "Depends on": "APP-181",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "none yet",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-181"
+      ]
+    },
+    {
       "id": "APP-189",
       "title": "Go-live: build day, rehearsal, codes and the class",
       "path": "0-backlog/APP-189.md",
@@ -6033,12 +6062,12 @@
       "Type": "Verification",
       "Sprint": "S15",
       "Phase": "PH09",
-      "Order": "195",
+      "Order": "196",
       "Size": "S",
       "Repos": "forma-app-platform",
       "Decision": "Victor, 2026-11-14: a real live test with 25 real people (the adult students of his Nov 29\u201330 class) in his organization, enforced to production standards. The platform stays general: no classroom-specific code ([plan](../../docs/planning/TRIAL-25-READINESS.md); [ADR-008 amendment](../../docs/architecture/ADR-008-YC-DEMO-AND-BETA-MVP.md#amendment-2026-11-14-a-real-live-test-with-25-real-people)).",
       "Requirements": "C01, C11, SR1",
-      "Depends on": "APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194",
+      "Depends on": "APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194, APP-195",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
       "Branch / PR": "None",
@@ -6056,7 +6085,8 @@
         "APP-190",
         "APP-191",
         "APP-192",
-        "APP-194"
+        "APP-194",
+        "APP-195"
       ]
     }
   ]

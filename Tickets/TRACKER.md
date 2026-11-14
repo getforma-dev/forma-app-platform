@@ -198,4 +198,5 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 192 | [APP-192: Share with roles and with everyone in the organization](0-backlog/APP-192.md) | [PH09](phases/PH09.md) | S15 | SHR | P0 | M | Backlog | APP-181, APP-191 |
 | 193 | [APP-193: Spike: live interaction from general primitives](0-backlog/APP-193.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
 | 194 | [APP-194: Schema release B: migrations 0023 and 0024](0-backlog/APP-194.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-182, APP-183, APP-186, APP-190, APP-191, APP-192 |
-| 195 | [APP-189: Go-live: build day, rehearsal, codes and the class](0-backlog/APP-189.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194 |
+| 195 | [APP-195: Refresh herd: bounded waiting at the data pool and jittered live refreshes](0-backlog/APP-195.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
+| 196 | [APP-189: Go-live: build day, rehearsal, codes and the class](0-backlog/APP-189.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194, APP-195 |
