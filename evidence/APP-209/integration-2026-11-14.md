@@ -122,6 +122,24 @@ The `participation` campaign's C2 race sends 25 simultaneous creates by one crea
 
 No submission failed for good. All 25 settled as committed or `unchanged` without one admission refusal, and no `Deadline` occurred, so none would have shown a member B1's "could not be confirmed; submitting again is safe" note. The C3 close race also held: across 6 rounds, the 26 accepted answers all committed before the close, and the 22 others were 422 `requirement_not_met` with nothing written. Report: [participation-campaign-2026-11-14.json](participation-campaign-2026-11-14.json).
 
+## Final integration, 2026-11-14 (B5, B6, B7 and `main`)
+
+After the record above, the coordinator merged the remaining builders and then `main`:
+
+| Order | Branch | Tickets | Merge commit |
+| --- | --- | --- | --- |
+| 5 | B5 | APP-207 (the composer generates the primitives) | `72ce086b` |
+| 6 | B6 | APP-208 (multi-select, the stretch) | `451761b8` |
+| 7 | B7 | APP-211 (no misleading score for a viewer without the key; grading by name) | `bebfa4ee` |
+| 8 | `3bd4319b` | generated content carries multi-select now that APP-208 has landed | `3bd4319b` |
+| 9 | `origin/main` `692ce826` | release B's close-out (the spent release file removed, `REVIEWED_DISPOSITION = None`), APP-210 (reviewed contract-only releases), the class guide and the operator checklists | `b7bfcef5` |
+
+**ADR-020 §17 renumbering**, continued: B5's clarifications are 28–33, B7's 34–35 and B6's 36–42 (B0 1–8, B2 9–15, B4 16–21, B1 22–27 as above).
+
+**The coordinator's checks at `3bd4319b`:** 501 library tests pass; `clippy` with both feature sets and `fmt` clean; the `composer`, `record-components`, `participation` and `private-entries` campaigns pass. At `72ce086b` the `actions` campaign also passed.
+
+Release C then ships as a reviewed contract-only release ([`CONTRACT-RELEASE.md`](CONTRACT-RELEASE.md)); its own checks at the merged head are in that record and the pull request. This supersedes the last limitation below: APP-207 and APP-208 are merged.
+
 ## Limitations
 
 - These are local results on a loaded shared host with Docker PostgreSQL. They are not CI and not beta. The builder did not observe this branch's GitHub CI.
