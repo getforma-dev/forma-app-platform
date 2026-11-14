@@ -17,6 +17,7 @@ issue           mint N codes locally (the task never sees a secret), write the o
 list            codes, status, notes and redemptions of the organization (identifiers only).
 revoke          revoke one code by id; the task drops its capability and provider invitation.
 grant-admin     the organization's admin_policy row for one member (the Admin page).
+revoke-admin    remove that row (the reviewed undo of a grant to the wrong member).
 delete-uploads  list one member's uploaded box files through the task, then delete every
                 S3 version and delete marker of those keys with the operator's identity.
 restart         force a new deployment of the service, behind --announced: the service
@@ -290,6 +291,13 @@ class Trial:
                 'grant-admin task did not succeed')
         return dict(outcome['result'], status='granted', receipts=self.receipts)
 
+    def revoke_admin(self, principal):
+        require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
+        outcome = self.operator_task('admission-revoke-admin', [('--organization', self.organization), ('--principal', principal)], 'revoke-admin')
+        require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict) and outcome['result'].get('permission') == 'admin_policy',
+                'revoke-admin task did not succeed')
+        return dict(outcome['result'], status='revoked-admin', receipts=self.receipts)
+
     def delete_uploads(self, principal):
         """Every S3 version and delete marker of the member's box-file keys, with the operator's identity."""
         require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
@@ -299,17 +307,26 @@ class Trial:
         require(listed.get('truncated') is False, 'more files than one listing shows; delete in several passes is not supported, inspect first')
         bucket = self.outputs['EvidenceBucket']
         pattern = re.compile(r'o/' + re.escape(self.organization) + r'/b/' + UUID_RE.pattern + r'/f/' + UUID_RE.pattern)
-        deleted = []
+        planned = []
         for entry in listed['files']:
-            key = entry.get('object_key')
-            require(isinstance(key, str) and pattern.fullmatch(key), 'object key outside this organization\'s box files: refused')
-            versions = self.versions(bucket, key)
-            for version in versions:
+            key, box_id, file_id = entry.get('object_key'), entry.get('box_id'), entry.get('file_id')
+            # The key must be exactly this organization's box-file key for the listed box and file ids,
+            # which also proves both ids are the UUIDs the receipt name and the pattern use.
+            require(isinstance(key, str) and pattern.fullmatch(key) and key == 'o/%s/b/%s/f/%s' % (self.organization, box_id, file_id),
+                    'object key outside this organization\'s box files, or ids that do not name it: refused')
+            planned.append({'key': key, 'box_id': box_id, 'file_id': file_id, 'versions': self.versions(bucket, key)})
+        # The intent, in the journal pattern, before the first deletion: what will be deleted and why.
+        self.receipt('delete-uploads-intent', {'bucket': bucket, 'principal_id': principal, 'files': planned,
+                                               'versions': sum(len(f['versions']) for f in planned)})
+        deleted = []
+        for plan in planned:
+            key = plan['key']
+            for version in plan['versions']:
                 self.aws.call('s3', 'delete_object', Bucket=bucket, Key=key, VersionId=version['VersionId'])
             remaining = self.versions(bucket, key)
-            self.receipt('delete-' + entry.get('file_id', key.rsplit('/', 1)[-1]), {'bucket': bucket, 'key': key, 'deleted_versions': versions, 'remaining': remaining})
+            self.receipt('delete-' + plan['file_id'], {'bucket': bucket, 'key': key, 'deleted_versions': plan['versions'], 'remaining': remaining})
             require(not remaining, 'object versions remain after deletion: ' + key)
-            deleted.append({'key': key, 'versions': len(versions)})
+            deleted.append({'key': key, 'versions': len(plan['versions'])})
         return {'status': 'deleted', 'principal_id': principal, 'files': len(deleted), 'versions': sum(d['versions'] for d in deleted),
                 'keys': [d['key'] for d in deleted], 'receipts': self.receipts,
                 'note': 'The box_files rows stay until the end-of-trial purge; the bytes are gone.'}
@@ -331,6 +348,10 @@ class Trial:
         runner = Runner(self.aws, self.store)
         self.store.load()
         before = runner.boundary(1)
+        main_before = next(r for r in before['services']['services'] if r.get('serviceName') == service)
+        # The intent, before the one mutation: the service, its task definition and the proved boundary.
+        self.receipt('restart-intent', {'cluster': cluster, 'service': service, 'task_definition': main_before.get('taskDefinition'),
+                                        'request': {'cluster': cluster, 'service': service, 'forceNewDeployment': True}})
         response = self.aws.call('ecs', 'update_service', cluster=cluster, service=service, forceNewDeployment=True)
         self.receipt('restart-requested', {'cluster': cluster, 'service': service, 'deployment_id': (response.get('service') or {}).get('deployments', [{}])[0].get('id')})
         def settled(result):
@@ -339,7 +360,6 @@ class Trial:
                 and rows[0]['deployments'][0].get('rolloutState') == 'COMPLETED' and rows[0].get('runningCount') == rows[0].get('desiredCount') == 1
         self.aws.wait('ecs', 'describe_services', settled, timeout=RESTART_WAIT_SECONDS, cluster=cluster, services=[service])
         after = runner.boundary(1)  # The same images, template, parameters and schedules; healthy targets.
-        main_before = next(r for r in before['services']['services'] if r.get('serviceName') == service)
         main_after = next(r for r in after['services']['services'] if r.get('serviceName') == service)
         self.receipt('restart-settled', {'before_task_definition': main_before.get('taskDefinition'),
                                          'after': {k: main_after.get(k) for k in ('taskDefinition', 'runningCount', 'desiredCount')}})
@@ -371,7 +391,7 @@ def _unique(pairs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'delete-uploads', 'restart'])
+    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'revoke-admin', 'delete-uploads', 'restart'])
     parser.add_argument('--state-bucket', required=True)
     parser.add_argument('--state-prefix', default='beta')
     parser.add_argument('--expected-state-sha256', required=True)
@@ -383,14 +403,14 @@ def main(argv=None):
     parser.add_argument('--expires-days', type=int, default=14, help='issue: code expiry, 1 to 30 days')
     parser.add_argument('--without-notes', action='store_true', help='issue: before migration 0023 (no access_codes.note column)')
     parser.add_argument('--code', help='revoke: the code id')
-    parser.add_argument('--principal', help='grant-admin, delete-uploads: the member\'s principal id')
+    parser.add_argument('--principal', help='grant-admin, revoke-admin, delete-uploads: the member\'s principal id')
     parser.add_argument('--announced', action='store_true', help='restart: the members were told the service restarts now')
     args = parser.parse_args(argv)
     if args.command == 'issue' and not (args.count and args.notes_file and args.identifiers):
         parser.error('issue needs --count, --notes-file and --identifiers')
     if args.command == 'revoke' and not args.code:
         parser.error('revoke needs --code')
-    if args.command in ('grant-admin', 'delete-uploads') and not args.principal:
+    if args.command in ('grant-admin', 'revoke-admin', 'delete-uploads') and not args.principal:
         parser.error(args.command + ' needs --principal')
     output = None
     try:
@@ -413,6 +433,8 @@ def main(argv=None):
             result = trial.revoke(args.code)
         elif args.command == 'grant-admin':
             result = trial.grant_admin(args.principal)
+        elif args.command == 'revoke-admin':
+            result = trial.revoke_admin(args.principal)
         elif args.command == 'delete-uploads':
             result = trial.delete_uploads(args.principal)
         else:

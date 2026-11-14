@@ -80,10 +80,17 @@ class TrialAWS(FakeAWS):
             return {'IsTruncated': False, 'Versions': [{'Key': a['Prefix'], 'VersionId': v} for v in versions if not v.startswith('dm-')],
                     'DeleteMarkers': [{'Key': a['Prefix'], 'VersionId': v} for v in versions if v.startswith('dm-')]}
         if s == 's3' and o == 'delete_object':
+            # m1: the intent receipt names every key and version before the first deletion.
+            intents = [k for k in self.s3.objects if k.endswith('/delete-uploads-intent.json')]
+            assert intents, 'delete_object before the intent receipt'
+            intent = json.loads(self.s3.objects[intents[-1]])
+            assert any(f['key'] == a['Key'] and any(v['VersionId'] == a['VersionId'] for v in f['versions']) for f in intent['files']), 'deletion outside the intent'
             self.deleted.append((a['Bucket'], a['Key'], a['VersionId']))
             self.objects[a['Bucket'], a['Key']].remove(a['VersionId'])
             return {}
         if s == 'ecs' and o == 'update_service' and a.get('forceNewDeployment'):
+            # m2: the intent receipt precedes the one mutation.
+            assert any(k.endswith('/restart-intent.json') for k in self.s3.objects), 'update_service before the intent receipt'
             self.forced += 1
             return {'service': {'deployments': [{'id': 'ecs-svc/1', 'rolloutState': 'IN_PROGRESS'}]}}
         return super()._call(s, o, a)
@@ -322,19 +329,25 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual((granted['status'], granted['permission']), ('granted', 'admin_policy'))
         self.assertEqual(self.aws.run_requests[2]['overrides']['containerOverrides'][0]['command'],
                          ['admission', 'grant-permission', '--organization', ORG, '--principal', PRINCIPAL, '--permission', 'admin_policy'])
+        self.aws.results = [(0, {'principal_id': PRINCIPAL, 'permission': 'admin_policy', 'changed': True, 'membership_epoch': 2})]
+        ungranted = trial.revoke_admin(PRINCIPAL)
+        self.assertEqual((ungranted['status'], ungranted['permission'], ungranted['membership_epoch']), ('revoked-admin', 'admin_policy', 2))
+        self.assertEqual(self.aws.run_requests[3]['overrides']['containerOverrides'][0]['command'],
+                         ['admission', 'revoke-permission', '--organization', ORG, '--principal', PRINCIPAL, '--permission', 'admin_policy'])
         self.assertEqual(self.aws.puts, [])  # none of these touches the input secret
         for request in self.aws.run_requests:
             self.assertEqual(request['startedBy'][:7], 'app078-')
             self.assertEqual(len(request['clientToken']), 64)
-        self.assertEqual(len({r['clientToken'] for r in self.aws.run_requests}), 3)
+        self.assertEqual(len({r['clientToken'] for r in self.aws.run_requests}), 4)
         # A failed task, a malformed id and a foreign organization in the override refuse.
         self.aws.results = [(1, {'refused': 'code_unknown'})]
         with self.assertRaises(Refused): trial.revoke(code)
         with self.assertRaises(Refused): trial.revoke('not-a-uuid')
         with self.assertRaises(Refused): trial.grant_admin(PRINCIPAL.upper())
+        with self.assertRaises(Refused): trial.revoke_admin('x')
         with self.assertRaises(Refused): trial.compose('admission-list-northstar', [])
         with self.assertRaises(Refused): trial.compose('migrate', [])
-        self.assertEqual(len(self.aws.run_requests), 4)
+        self.assertEqual(len(self.aws.run_requests), 5)
 
     def test_delete_uploads_removes_every_version_of_the_listed_keys_only(self):
         trial = self.trial()
@@ -351,18 +364,27 @@ class AdmissionTests(unittest.TestCase):
                          ['admission', 'list-box-files', '--organization', ORG, '--principal', PRINCIPAL])
         receipts = self.receipts()
         self.assertEqual(sorted(k.rsplit('/', 1)[-1] for k in receipts),
-                         ['delete-%s.json' % files[0], 'delete-%s.json' % files[1], 'list-box-files-1-run.json', 'list-box-files-1-stopped.json'])
+                         ['delete-%s.json' % files[0], 'delete-%s.json' % files[1], 'delete-uploads-intent.json', 'list-box-files-1-run.json', 'list-box-files-1-stopped.json'])
+        intent = next(v for k, v in receipts.items() if k.endswith('delete-uploads-intent.json'))
+        self.assertEqual((intent['bucket'], intent['principal_id'], intent['versions'], [f['key'] for f in intent['files']]), (BUCKET, PRINCIPAL, 4, keys))
+        self.assertEqual([v['VersionId'] for v in intent['files'][0]['versions']], ['v1', 'v2', 'dm-1'])
         # A key outside this organization's box files, a truncated listing or a failed task deletes nothing.
         for name, files_result in [
-            ('foreign organization', (0, {'files': [{'file_id': files[0], 'object_key': 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, files[0])}], 'truncated': False})),
-            ('source object', (0, {'files': [{'file_id': files[0], 'object_key': 'o/%s/s/%s' % (ORG, files[0])}], 'truncated': False})),
+            ('foreign organization', (0, {'files': [{'box_id': box, 'file_id': files[0], 'object_key': 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, files[0])}], 'truncated': False})),
+            ('source object', (0, {'files': [{'box_id': box, 'file_id': files[0], 'object_key': 'o/%s/s/%s' % (ORG, files[0])}], 'truncated': False})),
+            ('key names another file', (0, {'files': [{'box_id': box, 'file_id': files[1], 'object_key': keys[0]}], 'truncated': False})),
+            ('file id not a uuid', (0, {'files': [{'box_id': box, 'file_id': '../x', 'object_key': keys[0]}], 'truncated': False})),
+            ('box id missing', (0, {'files': [{'file_id': files[0], 'object_key': keys[0]}], 'truncated': False})),
             ('truncated', (0, {'files': [], 'truncated': True})),
             ('failed task', (1, {'refused': 'member_unknown'}))]:
             with self.subTest(case=name):
                 self.aws.deleted = []; self.aws.results = [files_result]
-                self.aws.objects = {(BUCKET, 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, files[0])): ['v9'], (BUCKET, 'o/%s/s/%s' % (ORG, files[0])): ['v8']}
+                self.aws.objects = {(BUCKET, 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, files[0])): ['v9'], (BUCKET, 'o/%s/s/%s' % (ORG, files[0])): ['v8'],
+                                    (BUCKET, keys[0]): ['v7']}
+                before = len(self.receipts())
                 with self.assertRaises(Refused): trial.delete_uploads(PRINCIPAL)
                 self.assertEqual(self.aws.deleted, [])
+                self.assertFalse(any(k.endswith('delete-uploads-intent.json') for k in list(self.receipts())[before:]))
 
     def test_restart_needs_the_announcement_then_forces_one_deployment_and_proves_the_boundary(self):
         trial = self.trial()
@@ -373,7 +395,9 @@ class AdmissionTests(unittest.TestCase):
         update = [a for s, o, a in self.aws.calls if o == 'update_service']
         self.assertEqual(update, [{'cluster': 'beta', 'service': 'main', 'forceNewDeployment': True}])
         self.assertFalse(any(o in ['execute_change_set', 'create_change_set', 'run_task', 'put_secret_value'] for _, o, _ in self.aws.calls))
-        self.assertEqual(sorted(k.rsplit('/', 1)[-1] for k in self.receipts()), ['restart-requested.json', 'restart-settled.json'])
+        self.assertEqual(sorted(k.rsplit('/', 1)[-1] for k in self.receipts()), ['restart-intent.json', 'restart-requested.json', 'restart-settled.json'])
+        intent = next(v for k, v in self.receipts().items() if k.endswith('restart-intent.json'))
+        self.assertEqual((intent['request'], intent['task_definition']), ({'cluster': 'beta', 'service': 'main', 'forceNewDeployment': True}, self.state['live']['outputs']['TaskDefinition']))
         self.assertEqual(self.s3.objects['beta/state.json'], encoded(self.state))
         # An unhealthy service after the restart refuses rather than reporting success.
         self.setUp(); trial = self.trial(); self.aws.running_health = 'UNHEALTHY'

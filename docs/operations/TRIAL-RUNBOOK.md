@@ -10,6 +10,10 @@ umask 077; mkdir -p "$PRIVATE_RECONCILIATION/trial"; export TRIAL="$PRIVATE_RECO
 # The trial organization's UUID (the clean-trial organization; the stack parameter CleanTrialOrganizationId):
 export TRIAL_ORG=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation \
   --query "Stacks[0].Parameters[?ParameterKey=='CleanTrialOrganizationId'].ParameterValue" --output text)
+# Stack outputs by name (sections 6, 9 and 10 use these):
+export OUT="Stacks[0].Outputs[?OutputKey=='%s'].OutputValue"
+out() { aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" "$1")" --output text; }
+export CLUSTER=$(out ClusterName) SERVICE=$(out ServiceName)
 ```
 
 Every `ops.promotion` command here takes `--expected-state-sha256`: read it fresh each time with `maintenance inspect` and paste it; a changed state refuses. Output files are created new (0600) and never overwritten: use a new name per attempt.
@@ -93,18 +97,18 @@ Run 43157872671 is stuck on a stale ledger basis; its packet must not be approve
 
 ## 2. The expiry and month renewal (Sunday Nov 23, before release B)
 
-The beta's backstop is Nov 25 08:00 UTC; release B subtracts 18 hours from the canonical expiry and refuses a stop within 24 hours. Order matters and everything happens within 24 hours of the merge: November reconciled, December added, expiry renewed, then the merge.
+After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packet took the canonical Nov 25 08:00 expiry minus 18 hours (`runner.py:222`), and on success that config became the live one, so the stack parameter, the schedule and the ledger window all read `2026-11-24T14:00:00Z`. Release B must **execute** (not merely merge) before that time; otherwise the schedule scales both services to zero and only the next successful release restarts them. Release B again subtracts 18 hours from the canonical expiry and refuses a stop within 24 hours, so the renewal below must precede it. Order matters and everything happens within 24 hours of the merge: November reconciled, December added, expiry renewed, then the merge.
 
 1. **Reconcile November** exactly as in release A step 4 (`observe-b.json`, `assessment-b.json`, `reconcile-b.json`). Confirm the observed total against the $210 / $248 ceiling.
 2. **Add December.** Write `$TRIAL/december.json`:
 
    ```json
-   {"month": "2026-12", "ledger_sha256": "<the ledger_sha256 from the assessment template just applied, re-read with observe if unsure>",
+   {"month": "2026-12", "ledger_sha256": "<the ledger_sha256 field of $TRIAL/reconcile-b.json>",
     "rationale": "December forward reservation for the real-user trial through the Dec 16 stop: no billing data yet; reserves cover probes, logs, secrets and billing lag.",
     "amounts": {"prior_extra_spend_cents": 0, "variable_reserve_cents": 1500, "auth_spent_or_reserved_cents": 3800, "unallocated_cents": 0}}
    ```
 
-   The `ledger_sha256` is the current ledger's digest; `month_renewal` refuses another. Plan, read, then apply against the same inspected state hash:
+   The `ledger_sha256` is the digest of the ledger **after** `reconcile apply` rewrote it: `reconcile apply` writes it into its `--output` file (`reconcile-b.json`, field `ledger_sha256`). The assessment template's `ledger_sha256` is the pre-apply digest and `month_renewal` would refuse "assessment is bound to another ledger". Plan, read, then apply against the same inspected state hash:
 
    ```sh
    $PY -m ops.promotion.maintenance inspect --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX"
@@ -125,7 +129,7 @@ The beta's backstop is Nov 25 08:00 UTC; release B subtracts 18 hours from the c
      --expected-state-sha256 "<same hash>" --output "$TRIAL/expiry-result.json" --apply
    ```
 
-   Expected plan: `"before_expiry": "2026-11-25T08:00:00Z"`, `"after_expiry": "2026-12-16T08:00:00Z"`, `"live_stop_unchanged": "2026-11-25T08:00:00Z"`, `"next_release_expiry": "2026-12-15T14:00:00Z"`, and `cost_by_month` for `2026-11` and `2026-12` each under 18000 / 21800 cents. The plan is release B's reservation projected: **if it refuses with `budget exceeded for 2026-11`**, stop; the November reservation does not fit the code caps and a reviewed cap change is needed (ADR-019 amendment, last paragraph), not a different number here. The apply prints `"status": "applied"`.
+   Expected plan: `"before_expiry": "2026-11-24T14:00:00Z"`, `"after_expiry": "2026-12-16T08:00:00Z"`, `"live_stop_unchanged": "2026-11-24T14:00:00Z"`, `"next_release_expiry": "2026-12-15T14:00:00Z"`, and `cost_by_month` for `2026-11` and `2026-12` each under 18000 / 21800 cents. The plan is release B's reservation projected: **if it refuses with `budget exceeded for 2026-11`**, stop; the November reservation does not fit the code caps and a reviewed cap change is needed (ADR-019 amendment, last paragraph), not a different number here. The apply prints `"status": "applied"`.
 
    If release B then does not merge within 24 hours, either repeat steps 1–3 the next day, or `--revert` (same arguments plus `--revert`) to put the config back to the window's recorded expiry; `reconcile apply` refuses while the config is renewed and no release has consumed it.
 
@@ -133,7 +137,7 @@ The beta's backstop is Nov 25 08:00 UTC; release B subtracts 18 hours from the c
 
 W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's operator changes (`--note`, `admin_policy`, `list-box-files`, `stats`) ride the same operator image. Within 24 hours of section 2:
 
-1. If `main` carries new scanner findings, preparation refuses before approval: section 10 (the scan disposition renewal). Otherwise:
+1. If `main` carries new scanner findings, preparation refuses before approval: section 8 (the scan disposition renewal). Otherwise:
 2. `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-B pull request, read the summary: `schema_release: {from_version: 22, to_version: 23}`, the stop time **2026-12-15T14:00:00Z**, the disposition (if any) with its Dec 16 expiry.
 3. Approve outside 05:00–05:45 UTC. Then `/health/ready` → 200, `gh run view ... --json conclusion` → `"success"`.
 4. **Verify from the back office** (the operator task now has `stats`):
@@ -144,12 +148,20 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
 
    The expiry is in the live parameters of the state the apply wrote; `aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "Stacks[0].Parameters[?ParameterKey=='DeploymentExpiresAtUtc'].ParameterValue" --output text` prints `2026-12-15T14:00:00Z`, and `aws scheduler get-schedule --group-name <DeploymentExpiryGroup output> --name <schedule>` shows `at(2026-12-15T14:00:00)`.
 5. **Deploy the alarms** (section 6), **set the Anthropic spend limit** (about $150 for the month, in the Anthropic console), **ask FormaStack to raise the fAuth tenant limit to at least 30**, and run the **restore drill** (section 9) while only Victor's account exists.
+6. **Victor's admin row** (Monday Nov 24, before building the class apps; the Admin page requires it). Your principal id is in `admission list`'s redemption of the owner code:
+
+   ```sh
+   $PY -m ops.promotion.admission grant-admin --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --principal "<your principal id>" --output "$TRIAL/grant-admin.json"
+   ```
+
+   Expected: `{"status": "granted", "permission": "admin_policy", "changed": true, ...}`. A grant to the wrong member is undone with `revoke-admin` (same arguments) → `{"status": "revoked-admin", "changed": true, ...}`; it advances that member's epoch.
 
 ## 4. Codes by wave and the one announced restart (Friday Nov 28)
 
 The back office is `ops/promotion/admission.py`. It mints the codes on your machine, writes the one-shot `OperatorInvitationInput` secret, runs one operator task per code (`admission issue --code-digest --provider-input-from-secret --authoring-only --note`), and **always empties the secret afterwards, even on failure**. The codes go only to the private `--output` file (0600). Nothing reaches the service until the restart: the service loads the capability secret once per task start (at most 128 entries), so one restart covers every code issued before it.
 
-1. **Recipients.** `$TRIAL/wave-1.json`, one entry per student, the note being what you want to see in `list` (a name or seat), never pasted anywhere else:
+1. **Recipients.** `$TRIAL/wave-1.json`, one entry per student. The note is what you will see in `list`: **a seat number or initials, never a full name or an address**, because it travels in the RunTask override and so in CloudTrail's request parameters, `DescribeTasks`, the operator log and the receipt. The address stays in this file and the one-shot secret only:
 
    ```json
    {"recipients": [{"email": "student@example.org", "note": "Ada L."}, {"email": "...", "note": "..."}]}
@@ -188,15 +200,6 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
 
    Expected: `{"status": "restarted", "service": "<ServiceName>", "receipts": [...]}` after the forced deployment settles and the boundary (same images, template, parameters and schedules; healthy targets) is re-proved. Without `--announced` it refuses. Then `/health/ready` → 200 and one code tried on the invite page reaches the provider's sign-up. **No deploys after this.**
 
-6. **Victor's admin row** (Nov 24, after release B; needed for the Admin page). Your principal id is in `list`'s redemption of the owner code, or on the Admin page once another admin exists:
-
-   ```sh
-   $PY -m ops.promotion.admission grant-admin --state-bucket ... --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" \
-     --principal "<your principal id>" --output "$TRIAL/grant-admin.json"
-   ```
-
-   Expected: `{"status": "granted", "permission": "admin_policy", "changed": true, ...}`.
-
 **Not available: renaming the organization.** The operator has only `provision --display-name`, which creates an organization; there is no command that changes an existing display name, so the trial organization keeps the name it was provisioned with unless W1/W2 add a rename.
 
 ## 5. Removing a member
@@ -217,28 +220,24 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
 **Alarms** (Nov 23, after release B). `ops/monitoring/alarms.json` is a standalone stack: an SNS topic with your email, alarms on load-balancer and target 5xx, unhealthy targets, no running task (the ECS metric sample count, since Container Insights is off) and database free storage under 2 GiB, plus an AWS Budget at the project ceiling. It references the beta's resources by identifier and changes none of them, so promotion's infrastructure digest is untouched.
 
 ```sh
-OUT="Stacks[0].Outputs[?OutputKey=='%s'].OutputValue"
-ALB_DNS=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" LoadBalancerDnsName)" --output text)
+ALB_DNS=$(out LoadBalancerDnsName)
 ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$ALB_DNS'].LoadBalancerArn" --output text)
 # The main service's target group is the one that is not port 3001 (the broker's).
 TG_ARN=$(aws elbv2 describe-target-groups --load-balancer-arn "$ALB_ARN" --query "TargetGroups[?Port!=\`3001\`].TargetGroupArn" --output text)
 aws cloudformation deploy --stack-name forma-beta-trial-alarms --template-file ops/monitoring/alarms.json --no-fail-on-empty-changeset \
   --parameter-overrides NotificationEmail=<your address> LoadBalancerFullName="${ALB_ARN#*loadbalancer/}" TargetGroupFullName="${TG_ARN##*:}" \
-  ClusterName=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" ClusterName)" --output text) \
-  ServiceName=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" ServiceName)" --output text) \
-  DBInstanceIdentifier=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" DatabaseEndpoint)" --output text | cut -d. -f1) \
+  ClusterName="$CLUSTER" ServiceName="$SERVICE" DBInstanceIdentifier=$(out DatabaseEndpoint | cut -d. -f1) \
   MonthlyBudgetUsd=248
 ```
+
+**Expected alarms.** `UnhealthyTargets` and `NoRunningTask` treat missing data as breaching, so by design they fire during every promotion outage (the stop-both-services step, a few minutes) and at the scheduled stop (2026-11-24 14:00 UTC if release B has not executed; 2026-12-15 14:00 UTC after it), and recover when the service is back. On a class day there is no deploy, so any of these is real. `LoadBalancer5xx` also fires briefly while targets drain during a promotion.
 
 Confirm the subscription from the email SNS sends, then the test email: `aws sns publish --topic-arn "$(aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query "$(printf "$OUT" AlarmTopicArn)" --output text)" --message "trial alarm test"` arrives within a minute. `aws cloudwatch describe-alarms --alarm-name-prefix forma-beta-trial-alarms --query "MetricAlarms[].{n:AlarmName,s:StateValue}"` shows every alarm `OK` once each has data (the free-storage and running-task alarms within ten minutes). On Dec 1 redeploy with `MonthlyBudgetUsd=118`; after the trial `aws cloudformation delete-stack --stack-name forma-beta-trial-alarms`.
 
 **Deny-all** (a bad image or an exposed route; [DEPLOY-RUNBOOK "Rollback"](../pitch/DEPLOY-RUNBOOK.md#rollback)). It is the stack's own deny-all revision on the same image: every sign-in fails and every protected route answers 404, data untouched, and it is reversible in one call. The `just deploy rollback-deny` recipe is fenced since the promotion cutover; use the call directly:
 
 ```sh
-CLUSTER=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" ClusterName)" --output text)
-SERVICE=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" ServiceName)" --output text)
-aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
-  --task-definition "$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" RollbackTaskDefinition)" --output text)"
+aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$(out RollbackTaskDefinition)"
 aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
 curl -sS -o /dev/null -w '%{http_code}\n' https://beta.getforma.dev/canvas       # 404 (and sign-in fails)
 ```
@@ -268,7 +267,7 @@ The current disposition covers release A only (APP-175: contract 14a161a0…, 14
      --evidence evidence/APP-<ticket>/SCAN-DISPOSITION.md --expires-at-utc 2026-12-16T00:00:00Z --output ops/promotion/scan-disposition.json
    ```
 
-   It prints the finding names and the exact `REVIEWED_DISPOSITION` block for `ops/promotion/registry.py`. It refuses a CRITICAL finding and roles whose introduced sets differ. Paste the pin, write the evidence record in the APP-175 form (scope, method, each CVE's applicability, limits), point `test_scan.py`'s `ReleaseBindingTests` at the new delta and record, and keep `schema-release.json`'s expiry equal to the disposition's (the tests bind them; W1 owns that file). `scan_renewal check --delta <the delta>` must print `"status": "bound"`.
+   `--contract` is release B's `to` deployment contract: `schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256']` (W1's pin, equal to `schema-release.json`'s `to`); the guard checks the disposition against the contract of the candidate being promoted. `scan_renewal check` binds the file to its delta but not to that pin; `test_scan.py`'s `ReleaseBindingTests` does (`test_contract_and_expiry_are_the_schema_releases`), so edit `ReleaseBindingTests.setUp` (`test_scan.py:186`) to read the new delta file and expect the new evidence path. The tool prints the finding names and the exact `REVIEWED_DISPOSITION` block for `ops/promotion/registry.py`. It refuses a CRITICAL finding and roles whose introduced sets differ. Paste the pin, write the evidence record in the APP-175 form (scope, method, each CVE's applicability, limits), and keep `schema-release.json`'s expiry equal to the disposition's (the tests bind them; W1 owns that file). `scan_renewal check --delta <the delta>` must print `"status": "bound"` and `python3 -m unittest ops.promotion.test_scan` must pass.
 4. An independent review of the record, merge, `PROMOTION_ENABLED=true`, merge release B again.
 
 If release A has **not** landed by Nov 19, the same `generate` with the APP-175 delta (`evidence/APP-175/scan-delta-2026-11-12.json`) and the new expiry extends A's disposition unchanged in scope; the schema release's expiry moves with it (W1). The committed file never changes until the coordinator says which case applies.
@@ -278,7 +277,7 @@ If release A has **not** landed by Nov 19, the same `generate` with the APP-175 
 Prove that a snapshot restores and that the restored database is the live one: the same schema version and the same row counts for the organization. The comparison is the operator task's read-only `admission stats`, run once against the live database and once against the scratch instance through a one-off `PGHOST` environment override (the only time an override carries anything but the command; it points at a copy of the same data, under the same credentials). Do it while only your account exists, so the counts cannot move between the snapshot and the drill.
 
 ```sh
-DB=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "$(printf "$OUT" DatabaseEndpoint)" --output text | cut -d. -f1)
+DB=$(out DatabaseEndpoint | cut -d. -f1)
 SNAP=$(aws rds describe-db-snapshots --db-instance-identifier "$DB" --query "sort_by(DBSnapshots[?Status=='available'],&SnapshotCreateTime)[-1].DBSnapshotIdentifier" --output text)
 aws rds describe-db-instances --db-instance-identifier "$DB" --query "DBInstances[0].{class:DBInstanceClass,subnets:DBSubnetGroup.DBSubnetGroupName,sg:VpcSecurityGroups[0].VpcSecurityGroupId}"
 SCRATCH=forma-restore-drill-$(date -u +%Y%m%d)

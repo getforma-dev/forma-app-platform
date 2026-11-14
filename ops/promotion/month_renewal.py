@@ -36,16 +36,26 @@ SOURCE_FILES = ['ops/promotion/month_renewal.py', 'ops/promotion/reconcile.py', 
                 'ops/promotion/state.py', 'infra/scripts/preflight.py']
 
 
-def december_projection(budget, ledger, amounts):
-    """What preflight will compute for the month with no window compute yet: the retained core
-    for the full month, the clean-trial retained figure while any window names the trial."""
+def december_projection(budget, ledger, amounts, shorten_hours):
+    """What preflight will compute for the month once release B is reserved: the retained core for
+    the full month (plus the clean-trial retained figure while any window names the trial), release
+    B's December compute from Dec 1 to its stop (the renewed expiry minus the shortening default,
+    plus preflight's one-hour margin and two extra task-hours) and the assessed reserves."""
     import calendar
+    from datetime import datetime, timedelta, timezone
+    from .expiry_renewal import RENEWED_EXPIRY
     year, number = (int(x) for x in MONTH.split('-'))
-    clean = budget.CLEAN_RETAINED_MONTHLY if any(w.get('clean_trial_organization_id') for w in ledger['windows'].values()) else 0
+    clean_trial = any(w.get('clean_trial_organization_id') for w in ledger['windows'].values())
+    clean = budget.CLEAN_RETAINED_MONTHLY if clean_trial else 0
     retained = budget.cents(budget.FIXED_HOURLY * calendar.monthrange(year, number)[1] * 24 + budget.FIXED_STORAGE_KEYS + clean)
-    genui = retained + amounts['prior_extra_spend_cents'] + amounts['variable_reserve_cents']
+    stop = budget.timestamp(RENEWED_EXPIRY) - timedelta(hours=shorten_hours)
+    hours = budget.months_between(datetime(year, number, 1, tzinfo=timezone.utc), stop + timedelta(hours=1)).get(MONTH, 0) + 2
+    rate = budget.TASK_HOURLY + (budget.BROKER_HOURLY if clean_trial else 0)
+    compute = budget.cents(hours * rate)
+    genui = retained + compute + amounts['prior_extra_spend_cents'] + amounts['variable_reserve_cents']
     total = genui + amounts['auth_spent_or_reserved_cents'] + amounts['unallocated_cents']
-    return {'retained_core_full_month_cents': retained, 'genui_total_cents': genui, 'project_total_cents': total}
+    return {'retained_core_full_month_cents': retained, 'release_compute_cents': compute, 'release_stop_utc': stop.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'genui_total_cents': genui, 'project_total_cents': total}
 
 
 def plan(runner, expected_state_sha256, assessment):
@@ -74,7 +84,7 @@ def plan(runner, expected_state_sha256, assessment):
     if existing is not None:
         for key in AMOUNTS:
             require(amounts[key] >= existing[key], 'cannot lower recorded money: ' + key)
-    projection = december_projection(budget, ledger, amounts)
+    projection = december_projection(budget, ledger, amounts, state['policy']['shorten_expiry_hours'])
     require(projection['genui_total_cents'] <= plans['genui_cap_cents'] and projection['project_total_cents'] <= plans['project_cap_cents'],
             'December reservation exceeds the %d/%d cent caps' % (plans['genui_cap_cents'], plans['project_cap_cents']))
     ledger['months'][MONTH] = dict(amounts, reconciled_at_utc=clock.strftime('%Y-%m-%dT%H:%M:%SZ'),

@@ -47,6 +47,8 @@ In Phase 1, INSERT on `apps` and `publication_policies` is an operator write (`c
 
 **Amendment 2026-10-29 (APP-009 open question 1): finding a pending admission at sign-in.** ADR-006 Flow 2 needs the later verified sign-in to find that identity's live pending admission. The workspace role gains a column-limited SELECT on `genui.code_reservations` (`organization_id`, `reservation_id`, `kind`, `state`, `issuer`, `provider_tenant_id`, `provider_subject`, `expires_at`) under the existing RLS scope, and nothing else: no `code_id`, no context digest, no write. Consumption still happens only inside `admit_redemption`. Migration 0006 carries the grant.
 
+**Amendment 2026-11-14 (the real-user trial, decisions D2 and D4; APP-185):** `admin_policy` is operator-grantable. `grant-permission --permission admin_policy` writes the member's `organization_permissions` row and `revoke-permission` removes it with the epoch advance, under this ADR's lock order; the `permission.granted` and `permission.revoked` events of the `operator` chain with null `app_id` and `work_id` are organization-level grants and revocations. Until this date the operator channel refused `admin_policy` by code (APP-010 review M2); D7.3's rule is unchanged (permission-table rows are still written only by `admit_redemption` and the operator channel), and an access code still never carries `admin_policy` or `review_publish` (D7.1 `admit_redemption`, `parse_grant`).
+
 ### D7.4 Adoption stays operator and test-only in Phase 1
 
 No application write path bumps `saved_work.version` before PH03 (C10). APP-014's adoption race uses a test-only writer through the owner channel, exactly as the current campaign drives revocation.

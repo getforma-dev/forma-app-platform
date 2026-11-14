@@ -55,8 +55,12 @@ class MonthRenewalTests(unittest.TestCase):
         self.assertEqual((public['status'], public['month'], public['created']), ('planned', '2026-12', True))
         budget = preflight()
         retained = budget.cents(budget.FIXED_HOURLY * 31 * 24 + budget.FIXED_STORAGE_KEYS)
-        self.assertEqual(public['december_projection'], {'retained_core_full_month_cents': retained, 'genui_total_cents': retained + 1500,
-                                                         'project_total_cents': retained + 1500 + 3800})
+        # Release B's December compute: Dec 1 00:00 to the Dec 15 14:00 stop plus the one-hour margin is 351 hours, plus two task-hours.
+        compute = budget.cents(353 * budget.TASK_HOURLY)
+        self.assertEqual(compute, 4290)
+        self.assertEqual(public['december_projection'], {'retained_core_full_month_cents': retained, 'release_compute_cents': compute,
+                                                         'release_stop_utc': '2026-12-15T14:00:00Z', 'genui_total_cents': retained + compute + 1500,
+                                                         'project_total_cents': retained + compute + 1500 + 3800})
         self.assertEqual(public['trial_ceiling_cents'], {'genui': 8000, 'project': 11800})
         self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (18000, 21800))
         self.assertEqual(self.aws.calls, [])  # no boundary read: the month is a ledger fact, as in reconcile
@@ -174,6 +178,7 @@ class MonthRenewalTests(unittest.TestCase):
         budget = preflight()
         projection = self.run_month()['public']['december_projection']
         self.assertEqual(projection['retained_core_full_month_cents'], budget.cents(budget.FIXED_HOURLY * 31 * 24 + budget.FIXED_STORAGE_KEYS + budget.CLEAN_RETAINED_MONTHLY))
+        self.assertEqual(projection['release_compute_cents'], budget.cents(353 * (budget.TASK_HOURLY + budget.BROKER_HOURLY)))  # the broker runs beside the service
 
     def test_cli_reserves_a_private_output_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as directory:
