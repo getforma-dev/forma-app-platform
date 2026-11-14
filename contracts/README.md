@@ -61,7 +61,7 @@ The synthetic retry horizon is 24 hours from committed time. The outcome shape o
 
 ## Edition impl-2026-11-14.1
 
-Opened by APP-191 (private entries and reviewer-only commands) for the real live test of 2026-11-29/30 ([plan](../docs/planning/TRIAL-25-READINESS.md); [ADR-002 note](../docs/architecture/ADR-002-CONTRACT-EDITION.md#edition-note-2026-11-14-impl-2026-11-141-app-191)).
+Opened by APP-191 (private entries and reviewer-only commands) for the real live test of 2026-11-29/30 (the plan is docs/planning/TRIAL-25-READINESS.md on the `plan/trial-25-readiness` branch; the approval is recorded in the [ADR-002 note](../docs/architecture/ADR-002-CONTRACT-EDITION.md#edition-note-2026-11-14-impl-2026-11-141-app-191)).
 
 **Approval.** Victor, 2026-11-14, in his approval of the live-test plan, decisions D7 ("Private entries (general): a record list can be declared 'each person sees and changes only their own entries'. The app's reviewers … see and change all entries.") and D8 ("Who may do what (general): a command can be limited to reviewers (approve, grade, close). Contributors can't run it, even on their own entries."). The grammar wording (optional `visibility: "own"`, optional `reviewer_only: true`, `"shared"` and `false` refused) was confirmed by the coordinator on 2026-11-14 from two independent design passes.
 

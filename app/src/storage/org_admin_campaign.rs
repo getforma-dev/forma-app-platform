@@ -138,9 +138,8 @@ fn rfc3339_second(value: &str) -> bool {
             .all(|(i, c)| matches!(i, 4 | 7 | 10 | 13 | 16 | 19) || c.is_ascii_digit())
 }
 
-/// A fresh identity admitted through the storage admission path with the
-/// current notice version (what the invitation page's consent produces).
-async fn admit(fixture: &Fixture, stores: &Stores, label: &str) -> (String, String) {
+/// One single-use code with the fixture app's grants: `(code_id, digest)`.
+fn issued(fixture: &Fixture) -> (String, String) {
     let issued = operator(
         fixture,
         &[
@@ -157,15 +156,29 @@ async fn admit(fixture: &Fixture, stores: &Stores, label: &str) -> (String, Stri
             &format!("run:{APP}"),
         ],
     );
-    let code_id = issued["code_id"].as_str().unwrap().to_owned();
-    let digest = code_digest(issued["code"].as_str().unwrap()).unwrap();
-    let identity = VerifiedNonmember {
+    (
+        issued["code_id"].as_str().unwrap().to_owned(),
+        code_digest(issued["code"].as_str().unwrap()).unwrap(),
+    )
+}
+fn identity(stores: &Stores, label: &str) -> VerifiedNonmember {
+    VerifiedNonmember {
         issuer: ISSUER.into(),
         provider_tenant: format!("ten_{ORG}"),
         provider_subject: format!("usr_org_admin_{label}"),
         registry_sha256: stores.registry_identity().sha256.clone(),
         email_verified: true,
-    };
+    }
+}
+/// A reservation and its pending admission for a fresh identity, with the
+/// current notice version (what the invitation page's consent produces).
+async fn pending(
+    fixture: &Fixture,
+    stores: &Stores,
+    label: &str,
+) -> (String, String, VerifiedNonmember) {
+    let (code_id, digest) = issued(fixture);
+    let identity = identity(stores, label);
     let Reservation::Reserved { reservation, .. } = stores
         .workspace
         .reserve_code(ORG, &digest, &sha(label), NOTICE_VERSION)
@@ -184,6 +197,11 @@ async fn admit(fixture: &Fixture, stores: &Stores, label: &str) -> (String, Stri
     else {
         panic!("pending admission refused");
     };
+    (pending_admission, code_id, identity)
+}
+/// A fresh identity admitted through the storage admission path.
+async fn admit(fixture: &Fixture, stores: &Stores, label: &str) -> (String, String) {
+    let (pending_admission, code_id, identity) = pending(fixture, stores, label).await;
     let Admission::Admitted { principal, .. } = stores
         .workspace
         .admit(&identity, ORG, &pending_admission, &sha(label))
@@ -246,6 +264,31 @@ async fn campaign() {
     check(
         &mut checks,
         "an admission through the storage path stores the member's consent to the notice version the reservation carried and appends admission.consented right after admission.redeemed, naming the consent row's event; a reservation without a usable notice version is refused",
+    );
+
+    // --- the legacy guard (review M1): a live pending admission with no notice
+    // version (a row from before 0023, which the repeat-callback branch would
+    // otherwise answer) is refused as malformed: Denied, nothing written, the
+    // row stays live and no principal exists for the identity.
+    let (legacy, legacy_code, legacy_identity) = pending(&fixture, &stores, "legacy").await;
+    fixture.sql(&format!("UPDATE genui.code_reservations SET notice_version=NULL WHERE organization_id='{ORG}' AND reservation_id='{legacy}'"), "genui");
+    let untouched = footprint(&fixture, ORG).await;
+    assert_eq!(
+        stores
+            .workspace
+            .admit(&legacy_identity, ORG, &legacy, &sha("legacy"))
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(footprint(&fixture, ORG).await, untouched);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.code_reservations WHERE organization_id='{ORG}' AND reservation_id='{legacy}' AND kind='pending' AND state='live' AND notice_version IS NULL AND expires_at>now()")).await, 1);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.principals WHERE organization_id='{ORG}' AND provider_subject='{}'", legacy_identity.provider_subject)).await, 0);
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.code_redemptions WHERE organization_id='{ORG}' AND code_id='{legacy_code}'")).await, 0);
+    assert_eq!(scalar(&fixture, &format!("SELECT redeemed_count FROM genui.access_codes WHERE organization_id='{ORG}' AND code_id='{legacy_code}'")).await, 0);
+    check(
+        &mut checks,
+        "a live pending admission without a notice version is refused by admit_redemption (no row: Denied) with nothing written: no principal, membership, redemption, consent or event, the code uncounted and the pending row still live",
     );
 
     // --- a non-admin, a cross-organization caller and a non-member ---------

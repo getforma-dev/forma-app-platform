@@ -136,6 +136,29 @@ fn admit_member(fixture: &Fixture, principal: &str) {
     fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{principal}','app008-fixture-only','ten_{ORG}','usr_{principal}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{principal}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{ORG}','{principal}','0000e000-0000-4000-8000-{tail}','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
 }
 
+/// Calls a genui_admit definer directly as the workspace role under
+/// `principal`'s scope, in a transaction that is rolled back: how many rows it
+/// answers (a refusal answers none). This judges the SQL-side rule by itself,
+/// without the storage layer's own `Permit` checks in front of it.
+async fn definer_rows(fixture: &Fixture, principal: &str, sql: &str) -> i64 {
+    let mut operator = fixture.operator().await;
+    let transaction = operator.client.transaction().await.unwrap();
+    transaction
+        .batch_execute("SET LOCAL ROLE genui_workspace")
+        .await
+        .unwrap();
+    transaction
+        .execute(
+            "SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)",
+            &[&ORG, &principal],
+        )
+        .await
+        .unwrap();
+    let rows: i64 = transaction.query_one(sql, &[]).await.unwrap().get(0);
+    transaction.rollback().await.unwrap();
+    rows
+}
+
 async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     fixture
         .operator()
@@ -1153,6 +1176,52 @@ async fn campaign() {
     assert_eq!(ids_in(&n, &w.claims), Vec::<String>::new());
     assert_eq!(ids_in(&n, &w.notes), all_notes);
     check(&mut checks, "D9: a share_work holder who is not a reviewer may share viewer or contributor (what they hold) but never reviewer, to a member or to everyone");
+    // The SQL definers judge the same rules themselves (the storage layer's
+    // `Permit::also(RecordReview)` stands in front of them in production):
+    // direct calls under the workspace role, rolled back.
+    let share = |sharer: &str, grantee: &str, role: &str| {
+        format!("SELECT count(*) FROM genui_private.share_work('{ORG}','{sharer}','{grantee}','{PRIVATE_APP}','{work}','{role}')")
+    };
+    let everyone_sql = |sharer: &str, role: &str| {
+        format!("SELECT count(*) FROM genui_private.set_work_everyone('{ORG}','{sharer}','{PRIVATE_APP}','{work}','{role}')")
+    };
+    assert_eq!(
+        definer_rows(&fixture, BEN, &share(BEN, FAY, "reviewer")).await,
+        0,
+        "share_work: a share_work holder who is no reviewer grants no reviewer"
+    );
+    assert!(
+        definer_rows(&fixture, BEN, &share(BEN, FAY, "contributor")).await > 0,
+        "share_work: the same sharer grants what they hold"
+    );
+    assert_eq!(
+        definer_rows(&fixture, REV, &share(REV, FAY, "viewer")).await,
+        0,
+        "share_work: a reviewer without share authority grants nothing"
+    );
+    assert!(
+        definer_rows(&fixture, OWNER, &share(OWNER, FAY, "reviewer")).await > 0,
+        "share_work: the owner grants reviewer"
+    );
+    assert_eq!(
+        definer_rows(&fixture, BEN, &everyone_sql(BEN, "reviewer")).await,
+        0,
+        "set_work_everyone: no reviewer share from a non-reviewer"
+    );
+    assert!(
+        definer_rows(&fixture, BEN, &everyone_sql(BEN, "contributor")).await > 0,
+        "set_work_everyone: a share_work holder shares what they hold"
+    );
+    assert_eq!(
+        definer_rows(&fixture, REV, &everyone_sql(REV, "viewer")).await,
+        0,
+        "set_work_everyone: no share authority, no share"
+    );
+    assert!(
+        definer_rows(&fixture, OWNER, &everyone_sql(OWNER, "reviewer")).await > 0,
+        "set_work_everyone: the owner shares reviewer with everyone"
+    );
+    check(&mut checks, "D9 in SQL: share_work and set_work_everyone themselves refuse the reviewer role from a sharer who is no reviewer and any share from a sharer without share authority (direct definer calls under the workspace role, rolled back)");
     let owner_rev = stores
         .workspace
         .share_work(

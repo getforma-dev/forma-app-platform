@@ -171,7 +171,7 @@ Decided by Claude (Opus 5.5) under Victor's delegation of 2026-11-12 ("Make your
 
 ## Amendment, 2026-11-14: own collections, reviewers and shares with roles (APP-191, APP-192)
 
-Decided by Victor on 2026-11-14 as decisions D7, D8 and D9 of the live-test plan ([TRIAL-25-READINESS](../planning/TRIAL-25-READINESS.md); [ADR-008 amendment](ADR-008-YC-DEMO-AND-BETA-MVP.md#amendment-2026-11-14-a-real-live-test-with-25-real-people)), with the reviewer-grant rule refined by the product advisor in his place the same day. Migration 0024 carries it (release B, after W1's 0023).
+Decided by Victor on 2026-11-14 as decisions D7, D8 and D9 of the live-test plan (docs/planning/TRIAL-25-READINESS.md and the ADR-008 amendment of 2026-11-14, both on the `plan/trial-25-readiness` branch), with the reviewer-grant rule refined by the product advisor in his place the same day. Migration 0024 carries it (release B, after W1's 0023).
 
 **The reviewer rule.** A reviewer of a saved work is an active member who is the app's owner, the work's unrevoked creator (Victor: the creator counts), a holder of the new work permission `record_review`, or covered by a live organization-wide share with the reviewer role. `Action::RecordReview` is `record_read` on the work and that rule, judged after the member fence like every other permission (`authorization::reviewer_clause`).
 

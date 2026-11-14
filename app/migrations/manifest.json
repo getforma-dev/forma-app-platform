@@ -115,7 +115,7 @@
     {
       "version": 23,
       "file": "0023_consent_names_org_admin.sql",
-      "sha256": "0e6e2aabcb3d2ae3ad95f7ee3c4a227f1d3c9db5f19225629ce21f00f3b748e9"
+      "sha256": "1c95963e3d75b93f896b7e20635cb196025559d5546e2ebf4c12228c2ef6c89b"
     },
     {
       "version": 24,
@@ -218,11 +218,11 @@
     },
     {
       "file": "catalog-v23.json",
-      "sha256": "487621f78967fbccf26ff47780cf9138e1c8f3a01c3a6899534bca509841944e"
+      "sha256": "e179414c538070b0198cc358158263ad9ebb53aa3cc27702f7e5bf2a02405c21"
     },
     {
       "file": "catalog-v24.json",
-      "sha256": "bfbbc53cc63c3abe210d3e4ad27a3992e6ef7eb690a94f0d28520b3eaa5968f6"
+      "sha256": "47fd6964817aa0b8d3544444fcc097687112cdb81ed594082b54f9c3fee1bfb5"
     }
   ]
 }

@@ -208,14 +208,11 @@ def _role_columns(role, relation, privilege, *columns):
     return {(role, relation, privilege, column) for column in columns}
 
 
-# The workspace reads a member's own consent rows (0023).
-CONSENT_READS = _role_columns('genui_workspace','member_consents','SELECT','organization_id','principal_id','notice_version','consented_at')
 # 0024 (APP-192): every work-level clause consults the live organization-wide
 # share, so the three application roles read work_shares (no granted set).
 ORGANIZATION_SHARE_READS = set().union(*(_role_columns(role,'work_shares','SELECT','organization_id','share_id','sharer_id','grantee_id',
                                                        'app_id','work_id','role','revoked_at','shared_at')
                                          for role in ('genui_workspace','genui_control','genui_data')))
-
 
 AUDIT_EVENT_COLUMNS = ('organization_id','event_id','writer_role','chain_sequence','kind','actor_principal_id','app_id','work_id',
                        'record_id','code_id','outcome_digest','occurred_at','previous_hash','hash')
@@ -558,7 +555,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS|CONSENT_READS|ORGANIZATION_SHARE_READS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS|ORGANIZATION_SHARE_READS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow

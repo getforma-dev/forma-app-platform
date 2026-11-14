@@ -589,6 +589,8 @@ app/admin/src/record-components/**
 !app/migrations/catalog-v22.json
 !app/migrations/0023_consent_names_org_admin.sql
 !app/migrations/catalog-v23.json
+!app/migrations/0024_private_entries_and_roles.sql
+!app/migrations/catalog-v24.json
 !app/src/auth/notice.rs
 !app/src/storage/org_admin.rs
 !app/runtime/box_record_import.py
