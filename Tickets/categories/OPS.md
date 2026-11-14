@@ -43,3 +43,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 197 | [APP-196: Tier A review of the schema restore command and the scan-delta binding](../4-done/APP-196.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Done | APP-175 |
 | 200 | [APP-189: Go-live: build day, rehearsal, codes and the class](../0-backlog/APP-189.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194, APP-195, APP-196, APP-197, APP-198 |
 | 203 | [APP-201: A read-only, lock-aware operator command to read the schema version during a held schema release](../0-backlog/APP-201.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-196 |
+| 212 | [APP-210: Reviewed contract-only release: image contexts may change without a migration](../0-backlog/APP-210.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-194 |

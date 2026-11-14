@@ -1,17 +1,24 @@
-"""A reviewed schema release: the one migration a runtime promotion may carry (APP-175).
+"""A reviewed schema release: the one migration or contract change a runtime
+promotion may carry (APP-175, APP-210).
 
 Automatic promotion refuses any change to the schema manifest or deployment
 contract. `schema-release.json` admits exactly one such change: from the live
 baseline's digests and policy schema version to the candidate's, with the stack
-source unchanged and before an expiry. Every value in it is also pinned here, in
+source unchanged and before an expiry. The deployment contract always moves.
+The schema manifest moves exactly when the database version rises: that is a
+migration. A release whose version and manifest stay the same is contract-only
+(APP-210): only the rest of the contract moves (image contexts, Dockerfiles,
+`runtime.py`). Every value in the file is also pinned here, in
 source, so editing the JSON alone can neither widen nor retarget it: the
 evidence record, both ends' versions and digests, the infrastructure digest and
 the expiry. A CI test binds the `to` side and infrastructure digest to HEAD. A
 missing file means no schema release.
 
-Execution takes a manual RDS snapshot while beta still serves, after every
-pre-execution recheck, then stops the services, applies the reviewed change set
-and runs the stack's migration task on the candidate image before activation.
+A migration's execution takes a manual RDS snapshot while beta still serves,
+after every pre-execution recheck, then stops the services, applies the reviewed
+change set and runs the stack's migration task on the candidate image before
+activation. A contract-only release takes no snapshot and runs no migration: it
+executes as a normal promotion and then admits its contract into the baseline.
 A snapshot failure leaves beta running and the release abandonable; a migration
 failure leaves the services stopped and the lease held for operator
 reconciliation. Nothing is retried or replayed.
@@ -93,12 +100,22 @@ def load():
             and value['expires_at_utc'] == reviewed['expires_at_utc']
             and isinstance(value['infrastructure_sha256'], str) and HEX.fullmatch(value['infrastructure_sha256'])
             and side(value['from'], reviewed['from']['database_version']) and side(value['to'], reviewed['to']['database_version'])
-            and all(value['from'][key] != value['to'][key] for key in DIGESTS),
+            # One migration or one contract change (APP-210): the contract always moves, the
+            # version never falls, and the schema manifest moves exactly when the version does.
+            and value['from']['deployment_contract_sha256'] != value['to']['deployment_contract_sha256']
+            and value['from']['database_version'] <= value['to']['database_version']
+            and ((value['from']['schema_manifest_sha256'] != value['to']['schema_manifest_sha256'])
+                 == (value['from']['database_version'] != value['to']['database_version'])),
             'invalid schema release')
     require(value['from'] == reviewed['from'] and value['to'] == reviewed['to']
             and value['infrastructure_sha256'] == reviewed['infrastructure_sha256'],
             'schema release differs from the reviewed source')
     return value, hashlib.sha256(raw).hexdigest()
+
+
+def migrates(release):
+    """True for a migration, False for a contract-only release (APP-210)."""
+    return release['from_version'] != release['to_version']
 
 
 def expiry(spec):
@@ -114,10 +131,13 @@ def candidate_manifest(repo):
 
 
 def applicable(source, baseline, policy_version, repo, clock, candidate):
-    """The release for this exact baseline-to-candidate change, or Refused.
+    """The release for the one migration or contract change from this exact
+    baseline to this candidate, or Refused.
 
     Called only when the candidate's schema manifest or deployment contract
-    differs from the baseline, before the lease and again at execution.
+    differs from the baseline, before the lease and again at execution. A
+    contract-only release passes the same checks: its candidate manifest has the
+    baseline's bytes and version, which are also its `to`.
     """
     spec, spec_sha = load()
     require(spec is not None, CHANGED)

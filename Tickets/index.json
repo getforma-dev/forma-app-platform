@@ -367,9 +367,10 @@
         "APP-189",
         "APP-199",
         "APP-200",
-        "APP-201"
+        "APP-201",
+        "APP-210"
       ],
-      "ticket_count": 38,
+      "ticket_count": 39,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6267,6 +6268,35 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-196"
+      ]
+    },
+    {
+      "id": "APP-210",
+      "title": "Reviewed contract-only release: image contexts may change without a migration",
+      "path": "0-backlog/APP-210.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "212",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Fable advisor in lieu of Victor, 2026-11-14: the existing `schema-release.json` record also admits a contract-only release (same database version and schema manifest, a different deployment contract). It takes no snapshot, runs no migration and executes the normal sequence. The `REVIEWED_SCHEMA_RELEASE` pin is unchanged.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-175, APP-194",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`ops/app-210-contract-release`; [PR #128](https://github.com/getforma-dev/forma-app-platform/pull/128), open; merges after release B's close-out pull request, promotions paused",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-175",
+        "APP-194"
       ]
     }
   ]
