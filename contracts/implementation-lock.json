@@ -64,7 +64,7 @@
   "artifacts": {
     ".github/workflows/contracts.yml": "802f0f664e20a7bae03da33f78507a92328f0c2662154369bc967efd76f6e2d1",
     "contracts/.gitignore": "57a8ad0e62346f7b0f2e261d59a7b90f1310043424bcb9d229208f183f1940d9",
-    "contracts/README.md": "272a46c9a686934639dda077d8948f255f3b42bc6612550db5f56ed425ff86d4",
+    "contracts/README.md": "da6311c9c9c801ec82d1ec434d6032de87ac4021fa02bd61557528aeb0205d56",
     "contracts/fixtures/canonical-vectors.json": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
     "contracts/fixtures/command-recovery.json": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
     "contracts/fixtures/impl-2026-10-28.1/canonical-vectors.json": "33b46ff5970bdcd5259f23bdb5e9a7fcda4c5eeffebe93e0fedfebf5f661203d",
@@ -115,7 +115,7 @@
     "contracts/fixtures/library/time-off.json": "909a16c7bb3c29fcdd2be2b304eae7f9667cb87e877df9dea48d1cd7d6bb1531",
     "contracts/fixtures/library/vendor-invoices.json": "fedc01ecb2fbdcef6a6164f5c6803d07c40561e1098f6e4ffb21ebbf3f356aaa",
     "contracts/fixtures/library/vendor-spend.json": "5f612f5064e6f5eac4169cc474e81b0416a15b38ecb6992c1a82cb164b05f012",
-    "contracts/fixtures/negative-vectors.json": "54a6a82abb9cc914abf532ba5d542fe5165a4a1d00f856692ff1d08f7535ac59",
+    "contracts/fixtures/negative-vectors.json": "b56e6e0995d7e25946ec2bbee3079d6f9fccc83098dee3125fa8cd8366328a52",
     "contracts/fixtures/northstar.json": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
     "contracts/fixtures/participation.json": "6bae4550b4ddbbdc5ed092929040fe2420f7352b13de303b88fbe92c968bbe64",
     "contracts/fixtures/shared-v1/query-receipt.json": "ccca53f58e24f5ce26e63bf057b58aea9292a8bc8c01d4f77877ead39510bc69",
@@ -129,13 +129,13 @@
     "contracts/schema.json": "bbe8f559d3b60ba59a5b50f374ea1ffbd52dee8614b709e71a5f6341c1169f02",
     "contracts/schema.py": "319f582b55827eb509c3cf0935df32d3deafaca9fac57c96e740dd9eb3fa8030",
     "contracts/shared-query-receipt-v1.schema.json": "528ece3ab7335881583e83d22aa71aa0b0b61ed9088cefbb8eaec9be8f5415ff",
-    "contracts/test_contracts.py": "6712794487393892806693285c8f346c6a1de94f402d4c8000628f9cb2c23328",
+    "contracts/test_contracts.py": "ee663be779b5161ace8f72212c35e027fffed85a4107868c5658b949ec6eb4a9",
     "contracts/test_library_check.py": "79e1afa202e0010690b01c3b563d7f445013f05cca2a856544ba72f76b59743d",
     "contracts/test_presentation.py": "ea4e3b28db884e59018a0cc78b8baee3897e0c889b6e94a20f1d92a13f2d88aa",
     "contracts/test_shared_receipt.py": "6d8e16229481992188213c546b04f453e9f97c8ae9010119598c7e2e48f43b7b",
     "contracts/validate.py": "b48509397f574ad54ba30969709e77883db51f03c29d5f189fe073f978b41309",
     "contracts/verify_vectors.mjs": "b81b9bdeb4e57037a66bca328c5e519ea7613101eec1c3d8486598aa28b31674",
-    "docs/architecture/ADR-002-CONTRACT-EDITION.md": "cd77bd91de13ddfec0196962eec98852558b7c18b0c105b5fb3d1ac02fb1a50d",
+    "docs/architecture/ADR-002-CONTRACT-EDITION.md": "652393fa0a559911321c8352a569cca532c318d224610c226c5915474c98dc33",
     "docs/architecture/ADR-009-PHASE-2-DATA-PLANE.md": "8a52d3cb7efa6e8451633de44634c3f3fcd3107044be4c6c94b8cf85c765172f",
     "evidence/APP-002/dependencies.json": "89c86a4d381f8d945bdcd9c7655ad9e7f01ae80a60515ded172060afd890771c"
   }

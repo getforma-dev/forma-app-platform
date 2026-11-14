@@ -2182,7 +2182,7 @@ fn private_entries_and_reviewer_only_commands_match_validate_py() {
 /// Edition impl-2026-11-14.2's negative vectors (ADR-020 §11), in file order
 /// after the retained list; `contracts/test_contracts.py` `RELEASE_C_VECTORS`.
 #[rustfmt::skip]
-const RELEASE_C_VECTORS: [&str; 56] = [
+const RELEASE_C_VECTORS: [&str; 57] = [
     "one_per_creator on a shared schema refused",
     "one_per_creator key absent from a create's writable fields refused",
     "one_per_creator key in an update's writable fields refused",
@@ -2222,6 +2222,7 @@ const RELEASE_C_VECTORS: [&str; 56] = [
     "matches with fields of different types refused",
     "matches key_input equal to the component input refused",
     "matches key_input naming no records input refused",
+    "matches key_input naming a source input refused",
     "unknown matches field refused",
     "matches on a record trend refused",
     "multi_enum matches field refused",

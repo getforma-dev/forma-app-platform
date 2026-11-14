@@ -69,6 +69,7 @@ RELEASE_C_VECTORS = (
     "matches with fields of different types refused",
     "matches key_input equal to the component input refused",
     "matches key_input naming no records input refused",
+    "matches key_input naming a source input refused",
     "unknown matches field refused",
     "matches on a record trend refused",
     "multi_enum matches field refused",

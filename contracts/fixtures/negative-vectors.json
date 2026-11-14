@@ -1659,6 +1659,20 @@
     "rehash_definition": true
   },
   {
+    "name": "matches key_input naming a source input refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      2,
+      "kind"
+    ],
+    "value": "source",
+    "expected": "matches key input must be a records input",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
     "name": "unknown matches field refused",
     "path": [
       "definition",
