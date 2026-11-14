@@ -22,16 +22,17 @@
 //!   them at once. 200 `{"app_id","work_id","role":"<role>"|"none"}`.
 //! - `GET /v1/work/{app}/{work}/share` (APP-192): what the share dialog shows
 //!   a member with share authority: `{"app_id","work_id","roles":[…],
-//!   "can_revoke_members":false,"organization":{"available":bool,
-//!   "role":"<role>"|null},"members":
+//!   "can_revoke_members":false,"private_lists":bool,"organization":
+//!   {"available":bool,"role":"<role>"|null},"members":
 //!   [{"principal_id","label","role"}, …]}` (`Workspace::work_sharing`; the
-//!   roles this sharer may grant; members by label, never by provider
-//!   identity).
+//!   roles this sharer may grant; whether the app has private lists; members
+//!   by label, never by provider identity, each with the role of their live
+//!   permissions on the work).
 //!
 //! Refusal order on both POSTs: fetch metadata (403 `cross_site`), the ids
 //! (uniform 404), the session (uniform 404), the member write limit (429),
 //! the body (413, then 400 `malformed_share`), then the sharer's own
-//! standing (`Workspace::work_sharing`): `Denied` is the uniform 404 (a work
+//! standing (`Workspace::share_standing`): `Denied` is the uniform 404 (a work
 //! the sharer cannot open, no authority to share; identical for existing and
 //! nonexistent works). A sharer **with** share authority then learns, in 422,
 //! only what concerns its own standing, judged before any grantee is
@@ -43,9 +44,12 @@
 //! grantee who is not an active member of the same organization or is the
 //! sharer; the standing changed meanwhile), 503 for a store outage. The
 //! definers still judge every rule on their own (`share_work`,
-//! `set_work_everyone`) and write the audit rows. A share that wrote a grant
-//! announces `app.shared` on the event hub (`events`); every member who can
-//! now open the work receives it.
+//! `set_work_everyone`) and write the audit rows. A person share that wrote
+//! a grant announces `app.shared` on the event hub (`events`); an
+//! organization-wide change announces it only when it widens access (a first
+//! share or a wider role; `announces_organization`), so a narrower role or a
+//! stop tells nobody anything. Every member who can then open the work
+//! receives it.
 //!
 //! Session resolution (`session`): an absent or ended session and a store
 //! error alike answer the uniform 404 (fail closed; review m2: the deliberate
@@ -149,7 +153,7 @@ pub(crate) fn parse_organization_share(bytes: &[u8]) -> Option<Option<ShareRole>
 }
 
 /// The plain code a sharer with share authority receives for a role it may
-/// not grant (`roles`: `WorkSharing::roles`), or none when it may.
+/// not grant (`roles`: `ShareStanding::roles`), or none when it may.
 pub(crate) fn role_refusal(role: ShareRole, roles: &[ShareRole]) -> Option<&'static str> {
     if roles.contains(&role) {
         return None;
@@ -168,16 +172,37 @@ pub(crate) fn role_refusal(role: ShareRole, roles: &[ShareRole]) -> Option<&'sta
 /// control only when this is true.
 pub(crate) const MEMBER_REVOKE: bool = false;
 
+/// Whether an organization-wide change that `changed` the rows, from the
+/// role live `before` to the role live `after`, gives members something to
+/// be told about: a first share, or a wider role. A narrower or equal role,
+/// a stop and a call that wrote nothing announce nothing (review of W2b,
+/// item 6: no notice on a change that adds nothing for a member).
+pub(crate) fn announces_organization(
+    before: Option<ShareRole>,
+    after: Option<ShareRole>,
+    changed: bool,
+) -> bool {
+    let rank = |role: Option<ShareRole>| match role {
+        None => 0,
+        Some(ShareRole::Viewer) => 1,
+        Some(ShareRole::Contributor) => 2,
+        Some(ShareRole::Reviewer) => 3,
+    };
+    changed && rank(after) > rank(before)
+}
+
 /// The share dialog's document (`GET /v1/work/{app}/{work}/share`).
 pub(crate) fn sharing_json(app: &str, work: &str, sharing: &storage::WorkSharing) -> Value {
+    let standing = &sharing.standing;
     json!({
         "app_id": app,
         "work_id": work,
-        "roles": sharing.roles.iter().map(|r| r.name()).collect::<Vec<_>>(),
+        "roles": standing.roles.iter().map(|r| r.name()).collect::<Vec<_>>(),
         "can_revoke_members": MEMBER_REVOKE,
+        "private_lists": sharing.private_lists,
         "organization": {
-            "available": sharing.organization_available,
-            "role": sharing.organization.map(|r| r.name()),
+            "available": standing.organization_available,
+            "role": standing.organization.map(|r| r.name()),
         },
         "members": sharing.members.iter().map(|m| json!({
             "principal_id": m.principal, "label": m.label, "role": m.role.name(),
@@ -258,9 +283,9 @@ async fn standing(
     trusted: &TrustedRequest,
     app: &str,
     work: &str,
-) -> Result<storage::WorkSharing, Response> {
-    match stores.workspace.work_sharing(trusted, app, work).await {
-        Ok(sharing) => Ok(sharing),
+) -> Result<storage::ShareStanding, Response> {
+    match stores.workspace.share_standing(trusted, app, work).await {
+        Ok(standing) => Ok(standing),
         Err(storage::Error::Denied) => Err(http::not_found()),
         Err(_) => Err(http::unavailable()),
     }
@@ -280,9 +305,10 @@ async fn sharing(
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
-    match standing(stores, &trusted, &app, &work).await {
+    match stores.workspace.work_sharing(&trusted, &app, &work).await {
         Ok(sharing) => document(StatusCode::OK, &sharing_json(&app, &work, &sharing)),
-        Err(refusal) => refusal,
+        Err(storage::Error::Denied) => http::not_found(),
+        Err(_) => http::unavailable(),
     }
 }
 
@@ -301,11 +327,11 @@ async fn share(
     let Some((grantee, role)) = parse_share(&bytes) else {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
     };
-    let sharing = match standing(stores, &trusted, &app, &work).await {
-        Ok(sharing) => sharing,
+    let standing = match standing(stores, &trusted, &app, &work).await {
+        Ok(standing) => standing,
         Err(refusal) => return refusal,
     };
-    if let Some(code) = role_refusal(role, &sharing.roles) {
+    if let Some(code) = role_refusal(role, &standing.roles) {
         tracing::info!(outcome = code, role = role.name(), "share.submit");
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, code);
     }
@@ -353,14 +379,14 @@ async fn share_organization(
     let Some(role) = parse_organization_share(&bytes) else {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
     };
-    let sharing = match standing(stores, &trusted, &app, &work).await {
-        Ok(sharing) => sharing,
+    let standing = match standing(stores, &trusted, &app, &work).await {
+        Ok(standing) => standing,
         Err(refusal) => return refusal,
     };
     let name = role.map_or("none", ShareRole::name);
     if let Some(role) = role {
-        let refusal = if sharing.organization_available {
-            role_refusal(role, &sharing.roles)
+        let refusal = if standing.organization_available {
+            role_refusal(role, &standing.roles)
         } else {
             Some("organization_share_unavailable")
         };
@@ -395,7 +421,9 @@ async fn share_organization(
     );
     match result {
         Ok(changed) => {
-            if changed && role.is_some() {
+            // The role live before is the standing's read, taken before the
+            // write: an announcement is a hint, never an authority.
+            if announces_organization(standing.organization, role, changed) {
                 events::hub().app_shared(trusted.organization(), &app, &work);
             }
             document(
@@ -587,9 +615,12 @@ mod tests {
     #[test]
     fn the_sharing_answer_names_roles_and_labels_only() {
         let sharing = storage::WorkSharing {
-            roles: vec![ShareRole::Viewer, ShareRole::Contributor],
-            organization_available: true,
-            organization: Some(ShareRole::Viewer),
+            standing: storage::ShareStanding {
+                roles: vec![ShareRole::Viewer, ShareRole::Contributor],
+                organization_available: true,
+                organization: Some(ShareRole::Viewer),
+            },
+            private_lists: true,
             members: vec![storage::ShareEntry {
                 principal: GRANTEE.into(),
                 label: "Ana".into(),
@@ -603,20 +634,60 @@ mod tests {
                 "work_id": GRANTEE,
                 "roles": ["viewer", "contributor"],
                 "can_revoke_members": false,
+                "private_lists": true,
                 "organization": {"available": true, "role": "viewer"},
                 "members": [{"principal_id": GRANTEE, "label": "Ana", "role": "contributor"}],
             })
         );
         let alone = storage::WorkSharing {
-            roles: vec![ShareRole::Viewer],
-            organization_available: false,
-            organization: None,
+            standing: storage::ShareStanding {
+                roles: vec![ShareRole::Viewer],
+                organization_available: false,
+                organization: None,
+            },
+            private_lists: false,
             members: vec![],
         };
         assert_eq!(
             sharing_json(GRANTEE, GRANTEE, &alone)["organization"],
             json!({"available": false, "role": null})
         );
+    }
+
+    /// An organization-wide change is announced to members only when it gives
+    /// them something: a first share or a wider role. A narrower role, the
+    /// same role, a stop, or a call that wrote nothing announces nothing.
+    #[test]
+    fn an_organization_share_is_announced_only_when_it_widens() {
+        use ShareRole::*;
+        assert!(announces_organization(None, Some(Viewer), true));
+        assert!(announces_organization(None, Some(Reviewer), true));
+        assert!(announces_organization(
+            Some(Viewer),
+            Some(Contributor),
+            true
+        ));
+        assert!(announces_organization(
+            Some(Contributor),
+            Some(Reviewer),
+            true
+        ));
+        for (before, after) in [
+            (Some(Reviewer), Some(Viewer)),
+            (Some(Contributor), Some(Viewer)),
+            (Some(Reviewer), Some(Contributor)),
+            (Some(Viewer), None),
+            (Some(Reviewer), None),
+            (None, None),
+        ] {
+            assert!(
+                !announces_organization(before, after, true),
+                "{before:?} -> {after:?}"
+            );
+        }
+        // Nothing written (a replay, or a stop with nothing live).
+        assert!(!announces_organization(None, Some(Viewer), false));
+        assert!(!announces_organization(Some(Viewer), Some(Viewer), false));
     }
 
     /// Without a configured store every protected answer is the uniform 404

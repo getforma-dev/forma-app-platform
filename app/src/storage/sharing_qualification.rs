@@ -790,6 +790,8 @@ async fn campaign() {
         dialog.json()["organization"],
         json!({"available": false, "role": null})
     );
+    // The S05 decisions are a shared list: no private lists to explain.
+    assert_eq!(dialog.json()["private_lists"], false);
     let form = send(
         &app,
         "POST",

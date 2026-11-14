@@ -2219,7 +2219,7 @@ async fn campaign() {
             .post(
                 &format!("/v1/boxes/{viewer_box}/share"),
                 Some(&maya_cookie),
-                &json!({"grantee_principal_id": mate_id, "role": "viewer"}).to_string()
+                &json!({"grantee_principal_id":mate_id}).to_string()
             )
             .await
             .status,

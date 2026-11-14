@@ -17,14 +17,16 @@
 //! app's owner and the work's creator), Rev (given the reviewer role over
 //! the route), Hal (an operator-granted `share_work` holder who is a
 //! contributor, not a reviewer), Ana (shared with by Hal), Nia (no access,
-//! never a sharer) and Fay (admitted after the organization-wide share).
+//! never a sharer), Fay (admitted after the organization-wide share), Vic (a
+//! `share_work` holder who may only view) and Oz (a member of another
+//! organization).
 use super::{
     admission_qualification::operator,
     command_qualification::{send, vault_token, Reply, TestPages},
-    definition_qualification::{grant, request, POLICY},
+    definition_qualification::{grant, request, revoke, POLICY},
     private_entries_campaign,
     qualification::Fixture,
-    qualification_cases::{check, ORG},
+    qualification_cases::{check, ORG, OTHER},
     *,
 };
 use crate::{
@@ -46,6 +48,9 @@ const HAL: &str = "00000000-0000-4000-8000-000000000b03";
 const ANA: &str = "00000000-0000-4000-8000-000000000b04";
 const NIA: &str = "00000000-0000-4000-8000-000000000b05";
 const FAY: &str = "00000000-0000-4000-8000-000000000b06";
+const VIC: &str = "00000000-0000-4000-8000-000000000b07";
+/// A member of the other fixture organization only.
+const OZ: &str = "00000000-0000-4000-8000-000000000b08";
 /// Well formed, never a member anywhere.
 const NOBODY: &str = "00000000-0000-4000-8000-000000000bff";
 const JSON: [(&str, &str); 2] = [
@@ -73,10 +78,26 @@ fn native_share_routes_campaign() {
 }
 
 /// Operator-channel stand-in (as tenant_seed writes fixture authority): one
-/// active member of the organization with a live entitlement.
-fn admit_member(fixture: &Fixture, principal: &str) {
+/// active member of `organization` with a live entitlement.
+fn admit_member(fixture: &Fixture, organization: &str, principal: &str) {
     let tail = &principal[principal.len() - 12..];
-    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{principal}','app008-fixture-only','ten_{ORG}','usr_{principal}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{principal}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{ORG}','{principal}','0000e000-0000-4000-8000-{tail}','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{organization}',true); INSERT INTO genui.principals VALUES ('{organization}','{principal}','app008-fixture-only','ten_{organization}','usr_{principal}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{organization}','{principal}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{organization}','{principal}','0000e000-0000-4000-8000-{tail}','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
+}
+/// The dialog's listing of people, as `(label, role)` sorted by label.
+fn listed(dialog: &Value) -> Vec<(String, String)> {
+    let mut people: Vec<(String, String)> = dialog["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| {
+            (
+                m["label"].as_str().unwrap().to_owned(),
+                m["role"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    people.sort();
+    people
 }
 
 async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
@@ -169,9 +190,10 @@ async fn campaign() {
     let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
     stores.readiness().await.unwrap();
     let mut checks = Vec::new();
-    for member in [OWNER, REV, HAL, ANA, NIA] {
-        admit_member(&fixture, member);
+    for member in [OWNER, REV, HAL, ANA, NIA, VIC] {
+        admit_member(&fixture, ORG, member);
     }
+    admit_member(&fixture, OTHER, OZ);
     let owner = request(&stores, ORG, OWNER, 1);
 
     // --- the app and its work, through the admitted path --------------------
@@ -259,6 +281,15 @@ async fn campaign() {
     let rev_cookie = mint(REV).await;
     let hal_cookie = mint(HAL).await;
     let nia_cookie = mint(NIA).await;
+    let vic_cookie = mint(VIC).await;
+    let oz_cookie = {
+        let reference = auth.vault.insert("northstar", &vault_token()).unwrap();
+        stores
+            .workspace
+            .mint_session_for_tests(OTHER, OZ, &reference)
+            .await
+            .unwrap()
+    };
     let router: Router = http::uniform(sharing::router(auth.clone()));
     let share_uri = format!("/v1/work/{app}/{work}/share");
     let everyone_uri = format!("{share_uri}/organization");
@@ -285,6 +316,7 @@ async fn campaign() {
             "app_id": app, "work_id": work,
             "roles": ["viewer", "contributor", "reviewer"],
             "can_revoke_members": false,
+            "private_lists": true,
             "organization": {"available": true, "role": null},
             "members": [],
         })
@@ -299,7 +331,7 @@ async fn campaign() {
     }
     check(
         &mut checks,
-        "GET /v1/work/{app}/{work}/share: the work's creator reads the roles it may grant (viewer, contributor, reviewer), the organization-wide share (available, none live) and no members yet, no-store; an anonymous caller, a member without share authority and a nonexistent work get the byte-identical uniform 404",
+        "GET /v1/work/{app}/{work}/share: the work's creator reads the roles it may grant (viewer, contributor, reviewer), that the app has private lists, the organization-wide share (available, none live) and no members yet, no-store; an anonymous caller, a member without share authority and a nonexistent work get the byte-identical uniform 404",
     );
 
     // --- one encoding, closed bodies, fetch metadata ------------------------
@@ -486,6 +518,51 @@ async fn campaign() {
         "a `share_work` holder who is a contributor but not a reviewer reads roles viewer and contributor; its reviewer grant, to a person or to everyone, is 422 `reviewer_not_allowed`, byte-identical whoever the grantee is (a member, nobody, a revoked member, itself), writing nothing; its contributor share lands (record_read, record_write)",
     );
 
+    // --- a sharer who may only view: contributor_not_allowed ---------------
+    // A `share_work` holder (operator stand-in) whose own access is a viewer
+    // share: it may share as a viewer only, and is told so in plain terms.
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.work_permissions VALUES ('{ORG}','{VIC}','{app}','{work}','share_work'); COMMIT;"), "genui");
+    let vic_shared = post(Some(&owner_cookie), &share_uri, share_body(VIC, "viewer")).await;
+    assert_eq!(vic_shared.status, StatusCode::OK, "{}", vic_shared.body);
+    let vic_dialog = get(Some(&vic_cookie), &share_uri).await;
+    assert_eq!(vic_dialog.status, StatusCode::OK, "{}", vic_dialog.body);
+    assert_eq!(vic_dialog.json()["roles"], json!(["viewer"]));
+    let before = footprint(&fixture).await;
+    let refused = post(
+        Some(&vic_cookie),
+        &share_uri,
+        share_body(NIA, "contributor"),
+    )
+    .await;
+    assert_eq!(
+        (refused.status, refused.body.as_str()),
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{\"code\":\"contributor_not_allowed\",\"status\":422}"
+        )
+    );
+    for grantee in [NOBODY, REVOKED, VIC, ANA] {
+        let again = post(
+            Some(&vic_cookie),
+            &share_uri,
+            share_body(grantee, "contributor"),
+        )
+        .await;
+        assert_eq!(again.body, refused.body, "{grantee}");
+    }
+    let everyone = post(Some(&vic_cookie), &everyone_uri, role_body("contributor")).await;
+    assert_eq!(everyone.body, refused.body);
+    let reviewer = post(Some(&vic_cookie), &everyone_uri, role_body("reviewer")).await;
+    assert_eq!(
+        reviewer.body,
+        "{\"code\":\"reviewer_not_allowed\",\"status\":422}"
+    );
+    assert_eq!(footprint(&fixture).await, before);
+    check(
+        &mut checks,
+        "a `share_work` holder whose own access is a viewer share reads roles [viewer] only; its contributor grant, to a person or to everyone, is 422 `contributor_not_allowed`, byte-identical whoever the grantee is, and its reviewer grant to everyone 422 `reviewer_not_allowed`; nothing is written",
+    );
+
     // --- no share authority: the uniform 404 --------------------------------
     let before = footprint(&fixture).await;
     let anonymous = post(None, &share_uri, share_body(ANA, "viewer")).await;
@@ -506,8 +583,14 @@ async fn campaign() {
             &format!("{missing_uri}/organization"),
             role_body("viewer"),
         ),
-        // A grantee who is nobody, revoked, or the sharer.
+        // A member of another organization, on every route.
+        (&oz_cookie, &share_uri, share_body(ANA, "viewer")),
+        (&oz_cookie, &everyone_uri, role_body("viewer")),
+        (&oz_cookie, &everyone_uri, role_body("none")),
+        // A grantee who is nobody, revoked, of another organization, or the
+        // sharer.
         (&owner_cookie, &share_uri, share_body(NOBODY, "viewer")),
+        (&owner_cookie, &share_uri, share_body(OZ, "viewer")),
         (&owner_cookie, &share_uri, share_body(REVOKED, "viewer")),
         (&owner_cookie, &share_uri, share_body(OWNER, "viewer")),
     ] {
@@ -519,10 +602,58 @@ async fn campaign() {
         get(Some(&rev_cookie), &share_uri).await.body,
         anonymous.body
     );
+    assert_eq!(get(Some(&oz_cookie), &share_uri).await.body, anonymous.body);
     assert_eq!(footprint(&fixture).await, before);
     check(
         &mut checks,
-        "without share authority (a member with no access, a reviewer who is neither the creator nor a `share_work` holder), for a nonexistent work, and for a grantee who is nobody, revoked or the sharer, both POSTs and the dialog read answer the byte-identical uniform 404 (a reviewer's reviewer request included), writing nothing",
+        "without share authority (a member with no access, a reviewer who is neither the creator nor a `share_work` holder, a member of another organization), for a nonexistent work, and for a grantee who is nobody, revoked, of another organization or the sharer, both POSTs and the dialog read answer the byte-identical uniform 404 (a reviewer's reviewer request included), writing nothing",
+    );
+
+    // --- the body bound and the member write window ------------------------
+    let before = footprint(&fixture).await;
+    let padding = "x".repeat(http::JSON_BODY_LIMIT + 1);
+    for uri in [&share_uri, &everyone_uri] {
+        let large = post(
+            Some(&owner_cookie),
+            uri,
+            json!({"role": "viewer", "padding": padding}).to_string(),
+        )
+        .await;
+        assert_eq!(
+            code(&large),
+            (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "payload_too_large".to_owned()
+            ),
+            "{uri}"
+        );
+    }
+    // Nia's member write window, used up the way 120 POSTs would.
+    while auth.limits.admit_member_write(ORG, NIA).is_ok() {}
+    for (uri, body) in [
+        (&share_uri, share_body(ANA, "viewer")),
+        (&everyone_uri, role_body("viewer")),
+    ] {
+        let limited = post(Some(&nia_cookie), uri, body).await;
+        assert_eq!(
+            code(&limited),
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                "too_many_requests".to_owned()
+            ),
+            "{uri}"
+        );
+        assert!(limited.headers.contains_key("retry-after"));
+    }
+    // The dialog's read is a read: it is not counted against the window.
+    assert_eq!(
+        get(Some(&nia_cookie), &share_uri).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(footprint(&fixture).await, before);
+    check(
+        &mut checks,
+        "a body over the JSON limit is 413 `payload_too_large` on both POSTs; a member whose write window is used up gets 429 `too_many_requests` with Retry-After on both POSTs before anything else is judged; the dialog's read is not counted; nothing is written",
     );
 
     // --- everyone in the organization: set, replace, revoke -----------------
@@ -556,7 +687,16 @@ async fn campaign() {
         "one live row and one grant event; no personal permission row"
     );
     stores.data.can_open(&nia, app, work).await.unwrap();
-    admit_member(&fixture, FAY);
+    // A member of another organization is not covered.
+    assert_eq!(
+        stores
+            .data
+            .can_open(&request(&stores, OTHER, OZ, 1), app, work)
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    admit_member(&fixture, ORG, FAY);
     let fay = request(&stores, ORG, FAY, 1);
     stores.data.can_open(&fay, app, work).await.unwrap();
     let replay = post(Some(&owner_cookie), &everyone_uri, role_body("viewer")).await;
@@ -569,7 +709,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "everyone in the organization as viewer over the route: one live organization-wide row and one `permission.granted` event, no personal permission row; a member with no grant and a member admitted afterwards can open the work; the same request again writes nothing; the dialog shows the role",
+        "everyone in the organization as viewer over the route: one live organization-wide row and one `permission.granted` event, no personal permission row; a member with no grant and a member admitted afterwards can open the work, a member of another organization cannot; the same request again writes nothing; the dialog shows the role",
     );
 
     for (replaced_so_far, role) in [(1, "contributor"), (2, "reviewer")] {
@@ -652,11 +792,67 @@ async fn campaign() {
         .map(|m| m["label"].as_str().unwrap())
         .collect();
     labels.sort();
-    assert_eq!(labels, ["Ana Diaz", "Hal Moreno", "Rita Okafor"]);
+    assert_eq!(
+        labels,
+        ["Ana Diaz", "Hal Moreno", "Member 00000000", "Rita Okafor"]
+    );
     assert!(!dialog.to_string().contains("usr_"));
     check(
         &mut checks,
-        "`none` ends the organization-wide share for all at once: the live row is revoked with one `permission.revoked` event, the member with no grant and the late member can no longer open the work, personal shares stay; `none` again writes nothing; the dialog lists the three personal shares by name, never by provider identity",
+        "`none` ends the organization-wide share for all at once: the live row is revoked with one `permission.revoked` event, the member with no grant and the late member can no longer open the work, personal shares stay; `none` again writes nothing; the dialog lists the four personal shares by name (Vic has no name), never by provider identity",
+    );
+
+    // --- the listed role is the grantee's live permissions -----------------
+    let people = || async { listed(&get(Some(&owner_cookie), &share_uri).await.json()) };
+    let pair = |label: &str, role: &str| (label.to_owned(), role.to_owned());
+    assert_eq!(
+        people().await,
+        [
+            pair("Ana Diaz", "contributor"),
+            pair("Hal Moreno", "contributor"),
+            pair("Member 00000000", "viewer"),
+            pair("Rita Okafor", "reviewer"),
+        ]
+    );
+    // An operator revocation of Ana's record_write: she shows as a viewer.
+    revoke(
+        &fixture,
+        ANA,
+        "record_write",
+        &["--app", app, "--work", work],
+    );
+    // An operator demotion of Rev (record_review removed; operator stand-in,
+    // as revoke-permission has no record_review on this branch).
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); DELETE FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND work_id='{work}' AND permission='record_review'; COMMIT;"), "genui");
+    assert_eq!(
+        people().await,
+        [
+            pair("Ana Diaz", "viewer"),
+            pair("Hal Moreno", "contributor"),
+            pair("Member 00000000", "viewer"),
+            pair("Rita Okafor", "contributor"),
+        ]
+    );
+    // With record_read gone too, Ana's share row lists nothing.
+    revoke(
+        &fixture,
+        ANA,
+        "record_read",
+        &["--app", app, "--work", work],
+    );
+    let after = people().await;
+    assert!(
+        !after.iter().any(|(label, _)| label == "Ana Diaz"),
+        "{after:?}"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id='{ANA}' AND revoked_at IS NULL")).await,
+        1,
+        "the share row is still live; the listing follows the permissions"
+    );
+    check(
+        &mut checks,
+        "the dialog lists each person with the role of their live permissions on the work, not of their share rows: after an operator revoke-permission of record_write Ana shows as a viewer, after a demotion Rev shows as a contributor, and once record_read is gone Ana is not listed although her share row is still live",
     );
 
     stores.close().await.unwrap();

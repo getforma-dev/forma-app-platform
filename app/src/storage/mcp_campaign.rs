@@ -1529,6 +1529,44 @@ async fn campaign() {
         &format!("APP-115 access log: every tools/call is one row (token, label, member, tool, touched ids, outcome and reason, space, duration); GET /v1/governance/agents lists Diego's agents with scope, status and counts (Security bot: 9 calls, 7 refused); its timeline is newest first and shows \"Draft a record — refused: outside scope (People), Time off\" with the time-off app id, the view refusal with its work id, and the allowed access-request draft; Sarah reading Diego's agent and an anonymous read are the uniform 404; no token in the log; the {rows}-row organization chain verifies, editing row 3's duration as the owner breaks it at row 3 and restoring it verifies again; genui_workspace holds no UPDATE or DELETE; a token revoked through DELETE /v1/agent-tokens answers the uniform 404 on its next call and lists as revoked"),
     );
 
+    // APP-192 review (MINOR-6): forma_share succeeds through the canvas
+    // route's own share path, and its published `record_write: true` maps to
+    // the contributor role: record_read and record_write are copied and the
+    // share row names the role.
+    let (sharer, _) = mint_token(&diego, "Share check").await;
+    let shared = client
+        .call(
+            &sharer,
+            mcp::tools::SHARE,
+            json!({"app_id": app_id, "work_id": work_id, "member_name": "Priya", "record_write": true}),
+        )
+        .await;
+    let shared = ok(&shared).clone();
+    assert_eq!(shared["shared_with"], "Priya Natarajan");
+    assert_eq!(shared["work_id"], work_id.as_str());
+    let operator = fixture.operator().await;
+    let held: Vec<String> = operator
+        .client
+        .query(&format!("SELECT permission FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}' AND work_id='{work_id}' ORDER BY permission"), &[])
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert_eq!(held, ["record_read", "record_write"]);
+    let role: String = operator
+        .client
+        .query_one(&format!("SELECT role FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{PRINCIPAL}' AND work_id='{work_id}' AND revoked_at IS NULL ORDER BY shared_at DESC LIMIT 1"), &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(role, "contributor");
+    drop(operator);
+    check(
+        &mut checks,
+        "forma_share succeeds: Diego's agent shares his expense work with Priya by name with record_write: true; she now holds record_read and record_write on it and the share row names the contributor role (the canvas route's own path)",
+    );
+
     // --- The local stand for the browser and the real MCP clients ---
     if let Some(seconds) = stand {
         let file = std::env::var("GENUI_MCP_STAND_FILE").unwrap_or_default();
