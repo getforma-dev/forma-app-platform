@@ -999,3 +999,54 @@ fn the_kind_body_is_closed_and_names_card_or_app() {
         );
     }
 }
+
+/// ADR-020 §17.35 (APP-211): the record chooser of an update or transition
+/// form names each record's creator over an `own` collection, as the Records
+/// card's "Filed by" does, so a reviewer grading many entries can tell whose
+/// is whose; a shared collection keeps today's label. The text part is cut at
+/// 100 characters; the name never is.
+#[test]
+fn an_own_collections_chooser_names_the_creator_and_a_shared_one_does_not() {
+    let values = json!([
+        {"field_id": "item", "value": {"type": "reference", "input_id": "items", "record_id": "00000000-0000-4000-8000-000000000c21"}},
+        {"field_id": "answer", "value": {"type": "text", "value": "The square"}},
+        {"field_id": "choice", "value": {"type": "enum", "value": "b"}}
+    ]);
+    // Shared: byte for byte today's label.
+    assert_eq!(
+        record_choice_label(None, &values, 3),
+        "The square · revision 3"
+    );
+    assert_eq!(
+        record_choice_label(
+            None,
+            &json!([{"field_id": "done", "value": {"type": "boolean", "value": true}}]),
+            1
+        ),
+        "Record · revision 1"
+    );
+    // Own: the creator's label first, then the same text and revision.
+    assert_eq!(
+        record_choice_label(Some("Ben Okafor".into()), &values, 3),
+        "Ben Okafor · The square · revision 3"
+    );
+    assert_eq!(
+        record_choice_label(Some("Member c0000c05".into()), &json!([]), 2),
+        "Member c0000c05 · Record · revision 2"
+    );
+    // The text is bounded, the name is whole.
+    let long = json!([{"field_id": "answer", "value": {"type": "text", "value": "é".repeat(150)}}]);
+    let name = "N".repeat(80);
+    let label = record_choice_label(Some(name.clone()), &long, 7);
+    assert_eq!(label, format!("{name} · {} · revision 7", "é".repeat(100)));
+    assert_eq!(
+        record_choice_label(None, &long, 7),
+        format!("{} · revision 7", "é".repeat(100))
+    );
+    // The chooser's own rule picks the first string value, as it did before.
+    let enum_first = json!([{"field_id": "choice", "value": {"type": "enum", "value": "b"}}, {"field_id": "answer", "value": {"type": "text", "value": "The square"}}]);
+    assert_eq!(
+        record_choice_label(Some("Ana Lima".into()), &enum_first, 1),
+        "Ana Lima · b · revision 1"
+    );
+}

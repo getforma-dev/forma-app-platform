@@ -375,9 +375,10 @@
         "APP-206",
         "APP-207",
         "APP-208",
-        "APP-209"
+        "APP-209",
+        "APP-211"
       ],
-      "ticket_count": 46,
+      "ticket_count": 47,
       "done_count": 7,
       "blocked_count": 0
     }
@@ -6503,6 +6504,35 @@
         "APP-205",
         "APP-206",
         "APP-207"
+      ]
+    },
+    {
+      "id": "APP-211",
+      "title": "No misleading score for a viewer who cannot read the key; grading by name in the record chooser",
+      "path": "0-backlog/APP-211.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Bug",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "213",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "The coordinator (Claude, in lieu of Victor), 2026-11-14, from the class guide's review of Release C's record components; both decisions are final and recorded as [ADR-020](../../docs/architecture/ADR-020-PARTICIPATION-PRIMITIVES.md) \u00a717.34 and \u00a717.35. Item 34 supersedes \u00a77's \"a student sees only their own name and zero, which is honest and harmless\".",
+      "Requirements": "SR1, SR3, C04, C06",
+      "Depends on": "APP-204, APP-205",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI (builder B7)",
+      "Branch / PR": "`release/c-b7-labels` (pushed; no PR: it merges into `release/c-participation`, ADR-020 \u00a713)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-204",
+        "APP-205"
       ]
     }
   ]

@@ -5,7 +5,7 @@
 //! every countdown's props carry it, so no browser clock decides a countdown.
 use super::{
     record_components::{self, RecordComponentProps},
-    routes,
+    routes::{self, Executor},
     worker::INTERACTIVE_DEADLINE,
     Work,
 };
@@ -55,7 +55,7 @@ fn now_seconds() -> i64 {
 
 /// A released batch: the server's instant is taken here, once, and stamped
 /// on every countdown (ADR-020 C1).
-fn released(
+pub(crate) fn released(
     mut components: Vec<RecordComponentProps>,
     parameters: &Value,
     run: storage::RecordComponentsRun,
@@ -179,10 +179,22 @@ async fn execute(
     run: &storage::RecordComponentsRun,
     parameters: &Value,
 ) -> Vec<RecordComponentProps> {
+    compute(work.executor().map(AsRef::as_ref), run, parameters).await
+}
+
+/// The props of one authorized run, as every page and the JSON refresh build
+/// them: the engine's result as props, a failure as `failed` props, and (ADR-020
+/// §17.34, APP-211) the withheld components as the note, with or without an
+/// engine, even when nothing is left to compute.
+pub(crate) async fn compute(
+    engine: Option<&dyn Executor>,
+    run: &storage::RecordComponentsRun,
+    parameters: &Value,
+) -> Vec<RecordComponentProps> {
     if run.is_empty() {
-        return Vec::new();
+        return record_components::withheld_props(run, parameters);
     }
-    let Some(engine) = work.executor() else {
+    let Some(engine) = engine else {
         return record_components::unavailable_with_parameters(
             run,
             parameters,
@@ -253,6 +265,62 @@ mod tests {
         assert!(is_record_kind("countdown"));
         assert!(is_record_kind("record_ranking"));
         assert!(!is_record_kind("summary"));
+    }
+    /// ADR-020 §17.34 (APP-211): a run whose every component is withheld has
+    /// nothing for the engine, yet the response carries each one as the note;
+    /// with something to compute and no engine, the computed part fails and
+    /// the withheld part still reads the note, never a failure.
+    #[tokio::test]
+    async fn a_withheld_only_run_answers_the_note_without_an_engine() {
+        let board = json!({"id": "board", "title": "Leaderboard", "kind": "record_ranking", "renderer_version": 1, "records": {"version": 1, "input_id": "responses", "schema_id": "responses", "group_by": "creator", "measure": {"op": "matches", "key_input": "expected", "fields": ["item"]}, "limit": 50}});
+        let timer = json!({"id": "timer", "title": "Time left", "kind": "countdown", "renderer_version": 1, "records": {"version": 1, "input_id": "items", "schema_id": "items", "timestamp_field": "opened_at"}});
+        let parameters = json!({"filter_epoch": 2, "filters": []});
+        let only = storage::RecordComponentsRun::for_tests_withholding(
+            json!({"components": [], "filters": [], "datasets": [], "creators": []}),
+            vec![board.clone()],
+        );
+        let note = compute(None, &only, &parameters).await;
+        assert_eq!(note.len(), 1);
+        assert_eq!(
+            (
+                note[0].id.as_str(),
+                note[0].state.as_str(),
+                note[0].message.as_str(),
+                note[0].has_summary,
+                note[0].has_groups,
+                note[0].has_receipt
+            ),
+            (
+                "board",
+                "withheld",
+                record_components::WITHHELD_NOTE,
+                false,
+                false,
+                false
+            )
+        );
+        let batch = released(note, &parameters, only, 1_764_428_705);
+        let body: Value = serde_json::from_slice(&serde_json::to_vec(&batch).unwrap()).unwrap();
+        assert_eq!(body["filter_epoch"], 2);
+        assert_eq!(body["components"][0]["state"], "withheld");
+        assert_eq!(
+            body["components"][0]["message"],
+            "Scores are shown to this app's reviewers."
+        );
+        assert_eq!(body["components"][0]["summary"], "");
+        let mixed = storage::RecordComponentsRun::for_tests_withholding(
+            json!({"components": [timer], "filters": [], "datasets": [], "creators": []}),
+            vec![board],
+        );
+        let shown = compute(None, &mixed, &parameters).await;
+        assert_eq!(
+            shown
+                .iter()
+                .map(|p| (p.id.as_str(), p.state.as_str()))
+                .collect::<Vec<_>>(),
+            [("timer", "failed"), ("board", "withheld")]
+        );
+        assert_eq!(shown[1].message, record_components::WITHHELD_NOTE);
     }
     #[test]
     fn every_response_carries_the_server_instant_and_stamps_countdowns() {

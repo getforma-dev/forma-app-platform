@@ -2063,10 +2063,19 @@ async fn participation_phase(
     assert!(label.as_str().is_some_and(|label| !label.is_empty()));
     assert_eq!(component(&page, "response_count")["value"], "1");
     assert_eq!(component(&page, "timer")["closed"], false);
-    // The contributor's page ranks only themselves, scored against no
-    // readable expected entry.
+    // ADR-020 §17.34 (APP-211): the contributor cannot read the owner's
+    // `own` expected list, so the leaderboard is withheld from their page
+    // (never computed, so never a misleading zero); their count still shows.
     let own_page = components(stores, &engine, &contributor, quiz).await;
-    assert_eq!(scores(&own_page, "leaderboard"), [("0".to_owned(), 1)]);
+    assert!(
+        own_page["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|component| component["id"] != "leaderboard"),
+        "the leaderboard is withheld from a contributor"
+    );
+    assert_eq!(component(&own_page, "response_count")["value"], "1");
     // The owner closes the item: the next answer is refused.
     let close = command_on(
         quiz,
@@ -2090,7 +2099,7 @@ async fn participation_phase(
     );
     check(
         checks,
-        "APP-207 acceptance 3: the composed quiz runs end to end: a contributor cannot post; the owner's post stamps opened_at; a contributor's answer is filed, a changed answer replaces it (the same entry at version 2, the second form's id never created), the same answer again is unchanged; the owner's page ranks the contributor by creator with one match against the expected entry and the contributor's page ranks only themselves at zero; after the owner's close the countdown reads closed and the next answer is refused requirement_not_met",
+        "APP-207 acceptance 3: the composed quiz runs end to end: a contributor cannot post; the owner's post stamps opened_at; a contributor's answer is filed, a changed answer replaces it (the same entry at version 2, the second form's id never created), the same answer again is unchanged; the owner's page ranks the contributor by creator with one match against the expected entry and the contributor's page withholds the leaderboard (APP-211: the expected key is unreadable to them) while still counting their response; after the owner's close the countdown reads closed and the next answer is refused requirement_not_met",
     );
 
     // --- Attendance: one check-in per session while it is open ---

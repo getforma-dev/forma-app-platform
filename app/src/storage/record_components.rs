@@ -12,6 +12,15 @@
 //! against no key row they cannot read. Labels are `directory::label` for a
 //! member; a guest (an account outside the organization) sees only the
 //! neutral handle, never a member's chosen name (ADR-020 clarification).
+//!
+//! ADR-020 §17.34 (APP-211): a `matches` component whose key input the viewer
+//! cannot read is **withheld** here, once, before any child runs: the key's
+//! collection is declared `own` and the viewer is not a reviewer of the work,
+//! which is exactly the test `own_rows` applies to every row the viewer did
+//! not create ([`super::authorization::hidden`]). A withheld component is not
+//! in the engine payload (so it is never computed, and the receipt never
+//! covers it); the run lists its declaration under [`RecordComponentsRun::withheld`]
+//! so that every page shows the same note and no number.
 use super::{
     authorization::Transaction,
     pool::Data,
@@ -50,6 +59,10 @@ pub struct RecordComponentsRun {
     policy_epoch: i64,
     actor: Actor,
     payload: Value,
+    /// ADR-020 §17.34 (APP-211): the declarations of the components withheld
+    /// from this viewer (their key input is unreadable), in definition order.
+    /// Never in `payload`, so never computed and never in the receipt.
+    withheld: Vec<Value>,
     snapshot: Value,
     snapshot_digest: String,
 }
@@ -84,15 +97,27 @@ impl RecordComponentsRun {
     pub fn snapshot_digest(&self) -> &str {
         &self.snapshot_digest
     }
+    /// Nothing to compute: no component reaches the engine. Withheld
+    /// components do not count; they are shown from [`Self::withheld`].
     pub fn is_empty(&self) -> bool {
         self.payload["components"]
             .as_array()
             .is_none_or(Vec::is_empty)
     }
+    /// ADR-020 §17.34 (APP-211): the components withheld from this viewer,
+    /// as declared (id, title, kind, records), in definition order.
+    pub fn withheld(&self) -> &[Value] {
+        &self.withheld
+    }
     /// Unit tests of the projection protocol: a run over a synthetic payload,
     /// never a capture. Test builds only.
     #[cfg(test)]
     pub fn for_tests(payload: Value) -> Self {
+        Self::for_tests_withholding(payload, Vec::new())
+    }
+    /// [`Self::for_tests`] with components withheld from the viewer.
+    #[cfg(test)]
+    pub fn for_tests_withholding(payload: Value, withheld: Vec<Value>) -> Self {
         let id = "00000000-0000-4000-8000-000000000001".to_owned();
         Self {
             organization: id.clone(),
@@ -107,6 +132,7 @@ impl RecordComponentsRun {
                 epoch: 1,
             },
             payload,
+            withheld,
             snapshot: json!([]),
             snapshot_digest: format!("sha256:{}", "0".repeat(64)),
         }
@@ -158,6 +184,65 @@ fn captured_inputs(components: &[Value]) -> BTreeSet<&str> {
         })
         .flatten()
         .collect()
+}
+/// The key input each `matches` component names (ADR-020 C4).
+fn key_input(component: &Value) -> Option<&str> {
+    component["records"]["measure"]["key_input"].as_str()
+}
+/// ADR-020 §17.34 (APP-211): splits the components into those the engine
+/// computes and those withheld from the viewer, in definition order: a
+/// component is withheld exactly when its key input is in `unreadable`.
+fn partition_withheld(
+    components: Vec<Value>,
+    unreadable: &BTreeSet<String>,
+) -> (Vec<Value>, Vec<Value>) {
+    components
+        .into_iter()
+        .partition(|v| !key_input(v).is_some_and(|key| unreadable.contains(key)))
+}
+/// ADR-020 §17.34 (APP-211): whether `$3` (a collection of work `$2` of app
+/// `$1`) is hidden from the scoped principal: declared `own` and the principal
+/// is not a reviewer of the work. This is `own_rows`' own test for a row the
+/// principal did not create ([`super::authorization::hidden`]), asked once
+/// per key input rather than once per row; there is no second definition of
+/// a reviewer here.
+fn key_hidden_statement() -> String {
+    format!(
+        "SELECT $3::text::uuid = ANY({})",
+        super::authorization::hidden(
+            "$1::text::uuid",
+            "$2::text::uuid",
+            super::authorization::SCOPED
+        )
+    )
+}
+async fn key_hidden(tx: &Transaction<'_>, app: &str, work: &str, collection: &str) -> Result<bool> {
+    // Test builds with the row rule bypassed (ADR-020 §14.1): nothing is
+    // hidden, so nothing is withheld, and the campaign's check fails as every
+    // D7 check must. (`hidden` is then a literal that names no parameter.)
+    if super::authorization::bypassed() {
+        return Ok(false);
+    }
+    let rows = tx
+        .query(&key_hidden_statement(), &[&app, &work, &collection])
+        .await?;
+    rows.first()
+        .ok_or(Error::Unavailable)?
+        .try_get(0)
+        .map_err(|_| Error::Unavailable)
+}
+/// The work's `records` binding of `input`: `(collection, schema, version)`.
+/// An input the work does not bind is `Denied`, as any unreadable record is.
+async fn binding(
+    tx: &Transaction<'_>,
+    org: &str,
+    app: &str,
+    work: &str,
+    input: &str,
+) -> Result<(String, String, i64)> {
+    let binding=tx.query("SELECT collection_id::text,schema_id::text,schema_version::bigint FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND input_id=$4::text AND kind='records' AND revision_policy='committed_snapshot'", &[&org,&app,&work,&input]).await?;
+    let b = binding.first().ok_or(Error::Denied)?;
+    Ok((text(b, 0)?, text(b, 1)?, number(b, 2)?))
 }
 /// A payload the confined child could not read whole is refused as a
 /// projection limit before any child is launched; nothing partial is shown.
@@ -328,6 +413,22 @@ async fn capture(
                 .is_some_and(|id| a.views.iter().any(|v| v == id))
         }))?;
     }
+    // Every input the components name is bound once, before anything is read.
+    let mut bindings = BTreeMap::new();
+    for input in captured_inputs(&components) {
+        bindings.insert(input.to_owned(), binding(tx, org, app, work, input).await?);
+    }
+    // ADR-020 §17.34 (APP-211): a key the viewer cannot read withholds every
+    // component that scores against it. Decided here, once, so the canvas,
+    // the pages, the live refresh and every other reader agree.
+    let mut unreadable = BTreeSet::new();
+    for key in components.iter().filter_map(key_input) {
+        let (collection, _, _) = bindings.get(key).ok_or(Error::Unavailable)?;
+        if key_hidden(tx, app, work, collection).await? {
+            unreadable.insert(key.to_owned());
+        }
+    }
+    let (components, withheld) = partition_withheld(components, &unreadable);
     let inputs = captured_inputs(&components);
     let mut creators = BTreeMap::new();
     let mut datasets = Vec::new();
@@ -335,11 +436,7 @@ async fn capture(
     let mut total_bytes = 0usize;
     let mut provenance = Vec::new();
     for input in inputs {
-        let binding=tx.query("SELECT collection_id::text,schema_id::text,schema_version::bigint FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND input_id=$4::text AND kind='records' AND revision_policy='committed_snapshot'", &[&org,&app,&work,&input]).await?;
-        let b = binding.first().ok_or(Error::Denied)?;
-        let collection = text(b, 0)?;
-        let schema = text(b, 1)?;
-        let version = number(b, 2)?;
+        let (collection, schema, version) = bindings.get(input).ok_or(Error::Unavailable)?.clone();
         require(
             components
                 .iter()
@@ -411,6 +508,7 @@ async fn capture(
         policy_epoch: pin.policy_epoch,
         actor,
         payload,
+        withheld,
         snapshot: json!(provenance),
         snapshot_digest,
     })
@@ -429,6 +527,57 @@ mod tests {
         assert_eq!(
             captured_inputs(&components).into_iter().collect::<Vec<_>>(),
             ["expected", "items", "responses"]
+        );
+    }
+    /// ADR-020 §17.34 (APP-211): the withheld decision is `own_rows`' own
+    /// test for a row the viewer did not create (`hidden`), asked once per
+    /// key input: the `own` declaration and the one reviewer clause (the app's
+    /// owner, the work's unrevoked creator, `record_review`, the
+    /// organization-wide reviewer share), no second definition.
+    #[test]
+    fn the_key_test_is_the_row_rules_hidden_clause() {
+        let statement = key_hidden_statement();
+        assert!(statement.starts_with("SELECT $3::text::uuid = ANY(ARRAY(SELECT hc.collection_id"));
+        for part in [
+            "hd.owner_only",
+            "ra.owner_principal_id=nullif(current_setting('genui.principal_id',true),'')::uuid",
+            "rw.creator_revoked_at IS NULL",
+            "rp.permission='record_review'",
+            "rs.role='reviewer'",
+        ] {
+            assert!(statement.contains(part), "{part} is not in {statement}");
+        }
+        assert_eq!(
+            statement,
+            format!(
+                "SELECT $3::text::uuid = ANY({})",
+                super::super::authorization::hidden(
+                    "$1::text::uuid",
+                    "$2::text::uuid",
+                    super::super::authorization::SCOPED
+                )
+            )
+        );
+    }
+    #[test]
+    fn a_component_is_withheld_exactly_when_its_key_input_is_unreadable() {
+        let timer = json!({"id": "timer", "kind": "countdown", "records": {"input_id": "items"}});
+        let board = json!({"id": "board", "kind": "record_ranking", "records": {"input_id": "responses", "group_by": "creator", "measure": {"op": "matches", "key_input": "expected", "fields": ["item"]}}});
+        let count = json!({"id": "count", "kind": "record_summary", "records": {"input_id": "responses", "measure": {"op": "count"}}});
+        let shared = json!({"id": "shared", "kind": "record_summary", "records": {"input_id": "responses", "measure": {"op": "matches", "key_input": "answers", "fields": ["item"]}}});
+        let all = vec![timer.clone(), board.clone(), count.clone(), shared.clone()];
+        // A readable key (a reviewer, the owner, a shared key list): nothing withheld.
+        let (computed, withheld) = partition_withheld(all.clone(), &BTreeSet::new());
+        assert_eq!((computed.len(), withheld.len()), (4, 0));
+        // The `expected` key is unreadable: only the components scoring against it go.
+        let unreadable = BTreeSet::from(["expected".to_owned()]);
+        let (computed, withheld) = partition_withheld(all, &unreadable);
+        assert_eq!(computed, vec![timer, count, shared]);
+        assert_eq!(withheld, vec![board]);
+        // The key input of a withheld component is no longer captured.
+        assert_eq!(
+            captured_inputs(&computed).into_iter().collect::<Vec<_>>(),
+            ["answers", "items", "responses"]
         );
     }
     #[test]

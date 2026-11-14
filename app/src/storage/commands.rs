@@ -343,6 +343,11 @@ pub struct RecordDetail {
     /// collection_id)` in input order, so that a form can resolve a
     /// reference field's `target_input` to the collection it names.
     pub bindings: Vec<(String, String)>,
+    /// ADR-020 §17.35 (APP-211): the collection's schema declares
+    /// `visibility: "own"` (each member files their own entries), so a chooser
+    /// over it names each record's creator. Presentation only; the row rule
+    /// is `own_rows`.
+    pub own: bool,
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -428,6 +433,8 @@ pub(super) struct Published {
     /// ADR-020 C2: the schema's `one_per_creator` key fields, in declaration
     /// order; empty when the schema declares none.
     pub(super) one_per_creator: Vec<String>,
+    /// ADR-007 (D7): the schema declares `visibility: "own"`.
+    pub(super) own: bool,
 }
 
 fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
@@ -573,6 +580,7 @@ pub(super) fn published_content(
         fields,
         commands,
         one_per_creator,
+        own: found.get("visibility").and_then(Value::as_str) == Some("own"),
     })
 }
 
@@ -1347,6 +1355,7 @@ impl Data {
                     .collect(),
                 can_write,
                 bindings,
+                own: published.own,
             })
         }
         .await;

@@ -904,6 +904,7 @@ fn a_stamped_field_is_read_only_in_the_form() {
         }],
         can_write: true,
         bindings: Vec::new(),
+        own: false,
     };
     let view = super::view("a", "w", &detail, "t".into(), "k".into(), None);
     let writable: Vec<(&str, bool)> = view
@@ -1043,6 +1044,7 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
         commands,
         can_write: true,
         bindings: Vec::new(),
+        own: false,
     };
     let offered = |detail: &RecordDetail| {
         let view = super::view("a", "w", detail, "t".into(), "k".into(), None);
@@ -1140,6 +1142,7 @@ fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
         }],
         commands: vec![command],
         bindings: Vec::new(),
+        own: false,
     };
     let offered = |detail: &RecordDetail, selected| {
         super::view_for_command("a", "w", detail, "csrf".into(), "same-key".into(), selected)
