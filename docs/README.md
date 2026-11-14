@@ -39,6 +39,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [architecture/SPREADSHEET-VIEWING.md](architecture/SPREADSHEET-VIEWING.md) | Reference | Limits for viewing a large spreadsheet. | |
 | [architecture/THEME-ROLES.md](architecture/THEME-ROLES.md) | Reference | Shared color roles for the canvas, native pages, apps and widgets. | |
 | [design-brief/README.md](design-brief/README.md) | Reference | Designer brief dated 2026-10-30 for the invite-first beta screens. | |
+| [operations/CLASS-GUIDE.md](operations/CLASS-GUIDE.md) | Current | Victor's class-prep pack for the Nov 29–30 class: the composer words for each class app and their helper checks, the rehearsal script, the students' known-issues list, the code email and what to watch during the class. | |
 | [operations/LIVE-SHARING.md](operations/LIVE-SHARING.md) | Current | Private live sharing and the separate invitation broker. | |
 | [operations/TRIAL-RUNBOOK.md](operations/TRIAL-RUNBOOK.md) | Current | The real-user trial (Nov 29–30 class): releases A and B, renewals, codes and restarts, member removal, deny-all, feedback, the restore drill and the purge. | |
 | [pitch/README.md](pitch/README.md) | Current | Why `docs/pitch/` still holds live procedures, and which file is which. | |
