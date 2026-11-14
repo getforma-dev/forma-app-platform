@@ -520,6 +520,14 @@ fn column_types_follow_the_typed_query() {
     ] {
         assert_eq!(ColumnType::from_value_type(&bad), None, "{bad}");
     }
+    // ADR-020 §9 (APP-208): a multi-select is a text column to the engine
+    // (`record_query::scalar_row` joins the selection by ", ").
+    assert_eq!(
+        ColumnType::from_value_type(
+            &json!({"type": "multi_enum", "values": ["red", "green", "blue"]})
+        ),
+        Some(ColumnType::Text)
+    );
 }
 
 #[tokio::test]

@@ -904,7 +904,9 @@ impl ColumnType {
             "decimal" => Self::Decimal {
                 scale: bounded("scale")?,
             },
-            "text" | "enum" => Self::Text,
+            // ADR-020 §9 (APP-208): a multi-select reaches the typed engine
+            // as one text (`record_query::scalar_row` joins its values).
+            "text" | "enum" | "multi_enum" => Self::Text,
             "date" => Self::Date,
             "timestamp" => Self::Timestamp,
             "boolean" => Self::Boolean,

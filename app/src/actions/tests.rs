@@ -190,6 +190,11 @@ fn money_resolves_to_cents_and_displays_as_dollars() {
         display(&json!({"type": "enum", "value": "approved"})),
         "approved"
     );
+    // ADR-020 §9 (APP-208): a multi-select reads as its values joined.
+    assert_eq!(
+        display(&json!({"type": "multi_enum", "values": ["red", "blue"]})),
+        "red, blue"
+    );
 }
 
 #[test]

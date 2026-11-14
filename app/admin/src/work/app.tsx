@@ -65,6 +65,8 @@ type Field = {
   hasChoices: boolean;
   /** APP-205: a reference with nothing to choose (a disabled select). */
   noChoices: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  hasCheckboxes: boolean;
   choices: Choice[];
 };
 type FormCard = {
@@ -267,6 +269,13 @@ function Work(props: WorkProps) {
                   {createShow(() => field.noChoices, () => <label>
                     <span>{field.label}</span><select name={field.input} disabled><option value="">Nothing to choose yet</option></select>
                   </label>)}
+                  {createShow(() => field.hasCheckboxes, () => <fieldset class="document-choices">
+                    <legend>{field.label}</legend>
+                    <input type="hidden" name={field.input} value="" />
+                    {createList(() => field.choices, choice => choice.id, choice => <label class="document-choice">
+                      <input type="checkbox" name={field.input} value={choice.value} checked={choice.selected} />{' '}{choice.label}
+                    </label>)}
+                  </fieldset>)}
                   {createShow(() => field.readOnly, () => <p>{field.label}: {field.value}</p>)}
                   {createShow(() => field.writable, () => <input type="hidden" name={field.specInput} value={field.spec} />)}
                 </div>

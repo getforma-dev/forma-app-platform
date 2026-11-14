@@ -86,6 +86,32 @@ class RecordQueryTests(unittest.TestCase):
         with self.assertRaisesRegex(engine.Refused, "scratch_refused"):
             engine.execute(request, time.monotonic())
 
+    def test_a_multi_select_is_one_text_column_of_a_records_input_only(self):
+        """ADR-020 section 9 (APP-208): the parent joins the selection by ", "; this engine
+        sees a VARCHAR column. No source column has the type, and no literal of it is qualified."""
+        global FIELDS
+        kept = FIELDS
+        FIELDS = [{"id": "title", "value_type": {"type": "text"}, "nullable": False},
+                  {"id": "tags", "value_type": {"type": "multi_enum", "values": ["red", "green", "blue"]}, "nullable": True}]
+        try:
+            tags = {"input_id": "app_data", "field_id": "tags"}
+            rows = [{"title": "one", "tags": "red, blue"}, {"title": "two", "tags": None}, {"title": "three", "tags": "green"}]
+            result = self.run_query(rows, [{"type": "project", "fields": [{"input_id": "app_data", "field_id": "title"}, tags]}])
+            self.assertEqual(result["rows"], [["one", "red, blue"], ["two", None], ["three", "green"]])
+            counted = self.run_query(rows, [{"type": "aggregate", "group_by": [tags], "measures": [
+                {"id": "n", "operation": "count", "field": {"input_id": "app_data", "field_id": "title"}}]}])
+            self.assertEqual(counted["rows"], [["green", "1"], ["red, blue", "1"], [None, "1"]])
+            with self.assertRaisesRegex(engine.Refused, "literal type is not in the qualified query subset"):
+                self.run_query(rows, [{"type": "filter", "field": tags, "comparison": "eq",
+                                       "value": {"type": "multi_enum", "values": ["red"]}}])
+            # A source input never carries the type.
+            with self.assertRaisesRegex(engine.Refused, "fields_refused"):
+                engine.compile_query({"operator_version": 1, "null_policy": "unknown", "inputs": ["app_data"],
+                                      "operations": [{"type": "project", "fields": [tags]}]},
+                                     "unused.parquet", input_id="app_data", fields=FIELDS, records=False)
+        finally:
+            FIELDS = kept
+
 
 if __name__ == "__main__":
     unittest.main()

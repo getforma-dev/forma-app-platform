@@ -8,6 +8,15 @@
 //! `matches` summary. Its D7 checks run twice: as shipped, where they must
 //! hold, and with `authorization::BYPASS` set, where they must fail (the
 //! contributor's ranking then shows everyone).
+//!
+//! APP-208 (ADR-020 §9) adds the contract specimen's multi-select app
+//! (`contracts/fixtures/participation.json`, `multi_select`): an `own`
+//! `choices` list whose `tags` is a `multi_enum`, picked through the JSON
+//! route and through the native form's checkbox group; a ranking that counts
+//! a row once per selected value, a list whose cell joins the selection, and
+//! a typed query that sees the field as text; storage's refusals of any other
+//! order, a repeat, an unknown id, an empty set and nothing on a required
+//! field; and D7 on the ranking and the typed query (fails under bypass).
 use super::{
     admission_qualification::operator,
     authorization::BYPASS,
@@ -471,7 +480,8 @@ async fn campaign() {
     );
     check(&mut checks,"expired execution deadline launches no child and yields no values; member revocation denies previously computed release and new snapshot before bounds/data reads");
     let participation = participation(&fixture, &stores, &engine, &mut checks).await;
-    let report = json!({"campaign":"APP-158-159-record-components","passed":true,"checks":checks,"participation":participation,"record_operator_version":1,"bounds":{"rows":RECORD_COMPONENT_ROWS,"bytes":RECORD_COMPONENT_BYTES},"provider_identity":"synthetic-test-proof-only","definition":template.content(),"initial_command_outcomes":command_outcomes,"snapshot_datasets":run.payload()["datasets"],"parameters":parameters,"initial_result":result.document,"member_receipt":receipt,"guest_receipt":projections::receipt(&guest,&guest_result,&parameters).unwrap()});
+    let multi_select = multi_select(&fixture, &stores, &engine, &mut checks).await;
+    let report = json!({"campaign":"APP-158-159-record-components","passed":true,"checks":checks,"participation":participation,"multi_select":multi_select,"record_operator_version":1,"bounds":{"rows":RECORD_COMPONENT_ROWS,"bytes":RECORD_COMPONENT_BYTES},"provider_identity":"synthetic-test-proof-only","definition":template.content(),"initial_command_outcomes":command_outcomes,"snapshot_datasets":run.payload()["datasets"],"parameters":parameters,"initial_result":result.document,"member_receipt":receipt,"guest_receipt":projections::receipt(&guest,&guest_result,&parameters).unwrap()});
     if let Some(path) = std::env::var_os("GENUI_RECORD_COMPONENTS_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
@@ -631,11 +641,17 @@ async fn computed(
     who: &TrustedRequest,
     work: &str,
 ) -> (RecordComponentsRun, projections::RecordComponentsResult) {
-    let run = stores
-        .data
-        .record_components(who, QUIZ_APP, work)
-        .await
-        .unwrap();
+    computed_in(stores, engine, who, QUIZ_APP, work).await
+}
+/// [`computed`] for any campaign app (APP-208's multi-select app too).
+async fn computed_in(
+    stores: &Stores,
+    engine: &Engine,
+    who: &TrustedRequest,
+    app: &str,
+    work: &str,
+) -> (RecordComponentsRun, projections::RecordComponentsResult) {
+    let run = stores.data.record_components(who, app, work).await.unwrap();
     let result = engine
         .execute_records(
             &run,
@@ -1296,4 +1312,466 @@ async fn participation(
             && judged.standing(&cal) == Standing::Closed
     });
     json!({"definition": participation_definition()["content"], "owner": owner_view, "contributor": contributor_view})
+}
+
+// --- APP-208: ADR-020 §9 (the multi-select) ----------------------------------
+
+const MULTI_APP: &str = "00000000-0000-4000-8000-000000000c30";
+const MULTI_REVISION: &str = "00000000-0000-4000-8000-000000000c31";
+/// The contract specimen of edition impl-2026-11-14.2 (B0's
+/// `make_fixtures.participation()`); its `multi_select` member is ADR-020 §9's
+/// definition: an `own` `choices` list (`title` text, `tags` multi_enum
+/// red|green|blue, `day` date) with a `pick` create, a reviewer-only `keys`
+/// list, a `records_list`, a ranking by `tags`, a trend by `day`, a `matches`
+/// summary and a typed query projecting `title` and `tags`.
+const SPECIMEN: &str = include_str!("../../../contracts/fixtures/participation.json");
+
+/// The specimen's multi-select definition under this campaign's organization
+/// and app, at definition schema version 1 (storage stores edition 1 only,
+/// `definitions::create_definition_revision`), derived as B0's
+/// `make_fixtures.records_input` derives `definition_v1` from the version-2
+/// content: every input drops its version-2-only `coverage`; nothing else
+/// changes. Re-digested over that content.
+fn multi_select_definition() -> Value {
+    let specimen: Value = serde_json::from_str(SPECIMEN).unwrap();
+    let mut content = specimen["multi_select"]["content"].clone();
+    for input in content["inputs"].as_array_mut().unwrap() {
+        input.as_object_mut().unwrap().remove("coverage");
+    }
+    let canonical = admission::encode(&content).unwrap();
+    json!({
+        "kind": "app_definition",
+        "schema_version": 1,
+        "organization_id": ORG,
+        "app_id": MULTI_APP,
+        "revision_id": MULTI_REVISION,
+        "content": content,
+        "digest": digest::digest(digest::APP_DEFINITION, &canonical),
+    })
+}
+
+fn tags(values: &[&str]) -> Value {
+    json!({"type": "multi_enum", "values": values})
+}
+fn pick_values(title: &str, tags_value: Value, day: &str) -> Value {
+    json!([
+        {"field_id": "title", "value": {"type": "text", "value": title}},
+        {"field_id": "tags", "value": tags_value},
+        {"field_id": "day", "value": {"type": "date", "value": day}}
+    ])
+}
+fn multi_record(n: u32) -> String {
+    format!("00000000-0000-4000-8000-00000000c3{n:02x}")
+}
+/// The `pick` form a member is offered on record `n`, as the record page and
+/// the canvas card build it (`view_for_command`).
+async fn multi_form(
+    stores: &Stores,
+    who: &TrustedRequest,
+    work: &str,
+    choices: &str,
+    n: u32,
+) -> crate::commands::RecordView {
+    let detail = stores
+        .data
+        .read_record_detail(who, MULTI_APP, work, choices, &multi_record(n))
+        .await
+        .unwrap();
+    crate::commands::view_for_command(
+        MULTI_APP,
+        work,
+        &detail,
+        "csrf".into(),
+        format!("{:032x}", 0xc380 + n),
+        Some("pick"),
+    )
+}
+/// The specimen's `tag_rows` typed query as `who` may run it: its rows,
+/// sorted by title, each as a JSON array.
+async fn typed_rows(
+    stores: &Stores,
+    engine: &Engine,
+    who: &TrustedRequest,
+    work: &str,
+) -> Vec<Value> {
+    let run = stores
+        .data
+        .run_query(who, MULTI_APP, work, "tag_rows", &json!({}))
+        .await
+        .unwrap();
+    let result = engine
+        .execute(&run, Duration::from_millis(1800))
+        .await
+        .unwrap();
+    stores.data.release_result(who, &run).await.unwrap();
+    let mut rows = result.rows.clone();
+    rows.sort_by(|a, b| a[0].as_str().cmp(&b[0].as_str()));
+    rows.into_iter().map(Value::Array).collect()
+}
+
+/// ADR-020 §9: the multi-select through the shipped paths. Returns the
+/// report's `multi_select` member.
+async fn multi_select(
+    fixture: &Fixture,
+    stores: &Stores,
+    engine: &Engine,
+    checks: &mut Vec<Value>,
+) -> Value {
+    // The actors are `participation`'s (admitted and named there).
+    let owner = request(stores, ORG, P_OWNER, 1);
+    let rev = request(stores, ORG, P_REV, 1);
+    let ben = request(stores, ORG, P_BEN, 1);
+    let ana = request(stores, ORG, P_ANA, 1);
+    operator(
+        fixture,
+        &[
+            "create-app",
+            "--organization",
+            ORG,
+            "--app",
+            MULTI_APP,
+            "--space",
+            SPACE,
+            "--owner",
+            P_OWNER,
+        ],
+    );
+    for permission in ["discover", "run"] {
+        grant(fixture, P_OWNER, permission, &["--app", MULTI_APP]);
+    }
+    let admitted =
+        admission::admit_definition(&serde_json::to_vec(&multi_select_definition()).unwrap())
+            .expect("the specimen's multi-select definition admits");
+    let revision = stores
+        .workspace
+        .create_definition_revision(&owner, MULTI_APP, &admitted)
+        .await
+        .unwrap();
+    let PublishResult::Published(publication) = stores
+        .control
+        .publish(&owner, MULTI_APP, &revision.revision, POLICY)
+        .await
+        .unwrap()
+    else {
+        panic!("uncontended publication is not stale");
+    };
+    let saved = stores
+        .workspace
+        .create_work(
+            &owner,
+            MULTI_APP,
+            &publication.publication_id,
+            "Multi-select (synthetic campaign)",
+            &["choices", "keys"].map(|id| WorkBinding::Records {
+                input: id.into(),
+                schema: id.into(),
+            }),
+        )
+        .await
+        .unwrap();
+    let work = saved.work.as_str();
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            MULTI_APP,
+            work,
+            Audience::Member(P_REV),
+            ShareRole::Reviewer,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    for member in [P_BEN, P_ANA] {
+        stores
+            .workspace
+            .share_work(
+                &owner,
+                MULTI_APP,
+                work,
+                Audience::Member(member),
+                ShareRole::Contributor,
+                ShareMode::Set,
+            )
+            .await
+            .unwrap();
+    }
+    let listing = stores
+        .data
+        .list_records(&owner, MULTI_APP, work)
+        .await
+        .unwrap();
+    let choices = listing
+        .collections
+        .iter()
+        .find(|c| c.schema == "choices")
+        .expect("the choices collection")
+        .collection
+        .clone();
+    let record = multi_record;
+    let pick = |n: u32, values: Value| CommandRequest {
+        app: MULTI_APP.into(),
+        work: work.to_owned(),
+        publication: publication.publication_id.clone(),
+        command: "pick".into(),
+        schema: "choices".into(),
+        schema_version_expected: 1,
+        record: record(n),
+        expected_record_version: 0,
+        expected_work_version: 1,
+        values,
+        idempotency_key: format!("{:032x}", 0xc300 + n),
+    };
+    check(checks, "APP-208: the contract specimen's multi-select definition (an own `choices` list with a multi_enum `tags`) admits, publishes and saves through the shipped path");
+
+    // --- storage: the ordered subset and nothing else ---------------------
+    commits(
+        stores,
+        &ben,
+        &pick(1, pick_values("one", tags(&["red", "blue"]), "2026-11-14")),
+    )
+    .await;
+    commits(
+        stores,
+        &ben,
+        &pick(2, pick_values("two", tags(&["blue"]), "2026-11-14")),
+    )
+    .await;
+    commits(
+        stores,
+        &ana,
+        &pick(
+            3,
+            pick_values("three", tags(&["red", "green", "blue"]), "2026-11-15"),
+        ),
+    )
+    .await;
+    for (n, refused) in [
+        (0x10, tags(&["blue", "red"])),
+        (0x11, tags(&["red", "red"])),
+        (0x12, tags(&["purple"])),
+        (0x13, tags(&["red", "purple"])),
+        (0x14, tags(&[])),
+        (0x15, json!({"type": "null"})),
+        (0x16, json!({"type": "enum", "value": "red"})),
+        (
+            0x17,
+            json!({"type": "multi_enum", "values": ["red"], "value": "red"}),
+        ),
+    ] {
+        let attempt = pick(n, pick_values("refused", refused.clone(), "2026-11-14"));
+        assert_eq!(
+            stores.data.commit_record(&ben, &attempt).await,
+            Err(Error::Denied),
+            "{refused}"
+        );
+    }
+    let detail = stores
+        .data
+        .read_record_detail(&ben, MULTI_APP, work, &choices, &record(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        detail.fields.iter().find(|f| f.id == "tags").unwrap().value,
+        tags(&["red", "blue"])
+    );
+    check(checks, "APP-208 storage: a selection in declaration order commits and is stored canonically; another order, a repeat, an unknown id, an empty set, null on the required field, an enum literal and an extra member are each refused (the uniform refusal, nothing written)");
+
+    // --- the native form: checkboxes under one input name -----------------
+    let fresh = multi_form(stores, &ben, work, &choices, 4).await;
+    let row = |view: &crate::commands::RecordView, id: &str| {
+        view.fields.iter().find(|r| r.id == id).cloned().unwrap()
+    };
+    let tags_row = row(&fresh, "tags");
+    assert_eq!(tags_row.kind, "multi_enum");
+    assert_eq!(
+        tags_row
+            .choices
+            .iter()
+            .map(|c| (c.value.as_str(), c.selected))
+            .collect::<Vec<_>>(),
+        [("red", false), ("green", false), ("blue", false)]
+    );
+    assert!(tags_row.writable && !tags_row.nothing_to_choose && tags_row.value.is_empty());
+    let card = crate::query::canvas::form_card(work, &fresh).unwrap();
+    let card_tags = card.fields.iter().find(|f| f.id == "tags").unwrap();
+    assert!(card_tags.has_checkboxes && !card_tags.has_choices && !card_tags.has_text);
+    let field = |name: &str, value: &str| (name.to_owned(), value.to_owned());
+    let premise = |view: &crate::commands::RecordView| {
+        vec![
+            field("csrf", "csrf"),
+            field("idempotency_key", &view.idempotency_key),
+            field("collection_id", &view.collection),
+            field("publication_id", &view.publication),
+            field("schema_id", &view.schema),
+            field("schema_version_expected", &view.schema_version),
+            field("record_id", &view.record_id),
+            field("expected_record_version", &view.version),
+            field("expected_work_version", &view.work_version),
+            field(&row(view, "title").input, "four"),
+            field(&row(view, "title").spec_input, &row(view, "title").spec),
+            field(&row(view, "day").input, "2026-11-16"),
+            field(&row(view, "day").spec_input, &row(view, "day").spec),
+        ]
+    };
+    // As the browser posts the group: the empty sentinel, then each checked
+    // box in document (declaration) order, then the spec echo.
+    let mut posted = premise(&fresh);
+    posted.extend([
+        field(&tags_row.input, ""),
+        field(&tags_row.input, "green"),
+        field(&tags_row.input, "blue"),
+        field(&tags_row.spec_input, &tags_row.spec),
+    ]);
+    let (submitted, collection) =
+        crate::commands::routes::parse_form_for_tests(&posted, MULTI_APP, work, "pick").unwrap();
+    assert_eq!(collection, choices);
+    let posted_value = |request: &CommandRequest, id: &str| {
+        request
+            .values
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["field_id"] == id)
+            .unwrap()["value"]
+            .clone()
+    };
+    assert_eq!(posted_value(&submitted, "tags"), tags(&["green", "blue"]));
+    let picked = commits(stores, &ben, &submitted).await;
+    assert_eq!(picked.record_id, record(4));
+    let held = multi_form(stores, &ben, work, &choices, 4).await;
+    assert_eq!(row(&held, "tags").value, "green, blue");
+    assert_eq!(
+        row(&held, "tags")
+            .choices
+            .iter()
+            .map(|c| c.selected)
+            .collect::<Vec<_>>(),
+        [false, true, true]
+    );
+    // Nothing checked: the sentinel alone is the null value, which the
+    // required field refuses.
+    let none = multi_form(stores, &ben, work, &choices, 5).await;
+    let mut unchecked = premise(&none);
+    unchecked.extend([
+        field(&tags_row.input, ""),
+        field(&tags_row.spec_input, &tags_row.spec),
+    ]);
+    let (nothing, _) =
+        crate::commands::routes::parse_form_for_tests(&unchecked, MULTI_APP, work, "pick").unwrap();
+    assert_eq!(posted_value(&nothing, "tags"), json!({"type": "null"}));
+    assert_eq!(
+        stores.data.commit_record(&ben, &nothing).await,
+        Err(Error::Denied)
+    );
+    check(checks, "APP-208 forms: a contributor's pick form offers one checkbox per declared value in declaration order (none checked on a new record; the canvas card carries them as checkboxes, not a select or a text box); the boxes posted through the native form's parse compose one ordered multi_enum value storage accepts, and the record then reads \"green, blue\" with those two checked; nothing checked posts null, which the required field refuses");
+
+    // --- the ranking counts a row once per selected value -----------------
+    // Four rows: [red, blue], [blue], [red, green, blue], [green, blue].
+    let (run, result) = computed_in(stores, engine, &rev, MULTI_APP, work).await;
+    assert_eq!(
+        groups(&result, "by_tag"),
+        vec![
+            group("blue", "4", 4),
+            group("green", "2", 2),
+            group("red", "2", 2)
+        ]
+    );
+    let by_tag = value(&result, "by_tag");
+    assert_eq!(
+        (by_tag["population"].as_u64(), by_tag["value"].as_str()),
+        (Some(4), Some("4"))
+    );
+    assert_eq!(value(&result, "list")["population"], 4);
+    let list = value(&result, "list");
+    let cell = |record_id: &str| {
+        list["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == record_id)
+            .map(|r| r["cells"][1].clone())
+            .unwrap()
+    };
+    assert_eq!(cell(&record(1)), tags(&["red", "blue"]));
+    assert_eq!(cell(&record(4)), tags(&["green", "blue"]));
+    let props = projections::props(&run, &result, &projections::default_parameters()).unwrap();
+    let shown = props.iter().find(|p| p.id == "list").unwrap();
+    let texts: Vec<String> = shown
+        .rows
+        .iter()
+        .filter(|r| r.id == record(1))
+        .flat_map(|r| {
+            r.cells
+                .iter()
+                .filter(|c| c.id == "tags")
+                .map(|c| c.text.clone())
+        })
+        .collect();
+    assert_eq!(texts, ["red, blue"]);
+    // The trend buckets by month (APP-159): three November days, one group.
+    assert_eq!(groups(&result, "by_day"), vec![group("2026-11", "4", 4)]);
+    assert_eq!(value(&result, "matched")["value"], "0");
+    check(checks, "APP-208 ranking: over four rows selecting [red, blue], [blue], [red, green, blue] and [green, blue], a reviewer's ranking by tags counts blue 4, green 2, red 2 (a row adds one to each option it selected) while its population and total count the four rows once; the list's cell carries the typed selection and reads \"red, blue\"; the trend and the matches summary run beside it");
+
+    // --- the typed query sees the field as text ---------------------------
+    assert_eq!(
+        typed_rows(stores, engine, &rev, work).await,
+        vec![
+            json!(["four", "green, blue"]),
+            json!(["one", "red, blue"]),
+            json!(["three", "red, green, blue"]),
+            json!(["two", "blue"]),
+        ]
+    );
+    check(checks, "APP-208 typed query: the specimen's `tag_rows` view runs over the input with the multi_enum field projected as text joined by \", \"");
+
+    // --- D7 on every path -------------------------------------------------
+    judged!(checks, "APP-208 x D7: a contributor's ranking by tags, list and typed query count only their own rows (Ben: blue 3, green 1, red 1 over three rows), a reviewer's every member's", {
+        let (_, mine) = computed_in(stores, engine, &ben, MULTI_APP, work).await;
+        let rows = typed_rows(stores, engine, &ben, work).await;
+        groups(&mine, "by_tag") == vec![group("blue", "3", 3), group("green", "1", 1), group("red", "1", 1)]
+            && value(&mine, "by_tag")["population"] == 3
+            && value(&mine, "list")["population"] == 3
+            && rows.len() == 3
+            && rows.iter().all(|r| r[0] != "three")
+    });
+    json!({
+        "definition": multi_select_definition()["content"],
+        "work": work,
+        "reviewer_ranking": value(&result, "by_tag")["groups"],
+        "reviewer_rows": typed_rows(stores, engine, &rev, work).await,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    /// APP-208: the specimen's multi-select app admits at the stored edition
+    /// (version 1, `coverage` dropped from its inputs) with its `multi_enum`
+    /// field, its ranking by that field and its typed query intact.
+    #[test]
+    fn the_multi_select_definition_admits_at_the_stored_edition() {
+        let document = super::multi_select_definition();
+        assert_eq!(document["schema_version"], 1);
+        let admitted = crate::admission::admit_definition(&serde_json::to_vec(&document).unwrap())
+            .expect("admits");
+        assert_eq!(admitted.schema_version, 1);
+        let content = crate::admission::decode(&admitted.canonical).unwrap();
+        let inputs = content["inputs"].as_array().unwrap();
+        assert!(inputs.iter().all(|i| i.get("coverage").is_none()));
+        let tags = &content["record_schemas"][0]["fields"][1];
+        assert_eq!(tags["value_type"]["type"], "multi_enum");
+        let kinds: Vec<&Value> = content["views"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| &v["kind"])
+            .collect();
+        assert!(
+            kinds.contains(&&Value::from("record_ranking"))
+                && kinds.contains(&&Value::from("table"))
+        );
+    }
 }

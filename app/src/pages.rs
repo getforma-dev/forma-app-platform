@@ -125,6 +125,9 @@ pub struct FieldRowProps {
     pub has_choices: bool,
     /// APP-205: a reference with nothing to choose (a disabled select).
     pub no_choices: bool,
+    /// ADR-020 §9 (APP-208): a multi-select, one checkbox per declared
+    /// value (`choices`), the held ones checked, posted under one name.
+    pub has_checkboxes: bool,
     pub choices: Vec<RecordChoiceProps>,
 }
 /// APP-205: one option of the record page's reference picker.
@@ -214,11 +217,15 @@ impl RecordPage for SsrPages {
                             options: row.options.clone(),
                             nullable: row.nullable,
                             writable: row.writable,
-                            has_choices: row.writable && !row.choices.is_empty(),
+                            has_choices: row.writable
+                                && !row.choices.is_empty()
+                                && row.kind != "multi_enum",
                             no_choices: row.writable && row.nothing_to_choose,
+                            has_checkboxes: row.writable && row.kind == "multi_enum",
                             has_text: row.writable
                                 && row.choices.is_empty()
-                                && !row.nothing_to_choose,
+                                && !row.nothing_to_choose
+                                && row.kind != "multi_enum",
                             read_only: !row.writable,
                             choices: row
                                 .choices

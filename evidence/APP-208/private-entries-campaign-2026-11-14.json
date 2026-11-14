@@ -1,0 +1,580 @@
+{
+  "actors": {
+    "contributor": "00000000-0000-4000-8000-000000000a03",
+    "late_member": "00000000-0000-4000-8000-000000000a06",
+    "no_access_then_contributor": "00000000-0000-4000-8000-000000000a05",
+    "organization_contributor": "00000000-0000-4000-8000-000000000a04",
+    "owner": "00000000-0000-4000-8000-000000000a01",
+    "reviewer": "00000000-0000-4000-8000-000000000a02"
+  },
+  "bypass": "authorization::BYPASS: own_rows TRUE, hidden empty, own_collections 0, the reviewer_only gate skipped; every check marked `fails under bypass` was run in both modes",
+  "campaign": "APP-191-192-private-entries",
+  "checks": [
+    {
+      "name": "migration 0024: owner_only is derived in the database from the admitted canonical schema (`claim` own, `note` shared); no writer changed",
+      "passed": true
+    },
+    {
+      "name": "D9: a reviewer share writes record_read, record_write and record_review (plus discover and run); a contributor share writes no record_review",
+      "passed": true
+    },
+    {
+      "name": "list: a contributor sees only their own claims and every note; a reviewer and the owner see all claims (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "search: a contributor's search of the own collection finds their rows only; a reviewer's finds all (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "target: another member's record is absent (404) to a contributor; their own and a reviewer's targets answer (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "the shared `notes` rows of a contributor's listing are identical with and without the rule; only the own collection differs",
+      "passed": true
+    },
+    {
+      "name": "work_reads (the canvas page): a contributor's batch listing carries their own claims only (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "Ask (read-only listings): a contributor's snapshot carries their own claims only; a reviewer's carries all (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "query snapshot (summaries, counts): a contributor's count covers their own rows only, a reviewer's covers all (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "record components (records lists, summaries, ranks): a contributor's dataset holds their own rows only (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "detail and read_record: another member's record is 404 to a contributor, open to a reviewer (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "commit on another member's record: 404 with nothing written and no recovery view (right version, wrong version, dry run) (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "a reused key against another member's record: 404, no recovery view and no stored outcome disclosed (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "a contributor can still change their own record (edit), and the change is theirs (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "D8: a contributor's reviewer-only command on a shared row they can see (close another member's note) is refused on the dry run and the commit, nothing written (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "D8: a contributor's approve is refused on their own and on another member's claim; a reviewer's close of a member's note commits",
+      "passed": true
+    },
+    {
+      "name": "D8: a reviewer's approve of a contributor's claim commits",
+      "passed": true
+    },
+    {
+      "name": "D8: by_filer stays: a reviewer (and the owner) cannot approve their own claim",
+      "passed": true
+    },
+    {
+      "name": "D8 presentation (as shipped): listings and the record detail show `approve` to reviewers and the owner only",
+      "passed": true
+    },
+    {
+      "name": "events: a commit in the own collection reaches its creator and the reviewers, not another contributor (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "pinned answers (as shipped): an answer derived from the work's rows lists to its maker only; neither the share route nor the database lets it reach another member, so no hidden row leaks through it",
+      "passed": true
+    },
+    {
+      "name": "D9: a member with no grant and no organization-wide share gets the uniform 404 on the work",
+      "passed": true
+    },
+    {
+      "name": "D9: a reviewer without share_work cannot share or grant at all (member or organization, any role); neither can a contributor",
+      "passed": true
+    },
+    {
+      "name": "D9: the owner shares with everyone as contributor: one live work_shares row with no grantee, one permission.granted whose digest recomputes from the row; the same share again writes nothing",
+      "passed": true
+    },
+    {
+      "name": "D9: a member with no personal grant opens, lists, queries and files through the organization-wide share (contributor)",
+      "passed": true
+    },
+    {
+      "name": "D9 x D7: through the organization-wide share a contributor sees their own claim only; the owner sees it too (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "D9: a member admitted after the organization-wide share is covered by it (list, open) with no new grant",
+      "passed": true
+    },
+    {
+      "name": "D9: re-sharing with everyone as viewer revokes the contributor share and grants the viewer share in one unit (permission.revoked then permission.granted); members read but cannot write",
+      "passed": true
+    },
+    {
+      "name": "D9: revoking the organization-wide share ends it for every covered member at once (a second revocation changes nothing); personal grants stay",
+      "passed": true
+    },
+    {
+      "name": "D9: a share_work holder who is not a reviewer may share viewer or contributor (what they hold) but never reviewer, to a member or to everyone",
+      "passed": true
+    },
+    {
+      "name": "recheck r1: share_work refuses the app owner and the sharer as grantee (the definer and storage alike), so no lower re-share strips the owner's rows",
+      "passed": true
+    },
+    {
+      "name": "recheck r6: under ensure the app owner is a grantee like any other: a member's own work of the owner's app, shared with the owner through the canvas route's path, inserts the missing rows and the owner can open it; under set the owner stays refused",
+      "passed": true
+    },
+    {
+      "name": "recheck r7: two members sharing with each other cycle on their membership rows; PostgreSQL aborts one side (40P01, or 55P03 at lock_timeout) and storage answers the retryable Busy (429), never Unavailable; the other side completes",
+      "passed": true
+    },
+    {
+      "name": "D9 in SQL: share_work and set_work_everyone themselves refuse the reviewer role from a sharer who is no reviewer and any share from a sharer without share authority (direct definer calls under the workspace role, rolled back)",
+      "passed": true
+    },
+    {
+      "name": "D9 x D7: with the organization-wide reviewer share live, every member sees every claim; revoked, a contributor sees their own again (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "review m1, m2: share_work and set_work_everyone copy only what the sharer holds personally: a sharer without record_read confers nothing; write standing held only through a live organization-wide share is never copied into a personal grant (direct definer calls and the storage API)",
+      "passed": true
+    },
+    {
+      "name": "review n7: a share_work holder who is no reviewer can neither lower nor revoke a live organization-wide reviewer share; the owner can",
+      "passed": true
+    },
+    {
+      "name": "review m3: two concurrent set_work_everyone calls for one work serialize on the advisory lock; the second waits, then replaces the first's role as one unit, and both answer rows (no unique violation, no 503); one live row remains",
+      "passed": true
+    },
+    {
+      "name": "W2b review MAJOR-1: a 'none' queued behind an uncommitted viewer-to-contributor change waits on the per-work lock (taken before any read), then revokes the committed contributor share (storage answers true, no live organization-wide row) instead of answering 'nothing to revoke' over a stale read",
+      "passed": true
+    },
+    {
+      "name": "W2b review MAJOR-1, the same ordering in share_work and revoke_work_share: an owner's revocation queued behind an uncommitted reviewer share waits on the per-work lock, then removes the three rows that share committed (Fay keeps nothing, her share record marked revoked), instead of answering 'nothing to remove' and leaving the grant live",
+      "passed": true
+    },
+    {
+      "name": "recheck r3: the owner's revocation takes the grantee's membership row FOR UPDATE before the work lock (the fence's order) and waits behind the grantee's fenced transaction in flight; r2: its permission.revoked digest (forma:share-member-revoke:v1) recomputes from the stored grantee and removed set",
+      "passed": true
+    },
+    {
+      "name": "review M1: the app owner revokes a member's personal share in one unit (record_read, record_review and record_write removed, the share record marked revoked, one permission.revoked whose digest recomputes); non-owners and the owner's own rows are refused; nothing held is an unchanged outcome",
+      "passed": true
+    },
+    {
+      "name": "review M1: after the owner's revocation a later organization-wide viewer share gives the former reviewer their own rows only and no reviewer-only command (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "recheck r5: share_work's 'ensure' mode (every automatic or approver path) grants what is missing and never deletes: a reviewer approver keeps record_review after an automatic contributor share, nothing written, no permission.revoked; the owner as grantee reads as held; an unknown mode is refused; only 'set' (the dialog's exact role) lowers a role",
+      "passed": true
+    },
+    {
+      "name": "recheck T1: share_work's demotion takes the grantee's membership row FOR UPDATE (the fence's order) and waits behind the grantee's fenced transaction in flight, then strips",
+      "passed": true
+    },
+    {
+      "name": "recheck r4, r2: a demotion that inserts nothing leaves exactly one live share record (the new role, the remaining access, the removed set) and its permission.revoked digest recomputes from that stored row",
+      "passed": true
+    },
+    {
+      "name": "review f1: re-shared as contributor, a former reviewer has no reviewer standing left: their own rows only and no reviewer-only command (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "recheck r2b: a later demotion marks the earlier demotion's live record revoked without rewriting its removed set and writes its own record, so every permission.revoked of a member on the work recomputes from the record whose audit_event_id is the event",
+      "passed": true
+    },
+    {
+      "name": "review f1: share_work with a lower role deletes the rows the new role lacks in the same transaction (reviewer to contributor drops record_review, to viewer also record_write) with one permission.revoked; a sharer who could not have granted the stripped rows is refused",
+      "passed": true
+    },
+    {
+      "name": "receipts: a receipt citing another member's own-collection row is unknown to a contributor, known to a reviewer (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "query release: a contributor's snapshot (their rows only) is released against the same rule; judged over every row it would be stale (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "D8 on one's own entry over the command path: a contributor's reviewer-only update (grade) of their own claim is refused on the dry run and the commit, nothing written (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "D8: a reviewer's grade of a contributor's claim commits (the same update a contributor was refused); a reviewer-only update is the owner's way to advance a row they created themselves (a declared transition would refuse its filer)",
+      "passed": true
+    },
+    {
+      "name": "source-view sequence: a contributor's source view carries the sequence of their own rows, a reviewer's the work's latest (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "guest listing: a guest of a share that names the own collection still sees only the shared notes; the row rule, not the share's collection list, keeps every own row out (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "guest source-view sequence: a guest's source view carries no own row's sequence (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "review m5: owner_only is derived by a real JSON parse (genui.canonical_jsonb): non-ASCII bytes derive, an escaped spelling of own reads own, invalid UTF-8 is refused at write time",
+      "passed": true
+    },
+    {
+      "name": "guests: a live share of a work with an own collection is refused and writes nothing (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "APP-191 acceptance: 25 commits to an own list in under 60 s, 26 pages open: no non-reviewer page receives a hint for another member's row, each receives its own, and the reviewer page is current within 6 s of the last commit (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "0024 purge exception (W3 R1): a guest account's share_events row survives deleting its live_work_shares row (the chain stays verifiable); linked_apps still refuses the delete until the linked app is removed",
+      "passed": true
+    }
+  ],
+  "collections": {
+    "claims": "293254a3-c4b6-4ea4-93d0-b601654f263b",
+    "notes": "d5f5a476-e567-4bb0-8afd-7ba63f2c23e3"
+  },
+  "definition": {
+    "commands": [
+      {
+        "id": "submit",
+        "initial": [
+          {
+            "field_id": "status",
+            "value": "filed"
+          }
+        ],
+        "operation": "create",
+        "record_schema_id": "claim",
+        "transitions": [],
+        "writable_fields": [
+          "amount",
+          "status",
+          "note"
+        ]
+      },
+      {
+        "id": "edit",
+        "operation": "update",
+        "record_schema_id": "claim",
+        "transitions": [],
+        "writable_fields": [
+          "note"
+        ]
+      },
+      {
+        "id": "grade",
+        "operation": "update",
+        "record_schema_id": "claim",
+        "reviewer_only": true,
+        "transitions": [],
+        "writable_fields": [
+          "grade"
+        ]
+      },
+      {
+        "id": "approve",
+        "operation": "create",
+        "record_schema_id": "claim",
+        "reviewer_only": true,
+        "transitions": [
+          {
+            "field_id": "status",
+            "from": "filed",
+            "to": "approved"
+          }
+        ],
+        "writable_fields": [
+          "status"
+        ]
+      },
+      {
+        "id": "add_note",
+        "initial": [
+          {
+            "field_id": "state",
+            "value": "open"
+          }
+        ],
+        "operation": "create",
+        "record_schema_id": "note",
+        "transitions": [],
+        "writable_fields": [
+          "title",
+          "state"
+        ]
+      },
+      {
+        "id": "close",
+        "operation": "create",
+        "record_schema_id": "note",
+        "reviewer_only": true,
+        "transitions": [
+          {
+            "field_id": "state",
+            "from": "open",
+            "to": "closed"
+          }
+        ],
+        "writable_fields": [
+          "state"
+        ]
+      }
+    ],
+    "default_layout": [
+      {
+        "column": 0,
+        "row": 0,
+        "view_id": "count",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 1,
+        "view_id": "claims_list",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 2,
+        "view_id": "notes_list",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 3,
+        "view_id": "submit",
+        "width": 12
+      }
+    ],
+    "description": "Synthetic campaign app: each member's own claims, reviewed by the app's reviewers; shared notes.",
+    "inputs": [
+      {
+        "contract_id": "claim_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "amount",
+            "nullable": false,
+            "value_type": {
+              "type": "integer",
+              "unit": "count"
+            }
+          },
+          {
+            "id": "status",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "filed",
+                "approved"
+              ]
+            }
+          },
+          {
+            "id": "note",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "grade",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          }
+        ],
+        "id": "claims",
+        "kind": "records"
+      },
+      {
+        "contract_id": "note_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "title",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "state",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "closed"
+              ]
+            }
+          }
+        ],
+        "id": "notes",
+        "kind": "records"
+      }
+    ],
+    "links": [],
+    "record_schemas": [
+      {
+        "fields": [
+          {
+            "id": "amount",
+            "nullable": false,
+            "value_type": {
+              "type": "integer",
+              "unit": "count"
+            }
+          },
+          {
+            "id": "status",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "filed",
+                "approved"
+              ]
+            }
+          },
+          {
+            "id": "note",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "grade",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          }
+        ],
+        "id": "claim",
+        "version": 1,
+        "visibility": "own"
+      },
+      {
+        "fields": [
+          {
+            "id": "title",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "state",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "closed"
+              ]
+            }
+          }
+        ],
+        "id": "note",
+        "version": 1
+      }
+    ],
+    "title": "Claims and notes",
+    "views": [
+      {
+        "id": "count",
+        "kind": "summary",
+        "query": {
+          "inputs": [
+            "claims"
+          ],
+          "null_policy": "unknown",
+          "operations": [
+            {
+              "group_by": [],
+              "measures": [
+                {
+                  "field": {
+                    "field_id": "amount",
+                    "input_id": "claims"
+                  },
+                  "id": "n",
+                  "operation": "count"
+                }
+              ],
+              "type": "aggregate"
+            }
+          ],
+          "operator_version": 1
+        },
+        "renderer_version": 1,
+        "title": "Claims"
+      },
+      {
+        "id": "claims_list",
+        "kind": "records_list",
+        "records": {
+          "columns": [
+            "amount",
+            "status",
+            "note"
+          ],
+          "input_id": "claims",
+          "schema_id": "claim",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Claims"
+      },
+      {
+        "id": "notes_list",
+        "kind": "records_list",
+        "records": {
+          "columns": [
+            "title"
+          ],
+          "input_id": "notes",
+          "schema_id": "note",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Notes"
+      },
+      {
+        "command_id": "submit",
+        "id": "submit",
+        "kind": "form",
+        "renderer_version": 1,
+        "title": "Submit a claim"
+      }
+    ]
+  },
+  "passed": true,
+  "work": "f4be5df0-5498-42fa-8d80-97605a7a77e9"
+}

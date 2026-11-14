@@ -406,6 +406,96 @@ fn a_form_card_carries_the_reference_picker_and_keeps_stamped_fields_read_only()
     assert!(stamped.read_only && !stamped.writable && !stamped.has_text && !stamped.no_choices);
 }
 
+/// ADR-020 §9 (APP-208): a writable multi-select reaches the form card as
+/// checkboxes (`has_checkboxes`), never a select or a text box: one choice
+/// per declared value in declaration order, the held ones selected, labelled
+/// by the value; its value stays the joined text. A read-only multi-select
+/// is text only.
+#[test]
+fn a_form_card_renders_a_multi_select_as_checkboxes_with_the_held_values_checked() {
+    let row = |id: &str, kind: &str, writable: bool| commands::FieldRow {
+        id: id.into(),
+        kind: kind.into(),
+        value: String::new(),
+        input: format!("value.{id}"),
+        spec: format!("{{\"type\":\"{kind}\"}}"),
+        spec_input: format!("spec.{id}"),
+        options: String::new(),
+        nullable: false,
+        writable,
+        choices: Vec::new(),
+        nothing_to_choose: false,
+    };
+    let choice = |value: &str, selected: bool| commands::FieldChoice {
+        value: value.into(),
+        label: value.into(),
+        selected,
+    };
+    let mut tags = row("tags", "multi_enum", true);
+    tags.value = "red, blue".into();
+    tags.options = "red | green | blue".into();
+    tags.spec = r#"{"type":"multi_enum","values":["red","green","blue"]}"#.into();
+    tags.choices = vec![
+        choice("red", true),
+        choice("green", false),
+        choice("blue", true),
+    ];
+    let mut shown = row("tags", "multi_enum", false);
+    shown.value = "green".into();
+    shown.choices = vec![
+        choice("red", false),
+        choice("green", true),
+        choice("blue", false),
+    ];
+    let record = commands::RecordView {
+        app: APP.into(),
+        work: WORK.into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        record_id: "00000000-0000-4000-8000-0000000013b1".into(),
+        schema: "choices".into(),
+        schema_version: "1".into(),
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        work_version: "1".into(),
+        version: "0".into(),
+        exists: false,
+        fields: vec![tags, shown, row("title", "text", true)],
+        command: "pick".into(),
+        action: format!("/v1/work/{APP}/{WORK}/commands/pick"),
+        can_write: true,
+        csrf: "C".repeat(43),
+        idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+        notice: None,
+    };
+    let form = form_card(WORK, &record).unwrap();
+    let boxes = &form.fields[0];
+    assert!(boxes.has_checkboxes && boxes.writable);
+    assert!(!boxes.has_choices && !boxes.has_text && !boxes.no_choices && !boxes.read_only);
+    assert_eq!(boxes.value, "red, blue");
+    assert_eq!(boxes.input, "value.tags");
+    assert_eq!(
+        boxes
+            .choices
+            .iter()
+            .map(|c| (
+                c.id.as_str(),
+                c.value.as_str(),
+                c.label.as_str(),
+                c.selected
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("o0", "red", "red", true),
+            ("o1", "green", "green", false),
+            ("o2", "blue", "blue", true)
+        ]
+    );
+    let read_only = &form.fields[1];
+    assert!(read_only.read_only && !read_only.has_checkboxes && !read_only.has_choices);
+    assert_eq!(read_only.value, "green");
+    let text = &form.fields[2];
+    assert!(text.has_text && !text.has_checkboxes);
+}
+
 #[test]
 fn the_receipt_line_and_the_top_bar_identity() {
     assert_eq!(

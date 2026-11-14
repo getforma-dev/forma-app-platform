@@ -103,6 +103,8 @@ type Field = {
   hasChoices: boolean;
   /** APP-205: a reference with nothing to choose (a disabled select). */
   noChoices: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  hasCheckboxes: boolean;
   choices: Choice[];
 };
 type FormCard = {
@@ -654,6 +656,17 @@ function Canvas(props: CanvasProps) {
                           <select name={field.input} aria-label={field.label} disabled>
                             <option value="">Nothing to choose yet</option>
                           </select>
+                        ))}
+                        {createShow(() => field.hasCheckboxes, () => (
+                          <span class="cv-choices" role="group" aria-label={field.label}>
+                            <input type="hidden" name={field.input} value="" />
+                            {createList(() => field.choices, choice => choice.id, choice => (
+                              <label class="cv-choice">
+                                <input type="checkbox" name={field.input} value={choice.value} checked={choice.selected} />
+                                {' '}{choice.label}
+                              </label>
+                            ))}
+                          </span>
                         ))}
                         {createShow(() => field.hasText, () => (
                           h('input', { type: 'text', inputmode: field.inputMode, name: field.input, value: field.value, 'aria-label': field.label })
