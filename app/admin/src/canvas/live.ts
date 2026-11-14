@@ -173,3 +173,12 @@ function streamLive(
     onState('off');
   };
 }
+
+/** What a member is told when an app is shared with them (APP-192 review:
+ * the announcement says nothing of a private link, which a member share has
+ * none of). Null when this canvas already has the app: a role change, or a
+ * share the member already reached, tells them nothing new. */
+export const SHARED_NOTICE = 'An app was shared with you. Reload the page to find it in My apps.';
+export function sharedAppNotice(known: boolean): string | null {
+  return known ? null : SHARED_NOTICE;
+}

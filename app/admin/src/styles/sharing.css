@@ -39,6 +39,11 @@
 .share-everyone-actions label { display: grid; gap: 7px; color: #35443b; font-size: 12px; font-weight: 600; flex: 1 1 220px; }
 .share-everyone-actions select { width: 100%; box-sizing: border-box; border: 1px solid #cfd7ce; border-radius: 9px; padding: 10px; color: #293f34; background: #fff; font: inherit; font-size: 14px; }
 .share-team-list-title { font-size: 12px; margin: 18px 0 0; color: #35443b; }
+.share-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 0; padding: 14px; border: 1px solid #ead9d6; border-radius: 12px; background: #fff8f6; }
+.share-confirm-text { flex: 1 1 100%; margin: 0; font-size: 13px; line-height: 1.5; color: #6b2f2b; }
+.share-team .share-stop { margin-top: 10px; }
+.share-team .share-private-note { margin: 12px 0 0; }
+.share-team .share-retry { margin-top: 8px; }
 .share-team .share-status { margin: 4px 0 0; }
 .share-dialog .share-outside { margin-top: 34px; padding-top: 20px; border-top: 1px solid #e8ebe5; }
 .shared-page { max-width: 1120px; }

@@ -16,7 +16,7 @@ import {
 import { decorateAppCard } from './address-chip';
 import { submitCommand } from './commands';
 import { clearLayouts, loadCamera, loadLayout, loadPlaced, mergeArtifactKinds, saveCamera, saveLayout, savePlaced, loadStandaloneWorks, saveStandaloneWorks, type ItemLayout, type PlacedWork } from './layout';
-import { subscribeLive, type LiveEvent } from './live';
+import { sharedAppNotice, subscribeLive, type LiveEvent } from './live';
 import { parametersOf, runView } from './queries';
 import { announce, buildForm, buildGroup, el, groupJson, isUuid, pulseTarget, renderNoValue, type FormJson } from './render';
 import { refreshRecords, wireRecordsCard } from './records';
@@ -1515,7 +1515,10 @@ function onLive(event: LiveEvent): void {
   if (event.kind === 'app.shared') {
     // Permission is not placement. The recipient explicitly adds a live ref.
     host?.ownerDocument.dispatchEvent(new CustomEvent('forma:connected-refresh'));
-    announce('An app was shared. Open its private link to review access.');
+    // Only an app this canvas does not have yet is news (the id is a UUID).
+    const known = groups.has(event.work_id) || !!host?.ownerDocument.querySelector(`.cv-lib-app[data-work="${event.work_id}"]`);
+    const notice = sharedAppNotice(known);
+    if (notice) announce(notice);
     return;
   }
   void placeWork(event.app_id, event.work_id).then(announce);

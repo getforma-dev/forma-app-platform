@@ -70,16 +70,22 @@ export async function setConnected(key: string, add: boolean): Promise<void> {
 
 export type TeamRole = 'viewer' | 'contributor' | 'reviewer';
 const TEAM_ROLES: readonly TeamRole[] = ['viewer', 'contributor', 'reviewer'];
-/** Each role in plain words, weakest first. */
+/**
+ * Each role in plain words, weakest first. True for shared and private lists
+ * alike: in a shared list a contributor may change anyone's entries, in a
+ * private list only their own (the dialog says so when the app has one).
+ */
 export const ROLE_WORDS: Readonly<Record<TeamRole, string>> = {
   viewer: 'Can view',
-  contributor: 'Can add and edit their entries',
+  contributor: 'Can add and edit entries',
   reviewer: 'Can review all entries',
 };
 export type TeamMember = { principal_id: string; label: string; role: TeamRole };
 export type TeamSharing = {
   roles: TeamRole[];
   canRevokeMembers: boolean;
+  /** The app has a private list (computed in Rust): people see only their own entries there. */
+  privateLists: boolean;
   organization: { available: boolean; role: TeamRole | null };
   members: TeamMember[];
 };
@@ -101,7 +107,7 @@ export function teamSharing(value: unknown, app: string, work: string): TeamShar
   if (!value || typeof value !== 'object') return null;
   const body = value as Record<string, unknown>;
   const organization = body.organization as Record<string, unknown> | null;
-  if (body.app_id !== app || body.work_id !== work || typeof body.can_revoke_members !== 'boolean') return null;
+  if (body.app_id !== app || body.work_id !== work || typeof body.can_revoke_members !== 'boolean' || typeof body.private_lists !== 'boolean') return null;
   if (!Array.isArray(body.roles) || body.roles[0] !== 'viewer' || !body.roles.every(isRole)) return null;
   if (!organization || typeof organization !== 'object' || typeof organization.available !== 'boolean') return null;
   if (organization.role !== null && !isRole(organization.role)) return null;
@@ -115,6 +121,7 @@ export function teamSharing(value: unknown, app: string, work: string): TeamShar
   return {
     roles: [...body.roles] as TeamRole[],
     canRevokeMembers: body.can_revoke_members,
+    privateLists: body.private_lists,
     organization: { available: organization.available, role: organization.role as TeamRole | null },
     members,
   };
@@ -140,11 +147,13 @@ export function memberRevokeRequest(app: string, work: string, grantee: string):
   if (!isUuid(app) || !isUuid(work) || !isUuid(grantee)) return null;
   return { url: teamPath(app, work), body: JSON.stringify({ grantee_principal_id: grantee, role: 'none' }) };
 }
+/** Why a work cannot be shared with everyone (the sharer's sources may not be their own). */
+export const UNAVAILABLE_FOR_EVERYONE = 'This app uses data sources or folder files, so it can be shared one person at a time only.';
 /** Plain copy for a refused request. It never names another member. */
 export function teamRefusal(status: number, code: string): string {
   if (code === 'reviewer_not_allowed') return 'Only someone who can review all entries can give that access.';
   if (code === 'contributor_not_allowed') return 'Only someone who can add and edit entries can give that access.';
-  if (code === 'organization_share_unavailable') return 'This app uses your own data sources or folder files, so it can be shared one person at a time only.';
+  if (code === 'organization_share_unavailable') return UNAVAILABLE_FOR_EVERYONE;
   if (status === 404) return 'That share was refused. Refresh the list and try again.';
   if (status === 400) return 'That request was not understood. Refresh the list and try again.';
   if (status === 403) return 'This page could not confirm the request. Reload the page and try again.';

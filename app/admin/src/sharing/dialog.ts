@@ -1,7 +1,7 @@
 import {
   createShare, listShares, offeredRoles, readColleagues, readTeamSharing, revokeMemberShare, ROLE_WORDS, ShareError,
-  shareWithEveryone, shareWithMember, sharingRequest, sharesPath, type ShareDraft, type ShareSummary, type TeamRole,
-  type TeamSharing,
+  shareWithEveryone, shareWithMember, sharingRequest, sharesPath, UNAVAILABLE_FOR_EVERYONE, type ShareDraft,
+  type ShareSummary, type TeamRole, type TeamSharing,
 } from './api';
 
 function node<K extends keyof HTMLElementTagNameMap>(document: Document, tag: K, text = '', attrs: Record<string, string> = {}): HTMLElementTagNameMap[K] {
@@ -127,15 +127,37 @@ export function openSharing(document: Document, app: string, work: string, title
 
 const RANK: Record<TeamRole, number> = { viewer: 1, contributor: 2, reviewer: 3 };
 
+/** One in-place confirmation: a sentence naming the effect, a yes and a cancel. */
+function confirmation(document: Document, onCancel: () => void) {
+  const box = node(document, 'div', '', { class: 'share-confirm' });
+  const text = node(document, 'p', '', { class: 'share-confirm-text' });
+  const yes = node(document, 'button', '', { type: 'button', class: 'share-primary' });
+  const no = node(document, 'button', 'Cancel', { type: 'button', class: 'share-secondary' });
+  box.append(text, yes, no);
+  box.hidden = true;
+  let pending: (() => void) | null = null;
+  const close = () => { pending = null; box.hidden = true; };
+  yes.addEventListener('click', () => { const run = pending; close(); run?.(); });
+  no.addEventListener('click', () => { close(); onCancel(); });
+  return {
+    box, close,
+    ask(sentence: string, label: string, run: () => void) { text.textContent = sentence; yes.textContent = label; pending = run; box.hidden = false; },
+  };
+}
+
 /**
  * APP-192: people in the organization. The server says which roles this
  * sharer may grant (reviewer only for a reviewer) and refuses anything else;
- * the section stays hidden for a member who cannot share the app.
+ * the section stays hidden for a member who cannot share the app (the 404),
+ * and shows a plain message with a retry when the read fails otherwise.
+ * Exported for the dialog tests.
  */
-function teamSection(document: Document, app: string, work: string): { section: HTMLElement; load: () => Promise<void> } {
+export function teamSection(document: Document, app: string, work: string): { section: HTMLElement; load: () => Promise<void> } {
   const section = node(document, 'section', '', { class: 'share-team', 'aria-labelledby': 'share-team-title' });
   section.hidden = true;
   const heading = node(document, 'h3', 'People in your organization', { id: 'share-team-title' });
+  const content = node(document, 'div', '', { class: 'share-team-content' });
+  content.hidden = true;
   const intro = node(document, 'p', 'Choose who in your organization can open this app and what they can do. They see live updates.', { class: 'share-description' });
   const form = node(document, 'form', '', { class: 'share-create share-team-form' });
   const personLabel = node(document, 'label', 'Person');
@@ -146,6 +168,7 @@ function teamSection(document: Document, app: string, work: string): { section: 
   roleLabel.append(role);
   const submit = node(document, 'button', 'Share', { type: 'submit', class: 'share-primary' });
   form.append(personLabel, roleLabel, submit);
+  const privateNote = node(document, 'p', 'This app has private lists. There, people see and change only their own entries, unless they can review all entries.', { class: 'share-help share-private-note' });
   const everyone = node(document, 'div', '', { class: 'share-everyone' });
   const everyoneTitle = node(document, 'strong', 'Everyone in the organization');
   const everyoneState = node(document, 'p', '', { class: 'share-help' });
@@ -154,13 +177,21 @@ function teamSection(document: Document, app: string, work: string): { section: 
   const everyoneRole = node(document, 'select', '', { name: 'everyone_role' });
   everyoneLabel.append(everyoneRole);
   const everyoneShare = node(document, 'button', 'Share with everyone', { type: 'button', class: 'share-secondary' });
-  const everyoneStop = node(document, 'button', 'Stop sharing with everyone', { type: 'button', class: 'share-danger' });
-  everyoneForm.append(everyoneLabel, everyoneShare, everyoneStop);
-  everyone.append(everyoneTitle, everyoneState, everyoneForm);
+  everyoneForm.append(everyoneLabel, everyoneShare);
+  // Outside the form: a live share with everyone can always be stopped
+  // (review NIT-2), even on a work now shared person by person only.
+  const everyoneStop = node(document, 'button', 'Stop sharing with everyone', { type: 'button', class: 'share-danger share-stop' });
+  const status = node(document, 'p', '', { role: 'status', 'aria-live': 'polite', class: 'share-status' });
+  const cancelled = () => { status.textContent = 'Nothing was changed.'; };
+  const personConfirm = confirmation(document, cancelled);
+  const everyoneConfirm = confirmation(document, cancelled);
+  everyone.append(everyoneTitle, everyoneState, everyoneForm, everyoneConfirm.box, everyoneStop);
   const listTitle = node(document, 'h4', 'Shared with', { class: 'share-team-list-title' });
   const list = node(document, 'div', '', { class: 'share-people share-team-list', 'aria-label': 'People in your organization this app is shared with' });
-  const status = node(document, 'p', '', { role: 'status', 'aria-live': 'polite', class: 'share-status' });
-  section.append(heading, intro, form, everyone, listTitle, list, status);
+  const retry = node(document, 'button', 'Try again', { type: 'button', class: 'share-secondary share-retry' });
+  retry.hidden = true;
+  content.append(intro, form, personConfirm.box, privateNote, everyone, listTitle, list);
+  section.append(heading, content, status, retry);
 
   let sharing: TeamSharing | null = null;
   let busy = false;
@@ -181,16 +212,18 @@ function teamSection(document: Document, app: string, work: string): { section: 
     roleOptions(role, roles, role.value && roles.includes(role.value as TeamRole) ? role.value as TeamRole : 'viewer');
     const live = current.organization.role;
     roleOptions(everyoneRole, roles, live && roles.includes(live) ? live : 'viewer');
+    privateNote.hidden = !current.privateLists;
+    everyoneForm.hidden = !current.organization.available;
+    everyoneStop.hidden = !live;
     if (!current.organization.available) {
-      everyoneState.textContent = 'This app uses your own data sources or folder files, so it can be shared one person at a time only.';
-      everyoneForm.hidden = true;
+      everyoneState.textContent = live
+        ? `Shared with everyone: ${ROLE_WORDS[live]}. ${UNAVAILABLE_FOR_EVERYONE}`
+        : UNAVAILABLE_FOR_EVERYONE;
     } else {
       everyoneState.textContent = live
         ? `Shared with everyone: ${ROLE_WORDS[live]}. This includes people who join later.`
         : 'Not shared with everyone. Sharing with everyone includes people who join later.';
-      everyoneForm.hidden = false;
       everyoneShare.textContent = live ? 'Change access for everyone' : 'Share with everyone';
-      everyoneStop.hidden = !live;
     }
     list.replaceChildren();
     if (!current.members.length) list.append(node(document, 'p', 'Not shared with anyone in your organization yet.', { class: 'share-empty' }));
@@ -216,10 +249,11 @@ function teamSection(document: Document, app: string, work: string): { section: 
     if (!section.isConnected) return null;
     sharing = next;
     if (!next) { section.hidden = true; return null; }
-    section.hidden = false; render(next); return next;
+    section.hidden = false; content.hidden = false; retry.hidden = true; render(next); return next;
   }
   async function act(change: () => Promise<string | ((after: TeamSharing | null) => string)>, button?: HTMLButtonElement) {
     if (busy) return;
+    personConfirm.close(); everyoneConfirm.close();
     freeze(true); if (button) button.disabled = true;
     status.textContent = 'Updating access…';
     try {
@@ -231,13 +265,7 @@ function teamSection(document: Document, app: string, work: string): { section: 
       try { await refresh(); } catch { /* the message above stands */ }
     } finally { freeze(false); }
   }
-  form.addEventListener('submit', event => {
-    event.preventDefault();
-    if (busy || !sharing) return;
-    const grantee = person.value;
-    const chosen = role.value as TeamRole;
-    const label = person.selectedOptions[0]?.textContent ?? 'This person';
-    if (!grantee) { status.textContent = 'Choose a person first.'; return; }
+  function sharePerson(grantee: string, label: string, chosen: TeamRole) {
     void act(async () => {
       await shareWithMember(app, work, grantee, chosen);
       return (after: TeamSharing | null) => {
@@ -247,15 +275,38 @@ function teamSection(document: Document, app: string, work: string): { section: 
           : `Shared with ${label}: ${ROLE_WORDS[chosen]}.`;
       };
     }, submit);
+  }
+  function shareEveryone(chosen: TeamRole) {
+    void act(async () => { await shareWithEveryone(app, work, chosen); return `Shared with everyone in the organization: ${ROLE_WORDS[chosen]}.`; }, everyoneShare);
+  }
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (busy || !sharing) return;
+    const grantee = person.value;
+    const chosen = role.value as TeamRole;
+    const label = person.selectedOptions[0]?.textContent ?? 'This person';
+    if (!grantee) { status.textContent = 'Choose a person first.'; return; }
+    // Review MINOR-7: the reviewer role is named before it is given.
+    if (chosen === 'reviewer') {
+      personConfirm.ask(`${label} will see all entries, including private ones, and can take review actions.`, 'Yes, share', () => sharePerson(grantee, label, chosen));
+      return;
+    }
+    sharePerson(grantee, label, chosen);
   });
   everyoneShare.addEventListener('click', () => {
+    if (busy) return;
     const chosen = everyoneRole.value as TeamRole;
-    void act(async () => { await shareWithEveryone(app, work, chosen); return `Shared with everyone in the organization: ${ROLE_WORDS[chosen]}.`; }, everyoneShare);
+    if (chosen === 'reviewer') {
+      everyoneConfirm.ask('Everyone in the organization will see all entries, including private ones, and can take review actions. This includes people who join later.', 'Let everyone review all entries', () => shareEveryone(chosen));
+      return;
+    }
+    shareEveryone(chosen);
   });
   everyoneStop.addEventListener('click', () => {
     void act(async () => { await shareWithEveryone(app, work, 'none'); return 'Stopped sharing with everyone. People you added by name keep their access.'; }, everyoneStop);
   });
   async function load() {
+    retry.hidden = true;
     try {
       if (!await refresh()) return;
       const colleagues = await readColleagues();
@@ -264,9 +315,15 @@ function teamSection(document: Document, app: string, work: string): { section: 
       for (const colleague of colleagues) person.append(node(document, 'option', colleague.label, { value: colleague.principal_id }));
       nobody = !colleagues.length; submit.disabled = nobody;
     } catch (error) {
-      if (section.isConnected) { section.hidden = sharing === null; status.textContent = error instanceof ShareError ? error.message : message(error); }
+      // Review MINOR-3: an outage is said, with a retry, never a vanished section.
+      if (!section.isConnected) return;
+      section.hidden = false;
+      content.hidden = sharing === null;
+      status.textContent = error instanceof ShareError ? error.message : message(error);
+      retry.hidden = false;
     }
   }
+  retry.addEventListener('click', () => void load());
   return { section, load };
 }
 

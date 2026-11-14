@@ -15,14 +15,17 @@ const WORK = '11111111-2222-4333-8444-555555555555';
 const ANA = '99999999-8888-4777-8666-555555555555';
 const answer = {
   app_id: APP, work_id: WORK, roles: ['viewer', 'contributor', 'reviewer'], can_revoke_members: false,
-  organization: { available: true, role: null },
+  private_lists: true, organization: { available: true, role: null },
   members: [{ principal_id: ANA, label: 'Ana Diaz', role: 'contributor' }],
 };
 
-test('each role reads in plain words, weakest first', () => {
+test('each role reads in plain words, weakest first, true for shared and private lists', () => {
+  // W4's rule: in a shared list a contributor may change anyone's entries;
+  // only a private list keeps them to their own (own_rows). So the words
+  // claim neither "their own" nor "all".
   assert.deepEqual(ROLE_WORDS, {
     viewer: 'Can view',
-    contributor: 'Can add and edit their entries',
+    contributor: 'Can add and edit entries',
     reviewer: 'Can review all entries',
   });
   for (const words of Object.values(ROLE_WORDS)) assert.doesNotMatch(words, /record|permission|reviewer|contributor/i);
@@ -55,6 +58,8 @@ test('everyone in the organization takes a role or none, on its own route', () =
   assert.equal(everyoneRequest(APP, 'card-1', 'viewer'), null);
 });
 
+// Placeholder contract (review NIT-1): the body follows W4's route when it
+// lands; the dialog shows no remove control until the server says so.
 test('removing one person is one request through one function (the route lands with W4)', () => {
   const request = memberRevokeRequest(APP, WORK, ANA);
   assert.ok(request);
@@ -70,6 +75,7 @@ test('the dialog reads the server answer strictly', () => {
   assert.ok(read);
   assert.deepEqual(read.members, answer.members);
   assert.equal(read.canRevokeMembers, false);
+  assert.equal(read.privateLists, true);
   for (const change of [
     { app_id: WORK }, { roles: ['viewer', 'owner'] }, { roles: [] }, { roles: ['contributor'] },
     { organization: { available: true, role: 'none' } }, { organization: { available: 'yes', role: null } },
@@ -77,6 +83,7 @@ test('the dialog reads the server answer strictly', () => {
     { members: [{ principal_id: ANA, label: '', role: 'viewer' }] },
     { members: [{ principal_id: ANA, label: 'Ana', role: 'admin' }] },
     { can_revoke_members: 'false' },
+    { private_lists: 'yes' }, { private_lists: undefined },
   ]) {
     assert.equal(teamSharing({ ...answer, ...change }, APP, WORK), null, JSON.stringify(change));
   }
@@ -95,7 +102,7 @@ test('every refusal has plain copy that names no other member', () => {
   const cases: Array<[number, string, RegExp]> = [
     [422, 'reviewer_not_allowed', /review all entries/],
     [422, 'contributor_not_allowed', /add and edit/],
-    [422, 'organization_share_unavailable', /one person at a time/],
+    [422, 'organization_share_unavailable', /^This app uses data sources or folder files, so it can be shared one person at a time only\.$/],
     [404, 'not_found', /refused/],
     [400, 'malformed_share', /refresh/i],
     [403, 'cross_site', /reload/i],
@@ -158,4 +165,12 @@ test('a hidden control in the section stays hidden whatever its button class', (
   // was shared: `.share-danger { display: inline-block }` outranked `hidden`.
   const css = readFileSync(new URL('../src/styles/sharing.css', import.meta.url), 'utf8');
   assert.match(css, /\.share-team \[hidden\][^{]*\{ display: none; \}/);
+});
+
+test('a share notice is shown only for an app this canvas does not have yet', async () => {
+  const { sharedAppNotice } = await import('../src/canvas/live.ts');
+  assert.equal(sharedAppNotice(true), null);
+  const notice = sharedAppNotice(false);
+  assert.equal(notice, 'An app was shared with you. Reload the page to find it in My apps.');
+  assert.doesNotMatch(notice ?? '', /private link/i);
 });
