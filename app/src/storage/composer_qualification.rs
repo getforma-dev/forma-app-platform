@@ -14,6 +14,15 @@
 //! hostile outputs are refused by admission on every attempt and leave no
 //! row; the adapted patch is re-admitted whole and published; a model
 //! failure writes nothing.
+//!
+//! APP-207 (ADR-020 §10): the real client over a loopback Messages stub
+//! turns three plain sentences (the quiz acceptance sentence, an attendance
+//! check-in, homework submissions) into admitted, published and saved
+//! definitions whose records inputs each bind their own collection; the
+//! quiz then runs end to end on the shipped command and record-components
+//! paths: post, answer, replace, unchanged, the ranking on the owner's page
+//! and the contributor's, refuse after close; the other two check in,
+//! submit, replace, score and refuse as their declarations say.
 use super::{
     admission_qualification::operator,
     definition_qualification::{request, AUTHOR, POLICY, SPEND_APP},
@@ -31,6 +40,7 @@ use serde_json::{json, Value};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 const NORTHSTAR: &str =
@@ -113,6 +123,40 @@ async fn messages_stub(text: String) -> (String, Arc<std::sync::atomic::AtomicUs
     let endpoint = format!("http://{}/v1/messages", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     (endpoint, calls)
+}
+
+/// A loopback Messages endpoint answering its requests in order with
+/// `replies` (a 400 once they run out, which the client does not retry); it
+/// keeps every request body it received.
+async fn messages_script(replies: Vec<String>) -> (String, Arc<Mutex<Vec<Value>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let queue = Arc::new(Mutex::new(VecDeque::from(replies)));
+    let bodies = seen.clone();
+    let app = axum::Router::new().route(
+        "/v1/messages",
+        axum::routing::post(move |body: axum::body::Bytes| {
+            let bodies = bodies.clone();
+            let queue = queue.clone();
+            async move {
+                use axum::response::IntoResponse;
+                bodies
+                    .lock()
+                    .unwrap()
+                    .push(serde_json::from_slice(&body).unwrap_or(Value::Null));
+                let Some(text) = queue.lock().unwrap().pop_front() else {
+                    return axum::http::StatusCode::BAD_REQUEST.into_response();
+                };
+                let reply = json!({"id": "msg", "model": "stub-model",
+                    "content": [{"type": "text", "text": text}],
+                    "usage": {"input_tokens": 5, "output_tokens": 7}});
+                ([("content-type", "application/json")], reply.to_string()).into_response()
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/v1/messages", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (endpoint, seen)
 }
 
 fn router_reply(choice: &str, confidence: &str, title: &str) -> String {
@@ -799,6 +843,7 @@ async fn campaign() {
         &mut checks,
         "APP-191 (D7, D8), APP-193: from plain words the composer generates a collection private to each member (owner_only derived in the database) and a reviewer-only accept the owner sees and a shared-in contributor neither sees nor runs; an owner-advanced shared item is a reviewer-only update its creator can commit",
     );
+    let participation = participation_phase(&fixture, &stores, &member, &shell, &mut checks).await;
     let after = footprint(&fixture).await;
 
     // --- A model failure writes nothing ---
@@ -1687,10 +1732,538 @@ async fn campaign() {
 
     let _: Option<Composed> = None;
     let _ = plan::Decision::Generate;
-    let report = json!({"campaign": "APP-093 composer", "passed": true, "checks": checks});
+    let report = json!({"campaign": "APP-093 composer", "passed": true, "checks": checks, "participation": participation});
     if let Some(path) = std::env::var_os("GENUI_COMPOSER_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
     stores.close().await.unwrap();
+}
+
+// --- APP-207 (ADR-020 §10): participation apps from plain words ------------
+
+static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0xb207_0000);
+/// A fresh record id (UUID v4 shape) and a fresh idempotency key.
+fn fresh() -> (String, String) {
+    let n = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    (
+        format!("00000000-0000-4000-8000-{n:012x}"),
+        format!("{n:032x}"),
+    )
+}
+
+/// A command on the composed work, under its listing's premise.
+fn command_on(
+    work: &Composed,
+    listing: &RecordsListing,
+    command: &str,
+    schema: &str,
+    record: Option<(&str, i64)>,
+    values: Value,
+) -> CommandRequest {
+    let (fresh_record, key) = fresh();
+    let (record, expected) = record.map_or((fresh_record, 0), |(id, v)| (id.to_owned(), v));
+    CommandRequest {
+        app: work.app.clone(),
+        work: work.work.clone(),
+        publication: listing.publication.clone(),
+        command: command.into(),
+        schema: schema.into(),
+        schema_version_expected: 1,
+        record,
+        expected_record_version: expected,
+        expected_work_version: listing.work_version,
+        values,
+        idempotency_key: key,
+    }
+}
+
+fn enum_of(field: &str, value: &str) -> Value {
+    json!({"field_id": field, "value": {"type": "enum", "value": value}})
+}
+fn text_of(field: &str, value: &str) -> Value {
+    json!({"field_id": field, "value": {"type": "text", "value": value}})
+}
+fn reference_to(field: &str, input: &str, record: &str) -> Value {
+    json!({"field_id": field, "value": {"type": "reference", "input_id": input, "record_id": record}})
+}
+
+async fn committed(
+    stores: &Stores,
+    who: &TrustedRequest,
+    request: &CommandRequest,
+) -> CommandOutcome {
+    match stores.data.commit_record(who, request).await {
+        Ok(CommandResult::Committed(outcome)) => outcome,
+        other => panic!("{} must commit: {other:?}", request.command),
+    }
+}
+
+/// The record components of `work` as `who` sees them: the authorized
+/// capture, the confined engine and the release check.
+async fn components(
+    stores: &Stores,
+    engine: &crate::query::Engine,
+    who: &TrustedRequest,
+    work: &Composed,
+) -> Value {
+    let run = stores
+        .data
+        .record_components(who, &work.app, &work.work)
+        .await
+        .unwrap();
+    let result = engine
+        .execute_records(
+            &run,
+            &crate::query::record_components::default_parameters(),
+            Duration::from_millis(1800),
+        )
+        .await
+        .unwrap();
+    stores
+        .data
+        .release_record_components(who, &run)
+        .await
+        .unwrap();
+    result.document
+}
+fn component<'a>(document: &'a Value, id: &str) -> &'a Value {
+    document["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|component| component["id"] == id)
+        .unwrap_or_else(|| panic!("component {id}"))
+}
+/// A ranking's groups as `(value, count)`, best first.
+fn scores(document: &Value, id: &str) -> Vec<(String, u64)> {
+    component(document, id)["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|group| {
+            (
+                group["value"].as_str().unwrap().to_owned(),
+                group["count"].as_u64().unwrap(),
+            )
+        })
+        .collect()
+}
+
+/// APP-207 acceptance 2 and 3 (module documentation). Returns the report's
+/// `participation` member: the three admitted digests and the quiz's run.
+async fn participation_phase(
+    fixture: &Fixture,
+    stores: &Stores,
+    owner: &TrustedRequest,
+    shell: &str,
+    checks: &mut Vec<Value>,
+) -> Value {
+    use prompt::plain_words::{attendance, homework, quiz, ATTENDANCE, HOMEWORK, QUIZ};
+    static CALLS: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(16);
+    let sentences = [
+        (QUIZ, quiz()),
+        (ATTENDANCE, attendance()),
+        (HOMEWORK, homework()),
+    ];
+    let replies: Vec<String> = sentences
+        .iter()
+        .flat_map(|(_, reply)| [router_reply("none", "low", ""), reply.to_string()])
+        .collect();
+    let (endpoint, bodies) = messages_script(replies).await;
+    let client =
+        crate::composer::model::Anthropic::new("sk-ant-synthetic-not-a-real-key", &endpoint)
+            .unwrap()
+            .with_daily_cap(&CALLS);
+    let composer = Composer::new(
+        Some(Arc::new(client) as Arc<dyn Model>),
+        "router-model",
+        "generation-model",
+    );
+    let mut works = Vec::new();
+    for (sentence, _) in &sentences {
+        let work = compose_for(stores, &composer, owner, sentence)
+            .await
+            .unwrap_or_else(|refused| panic!("{sentence}: {refused:?}"));
+        assert_eq!(work.origin, Origin::Generated, "{sentence}");
+        assert_eq!(work.app, shell, "on the member's authoring shell");
+        works.push(work);
+    }
+    assert_eq!(
+        works.iter().map(|w| w.title.as_str()).collect::<Vec<_>>(),
+        ["Quiz", "Attendance", "Homework"]
+    );
+    let bodies = bodies.lock().unwrap().clone();
+    assert_eq!(
+        bodies.len(),
+        6,
+        "a router and one generation call per sentence"
+    );
+    for (index, (sentence, _)) in sentences.iter().enumerate() {
+        let generation = bodies[index * 2 + 1].to_string();
+        assert!(
+            generation.contains("PLAIN WORDS TO MEMBERS"),
+            "the generation prompt"
+        );
+        assert!(generation.contains(sentence), "the sentence as data");
+    }
+    // Every records input reads its own collection: `expected` is not bound
+    // to `responses`, whose fields it shares.
+    for (work, expected) in works.iter().zip([
+        "expected:expected,items:items,responses:responses",
+        "checkins:checkins,sessions:sessions",
+        "submissions:submissions,tasks:tasks",
+    ]) {
+        assert_eq!(
+            text(fixture, &format!("SELECT string_agg(input_id||':'||schema_id, ',' ORDER BY input_id) FROM genui.work_bindings WHERE organization_id='{ORG}' AND work_id='{}' AND kind='records'", work.work)).await,
+            expected
+        );
+    }
+    let quiz_revision = text(fixture, &format!("SELECT definition_revision_id::text FROM genui.publications p JOIN genui.saved_work w ON w.organization_id=p.organization_id AND w.publication_id=p.publication_id WHERE w.organization_id='{ORG}' AND w.work_id='{}'", works[0].work)).await;
+    assert_eq!(
+        scalar(fixture, &format!("SELECT count(*) FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND revision_id='{quiz_revision}' AND owner_only AND schema_id IN ('responses','expected')")).await,
+        2,
+        "responses and expected are own collections; items are shared"
+    );
+    check(
+        checks,
+        "APP-207: the real client over a loopback Messages stub turns the quiz acceptance sentence, an attendance check-in and homework submissions into generated definitions, admitted, owner-published and saved on the member's shell; the generation request carries the participation prompt and the sentence as data; every records input binds its own collection (expected is not bound to responses, whose fields it shares)",
+    );
+
+    // --- The quiz end to end: post, answer, replace, rank, close, refuse ---
+    let quiz = &works[0];
+    let contributor = request(stores, ORG, AUTHOR, 1);
+    stores
+        .workspace
+        .share_work(
+            owner,
+            &quiz.app,
+            &quiz.work,
+            Audience::Member(AUTHOR),
+            ShareRole::Contributor,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    let root = crate::query::tests::Directory::new("app207-composer-components");
+    let engine = crate::query::tests::real_engine(&super::qualification::fixture_python(), &root.0);
+    let listing = stores
+        .data
+        .list_records(owner, &quiz.app, &quiz.work)
+        .await
+        .unwrap();
+    let theirs = stores
+        .data
+        .list_records(&contributor, &quiz.app, &quiz.work)
+        .await
+        .unwrap();
+    let offered = |listing: &RecordsListing, schema: &str| -> Vec<String> {
+        listing
+            .collections
+            .iter()
+            .find(|c| c.schema == schema)
+            .map(|c| {
+                c.commands
+                    .iter()
+                    .map(|command| command.id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    assert_eq!(offered(&listing, "items"), ["close", "post", "reopen"]);
+    assert!(
+        offered(&theirs, "items").is_empty(),
+        "a contributor posts and closes nothing"
+    );
+    assert_eq!(offered(&theirs, "responses"), ["respond"]);
+    // A contributor cannot post.
+    let by_contributor = command_on(
+        quiz,
+        &theirs,
+        "post",
+        "items",
+        None,
+        json!([
+            text_of("prompt", "by a contributor"),
+            enum_of("state", "open")
+        ]),
+    );
+    assert_eq!(
+        stores
+            .data
+            .commit_record(&contributor, &by_contributor)
+            .await,
+        Err(Error::Denied)
+    );
+    let post = command_on(
+        quiz,
+        &listing,
+        "post",
+        "items",
+        None,
+        json!([text_of("prompt", "first item"), enum_of("state", "open")]),
+    );
+    let item = committed(stores, owner, &post).await;
+    let opened = text(fixture, &format!("SELECT to_char(committed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM genui.internal_record_revisions WHERE organization_id='{ORG}' AND record_id='{}' AND version=1", item.record_id)).await;
+    assert_eq!(
+        opened, item.committed_at,
+        "the post stamps the transaction's instant"
+    );
+    committed(
+        stores,
+        owner,
+        &command_on(
+            quiz,
+            &listing,
+            "add_expected",
+            "expected",
+            None,
+            json!([
+                reference_to("item", "items", &item.record_id),
+                enum_of("choice", "b")
+            ]),
+        ),
+    )
+    .await;
+    let answer = |choice: &str| {
+        command_on(
+            quiz,
+            &theirs,
+            "respond",
+            "responses",
+            None,
+            json!([
+                reference_to("item", "items", &item.record_id),
+                enum_of("choice", choice)
+            ]),
+        )
+    };
+    let first = committed(stores, &contributor, &answer("a")).await;
+    assert_eq!(first.record_version, 1);
+    let changed = answer("b");
+    let replaced = committed(stores, &contributor, &changed).await;
+    assert_eq!(
+        (replaced.record_id.as_str(), replaced.record_version),
+        (first.record_id.as_str(), 2),
+        "the second answer replaces the first entry"
+    );
+    assert_eq!(
+        scalar(fixture, &format!("SELECT count(*) FROM genui.internal_records WHERE organization_id='{ORG}' AND record_id='{}'", changed.record)).await,
+        0,
+        "the second form's id is never created"
+    );
+    assert_eq!(
+        stores.data.commit_record(&contributor, &answer("b")).await,
+        Ok(CommandResult::Refused(Refusal::Unchanged))
+    );
+    // The ranking on the owner's page: the contributor, one answer, one match.
+    let page = components(stores, &engine, owner, quiz).await;
+    assert_eq!(scores(&page, "leaderboard"), [("1".to_owned(), 1)]);
+    let label = component(&page, "leaderboard")["groups"][0]["label"].clone();
+    assert!(label.as_str().is_some_and(|label| !label.is_empty()));
+    assert_eq!(component(&page, "response_count")["value"], "1");
+    assert_eq!(component(&page, "timer")["closed"], false);
+    // The contributor's page ranks only themselves, scored against no
+    // readable expected entry.
+    let own_page = components(stores, &engine, &contributor, quiz).await;
+    assert_eq!(scores(&own_page, "leaderboard"), [("0".to_owned(), 1)]);
+    // The owner closes the item: the next answer is refused.
+    let close = command_on(
+        quiz,
+        &listing,
+        "close",
+        "items",
+        Some((&item.record_id, 1)),
+        json!([enum_of("state", "closed")]),
+    );
+    assert_eq!(committed(stores, owner, &close).await.record_version, 2);
+    assert_eq!(
+        stores.data.commit_record(&contributor, &answer("c")).await,
+        Ok(CommandResult::Refused(Refusal::RequirementNotMet))
+    );
+    let page = components(stores, &engine, owner, quiz).await;
+    assert_eq!(component(&page, "timer")["closed"], true);
+    assert_eq!(
+        scores(&page, "leaderboard"),
+        [("1".to_owned(), 1)],
+        "the refused answer changed nothing"
+    );
+    check(
+        checks,
+        "APP-207 acceptance 3: the composed quiz runs end to end: a contributor cannot post; the owner's post stamps opened_at; a contributor's answer is filed, a changed answer replaces it (the same entry at version 2, the second form's id never created), the same answer again is unchanged; the owner's page ranks the contributor by creator with one match against the expected entry and the contributor's page ranks only themselves at zero; after the owner's close the countdown reads closed and the next answer is refused requirement_not_met",
+    );
+
+    // --- Attendance: one check-in per session while it is open ---
+    let sessions = &works[1];
+    stores
+        .workspace
+        .share_work(
+            owner,
+            &sessions.app,
+            &sessions.work,
+            Audience::Member(AUTHOR),
+            ShareRole::Contributor,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    let listing = stores
+        .data
+        .list_records(owner, &sessions.app, &sessions.work)
+        .await
+        .unwrap();
+    let theirs = stores
+        .data
+        .list_records(&contributor, &sessions.app, &sessions.work)
+        .await
+        .unwrap();
+    let session = committed(
+        stores,
+        owner,
+        &command_on(
+            sessions,
+            &listing,
+            "open_session",
+            "sessions",
+            None,
+            json!([text_of("title", "first session"), enum_of("state", "open")]),
+        ),
+    )
+    .await;
+    let check_in = |note: &str| {
+        command_on(
+            sessions,
+            &theirs,
+            "check_in",
+            "checkins",
+            None,
+            json!([
+                reference_to("session", "sessions", &session.record_id),
+                text_of("note", note)
+            ]),
+        )
+    };
+    let first = committed(stores, &contributor, &check_in("here")).await;
+    let again = committed(stores, &contributor, &check_in("here, late")).await;
+    assert_eq!(
+        (again.record_id.as_str(), again.record_version),
+        (first.record_id.as_str(), 2)
+    );
+    committed(
+        stores,
+        owner,
+        &command_on(
+            sessions,
+            &listing,
+            "close_session",
+            "sessions",
+            Some((&session.record_id, 1)),
+            json!([enum_of("state", "closed")]),
+        ),
+    )
+    .await;
+    assert_eq!(
+        stores
+            .data
+            .commit_record(&contributor, &check_in("after close"))
+            .await,
+        Ok(CommandResult::Refused(Refusal::RequirementNotMet))
+    );
+    let page = components(stores, &engine, owner, sessions).await;
+    assert_eq!(component(&page, "checkin_count")["value"], "1");
+    assert_eq!(scores(&page, "per_person"), [("1".to_owned(), 1)]);
+
+    // --- Homework: one submission per task, scored by a reviewer ---
+    let tasks = &works[2];
+    stores
+        .workspace
+        .share_work(
+            owner,
+            &tasks.app,
+            &tasks.work,
+            Audience::Member(AUTHOR),
+            ShareRole::Contributor,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    let listing = stores
+        .data
+        .list_records(owner, &tasks.app, &tasks.work)
+        .await
+        .unwrap();
+    let theirs = stores
+        .data
+        .list_records(&contributor, &tasks.app, &tasks.work)
+        .await
+        .unwrap();
+    let task = committed(
+        stores,
+        owner,
+        &command_on(
+            tasks,
+            &listing,
+            "post_task",
+            "tasks",
+            None,
+            json!([
+                text_of("title", "first task"),
+                json!({"field_id": "details", "value": {"type": "null"}})
+            ]),
+        ),
+    )
+    .await;
+    let submit = |answer: &str| {
+        command_on(
+            tasks,
+            &theirs,
+            "submit",
+            "submissions",
+            None,
+            json!([
+                reference_to("task", "tasks", &task.record_id),
+                text_of("answer", answer)
+            ]),
+        )
+    };
+    let first = committed(stores, &contributor, &submit("draft")).await;
+    let resubmitted = committed(stores, &contributor, &submit("final")).await;
+    assert_eq!(
+        (resubmitted.record_id.as_str(), resubmitted.record_version),
+        (first.record_id.as_str(), 2)
+    );
+    let score = |who_listing: &RecordsListing| {
+        command_on(
+            tasks,
+            who_listing,
+            "review",
+            "submissions",
+            Some((&first.record_id, 2)),
+            json!([{"field_id": "score", "value": {"type": "integer", "value": "9", "unit": "points"}}]),
+        )
+    };
+    assert_eq!(
+        stores
+            .data
+            .commit_record(&contributor, &score(&theirs))
+            .await,
+        Err(Error::Denied),
+        "a contributor cannot score"
+    );
+    assert_eq!(
+        committed(stores, owner, &score(&listing))
+            .await
+            .record_version,
+        3
+    );
+    check(
+        checks,
+        "APP-207: the composed attendance app takes one check-in per person per session (a second replaces the first) and refuses one after the owner closes the session, counting one check-in per person; the composed homework app replaces a resubmission, refuses a contributor's score (reviewer_only) and commits the owner's",
+    );
+    json!({
+        "sentences": sentences.iter().map(|(sentence, _)| *sentence).collect::<Vec<_>>(),
+        "titles": works.iter().map(|work| work.title.clone()).collect::<Vec<_>>(),
+        "quiz": {"work": quiz.work, "item": item.record_id,
+            "replaced": {"record_id": replaced.record_id, "record_version": replaced.record_version}},
+    })
 }

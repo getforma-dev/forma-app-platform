@@ -207,7 +207,9 @@ fn summarize(content: &Value) -> Result<Summary> {
 /// The saved-work bindings that instantiate `inputs` for a member who may
 /// read `sources`: each source input to the first readable revision carrying
 /// its contract digest, each records input to the record schema with its
-/// fields. `None` when any input cannot be bound (the app is not offered).
+/// fields; when several schemas have those fields, the one of the input's
+/// own id (ADR-020 §10: `responses` and `expected` share their fields), else
+/// the first. `None` when any input cannot be bound (the app is not offered).
 pub fn bindings(
     inputs: &[PublishedInput],
     record_schemas: &[(String, Value)],
@@ -227,9 +229,12 @@ pub fn bindings(
                 }
             }
             "records" => {
+                let equal = |(_, fields): &&(String, Value)| *fields == input.fields;
                 let (schema, _) = record_schemas
                     .iter()
-                    .find(|(_, fields)| *fields == input.fields)?;
+                    .filter(equal)
+                    .find(|(id, _)| *id == input.id)
+                    .or_else(|| record_schemas.iter().find(equal))?;
                 WorkBinding::Records {
                     input: input.id.clone(),
                     schema: schema.clone(),
@@ -474,6 +479,43 @@ mod tests {
         assert_eq!(bindings(&inputs, &schemas, &sources[..1]), None);
         // A records input without a schema of its fields: not offered.
         assert_eq!(bindings(&inputs, &[], &sources), None);
+    }
+
+    /// APP-207 (ADR-020 §10): two lists of the same fields each bind their
+    /// own schema, whatever the schemas' order; without a schema of its id a
+    /// records input keeps the first schema of its fields, as before.
+    #[test]
+    fn records_inputs_of_the_same_fields_bind_the_schema_of_their_own_id() {
+        let fields = json!([{"id": "choice", "nullable": false, "value_type": {"type": "text"}}]);
+        let input = |id: &str| PublishedInput {
+            id: id.into(),
+            kind: "records".into(),
+            contract_digest: "sha256:cc".into(),
+            fields: fields.clone(),
+        };
+        let records = |input: &str, schema: &str| WorkBinding::Records {
+            input: input.into(),
+            schema: schema.into(),
+        };
+        let inputs = [input("responses"), input("expected")];
+        let schemas = [
+            ("responses".to_owned(), fields.clone()),
+            ("expected".to_owned(), fields.clone()),
+        ];
+        let reversed = [schemas[1].clone(), schemas[0].clone()];
+        for schemas in [&schemas[..], &reversed[..]] {
+            assert_eq!(
+                bindings(&inputs, schemas, &[]),
+                Some(vec![
+                    records("responses", "responses"),
+                    records("expected", "expected")
+                ])
+            );
+        }
+        assert_eq!(
+            bindings(&[input("answers")], &schemas, &[]),
+            Some(vec![records("answers", "responses")])
+        );
     }
 
     #[test]

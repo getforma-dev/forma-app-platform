@@ -6433,7 +6433,7 @@
       "Depends on": "APP-202",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI (builder B5)",
-      "Branch / PR": "`relc/b5-composer` (to open)",
+      "Branch / PR": "`release/c-b5-composer` (pushed; no PR opened by the builder; it merges into `release/c-participation`, ADR-020 \u00a713)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection. Acceptance 3 runs on the branch where APP-203, APP-204 and APP-205 are merged.",
