@@ -102,7 +102,11 @@ The workflow source is [`.github/workflows`](../.github/workflows). All twelve w
 | Released baseline / Published canvas / Auth consumer | The owning frozen spike and released consumer contract |
 | Parser / Parser release / Bounded query / Synthetic fixture | The owning parser, query or fixture qualification and its source-bound report |
 
-APP-131 repaired the missing `jsonschema` dependency, updated command/race fixtures to use a separate reviewer while retaining self-approval denials, and corrected the library-count expectation. Do not weaken authorization to make a campaign pass. Under ADR-012, a broken workflow is fixed or explicitly quarantined to `workflow_dispatch` with an owning ticket and a row here naming the limitation; red-and-ignored is not an accepted state. No quarantine is currently recorded.
+APP-131 repaired the missing `jsonschema` dependency, updated command/race fixtures to use a separate reviewer while retaining self-approval denials, and corrected the library-count expectation. Do not weaken authorization to make a campaign pass. Under ADR-012, a broken workflow is fixed or explicitly quarantined to `workflow_dispatch` with an owning ticket and a row here naming the limitation; red-and-ignored is not an accepted state. No workflow is quarantined. One catalog campaign is kept out of CI until its fix lands:
+
+| Quarantined | Since | Limitation | Owning ticket; what makes it pass |
+| --- | --- | --- | --- |
+| `refresh-herd` (catalog `ci` column `-`; not a tenant-foundation step) | 2026-11-14 | Run A fails: a 26-page refresh herd exceeds two connections per role, because every lease reuse repeats the catalog comparison ([evidence](../evidence/APP-195/refresh-herd-2026-11-14.md)). It still runs with `just campaign refresh-herd`, and its report is kept as evidence. | [APP-195](../Tickets/0-backlog/APP-195.md); APP-197 (the catalog check's cadence, not yet opened on this branch) makes it pass, and restores the step and the `ci` value |
 
 ## Campaigns
 
