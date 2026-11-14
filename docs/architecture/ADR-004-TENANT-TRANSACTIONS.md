@@ -60,3 +60,46 @@ Preserve migration0001 bytes/history. Add checksummed migration0002 and exact su
 The logical catalog must accommodate the observed provider difference in PostgreSQL creator bookkeeping: optional incoming grants from `genui_migration` to one of the six exact fixed roles with `admin=true`, `inherit=false`, `set=false` are excluded from comparison. The accepted APP-007 source/restored manifests omit these local creator grants. Preserve the explicit migration-to-owner grant and every other membership/flag, all fixed-role outgoing reachability and unrecognized incoming members. This narrow normalization changes no grants and is not permission to learn an expected baseline from a running database; fresh managed compatibility still must be checked. Establish a fixed `pg_catalog` search path before using unverified metadata, and validate catalog structure before reading application-owned version/history relations. Replica mode and grants that let an application role enable it must be refused; no privileged repair is an availability fallback.
 
 Acceptance still requires real per-role/two-tenant catalog/FK/RLS tests, same-connection cleanup, two-order revocation races, uniform private-route refusals and managed runtime evidence. This decision supplies none of those results and does not pass Phase 1.
+
+## Amendment A5, 2026-11-14: the catalog comparison on reuse runs at most every 30 s (APP-197)
+
+Decided by the Fable advisor in lieu of Victor (his delegation of 2026-11-14), for [APP-197](../../Tickets/0-backlog/APP-197.md), after the [APP-195 refresh-herd campaign](../../evidence/APP-195/refresh-herd-2026-11-14.md). ADR-007's amendments A1–A4 come first; this is A5. Revised the same day after the [Tier A review](../../evidence/APP-197/review-tier-a-2026-11-14.md) (M1, m1, m2, n1, n2). Victor can reverse it.
+
+**What it amends.** §Pool and driver lifecycle: "Only fully verified leases return to the pool." A reused lease is now fully verified except for the structural catalog comparison, which it repeats at most every 30 s.
+
+**Why.** Every lease reuse ran the full structural catalog comparison. That comparison is one query that builds the whole catalog in PostgreSQL, plus its comparison in the service. Measured locally, it took about 45 ms of a 64 ms data-role transaction, and every reuse ran it: 20 checks in 20 transactions. One page refresh takes 12 data-role and 5 workspace-role transactions, so a 26-page refresh herd needed about 10 s of data-role time on two connections. Neither the 32-caller waiter set (APP-195) nor four data connections made it pass.
+
+**Decision.**
+
+- **A new connection** runs `verify_identity`, the catalog comparison, the version relation's identity check and `verify_schema_version` before it is admitted. **Readiness** (`Stores::readiness` and its diagnosis) runs the same on every probe. Both are as before, plus the identity check.
+- **A reused connection, on every reuse,** runs in this order:
+  - `verify_identity`: flags, memberships, TLS, replication role and `search_path`;
+  - the version relation's identity check, from `pg_catalog` alone: `genui_meta.schema_version` is still the relation, by OID, that the connection's last comparison saw; it is a plain table without row security, with a `boolean` and an `integer` column;
+  - `verify_schema_version`, now `FROM ONLY`;
+  - `verify_baseline` last: user, role, `row_security`, `search_path`, blank scope and replication role. Nothing those reads ran can leave the session changed without being seen.
+- **The catalog comparison on reuse** runs only when the connection's own last comparison is at least `CATALOG_RECHECK` old. That is 30 s, a `const` in `storage/pool.rs` with a compile-time assertion of its value, and no environment or configuration override. The window is measured from the instant before that comparison began, and a reuse that does not compare never moves it.
+- **A failed check on reuse discards the connection, as before.** The driver closes it and its capacity is released.
+- **The test executable** can move the pool clock forward (`TestHooks::advance`). No production path can.
+- **Refusal causes stay typed `trace::refuse` codes.** The new ones are `version_relation_missing`, `version_relation_shape` and `version_relation_changed`.
+
+**What moves to the 30 s cadence:** the catalog document, when it changes without a schema-version bump. That covers grants and ACLs, relation kinds, RLS policies, triggers, constraints, functions and role attributes.
+
+**What stays checked on every reuse:**
+
+- identity and the replication role, so replica mode is caught at once;
+- the schema version, so a migration that bumps it is refused on the next reuse;
+- the version relation's identity. §Migration and recovery's rule, "validate catalog structure before reading application-owned version/history relations", therefore still holds inside the window. If the relation is replaced by a view, or given row security whose policy runs code, the reuse refuses before anything in it runs. The APP-008 native campaign asserts this inside the window, with zero marker executions.
+
+**Threat model.**
+
+- The comparison defends against operational drift of the database the service runs against: a migration applied while the service runs, grant or flag differences, replica mode, or a relation renamed away or replaced.
+- It is not a defence against a hostile database administrator. The [APP-008 r5 review](../../evidence/APP-008/native/r5/independent-review.md) already says: "No protection against a hostile database administrator changing DDL after validation is claimed."
+- No request path can cause catalog drift. The storage module issues only fixed statements, and the definer functions contain no DDL.
+- The four application roles own nothing: no schema, relation, function, type or large object. They hold no CREATE or TEMP privilege, and none is SUPERUSER, CREATEDB or CREATEROLE. The APP-008 native campaign asserts all of this.
+- PostgreSQL still lets each role set its own per-role defaults (`ALTER ROLE <self> SET …`), and the catalog compares those rows. They apply only to new connections, which are always compared before they are admitted.
+
+**Consequence.**
+
+- For catalog drift on a reused connection, detection moves from the next transaction to at most 30 s, plus the transaction in flight (at most 3 s). A new connection, readiness and every per-reuse check detect it as before.
+- Inside the window, a reused connection can run statements against drifted objects other than the version relation: a loosened policy, a dropped constraint, a redefined definer function. That is the same exposure as any statement a transaction runs after a successful check, now for up to 30 s instead of one transaction.
+- No connection count, deadline or waiter bound changes. ADR-007's numbers are unchanged.

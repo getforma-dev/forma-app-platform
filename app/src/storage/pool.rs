@@ -25,6 +25,14 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 pub(super) const ACQUIRE: Duration = Duration::from_secs(5);
 pub(super) const TRANSACTION: Duration = Duration::from_secs(3);
 pub(super) const CLEANUP: Duration = Duration::from_secs(2);
+/// ADR-004 amendment A5 (APP-197): a reused connection repeats the
+/// structural catalog comparison only when its own last comparison is older
+/// than this. A new connection and readiness always run it; identity, the
+/// session baseline and the schema version are checked on every reuse. No
+/// environment or configuration value can change it.
+pub(super) const CATALOG_RECHECK: Duration = Duration::from_secs(30);
+// The window is ADR-004 A5's number; a different one is an amendment.
+const _: () = assert!(CATALOG_RECHECK.as_secs() == 30);
 const EXPIRY_MARGIN: u64 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -125,9 +133,20 @@ pub(crate) struct TestHooks {
     /// count (APP-113 deferred `open_listed` batching).
     pub transactions: std::sync::atomic::AtomicUsize,
     pub statements: std::sync::atomic::AtomicUsize,
+    /// APP-197: how far these stores' pool clock runs ahead of real time
+    /// (milliseconds), so a test can pass the catalog window without waiting.
+    advanced_ms: std::sync::atomic::AtomicU64,
 }
 #[cfg(test)]
 impl TestHooks {
+    /// Moves these stores' pool clock forward by `by` (APP-197).
+    pub fn advance(&self, by: Duration) {
+        self.advanced_ms
+            .fetch_add(by.as_millis() as u64, Ordering::SeqCst);
+    }
+    fn advanced(&self) -> Duration {
+        Duration::from_millis(self.advanced_ms.load(Ordering::SeqCst))
+    }
     /// `(transactions, statements)` so far.
     pub fn counts(&self) -> (usize, usize) {
         (
@@ -155,6 +174,19 @@ impl TestHooks {
     }
 }
 
+/// Callers one role admits at once: the two holding its connections and up
+/// to thirty waiting for one. The next caller is refused at once
+/// (`admission_saturated`, `Error::Unavailable`).
+///
+/// This keeps ADR-004 §Pool and driver lifecycle true: the queue of waiters
+/// is bounded, separately from the connections, and every admitted caller
+/// waits inside the one absolute `ACQUIRE` deadline, so a wait is bounded in
+/// length and in time. APP-195 raised it from 8 (two running, six waiting):
+/// one save on a page that 26 members had open made most of their refreshes
+/// answer 503 (APP-193 finding, G6). The connections (two per role, eight in
+/// all) and the 5/3/2 s deadlines are ADR-007's and do not change.
+pub(super) const ADMITTED: usize = 32;
+
 struct Capacity {
     all: Arc<Semaphore>,
     roles: [Arc<Semaphore>; 4],
@@ -165,8 +197,62 @@ fn capacity() -> &'static Capacity {
     VALUE.get_or_init(|| Capacity {
         all: Arc::new(Semaphore::new(8)),
         roles: std::array::from_fn(|_| Arc::new(Semaphore::new(2))),
-        admitted: std::array::from_fn(|_| Arc::new(Semaphore::new(8))),
+        admitted: std::array::from_fn(|_| Arc::new(Semaphore::new(ADMITTED))),
     })
+}
+
+/// Test executable only (APP-195 run C): while the guard lives, `role`
+/// admits at most `admitted` callers. The guard holds the other admission
+/// permits, so the measured path is the production acquisition unchanged.
+#[cfg(test)]
+pub(super) struct AdmittedLimit {
+    _held: OwnedSemaphorePermit,
+}
+#[cfg(test)]
+pub(super) async fn limit_admitted(role: Role, admitted: usize) -> AdmittedLimit {
+    let held = ADMITTED
+        .checked_sub(admitted)
+        .and_then(|held| u32::try_from(held).ok())
+        .expect("a limit within ADMITTED");
+    AdmittedLimit {
+        _held: capacity().admitted[role.index()]
+            .clone()
+            .acquire_many_owned(held)
+            .await
+            .expect("admission permits are never closed"),
+    }
+}
+
+/// Test executable only (APP-195): admission refusals so far, per role in
+/// `Role::index` order, so a campaign can tell whether a caller was refused.
+#[cfg(test)]
+static SATURATED: [std::sync::atomic::AtomicUsize; 4] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; 4];
+#[cfg(test)]
+pub(super) fn saturated() -> [usize; 4] {
+    std::array::from_fn(|i| SATURATED[i].load(Ordering::SeqCst))
+}
+/// Test executable only (APP-195): per role, each lease's service time in
+/// microseconds: preparing its connection (creation or recycle checks) plus
+/// holding it until the lease ended. Drained by `take_service`.
+#[cfg(test)]
+static SERVICE: [std::sync::Mutex<Vec<u64>>; 4] = [const { std::sync::Mutex::new(Vec::new()) }; 4];
+#[cfg(test)]
+pub(super) fn take_service() -> [Vec<u64>; 4] {
+    std::array::from_fn(|i| {
+        SERVICE[i]
+            .lock()
+            .map(|mut samples| std::mem::take(&mut *samples))
+            .unwrap_or_default()
+    })
+}
+/// Test executable only (APP-195): admission permits granted so far, per role.
+#[cfg(test)]
+static ACQUIRED: [std::sync::atomic::AtomicUsize; 4] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; 4];
+#[cfg(test)]
+pub(super) fn acquired() -> [usize; 4] {
+    std::array::from_fn(|i| ACQUIRED[i].load(Ordering::SeqCst))
 }
 
 struct DriverPermits {
@@ -238,6 +324,15 @@ pub(super) struct Connection {
     pub fingerprint: String,
     pub expires_at: u64,
     pub clean: bool,
+    /// When this connection last passed the structural catalog comparison
+    /// (ADR-004 amendment A5, on the pool clock), and the identity of the
+    /// schema-version relation that comparison saw.
+    catalog_verified_at: Instant,
+    version_relation: i64,
+    /// Test executable only (APP-195): how long this connection's last
+    /// checkout took to prepare it (its creation or its recycle checks).
+    #[cfg(test)]
+    prepared_us: u64,
 }
 
 #[derive(Clone)]
@@ -248,6 +343,13 @@ pub(super) struct RoleManager {
     pub role: Role,
 }
 impl RoleManager {
+    /// The pool clock. The test executable can run it ahead (`TestHooks::advance`).
+    fn now(&self) -> Instant {
+        let now = Instant::now();
+        #[cfg(test)]
+        let now = now + self.settings.hooks.advanced();
+        now
+    }
     fn configuration(&self) -> Result<Config> {
         let value = Config::load(&self.settings.credentials).map_err(|reason| {
             trace::cause(trace::credentials(reason));
@@ -275,6 +377,8 @@ impl RoleManager {
         Ok(value)
     }
     async fn connect(&self, value: &Config) -> Result<Connection> {
+        #[cfg(test)]
+        let started = std::time::Instant::now();
         let cap = capacity();
         // These are acquired before opening a transport. During cancellation of
         // connect(), the connect future/transport drops before these locals.
@@ -328,23 +432,53 @@ impl RoleManager {
             fingerprint: value.file_sha256.clone(),
             expires_at: value.expires_at,
             clean: false,
+            catalog_verified_at: self.now(),
+            version_relation: 0,
+            #[cfg(test)]
+            prepared_us: 0,
         };
         #[cfg(test)]
         self.settings.hooks.checkpoint("connect").await;
-        self.verify_admission(&connected.client).await?;
+        // The window is measured from before the checks, never after them.
+        let checked_at = self.now();
+        connected.version_relation = self.verify_admission(&connected.client).await?;
+        connected.catalog_verified_at = checked_at;
         trace::step("reset");
         reset(&mut connected, self.role).await?;
+        #[cfg(test)]
+        {
+            connected.prepared_us = started.elapsed().as_micros() as u64;
+        }
         Ok(connected)
     }
-    async fn verify_admission(&self, client: &Client) -> Result<()> {
+    /// A new connection's admission, and readiness: identity, the structural
+    /// catalog comparison and the schema version, every time. Returns the
+    /// identity of the version relation the comparison saw.
+    async fn verify_admission(&self, client: &Client) -> Result<i64> {
+        self.verify_checks(client, None).await
+    }
+    /// `compared`: `None` compares the catalog; `Some(relation)` is a reuse
+    /// inside the A5 window, whose version relation must still be the one
+    /// its last comparison saw.
+    async fn verify_checks(&self, client: &Client, compared: Option<i64>) -> Result<i64> {
         // Only built-in catalog objects may be touched before the structural
         // comparison. Even the version relation could have become a view.
+        // Inside the A5 window the comparison is skipped, but ADR-004
+        // §Migration and recovery's rule still holds: the version relation is
+        // read only after a pg_catalog check that it is the same plain table,
+        // without row security, that the last comparison saw.
         trace::step("verify_identity");
-        verify_identity(client, self.role).await?;
-        trace::step("catalog_verify");
-        self.catalog.verify(client).await?;
+        let relation = verify_identity(client, self.role).await?;
+        if compared.is_none() {
+            trace::step("catalog_verify");
+            self.catalog.verify(client).await?;
+        }
+        if compared.is_some_and(|seen| seen != relation) {
+            return Err(trace::refuse("version_relation_changed"));
+        }
         trace::step("verify_schema_version");
-        verify_schema_version(client).await
+        verify_schema_version(client).await?;
+        Ok(relation)
     }
 }
 impl Manager for RoleManager {
@@ -368,6 +502,8 @@ impl Manager for RoleManager {
         Err(Error::Unavailable)
     }
     async fn recycle(&self, connection: &mut Connection, _: &Metrics) -> RecycleResult<Error> {
+        #[cfg(test)]
+        let started = std::time::Instant::now();
         if !connection.clean || connection.client.is_closed() {
             return Err(RecycleError::Backend(Error::Unavailable));
         }
@@ -378,14 +514,34 @@ impl Manager for RoleManager {
         {
             return Err(RecycleError::Backend(Error::Configuration));
         }
-        verify_baseline(&connection.client, self.role)
+        // ADR-004 amendment A5: identity, the version relation's identity and
+        // the schema version on every reuse; the catalog comparison once its
+        // last one is CATALOG_RECHECK old. The session baseline is checked
+        // last, so nothing the reads above ran can leave the session changed.
+        // A failure here discards the connection, as before.
+        let now = self.now();
+        let recheck =
+            now.saturating_duration_since(connection.catalog_verified_at) >= CATALOG_RECHECK;
+        let relation = self
+            .verify_checks(
+                &connection.client,
+                (!recheck).then_some(connection.version_relation),
+            )
             .await
             .map_err(RecycleError::Backend)?;
-        self.verify_admission(&connection.client)
+        if recheck {
+            connection.catalog_verified_at = now;
+            connection.version_relation = relation;
+        }
+        verify_baseline(&connection.client, self.role)
             .await
             .map_err(RecycleError::Backend)?;
         #[cfg(test)]
         self.settings.hooks.checkpoint("recycle").await;
+        #[cfg(test)]
+        {
+            connection.prepared_us = started.elapsed().as_micros() as u64;
+        }
         connection.clean = true;
         Ok(())
     }
@@ -406,7 +562,13 @@ impl RolePool {
         let admitted = capacity().admitted[self.manager.role.index()]
             .clone()
             .try_acquire_owned()
-            .map_err(|_| trace::refuse("admission_saturated"))?;
+            .map_err(|_| {
+                #[cfg(test)]
+                SATURATED[self.manager.role.index()].fetch_add(1, Ordering::SeqCst);
+                trace::refuse("admission_saturated")
+            })?;
+        #[cfg(test)]
+        ACQUIRED[self.manager.role.index()].fetch_add(1, Ordering::SeqCst);
         trace::step("configuration");
         self.manager.configuration()?;
         trace::step("pool_get");
@@ -426,6 +588,8 @@ impl RolePool {
         // No await between ownership acquisition and the non-reusable guard.
         object.clean = false;
         let lease = Lease {
+            #[cfg(test)]
+            obtained: (std::time::Instant::now(), object.prepared_us),
             object: Some(object),
             owner: self.clone(),
             _admitted: admitted,
@@ -446,12 +610,24 @@ pub(super) struct Lease {
     object: Option<Object<RoleManager>>,
     owner: Arc<RolePool>,
     _admitted: OwnedSemaphorePermit,
+    /// Test executable only (APP-195): when the lease got its connection,
+    /// and how long that checkout took to prepare it.
+    #[cfg(test)]
+    obtained: (std::time::Instant, u64),
 }
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(object) = self.object.take() {
             // No asynchronous cleanup is delegated to ordinary pool return.
             drop(Object::take(object));
+        }
+        #[cfg(test)]
+        {
+            let (at, prepared) = self.obtained;
+            let held = at.elapsed().as_micros() as u64;
+            if let Ok(mut samples) = SERVICE[self.owner.manager.role.index()].lock() {
+                samples.push(prepared + held);
+            }
         }
     }
 }
@@ -563,8 +739,13 @@ impl Lease {
     }
 }
 
-async fn verify_identity(client: &Client, role: Role) -> Result<()> {
-    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path') FROM pg_catalog.pg_roles WHERE rolname=current_user", &[])
+/// The connection's identity checks. The same statement also reads, from
+/// `pg_catalog` alone, the schema-version relation's identity (ADR-004 A5):
+/// returned once it is a plain table without row security whose columns are
+/// exactly a `boolean` and an `integer`, so that reading it runs nothing but
+/// the table scan. One round trip.
+async fn verify_identity(client: &Client, role: Role) -> Result<i64> {
+    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path'),v.relation,v.shape FROM pg_catalog.pg_roles LEFT JOIN LATERAL (SELECT c.oid::pg_catalog.int8 AS relation,c.relkind::pg_catalog.text||':'||(c.relrowsecurity OR c.relforcerowsecurity)::pg_catalog.text||':'||pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.int8 FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum),',') AS shape FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui_meta' AND c.relname='schema_version') v ON true WHERE rolname=current_user", &[])
         .await.map_err(trace::unavailable)?;
     let text = |index| row.try_get::<_, String>(index).map_err(trace::unavailable);
     let boolean = |index| row.try_get::<_, bool>(index).map_err(trace::unavailable);
@@ -593,13 +774,23 @@ async fn verify_identity(client: &Client, role: Role) -> Result<()> {
     if !rows.is_empty() {
         return Err(trace::refuse("identity_extra_membership"));
     }
-    Ok(())
+    // The version relation: a plain table ("r"), no row security ("false"),
+    // a boolean (oid 16) and an integer (oid 23) column, in that order.
+    let relation: Option<i64> = row.try_get(14).map_err(trace::unavailable)?;
+    let shape: Option<String> = row.try_get(15).map_err(trace::unavailable)?;
+    let Some(relation) = relation else {
+        return Err(trace::refuse("version_relation_missing"));
+    };
+    if shape.as_deref() != Some("r:false:16,23") {
+        return Err(trace::refuse("version_relation_shape"));
+    }
+    Ok(relation)
 }
 
 async fn verify_schema_version(client: &Client) -> Result<()> {
     let row = client
         .query_one(
-            "SELECT version FROM genui_meta.schema_version WHERE singleton",
+            "SELECT version FROM ONLY genui_meta.schema_version WHERE singleton",
             &[],
         )
         .await

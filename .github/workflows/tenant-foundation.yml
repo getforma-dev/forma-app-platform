@@ -87,6 +87,8 @@ jobs:
         run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_RECORD_COMPONENTS_REPORT="$RUNNER_TEMP/tenant-foundation/record-components.json" cargo test --locked -p forma-app-platform --lib storage::record_components_campaign::native_record_components_campaign -- --ignored --exact --nocapture
       - name: Qualify private entries, reviewer-only commands and shares with roles (APP-191/192)
         run: GENUI_PRIVATE_ENTRIES_REPORT="$RUNNER_TEMP/tenant-foundation/private-entries.json" cargo test --locked -p forma-app-platform --lib storage::private_entries_campaign::native_private_entries_campaign -- --ignored --exact --nocapture
+      - name: Qualify the 15-page refresh-herd gate and run C (APP-195, APP-197)
+        run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_REFRESH_HERD_REPORT="$RUNNER_TEMP/tenant-foundation/refresh-herd.json" cargo test --locked -p forma-app-platform --lib storage::qualification::refresh_herd::native_refresh_herd_campaign -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

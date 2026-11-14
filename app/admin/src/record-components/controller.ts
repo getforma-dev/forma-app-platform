@@ -1,9 +1,12 @@
 import { renderRecordComponents, type WireRecordComponent } from './render';
+import { retryOnce } from '../canvas/live';
 
 type Identity = { app: string; work: string } | { share: string };
 type Filter = { id: string; value: string } | { id: string; start: string; end: string };
 type Batch = { components: WireRecordComponent[]; filter_epoch: number };
 const ID = /^[a-z][a-z0-9_]{0,63}$/;
+// APP-195: a refresh a live hint started tries a 503 or a network error once more.
+const liveRead = retryOnce();
 
 /** A response from an older input generation can never replace a newer result. */
 export function matchingBatch(value: unknown, epoch: number, ids: ReadonlySet<string>): value is Batch {
@@ -83,7 +86,8 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
       const status = doc.createElement('p'); status.className = 'state'; status.setAttribute('role', 'status'); status.textContent = message; component.append(status);
     }
   };
-  const refresh = async () => {
+  /** `live`: a live hint started it (APP-195), so its read retries once; the member's filters read as before. */
+  const refresh = async (live = false) => {
     if (disposed || suspended || !components().length) return;
     const token = ++generation;
     request?.abort(); request = new AbortController();
@@ -91,7 +95,7 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
     const atEpoch = epoch;
     capture(); mask('Updating record views…');
     try {
-      const response = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]),
+      const response = await (live ? liveRead : fetch)(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]),
         headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ filter_epoch: atEpoch, filters: active }) });
       if (disposed || suspended || token !== generation) return;
       if (!response.ok) throw new Error(response.status === 404 ? 'denied' : 'unavailable');
@@ -162,12 +166,12 @@ export function recordComponentsFor(root: HTMLElement, identity: Identity) {
   return {
     refresh,
     beforeRefresh() { capture(); request?.abort(); generation++; },
-    afterRefresh() {
+    afterRefresh(live = false) {
       if (disposed) return;
       suspended = false; restore(); enable();
       // A regular live/native refresh has an unfiltered snapshot. Do not let
       // it flash underneath active filters; fetch the current scope again.
-      if (epoch > 0) void refresh();
+      if (epoch > 0) void refresh(live);
     },
     invalidate() {
       suspended = true; request?.abort(); generation++; drafts.clear(); focus = null;

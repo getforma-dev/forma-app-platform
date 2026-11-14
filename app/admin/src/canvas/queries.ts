@@ -6,6 +6,7 @@
 // at a time (the engine admits two per organization); a 429 waits its
 // `Retry-After` and retries, showing busy meanwhile.
 import { released, renderNoValue, renderReleased } from './render';
+import type { Fetch } from './live';
 
 export type Parameters = { window?: { start: string; end: string }; destination?: string };
 
@@ -78,8 +79,12 @@ function failure(status: number, code: string): [string, string, string] {
 
 const sleep = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 
-/** Runs one view card; a newer run of the same card supersedes this one (its answer is dropped). */
-export async function runView(card: HTMLElement, parameters: Parameters): Promise<void> {
+/**
+ * Runs one view card; a newer run of the same card supersedes this one (its
+ * answer is dropped). `request`: the read; a live hint's run passes one that
+ * tries a 503 or a network error once more (APP-195).
+ */
+export async function runView(card: HTMLElement, parameters: Parameters, request: Fetch = (input, init) => fetch(input, init)): Promise<void> {
   const url = card.dataset.query;
   if (!url || !url.startsWith('/v1/work/')) return;
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
@@ -91,7 +96,7 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
     try {
       // APP-113: a run superseded while it waited for a slot never fetches.
       response = await slot(() => (current()
-        ? fetch(url, {
+        ? request(url, {
           method: 'POST',
           credentials: 'same-origin',
           cache: 'no-store',
