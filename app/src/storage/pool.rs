@@ -182,6 +182,46 @@ fn capacity() -> &'static Capacity {
     })
 }
 
+/// Test executable only (APP-195 run C): while the guard lives, `role`
+/// admits at most `admitted` callers. The guard holds the other admission
+/// permits, so the measured path is the production acquisition unchanged.
+#[cfg(test)]
+pub(super) struct AdmittedLimit {
+    _held: OwnedSemaphorePermit,
+}
+#[cfg(test)]
+pub(super) async fn limit_admitted(role: Role, admitted: usize) -> AdmittedLimit {
+    let held = ADMITTED
+        .checked_sub(admitted)
+        .and_then(|held| u32::try_from(held).ok())
+        .expect("a limit within ADMITTED");
+    AdmittedLimit {
+        _held: capacity().admitted[role.index()]
+            .clone()
+            .acquire_many_owned(held)
+            .await
+            .expect("admission permits are never closed"),
+    }
+}
+
+/// Test executable only (APP-195): admission refusals so far, per role in
+/// `Role::index` order, so a campaign can tell whether a caller was refused.
+#[cfg(test)]
+static SATURATED: [std::sync::atomic::AtomicUsize; 4] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; 4];
+#[cfg(test)]
+pub(super) fn saturated() -> [usize; 4] {
+    std::array::from_fn(|i| SATURATED[i].load(Ordering::SeqCst))
+}
+/// Test executable only (APP-195): admission permits granted so far, per role.
+#[cfg(test)]
+static ACQUIRED: [std::sync::atomic::AtomicUsize; 4] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; 4];
+#[cfg(test)]
+pub(super) fn acquired() -> [usize; 4] {
+    std::array::from_fn(|i| ACQUIRED[i].load(Ordering::SeqCst))
+}
+
 struct DriverPermits {
     _role: OwnedSemaphorePermit,
     _all: OwnedSemaphorePermit,
@@ -419,7 +459,13 @@ impl RolePool {
         let admitted = capacity().admitted[self.manager.role.index()]
             .clone()
             .try_acquire_owned()
-            .map_err(|_| trace::refuse("admission_saturated"))?;
+            .map_err(|_| {
+                #[cfg(test)]
+                SATURATED[self.manager.role.index()].fetch_add(1, Ordering::SeqCst);
+                trace::refuse("admission_saturated")
+            })?;
+        #[cfg(test)]
+        ACQUIRED[self.manager.role.index()].fetch_add(1, Ordering::SeqCst);
         trace::step("configuration");
         self.manager.configuration()?;
         trace::step("pool_get");

@@ -79,6 +79,8 @@ jobs:
         run: GENUI_SHARED_IDENTITY_REPORT="$RUNNER_TEMP/tenant-foundation/shared-identity.json" cargo test --locked -p forma-app-platform --lib auth::shared_tests::native_shared_identity_campaign -- --ignored --exact --nocapture
       - name: Qualify record components, exact aggregates and guest release (APP-158/159)
         run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_RECORD_COMPONENTS_REPORT="$RUNNER_TEMP/tenant-foundation/record-components.json" cargo test --locked -p forma-app-platform --lib storage::record_components_campaign::native_record_components_campaign -- --ignored --exact --nocapture
+      - name: Qualify a 26-page refresh herd against the pool and the jittered client (APP-195)
+        run: GENUI_QUERY_PYTHON="$GITHUB_WORKSPACE/app/runtime/.venv/bin/python" GENUI_REFRESH_HERD_REPORT="$RUNNER_TEMP/tenant-foundation/refresh-herd.json" cargo test --locked -p forma-app-platform --lib storage::qualification::refresh_herd::native_refresh_herd_campaign -- --ignored --exact --nocapture
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
