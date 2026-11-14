@@ -11,8 +11,16 @@
 //! `Member <8 hex>`, even for a principal the file lists. A name is a label for
 //! people (the members list, the approver chip, the records list), never an
 //! identity: authority still comes from the principal id and its grants.
-//! Proper fix (APP-097/APP-098): a `display_name` column on `memberships`
-//! written by the operator channel under D7.3, replacing this file.
+//! Since migration 0023 (trial plan D6) members name themselves:
+//! `memberships.display_name`, set through `Workspace::set_display_name` and
+//! shown for **any** organization. Because `label` is synchronous and called
+//! from many render paths, the stored names live in a process-wide cache
+//! keyed by (organization, principal): filled once at startup from one read
+//! of the names (`Workspace::load_display_names`), and refreshed by this
+//! process's own writes (`set_display_name`) and on admission. The beta runs
+//! one task (ADR-007 D7.18, DS-16), so the cache is the database's current
+//! state; a second task would need a shared refresh, which is recorded here
+//! as the limit. The DS-44 persona file remains the demo-only fill-in.
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -39,9 +47,56 @@ struct Entry {
 }
 
 static NAMES: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
+/// 0023 member display names, keyed by (organization, principal).
+static MEMBER_NAMES: OnceLock<RwLock<HashMap<(String, String), String>>> = OnceLock::new();
 
 fn names() -> &'static RwLock<HashMap<String, String>> {
     NAMES.get_or_init(|| RwLock::new(load_from_env().unwrap_or_default()))
+}
+fn member_names() -> &'static RwLock<HashMap<(String, String), String>> {
+    MEMBER_NAMES.get_or_init(RwLock::default)
+}
+
+/// The display name a member set for itself in `organization` (0023), as
+/// this process last read or wrote it.
+pub fn member_name(organization: &str, principal: &str) -> Option<String> {
+    member_names()
+        .read()
+        .ok()?
+        .get(&(organization.to_owned(), principal.to_owned()))
+        .cloned()
+}
+
+/// Records one member's name as the database now holds it (`None` clears):
+/// after this process's own `set_display_name`, and on admission.
+pub fn set_member_name(organization: &str, principal: &str, name: Option<&str>) {
+    if let Ok(mut map) = member_names().write() {
+        let key = (organization.to_owned(), principal.to_owned());
+        match name.filter(|n| usable_name(n)) {
+            Some(name) => {
+                map.insert(key, name.trim().to_owned());
+            }
+            None => {
+                map.remove(&key);
+            }
+        }
+    }
+}
+
+/// Replaces every cached name of `organization` with the database's
+/// (the startup fill, one organization at a time).
+pub fn replace_member_names(organization: &str, entries: &[(String, String)]) {
+    if let Ok(mut map) = member_names().write() {
+        map.retain(|(org, _), _| org != organization);
+        for (principal, name) in entries {
+            if crate::storage::valid_identifier(principal) && usable_name(name) {
+                map.insert(
+                    (organization.to_owned(), principal.clone()),
+                    name.trim().to_owned(),
+                );
+            }
+        }
+    }
 }
 
 /// A usable display name: bounded, printable, no control characters.
@@ -129,9 +184,13 @@ fn load(
     parsed
 }
 
-/// The display name the operator set for `principal`, as seen in
-/// `organization`, if any.
+/// The display name of `principal` as seen in `organization`, if any: the
+/// name the member set (0023, any organization), else the operator's DS-44
+/// persona (listed demo organizations only).
 pub fn display_name(organization: &str, principal: &str) -> Option<String> {
+    if let Some(name) = member_name(organization, principal) {
+        return Some(name);
+    }
     // DS-44: persona names belong to the listed demo organizations only.
     if !crate::demo::is_demo_org(organization) {
         return None;
@@ -215,5 +274,48 @@ mod tests {
         assert_eq!(label(DEMO, SARAH), "Member 00000000", "the switch is off");
         crate::demo::configure_for_tests(false, &[]);
         set_for_tests(&[]);
+    }
+
+    /// 0023 (D6): a member's own name shows in its organization whatever the
+    /// demo switch says, never in another organization; the fill replaces an
+    /// organization's names wholesale, a clear removes one, and an unusable
+    /// name is never cached.
+    #[test]
+    fn member_names_are_per_organization_and_bounded() {
+        let _guard = crate::demo::lock_for_tests();
+        const ORG: &str = "00000000-0000-4000-8000-0000000000e1";
+        const OTHER: &str = "00000000-0000-4000-8000-0000000000e2";
+        const ADA: &str = "00000000-0000-4000-8000-0000000000a1";
+        const BOB: &str = "00000000-0000-4000-8000-0000000000b1";
+        crate::demo::configure_for_tests(false, &[]);
+        set_member_name(ORG, ADA, Some(" Ada Lovelace "));
+        assert_eq!(label(ORG, ADA), "Ada Lovelace");
+        assert_eq!(label(OTHER, ADA), "Member 00000000");
+        set_member_name(ORG, ADA, Some("a\nb"));
+        assert_eq!(label(ORG, ADA), "Member 00000000", "unusable clears");
+        replace_member_names(
+            ORG,
+            &[
+                (ADA.into(), "Ada".into()),
+                (BOB.into(), "x".repeat(81)),
+                ("bad".into(), "Eve".into()),
+            ],
+        );
+        assert_eq!(label(ORG, ADA), "Ada");
+        assert_eq!(label(ORG, BOB), "Member 00000000");
+        replace_member_names(OTHER, &[(BOB.into(), "Bob".into())]);
+        assert_eq!(
+            (label(ORG, ADA), label(OTHER, BOB)),
+            ("Ada".into(), "Bob".into())
+        );
+        replace_member_names(ORG, &[]);
+        assert_eq!(label(ORG, ADA), "Member 00000000");
+        assert_eq!(
+            label(OTHER, BOB),
+            "Bob",
+            "another organization's fill is untouched"
+        );
+        set_member_name(OTHER, BOB, None);
+        assert_eq!(label(OTHER, BOB), "Member 00000000");
     }
 }
