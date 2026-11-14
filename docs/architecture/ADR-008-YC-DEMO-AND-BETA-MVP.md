@@ -68,7 +68,7 @@ Victor decided on 2026-11-14 to run a real live test of the platform with real p
   - **Not the record of record.** Grades and attendance in the platform are not the official record, and no export exists. Victor copies them out before 2026-12-12; the purge procedure starts with that copy-out, and students are told their apps are deleted by 2026-12-14.
   - **Phones.** Desktop first. Phones serve check-ins and submissions; building apps on a phone isn't supported during the test. Students bring a laptop.
   - **Withdrawal.** Declining the checkbox, or leaving, costs nothing in the class, because the fallback serves them. Victor removes the member in `/admin` at once and deletes their uploads within two days. Their entries in shared apps stay until the purge, as the notice says.
-- **End of the test.** The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook (`docs/operations/TRIAL-RUNBOOK.md` §10):
+- **End of the test** (added later on 2026-11-14 from the W3 purge review). The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook (`docs/operations/TRIAL-RUNBOOK.md`, delivered by APP-188, §10):
   - **Content deleted:** apps, records, uploads, names, consents and memberships, plus every stored file version.
   - **Kept:** the hash-chained audit log (identifiers, event kinds, times and hashes; no content) and the routing rows for the organization's handle.
   - **Backups:** manual snapshots are deleted at the purge. RDS automated backups lapse seven days later, so the data is fully gone around 2026-12-21.
@@ -79,6 +79,8 @@ Victor decided on 2026-11-14 to run a real live test of the platform with real p
 ### Beta notice, version 1
 
 Shown on the invitation page; the required checkbox records consent to this version. The text is general, because it is platform text, not text for one cohort. Approved on 2026-11-14 by the Fable advisor acting for Victor at his instruction ("Ask Fable for answers and directions in lieu of me").
+
+The notice's "Your data" paragraph was revised later on 2026-11-14 from the W3 purge review; the rest is the morning's approved text.
 
 > **Before you join this Forma workspace**
 >

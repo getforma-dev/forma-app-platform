@@ -149,7 +149,7 @@ All yes, or no codes go out.
 6. **`refresh-herd` green on main** (APP-195). The sustainable commit cadence it measured is written in the runbook.
 7. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
 8. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
-9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved (the newest counts), a late answer still counts, and there is no timer.
+9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer.
 
 ## Verification (end to end)
 
