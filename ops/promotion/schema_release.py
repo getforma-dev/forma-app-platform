@@ -42,7 +42,10 @@ SPEC = Path(__file__).with_name('schema-release.json')
 # (evidence/APP-175/release-2026-11-14.md). It replaces release A's spent
 # 20 -> 22 pin (evidence/APP-175/SCHEMA-RELEASE.md). The expiry falls after the
 # planned release (2026-11-23) and before the class (2026-11-29), so no schema
-# change can promote during it.
+# change can promote during it. Release B went live on 2026-11-14
+# (evidence/APP-194/release-2026-11-14.md) and its file was removed: this pin is
+# now an inert record, read only together with a committed file, until the next
+# release's values replace it.
 REVIEWED_SCHEMA_RELEASE = {
     'evidence': 'evidence/APP-194/SCHEMA-RELEASE.md',
     'expires_at_utc': '2026-11-26T00:00:00Z',

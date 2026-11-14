@@ -304,9 +304,43 @@ class ReleaseAFixtureTests(unittest.TestCase):
                 self.assertIn('CVE-2026-76844', {f['name'] for f in observed['introduced']})
 
 
+def binding_problems(value, delta, release):
+    """Why a disposition is not bound, or [] when it is.
+
+    Always to its own record and its delta: the pinned evidence record, the delta's
+    contract and roles, and in every role the repository, the predecessor, exactly the
+    introduced findings and the pinned names. To a schema release only while one is
+    committed (`release` is `schema_release.load()`'s value, None without the file): its
+    contract is then the release's `to` contract and its expiry the release's. With no
+    release committed the source pin `REVIEWED_SCHEMA_RELEASE` is an inert record and
+    binds nothing, so a disposition for a later normal promotion names its own expiry
+    (release B integration review, MINOR-1).
+    """
+    from ops.promotion.registry import finding_set
+    problems = []
+    def check(ok, what):
+        if not ok: problems.append(what)
+    check(value['evidence'] == registry.REVIEWED_DISPOSITION['evidence'] and (ROOT / value['evidence']).is_file(), 'evidence record')
+    check(delta['deployment_contract_sha256'] == value['deployment_contract_sha256'], 'delta contract')
+    check(set(delta['roles']) == set(REPOS) == set(value['roles']), 'delta roles')
+    for role in sorted(set(value['roles']) & set(delta['roles'])):
+        entry, observed = value['roles'][role], delta['roles'][role]
+        check(observed['repository'] == REPOS.get(role), role + ': repository')
+        check(entry['predecessor_manifest_digest'] == observed['manifest_digest'], role + ': predecessor')
+        check(finding_set(entry['findings']) == finding_set(observed['introduced'])
+              and observed['introduced_count'] == len(entry['findings']), role + ': introduced findings')
+        check(observed['critical_count'] == 0, role + ': critical')
+        check(sorted(f['name'] for f in entry['findings']) == sorted(registry.REVIEWED_DISPOSITION['findings']), role + ': pinned names')
+    check(len({entry['predecessor_manifest_digest'] for entry in value['roles'].values()}) == len(REPOS), 'one predecessor per role')
+    if release is not None:
+        check(value['deployment_contract_sha256'] == release['to']['deployment_contract_sha256'], 'release contract')
+        check(value['expires_at_utc'] == release['expires_at_utc'], 'release expiry')
+    return problems
+
+
 @unittest.skipUnless(registry.DISPOSITION.exists(), 'no scan disposition is pending')
 class ReleaseBindingTests(unittest.TestCase):
-    """A committed disposition belongs to the pending schema release and to its own evidence.
+    """A committed disposition is bound to its own evidence, and to the schema release while one is committed.
 
     It is read from the one `scan-delta-*.json` beside its evidence record. Not bindable
     here: that each predecessor is the live image (the canonical state is private) and
@@ -320,31 +354,61 @@ class ReleaseBindingTests(unittest.TestCase):
         self.assertEqual(len(deltas), 1, 'one scan delta beside the disposition record')
         self.delta = json.loads(deltas[0].read_text())
 
-    def test_contract_and_expiry_are_the_schema_releases(self):
+    def test_bound_to_its_record_its_delta_and_any_committed_schema_release(self):
         from ops.promotion import schema_release
-        self.assertEqual(self.value['deployment_contract_sha256'], schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256'])
-        self.assertEqual(self.value['expires_at_utc'], schema_release.REVIEWED_SCHEMA_RELEASE['expires_at_utc'])
-        if schema_release.SPEC.exists():
-            spec, _ = schema_release.load()
-            self.assertEqual(self.value['deployment_contract_sha256'], spec['to']['deployment_contract_sha256'])
-        self.assertEqual(self.value['evidence'], registry.REVIEWED_DISPOSITION['evidence'])
+        release, _ = schema_release.load()
+        self.assertEqual(binding_problems(self.value, self.delta, release), [])
 
-    def test_every_role_reviews_exactly_the_committed_scan_delta(self):
-        from ops.promotion.registry import finding_set
-        self.assertEqual(self.delta['deployment_contract_sha256'], self.value['deployment_contract_sha256'])
-        self.assertEqual(set(self.delta['roles']), set(REPOS))
-        predecessors = set()
-        for role, entry in self.value['roles'].items():
-            with self.subTest(role=role):
-                observed = self.delta['roles'][role]
-                self.assertEqual(observed['repository'], REPOS[role])
-                self.assertEqual(entry['predecessor_manifest_digest'], observed['manifest_digest'])
-                self.assertEqual(finding_set(entry['findings']), finding_set(observed['introduced']))
-                self.assertEqual(observed['introduced_count'], len(entry['findings']))
-                self.assertEqual(observed['critical_count'], 0)
-                self.assertEqual(sorted(f['name'] for f in entry['findings']), sorted(registry.REVIEWED_DISPOSITION['findings']))
-                predecessors.add(entry['predecessor_manifest_digest'])
-        self.assertEqual(len(predecessors), len(REPOS))
+
+class BindingRuleTests(unittest.TestCase):
+    """The binding above, on release A's disposition and delta, with and without a committed release."""
+
+    def setUp(self):
+        self.value, _ = release_a_disposition(self)
+        self.delta = json.loads(RELEASE_A_DELTA.read_text())
+        # Release A's schema release as its committed file named them (removed 2026-11-14).
+        self.release = {'to': {'deployment_contract_sha256': '14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b'},
+                        'expires_at_utc': RELEASE_A_EXPIRY}
+
+    def later(self, expires_at_utc):
+        """Release A's findings regenerated with another expiry, file and pin installed together."""
+        from ops.promotion import scan_renewal
+        disposition, pin = scan_renewal.generate(self.delta, RELEASE_A_EVIDENCE, expires_at_utc)
+        directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / 'scan-disposition.json'
+        path.write_bytes(scan_renewal.encoded(disposition))
+        for name, value in [('DISPOSITION', path), ('REVIEWED_DISPOSITION', pin)]:
+            patcher = patch.object(registry, name, value); patcher.start(); self.addCleanup(patcher.stop)
+        return scan_disposition()[0]
+
+    def test_with_a_release_committed_its_contract_and_expiry_bind(self):
+        self.assertEqual(binding_problems(self.value, self.delta, self.release), [])
+        other = copy.deepcopy(self.release); other['to']['deployment_contract_sha256'] = 'b' * 64
+        self.assertEqual(binding_problems(self.value, self.delta, other), ['release contract'])
+        other = dict(self.release, expires_at_utc='2026-11-26T00:00:00Z')
+        self.assertEqual(binding_problems(self.value, self.delta, other), ['release expiry'])
+        self.assertEqual(binding_problems(self.later('2026-12-08T00:00:00Z'), self.delta, self.release), ['release expiry'])
+
+    def test_with_no_release_committed_only_its_record_and_delta_bind(self):
+        from ops.promotion import schema_release
+        # The inert pin names another release (release B's contract and expiry); it binds nothing.
+        self.assertNotEqual(schema_release.REVIEWED_SCHEMA_RELEASE['expires_at_utc'], RELEASE_A_EXPIRY)
+        self.assertNotEqual(schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256'], self.value['deployment_contract_sha256'])
+        self.assertEqual(binding_problems(self.value, self.delta, None), [])
+        # MINOR-1's case: a later disposition with an expiry of its own.
+        self.assertEqual(binding_problems(self.later('2026-12-08T00:00:00Z'), self.delta, None), [])
+        # Its record and delta still bind it.
+        for mutate, problem in [
+                (lambda v, d: d.update(deployment_contract_sha256='b' * 64), 'delta contract'),
+                (lambda v, d: d['roles']['operator'].update(manifest_digest='sha256:' + 'b' * 64), 'operator: predecessor'),
+                (lambda v, d: d['roles']['service']['introduced'].pop(), 'service: introduced findings'),
+                (lambda v, d: d['roles']['qualification'].update(critical_count=1), 'qualification: critical'),
+                (lambda v, d: d['roles'].pop('operator'), 'delta roles'),
+                (lambda v, d: v.update(evidence='evidence/APP-175/MISSING.md'), 'evidence record')]:
+            with self.subTest(problem=problem):
+                value, delta = copy.deepcopy(self.value), copy.deepcopy(self.delta)
+                mutate(value, delta)
+                self.assertIn(problem, binding_problems(value, delta, None))
 
 
 if __name__ == '__main__': unittest.main()
