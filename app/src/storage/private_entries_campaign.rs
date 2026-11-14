@@ -76,7 +76,8 @@ pub(super) fn definition() -> Value {
         {"id": "note", "value_type": {"type": "text"}, "nullable": true}
     ]);
     let note_fields = json!([
-        {"id": "title", "value_type": {"type": "text"}, "nullable": false}
+        {"id": "title", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "state", "value_type": {"type": "enum", "values": ["open", "closed"]}, "nullable": false}
     ]);
     let content = json!({
         "title": "Claims and notes",
@@ -99,7 +100,8 @@ pub(super) fn definition() -> Value {
             {"id": "submit", "record_schema_id": "claim", "operation": "create", "writable_fields": ["amount", "status", "note"], "transitions": [], "initial": [{"field_id": "status", "value": "filed"}]},
             {"id": "edit", "record_schema_id": "claim", "operation": "update", "writable_fields": ["note"], "transitions": []},
             {"id": "approve", "record_schema_id": "claim", "operation": "create", "writable_fields": ["status"], "transitions": [{"field_id": "status", "from": "filed", "to": "approved"}], "reviewer_only": true},
-            {"id": "add_note", "record_schema_id": "note", "operation": "create", "writable_fields": ["title"], "transitions": []}
+            {"id": "add_note", "record_schema_id": "note", "operation": "create", "writable_fields": ["title", "state"], "transitions": [], "initial": [{"field_id": "state", "value": "open"}]},
+            {"id": "close", "record_schema_id": "note", "operation": "create", "writable_fields": ["state"], "transitions": [{"field_id": "state", "from": "open", "to": "closed"}], "reviewer_only": true}
         ],
         "links": [],
         "default_layout": [
@@ -456,7 +458,7 @@ async fn campaign() {
             "note",
             OWNER_NOTE,
             0,
-            json!([{"field_id": "title", "value": {"type": "text", "value": "owner note"}}]),
+            json!([{"field_id": "title", "value": {"type": "text", "value": "owner note"}}, {"field_id": "state", "value": {"type": "enum", "value": "open"}}]),
             &"d".repeat(32),
         ),
     )
@@ -470,7 +472,7 @@ async fn campaign() {
             "note",
             BEN_NOTE,
             0,
-            json!([{"field_id": "title", "value": {"type": "text", "value": "ben note"}}]),
+            json!([{"field_id": "title", "value": {"type": "text", "value": "ben note"}}, {"field_id": "state", "value": {"type": "enum", "value": "open"}}]),
             &"e".repeat(32),
         ),
     )
@@ -572,20 +574,31 @@ async fn campaign() {
             && stores.data.read_record(&rev, PRIVATE_APP, work, &w.claims, OWNER_CLAIM).await.is_ok()
             && stores.data.read_record_detail(&rev, PRIVATE_APP, work, &w.claims, OWNER_CLAIM).await.is_ok()
     });
-    let before = revisions(&fixture, work).await;
     judged!(&mut checks, "commit on another member's record: 404 with nothing written and no recovery view (right version, wrong version, dry run)", {
+        let before = revisions(&fixture, work).await;
+        let current = stores.data.read_record(&owner, PRIVATE_APP, work, &w.claims, OWNER_CLAIM).await.unwrap().version;
         let edit = |expected: i64, key: &str| command(&w, "edit", "claim", OWNER_CLAIM, expected, json!([{"field_id": "note", "value": {"type": "text", "value": "tampered"}}]), key);
-        let right = stores.data.commit_record(&ben, &edit(1, &"f".repeat(32))).await;
-        let wrong = stores.data.commit_record(&ben, &edit(7, &"0".repeat(32))).await;
-        let dry = stores.data.dry_run_command(&ben, &edit(1, &"1".repeat(32))).await;
         let denied = |r: &Result<CommandResult>| matches!(r, Err(Error::Denied));
-        denied(&right) && denied(&wrong) && dry.err() == Some(Error::Denied) && revisions(&fixture, work).await == before
+        // The dry run and the wrong-version commit write nothing in either
+        // mode (under the bypass they answer a recovery view instead of 404);
+        // the right-version commit is attempted only once both were refused,
+        // so the bypass run never writes the owner's record.
+        let dry = stores.data.dry_run_command(&ben, &edit(current, &"1".repeat(32))).await;
+        let wrong = stores.data.commit_record(&ben, &edit(current + 6, &"0".repeat(32))).await;
+        let right = if dry.is_err() && denied(&wrong) {
+            denied(&stores.data.commit_record(&ben, &edit(current, &"f".repeat(32))).await)
+        } else {
+            false
+        };
+        dry.err() == Some(Error::Denied) && denied(&wrong) && right && revisions(&fixture, work).await == before
     });
     judged!(&mut checks, "a reused key against another member's record: 404, no recovery view and no stored outcome disclosed", {
-        // Ben's own earlier key, replayed with a different payload at the
-        // owner's record: the stored-outcome conflict path would have shown a
-        // recovery view with the record's current values.
-        let reused = command(&w, "edit", "claim", OWNER_CLAIM, 1, json!([{"field_id": "note", "value": {"type": "text", "value": "replayed"}}]), &"b".repeat(32));
+        // Ben's own earlier `submit` key, replayed with a different payload at
+        // the owner's record: the stored-outcome conflict path (nothing is
+        // written on it) would otherwise answer a recovery view with the
+        // record's current values and version.
+        let before = revisions(&fixture, work).await;
+        let reused = command(&w, "submit", "claim", OWNER_CLAIM, 0, claim_values("1", "filed", "replayed"), &"b".repeat(32));
         matches!(stores.data.commit_record(&ben, &reused).await, Err(Error::Denied))
             && revisions(&fixture, work).await == before
     });
@@ -617,13 +630,83 @@ async fn campaign() {
     assert_eq!(edited.record_version, 2);
 
     // --- D8: reviewer-only commands -----------------------------------------
-    judged!(&mut checks, "D8: a contributor's approve is refused on their own claim (dry run and commit) and nothing is written", {
-        let approve = |key: &str| command(&w, "approve", "claim", BEN_CLAIM, 2, json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]), key);
+    judged!(&mut checks, "D8: a contributor's reviewer-only command on a shared row they can see (close another member's note) is refused on the dry run and the commit, nothing written", {
+        // The shared collection isolates the gate: Ben sees the owner's note
+        // and did not file it, so only `reviewer_only` stands in the way.
+        let close = |key: &str| command(&w, "close", "note", OWNER_NOTE, 1, json!([{"field_id": "state", "value": {"type": "enum", "value": "closed"}}]), key);
         let before = revisions(&fixture, work).await;
-        let dry = stores.data.dry_run_command(&ben, &approve(&"4".repeat(32))).await;
-        let commit = stores.data.commit_record(&ben, &approve(&"5".repeat(32))).await;
-        dry.err() == Some(Error::Denied) && matches!(commit, Err(Error::Denied)) && revisions(&fixture, work).await == before
+        let dry = stores.data.dry_run_command(&ben, &close(&"4".repeat(32))).await;
+        // The commit is attempted only once the dry run was refused, so the
+        // bypass run (where the gate is off) never closes the owner's note.
+        let commit = if dry.is_err() {
+            matches!(stores.data.commit_record(&ben, &close(&"5".repeat(32))).await, Err(Error::Denied))
+        } else {
+            false
+        };
+        dry.err() == Some(Error::Denied) && commit && revisions(&fixture, work).await == before
     });
+    // On the own collection the gate and the row rule both refuse; `by_filer`
+    // refuses Ben's approve of his own claim even where the gate is off.
+    let approve_own = |key: &str| {
+        command(
+            &w,
+            "approve",
+            "claim",
+            BEN_CLAIM,
+            2,
+            json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]),
+            key,
+        )
+    };
+    assert_eq!(
+        stores
+            .data
+            .dry_run_command(&ben, &approve_own(&"a4".repeat(16)))
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert!(matches!(
+        stores
+            .data
+            .commit_record(&ben, &approve_own(&"a5".repeat(16)))
+            .await,
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        stores
+            .data
+            .commit_record(
+                &ben,
+                &command(
+                    &w,
+                    "approve",
+                    "claim",
+                    OWNER_CLAIM,
+                    1,
+                    json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]),
+                    &"a6".repeat(16)
+                )
+            )
+            .await,
+        Err(Error::Denied)
+    ));
+    let closed = committed(
+        &stores,
+        &rev,
+        &command(
+            &w,
+            "close",
+            "note",
+            OWNER_NOTE,
+            1,
+            json!([{"field_id": "state", "value": {"type": "enum", "value": "closed"}}]),
+            &"a7".repeat(16),
+        ),
+    )
+    .await;
+    assert_eq!(closed.record_version, 2);
+    check(&mut checks, "D8: a contributor's approve is refused on their own and on another member's claim; a reviewer's close of a member's note commits");
     let approve_ben = command(
         &w,
         "approve",
@@ -652,6 +735,12 @@ async fn campaign() {
         stores.data.commit_record(&rev, &by_filer).await,
         Err(Error::Denied)
     ));
+    let owner_version = stores
+        .data
+        .read_record(&owner, PRIVATE_APP, work, &w.claims, OWNER_CLAIM)
+        .await
+        .unwrap()
+        .version;
     assert!(matches!(
         stores
             .data
@@ -662,10 +751,10 @@ async fn campaign() {
                     "approve",
                     "claim",
                     OWNER_CLAIM,
-                    1,
+                    owner_version,
                     json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]),
-                    &"8".repeat(32)
-                )
+                    &"8".repeat(32),
+                ),
             )
             .await,
         Err(Error::Denied)
@@ -687,6 +776,8 @@ async fn campaign() {
         .unwrap();
     assert_eq!(commands_of(&b, &w.claims), ["edit", "submit"]);
     assert_eq!(commands_of(&r, &w.claims), ["approve", "edit", "submit"]);
+    assert_eq!(commands_of(&b, &w.notes), ["add_note"]);
+    assert_eq!(commands_of(&r, &w.notes), ["add_note", "close"]);
     let detail = stores
         .data
         .read_record_detail(&ben, PRIVATE_APP, work, &w.claims, BEN_CLAIM)
@@ -943,26 +1034,20 @@ async fn campaign() {
         Some(Error::Denied)
     );
     check(&mut checks, "D9: re-sharing with everyone as viewer revokes the contributor share and grants the viewer share in one unit (permission.revoked then permission.granted); members read but cannot write");
-    assert_eq!(
-        stores
-            .workspace
-            .revoke_organization_share(&owner, PRIVATE_APP, work)
-            .await
-            .unwrap(),
-        true
-    );
+    assert!(stores
+        .workspace
+        .revoke_organization_share(&owner, PRIVATE_APP, work)
+        .await
+        .unwrap());
     assert_eq!(
         chain(&fixture, "permission.revoked").await,
         revoked_before + 2
     );
-    assert_eq!(
-        stores
-            .workspace
-            .revoke_organization_share(&owner, PRIVATE_APP, work)
-            .await
-            .unwrap(),
-        false
-    );
+    assert!(!stores
+        .workspace
+        .revoke_organization_share(&owner, PRIVATE_APP, work)
+        .await
+        .unwrap());
     assert_eq!(
         stores
             .data
@@ -1156,6 +1241,8 @@ mod tests {
         assert_eq!(content["record_schemas"][0]["visibility"], "own");
         assert_eq!(content["record_schemas"][1].get("visibility"), None);
         assert_eq!(content["commands"][2]["reviewer_only"], true);
+        assert_eq!(content["commands"][4]["reviewer_only"], true);
         assert_eq!(content["commands"][0].get("reviewer_only"), None);
+        assert_eq!(content["commands"][3].get("reviewer_only"), None);
     }
 }

@@ -59,6 +59,25 @@ fn qualification_router() -> Option<Router> {
     })
 }
 
+/// One read of the stored member display names into the directory cache
+/// (0023, D6); `false` when the store refused, so the caller retries later.
+async fn load_display_names(stores: &Arc<genui::storage::Stores>) -> bool {
+    match stores.workspace.load_display_names().await {
+        Ok(count) => {
+            tracing::info!(
+                event = "directory.members_loaded",
+                count,
+                "display names loaded"
+            );
+            true
+        }
+        Err(error) => {
+            tracing::warn!(event = "directory.members_deferred", code = %error, "display names not loaded yet");
+            false
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // The image names its parser bytes in parser-manifest.json and sets this
@@ -96,6 +115,14 @@ async fn main() {
         Err(_) => refuse("tenant storage configuration refused"),
     };
     drop(config);
+    // 0023 (D6): the member display names the synchronous directory label
+    // reads, filled once from the database; a store that is not reachable yet
+    // is retried by the sweep task below until one fill succeeds.
+    let mut names_loaded = false;
+    if let Some(stores) = &stores {
+        names_loaded = load_display_names(stores).await;
+    }
+    let name_stores = stores.clone();
     // ADR-006 provider routing; absent: sign-in fails neutrally and every
     // protected route stays the uniform 404.
     let auth_config = match std::env::var(auth::CONFIG_ENV) {
@@ -347,6 +374,11 @@ async fn main() {
         loop {
             interval.tick().await;
             sweeper.sweep().await;
+            if !names_loaded {
+                if let Some(stores) = &name_stores {
+                    names_loaded = load_display_names(stores).await;
+                }
+            }
         }
     });
 
@@ -652,7 +684,10 @@ mod tests {
     /// APP-074: the invitation entry renders natively with no script and
     /// `no-store`; one labeled, keyboard-reachable code field posts to
     /// `/invite/validate`; the neutral refusal and the limit are announced
-    /// and tied to the field; no code value is ever rendered.
+    /// and tied to the field; no code value is ever rendered. Trial plan D5:
+    /// the whole beta notice (version `NOTICE_VERSION`, from the one
+    /// constant) is on the page, and the form carries the required `consent`
+    /// checkbox with value `1`, the only value attribute on the page.
     #[tokio::test]
     async fn invite_page_renders_entry_refusal_and_limit_without_javascript() {
         let pages = pages();
@@ -672,9 +707,35 @@ mod tests {
         assert!(body.contains("method=\"post\""));
         assert!(body.contains("for=\"invite-code\"") && body.contains("id=\"invite-code\""));
         assert!(body.contains("name=\"code\"") && body.contains("autocomplete=\"off\""));
-        assert!(!body.contains("<script src") && !body.contains("value=\""));
+        assert!(!body.contains("<script src"));
         assert!(!body.contains("role=\"alert\""));
         assert!(body.contains("aria-describedby=\"invite-help\""));
+        // D5: the notice, in full and from the constant, and the consent box.
+        assert!(body.contains(auth::notice::NOTICE_TITLE));
+        for paragraph in auth::notice::NOTICE_PARAGRAPHS {
+            let (lead, text) = auth::notice::lead_in(paragraph);
+            assert!(body.contains(text), "{text:.40}");
+            if let Some(lead) = lead {
+                assert!(body.contains(&format!("<strong>{lead}</strong>")), "{lead}");
+            }
+        }
+        assert!(body.contains(&format!(
+            "data-notice-version=\"{}\"",
+            auth::notice::NOTICE_VERSION
+        )));
+        assert!(body.contains("name=\"consent\"") && body.contains("type=\"checkbox\""));
+        assert!(body.contains("id=\"invite-consent\"") && body.contains("for=\"invite-consent\""));
+        assert!(body.contains(auth::notice::CONSENT_LABEL));
+        assert!(body.contains("value=\"1\""));
+        assert_eq!(
+            body.matches("value=\"").count(),
+            1,
+            "only the consent checkbox carries a value; a code is never rendered"
+        );
+        assert!(
+            body.matches("required").count() >= 2,
+            "the code and the consent are required"
+        );
         let (_, _, refused) = html(pages.invite(&InviteView {
             failed: true,
             ..InviteView::default()

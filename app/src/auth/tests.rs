@@ -1226,7 +1226,11 @@ impl Campaign {
         let (code, email) = self.codes.lock().unwrap()[digest].clone();
         self.auth.limits.clear();
         let entry = browser
-            .post(&self.app, "/invite/validate", &format!("code={code}"))
+            .post(
+                &self.app,
+                "/invite/validate",
+                &format!("code={code}&consent=1"),
+            )
             .await;
         assert_eq!(entry.status, StatusCode::SEE_OTHER, "{}", entry.body);
         let query = self

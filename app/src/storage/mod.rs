@@ -200,6 +200,9 @@ mod definition_qualification;
 mod managed_qualification;
 #[cfg(test)]
 mod mcp_campaign;
+// Trial plan D4/D5/D6: consent, names and the organization admin definers.
+#[cfg(test)]
+mod org_admin_campaign;
 #[cfg(test)]
 mod private_entries_campaign;
 #[cfg(test)]
