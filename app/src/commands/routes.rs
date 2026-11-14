@@ -2,7 +2,9 @@
 //! in `commands`). Refusal order for the `POST`: fetch metadata (403), the
 //! session (uniform 404), the bounded body (413), the synchronizer token of a
 //! form (403), the body as forma-json-v1, the key and the shape (400), and
-//! only then storage.
+//! only then storage. ADR-020: storage's typed refusals answer 422 with the
+//! code alone (`requirement_not_met`, `unchanged`); a form returns to the
+//! record page with the refused notice.
 use super::{payload, Notice, RecordPage};
 use crate::{
     auth::{capability, cookies, csrf, Auth},
@@ -103,7 +105,9 @@ enum Mode {
     },
 }
 
-/// The route's answer for a storage result (D7.9 HTTP rows).
+/// The route's answer for a storage result (D7.9 HTTP rows). A form returns
+/// to the page of the record the outcome names: the requested record, or
+/// (ADR-020 C2) the creator's own entry a keyed create replaced.
 fn answer(
     mode: &Mode,
     app: &str,
@@ -111,6 +115,14 @@ fn answer(
     record: &str,
     result: Result<CommandResult, storage::Error>,
 ) -> Response {
+    let record = match &result {
+        Ok(CommandResult::Committed(outcome)) | Ok(CommandResult::Replayed(outcome))
+            if storage::valid_identifier(&outcome.record_id) =>
+        {
+            outcome.record_id.clone()
+        }
+        _ => record.to_owned(),
+    };
     match mode {
         Mode::Json => match result {
             Ok(CommandResult::Committed(outcome)) | Ok(CommandResult::Replayed(outcome)) => {
@@ -133,6 +145,11 @@ fn answer(
             ),
             Ok(CommandResult::InFlight) => waiting("in_flight"),
             Ok(CommandResult::Busy) => waiting("busy"),
+            // ADR-020: the code alone (edition impl-2026-11-14.2 pairs no
+            // recovery view, revision, limit or Retry-After with it).
+            Ok(CommandResult::Refused(refusal)) => {
+                http::problem(StatusCode::UNPROCESSABLE_ENTITY, refusal.code())
+            }
             Err(storage::Error::ProjectionLimit) => {
                 http::problem(StatusCode::UNPROCESSABLE_ENTITY, "app_data_limit")
             }
@@ -151,8 +168,10 @@ fn answer(
                 Ok(CommandResult::InFlight) => Notice::InFlight,
                 Ok(CommandResult::Busy) => Notice::Busy,
                 // The session loaded the page it posts from (the token is
-                // bound to it): storage's refusal of a value returns there.
-                Err(storage::Error::Denied | storage::Error::ProjectionLimit) => Notice::Refused,
+                // bound to it): storage's refusal of a value returns there,
+                // and so do ADR-020's typed refusals.
+                Ok(CommandResult::Refused(_))
+                | Err(storage::Error::Denied | storage::Error::ProjectionLimit) => Notice::Refused,
                 Err(storage::Error::UnknownOutcome) => Notice::Unknown,
                 Err(_) => return http::unavailable(),
             };
@@ -466,6 +485,7 @@ pub(crate) async fn commit(
             Ok(CommandResult::Stale(_)) => "stale",
             Ok(CommandResult::InFlight) => "in_flight",
             Ok(CommandResult::Busy) => "busy",
+            Ok(CommandResult::Refused(refusal)) => refusal.code(),
             Err(storage::Error::Denied) => "denied",
             Err(storage::Error::UnknownOutcome) => "unknown_outcome",
             Err(_) => "unavailable",
@@ -567,7 +587,7 @@ async fn record_page(
     let Some(key) = fresh_key() else {
         return http::unavailable();
     };
-    let view = super::view(
+    let mut view = super::view(
         &app,
         &work,
         &detail,
@@ -575,6 +595,21 @@ async fn record_page(
         key,
         notice(request.uri().query()),
     );
+    // ADR-020 (APP-205): a form that writes a reference picks among the
+    // records the member may read (the work's listing, under own_rows), read
+    // under the same pin as the detail or the page is unavailable.
+    if super::writes_reference(&view) {
+        let listing = match stores.data.list_records(&trusted, &app, &work).await {
+            Ok(listing) => listing,
+            Err(storage::Error::Denied) => return http::not_found(),
+            Err(_) => return http::unavailable(),
+        };
+        if listing.publication != detail.publication || listing.work_version != detail.work_version
+        {
+            return http::unavailable();
+        }
+        super::fill_references(&mut view, &detail.bindings, &listing);
+    }
     state.page.record(&view)
 }
 

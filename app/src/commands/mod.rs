@@ -21,8 +21,18 @@ pub mod routes;
 #[cfg(test)]
 mod tests;
 
-use crate::storage::{RecordCommand, RecordDetail};
+use crate::storage::{RecordCommand, RecordDetail, RecordsListing, Refusal};
 use axum::response::Response;
+
+/// ADR-020: what a member reads for storage's typed refusals, on every
+/// surface that words one (the canvas copy in `canvas/commands.ts` is the
+/// same text; MCP and Slack carry the code with it).
+pub fn refusal_copy(refusal: Refusal) -> &'static str {
+    match refusal {
+        Refusal::RequirementNotMet => "Not saved: the item this refers to is no longer open.",
+        Refusal::Unchanged => "Already locked in: your entry already holds these values.",
+    }
+}
 
 /// A form notice the record page shows after a redirect (closed set).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,7 +92,30 @@ pub struct FieldRow {
     pub options: String,
     pub nullable: bool,
     pub writable: bool,
+    /// ADR-020 (APP-205): a writable reference field's picker, filled by
+    /// [`fill_references`]: the target collection's records the member may
+    /// read, newest first, one selected. Empty for every other field.
+    pub choices: Vec<FieldChoice>,
+    /// APP-205: a writable reference field whose target input is not bound
+    /// in the work, or of which the member can read nothing: the form shows
+    /// a disabled select, "Nothing to choose yet", and posts no value.
+    pub nothing_to_choose: bool,
 }
+
+/// One option of a reference picker: value = the record id, label = the
+/// record's first text value (at most [`REFERENCE_LABEL_CHARACTERS`]) or
+/// "Record".
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FieldChoice {
+    pub value: String,
+    pub label: String,
+    pub selected: bool,
+}
+
+/// APP-205: at most this many records in one picker.
+pub const REFERENCE_CHOICES: usize = 200;
+/// APP-205: a picker label's bound, in Unicode scalar values.
+pub const REFERENCE_LABEL_CHARACTERS: usize = 100;
 
 /// What the record page shows; the binary renders it with typed props.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -186,6 +219,85 @@ pub fn field_label(field: &FieldRow) -> String {
         }
     }
     label
+}
+
+/// ADR-020 §6 (APP-205): fills the picker of every writable `reference`
+/// field of `view` from `listing`, the work's records as the member may read
+/// them (`own_rows`), newest commit first. The field's `target_input`
+/// resolves through the work's records `bindings` (`RecordDetail::bindings`)
+/// to its collection; the choices are that collection's records in the
+/// listing's order, at most [`REFERENCE_CHOICES`], labelled by their first
+/// text value. The record the field already holds is selected; otherwise the
+/// first, the current record of ADR-020 §3 (the most recently touched). An
+/// unbound target or an empty readable set leaves the picker empty and
+/// `nothing_to_choose` set. Nothing here authorizes: storage judges the
+/// submitted reference (`compatible`, then any `requires` guard under
+/// `own_rows`).
+pub fn fill_references(
+    view: &mut RecordView,
+    bindings: &[(String, String)],
+    listing: &RecordsListing,
+) {
+    for row in view
+        .fields
+        .iter_mut()
+        .filter(|row| row.writable && row.kind == "reference")
+    {
+        let spec: serde_json::Value = serde_json::from_str(&row.spec).unwrap_or_default();
+        let target = spec
+            .get("target_input")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|input| bindings.iter().find(|(bound, _)| bound == input))
+            .map(|(_, collection)| collection.as_str());
+        let mut choices: Vec<FieldChoice> = target
+            .map(|collection| {
+                listing
+                    .records
+                    .iter()
+                    .filter(|record| record.collection == collection)
+                    .take(REFERENCE_CHOICES)
+                    .map(|record| FieldChoice {
+                        value: record.record_id.clone(),
+                        label: reference_label(&record.values),
+                        selected: false,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let held = choices.iter().position(|choice| choice.value == row.value);
+        if let Some(choice) = choices.get_mut(held.unwrap_or(0)) {
+            choice.selected = true;
+        }
+        row.nothing_to_choose = choices.is_empty();
+        row.choices = choices;
+    }
+}
+
+/// A picker label: the record's first `text` value, at most
+/// [`REFERENCE_LABEL_CHARACTERS`], or "Record" when it has none (or it is
+/// blank).
+pub fn reference_label(values: &serde_json::Value) -> String {
+    values
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item.get("value"))
+        .filter(|value| value.get("type").and_then(serde_json::Value::as_str) == Some("text"))
+        .filter_map(|value| value.get("value").and_then(serde_json::Value::as_str))
+        .next()
+        .filter(|text| !text.trim().is_empty())
+        .map(|text| text.chars().take(REFERENCE_LABEL_CHARACTERS).collect())
+        .unwrap_or_else(|| "Record".to_owned())
+}
+
+/// Whether the view's form writes a reference field (its picker needs the
+/// work's listing).
+pub fn writes_reference(view: &RecordView) -> bool {
+    view.can_write
+        && view
+            .fields
+            .iter()
+            .any(|row| row.writable && row.kind == "reference")
 }
 
 /// The text a form input carries for a stored value, and the text back.
@@ -323,6 +435,8 @@ pub fn view_for_command(
                 writable: command
                     .as_ref()
                     .is_some_and(|c| c.writable_fields.contains(&field.id)),
+                choices: Vec::new(),
+                nothing_to_choose: false,
             }
         })
         .collect();

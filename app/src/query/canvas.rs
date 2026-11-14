@@ -713,12 +713,19 @@ pub struct FormFieldProps {
     /// Writable as free text (no declared choices).
     pub has_text: bool,
     pub has_choices: bool,
+    /// ADR-020 (APP-205): a writable reference with nothing to choose (its
+    /// target is unbound or the member reads none of it): a disabled select,
+    /// "Nothing to choose yet", that posts no value.
+    pub no_choices: bool,
     pub choices: Vec<ChoiceProps>,
 }
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct ChoiceProps {
     pub id: String,
     pub value: String,
+    /// What the option reads as: the value itself for an enum, the record's
+    /// label for a reference picker (APP-205).
+    pub label: String,
     pub selected: bool,
 }
 
@@ -879,7 +886,21 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
             .fields
             .iter()
             .map(|field| {
-                let choices: Vec<ChoiceProps> = if field.options.is_empty() {
+                // APP-205: a reference picker's records (value = record id,
+                // label = its first text), else the declared enum values.
+                let choices: Vec<ChoiceProps> = if !field.choices.is_empty() {
+                    field
+                        .choices
+                        .iter()
+                        .enumerate()
+                        .map(|(index, choice)| ChoiceProps {
+                            id: format!("o{index}"),
+                            value: choice.value.clone(),
+                            label: choice.label.clone(),
+                            selected: choice.selected,
+                        })
+                        .collect()
+                } else if field.options.is_empty() {
                     Vec::new()
                 } else {
                     field
@@ -889,11 +910,20 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                         .map(|(index, value)| ChoiceProps {
                             id: format!("o{index}"),
                             value: value.to_owned(),
+                            label: value.to_owned(),
                             selected: value == field.value
                                 || (field.value.is_empty() && index == 0),
                         })
                         .collect()
                 };
+                let no_choices = field.writable && field.nothing_to_choose;
+                // A picker's value is its selected record, so that a select
+                // marked by value (the native document form) agrees with it.
+                let value = field
+                    .choices
+                    .iter()
+                    .find(|choice| choice.selected)
+                    .map_or_else(|| field.value.clone(), |choice| choice.value.clone());
                 FormFieldProps {
                     id: field.id.clone(),
                     kind: field.kind.clone(),
@@ -905,13 +935,14 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                     }
                     .into(),
                     input: field.input.clone(),
-                    value: field.value.clone(),
+                    value,
                     spec: field.spec.clone(),
                     spec_input: field.spec_input.clone(),
                     writable: field.writable,
                     read_only: !field.writable,
-                    has_text: field.writable && choices.is_empty(),
+                    has_text: field.writable && choices.is_empty() && !no_choices,
                     has_choices: field.writable && !choices.is_empty(),
+                    no_choices,
                     choices,
                 }
             })

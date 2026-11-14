@@ -40,3 +40,20 @@ test('an app data bound is a definitive refusal with clear limits, without retry
   assert.match('message'in result?result.message:'',/Nothing was saved. Original files are unchanged/);assert.equal(calls,1);
  }finally{globalThis.fetch=prior;}
 });
+
+// ADR-020 (APP-203): storage's two typed refusals are definitive 422s with
+// their own copy (a caller's generic refusal never replaces it), sent once.
+test('a closed item and an unchanged entry are definitive refusals with their own copy', async () => {
+ const prior = globalThis.fetch;
+ try {
+  for (const [code, copy] of [
+   ['requirement_not_met', 'Not saved: the item this refers to is no longer open.'],
+   ['unchanged', 'Already locked in: your entry already holds these values.'],
+  ] as const) {
+   let calls = 0;
+   globalThis.fetch = async () => { calls++; return Response.json({ code, status: 422 }, { status: 422 }); };
+   assert.deepEqual(await postCommand(path, {}, 'same-key', { refused: 'A generic refusal' }), { kind: 'refused', message: copy });
+   assert.equal(calls, 1);
+  }
+ } finally { globalThis.fetch = prior; }
+});

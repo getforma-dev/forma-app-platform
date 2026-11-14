@@ -87,7 +87,7 @@ type Card = {
   receipt: Pair[];
   receiptJson: string;
 };
-type Choice = { id: string; value: string; selected: boolean };
+type Choice = { id: string; value: string; label: string; selected: boolean };
 type Field = {
   inputMode: string;
   id: string;
@@ -101,6 +101,8 @@ type Field = {
   readOnly: boolean;
   hasText: boolean;
   hasChoices: boolean;
+  /** APP-205: a reference with nothing to choose (a disabled select). */
+  noChoices: boolean;
   choices: Choice[];
 };
 type FormCard = {
@@ -644,8 +646,13 @@ function Canvas(props: CanvasProps) {
                         {createShow(() => field.hasChoices, () => (
                           <select name={field.input} aria-label={field.label}>
                             {createList(() => field.choices, choice => choice.id, choice => (
-                              <option value={choice.value} selected={choice.selected}>{choice.value}</option>
+                              <option value={choice.value} selected={choice.selected}>{choice.label}</option>
                             ))}
+                          </select>
+                        ))}
+                        {createShow(() => field.noChoices, () => (
+                          <select name={field.input} aria-label={field.label} disabled>
+                            <option value="">Nothing to choose yet</option>
                           </select>
                         ))}
                         {createShow(() => field.hasText, () => (

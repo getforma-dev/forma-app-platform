@@ -1,0 +1,774 @@
+{
+  "actors": {
+    "class": [
+      "00000000-0000-4000-8000-000000000d01",
+      "00000000-0000-4000-8000-000000000d02",
+      "00000000-0000-4000-8000-000000000d03",
+      "00000000-0000-4000-8000-000000000d04",
+      "00000000-0000-4000-8000-000000000d05",
+      "00000000-0000-4000-8000-000000000d06",
+      "00000000-0000-4000-8000-000000000d07",
+      "00000000-0000-4000-8000-000000000d08",
+      "00000000-0000-4000-8000-000000000d09",
+      "00000000-0000-4000-8000-000000000d10",
+      "00000000-0000-4000-8000-000000000d11",
+      "00000000-0000-4000-8000-000000000d12",
+      "00000000-0000-4000-8000-000000000d13",
+      "00000000-0000-4000-8000-000000000d14",
+      "00000000-0000-4000-8000-000000000d15",
+      "00000000-0000-4000-8000-000000000d16",
+      "00000000-0000-4000-8000-000000000d17",
+      "00000000-0000-4000-8000-000000000d18",
+      "00000000-0000-4000-8000-000000000d19",
+      "00000000-0000-4000-8000-000000000d20",
+      "00000000-0000-4000-8000-000000000d21",
+      "00000000-0000-4000-8000-000000000d22",
+      "00000000-0000-4000-8000-000000000d23",
+      "00000000-0000-4000-8000-000000000d24",
+      "00000000-0000-4000-8000-000000000d25"
+    ],
+    "contributors": [
+      "00000000-0000-4000-8000-000000000c03",
+      "00000000-0000-4000-8000-000000000c04"
+    ],
+    "owner": "00000000-0000-4000-8000-000000000c01",
+    "reviewer": "00000000-0000-4000-8000-000000000c02"
+  },
+  "admission_refusals_resent": {
+    "race": 664,
+    "scale": 34793
+  },
+  "bypass": "authorization::BYPASS: own_rows TRUE, hidden empty, the reviewer_only gate and the key match's creator rule off; every check marked `fails under bypass` was run in both modes",
+  "campaign": "APP-203-participation",
+  "checks": [
+    {
+      "name": "the ADR-020 §10 example and the sessions app admit, publish and save through the shipped path; `responses` and `expected` are own collections; Rev is a reviewer, everyone else a contributor through the organization-wide share",
+      "passed": true
+    },
+    {
+      "name": "C3 set_now: a post stamps opened_at with the transaction's instant, equal to the revision's committed_at and the outcome's; a contributor cannot post (reviewer_only) and nobody can supply the stamp",
+      "passed": true
+    },
+    {
+      "name": "C2: a contributor's second create for the same key replaces the first (version 2 of the first record, one command.committed event and one outcome naming it, creator and updater the contributor); the second form's id is never created; the dry run names the entry it replaces; a replay returns the stored outcome",
+      "passed": true
+    },
+    {
+      "name": "C2: a create with the values the entry already holds is 422 unchanged (dry run too): nothing written, the claim released, so the same key is judged again later",
+      "passed": true
+    },
+    {
+      "name": "C2 x D7: two creators with the same key keep two entries; neither create (nor the dry run) touches the other's (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "C2 x D7: a reviewer's own create never matches a contributor's entry, although the reviewer reads every entry (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "C2: the reviewer's listing counts one entry per creator per key (Ben's four answers to item one are one record)",
+      "passed": true
+    },
+    {
+      "name": "C3: an answer while the item is open and inside its window commits; after the reviewer's close it is 422 requirement_not_met (dry run too) and nothing is written; a contributor cannot reopen; the reviewer's reopen re-stamps opened_at and answers are accepted again (replacing the entry)",
+      "passed": true
+    },
+    {
+      "name": "C3: a reference to a record that does not exist, to a record of another collection or to an id outside the work is the uniform 404 (commit and dry run), never requirement_not_met",
+      "passed": true
+    },
+    {
+      "name": "C3 now: 31 s after the post (the database's clock) an open item refuses answers with requirement_not_met (dry run too), its state still open; the reviewer's reopen (state unchanged) re-stamps opened_at and answers are accepted again",
+      "passed": true
+    },
+    {
+      "name": "C3 set_now on a contributor's create: checked_at is the transaction's instant (the outcome's committed_at)",
+      "passed": true
+    },
+    {
+      "name": "C3 x D7: a via reference into another member's own list is the uniform 404 (commit and dry run); the creator and a reviewer resolve it (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "C3 now: `closes_at > now` accepts a check-in before the deadline and refuses one at it (requirement_not_met, dry run too); a member's close of their own session refuses their next check-in",
+      "passed": true
+    },
+    {
+      "name": "APP-205: a contributor's respond form offers every readable item newest commit first, the current (most recently touched) item preselected and labelled by its prompt; the post form's stamped opened_at is read-only; the selection posted through the native form's parse commits a typed reference storage accepts",
+      "passed": true
+    },
+    {
+      "name": "APP-205 x D7: a picker over an own list offers only the records the member may read (a contributor their own, a reviewer every member's); a member who can read none gets the disabled picker (fails under bypass)",
+      "passed": true
+    },
+    {
+      "name": "C2 race: 25 simultaneous creates by one creator for one key leave exactly one entry whose state is one of the submitted states; its 21 commits have versions 1..21 and every outcome names it; the other 4 were 422 unchanged; no other requested id exists (664 admission refusals, each resent with its key)",
+      "passed": true
+    },
+    {
+      "name": "C2 lock order (D7.9): paused right after the key match, a replacing create holds the organization's commit sequence and the matched entry's row (both refuse FOR UPDATE NOWAIT to anyone else), then commits the entry's next version",
+      "passed": true
+    },
+    {
+      "name": "C3 race: in 6 rounds of a reviewer's close against 8 members' answers, every accepted answer (17) committed before the close in the organization's sequence and every other (31) was 422 requirement_not_met with nothing written",
+      "passed": true
+    },
+    {
+      "name": "C2 scale: 25 members × 50 items commit (1275 key matches in 131.8 s; the match statement p50 5895 µs, p95 13031 µs, max 112428 µs, budget 2,000,000 µs; 34793 admission refusals resent) and the collection holds exactly one entry per member per item",
+      "passed": true
+    },
+    {
+      "name": "guests: a live share of the participation work (own collections) is refused, so a guest never reaches a command",
+      "passed": true
+    }
+  ],
+  "definition": {
+    "commands": [
+      {
+        "id": "post",
+        "initial": [
+          {
+            "field_id": "state",
+            "value": "open"
+          }
+        ],
+        "operation": "create",
+        "record_schema_id": "items",
+        "reviewer_only": true,
+        "set_now": [
+          "opened_at"
+        ],
+        "transitions": [],
+        "writable_fields": [
+          "prompt",
+          "state"
+        ]
+      },
+      {
+        "id": "close",
+        "operation": "update",
+        "record_schema_id": "items",
+        "reviewer_only": true,
+        "transitions": [],
+        "writable_fields": [
+          "state"
+        ]
+      },
+      {
+        "id": "reopen",
+        "operation": "update",
+        "record_schema_id": "items",
+        "reviewer_only": true,
+        "set_now": [
+          "opened_at"
+        ],
+        "transitions": [],
+        "writable_fields": [
+          "state"
+        ]
+      },
+      {
+        "id": "respond",
+        "operation": "create",
+        "record_schema_id": "responses",
+        "requires": [
+          {
+            "comparison": "eq",
+            "field_id": "state",
+            "value": {
+              "type": "enum",
+              "value": "open"
+            },
+            "via": "item"
+          },
+          {
+            "comparison": "gte",
+            "field_id": "opened_at",
+            "value": {
+              "offset_seconds": -30,
+              "type": "now"
+            },
+            "via": "item"
+          }
+        ],
+        "transitions": [],
+        "writable_fields": [
+          "item",
+          "choice"
+        ]
+      },
+      {
+        "id": "add_expected",
+        "operation": "create",
+        "record_schema_id": "expected",
+        "reviewer_only": true,
+        "transitions": [],
+        "writable_fields": [
+          "item",
+          "choice"
+        ]
+      }
+    ],
+    "default_layout": [
+      {
+        "column": 0,
+        "row": 0,
+        "view_id": "respond",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 1,
+        "view_id": "timer",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 2,
+        "view_id": "item_list",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 3,
+        "view_id": "response_count",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 4,
+        "view_id": "leaderboard",
+        "width": 12
+      }
+    ],
+    "description": "Synthetic contract example (ADR-020 §10): items, responses and expected answers; no runtime or result is claimed.",
+    "inputs": [
+      {
+        "contract_id": "items_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "prompt",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "state",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "closed"
+              ]
+            }
+          },
+          {
+            "id": "opened_at",
+            "nullable": false,
+            "value_type": {
+              "type": "timestamp"
+            }
+          }
+        ],
+        "id": "items",
+        "kind": "records"
+      },
+      {
+        "contract_id": "responses_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "item",
+            "nullable": false,
+            "value_type": {
+              "target_input": "items",
+              "type": "reference"
+            }
+          },
+          {
+            "id": "choice",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ]
+            }
+          }
+        ],
+        "id": "responses",
+        "kind": "records"
+      },
+      {
+        "contract_id": "expected_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "item",
+            "nullable": false,
+            "value_type": {
+              "target_input": "items",
+              "type": "reference"
+            }
+          },
+          {
+            "id": "choice",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ]
+            }
+          }
+        ],
+        "id": "expected",
+        "kind": "records"
+      }
+    ],
+    "links": [],
+    "record_schemas": [
+      {
+        "fields": [
+          {
+            "id": "prompt",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "state",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "closed"
+              ]
+            }
+          },
+          {
+            "id": "opened_at",
+            "nullable": false,
+            "value_type": {
+              "type": "timestamp"
+            }
+          }
+        ],
+        "id": "items",
+        "version": 1
+      },
+      {
+        "fields": [
+          {
+            "id": "item",
+            "nullable": false,
+            "value_type": {
+              "target_input": "items",
+              "type": "reference"
+            }
+          },
+          {
+            "id": "choice",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ]
+            }
+          }
+        ],
+        "id": "responses",
+        "one_per_creator": [
+          "item"
+        ],
+        "version": 1,
+        "visibility": "own"
+      },
+      {
+        "fields": [
+          {
+            "id": "item",
+            "nullable": false,
+            "value_type": {
+              "target_input": "items",
+              "type": "reference"
+            }
+          },
+          {
+            "id": "choice",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ]
+            }
+          }
+        ],
+        "id": "expected",
+        "version": 1,
+        "visibility": "own"
+      }
+    ],
+    "title": "Participation",
+    "views": [
+      {
+        "command_id": "respond",
+        "id": "respond",
+        "kind": "form",
+        "renderer_version": 1,
+        "title": "respond"
+      },
+      {
+        "id": "timer",
+        "kind": "countdown",
+        "records": {
+          "closed_when": {
+            "comparison": "eq",
+            "field_id": "state",
+            "value": {
+              "type": "enum",
+              "value": "closed"
+            }
+          },
+          "input_id": "items",
+          "offset_seconds": 30,
+          "schema_id": "items",
+          "timestamp_field": "opened_at",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Time left"
+      },
+      {
+        "id": "item_list",
+        "kind": "records_list",
+        "records": {
+          "columns": [
+            "prompt",
+            "state",
+            "opened_at"
+          ],
+          "input_id": "items",
+          "schema_id": "items",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Items"
+      },
+      {
+        "id": "response_count",
+        "kind": "record_summary",
+        "records": {
+          "input_id": "responses",
+          "measure": {
+            "op": "count"
+          },
+          "schema_id": "responses",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Responses"
+      },
+      {
+        "id": "leaderboard",
+        "kind": "record_ranking",
+        "records": {
+          "group_by": "creator",
+          "input_id": "responses",
+          "limit": 50,
+          "measure": {
+            "fields": [
+              "item",
+              "choice"
+            ],
+            "key_input": "expected",
+            "op": "matches"
+          },
+          "schema_id": "responses",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Leaderboard"
+      }
+    ]
+  },
+  "key_match_micros": {
+    "budget": 2000000,
+    "count": 1275,
+    "max": 112428,
+    "p50": 5895,
+    "p95": 13031
+  },
+  "passed": true,
+  "sessions_definition": {
+    "commands": [
+      {
+        "id": "open_session",
+        "initial": [
+          {
+            "field_id": "state",
+            "value": "open"
+          }
+        ],
+        "operation": "create",
+        "record_schema_id": "sessions",
+        "transitions": [],
+        "writable_fields": [
+          "title",
+          "state",
+          "closes_at"
+        ]
+      },
+      {
+        "id": "close_session",
+        "operation": "update",
+        "record_schema_id": "sessions",
+        "transitions": [],
+        "writable_fields": [
+          "state"
+        ]
+      },
+      {
+        "id": "check_in",
+        "operation": "create",
+        "record_schema_id": "checkins",
+        "requires": [
+          {
+            "comparison": "eq",
+            "field_id": "state",
+            "value": {
+              "type": "enum",
+              "value": "open"
+            },
+            "via": "session"
+          },
+          {
+            "comparison": "gt",
+            "field_id": "closes_at",
+            "value": {
+              "type": "now"
+            },
+            "via": "session"
+          }
+        ],
+        "set_now": [
+          "checked_at"
+        ],
+        "transitions": [],
+        "writable_fields": [
+          "session",
+          "note"
+        ]
+      }
+    ],
+    "default_layout": [
+      {
+        "column": 0,
+        "row": 0,
+        "view_id": "open_session",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 1,
+        "view_id": "check_in",
+        "width": 12
+      },
+      {
+        "column": 0,
+        "row": 2,
+        "view_id": "session_list",
+        "width": 12
+      }
+    ],
+    "description": "Synthetic campaign app: each member's own sessions with a deadline, and one check-in per session while it is open.",
+    "inputs": [
+      {
+        "contract_id": "sessions_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "title",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "state",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "closed"
+              ]
+            }
+          },
+          {
+            "id": "closes_at",
+            "nullable": false,
+            "value_type": {
+              "type": "timestamp"
+            }
+          }
+        ],
+        "id": "sessions",
+        "kind": "records"
+      },
+      {
+        "contract_id": "checkins_v1",
+        "contract_version": 1,
+        "fields": [
+          {
+            "id": "session",
+            "nullable": false,
+            "value_type": {
+              "target_input": "sessions",
+              "type": "reference"
+            }
+          },
+          {
+            "id": "note",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "checked_at",
+            "nullable": false,
+            "value_type": {
+              "type": "timestamp"
+            }
+          }
+        ],
+        "id": "checkins",
+        "kind": "records"
+      }
+    ],
+    "links": [],
+    "record_schemas": [
+      {
+        "fields": [
+          {
+            "id": "title",
+            "nullable": false,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "state",
+            "nullable": false,
+            "value_type": {
+              "type": "enum",
+              "values": [
+                "open",
+                "closed"
+              ]
+            }
+          },
+          {
+            "id": "closes_at",
+            "nullable": false,
+            "value_type": {
+              "type": "timestamp"
+            }
+          }
+        ],
+        "id": "sessions",
+        "version": 1,
+        "visibility": "own"
+      },
+      {
+        "fields": [
+          {
+            "id": "session",
+            "nullable": false,
+            "value_type": {
+              "target_input": "sessions",
+              "type": "reference"
+            }
+          },
+          {
+            "id": "note",
+            "nullable": true,
+            "value_type": {
+              "type": "text"
+            }
+          },
+          {
+            "id": "checked_at",
+            "nullable": false,
+            "value_type": {
+              "type": "timestamp"
+            }
+          }
+        ],
+        "id": "checkins",
+        "one_per_creator": [
+          "session"
+        ],
+        "version": 1,
+        "visibility": "own"
+      }
+    ],
+    "title": "Sessions and check-ins",
+    "views": [
+      {
+        "command_id": "open_session",
+        "id": "open_session",
+        "kind": "form",
+        "renderer_version": 1,
+        "title": "Open a session"
+      },
+      {
+        "command_id": "check_in",
+        "id": "check_in",
+        "kind": "form",
+        "renderer_version": 1,
+        "title": "Check in"
+      },
+      {
+        "id": "session_list",
+        "kind": "records_list",
+        "records": {
+          "columns": [
+            "title",
+            "state",
+            "closes_at"
+          ],
+          "input_id": "sessions",
+          "schema_id": "sessions",
+          "version": 1
+        },
+        "renderer_version": 1,
+        "title": "Sessions"
+      }
+    ]
+  },
+  "works": {
+    "participation": "733c11ca-cba0-4a1e-bd70-5caadd7cfa74",
+    "sessions": "6c02cb93-b716-4593-81d1-914c0a13aad8"
+  }
+}

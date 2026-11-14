@@ -613,6 +613,311 @@ fn a_refused_form_submission_redirects_to_the_record_page_with_the_refused_notic
     }
 }
 
+/// ADR-020 (APP-203): storage's two typed refusals are 422 with the code
+/// alone, conforming to edition impl-2026-11-14.2's `$defs.problem` (no
+/// recovery view, revision, limit or Retry-After); a form returns to the
+/// record page with the refused notice; MCP and Slack word ADR-020's copy.
+#[tokio::test]
+async fn the_two_refusals_are_422_with_the_code_alone_and_a_form_returns_refused() {
+    for (refusal, code) in [
+        (storage::Refusal::RequirementNotMet, "requirement_not_met"),
+        (storage::Refusal::Unchanged, "unchanged"),
+    ] {
+        assert_eq!(refusal.code(), code);
+        let response = routes::json_answer_for_tests(Ok(CommandResult::Refused(refusal)));
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(response.headers().get(header::RETRY_AFTER).is_none());
+        assert_eq!(conforms(response).await.unwrap(), code);
+        let bytes = to_bytes(
+            routes::json_answer_for_tests(Ok(CommandResult::Refused(refusal))).into_body(),
+            1 << 20,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&bytes).unwrap(),
+            json!({"code": code, "status": 422})
+        );
+        let form = routes::form_answer_for_tests(Ok(CommandResult::Refused(refusal)));
+        assert_eq!(form.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            form.headers()[header::LOCATION],
+            "/work/a/w/records/c/r?notice=refused"
+        );
+    }
+    assert_eq!(
+        super::refusal_copy(storage::Refusal::RequirementNotMet),
+        "Not saved: the item this refers to is no longer open."
+    );
+    assert_eq!(
+        super::refusal_copy(storage::Refusal::Unchanged),
+        "Already locked in: your entry already holds these values."
+    );
+    // The canvas words the same text (`canvas/commands.ts` REFUSAL_COPY,
+    // asserted by `test/command-outcome.test.ts`).
+}
+
+/// ADR-020 C2: a committed (or replayed) keyed create names the creator's
+/// entry it replaced; the record page's form returns to that record, not
+/// to the fresh id the form minted. Every other answer keeps the requested id.
+#[test]
+fn a_form_returns_to_the_record_the_outcome_names() {
+    let outcome = |record: &str| storage::CommandOutcome {
+        organization: "00000000-0000-4000-8000-0000000000c8".into(),
+        app: "a".into(),
+        work: "w".into(),
+        principal: "00000000-0000-4000-8000-0000000000c7".into(),
+        command: "respond".into(),
+        idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+        payload_digest: format!("sha256:{}", "7".repeat(64)),
+        record_id: record.into(),
+        record_version: 2,
+        work_version: 1,
+        commit_sequence: 9,
+        audit_event_id: "00000000-0000-4000-8000-0000000000e1".into(),
+        committed_at: "2026-11-29T15:00:00Z".into(),
+        retry_expires_at: "2026-11-30T15:00:00Z".into(),
+    };
+    let replaced = "00000000-0000-4000-8000-0000000000f9";
+    for (result, notice) in [
+        (Ok(CommandResult::Committed(outcome(replaced))), "committed"),
+        (Ok(CommandResult::Replayed(outcome(replaced))), "replayed"),
+    ] {
+        let response = routes::form_answer_for_tests(result);
+        assert_eq!(
+            response.headers()[header::LOCATION],
+            format!("/work/a/w/records/c/{replaced}?notice={notice}").as_str()
+        );
+    }
+    // An outcome naming no canonical id never steers the redirect.
+    let response = routes::form_answer_for_tests(Ok(CommandResult::Committed(outcome("x"))));
+    assert_eq!(
+        response.headers()[header::LOCATION],
+        "/work/a/w/records/c/r?notice=committed"
+    );
+}
+
+/// ADR-020 §6 (APP-205): the reference picker. A writable reference field's
+/// choices are the records of the collection its target input is bound to,
+/// in the listing's order (newest commit first), labelled by the first text
+/// value (at most 100 characters, else "Record"), at most 200, the current
+/// record (the first) selected unless the field already holds one of them.
+/// An unbound target or an empty readable set is "nothing to choose"; a
+/// non-writable reference and every other field are untouched.
+#[test]
+fn the_reference_picker_lists_the_readable_target_records_newest_first() {
+    use crate::storage::{RecordRow, RecordsListing};
+    let (items, responses) = (
+        "00000000-0000-4000-8000-0000000000c1",
+        "00000000-0000-4000-8000-0000000000c2",
+    );
+    let record = |id: u32, collection: &str, values: Value| RecordRow {
+        record_id: format!("00000000-0000-4000-8000-{id:012x}"),
+        collection: collection.into(),
+        schema: String::new(),
+        version: 1,
+        commit_sequence: i64::from(id),
+        committed_at: "2026-11-29T15:00:00Z".into(),
+        creator: String::new(),
+        updater: String::new(),
+        values,
+    };
+    let prompt = |text: &str| {
+        json!([
+            {"field_id": "prompt", "value": {"type": "text", "value": text}},
+            {"field_id": "state", "value": {"type": "enum", "value": "open"}}
+        ])
+    };
+    let long = "x".repeat(150);
+    let listing = |records: Vec<RecordRow>| RecordsListing {
+        app: "a".into(),
+        work: "w".into(),
+        publication: "p".into(),
+        definition_digest: String::new(),
+        work_version: 1,
+        can_write: true,
+        collections: Vec::new(),
+        records,
+        truncated: false,
+    };
+    let newest_first = listing(vec![
+        record(0xa4, responses, json!([])),
+        record(
+            0xa3,
+            items,
+            json!([{"field_id": "state", "value": {"type": "enum", "value": "open"}}, {"field_id": "prompt", "value": {"type": "null"}}]),
+        ),
+        record(0xa2, items, prompt(&long)),
+        record(0xa1, items, prompt("First item")),
+    ]);
+    let field = |id: &str, kind: &str, spec: &str, writable: bool| super::FieldRow {
+        id: id.into(),
+        kind: kind.into(),
+        value: String::new(),
+        input: format!("value.{id}"),
+        spec: spec.into(),
+        spec_input: format!("spec.{id}"),
+        options: String::new(),
+        nullable: false,
+        writable,
+        choices: Vec::new(),
+        nothing_to_choose: false,
+    };
+    let reference = r#"{"target_input":"items","type":"reference"}"#;
+    let view = |fields: Vec<super::FieldRow>| super::RecordView {
+        app: "a".into(),
+        work: "w".into(),
+        collection: responses.into(),
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        schema: "responses".into(),
+        schema_version: "1".into(),
+        publication: "p".into(),
+        work_version: "1".into(),
+        version: "0".into(),
+        exists: false,
+        fields,
+        command: "respond".into(),
+        action: "/v1/work/a/w/commands/respond".into(),
+        can_write: true,
+        csrf: String::new(),
+        idempotency_key: String::new(),
+        notice: None,
+    };
+    let bindings = vec![
+        ("items".to_owned(), items.to_owned()),
+        ("responses".to_owned(), responses.to_owned()),
+    ];
+    let mut shown = view(vec![
+        field("item", "reference", reference, true),
+        field(
+            "choice",
+            "enum",
+            r#"{"type":"enum","values":["a","b"]}"#,
+            true,
+        ),
+        field("seen", "reference", reference, false),
+    ]);
+    assert!(super::writes_reference(&shown));
+    super::fill_references(&mut shown, &bindings, &newest_first);
+    let picked: Vec<(String, String, bool)> = shown.fields[0]
+        .choices
+        .iter()
+        .map(|c| (c.value[24..].to_owned(), c.label.clone(), c.selected))
+        .collect();
+    assert_eq!(
+        picked,
+        [
+            ("0000000000a3".to_owned(), "Record".to_owned(), true),
+            ("0000000000a2".to_owned(), "x".repeat(100), false),
+            ("0000000000a1".to_owned(), "First item".to_owned(), false),
+        ]
+    );
+    assert!(!shown.fields[0].nothing_to_choose);
+    assert!(shown.fields[1].choices.is_empty() && !shown.fields[1].nothing_to_choose);
+    assert!(shown.fields[2].choices.is_empty() && !shown.fields[2].nothing_to_choose);
+    // The value the field already holds stays selected.
+    let mut held = view(vec![field("item", "reference", reference, true)]);
+    held.fields[0].value = "00000000-0000-4000-8000-0000000000a1".into();
+    super::fill_references(&mut held, &bindings, &newest_first);
+    assert_eq!(
+        held.fields[0]
+            .choices
+            .iter()
+            .map(|c| c.selected)
+            .collect::<Vec<_>>(),
+        [false, false, true]
+    );
+    // An unbound target, and a target the member reads nothing of.
+    for (bindings, listing) in [
+        (
+            vec![("responses".to_owned(), responses.to_owned())],
+            &newest_first,
+        ),
+        (
+            bindings.clone(),
+            &listing(vec![record(0xa4, responses, json!([]))]),
+        ),
+    ] {
+        let mut empty = view(vec![field("item", "reference", reference, true)]);
+        super::fill_references(&mut empty, &bindings, listing);
+        assert!(empty.fields[0].choices.is_empty() && empty.fields[0].nothing_to_choose);
+    }
+    // At most 200 choices.
+    let many = listing(
+        (0..250)
+            .rev()
+            .map(|i| record(0x1000 + i, items, prompt("item")))
+            .collect(),
+    );
+    let mut bounded = view(vec![field("item", "reference", reference, true)]);
+    super::fill_references(&mut bounded, &bindings, &many);
+    assert_eq!(bounded.fields[0].choices.len(), super::REFERENCE_CHOICES);
+    assert!(bounded.fields[0].choices[0].selected);
+    // No picker to fill: a reader's view, or a form writing no reference.
+    let mut reader = view(vec![field("item", "reference", reference, true)]);
+    reader.can_write = false;
+    assert!(!super::writes_reference(&reader));
+    assert!(!super::writes_reference(&view(vec![field(
+        "seen",
+        "reference",
+        reference,
+        false
+    )])));
+}
+
+/// ADR-020 C3 (APP-205): a field a command stamps with `set_now` is not in
+/// its `writable_fields` (admission), so the record page model offers it as
+/// read-only and the form never carries an input for it.
+#[test]
+fn a_stamped_field_is_read_only_in_the_form() {
+    use crate::storage::{RecordCommand, RecordDetail, RecordField};
+    let field = |id: &str, value_type: Value| RecordField {
+        id: id.into(),
+        value_type,
+        nullable: false,
+        value: json!({"type": "null"}),
+        writable: false,
+    };
+    let detail = RecordDetail {
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        schema: "items".into(),
+        schema_version: 1,
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        definition_digest: format!("sha256:{}", "7".repeat(64)),
+        work_version: 1,
+        version: 0,
+        fields: vec![
+            field("prompt", json!({"type": "text"})),
+            field(
+                "state",
+                json!({"type": "enum", "values": ["open", "closed"]}),
+            ),
+            field("opened_at", json!({"type": "timestamp"})),
+        ],
+        commands: vec![RecordCommand {
+            id: "post".into(),
+            operation: "create".into(),
+            writable_fields: vec!["prompt".into(), "state".into()],
+            transitions: Vec::new(),
+            rules: Default::default(),
+        }],
+        can_write: true,
+        bindings: Vec::new(),
+    };
+    let view = super::view("a", "w", &detail, "t".into(), "k".into(), None);
+    let writable: Vec<(&str, bool)> = view
+        .fields
+        .iter()
+        .map(|row| (row.id.as_str(), row.writable))
+        .collect();
+    assert_eq!(
+        writable,
+        [("prompt", true), ("state", true), ("opened_at", false)]
+    );
+    assert!(!super::writes_reference(&view));
+}
+
 /// APP-013 review m1 and m4: the JSON body is decoded once as forma-json-v1
 /// (duplicate members, floats and non-JSON are `malformed_command`, reported
 /// before any key question), and the `Idempotency-Key` header is exactly one
@@ -737,6 +1042,7 @@ fn the_record_page_offers_only_a_command_storage_would_admit_and_only_its_writab
         fields: vec![status(current), note.clone()],
         commands,
         can_write: true,
+        bindings: Vec::new(),
     };
     let offered = |detail: &RecordDetail| {
         let view = super::view("a", "w", detail, "t".into(), "k".into(), None);
@@ -833,6 +1139,7 @@ fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
             writable: true,
         }],
         commands: vec![command],
+        bindings: Vec::new(),
     };
     let offered = |detail: &RecordDetail, selected| {
         super::view_for_command("a", "w", detail, "csrf".into(), "same-key".into(), selected)

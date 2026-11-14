@@ -808,7 +808,7 @@ pub(crate) async fn document_forms(
                 }
                 form_choices.insert(part.id.clone(), choices);
             }
-            let view = crate::commands::view_for_command(
+            let mut view = crate::commands::view_for_command(
                 app,
                 saved,
                 &detail,
@@ -816,6 +816,10 @@ pub(crate) async fn document_forms(
                 key,
                 Some(&part.command),
             );
+            // ADR-020 (APP-205): a reference field picks among the target
+            // collection's records this listing holds (read under own_rows,
+            // under the same pin as the detail, checked above).
+            crate::commands::fill_references(&mut view, &detail.bindings, listing);
             if let Some(mut form) = super::canvas::form_card(saved, &view) {
                 form.id = part.id.clone();
                 form.component = part.id.clone();

@@ -932,6 +932,8 @@ mod tests {
             options: options.into(),
             nullable: false,
             writable: true,
+            choices: Vec::new(),
+            nothing_to_choose: false,
         };
         let view = RecordView {
             app: "00000000-0000-4000-8000-0000000000c9".into(),
@@ -995,6 +997,50 @@ mod tests {
         );
         assert!(body.contains("name=\"value.status\"") && !body.contains("name=\"value.note\""));
         assert!(!body.contains("name=\"spec.note\""));
+        // ADR-020 (APP-205): a reference is a picker of the records the
+        // member may read, valued by record id and read as the record's
+        // label, the current one selected; an empty target is a disabled
+        // select with no value; text fields keep their text box.
+        let mut picker = view.clone();
+        picker.notice = None;
+        let mut item = row("item", "reference", "", "");
+        item.choices = vec![
+            commands::FieldChoice {
+                value: "00000000-0000-4000-8000-0000000000a3".into(),
+                label: "Third <item>".into(),
+                selected: true,
+            },
+            commands::FieldChoice {
+                value: "00000000-0000-4000-8000-0000000000a2".into(),
+                label: "Record".into(),
+                selected: false,
+            },
+        ];
+        let mut nothing = row("other", "reference", "", "");
+        nothing.nothing_to_choose = true;
+        picker.fields = vec![item, nothing, row("note", "text", "", "")];
+        let (status, _, body) = html(pages.record(&picker)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let select = &body[body.find("<select id=\"value.item\"").expect("a picker")..];
+        let select = &select[..select.find("</select>").unwrap()];
+        assert!(select.contains("name=\"value.item\""), "{select}");
+        assert!(
+            select.contains("value=\"00000000-0000-4000-8000-0000000000a3\" selected")
+                && select.contains(">Third &lt;item&gt;</option>"),
+            "{select}"
+        );
+        assert!(!select.contains("value=\"00000000-0000-4000-8000-0000000000a2\" selected"));
+        assert!(!body.contains("type=\"text\" id=\"value.item\""));
+        let at = body
+            .find("id=\"value.other\" name=\"value.other\"")
+            .expect("a disabled picker");
+        let empty = &body[body[..at].rfind("<select").unwrap()..];
+        let empty = &empty[..empty.find("</select>").unwrap()];
+        assert!(
+            empty.contains("disabled") && empty.contains(">Nothing to choose yet</option>"),
+            "{empty}"
+        );
+        assert!(body.contains("name=\"value.note\""));
     }
 
     /// APP-012: the native work page renders each view state from typed
@@ -1377,14 +1423,58 @@ mod tests {
                     genui::query::canvas::ChoiceProps {
                         id: "first".into(),
                         value: "needs_context".into(),
+                        label: "needs_context".into(),
                         selected: false,
                     },
                     genui::query::canvas::ChoiceProps {
                         id: "current".into(),
                         value: "reviewed".into(),
+                        label: "reviewed".into(),
                         selected: true,
                     },
                 ],
+                ..Default::default()
+            });
+        document.forms[0]
+            .fields
+            .push(genui::query::canvas::FormFieldProps {
+                id: "item".into(),
+                kind: "reference".into(),
+                label: "Item".into(),
+                input: "value.item".into(),
+                // `form_card` carries the selected record as the value.
+                value: "00000000-0000-4000-8000-0000000000a3".into(),
+                writable: true,
+                has_choices: true,
+                spec: r#"{"target_input":"items","type":"reference"}"#.into(),
+                spec_input: "spec.item".into(),
+                choices: vec![
+                    genui::query::canvas::ChoiceProps {
+                        id: "o0".into(),
+                        value: "00000000-0000-4000-8000-0000000000a3".into(),
+                        label: "Third item".into(),
+                        selected: true,
+                    },
+                    genui::query::canvas::ChoiceProps {
+                        id: "o1".into(),
+                        value: "00000000-0000-4000-8000-0000000000a2".into(),
+                        label: "Second item".into(),
+                        selected: false,
+                    },
+                ],
+                ..Default::default()
+            });
+        document.forms[0]
+            .fields
+            .push(genui::query::canvas::FormFieldProps {
+                id: "other".into(),
+                kind: "reference".into(),
+                label: "Other".into(),
+                input: "value.other".into(),
+                writable: true,
+                no_choices: true,
+                spec: r#"{"target_input":"elsewhere","type":"reference"}"#.into(),
+                spec_input: "spec.other".into(),
                 ..Default::default()
             });
         document.record_cards = vec![genui::query::canvas::RecordsCardProps {
@@ -1533,6 +1623,27 @@ mod tests {
             "native SSR marks the existing enum value, not the first option"
         );
         assert!(!document_body.contains("value=\"needs_context\" selected"));
+        // ADR-020 (APP-205): the native form's reference picker reads as the
+        // records' labels with the current record selected; an empty target
+        // is a disabled select.
+        let picker = &document_body[document_body.find("name=\"value.item\"").expect("a picker")..];
+        let picker = &picker[..picker.find("</select>").unwrap()];
+        assert!(
+            picker.contains("value=\"00000000-0000-4000-8000-0000000000a3\" selected")
+                && picker.contains("Third item")
+                && picker.contains("Second item")
+                && !picker.contains("value=\"00000000-0000-4000-8000-0000000000a2\" selected"),
+            "the native picker: {picker}"
+        );
+        let at = document_body
+            .find("name=\"value.other\"")
+            .expect("a disabled picker");
+        let empty = &document_body[document_body[..at].rfind("<select").unwrap()..];
+        let empty = &empty[..empty.find("</select>").unwrap()];
+        assert!(
+            empty.contains("disabled") && empty.contains(">Nothing to choose yet</option>"),
+            "{empty}"
+        );
         assert!(document_body.contains(&format!("value=\"{}\"", "a".repeat(32))));
         assert!(!document_body.contains("<script>untrusted()"));
         assert!(document_body.contains("&lt;script&gt;untrusted()&lt;/script&gt;"));
@@ -1691,6 +1802,8 @@ mod tests {
             options: options.into(),
             nullable: false,
             writable,
+            choices: Vec::new(),
+            nothing_to_choose: false,
         };
         let record = RecordView {
             app: app.into(),
@@ -1706,6 +1819,18 @@ mod tests {
             fields: vec![
                 field("status", "enum", "needs_context | reviewed", true),
                 field("note", "text", "", true),
+                commands::FieldRow {
+                    choices: vec![commands::FieldChoice {
+                        value: "00000000-0000-4000-8000-0000000000a3".into(),
+                        label: "Third item".into(),
+                        selected: true,
+                    }],
+                    ..field("item", "reference", "", true)
+                },
+                commands::FieldRow {
+                    nothing_to_choose: true,
+                    ..field("other", "reference", "", true)
+                },
             ],
             command: "record_decision".into(),
             action: format!("/v1/work/{app}/{spend}/commands/record_decision"),
@@ -1927,6 +2052,22 @@ mod tests {
         );
         assert!(content.contains("name=\"value.status\"") && content.contains(">reviewed<"));
         assert!(content.contains("name=\"spec.note\"") && content.contains("New decision record"));
+        // ADR-020 (APP-205): the canvas form's reference picker and the
+        // disabled picker of an empty target.
+        assert!(
+            content.contains("value=\"00000000-0000-4000-8000-0000000000a3\" selected")
+                && content.contains(">Third item</option>"),
+            "the canvas picker"
+        );
+        let at = content
+            .find("name=\"value.other\"")
+            .expect("a disabled picker");
+        let empty = &content[content[..at].rfind("<select").unwrap()..];
+        let empty = &empty[..empty.find("</select>").unwrap()];
+        assert!(
+            empty.contains("disabled") && empty.contains(">Nothing to choose yet</option>"),
+            "{empty}"
+        );
         assert!(content.contains(">Record decision</button>"));
         assert!(content.contains(&format!("value=\"{}\"", "C".repeat(43))));
         assert!(content.contains("action=\"/auth/signout\"") && content.contains(&"S".repeat(43)));

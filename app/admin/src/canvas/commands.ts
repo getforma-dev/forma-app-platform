@@ -63,6 +63,9 @@ export function commandRequest(form: HTMLFormElement, app: string, work: string)
   for (const element of Array.from(form.elements)) {
     if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) continue;
     if (!element.name.startsWith('value.')) continue;
+    // As a native submission: a disabled control (APP-205's empty reference
+    // picker, "Nothing to choose yet") is never posted.
+    if (element.disabled) continue;
     const id = element.name.slice('value.'.length);
     let spec: Record<string, unknown>;
     try {
@@ -107,6 +110,15 @@ function committed(body: unknown): CommandOutcome | null {
 
 const sleep = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 
+/**
+ * ADR-020: storage's typed refusals (422, the code alone), worded as
+ * `commands::refusal_copy` words them for MCP and Slack. Nothing was written.
+ */
+export const REFUSAL_COPY: Readonly<Record<string, string>> = {
+  requirement_not_met: 'Not saved: the item this refers to is no longer open.',
+  unchanged: 'Already locked in: your entry already holds these values.',
+};
+
 /** The outcome copy a caller may tailor (the form, a confirmed draft, a note). */
 export type OutcomeCopy = Partial<Record<'conflict' | 'stale' | 'refused' | 'busy' | 'unconfirmed', string>>;
 const COPY: Required<OutcomeCopy> = {
@@ -150,6 +162,7 @@ export async function postCommand(path: string, body: unknown, key: string, copy
     if (response.status === 409) return { kind: 'conflict', message: text.conflict };
     if (response.status === 412) return { kind: 'stale', message: text.stale };
     if (response.status === 422 && code === 'app_data_limit') return {kind: 'refused', message: 'This change would exceed the app data limit of 100,000 rows or 64 MiB. Nothing was saved. Original files are unchanged.'};
+    if (response.status === 422 && Object.hasOwn(REFUSAL_COPY, code)) return { kind: 'refused', message: REFUSAL_COPY[code] };
     // A gateway/server failure may follow a committed transaction whose
     // response was lost. Recover by the same key; never claim rollback.
     if (response.status >= 500) return lookUp(path, key, text.unconfirmed);
