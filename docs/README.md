@@ -28,7 +28,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [architecture/ADR-016-WORKSPACE-SIGNIN.md](architecture/ADR-016-WORKSPACE-SIGNIN.md) | Reference | Workspace entry and verified workspace discovery. | |
 | [architecture/ADR-017-BETA-PROMOTION.md](architecture/ADR-017-BETA-PROMOTION.md) | Reference | One-approval promotion. ADR-019 moves the deploy branch to `main`. | |
 | [architecture/ADR-018-WHOLE-APP-VIEWS.md](architecture/ADR-018-WHOLE-APP-VIEWS.md) | Reference | An app is one object. Card, stack and open are views. | |
-| [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) | Reference | `main` is the trunk, and the reservation ceiling is $180 / $218; the 2026-11-14 amendment records the trial ceilings. | |
+| [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) | Reference | `main` is the trunk, and the reservation ceiling is $210 / $248 since the 2026-11-14 amendment (the real-user trial; $180 / $218 before). | |
 | [architecture/CANVAS-WINDOWS.md](architecture/CANVAS-WINDOWS.md) | Reference | The app-window shell and file cards decided on 2026-11-02. | |
 | [architecture/CSV-APP-DATA.md](architecture/CSV-APP-DATA.md) | Reference | Editable data in an app built from a spreadsheet. | |
 | [architecture/DECISIONS.md](architecture/DECISIONS.md) | Reference | Implementation decisions from 2026-10-28. Product order is DIRECTION.md. | |

@@ -23,7 +23,7 @@ class MonthRenewalTests(unittest.TestCase):
         environment.start(); self.addCleanup(environment.stop)
         manifest = {'source': {'schema_manifest_sha256': 'a' * 64, 'deployment_contract_sha256': 'b' * 64}}
         self.state = fixture(manifest)
-        self.state['policy'].update(budget_genui_cents=18000, budget_total_cents=21800, shorten_expiry_hours=18)
+        self.state['policy'].update(budget_genui_cents=21000, budget_total_cents=24800, shorten_expiry_hours=18)
         self.state['ledger']['months']['2026-11']['reconciled_at_utc'] = (CLOCK - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         self.s3 = MemoryS3(self.state)
         self.store = Store(self.s3, 'bucket', 'beta')
@@ -62,7 +62,7 @@ class MonthRenewalTests(unittest.TestCase):
                                                          'release_stop_utc': '2026-12-15T14:00:00Z', 'genui_total_cents': retained + compute + 1500,
                                                          'project_total_cents': retained + compute + 1500 + 3800})
         self.assertEqual(public['trial_ceiling_cents'], {'genui': 8000, 'project': 11800})
-        self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (18000, 21800))
+        self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (21000, 24800))
         self.assertEqual(self.aws.calls, [])  # no boundary read: the month is a ledger fact, as in reconcile
         self.assertNotIn(self.state['live']['window_id'], json.dumps(public))
 

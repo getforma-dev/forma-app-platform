@@ -29,7 +29,7 @@ class ExpiryRenewalTests(unittest.TestCase):
         environment.start(); self.addCleanup(environment.stop)
         manifest = {'source': {'schema_manifest_sha256': 'a' * 64, 'deployment_contract_sha256': 'b' * 64}}
         self.state = fixture(manifest)
-        self.state['policy'].update(budget_genui_cents=18000, budget_total_cents=21800, shorten_expiry_hours=18)
+        self.state['policy'].update(budget_genui_cents=21000, budget_total_cents=24800, shorten_expiry_hours=18)
         # The fixture's live window stops 2026-11-30 23:00; the trial's clock is Nov 21 and both months are fresh.
         self.state['ledger']['months']['2026-11']['reconciled_at_utc'] = (CLOCK - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         december(self.state['ledger'], CLOCK - timedelta(hours=1))
@@ -60,8 +60,8 @@ class ExpiryRenewalTests(unittest.TestCase):
         self.assertEqual(public['live_stop_unchanged'], '2026-11-30T23:00:00Z')
         self.assertEqual(public['next_release_expiry'], '2026-12-15T14:00:00Z')
         self.assertEqual(set(public['cost_by_month']), {'2026-11', '2026-12'})
-        self.assertTrue(all(c['genui_total_cents'] <= 18000 and c['project_total_cents'] <= 21800 for c in public['cost_by_month'].values()))
-        self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (18000, 21800))
+        self.assertTrue(all(c['genui_total_cents'] <= 21000 and c['project_total_cents'] <= 24800 for c in public['cost_by_month'].values()))
+        self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (21000, 24800))
         self.assertFalse(public['ledger_changed']); self.assertFalse(public['live_parameters_changed'])
         self.assertEqual(result['receipt']['projection_config']['supersedes_window_id'], self.state['live']['window_id'])
         self.assertEqual(result['receipt']['window_recorded_expiry'], '2026-11-30T23:00:00Z')
@@ -112,7 +112,7 @@ class ExpiryRenewalTests(unittest.TestCase):
         def no_december(): del self.state['ledger']['months']['2026-12']; self.replace_state()
         def stale_december(): self.state['ledger']['months']['2026-12']['reconciled_at_utc'] = '2026-11-19T00:00:00Z'; self.replace_state()
         def stale_november(): self.state['ledger']['months']['2026-11']['reconciled_at_utc'] = '2026-11-19T00:00:00Z'; self.replace_state()
-        def caps_differ(): self.state['policy']['budget_genui_cents'] = 17000; self.replace_state()
+        def caps_differ(): self.state['policy']['budget_genui_cents'] = 18000; self.replace_state()  # the pair before the trial raise
         def pending_change_set():
             original = self.aws._call
             def call(s, o, a):
@@ -121,7 +121,7 @@ class ExpiryRenewalTests(unittest.TestCase):
             self.aws._call = call
         def unhealthy(): self.aws.running_health = 'UNHEALTHY'
         def too_far(): self.runner = Runner(self.aws, self.store, clock=lambda: datetime(2026, 11, 10, tzinfo=timezone.utc))
-        def budget_exceeded(): self.state['ledger']['months']['2026-12']['unallocated_cents'] = 10000; self.replace_state()
+        def budget_exceeded(): self.state['ledger']['months']['2026-12']['unallocated_cents'] = 13000; self.replace_state()
         def already_renewed(): self.state['live']['config']['deployment_expires_at_utc'] = '2026-12-10T00:00:00Z'; self.replace_state()
         for name, prepare in [('held lock', held), ('stale hash', stale), ('workflow identity', workflow), ('parameters disagree', parameters_disagree),
                               ('no december month', no_december), ('stale december', stale_december), ('stale november', stale_november),

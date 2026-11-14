@@ -99,8 +99,19 @@ Run 43157872671 is stuck on a stale ledger basis; its packet must not be approve
 
 After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packet took the canonical Nov 25 08:00 expiry minus 18 hours (`runner.py:222`), and on success that config became the live one, so the stack parameter, the schedule and the ledger window all read `2026-11-24T14:00:00Z`. Release B must **execute** (not merely merge) before that time; otherwise the schedule scales both services to zero and only the next successful release restarts them. Release B again subtracts 18 hours from the canonical expiry and refuses a stop within 24 hours, so the renewal below must precede it. Order matters and everything happens within 24 hours of the merge: November reconciled, December added, expiry renewed, then the merge.
 
+**Learn early.** `reservation_cap`, `month_renewal` and `expiry_renewal` without `--apply` are read-only plans. Run all three right after release A's reconcile on Nov 15 (the month plan against the freshly reconciled ledger, the expiry plan after the month plan is *applied*, or expect `missing reconciled ledger month 2026-12`): the expiry plan reports November's fit under the caps a week before Nov 23. The cap raise itself needs the W3 merge first (the code caps are read from the checkout; `reservation_cap` refuses until they are 21000/24800).
+
 1. **Reconcile November** exactly as in release A step 4 (`observe-b.json`, `assessment-b.json`, `reconcile-b.json`). Confirm the observed total against the $210 / $248 ceiling.
-2. **Add December.** Write `$TRIAL/december.json`:
+2. **Raise the canonical caps** to the ADR-019 amendment's pair, idle, once (it refuses a repeat):
+
+   ```sh
+   $PY -m ops.promotion.maintenance inspect --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX"
+   $PY -m ops.promotion.reservation_cap --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" --expected-state-sha256 "<hash>"
+   $PY -m ops.promotion.reservation_cap --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" --expected-state-sha256 "<hash>" --apply
+   ```
+
+   Expected plan: `{"status": "planned", "from": [18000, 21800], "to": [21000, 24800], ...}`; apply: `{"status": "caps-raised", "genui_cap_cents": 21000, "project_cap_cents": 24800, "revision": N+1, "state_sha256": ...}`. `expiry_renewal` refuses until the policy pair equals the code caps.
+3. **Add December.** Write `$TRIAL/december.json`:
 
    ```json
    {"month": "2026-12", "ledger_sha256": "<the ledger_sha256 field of $TRIAL/reconcile-b.json>",
@@ -118,9 +129,9 @@ After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packe
      --expected-state-sha256 "<same hash>" --assessment "$TRIAL/december.json" --output "$TRIAL/month-result.json" --apply
    ```
 
-   Expected plan: `"status": "planned", "month": "2026-12", "created": true`, a `december_projection` whose `genui_total_cents` is about 5800 plus the reserves and `project_total_cents` about 3800 more, beside `trial_ceiling_cents: {"genui": 8000, "project": 11800}`; the apply prints `"status": "applied"` with the new `revision` and `state_sha256`. Running it again later re-assesses (new timestamp, never a lower amount); after Dec 1 it refuses and `reconcile` owns the month.
+   Expected plan: `"status": "planned", "month": "2026-12", "created": true`, a `december_projection` with `retained_core_full_month_cents` about 5590, `release_compute_cents` about 4900 (release B from Dec 1 to its Dec 15 14:00 stop, service and broker), `genui_total_cents` those two plus the reserves, and `project_total_cents` 3800 more, beside `trial_ceiling_cents: {"genui": 8000, "project": 11800}` (the ceiling counts sixteen days of retained core, the projection the whole month); the apply prints `"status": "applied"` with the new `revision` and `state_sha256`. Running it again later re-assesses (new timestamp, never a lower amount); after Dec 1 it refuses and `reconcile` owns the month.
 
-3. **Renew the expiry** against the state hash the apply printed:
+4. **Renew the expiry** against the state hash the month apply printed:
 
    ```sh
    $PY -m ops.promotion.expiry_renewal --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
@@ -129,9 +140,9 @@ After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packe
      --expected-state-sha256 "<same hash>" --output "$TRIAL/expiry-result.json" --apply
    ```
 
-   Expected plan: `"before_expiry": "2026-11-24T14:00:00Z"`, `"after_expiry": "2026-12-16T08:00:00Z"`, `"live_stop_unchanged": "2026-11-24T14:00:00Z"`, `"next_release_expiry": "2026-12-15T14:00:00Z"`, and `cost_by_month` for `2026-11` and `2026-12` each under 18000 / 21800 cents. The plan is release B's reservation projected: **if it refuses with `budget exceeded for 2026-11`**, stop; the November reservation does not fit the code caps and a reviewed cap change is needed (ADR-019 amendment, last paragraph), not a different number here. The apply prints `"status": "applied"`.
+   Expected plan: `"before_expiry": "2026-11-24T14:00:00Z"`, `"after_expiry": "2026-12-16T08:00:00Z"`, `"live_stop_unchanged": "2026-11-24T14:00:00Z"`, `"next_release_expiry": "2026-12-15T14:00:00Z"`, `"genui_cap_cents": 21000`, `"project_cap_cents": 24800`, and `cost_by_month` for `2026-11` and `2026-12` each under those caps. The plan is release B's reservation projected: **if it still refuses with `budget exceeded for 2026-11`**, stop; the November reservation does not fit even the raised caps and a new decision is needed, not a different number here. The apply prints `"status": "applied"`.
 
-   If release B then does not merge within 24 hours, either repeat steps 1–3 the next day, or `--revert` (same arguments plus `--revert`) to put the config back to the window's recorded expiry; `reconcile apply` refuses while the config is renewed and no release has consumed it.
+   If release B then does not merge within 24 hours, either repeat steps 1, 3 and 4 the next day (the cap raise is done once), or `--revert` (same arguments plus `--revert`) to put the config back to the window's recorded expiry; `reconcile apply` refuses while the config is renewed and no release has consumed it.
 
 ## 3. Release B: migration 0023 and the trial capabilities (Sunday Nov 23)
 
