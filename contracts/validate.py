@@ -156,6 +156,9 @@ def validate_problem(body):
     code = body["code"]
     require(code != "payload_too_large" or body["status"] == 413, "payload_too_large is 413")
     require(code != "limit_exceeded" or body["status"] == 429, "limit_exceeded is 429")
+    # Edition impl-2026-11-14.2 (ADR-020 C2, C3): the record command route's two typed refusals are 422 bodies; the
+    # rules below already keep the recovery view, the current revision, a limit and Retry-After off them.
+    require(code not in ("requirement_not_met", "unchanged") or body["status"] == 422, "requirement_not_met and unchanged are 422")
     names = code == "limit_exceeded" and "limit" in body and "retry_after_seconds" in body
     # Edition impl-2026-10-29.3 (ADR-007 D7.9): in_flight and busy are 409 with Retry-After and no limit.
     waiting = code in ("in_flight", "busy")
@@ -206,6 +209,12 @@ def compatible(value, field):
         return value["value"] in expected["values"]
     if expected["type"] == "reference":
         return value["input_id"] == expected["target_input"]
+    if expected["type"] == "multi_enum":
+        # Edition impl-2026-11-14.2 (ADR-020 C6): a subset of the declared values in declaration order (the schema
+        # already refuses an empty selection and a duplicate).
+        declared = expected["values"]
+        return all(item in declared for item in value["values"]) and \
+            all(declared.index(a) < declared.index(b) for a, b in zip(value["values"], value["values"][1:]))
     return all(value.get(k) == v for k, v in expected.items() if k != "type")
 
 
@@ -213,11 +222,31 @@ GUARD_ORDERED = ("integer", "decimal", "money", "date", "timestamp")
 
 
 def _guard(guard, fields):
-    """APP-107: a declared guard compares one field of the same record schema with a typed, non-null literal."""
+    """APP-107: a declared guard compares one field of the same record schema with a typed, non-null literal.
+    Edition impl-2026-11-14.2 (ADR-020 C6): never a multi_enum field (set comparison is not a guard)."""
     field = fields.get(guard["field_id"])
     require(field is not None, "unknown guard field")
     require(guard["value"]["type"] != "null" and compatible(guard["value"], field), "guard value type/unit mismatch")
+    require(field["value_type"]["type"] != "multi_enum", "guard field cannot be multi_enum")
     require(guard["comparison"] in ("eq", "ne") or field["value_type"]["type"] in GUARD_ORDERED, "guard comparison requires an ordered field")
+
+
+def _requirement(requirement, fields, inputs):
+    """Edition impl-2026-11-14.2 (ADR-020 C3): one `requires` guard. Without `via` it is APP-107's guard over this
+    record; with `via` it names a reference field of this record whose target is a records input of the definition,
+    and the guard is typed against that input's field. The `now` literal needs a timestamp field."""
+    if "via" in requirement:
+        via = fields.get(requirement["via"])
+        require(via is not None and via["value_type"]["type"] == "reference", "via requires a reference field")
+        target = inputs.get(via["value_type"]["target_input"])
+        require(target is not None and target["kind"] == "records", "via target must be a records input")
+        fields = {item["id"]: item for item in target["fields"]}
+    if requirement["value"]["type"] == "now":
+        field = fields.get(requirement["field_id"])
+        require(field is not None, "unknown guard field")
+        require(field["value_type"]["type"] == "timestamp", "now requires a timestamp field")
+    else:
+        _guard(requirement, fields)
 
 
 def guard_holds(guard, state):
@@ -263,7 +292,10 @@ def _presentation(presentation, views):
 
 
 
-RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
+RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget", "countdown")
+# Edition impl-2026-11-14.2 (ADR-020 §3, clarification of 2026-11-14): a countdown follows the current record of its
+# input among every record the viewer may read, so a record filter never narrows it; filters target the other kinds.
+FILTERED_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
 
 def _record_component(view, inputs, records):
     config = view.get("records")
@@ -273,11 +305,16 @@ def _record_component(view, inputs, records):
         "records_list": ({"columns"}, {"limit", "order"}),
         "record_summary": ({"measure"}, set()),
         "record_trend": ({"measure", "date_field"}, set()),
-        "record_ranking": ({"measure", "group_field"}, {"limit"}),
+        # Edition impl-2026-11-14.2 (ADR-020 C4): a ranking groups by `group_field` or by creator, exactly one.
+        "record_ranking": ({"measure"}, {"limit", "group_field", "group_by"}),
         "record_budget": ({"measure", "budget"}, set()),
+        # Edition impl-2026-11-14.2 (ADR-020 C1).
+        "countdown": ({"timestamp_field"}, {"offset_seconds", "closed_when"}),
     }[view["kind"]]
     common = {"version", "input_id", "schema_id"}
     require(common | required <= config.keys() and config.keys() <= common | required | optional, "record component properties do not match kind")
+    if view["kind"] == "record_ranking":
+        require(("group_field" in config) != ("group_by" in config), "record ranking requires exactly one of group_field or group_by")
     source, schema = inputs.get(config["input_id"]), records.get(config["schema_id"])
     require(source is not None and source["kind"] == "records" and schema is not None, "unknown records input or schema")
     require(source["fields"] == schema["fields"], "records input and schema fields differ")
@@ -287,18 +324,38 @@ def _record_component(view, inputs, records):
     if "order" in config:
         require(config["order"]["field"] in fields, "unknown record component order field")
         require(fields[config["order"]["field"]]["value_type"]["type"] != "reference", "reference record ordering is not qualified")
+        require(fields[config["order"]["field"]]["value_type"]["type"] != "multi_enum", "multi_enum record ordering is not qualified")
     measure = config.get("measure", {})
     if measure.get("op") == "sum":
         field = fields.get(measure["field"])
         require(field is not None and field["value_type"]["type"] in ("integer", "money"), "record sum requires integer or money")
+    if measure.get("op") == "matches":
+        # Edition impl-2026-11-14.2 (ADR-020 C4): rows whose `fields` equal those of some row of another records input.
+        require(view["kind"] in ("record_summary", "record_ranking"), "matches measure belongs to a summary or ranking")
+        key = inputs.get(measure["key_input"])
+        require(key is not None and key["kind"] == "records", "matches key input must be a records input")
+        require(measure["key_input"] != config["input_id"], "matches key input must differ from the component input")
+        key_fields = {field["id"]: field for field in key["fields"]}
+        for name in measure["fields"]:
+            require(name in fields and name in key_fields, "unknown matches field")
+            require(fields[name]["value_type"] == key_fields[name]["value_type"], "matches field types differ")
+            require(fields[name]["value_type"]["type"] != "multi_enum", "matches field cannot be multi_enum")
     if "date_field" in config:
         field = fields.get(config["date_field"])
         require(field is not None and field["value_type"]["type"] == "date", "record trend requires date field")
     if "group_field" in config:
+        # Edition impl-2026-11-14.2 (ADR-020 C6): a multi_enum group counts a row once per selected value.
         field = fields.get(config["group_field"])
-        require(field is not None and field["value_type"]["type"] in ("text", "enum"), "record ranking requires text or enum field")
+        require(field is not None and field["value_type"]["type"] in ("text", "enum", "multi_enum"), "record ranking requires a text, enum or multi_enum field")
     if view["kind"] == "record_ranking":
-        require(config.get("limit", 5) <= 20, "record ranking limit exceeds bound")
+        require(config.get("limit", 5) <= 50, "record ranking limit exceeds bound")
+    if view["kind"] == "countdown":
+        # Edition impl-2026-11-14.2 (ADR-020 C1): the target instant is `timestamp_field + offset_seconds`; `closed_when`
+        # is an APP-107 guard over the same schema (its shape carries neither `via` nor `now`).
+        field = fields.get(config["timestamp_field"])
+        require(field is not None and field["value_type"]["type"] == "timestamp", "countdown requires a timestamp field")
+        if "closed_when" in config:
+            _guard(config["closed_when"], fields)
     if view["kind"] == "record_budget":
         require(measure.get("op") == "sum", "record budget requires money sum")
         field = fields.get(measure.get("field"), {})
@@ -316,7 +373,7 @@ def _record_filters(filters, views, inputs):
         require(field is not None and field["value_type"]["type"] == required, "record filter field type mismatch")
         for target in item["targets"]:
             view = views.get(target)
-            require(view is not None and view["kind"] in RECORD_KINDS and view["records"]["input_id"] == item["input_id"], "record filter target scope mismatch")
+            require(view is not None and view["kind"] in FILTERED_KINDS and view["records"]["input_id"] == item["input_id"], "record filter target scope mismatch")
 
 
 def _definition(content, new_content=False):
@@ -333,6 +390,22 @@ def _definition(content, new_content=False):
         for field in collection["fields"]:
             if field["value_type"]["type"] == "reference":
                 require(field["value_type"]["target_input"] in inputs, "unknown reference target")
+    # Edition impl-2026-11-14.2 (ADR-020 C2): one entry per creator per key, on an own schema only. The filer always
+    # chooses the key and a key never moves, so every create writes every key field and no update writes one.
+    for name, schema in records.items():
+        if "one_per_creator" not in schema:
+            continue
+        keys = schema["one_per_creator"]
+        require(set(keys) <= record_fields[name].keys(), "unknown one_per_creator field")
+        require(schema.get("visibility") == "own", "one_per_creator requires visibility own")
+        require(all(record_fields[name][key]["value_type"]["type"] != "multi_enum" for key in keys), "one_per_creator key cannot be multi_enum")
+        for command in commands.values():
+            if command["record_schema_id"] != name:
+                continue
+            if command["operation"] == "create":
+                require(set(keys) <= set(command["writable_fields"]), "a create on a keyed schema must write every key field")
+            else:
+                require(not set(keys) & set(command["writable_fields"]), "an update on a keyed schema cannot write a key field")
     for command in commands.values():
         require(command["record_schema_id"] in records, "unknown record schema")
         schema_fields = record_fields[command["record_schema_id"]]
@@ -360,6 +433,15 @@ def _definition(content, new_content=False):
                 require(rule["value"] in field["value_type"]["values"], "unknown initial value")
                 if "when" in rule:
                     _guard(rule["when"], schema_fields)
+        # Edition impl-2026-11-14.2 (ADR-020 C3): guards that must hold when the command commits, and the timestamp
+        # fields the server stamps with the transaction's instant (one source of each value: never writable).
+        for requirement in command.get("requires", []):
+            _requirement(requirement, schema_fields, inputs)
+        for field_id in command.get("set_now", []):
+            field = schema_fields.get(field_id)
+            require(field is not None, "unknown set_now field")
+            require(field["value_type"]["type"] == "timestamp", "set_now requires a timestamp field")
+            require(field_id not in command["writable_fields"], "set_now field cannot be writable")
         # APP-113 review: a create that may write an enum field another command of the same record schema
         # governs by declared transitions must declare that field's `initial` value, so no filing create
         # starts a record at a decision outcome (storage refuses such a start for undeclared fields too).
@@ -403,7 +485,10 @@ def _definition(content, new_content=False):
                 for field in op["fields"]:
                     lookup(field)
             elif kind == "filter":
-                require(compatible(op["value"], lookup(op["field"])), "filter value type/unit mismatch")
+                field = lookup(op["field"])
+                require(compatible(op["value"], field), "filter value type/unit mismatch")
+                # Edition impl-2026-11-14.2 (ADR-020 C6): a typed filter never compares a multi-select.
+                require(field["value_type"]["type"] != "multi_enum", "filter field cannot be multi_enum")
             elif kind == "aggregate":
                 for field in op["group_by"]:
                     lookup(field)

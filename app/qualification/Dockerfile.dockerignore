@@ -204,6 +204,7 @@ app/src/bin/**
 !contracts/fixtures/northstar.json
 !contracts/fixtures/spend-review.json
 !contracts/fixtures/command-recovery.json
+!contracts/fixtures/participation.json
 !contracts/fixtures/library/
 contracts/fixtures/library/**
 !contracts/fixtures/library/catalog.json
@@ -254,6 +255,19 @@ contracts/fixtures/impl-2026-11-01.2/shared-v1/**
 !contracts/fixtures/impl-2026-11-01.2/stored/
 contracts/fixtures/impl-2026-11-01.2/stored/**
 !contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json
+!contracts/fixtures/impl-2026-11-14.1/
+contracts/fixtures/impl-2026-11-14.1/**
+!contracts/fixtures/impl-2026-11-14.1/canonical-vectors.json
+!contracts/fixtures/impl-2026-11-14.1/command-recovery.json
+!contracts/fixtures/impl-2026-11-14.1/negative-vectors.json
+!contracts/fixtures/impl-2026-11-14.1/northstar.json
+!contracts/fixtures/impl-2026-11-14.1/spend-review.json
+!contracts/fixtures/impl-2026-11-14.1/shared-v1/
+contracts/fixtures/impl-2026-11-14.1/shared-v1/**
+!contracts/fixtures/impl-2026-11-14.1/shared-v1/query-receipt.json
+!contracts/fixtures/impl-2026-11-14.1/stored/
+contracts/fixtures/impl-2026-11-14.1/stored/**
+!contracts/fixtures/impl-2026-11-14.1/stored/expense-claims-d70710d3.json
 !app/src/admission/record_receipt.rs
 !app/src/composer/presentation.rs
 !app/src/query/record_components.rs

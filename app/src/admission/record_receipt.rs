@@ -1,5 +1,6 @@
 //! Additive APP-158/159 receipt grammar. It is an identity document, never an
 //! authority token. Existing source-query receipt domains and vectors are unchanged.
+//! Edition impl-2026-11-14.2 (ADR-020 C1) adds the `countdown` component kind.
 use super::{encode, AdmissionError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -126,6 +127,7 @@ pub fn admit_record_components_receipt(v: &Value) -> Result<(), AdmissionError> 
                         | "record_trend"
                         | "record_ranking"
                         | "record_budget"
+                        | "countdown"
                 )
             )
             || c["population"].as_u64().is_none_or(|n| n > 2000)

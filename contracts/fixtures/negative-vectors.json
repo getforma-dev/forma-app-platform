@@ -992,5 +992,1032 @@
     "value": "own",
     "expected": "schema:",
     "rehash_definition": true
+  },
+  {
+    "name": "one_per_creator on a shared schema refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      1,
+      "visibility"
+    ],
+    "operation": "remove",
+    "expected": "one_per_creator requires visibility own",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "one_per_creator key absent from a create's writable fields refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "writable_fields"
+    ],
+    "value": [
+      "choice"
+    ],
+    "expected": "a create on a keyed schema must write every key field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "one_per_creator key in an update's writable fields refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "operation"
+    ],
+    "value": "update",
+    "expected": "an update on a keyed schema cannot write a key field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum one_per_creator key refused",
+    "path": [
+      "multi_select",
+      "content",
+      "record_schemas",
+      0,
+      "one_per_creator"
+    ],
+    "value": [
+      "tags"
+    ],
+    "expected": "one_per_creator key cannot be multi_enum",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "empty one_per_creator refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      1,
+      "one_per_creator"
+    ],
+    "value": [],
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "unknown one_per_creator field refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      1,
+      "one_per_creator"
+    ],
+    "value": [
+      "ghost"
+    ],
+    "expected": "unknown one_per_creator field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "via naming a non-reference field refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires",
+      0,
+      "via"
+    ],
+    "value": "choice",
+    "expected": "via requires a reference field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "via whose target is a source input refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      0,
+      "kind"
+    ],
+    "value": "source",
+    "expected": "via target must be a records input",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "requires field unknown on the referenced input refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires",
+      0,
+      "field_id"
+    ],
+    "value": "ghost",
+    "expected": "unknown guard field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "requires value typed against the referenced field refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires",
+      0,
+      "value"
+    ],
+    "value": {
+      "type": "enum",
+      "value": "pending"
+    },
+    "expected": "guard value type/unit mismatch",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "now against an enum field refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires",
+      0,
+      "value"
+    ],
+    "value": {
+      "type": "now"
+    },
+    "expected": "now requires a timestamp field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "now in a query filter refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "query",
+      "operations",
+      0,
+      "value"
+    ],
+    "value": {
+      "type": "now"
+    },
+    "expected": "schema:",
+    "fixture": "spend-review",
+    "rehash_definition": true
+  },
+  {
+    "name": "now in a transition's when refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "transitions",
+      0,
+      "when"
+    ],
+    "value": {
+      "field_id": "status",
+      "comparison": "eq",
+      "value": {
+        "type": "now"
+      }
+    },
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "now in an initial rule's when refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "initial",
+      0,
+      "when"
+    ],
+    "value": {
+      "field_id": "prompt",
+      "comparison": "eq",
+      "value": {
+        "type": "now"
+      }
+    },
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "now in closed_when refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "closed_when",
+      "value"
+    ],
+    "value": {
+      "type": "now"
+    },
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "via in a transition's when refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "transitions",
+      0,
+      "when"
+    ],
+    "value": {
+      "field_id": "status",
+      "comparison": "eq",
+      "value": {
+        "type": "enum",
+        "value": "needs_context"
+      },
+      "via": "note"
+    },
+    "expected": "schema:",
+    "rehash_definition": true
+  },
+  {
+    "name": "via in closed_when refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "closed_when",
+      "via"
+    ],
+    "value": "prompt",
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "now offset_seconds zero refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires",
+      1,
+      "value",
+      "offset_seconds"
+    ],
+    "value": 0,
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "now offset_seconds beyond a week refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires",
+      1,
+      "value",
+      "offset_seconds"
+    ],
+    "value": -604801,
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "empty requires refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      3,
+      "requires"
+    ],
+    "value": [],
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "set_now on a writable field refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      0,
+      "writable_fields"
+    ],
+    "value": [
+      "prompt",
+      "state",
+      "opened_at"
+    ],
+    "expected": "set_now field cannot be writable",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "set_now on a date field refused",
+    "path": [
+      "definition",
+      "content",
+      "record_schemas",
+      0,
+      "fields",
+      2,
+      "value_type"
+    ],
+    "value": {
+      "type": "date"
+    },
+    "expected": "set_now requires a timestamp field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "unknown set_now field refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      2,
+      "set_now"
+    ],
+    "value": [
+      "ghost"
+    ],
+    "expected": "unknown set_now field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "empty set_now refused",
+    "path": [
+      "definition",
+      "content",
+      "commands",
+      2,
+      "set_now"
+    ],
+    "value": [],
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "countdown with a query refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "query"
+    ],
+    "value": {
+      "operator_version": 1,
+      "inputs": [
+        "items"
+      ],
+      "operations": [
+        {
+          "type": "project",
+          "fields": [
+            {
+              "input_id": "items",
+              "field_id": "prompt"
+            }
+          ]
+        }
+      ],
+      "null_policy": "unknown"
+    },
+    "expected": "record component cannot carry query, command or literal text",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "countdown without timestamp_field refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "timestamp_field"
+    ],
+    "operation": "remove",
+    "expected": "record component properties do not match kind",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "countdown timestamp_field of another type refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "timestamp_field"
+    ],
+    "value": "prompt",
+    "expected": "countdown requires a timestamp field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "countdown closed_when over another schema's field refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "closed_when",
+      "field_id"
+    ],
+    "value": "choice",
+    "expected": "unknown guard field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "countdown offset_seconds zero refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "offset_seconds"
+    ],
+    "value": 0,
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "countdown over an input whose fields differ from its schema refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      1,
+      "records",
+      "schema_id"
+    ],
+    "value": "responses",
+    "expected": "records input and schema fields differ",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "record filter targeting a countdown refused",
+    "path": [
+      "definition",
+      "content",
+      "record_filters"
+    ],
+    "value": [
+      {
+        "id": "search",
+        "input_id": "items",
+        "field": "prompt",
+        "kind": "text_contains",
+        "targets": [
+          "timer"
+        ]
+      }
+    ],
+    "expected": "record filter target scope mismatch",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "group_by beside group_field refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "group_field"
+    ],
+    "value": "choice",
+    "expected": "record ranking requires exactly one of group_field or group_by",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "ranking with neither group_field nor group_by refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "group_by"
+    ],
+    "operation": "remove",
+    "expected": "record ranking requires exactly one of group_field or group_by",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "group_by other than creator refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "group_by"
+    ],
+    "value": "field",
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "group_by on a record summary refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      3,
+      "records",
+      "group_by"
+    ],
+    "value": "creator",
+    "expected": "record component properties do not match kind",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "record ranking limit above 50 refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "limit"
+    ],
+    "value": 51,
+    "expected": "record ranking limit exceeds bound",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "matches with fields of different types refused",
+    "path": [
+      "definition",
+      "content",
+      "inputs",
+      2,
+      "fields",
+      1,
+      "value_type"
+    ],
+    "value": {
+      "type": "enum",
+      "values": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    "expected": "matches field types differ",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "matches key_input equal to the component input refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "measure",
+      "key_input"
+    ],
+    "value": "responses",
+    "expected": "matches key input must differ from the component input",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "matches key_input naming no records input refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "measure",
+      "key_input"
+    ],
+    "value": "ghost",
+    "expected": "matches key input must be a records input",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "unknown matches field refused",
+    "path": [
+      "definition",
+      "content",
+      "views",
+      4,
+      "records",
+      "measure",
+      "fields"
+    ],
+    "value": [
+      "item",
+      "prompt"
+    ],
+    "expected": "unknown matches field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "matches on a record trend refused",
+    "path": [
+      "multi_select",
+      "content",
+      "views",
+      3,
+      "records",
+      "measure"
+    ],
+    "value": {
+      "op": "matches",
+      "key_input": "keys",
+      "fields": [
+        "title"
+      ]
+    },
+    "expected": "matches measure belongs to a summary or ranking",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum matches field refused",
+    "path": [
+      "multi_select",
+      "content",
+      "views",
+      4,
+      "records",
+      "measure",
+      "fields"
+    ],
+    "value": [
+      "tags"
+    ],
+    "expected": "matches field cannot be multi_enum",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "empty multi_enum value refused",
+    "path": [
+      "multi_select",
+      "content",
+      "commands",
+      0,
+      "requires"
+    ],
+    "value": [
+      {
+        "field_id": "tags",
+        "comparison": "eq",
+        "value": {
+          "type": "multi_enum",
+          "values": []
+        }
+      }
+    ],
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum value out of declaration order refused",
+    "path": [
+      "multi_select",
+      "content",
+      "commands",
+      0,
+      "requires"
+    ],
+    "value": [
+      {
+        "field_id": "tags",
+        "comparison": "eq",
+        "value": {
+          "type": "multi_enum",
+          "values": [
+            "blue",
+            "red"
+          ]
+        }
+      }
+    ],
+    "expected": "guard value type/unit mismatch",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum value with an unknown id refused",
+    "path": [
+      "multi_select",
+      "content",
+      "commands",
+      0,
+      "requires"
+    ],
+    "value": [
+      {
+        "field_id": "tags",
+        "comparison": "eq",
+        "value": {
+          "type": "multi_enum",
+          "values": [
+            "red",
+            "purple"
+          ]
+        }
+      }
+    ],
+    "expected": "guard value type/unit mismatch",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum value with a duplicate refused",
+    "path": [
+      "multi_select",
+      "content",
+      "commands",
+      0,
+      "requires"
+    ],
+    "value": [
+      {
+        "field_id": "tags",
+        "comparison": "eq",
+        "value": {
+          "type": "multi_enum",
+          "values": [
+            "red",
+            "red"
+          ]
+        }
+      }
+    ],
+    "expected": "schema:",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum guard field refused",
+    "path": [
+      "multi_select",
+      "content",
+      "commands",
+      0,
+      "requires"
+    ],
+    "value": [
+      {
+        "field_id": "tags",
+        "comparison": "eq",
+        "value": {
+          "type": "multi_enum",
+          "values": [
+            "red",
+            "blue"
+          ]
+        }
+      }
+    ],
+    "expected": "guard field cannot be multi_enum",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum query filter refused",
+    "path": [
+      "multi_select",
+      "content",
+      "views",
+      5,
+      "query",
+      "operations",
+      0
+    ],
+    "value": {
+      "type": "filter",
+      "field": {
+        "input_id": "choices",
+        "field_id": "tags"
+      },
+      "comparison": "eq",
+      "value": {
+        "type": "multi_enum",
+        "values": [
+          "red"
+        ]
+      }
+    },
+    "expected": "filter field cannot be multi_enum",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum record filter refused",
+    "path": [
+      "multi_select",
+      "content",
+      "record_filters"
+    ],
+    "value": [
+      {
+        "id": "tag_filter",
+        "input_id": "choices",
+        "field": "tags",
+        "kind": "enum",
+        "targets": [
+          "list"
+        ]
+      }
+    ],
+    "expected": "record filter field type mismatch",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum records_list order refused",
+    "path": [
+      "multi_select",
+      "content",
+      "views",
+      1,
+      "records",
+      "order"
+    ],
+    "value": {
+      "field": "tags",
+      "direction": "asc"
+    },
+    "expected": "multi_enum record ordering is not qualified",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "multi_enum transition refused",
+    "path": [
+      "multi_select",
+      "content",
+      "commands",
+      0,
+      "transitions"
+    ],
+    "value": [
+      {
+        "field_id": "tags",
+        "from": "red",
+        "to": "blue"
+      }
+    ],
+    "expected": "transition requires enum field",
+    "fixture": "participation",
+    "rehash_definition": true
+  },
+  {
+    "name": "record components receipt kind outside the registry refused",
+    "path": [
+      "components_receipt",
+      "components",
+      0,
+      "kind"
+    ],
+    "value": "timer",
+    "expected": "schema:",
+    "fixture": "participation"
+  },
+  {
+    "name": "unchanged carrying a recovery view refused",
+    "path": [
+      "unchanged",
+      "recovery_view"
+    ],
+    "value": {
+      "kind": "recovery_view",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-0000000000c8",
+      "app_id": "00000000-0000-4000-8000-0000000000c9",
+      "work_id": "00000000-0000-4000-8000-0000000000cd",
+      "publication_id": "00000000-0000-4000-8000-0000000000cc",
+      "work_version": 1,
+      "record_id": "00000000-0000-4000-8000-0000000000f0",
+      "command_id": "record_decision",
+      "idempotency_key": "fedcba9876543210fedcba9876543210",
+      "reason": "expected_version",
+      "expected_record_version": 0,
+      "current_record_version": 1,
+      "current_values": [
+        {
+          "field_id": "status",
+          "value": {
+            "type": "enum",
+            "value": "needs_context"
+          }
+        },
+        {
+          "field_id": "note",
+          "value": {
+            "type": "text",
+            "value": "Review required \u2014 synthetic only"
+          }
+        }
+      ],
+      "stored_outcome": null
+    },
+    "expected": "only a conflict carries one",
+    "fixture": "participation"
+  },
+  {
+    "name": "requirement_not_met carrying the current revision refused",
+    "path": [
+      "requirement_not_met",
+      "current_revision"
+    ],
+    "value": {
+      "publication_id": null,
+      "definition_revision_id": null,
+      "definition_digest": null,
+      "work_version": null
+    },
+    "expected": "only stale carries one",
+    "fixture": "participation"
+  },
+  {
+    "name": "unchanged at another status refused",
+    "path": [
+      "unchanged",
+      "status"
+    ],
+    "value": 409,
+    "expected": "requirement_not_met and unchanged are 422",
+    "fixture": "participation"
+  },
+  {
+    "name": "requirement_not_met with Retry-After refused",
+    "path": [
+      "requirement_not_met",
+      "retry_after_seconds"
+    ],
+    "value": 2,
+    "expected": "only a 429, in_flight or busy does",
+    "fixture": "participation"
   }
 ]

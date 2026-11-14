@@ -137,7 +137,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_validator_sha256",
         "contracts/validate.py",
-        "2959636e034695dfabd4d308bcce9bfcd0910f99c909563ed3e77d9eca8e2f02",
+        "b48509397f574ad54ba30969709e77883db51f03c29d5f189fe073f978b41309",
     ),
     // ADR-011 library (APP-094): the catalog pins every library fixture the
     // `seed-library` command places (each entry's `fixture_sha256`).
@@ -178,7 +178,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 227] = [
+const SOURCES: [(&str, &[u8]); 235] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -883,6 +883,38 @@ const SOURCES: [(&str, &[u8]); 227] = [
         ),
     ),
     (
+        "contracts/fixtures/impl-2026-11-14.1/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-14.1/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-14.1/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-14.1/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-14.1/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/shared-v1/query-receipt.json",
+        include_bytes!(
+            "../../../contracts/fixtures/impl-2026-11-14.1/shared-v1/query-receipt.json"
+        ),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-14.1/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/stored/expense-claims-d70710d3.json",
+        include_bytes!(
+            "../../../contracts/fixtures/impl-2026-11-14.1/stored/expense-claims-d70710d3.json"
+        ),
+    ),
+    (
         "contracts/fixtures/library/catalog.json",
         include_bytes!("../../../contracts/fixtures/library/catalog.json"),
     ),
@@ -897,6 +929,10 @@ const SOURCES: [(&str, &[u8]); 227] = [
     (
         "contracts/fixtures/northstar.json",
         include_bytes!("../../../contracts/fixtures/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/participation.json",
+        include_bytes!("../../../contracts/fixtures/participation.json"),
     ),
     (
         "contracts/fixtures/shared-v1/query-receipt.json",

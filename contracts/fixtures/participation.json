@@ -1,0 +1,1277 @@
+{
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 2,
+    "organization_id": "00000000-0000-4000-8000-00000000012c",
+    "app_id": "00000000-0000-4000-8000-00000000012d",
+    "revision_id": "00000000-0000-4000-8000-00000000012f",
+    "content": {
+      "title": "Participation",
+      "description": "Synthetic contract example (ADR-020 §10): items, responses and expected answers; no runtime or result is claimed.",
+      "inputs": [
+        {
+          "id": "items",
+          "contract_id": "items_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "prompt",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "state",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "opened_at",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        },
+        {
+          "id": "responses",
+          "contract_id": "responses_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        },
+        {
+          "id": "expected",
+          "contract_id": "expected_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        }
+      ],
+      "views": [
+        {
+          "id": "respond",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "respond",
+          "command_id": "respond"
+        },
+        {
+          "id": "timer",
+          "kind": "countdown",
+          "renderer_version": 1,
+          "title": "Time left",
+          "records": {
+            "version": 1,
+            "input_id": "items",
+            "schema_id": "items",
+            "timestamp_field": "opened_at",
+            "offset_seconds": 30,
+            "closed_when": {
+              "field_id": "state",
+              "comparison": "eq",
+              "value": {
+                "type": "enum",
+                "value": "closed"
+              }
+            }
+          }
+        },
+        {
+          "id": "item_list",
+          "kind": "records_list",
+          "renderer_version": 1,
+          "title": "Items",
+          "records": {
+            "version": 1,
+            "input_id": "items",
+            "schema_id": "items",
+            "columns": [
+              "prompt",
+              "state",
+              "opened_at"
+            ]
+          }
+        },
+        {
+          "id": "response_count",
+          "kind": "record_summary",
+          "renderer_version": 1,
+          "title": "Responses",
+          "records": {
+            "version": 1,
+            "input_id": "responses",
+            "schema_id": "responses",
+            "measure": {
+              "op": "count"
+            }
+          }
+        },
+        {
+          "id": "leaderboard",
+          "kind": "record_ranking",
+          "renderer_version": 1,
+          "title": "Leaderboard",
+          "records": {
+            "version": 1,
+            "input_id": "responses",
+            "schema_id": "responses",
+            "group_by": "creator",
+            "measure": {
+              "op": "matches",
+              "key_input": "expected",
+              "fields": [
+                "item",
+                "choice"
+              ]
+            },
+            "limit": 50
+          }
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "items",
+          "version": 1,
+          "fields": [
+            {
+              "id": "prompt",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "state",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "opened_at",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "responses",
+          "version": 1,
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "visibility": "own",
+          "one_per_creator": [
+            "item"
+          ]
+        },
+        {
+          "id": "expected",
+          "version": 1,
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "visibility": "own"
+        }
+      ],
+      "commands": [
+        {
+          "id": "post",
+          "record_schema_id": "items",
+          "operation": "create",
+          "writable_fields": [
+            "prompt",
+            "state"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "state",
+              "value": "open"
+            }
+          ],
+          "reviewer_only": true,
+          "set_now": [
+            "opened_at"
+          ]
+        },
+        {
+          "id": "close",
+          "record_schema_id": "items",
+          "operation": "update",
+          "writable_fields": [
+            "state"
+          ],
+          "transitions": [],
+          "reviewer_only": true
+        },
+        {
+          "id": "reopen",
+          "record_schema_id": "items",
+          "operation": "update",
+          "writable_fields": [
+            "state"
+          ],
+          "transitions": [],
+          "reviewer_only": true,
+          "set_now": [
+            "opened_at"
+          ]
+        },
+        {
+          "id": "respond",
+          "record_schema_id": "responses",
+          "operation": "create",
+          "writable_fields": [
+            "item",
+            "choice"
+          ],
+          "transitions": [],
+          "requires": [
+            {
+              "via": "item",
+              "field_id": "state",
+              "comparison": "eq",
+              "value": {
+                "type": "enum",
+                "value": "open"
+              }
+            },
+            {
+              "via": "item",
+              "field_id": "opened_at",
+              "comparison": "gte",
+              "value": {
+                "type": "now",
+                "offset_seconds": -30
+              }
+            }
+          ]
+        },
+        {
+          "id": "add_expected",
+          "record_schema_id": "expected",
+          "operation": "create",
+          "writable_fields": [
+            "item",
+            "choice"
+          ],
+          "transitions": [],
+          "reviewer_only": true
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "respond",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "timer",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "item_list",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "response_count",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "leaderboard",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:98a5f4b06bbb3ccf92652dbcbca3823b5c0979c2d2f53adf50631cbb746367b9"
+  },
+  "definition_v1": {
+    "kind": "app_definition",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-00000000012c",
+    "app_id": "00000000-0000-4000-8000-00000000012d",
+    "revision_id": "00000000-0000-4000-8000-000000000130",
+    "content": {
+      "title": "Participation",
+      "description": "Synthetic contract example (ADR-020 §10): items, responses and expected answers; no runtime or result is claimed.",
+      "inputs": [
+        {
+          "id": "items",
+          "contract_id": "items_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "prompt",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "state",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "opened_at",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "responses",
+          "contract_id": "responses_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "expected",
+          "contract_id": "expected_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "views": [
+        {
+          "id": "respond",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "respond",
+          "command_id": "respond"
+        },
+        {
+          "id": "timer",
+          "kind": "countdown",
+          "renderer_version": 1,
+          "title": "Time left",
+          "records": {
+            "version": 1,
+            "input_id": "items",
+            "schema_id": "items",
+            "timestamp_field": "opened_at",
+            "offset_seconds": 30,
+            "closed_when": {
+              "field_id": "state",
+              "comparison": "eq",
+              "value": {
+                "type": "enum",
+                "value": "closed"
+              }
+            }
+          }
+        },
+        {
+          "id": "item_list",
+          "kind": "records_list",
+          "renderer_version": 1,
+          "title": "Items",
+          "records": {
+            "version": 1,
+            "input_id": "items",
+            "schema_id": "items",
+            "columns": [
+              "prompt",
+              "state",
+              "opened_at"
+            ]
+          }
+        },
+        {
+          "id": "response_count",
+          "kind": "record_summary",
+          "renderer_version": 1,
+          "title": "Responses",
+          "records": {
+            "version": 1,
+            "input_id": "responses",
+            "schema_id": "responses",
+            "measure": {
+              "op": "count"
+            }
+          }
+        },
+        {
+          "id": "leaderboard",
+          "kind": "record_ranking",
+          "renderer_version": 1,
+          "title": "Leaderboard",
+          "records": {
+            "version": 1,
+            "input_id": "responses",
+            "schema_id": "responses",
+            "group_by": "creator",
+            "measure": {
+              "op": "matches",
+              "key_input": "expected",
+              "fields": [
+                "item",
+                "choice"
+              ]
+            },
+            "limit": 50
+          }
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "items",
+          "version": 1,
+          "fields": [
+            {
+              "id": "prompt",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "state",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "opened_at",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            }
+          ]
+        },
+        {
+          "id": "responses",
+          "version": 1,
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "visibility": "own",
+          "one_per_creator": [
+            "item"
+          ]
+        },
+        {
+          "id": "expected",
+          "version": 1,
+          "fields": [
+            {
+              "id": "item",
+              "value_type": {
+                "type": "reference",
+                "target_input": "items"
+              },
+              "nullable": false
+            },
+            {
+              "id": "choice",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "a",
+                  "b",
+                  "c",
+                  "d"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "visibility": "own"
+        }
+      ],
+      "commands": [
+        {
+          "id": "post",
+          "record_schema_id": "items",
+          "operation": "create",
+          "writable_fields": [
+            "prompt",
+            "state"
+          ],
+          "transitions": [],
+          "initial": [
+            {
+              "field_id": "state",
+              "value": "open"
+            }
+          ],
+          "reviewer_only": true,
+          "set_now": [
+            "opened_at"
+          ]
+        },
+        {
+          "id": "close",
+          "record_schema_id": "items",
+          "operation": "update",
+          "writable_fields": [
+            "state"
+          ],
+          "transitions": [],
+          "reviewer_only": true
+        },
+        {
+          "id": "reopen",
+          "record_schema_id": "items",
+          "operation": "update",
+          "writable_fields": [
+            "state"
+          ],
+          "transitions": [],
+          "reviewer_only": true,
+          "set_now": [
+            "opened_at"
+          ]
+        },
+        {
+          "id": "respond",
+          "record_schema_id": "responses",
+          "operation": "create",
+          "writable_fields": [
+            "item",
+            "choice"
+          ],
+          "transitions": [],
+          "requires": [
+            {
+              "via": "item",
+              "field_id": "state",
+              "comparison": "eq",
+              "value": {
+                "type": "enum",
+                "value": "open"
+              }
+            },
+            {
+              "via": "item",
+              "field_id": "opened_at",
+              "comparison": "gte",
+              "value": {
+                "type": "now",
+                "offset_seconds": -30
+              }
+            }
+          ]
+        },
+        {
+          "id": "add_expected",
+          "record_schema_id": "expected",
+          "operation": "create",
+          "writable_fields": [
+            "item",
+            "choice"
+          ],
+          "transitions": [],
+          "reviewer_only": true
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "respond",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "timer",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "item_list",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "response_count",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "leaderboard",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:c77293b3e73ada6f7a1aea9986addd23802ec24b41795f840274846f6fcf8617"
+  },
+  "multi_select": {
+    "kind": "app_definition",
+    "schema_version": 2,
+    "organization_id": "00000000-0000-4000-8000-00000000012c",
+    "app_id": "00000000-0000-4000-8000-00000000014a",
+    "revision_id": "00000000-0000-4000-8000-00000000014d",
+    "content": {
+      "title": "Multi-select",
+      "description": "Synthetic contract example (ADR-020 §9): choose all that apply; no runtime or result is claimed.",
+      "inputs": [
+        {
+          "id": "choices",
+          "contract_id": "choices_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "title",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "tags",
+              "value_type": {
+                "type": "multi_enum",
+                "values": [
+                  "red",
+                  "green",
+                  "blue"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "day",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        },
+        {
+          "id": "keys",
+          "contract_id": "keys_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "title",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "tags",
+              "value_type": {
+                "type": "multi_enum",
+                "values": [
+                  "red",
+                  "green",
+                  "blue"
+                ]
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        }
+      ],
+      "views": [
+        {
+          "id": "pick",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "pick",
+          "command_id": "pick"
+        },
+        {
+          "id": "list",
+          "kind": "records_list",
+          "renderer_version": 1,
+          "title": "Picks",
+          "records": {
+            "version": 1,
+            "input_id": "choices",
+            "schema_id": "choices",
+            "columns": [
+              "title",
+              "tags",
+              "day"
+            ]
+          }
+        },
+        {
+          "id": "by_tag",
+          "kind": "record_ranking",
+          "renderer_version": 1,
+          "title": "By tag",
+          "records": {
+            "version": 1,
+            "input_id": "choices",
+            "schema_id": "choices",
+            "group_field": "tags",
+            "measure": {
+              "op": "count"
+            }
+          }
+        },
+        {
+          "id": "by_day",
+          "kind": "record_trend",
+          "renderer_version": 1,
+          "title": "By day",
+          "records": {
+            "version": 1,
+            "input_id": "choices",
+            "schema_id": "choices",
+            "date_field": "day",
+            "measure": {
+              "op": "count"
+            }
+          }
+        },
+        {
+          "id": "matched",
+          "kind": "record_summary",
+          "renderer_version": 1,
+          "title": "Matched",
+          "records": {
+            "version": 1,
+            "input_id": "choices",
+            "schema_id": "choices",
+            "measure": {
+              "op": "matches",
+              "key_input": "keys",
+              "fields": [
+                "title"
+              ]
+            }
+          }
+        },
+        {
+          "id": "tag_rows",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "tag rows",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "choices"
+            ],
+            "operations": [
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "choices",
+                    "field_id": "title"
+                  },
+                  {
+                    "input_id": "choices",
+                    "field_id": "tags"
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "choices",
+          "version": 1,
+          "fields": [
+            {
+              "id": "title",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "tags",
+              "value_type": {
+                "type": "multi_enum",
+                "values": [
+                  "red",
+                  "green",
+                  "blue"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "day",
+              "value_type": {
+                "type": "date"
+              },
+              "nullable": false
+            }
+          ],
+          "visibility": "own"
+        },
+        {
+          "id": "keys",
+          "version": 1,
+          "fields": [
+            {
+              "id": "title",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "tags",
+              "value_type": {
+                "type": "multi_enum",
+                "values": [
+                  "red",
+                  "green",
+                  "blue"
+                ]
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "pick",
+          "record_schema_id": "choices",
+          "operation": "create",
+          "writable_fields": [
+            "title",
+            "tags",
+            "day"
+          ],
+          "transitions": []
+        },
+        {
+          "id": "add_key",
+          "record_schema_id": "keys",
+          "operation": "create",
+          "writable_fields": [
+            "title",
+            "tags"
+          ],
+          "transitions": [],
+          "reviewer_only": true
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "pick",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "list",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "by_tag",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "by_day",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "matched",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        },
+        {
+          "view_id": "tag_rows",
+          "column": 0,
+          "row": 5,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:163f73c016db51b2e45fb71522ce79e68e1681474e66c351e36524dd198f7fc5"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 2,
+    "organization_id": "00000000-0000-4000-8000-00000000012c",
+    "app_id": "00000000-0000-4000-8000-00000000012d",
+    "publication_id": "00000000-0000-4000-8000-000000000132",
+    "definition_revision_id": "00000000-0000-4000-8000-00000000012f",
+    "definition_digest": "sha256:98a5f4b06bbb3ccf92652dbcbca3823b5c0979c2d2f53adf50631cbb746367b9",
+    "input_contract_digests": [
+      {
+        "input_id": "items",
+        "digest": "sha256:421cf3428e7c60cecbb75107d254d2ed8347e6f698bc613b89b0942d8b4626b1"
+      },
+      {
+        "input_id": "responses",
+        "digest": "sha256:d580157941b982ae8d04fff441101d69f94c64007d0ff1f950b422741729a253"
+      },
+      {
+        "input_id": "expected",
+        "digest": "sha256:da771b638f9bbd72d5111157d0f9079a165bd651471d09f3ae2b9581096cd929"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "items",
+        "digest": "sha256:11979e6b95a26c841faa43881607dbc9b7a12ee103f211fdadcf7ccdeaf832c4"
+      },
+      {
+        "schema_id": "responses",
+        "digest": "sha256:14dcc761ab3685a903c944cddac354fe7695ce7e27bc34cf32fa3571daa96a09"
+      },
+      {
+        "schema_id": "expected",
+        "digest": "sha256:0e6d565adfd8faed2db2c4dc7ca4b8c80babf1d73353be48cd24d14f8368bec4"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "operators": [],
+    "renderers": [
+      {
+        "kind": "countdown",
+        "version": 1
+      },
+      {
+        "kind": "form",
+        "version": 1
+      },
+      {
+        "kind": "record_ranking",
+        "version": 1
+      },
+      {
+        "kind": "record_summary",
+        "version": 1
+      },
+      {
+        "kind": "records_list",
+        "version": 1
+      }
+    ],
+    "admission_digest": "sha256:1a1229318bce901c7bba9e3084a4e473d580733fc43b8c8ac4f2a2bc71e14866",
+    "policy": {
+      "id": "00000000-0000-4000-8000-000000000133",
+      "version": 1,
+      "kind": "owner_publish"
+    },
+    "author_id": "00000000-0000-4000-8000-00000000012e",
+    "approver_id": "00000000-0000-4000-8000-00000000012e",
+    "approver_epoch": 1,
+    "published_at": "2026-11-14T12:00:00Z"
+  },
+  "components_receipt": {
+    "kind": "record_components_receipt",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-00000000012c",
+    "app_id": "00000000-0000-4000-8000-00000000012d",
+    "work_id": "00000000-0000-4000-8000-000000000131",
+    "publication_id": "00000000-0000-4000-8000-000000000132",
+    "definition_digest": "sha256:98a5f4b06bbb3ccf92652dbcbca3823b5c0979c2d2f53adf50631cbb746367b9",
+    "work_version": 1,
+    "policy_epoch": 1,
+    "actor": {
+      "kind": "member",
+      "principal_id": "00000000-0000-4000-8000-00000000012e",
+      "membership_epoch": 1
+    },
+    "operator_version": 1,
+    "parameters": {
+      "filter_epoch": 0,
+      "filters": []
+    },
+    "components": [
+      {
+        "view_id": "timer",
+        "kind": "countdown",
+        "population": 1,
+        "truncated_page": false,
+        "budget": null
+      },
+      {
+        "view_id": "item_list",
+        "kind": "records_list",
+        "population": 1,
+        "truncated_page": false,
+        "budget": null
+      },
+      {
+        "view_id": "response_count",
+        "kind": "record_summary",
+        "population": 1,
+        "truncated_page": false,
+        "budget": null
+      },
+      {
+        "view_id": "leaderboard",
+        "kind": "record_ranking",
+        "population": 1,
+        "truncated_page": false,
+        "budget": null
+      }
+    ],
+    "snapshot": [
+      {
+        "input_id": "items",
+        "collection_id": "00000000-0000-4000-8000-000000000136",
+        "schema_id": "items",
+        "schema_version": 1,
+        "records": [
+          {
+            "record_id": "00000000-0000-4000-8000-000000000140",
+            "version": 1,
+            "commit_sequence": 1
+          }
+        ]
+      },
+      {
+        "input_id": "responses",
+        "collection_id": "00000000-0000-4000-8000-000000000137",
+        "schema_id": "responses",
+        "schema_version": 1,
+        "records": [
+          {
+            "record_id": "00000000-0000-4000-8000-000000000141",
+            "version": 1,
+            "commit_sequence": 2
+          }
+        ]
+      },
+      {
+        "input_id": "expected",
+        "collection_id": "00000000-0000-4000-8000-000000000138",
+        "schema_id": "expected",
+        "schema_version": 1,
+        "records": [
+          {
+            "record_id": "00000000-0000-4000-8000-000000000142",
+            "version": 1,
+            "commit_sequence": 3
+          }
+        ]
+      }
+    ],
+    "snapshot_digest": "sha256:05fd75fc916f068b83348dbbf3617f67599bbf259e6b55d81c746ef65b8203d4",
+    "result_digest": "sha256:e1397adbdb687b873839491806a01ca199794057ced0df23847db8eff1d16b44",
+    "partial": false,
+    "total_scope": "full_authorized_filtered_collection",
+    "digest": "sha256:f99035bcea1ddbf9ceab7d603999c3bb02af028825370ff0098accbaf4a4b144"
+  },
+  "requirement_not_met": {
+    "status": 422,
+    "code": "requirement_not_met"
+  },
+  "unchanged": {
+    "status": 422,
+    "code": "unchanged"
+  }
+}

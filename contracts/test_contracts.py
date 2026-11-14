@@ -14,7 +14,86 @@ RETAINED = ROOT / "fixtures" / "impl-2026-10-28.1"
 RETAINED_TWO = ROOT / "fixtures" / "impl-2026-10-29.2"
 RETAINED_THREE = ROOT / "fixtures" / "impl-2026-10-29.3"
 RETAINED_SIX = ROOT / "fixtures" / "impl-2026-11-01.2"
+RETAINED_SEVEN = ROOT / "fixtures" / "impl-2026-11-14.1"
 LIBRARY = ROOT / "fixtures" / "library"
+# The fixture identities edition impl-2026-11-14.1 locked; edition impl-2026-11-14.2 retains its copies byte-identically
+# under fixtures/impl-2026-11-14.1/ (the same seven files edition impl-2026-11-01.2 retained).
+EDITION_SEVEN_FIXTURES = {
+    "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "command-recovery": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
+    "negative-vectors": "941ab5880f5b09278f8a07a9db1ed5f64fad1911c95909573400590be4645d46",
+    "northstar": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+    "spend-review": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
+    "shared-v1/query-receipt": "ccca53f58e24f5ce26e63bf057b58aea9292a8bc8c01d4f77877ead39510bc69",
+    "stored/expense-claims-d70710d3": "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059",
+}
+# Edition impl-2026-11-14.2 (ADR-020 §11): the negative vectors it adds, in order, after the retained list. Each
+# refusal rule of the ADR has at least one; `admission::tests` reproduces every one by name.
+RELEASE_C_VECTORS = (
+    "one_per_creator on a shared schema refused",
+    "one_per_creator key absent from a create's writable fields refused",
+    "one_per_creator key in an update's writable fields refused",
+    "multi_enum one_per_creator key refused",
+    "empty one_per_creator refused",
+    "unknown one_per_creator field refused",
+    "via naming a non-reference field refused",
+    "via whose target is a source input refused",
+    "requires field unknown on the referenced input refused",
+    "requires value typed against the referenced field refused",
+    "now against an enum field refused",
+    "now in a query filter refused",
+    "now in a transition's when refused",
+    "now in an initial rule's when refused",
+    "now in closed_when refused",
+    "via in a transition's when refused",
+    "via in closed_when refused",
+    "now offset_seconds zero refused",
+    "now offset_seconds beyond a week refused",
+    "empty requires refused",
+    "set_now on a writable field refused",
+    "set_now on a date field refused",
+    "unknown set_now field refused",
+    "empty set_now refused",
+    "countdown with a query refused",
+    "countdown without timestamp_field refused",
+    "countdown timestamp_field of another type refused",
+    "countdown closed_when over another schema's field refused",
+    "countdown offset_seconds zero refused",
+    "countdown over an input whose fields differ from its schema refused",
+    "record filter targeting a countdown refused",
+    "group_by beside group_field refused",
+    "ranking with neither group_field nor group_by refused",
+    "group_by other than creator refused",
+    "group_by on a record summary refused",
+    "record ranking limit above 50 refused",
+    "matches with fields of different types refused",
+    "matches key_input equal to the component input refused",
+    "matches key_input naming no records input refused",
+    "unknown matches field refused",
+    "matches on a record trend refused",
+    "multi_enum matches field refused",
+    "empty multi_enum value refused",
+    "multi_enum value out of declaration order refused",
+    "multi_enum value with an unknown id refused",
+    "multi_enum value with a duplicate refused",
+    "multi_enum guard field refused",
+    "multi_enum query filter refused",
+    "multi_enum record filter refused",
+    "multi_enum records_list order refused",
+    "multi_enum transition refused",
+    "record components receipt kind outside the registry refused",
+    "unchanged carrying a recovery view refused",
+    "requirement_not_met carrying the current revision refused",
+    "unchanged at another status refused",
+    "requirement_not_met with Retry-After refused",
+)
+# ADR-020 §2: the explicit alternatives refused so that each meaning has one encoding, each by its own vector.
+ONE_ENCODING_VECTORS = (
+    "group_by beside group_field refused", "now in a query filter refused", "now in a transition's when refused",
+    "now in an initial rule's when refused", "now in closed_when refused", "one_per_creator on a shared schema refused",
+    "set_now on a writable field refused", "empty multi_enum value refused", "multi_enum value out of declaration order refused",
+    "now offset_seconds zero refused", "countdown offset_seconds zero refused",
+)
 # Stored-data vectors (edition impl-2026-10-31.4): documents admitted and stored before a later rule, which must keep
 # their stored-document verdict. Beta's Expense claims bundle as seeded at 0c3261b (APP-105), byte for byte.
 STORED_EXPENSE = ROOT / "fixtures" / "stored" / "expense-claims-d70710d3.json"
@@ -78,6 +157,16 @@ def retained_unchanged_or_leading(case, folder, name):
         case.assertEqual(retained, current, name)
 
 
+def judge(specimen, member):
+    """A bundle is judged whole. A specimen that is not a bundle (edition impl-2026-11-14.2's participation.json) is a
+    set of independent documents: the vector judges the member its path names, a contract document by `validate` and
+    a problem body (no `kind`) by `validate_problem`."""
+    if "context" in specimen:
+        return validate_bundle(specimen)
+    document = specimen[member]
+    return validate(document) if "kind" in document else validate_problem(document)
+
+
 def run_negative_vectors(case, vectors, load):
     for vector in vectors:
         with case.subTest(case=vector["name"]):
@@ -90,13 +179,14 @@ def run_negative_vectors(case, vectors, load):
                 del target[path[-1]]
             else:
                 target[path[-1]] = vector["value"]
-            # Preserve cryptographic validity when isolating a semantic refusal.
+            # Preserve cryptographic validity when isolating a semantic refusal. In a bundle the definition is its
+            # `definition` member, which is also what the path names.
             if vector.get("rehash_definition"):
-                bundle["definition"]["digest"] = digest("app-definition", bundle["definition"]["content"])
+                bundle[path[0]]["digest"] = digest("app-definition", bundle[path[0]]["content"])
             if vector.get("rehash_receipt"):
                 rehash_receipt(bundle["receipt"])
             with case.assertRaisesRegex(ContractError, vector["expected"]):
-                validate_bundle(bundle)
+                judge(bundle, path[0])
 
 
 class ContractTests(unittest.TestCase):
@@ -655,7 +745,9 @@ class PrivateEntriesEditionTests(unittest.TestCase):
         current = json.loads((ROOT / "fixtures" / "negative-vectors.json").read_text())
         retained = json.loads((RETAINED_SIX / "negative-vectors.json").read_text())
         self.assertEqual(current[:len(retained)], retained, "the retained vectors lead the current list unchanged")
-        self.assertEqual(len(current), len(retained) + 8)
+        # This edition added eight vectors; its own list is retained in fixtures/impl-2026-11-14.1/ (edition
+        # impl-2026-11-14.2 extends the current list again).
+        self.assertEqual(len(json.loads((RETAINED_SEVEN / "negative-vectors.json").read_text())), len(retained) + 8)
 
     def test_own_collections_and_reviewer_only_commands_validate_at_both_versions(self):
         for name, version in (("northstar", 2), (STORED_EXPENSE, 1)):
@@ -687,4 +779,141 @@ class PrivateEntriesEditionTests(unittest.TestCase):
                 target[pointer[-1]] = value
                 broken["digest"] = digest("app-definition", broken["content"])
                 with self.assertRaisesRegex(ContractError, "schema:"):
+                    validate(broken)
+
+
+class ParticipationEditionTests(unittest.TestCase):
+    """Edition impl-2026-11-14.2 (ADR-020, APP-202): the participation grammar over the retained edition
+    impl-2026-11-14.1. Every member is optional and refused off its own shape, the explicit alternatives are refused,
+    and the stored-document and authoring verdicts are the same for these shape rules."""
+
+    def specimen(self):
+        return fixture("participation")
+
+    def test_edition_retains_edition_seven_byte_identically(self):
+        for name, identity in EDITION_SEVEN_FIXTURES.items():
+            with self.subTest(fixture=name):
+                self.assertEqual(hashlib.sha256((RETAINED_SEVEN / (name + ".json")).read_bytes()).hexdigest(), identity)
+                retained_unchanged_or_leading(self, RETAINED_SEVEN, name)
+        def kept(name):
+            return loads((RETAINED_SEVEN / (name + ".json")).read_bytes())
+        for name in ("northstar", "spend-review", "stored/expense-claims-d70710d3"):
+            with self.subTest(bundle=name):
+                bundle = kept(name)
+                validate_bundle(bundle)
+                self.assertEqual(bundle["definition"]["digest"], digest("app-definition", bundle["definition"]["content"]))
+        run_negative_vectors(self, json.loads((RETAINED_SEVEN / "negative-vectors.json").read_text()), kept)
+        specimen = kept("command-recovery")
+        for view in specimen["recovery_views"]:
+            validate(view)
+        for body in specimen["problems"]:
+            validate_problem(body)
+        # Every library bundle keeps its authoring verdict (make_library.py --check rebuilds the same bytes).
+        for path in sorted(LIBRARY.glob("*.json")):
+            if path.name != "catalog.json":
+                with self.subTest(library=path.name):
+                    validate_bundle(loads(path.read_bytes()), new_content=True)
+
+    def test_release_c_vectors_extend_the_retained_list_in_order(self):
+        current = json.loads((ROOT / "fixtures" / "negative-vectors.json").read_text())
+        retained = json.loads((RETAINED_SEVEN / "negative-vectors.json").read_text())
+        self.assertEqual(current[:len(retained)], retained)
+        added = current[len(retained):]
+        self.assertEqual(tuple(vector["name"] for vector in added), RELEASE_C_VECTORS)
+        self.assertGreaterEqual(len(added), 14)
+        run_negative_vectors(self, added, fixture)
+
+    def test_the_specimen_is_regenerated_byte_for_byte(self):
+        self.assertEqual((ROOT / "fixtures" / "participation.json").read_text(),
+                         json.dumps(make_fixtures.participation(), ensure_ascii=False, indent=2) + "\n")
+
+    def test_the_worked_example_validates_at_both_versions(self):
+        specimen = self.specimen()
+        two, one = specimen["definition"], specimen["definition_v1"]
+        self.assertEqual((two["schema_version"], one["schema_version"]), (2, 1))
+        for definition in (two, one):
+            with self.subTest(version=definition["schema_version"]):
+                validate(definition)
+                validate(definition, new_content=True)
+                self.assertEqual(definition["digest"], digest("app-definition", definition["content"]))
+                raw = canonical(definition["content"])
+                for member in (b'"one_per_creator":["item"]', b'"requires":[', b'"via":"item"', b'{"offset_seconds":-30,"type":"now"}',
+                               b'"set_now":["opened_at"]', b'"kind":"countdown"', b'"group_by":"creator"', b'"op":"matches"', b'"limit":50'):
+                    self.assertIn(member, raw)
+        # Version 1 is version 2 without input coverage; nothing else differs.
+        stripped = copy.deepcopy(two["content"])
+        for item in stripped["inputs"]:
+            del item["coverage"]
+        self.assertEqual(stripped, one["content"])
+        # The members are optional: without them the same app is an older, valid definition.
+        older = copy.deepcopy(two)
+        content = older["content"]
+        del content["record_schemas"][1]["one_per_creator"]
+        for command in content["commands"]:
+            command.pop("requires", None)
+            command.pop("set_now", None)
+        content["views"] = [v for v in content["views"] if v["kind"] != "countdown"]
+        content["views"][-1]["records"] = {"version": 1, "input_id": "responses", "schema_id": "responses", "group_field": "choice", "measure": {"op": "count"}}
+        content["default_layout"] = [p for p in content["default_layout"] if p["view_id"] != "timer"]
+        older["digest"] = digest("app-definition", content)
+        validate(older, new_content=True)
+
+    def test_multi_select_receipt_publication_and_problem_bodies(self):
+        specimen = self.specimen()
+        validate(specimen["multi_select"])
+        validate(specimen["multi_select"], new_content=True)
+        receipt = specimen["components_receipt"]
+        validate(receipt)
+        self.assertIn("countdown", [c["kind"] for c in receipt["components"]])
+        publication = specimen["publication"]
+        validate(publication)
+        self.assertIn({"kind": "countdown", "version": 1}, publication["renderers"])
+        kinds = sorted({v["kind"] for v in specimen["definition"]["content"]["views"]})
+        self.assertEqual(publication["renderers"], [{"kind": kind, "version": 1} for kind in kinds])
+        for code in ("requirement_not_met", "unchanged"):
+            with self.subTest(code=code):
+                self.assertEqual(validate_problem(specimen[code]), {"status": 422, "code": code})
+        # Every earlier problem body is unchanged.
+        for body in fixture("command-recovery")["problems"]:
+            validate_problem(body)
+
+    def test_multi_enum_values_are_an_ordered_subset(self):
+        definition = self.specimen()["multi_select"]
+        def guarded(values):
+            value = copy.deepcopy(definition)
+            value["content"]["commands"][0]["requires"] = [{"field_id": "tags", "comparison": "eq", "value": {"type": "multi_enum", "values": values}}]
+            value["digest"] = digest("app-definition", value["content"])
+            return value
+        # In declaration order the literal is typed; the guard is then refused for its multi_enum field.
+        for values in (["red"], ["red", "blue"], ["red", "green", "blue"]):
+            with self.subTest(values=values), self.assertRaisesRegex(ContractError, "guard field cannot be multi_enum"):
+                validate(guarded(values))
+        for values in (["blue", "red"], ["green", "red"], ["red", "purple"]):
+            with self.subTest(values=values), self.assertRaisesRegex(ContractError, "guard value type/unit mismatch"):
+                validate(guarded(values))
+        for values in ([], ["red", "red"], ["Red"]):
+            with self.subTest(values=values), self.assertRaisesRegex(ContractError, "schema:"):
+                validate(guarded(values))
+
+    def test_each_meaning_has_one_encoding(self):
+        vectors = {vector["name"]: vector for vector in json.loads((ROOT / "fixtures" / "negative-vectors.json").read_text())}
+        for name in ONE_ENCODING_VECTORS:
+            with self.subTest(case=name):
+                self.assertIn(name, vectors)
+                run_negative_vectors(self, [vectors[name]], fixture)
+        # The absent member is the default; spelled out, it is refused.
+        definition = self.specimen()["definition"]
+        for pointer, value in ((("views", 4, "records", "group_field"), "choice"),
+                               (("views", 1, "records", "offset_seconds"), 0),
+                               (("commands", 3, "requires", 1, "value", "offset_seconds"), 0),
+                               (("record_schemas", 0, "one_per_creator"), ["prompt"]),
+                               (("commands", 0, "set_now"), ["opened_at", "opened_at"])):
+            with self.subTest(member=pointer):
+                broken = copy.deepcopy(definition)
+                target = broken["content"]
+                for key in pointer[:-1]:
+                    target = target[key]
+                target[pointer[-1]] = value
+                broken["digest"] = digest("app-definition", broken["content"])
+                with self.assertRaises(ContractError):
                     validate(broken)

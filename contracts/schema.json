@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://getforma.dev/contracts/impl-2026-11-14.1/schema.json",
+  "$id": "https://getforma.dev/contracts/impl-2026-11-14.2/schema.json",
   "$defs": {
     "value": {
       "oneOf": [
@@ -193,6 +193,29 @@
           "type": "object",
           "properties": {
             "type": {
+              "const": "multi_enum"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "type",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
               "const": "null"
             }
           },
@@ -361,6 +384,29 @@
                 "minor_unit_exponent"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "multi_enum"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+                  },
+                  "minItems": 1,
+                  "maxItems": 32,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "type",
+                "values"
+              ],
+              "additionalProperties": false
             }
           ]
         },
@@ -435,6 +481,16 @@
           "enum": [
             "own"
           ]
+        },
+        "one_per_creator": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true
         }
       },
       "required": [
@@ -463,6 +519,65 @@
         },
         "value": {
           "$ref": "#/$defs/value"
+        }
+      },
+      "required": [
+        "field_id",
+        "comparison",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "now": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "now"
+        },
+        "offset_seconds": {
+          "type": "integer",
+          "minimum": -604800,
+          "maximum": 604800,
+          "not": {
+            "const": 0
+          }
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "requirement": {
+      "type": "object",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "comparison": {
+          "enum": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/value"
+            },
+            {
+              "$ref": "#/$defs/now"
+            }
+          ]
+        },
+        "via": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
         }
       },
       "required": [
@@ -558,6 +673,24 @@
         },
         "reviewer_only": {
           "const": true
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/requirement"
+          },
+          "minItems": 1,
+          "maxItems": 4
+        },
+        "set_now": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+          },
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true
         }
       },
       "required": [
@@ -1095,7 +1228,8 @@
             "record_summary",
             "record_trend",
             "record_ranking",
-            "record_budget"
+            "record_budget",
+            "countdown"
           ]
         },
         "renderer_version": {
@@ -1617,6 +1751,34 @@
             "field"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "matches"
+            },
+            "key_input": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+              },
+              "minItems": 1,
+              "maxItems": 4,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "op",
+            "key_input",
+            "fields"
+          ],
+          "additionalProperties": false
         }
       ]
     },
@@ -1704,6 +1866,24 @@
             "minor_unit_exponent"
           ],
           "additionalProperties": false
+        },
+        "group_by": {
+          "const": "creator"
+        },
+        "timestamp_field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
+        },
+        "offset_seconds": {
+          "type": "integer",
+          "minimum": -604800,
+          "maximum": 604800,
+          "not": {
+            "const": 0
+          }
+        },
+        "closed_when": {
+          "$ref": "#/$defs/guard"
         }
       },
       "required": [
@@ -3118,7 +3298,8 @@
             "record_summary",
             "record_trend",
             "record_ranking",
-            "record_budget"
+            "record_budget",
+            "countdown"
           ]
         },
         "version": {
@@ -3213,7 +3394,9 @@
             "missing_idempotency_key",
             "malformed_idempotency_key",
             "malformed_command",
-            "unknown_outcome"
+            "unknown_outcome",
+            "requirement_not_met",
+            "unchanged"
           ]
         },
         "limit": {
@@ -3483,7 +3666,8 @@
             "record_summary",
             "record_trend",
             "record_ranking",
-            "record_budget"
+            "record_budget",
+            "countdown"
           ]
         },
         "renderer_version": {
@@ -3834,7 +4018,7 @@
             "$ref": "#/$defs/renderer_identity"
           },
           "minItems": 0,
-          "maxItems": 14
+          "maxItems": 15
         }
       },
       "required": [
@@ -4388,7 +4572,8 @@
                   "record_summary",
                   "record_trend",
                   "record_ranking",
-                  "record_budget"
+                  "record_budget",
+                  "countdown"
                 ]
               },
               "population": {

@@ -3,11 +3,12 @@
 //! string, digest and verdict here is locked in
 //! `contracts/implementation-lock.json` or was produced by the Python reference
 //! (`contracts/validate.py` on Python 3.11.0) from the same input.
+use super::admit_record_components_receipt;
 use super::canonical::{decode, encode, MAX_DOCUMENT_BYTES};
 use super::digest::{self, digest, DOMAINS};
 use super::validate::{
-    admit_definition, check_exact_rational, exact_rational, AdmittedDefinition,
-    MAX_DEFINITION_BYTES,
+    admit_definition, admit_problem, check_exact_rational, exact_rational, AdmittedDefinition,
+    MAX_DEFINITION_BYTES, PROBLEM_CODES, RECORD_KINDS, RENDERERS,
 };
 use super::AdmissionError::{self, *};
 use serde_json::{json, Value};
@@ -26,7 +27,39 @@ const LOCK: &str = include_str!("../../../contracts/implementation-lock.json");
 // One line per embed: the managed source bundle's scan reads each embed macro
 // and its quoted path on one line.
 #[rustfmt::skip]
-const FIXTURES: [(&str, &str); 27] = [
+const FIXTURES: [(&str, &str); 35] = [
+    (
+        "contracts/fixtures/impl-2026-11-14.1/canonical-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/command-recovery.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/negative-vectors.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/northstar.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/spend-review.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/shared-v1/query-receipt.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/shared-v1/query-receipt.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-14.1/stored/expense-claims-d70710d3.json",
+        include_str!("../../../contracts/fixtures/impl-2026-11-14.1/stored/expense-claims-d70710d3.json"),
+    ),
+    (
+        "contracts/fixtures/participation.json",
+        include_str!("../../../contracts/fixtures/participation.json"),
+    ),
     (
         "contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json",
         include_str!("../../../contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json"),
@@ -628,7 +661,71 @@ fn schema_vector(name: &str) -> (&'static str, &'static str) {
         "visibility on an input contract refused" => {
             ("unknown_field", "$.content.inputs[0].visibility")
         }
+        // Edition impl-2026-11-14.2 (ADR-020): bounds, the closed guard shape
+        // outside `requires` (no `via`, no `now`), and the receipt's kinds.
+        "empty one_per_creator refused" => {
+            ("encoding", "$.content.record_schemas[1].one_per_creator")
+        }
+        "now in a query filter refused" => (
+            "encoding",
+            "$.content.views[1].query.operations[0].value.type",
+        ),
+        "now in a transition's when refused" => (
+            "encoding",
+            "$.content.commands[0].transitions[0].when.value.type",
+        ),
+        "now in an initial rule's when refused" => (
+            "encoding",
+            "$.content.commands[0].initial[0].when.value.type",
+        ),
+        "now in closed_when refused" => (
+            "encoding",
+            "$.content.views[1].records.closed_when.value.type",
+        ),
+        "via in a transition's when refused" => (
+            "unknown_field",
+            "$.content.commands[0].transitions[0].when.via",
+        ),
+        "via in closed_when refused" => (
+            "unknown_field",
+            "$.content.views[1].records.closed_when.via",
+        ),
+        "now offset_seconds zero refused" | "now offset_seconds beyond a week refused" => (
+            "encoding",
+            "$.content.commands[3].requires[1].value.offset_seconds",
+        ),
+        "empty requires refused" => ("encoding", "$.content.commands[3].requires"),
+        "empty set_now refused" => ("encoding", "$.content.commands[2].set_now"),
+        "countdown offset_seconds zero refused" => {
+            ("encoding", "$.content.views[1].records.offset_seconds")
+        }
+        "group_by other than creator refused" => {
+            ("encoding", "$.content.views[4].records.group_by")
+        }
+        "empty multi_enum value refused" | "multi_enum value with a duplicate refused" => {
+            ("encoding", "$.content.commands[0].requires[0].value.values")
+        }
+        "record components receipt kind outside the registry refused" => {
+            ("encoding", "$.record_components_receipt")
+        }
         other => panic!("unclassified schema vector: {other}"),
+    }
+}
+
+/// Vectors validate.py refuses in its reference rules (`_record_component`'s
+/// member set per kind) that Rust admission refuses earlier, in its walk: each
+/// kind's records configuration is a closed shape there. The verdict is the
+/// same; the reported class is the walk's.
+fn walk_vector(name: &str) -> Option<(&'static str, &'static str)> {
+    match name {
+        "countdown without timestamp_field refused" => Some((
+            "encoding",
+            "$.content.views[1].records.timestamp_field: required field missing",
+        )),
+        "group_by on a record summary refused" => {
+            Some(("unknown_field", "$.content.views[3].records.group_by"))
+        }
+        _ => None,
     }
 }
 
@@ -676,7 +773,7 @@ fn sized_definition(target: usize) -> Value {
 fn canonical_vectors_match_contracts_lock() {
     // The embedded vectors and specimens are exactly the locked edition's set.
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-11-14.1");
+    assert_eq!(lock["edition"], "impl-2026-11-14.2");
     assert_eq!(lock["canonical_encoding"], "forma-json-v1");
     let locked_fixtures: BTreeSet<&str> = lock["artifacts"]
         .as_object()
@@ -713,61 +810,86 @@ fn canonical_vectors_match_contracts_lock() {
 
     // Negative vectors: each definition mutation fails whole-output admission
     // with its coded reason; validate.py's own message for its reference rules.
+    // Edition impl-2026-11-14.2 adds vectors on its participation specimen
+    // (definitions, a record-components receipt and two problem bodies).
     assert_eq!(
         negative_vectors("contracts/fixtures/negative-vectors.json", bundle),
+        EDITION_TWO_DEFINITION_VECTORS + RELEASE_C_VECTORS.len()
+    );
+    assert_eq!(
+        negative_vectors(
+            "contracts/fixtures/impl-2026-11-14.1/negative-vectors.json",
+            bundle
+        ),
         EDITION_TWO_DEFINITION_VECTORS
     );
     canonical_refusals();
 }
 
-/// Applies every negative vector of one locked file to the bundles `load`
-/// returns; returns how many mutate a definition, each of which admission
-/// refuses with its coded reason.
+/// Applies every negative vector of one locked file to the specimens `load`
+/// returns; returns how many judge a document admission owns, each of which
+/// admission refuses with its coded reason.
 fn negative_vectors(path: &str, load: fn(&str) -> Value) -> usize {
-    let mut definition_vectors = 0;
-    for vector in locked(path).as_array().unwrap() {
-        let name = vector["name"].as_str().unwrap();
-        let fixture = vector
-            .get("fixture")
-            .and_then(Value::as_str)
-            .unwrap_or("northstar");
-        let mut document = load(fixture);
-        let before = document["definition"].clone();
-        mutate(&mut document, vector);
-        let entity = vector["path"][0].as_str().unwrap();
-        if entity != "definition" {
-            // Publication, saved work, source, receipt, command and outcome
-            // contracts belong to the persistence, query and command slices;
-            // these vectors leave the definition, and so its admission, unchanged.
-            assert!(
-                [
-                    "publication",
-                    "work",
-                    "sources",
-                    "receipt",
-                    "command",
-                    "outcome"
-                ]
-                .contains(&entity),
-                "{name}"
-            );
-            assert_eq!(document["definition"], before, "{name}");
-            continue;
-        }
-        definition_vectors += 1;
-        if vector["rehash_definition"] == true {
-            rehash(&mut document["definition"]);
-        }
-        let error = admit(&document["definition"]).expect_err(name);
-        let expected = vector["expected"].as_str().unwrap();
-        let (code, detail) = match expected {
-            "schema:" => schema_vector(name),
-            message => ("encoding", message),
-        };
-        assert_eq!(error.code(), code, "{name}: {error}");
-        assert!(error.to_string().contains(detail), "{name}: {error}");
+    locked(path)
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|vector| judge_vector(vector, load))
+        .count()
+}
+
+/// Applies one negative vector exactly as contracts/test_contracts.py does. A
+/// bundle's definition, a non-bundle specimen's definitions and its
+/// record-components receipt and problem bodies are admission's: each is
+/// refused with the vector's coded reason, validate.py's own message for its
+/// reference rules (returns true). A bundle's publication, saved work, source,
+/// receipt, command and outcome belong to the persistence, query and command
+/// slices; the vector must leave the definition unchanged (returns false).
+fn judge_vector(vector: &Value, load: fn(&str) -> Value) -> bool {
+    let name = vector["name"].as_str().unwrap();
+    let fixture = vector
+        .get("fixture")
+        .and_then(Value::as_str)
+        .unwrap_or("northstar");
+    let mut document = load(fixture);
+    let before = document.clone();
+    mutate(&mut document, vector);
+    let entity = vector["path"][0].as_str().unwrap();
+    if document.get("context").is_some() && entity != "definition" {
+        assert!(
+            [
+                "publication",
+                "work",
+                "sources",
+                "receipt",
+                "command",
+                "outcome"
+            ]
+            .contains(&entity),
+            "{name}"
+        );
+        assert_eq!(document["definition"], before["definition"], "{name}");
+        return false;
     }
-    definition_vectors
+    if vector["rehash_definition"] == true {
+        rehash(&mut document[entity]);
+    }
+    let target = &document[entity];
+    let verdict = match target.get("kind").and_then(Value::as_str) {
+        Some("app_definition") => admit(target).map(|_| ()),
+        Some("record_components_receipt") => admit_record_components_receipt(target),
+        None => admit_problem(target),
+        Some(other) => panic!("{name}: a {other} is not judged by admission"),
+    };
+    let error = verdict.expect_err(name);
+    let expected = vector["expected"].as_str().unwrap();
+    let (code, detail) = match expected {
+        "schema:" => schema_vector(name),
+        message => walk_vector(name).unwrap_or(("encoding", message)),
+    };
+    assert_eq!(error.code(), code, "{name}: {error}");
+    assert!(error.to_string().contains(detail), "{name}: {error}");
+    true
 }
 
 fn canonical_refusals() {
@@ -1444,7 +1566,8 @@ fn shape_and_reference_rules_match_validate_py() {
 /// Canonical vectors of edition two: edition one's six, two normalized-row
 /// streams, one job payload and four exact rationals.
 const EDITION_TWO_VECTORS: usize = 13;
-/// Edition two's negative vectors that mutate a definition.
+/// Edition two's negative vectors that mutate a definition, with edition
+/// impl-2026-11-14.1's eight (the retained list of edition impl-2026-11-14.2).
 const EDITION_TWO_DEFINITION_VECTORS: usize = 33;
 
 /// Edition impl-2026-10-28.1's locked fixture identities; edition two retains
@@ -1492,7 +1615,7 @@ fn retained(name: &str) -> Value {
 #[test]
 fn edition_two_vectors_match_contracts_lock() {
     let lock: Value = serde_json::from_str(LOCK).unwrap();
-    assert_eq!(lock["edition"], "impl-2026-11-14.1");
+    assert_eq!(lock["edition"], "impl-2026-11-14.2");
     let retained_lock = &lock["retained_editions"]["impl-2026-10-28.1"]["artifacts"];
     for (path, identity) in EDITION_ONE {
         assert_eq!(retained_lock[path], identity, "{path}");
@@ -1538,6 +1661,17 @@ fn edition_two_vectors_match_contracts_lock() {
     for (path, identity) in retained_six {
         assert_eq!(lock["artifacts"][path], *identity, "{path}");
         let current = path.replace("impl-2026-11-01.2/", "");
+        retained_unchanged_or_leading(&current, path);
+    }
+    // Edition impl-2026-11-14.2 (ADR-020) retains edition impl-2026-11-14.1
+    // the same way: seven artifacts, the negative vectors extended only.
+    let retained_seven = lock["retained_editions"]["impl-2026-11-14.1"]["artifacts"]
+        .as_object()
+        .unwrap();
+    assert_eq!(retained_seven.len(), 7);
+    for (path, identity) in retained_seven {
+        assert_eq!(lock["artifacts"][path], *identity, "{path}");
+        let current = path.replace("impl-2026-11-14.1/", "");
         retained_unchanged_or_leading(&current, path);
     }
 
@@ -2042,5 +2176,315 @@ fn private_entries_and_reviewer_only_commands_match_validate_py() {
             error.to_string().contains(detail),
             "{pointer} = {value}: {error}"
         );
+    }
+}
+
+/// Edition impl-2026-11-14.2's negative vectors (ADR-020 §11), in file order
+/// after the retained list; `contracts/test_contracts.py` `RELEASE_C_VECTORS`.
+#[rustfmt::skip]
+const RELEASE_C_VECTORS: [&str; 56] = [
+    "one_per_creator on a shared schema refused",
+    "one_per_creator key absent from a create's writable fields refused",
+    "one_per_creator key in an update's writable fields refused",
+    "multi_enum one_per_creator key refused",
+    "empty one_per_creator refused",
+    "unknown one_per_creator field refused",
+    "via naming a non-reference field refused",
+    "via whose target is a source input refused",
+    "requires field unknown on the referenced input refused",
+    "requires value typed against the referenced field refused",
+    "now against an enum field refused",
+    "now in a query filter refused",
+    "now in a transition's when refused",
+    "now in an initial rule's when refused",
+    "now in closed_when refused",
+    "via in a transition's when refused",
+    "via in closed_when refused",
+    "now offset_seconds zero refused",
+    "now offset_seconds beyond a week refused",
+    "empty requires refused",
+    "set_now on a writable field refused",
+    "set_now on a date field refused",
+    "unknown set_now field refused",
+    "empty set_now refused",
+    "countdown with a query refused",
+    "countdown without timestamp_field refused",
+    "countdown timestamp_field of another type refused",
+    "countdown closed_when over another schema's field refused",
+    "countdown offset_seconds zero refused",
+    "countdown over an input whose fields differ from its schema refused",
+    "record filter targeting a countdown refused",
+    "group_by beside group_field refused",
+    "ranking with neither group_field nor group_by refused",
+    "group_by other than creator refused",
+    "group_by on a record summary refused",
+    "record ranking limit above 50 refused",
+    "matches with fields of different types refused",
+    "matches key_input equal to the component input refused",
+    "matches key_input naming no records input refused",
+    "unknown matches field refused",
+    "matches on a record trend refused",
+    "multi_enum matches field refused",
+    "empty multi_enum value refused",
+    "multi_enum value out of declaration order refused",
+    "multi_enum value with an unknown id refused",
+    "multi_enum value with a duplicate refused",
+    "multi_enum guard field refused",
+    "multi_enum query filter refused",
+    "multi_enum record filter refused",
+    "multi_enum records_list order refused",
+    "multi_enum transition refused",
+    "record components receipt kind outside the registry refused",
+    "unchanged carrying a recovery view refused",
+    "requirement_not_met carrying the current revision refused",
+    "unchanged at another status refused",
+    "requirement_not_met with Retry-After refused",
+];
+
+/// ADR-020 §2: the explicit alternatives refused so that each meaning has one
+/// encoding; `contracts/test_contracts.py` `ONE_ENCODING_VECTORS`.
+#[rustfmt::skip]
+const ONE_ENCODING_VECTORS: [&str; 11] = [
+    "group_by beside group_field refused", "now in a query filter refused",
+    "now in a transition's when refused", "now in an initial rule's when refused",
+    "now in closed_when refused", "one_per_creator on a shared schema refused",
+    "set_now on a writable field refused", "empty multi_enum value refused",
+    "multi_enum value out of declaration order refused", "now offset_seconds zero refused",
+    "countdown offset_seconds zero refused",
+];
+
+fn participation() -> Value {
+    locked("contracts/fixtures/participation.json")
+}
+
+#[test]
+fn participation_grammar_admits_with_validate_py_identities() {
+    // Edition impl-2026-11-14.2 (ADR-020 §10): the worked example at schema
+    // versions 2 and 1 and the multi-select definition admit with the digests
+    // validate.py computed (make_fixtures.py), and the canonical bytes storage
+    // keeps carry every new member.
+    let specimen = participation();
+    for (member, version) in [("definition", 2), ("definition_v1", 1), ("multi_select", 2)] {
+        let definition = &specimen[member];
+        let admitted = admit(definition).unwrap_or_else(|e| panic!("{member}: {e}"));
+        assert_eq!(admitted.digest, definition["digest"], "{member}");
+        assert_eq!(admitted.schema_version, version, "{member}");
+        assert_eq!(
+            decode(&admitted.canonical).unwrap(),
+            definition["content"],
+            "{member}"
+        );
+    }
+    let canonical = String::from_utf8(admit(&specimen["definition"]).unwrap().canonical).unwrap();
+    for member in [
+        r#""one_per_creator":["item"]"#,
+        r#""via":"item""#,
+        r#"{"offset_seconds":-30,"type":"now"}"#,
+        r#""set_now":["opened_at"]"#,
+        r#""kind":"countdown""#,
+        r#""group_by":"creator""#,
+        r#""op":"matches""#,
+        r#""limit":50"#,
+    ] {
+        assert!(canonical.contains(member), "{member}");
+    }
+    // Version 1 is version 2 without input coverage.
+    let mut stripped = specimen["definition"]["content"].clone();
+    for input in stripped["inputs"].as_array_mut().unwrap() {
+        input.as_object_mut().unwrap().remove("coverage");
+    }
+    assert_eq!(stripped, specimen["definition_v1"]["content"]);
+    // The receipt names a countdown; the registries publish the kind.
+    admit_record_components_receipt(&specimen["components_receipt"]).unwrap();
+    assert_eq!(
+        specimen["components_receipt"]["components"][0]["kind"],
+        "countdown"
+    );
+    assert!(RENDERERS.contains(&"countdown") && RECORD_KINDS.contains(&"countdown"));
+    assert_eq!(RENDERERS.len(), 15);
+    assert!(specimen["publication"]["renderers"]
+        .as_array()
+        .unwrap()
+        .contains(&json!({"kind": "countdown", "version": 1})));
+    // Absent members keep today's meaning: the same app without them admits.
+    let mut older = specimen["definition"].clone();
+    let content = &mut older["content"];
+    content["record_schemas"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("one_per_creator");
+    for command in content["commands"].as_array_mut().unwrap() {
+        let command = command.as_object_mut().unwrap();
+        command.remove("requires");
+        command.remove("set_now");
+    }
+    content["views"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|view| view["kind"] != "countdown");
+    content["views"][3]["records"] = json!({"version": 1, "input_id": "responses", "schema_id": "responses", "group_field": "choice", "measure": {"op": "count"}});
+    content["default_layout"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|position| position["view_id"] != "timer");
+    rehash(&mut older);
+    admit(&older).unwrap();
+}
+
+#[test]
+fn release_c_vectors_match_validate_py() {
+    // Every vector the edition adds, by name and in order after the retained
+    // list, is refused by Rust admission with validate.py's verdict.
+    let current = locked("contracts/fixtures/negative-vectors.json");
+    let retained = locked("contracts/fixtures/impl-2026-11-14.1/negative-vectors.json");
+    let (kept, added) = current
+        .as_array()
+        .unwrap()
+        .split_at(retained.as_array().unwrap().len());
+    assert_eq!(kept, retained.as_array().unwrap().as_slice());
+    let names: Vec<&str> = added.iter().map(|v| v["name"].as_str().unwrap()).collect();
+    assert_eq!(names, RELEASE_C_VECTORS);
+    for vector in added {
+        assert!(judge_vector(vector, bundle), "{}", vector["name"]);
+    }
+}
+
+#[test]
+fn each_meaning_has_one_encoding_in_both_validators() {
+    // ADR-020 §2: `group_by` beside `group_field`, `now` outside `requires`,
+    // `one_per_creator` on a shared schema, `set_now` on a writable field, an
+    // empty or out-of-order `multi_enum` value and an explicit zero offset are
+    // refused, each by its own vector (validate.py judges the same list).
+    let vectors = locked("contracts/fixtures/negative-vectors.json");
+    for name in ONE_ENCODING_VECTORS {
+        let vector = vectors
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|vector| vector["name"] == name)
+            .unwrap_or_else(|| panic!("{name} is authored"));
+        assert!(judge_vector(vector, bundle), "{name}");
+    }
+}
+
+#[test]
+fn multi_enum_values_are_an_ordered_subset() {
+    let base = participation()["multi_select"].clone();
+    let guarded = |values: Value| {
+        let mut definition = base.clone();
+        definition["content"]["commands"][0]["requires"] = json!([
+            {"field_id": "tags", "comparison": "eq", "value": {"type": "multi_enum", "values": values}}
+        ]);
+        rehash(&mut definition);
+        admit(&definition).unwrap_err().to_string()
+    };
+    // In declaration order the literal is typed; the guard is then refused for
+    // its multi_enum field.
+    for values in [
+        json!(["red"]),
+        json!(["red", "blue"]),
+        json!(["red", "green", "blue"]),
+    ] {
+        assert!(
+            guarded(values.clone()).contains("guard field cannot be multi_enum"),
+            "{values}"
+        );
+    }
+    for values in [
+        json!(["blue", "red"]),
+        json!(["green", "red"]),
+        json!(["red", "purple"]),
+    ] {
+        assert!(
+            guarded(values.clone()).contains("guard value type/unit mismatch"),
+            "{values}"
+        );
+    }
+    for values in [json!([]), json!(["red", "red"]), json!(["Red"])] {
+        assert!(
+            guarded(values.clone()).contains("requires[0].value.values"),
+            "{values}"
+        );
+    }
+}
+
+#[test]
+fn problem_bodies_match_validate_py() {
+    // The registry is schema.json's; every earlier body and the two 422s admit.
+    let schema: Value =
+        serde_json::from_str(include_str!("../../../contracts/schema.json")).unwrap();
+    let registered: Vec<&str> = schema["$defs"]["problem"]["properties"]["code"]["enum"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|code| code.as_str().unwrap())
+        .collect();
+    assert_eq!(registered, PROBLEM_CODES);
+    for body in locked("contracts/fixtures/command-recovery.json")["problems"]
+        .as_array()
+        .unwrap()
+    {
+        admit_problem(body).unwrap_or_else(|e| panic!("{body}: {e}"));
+    }
+    let specimen = participation();
+    for code in ["requirement_not_met", "unchanged"] {
+        admit_problem(&specimen[code]).unwrap();
+    }
+    admit_problem(&json!({"status": 429, "code": "limit_exceeded", "limit": "task_queue", "retry_after_seconds": 7})).unwrap();
+    for (body, code, rule) in [
+        (
+            json!({"status": 422, "code": "payload_too_large"}),
+            "encoding",
+            "payload_too_large is 413",
+        ),
+        (
+            json!({"status": 422, "code": "narrow_the_sql"}),
+            "encoding",
+            "$.code",
+        ),
+        (
+            json!({"status": 200, "code": "source_deleted"}),
+            "encoding",
+            "$.status",
+        ),
+        (
+            json!({"status": 422, "code": "unchanged", "note": "x"}),
+            "unknown_field",
+            "$.note",
+        ),
+        (
+            json!({"status": 422, "code": "unchanged", "limit": "task_queue"}),
+            "encoding",
+            "only a 429",
+        ),
+        (
+            json!({"status": 409, "code": "conflict"}),
+            "encoding",
+            "only a conflict carries one",
+        ),
+        (
+            json!({"status": 409, "code": "in_flight"}),
+            "encoding",
+            "in_flight and busy are 409",
+        ),
+        (
+            json!({"status": 429, "code": "limit_exceeded", "limit": "task_queue", "retry_after_seconds": true}),
+            "encoding",
+            "$.retry_after_seconds",
+        ),
+        (
+            json!({"status": 412, "code": "stale", "current_revision": {"publication_id": null}}),
+            "encoding",
+            "$.current_revision",
+        ),
+        (
+            json!({"status": 422, "code": "requirement_not_met", "current_revision": {"publication_id": null, "definition_revision_id": null, "definition_digest": null, "work_version": null}}),
+            "encoding",
+            "only stale carries one",
+        ),
+    ] {
+        let error = admit_problem(&body).unwrap_err();
+        assert_eq!(error.code(), code, "{body}: {error}");
+        assert!(error.to_string().contains(rule), "{body}: {error}");
     }
 }
