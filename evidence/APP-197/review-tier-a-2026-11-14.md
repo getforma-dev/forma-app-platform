@@ -228,3 +228,125 @@ This replaced `qualification.rs:1020-1023` (from `// After the window …` to it
     let before = compared();
     assert!(Lease::acquire(&window.data.inner).await.is_err(), "PROBE 31 s: the reuse compares and refuses");
 ```
+
+## Recheck (2026-11-14)
+
+The same reviewer rechecked the fix round: PR #123 (draft), head `187ab3b0` on `trial/app-197-catalog-cadence`, against [review-fixes-2026-11-14.md](review-fixes-2026-11-14.md). I read the diff `e24fef7f..187ab3b0` for `pool.rs`, `qualification.rs`, `campaigns.tsv`, `tenant-foundation.yml`, ADR-004 A5, the ADR-007 header, `DEVELOPMENT.md`, `live.ts`, `board.ts`, `document.ts`, `live-wiring.test.ts`, the four gate reports, and the APP-188, APP-195 and APP-197 tickets. The gate's red CI step (view 429s at the record snapshot cap of 4) is decided and is not a finding here.
+
+### Verdict
+
+- **APP-195's part: every finding is fixed. No BLOCKER, no MAJOR.**
+- **APP-197's part: no BLOCKER; one new MAJOR.** M1 is fixed. m1's relation check holds and costs no round trip. But moving `verify_baseline` from first to last (my m1 suggestion said "last", not "also last") lets a reused session run its `verify_identity` statement before its `search_path` is known to be clean. The APP-008 idle-shadowing defence now executes planted code (R-M1). One new MINOR is about the gate evidence (R-m1), plus three NITs.
+
+### Commands and results (`187ab3b0`)
+
+| Command | Result |
+| --- | --- |
+| `just check` | 21/21 steps ok (5 min 57 s). Library 415 passed, 35 ignored. Admin 311/311. `py-promotion` 183 tests OK (4 skipped). `board` OK: 199 tickets |
+| `just campaign postgres` | ok (48.00 s), 37 checks. This was a fresh rebuild on a clean tree (`pool.rs` `e116bbba…ceb6bf`, `qualification.rs` `c3dd070b…`), after the R4 (first attempt), R5, S1 and S2 restores. The R4 rerun came after it and was restored byte-identically |
+| `just check admin` | ok (21 s) |
+| pgbench, fixture image (PG 16.15), 3,000 executions each | The identity statement averages 0.152 ms before the fold and 0.328 ms after it |
+
+### Each finding
+
+| Finding | Status | Checked |
+| --- | --- | --- |
+| **M1** the 30 s bound | **Fixed** | The probe ages the connection from its last comparison against real elapsed time: ≤ 20 s and ≤ 29 s tolerated, ≥ 31 s refused (`qualification.rs:1053-1095`). `const _: () = assert!(CATALOG_RECHECK.as_secs() == 30);` is at `pool.rs:35`. The arithmetic holds: the tolerated ages are measured from before readiness, the refused one from after it |
+| **m1** the version relation read in the window | **Fixed for the read; regressed the order (R-M1)** | See the next section |
+| **m2** threat-model wording; ownership | **Fixed** | The A5 wording is accurate. The assertion now also counts `pg_proc`, `pg_type` and `pg_largeobject_metadata` ownership (`qualification.rs:1019-1028`) |
+| **m3** stale quarantine row | **Fixed** | Row removed, catalog `ci` = `tenant-foundation`, workflow step added. Merge order is a decided condition: the step is red until APP-200 |
+| **m4** browser wiring untested | **Fixed** | My G1 probe now fails tests 8 and 9, and G3 fails test 9 (below) |
+| **m5** composed retry bound | **Fixed (documented)** | Stated in the fixes record and the APP-195 log |
+| **m6** `online` unjittered | **Fixed** | `listenForRefreshes` routes `online` to `refresher.hint()`. Test 10 covers it, and the listeners end with the lifecycle signal |
+| n1, n2, n3 | **Fixed** | `connect` stamps `checked_at` before `verify_admission`. A5 says "at least". `void response.body?.cancel().catch(…)`: the optional chain short-circuits on a null body |
+| n4 | **Recorded** | In APP-188's runbook text, which is pending there |
+
+### m1: does the relation check restore the APP-008 rule, can it be bypassed, and is it free?
+
+- **It restores the rule for the version relation.** Every `verify_identity` call checks the relation's shape in the same statement (`pool.rs:747-787`): a plain table, no row security of either kind, columns `bool` and `int4` by type OID. That applies on a new connection, on every reuse and at readiness. Inside the window the OID must also equal the one recorded at the last comparison. The read is `FROM ONLY`, which excludes inheritance children. With these conditions the read can run only a heap scan with built-in type output: no rule, policy, view, child, domain or custom type.
+- **Readiness's order is fixed too.** Its lease's recycle checks the relation before it reads it.
+- R4 and R5 reproduce (below). R6 (`relkind` alone) is rightly kept as defence in depth: on PostgreSQL 15 and earlier a table-to-view conversion keeps the OID and changes only `relkind`.
+- **I found no bypass in the code.** The OID comparison is skipped only when the catalog comparison runs, and that comparison runs before the read. A missing relation is refused (`version_relation_missing`).
+- **Residuals.**
+  - The identity statement and the version read are two statements, so a sub-millisecond time-of-check gap remains. It is the same class as the gap between the comparison and the read before A5.
+  - The shape omits `relam` (table access method) and `attgenerated`. RDS is pinned to `VER_16_13` (`infra/src/stack.ts:215`), which has only `heap` and no virtual generated columns. Add both before an engine upgrade to 18, where a virtual column is evaluated on read (NIT).
+- **No round trip is added.** `verify_identity` still sends its two statements. The relation check is a `LEFT JOIN LATERAL` in the first. Its cost is about 0.18 ms per call (pgbench above), so it does not explain the rise in per-transaction time from 7.6 to 10–11 ms in today's release runs.
+
+### MAJOR (new)
+
+**R-M1 (APP-197). On reuse, the identity statement now runs before any check of the session's `search_path`, and that statement resolves operators through `search_path`. A session corrupted while idle runs planted operators before it is refused.**
+`app/src/storage/pool.rs:504-538` (`recycle`: `verify_checks` at `:525`, `verify_baseline` moved to `:536`); `pool.rs:747` (`verify_identity`'s SQL uses unqualified `=`, `||`, `>` and `NOT IN`).
+
+- **What changed.** On `main` and at `e24fef7f`, `recycle` ran `verify_baseline` first. Its statement uses only `pg_catalog.current_setting(…)`, so it is independent of `search_path`, and it refused a changed `search_path` before anything else ran. The identity statement then always ran under `pg_catalog, pg_temp`. Now the identity statement is the first statement a reuse sends.
+- **Proof on PG 16.15.** Under `search_path = evil, pg_catalog`, one execution of the new identity statement called `evil.=(name,name)` 24 times.
+- **Proof on the real code path (S1).** I added the same operator to the shadow check's trap schema. The check models "a corrupted idle path": a pooled worker session given `search_path=reviewer_probe,pg_catalog`. The campaign then failed at `qualification.rs:1225`, with the marker at `"37"` instead of `"0"`. The check "startup and idle search-path shadowing is refused … with zero marker execution" (`:1237`) passes on the branch only because its trap has no operator.
+- **The fix is proven (S2).** S1's probe plus `verify_baseline` also run *first* in `recycle` passed: 37 checks, marker 0.
+- **Reachability.** It needs an idle pooled session whose `search_path` changed without a reset. No production path does that today, because `release` always runs DISCARD ALL, re-installs the baseline and verifies it. It also needs a DDL-capable identity to plant the operator. But this is exactly the corruption model APP-008 qualifies, and the branch has silently lost it.
+- **Fix.** Either one closes it:
+  - Run `verify_baseline` first *and* last in `recycle`. That costs one statement (about 0.1–0.15 ms); S2 shows it works.
+  - Write every operator in both `verify_identity` statements as `OPERATOR(pg_catalog.…)`, which costs nothing.
+- Either way, keep S1's operator in the shadow check so the property stays tested. Then amend A5's "`verify_baseline` last" bullet to say which order guards what.
+
+### MINOR (new)
+
+**R-m1 (APP-197). The fixes record says gate A had "no data or workspace admission refusals" in every run. The run with the snapshot cap at 24, which is the configuration that will ship, had one.**
+`evidence/APP-197/review-fixes-2026-11-14.md` ("In every run: … no data or workspace admission refusals in gate A"); `refresh-herd-gate-snapshot24-experiment-2026-11-14.json`.
+
+- **What the report shows.** Gate A's `admission_saturated` is `{"data": 1}`, and herd 2 has one first-attempt 503 (`reads_with_a_503` `[0, 0, 1]`).
+- **What it means.** Raising the cap removes the 429 throttle on view reads, so their load moves onto the data role's 32-caller queue. At 15 pages that queue already overflowed once. The gate asserts no refusal only for the command and the delivery read, so a read refusal does not fail it.
+- **Fix.**
+  - Correct the sentence.
+  - Report data-role refusals in the gate's output (they are already in the report) and in the APP-188 capacity statement.
+  - Decide whether read refusals at 15 pages are acceptable headroom.
+
+### NIT (new)
+
+- **A5 "Consequence".** "Plus the transaction in flight (at most 3 s)": an import transaction runs up to 60 s (`Lease::import_deadline`, used at `authorization.rs:150`). Say "at most 3 s, or 60 s for an import".
+- **A5 "What moves to the 30 s cadence: … role attributes".** The pooled role's own flags and memberships are still checked on every reuse. Only other roles' attributes (`genui_owner`, `genui_lock`, `genui_admit`) move. Name them.
+- **The shape check.** Add `relam` = heap and `attgenerated = ''` before any upgrade past PostgreSQL 16.
+
+### The A5 text
+
+Apart from R-M1's ordering bullet and the two NITs above, A5 is now accurate:
+
+- what it amends ("Only fully verified leases return to the pool");
+- what moves to the 30 s cadence and what stays on every reuse;
+- that §Migration and recovery's rule holds inside the window;
+- the threat model, including per-role defaults;
+- the refusal codes;
+- that the window is measured from the instant before the comparison and never moves without one.
+
+### The gate split
+
+- **The default run is the gate, and it is asserted.** It is gate A (15 pages, three herds 10 s apart, every run A criterion) and gate C (15 pages at one instant, 8 admitted, at least ten 503s). The final assertions are `c_503 >= 10` and `passed_gate`.
+- **The 26-page measurement is not asserted.** It runs only when `GENUI_REFRESH_HERD_FULL` is exactly `1`. It only inserts results into the report. Its own `c_503` is a separate binding inside the `if full` block and cannot reach the gate's assertion.
+- **CI runs only the gate.** The tenant-foundation step sets no `GENUI_REFRESH_HERD_FULL`, and the catalog row has no such default. Because the catalog `ci` value is `tenant-foundation`, `just ci` also runs the gate, and it is red locally until APP-200 lands; that is decided.
+
+### What else in the gate's numbers worries me
+
+- **R-m1's data-role refusal at cap 24.**
+- **A thin margin and one sample.**
+  - With 48 first-attempt reads per herd, 5 misses fail a herd. p95 is taken over 15 pages.
+  - Cap 24 passed once, locally (p95 up to 5.0 s against the 6 s line). At cap 4, CI's p95 ran higher than the local pass.
+  - Before treating the gate as a stable merge check, record at least three consecutive green CI runs on the integration branch with APP-200. Otherwise it will drift into "red and ignored".
+- **The runbook quotes the best run.** APP-188's capacity statement says: "at 26 open pages … every page was current within 6.1 s, no refresh failed". That is the earlier release run at `06e8eeb8`. Today's 26-page release runs on the current code failed reads after retry (12, 38 and 2 in herd 0, the last with cap 24), with slowest pages of 18–27 s and 57–129 data-role refusals. The builder attributes this to host load at 10–22, and the 0.18 ms cost of the relation check supports that. But before the runbook text is final, rerun the 26-page measurement on the final integration head on a quiet host or a CI runner, and quote that run.
+- **An existing step flaked twice on my loaded host.** The `postgres` campaign's readiness after a credential-generation change (`qualification.rs:885`) hit the 5 s `Deadline` twice: my earlier B3 attempt and this R4 attempt. Both passed on rerun. The step predates both tickets, but a slow CI runner could hit it.
+
+### Break proofs (spot checks)
+
+Each break was an exact-string replacement, then a run, then a restore with the SHA-256 checked against HEAD: `pool.rs` `e116bbba…ceb6bf`, `qualification.rs` `c3dd070b…`, `board.ts` `610913c7…`, `live.ts` `10b48fbc…`.
+
+| Id | Break or probe | Result |
+| --- | --- | --- |
+| R4 (redo) | In the window, the OID comparison disabled (`… && false`) | The first attempt stopped at `:885` (`Deadline`, load; not counted). Rerun: failed at `qualification.rs:1172`, "a replaced version relation is never read on reuse" (backend 554 reused). **Reproduced** |
+| R5 (redo) | The row-security term of the shape forced to `false` | Failed at `qualification.rs:473`, `Lease::acquire(pool).await.is_err()` (the policy case). **Reproduced** |
+| G3 (redo) | The board's `stream.lagged` hint runs at once | Test 9 failed (9 pass, 1 fail). Restored: 10/10. **Reproduced** |
+| G1 (my earlier gap probe, rerun) | `browserTiming` listens for `visibilitychanged` | Tests 8 and 9 failed. **m4 closed** |
+| S1 (new) | The shadow check's trap also defines `reviewer_probe.=(name,name)`, which calls `mark()` | Failed at `qualification.rs:1225`: marker `"37"`, expected `"0"` (R-M1) |
+| S2 (new) | S1 plus `verify_baseline` also run first in `recycle` | Passed, 37 checks (the fix for R-M1) |
+
+### Limits
+
+- Local Docker PostgreSQL on a shared host at load 6–11, with other worktrees' campaigns running at the same time. I did not run `refresh-herd`, so the gate and 26-page numbers are the builder's reports, which I read and cross-checked.
+- R-M1's proof uses the campaign's own test-only corruption model, a pooled object changed while idle. I know of no production path that produces that state.
+- An untracked file I did not write, `evidence/APP-197/release-measurement-recipe.md`, appeared in this worktree during the recheck. It is not part of this commit.
