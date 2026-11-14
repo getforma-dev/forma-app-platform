@@ -279,6 +279,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/data-sheet.ts
 !app/admin/src/canvas/explain.ts
 !app/admin/src/canvas/folder-bar.ts
+# Trial plan D10: the daily model-call cap's canvas copy.
+!app/admin/src/canvas/daily-limit.ts
 # APP-112 / APP-116: plain-word canvas actions and the timing chips.
 !app/admin/src/canvas/sentences.ts
 !app/admin/src/canvas/timing.ts
