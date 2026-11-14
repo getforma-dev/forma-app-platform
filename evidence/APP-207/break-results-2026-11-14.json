@@ -1,0 +1,373 @@
+{
+ "head": "9c8fef16",
+ "note": "S1-P2 ran in the first pass; its P3 restore met a transient git checkout failure (exit 128), was restored by hand and checked byte-identical, and P3-E3 ran again in a second pass with git retries",
+ "breaks": [
+  {
+   "id": "S1",
+   "guard": "a records input binds the schema of its own id",
+   "file": "app/src/storage/composer.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 136,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen",
+    "composer::tests::plain_words_compose_participation_apps_through_admission",
+    "storage::composer::tests::records_inputs_of_the_same_fields_bind_the_schema_of_their_own_id"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen' (67060298) panicked at app/src/composer/prompt.rs:924:9:",
+    "assertion `left == right` failed: expected binds the expected schema, not the responses schema of the same fields",
+    "left: [(\"items\", \"items\"), (\"responses\", \"responses\"), (\"expected\", \"responses\")]",
+    "right: [(\"items\", \"items\"), (\"responses\", \"responses\"), (\"expected\", \"expected\")]",
+    "thread 'composer::tests::plain_words_compose_participation_apps_through_admission' (67060451) panicked at app/src/composer/tests.rs:836:13:",
+    "assertion `left == right` failed: a quiz where each student answers once per question and can change it until the question closes after 30 seconds, with a leaderboard on my screen",
+    "left: \"expected\"",
+    "right: \"responses\"",
+    "thread 'storage::composer::tests::records_inputs_of_the_same_fields_bind_the_schema_of_their_own_id' (67060511) panicked at app/src/storage/composer.rs:505:13:",
+    "assertion `left == right` failed",
+    "left: Some([Records { input: \"responses\", schema: \"responses\" }, Records { input: \"expected\", schema: \"responses\" }])",
+    "right: Some([Records { input: \"responses\", schema: \"responses\" }, Records { input: \"expected\", schema: \"expected\" }])"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "S2",
+   "guard": "the same, over real rows (the composed quiz's work bindings)",
+   "file": "app/src/storage/composer.rs",
+   "command": "just campaign composer",
+   "exit": 101,
+   "seconds": 49,
+   "caught": true,
+   "failed_tests": [
+    "storage::composer_qualification::native_composer_campaign"
+   ],
+   "panics": [
+    "thread 'app093-composer-campaign' (67067230) panicked at app/src/storage/composer_qualification.rs:1917:9:",
+    "assertion `left == right` failed",
+    "left: \"expected:responses,items:items,responses:responses\"",
+    "right: \"expected:expected,items:items,responses:responses\"",
+    "thread 'storage::composer_qualification::native_composer_campaign' (67067229) panicked at app/src/storage/composer_qualification.rs:239:10:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`",
+    "error: recipe `campaign` failed on line 49 with exit code 101"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "P1",
+   "guard": "a generated reference must target a records input of the content",
+   "file": "app/src/composer/plan.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 55,
+   "caught": true,
+   "failed_tests": [
+    "composer::tests::which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update"
+   ],
+   "panics": [
+    "thread 'composer::tests::which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update' (67076613) panicked at app/src/composer/tests.rs:664:85:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "P2",
+   "guard": "a reference to a records input is no longer refused (ADR-020 C7)",
+   "file": "app/src/composer/plan.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 34,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen",
+    "composer::tests::a_participation_refusal_retries_with_its_code_and_fix_and_no_value",
+    "composer::tests::plain_words_compose_participation_apps_through_admission",
+    "composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused",
+    "composer::tests::which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen' (67079305) panicked at app/src/composer/prompt.rs:909:85:",
+    "thread 'composer::tests::a_participation_refusal_retries_with_its_code_and_fix_and_no_value' (67079326) panicked at app/src/composer/tests.rs:1293:10:",
+    "thread 'composer::tests::plain_words_compose_participation_apps_through_admission' (67079337) panicked at app/src/composer/tests.rs:826:14:",
+    "thread 'composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused' (67079336) panicked at app/src/composer/tests.rs:1350:5:",
+    "assertion `left == right` failed",
+    "left: \"reference_field\"",
+    "right: \"ambiguous_records_input\"",
+    "thread 'composer::tests::which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update' (67079352) panicked at app/src/composer/tests.rs:648:10:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "P3",
+   "guard": "multi_enum is refused in generated content until APP-208",
+   "file": "app/src/composer/plan.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 44,
+   "caught": true,
+   "failed_tests": [
+    "composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused"
+   ],
+   "panics": [
+    "thread 'composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused' (67095366) panicked at app/src/composer/tests.rs:1320:75:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "P4",
+   "guard": "ambiguous records inputs are refused",
+   "file": "app/src/composer/plan.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 29,
+   "caught": true,
+   "failed_tests": [
+    "composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused"
+   ],
+   "panics": [
+    "thread 'composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused' (67101896) panicked at app/src/composer/tests.rs:1349:77:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "P5",
+   "guard": "an edition rule's refusal carries its own static code",
+   "file": "app/src/composer/plan.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 29,
+   "caught": true,
+   "failed_tests": [
+    "composer::tests::a_participation_refusal_retries_with_its_code_and_fix_and_no_value",
+    "composer::tests::each_participation_rule_is_refused_with_its_own_static_hint"
+   ],
+   "panics": [
+    "thread 'composer::tests::a_participation_refusal_retries_with_its_code_and_fix_and_no_value' (67113018) panicked at app/src/composer/tests.rs:1295:5:",
+    "assertion `left == right` failed",
+    "left: [\"encoding\"]",
+    "right: [\"participation_rule: set_now field cannot be writable\"]",
+    "thread 'composer::tests::each_participation_rule_is_refused_with_its_own_static_hint' (67113023) panicked at app/src/composer/tests.rs:1243:9:",
+    "assertion `left == right` failed: one_per_creator requires visibility own",
+    "left: \"encoding\"",
+    "right: \"participation_rule: one_per_creator requires visibility own\""
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "H1",
+   "guard": "the hint is the rule's fix",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 25,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::participation_rules_key_static_codes_and_fixes_on_the_editions_messages",
+    "composer::tests::each_participation_rule_is_refused_with_its_own_static_hint"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::participation_rules_key_static_codes_and_fixes_on_the_editions_messages' (67115288) panicked at app/src/composer/prompt.rs:1050:13:",
+    "assertion `left == right` failed",
+    "left: \"Produce a corrected, complete definition content object.\"",
+    "right: \"Put one_per_creator only on a record_schema with visibility: \\\"own\\\"; a shared list never carries it.\"",
+    "thread 'composer::tests::each_participation_rule_is_refused_with_its_own_static_hint' (67115319) panicked at app/src/composer/tests.rs:1244:9:",
+    "assertion `left == right` failed: one_per_creator requires visibility own",
+    "left: \"Produce a corrected, complete definition content object.\"",
+    "right: \"Put one_per_creator only on a record_schema with visibility: \\\"own\\\"; a shared list never carries it.\""
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "H2",
+   "guard": "only the whole message after the path matches a rule",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 23,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::participation_rules_key_static_codes_and_fixes_on_the_editions_messages",
+    "composer::tests::each_participation_rule_is_refused_with_its_own_static_hint"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::participation_rules_key_static_codes_and_fixes_on_the_editions_messages' (67139059) panicked at app/src/composer/prompt.rs:1053:13:",
+    "assertion `left == right` failed",
+    "left: Some(\"participation_rule: now requires a timestamp field\")",
+    "right: Some(\"participation_rule: set_now requires a timestamp field\")",
+    "thread 'composer::tests::each_participation_rule_is_refused_with_its_own_static_hint' (67139094) panicked at app/src/composer/tests.rs:1243:9:",
+    "assertion `left == right` failed: set_now requires a timestamp field",
+    "left: \"participation_rule: now requires a timestamp field\"",
+    "right: \"participation_rule: set_now requires a timestamp field\""
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "G1",
+   "guard": "the prompt states the never rule for set_now",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 23,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules' (67176402) panicked at app/src/composer/prompt.rs:1009:13:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "G2",
+   "guard": "the prompt states requires in the command grammar",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 20,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules' (67198578) panicked at app/src/composer/prompt.rs:994:13:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "G3",
+   "guard": "the prompt omits multi_enum until APP-208",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 18,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::multi_enum_is_stated_only_when_generated_content_may_carry_it",
+    "composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::multi_enum_is_stated_only_when_generated_content_may_carry_it' (67202090) panicked at app/src/composer/prompt.rs:1027:9:",
+    "assertion `left == right` failed",
+    "left: \"You compose typed Forma app definitions for a member of an organization.\\nOutput exactly one JSON object and nothing else (no prose, no code fences): the `content` of an `app_definition` of contract edition impl-2026-11-14.2 (schema ",
+    "right: \"You compose typed Forma app definitions for a member of an organization.\\nOutput exactly one JSON object and nothing else (no prose, no code fences): the `content` of an `app_definition` of contract edition impl-2026-11-14.2 (schema",
+    "thread 'composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules' (67202094) panicked at app/src/composer/prompt.rs:994:13:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "E1",
+   "guard": "the example's post is reviewer-only",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 19,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen",
+    "composer::tests::plain_words_compose_participation_apps_through_admission",
+    "composer::tests::the_smokes_participation_features_judge_the_acceptance_shape"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen' (67205491) panicked at app/src/composer/prompt.rs:937:13:",
+    "assertion `left == right` failed: commands",
+    "left: Array [Object {\"id\": String(\"post\"), \"initial\": Array [Object {\"field_id\": String(\"state\"), \"value\": String(\"open\")}], \"operation\": String(\"create\"), \"record_schema_id\": String(\"items\"), \"set_now\": Array [String(\"opened_at\")], \"transi",
+    "right: Array [Object {\"id\": String(\"post\"), \"initial\": Array [Object {\"field_id\": String(\"state\"), \"value\": String(\"open\")}], \"operation\": String(\"create\"), \"record_schema_id\": String(\"items\"), \"reviewer_only\": Bool(true), \"set_now\": Array ",
+    "thread 'composer::tests::plain_words_compose_participation_apps_through_admission' (67205531) panicked at app/src/composer/tests.rs:869:9:",
+    "assertion `left == right` failed: post",
+    "left: Null",
+    "right: true",
+    "thread 'composer::tests::the_smokes_participation_features_judge_the_acceptance_shape' (67205544) panicked at app/src/composer/tests.rs:961:5:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "E2",
+   "guard": "the example omits a zero offset (the countdown's 30 s)",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 19,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen",
+    "composer::tests::a_participation_refusal_retries_with_its_code_and_fix_and_no_value",
+    "composer::tests::each_participation_rule_is_refused_with_its_own_static_hint",
+    "composer::tests::plain_words_compose_participation_apps_through_admission",
+    "composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen' (67208691) panicked at app/src/composer/prompt.rs:909:85:",
+    "thread 'composer::tests::a_participation_refusal_retries_with_its_code_and_fix_and_no_value' (67208712) panicked at app/src/composer/tests.rs:1293:10:",
+    "thread 'composer::tests::each_participation_rule_is_refused_with_its_own_static_hint' (67208717) panicked at app/src/composer/tests.rs:1243:9:",
+    "assertion `left == right` failed: one_per_creator requires visibility own",
+    "left: \"encoding\"",
+    "right: \"participation_rule: one_per_creator requires visibility own\"",
+    "thread 'composer::tests::plain_words_compose_participation_apps_through_admission' (67208723) panicked at app/src/composer/tests.rs:826:14:",
+    "thread 'composer::tests::multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused' (67208722) panicked at app/src/composer/tests.rs:1348:5:",
+    "assertion failed: plan::admit(&renamed, ORG, APP).is_ok()"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  },
+  {
+   "id": "E3",
+   "guard": "the example carries no classroom word",
+   "file": "app/src/composer/prompt.rs",
+   "command": "cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests",
+   "exit": 101,
+   "seconds": 25,
+   "caught": true,
+   "failed_tests": [
+    "composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules",
+    "composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen"
+   ],
+   "panics": [
+    "thread 'composer::prompt::tests::the_prompt_states_the_participation_grammar_and_the_never_rules' (67210497) panicked at app/src/composer/prompt.rs:1019:13:",
+    "thread 'composer::prompt::tests::the_participation_example_admits_binds_and_is_the_contract_specimen' (67210495) panicked at app/src/composer/prompt.rs:953:13:"
+   ],
+   "errors": [
+    "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+   ],
+   "restored_byte_identical": true
+  }
+ ]
+}

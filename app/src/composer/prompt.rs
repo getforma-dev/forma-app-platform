@@ -78,7 +78,7 @@ const PARTICIPATION_MEMBERS: &str = "PARTICIPATION MEMBERS (edition impl-2026-11
 /// APP-207 (ADR-020 §10): the member's plain words and the members they call
 /// for; the "never" rules. The member's words name their domain; the ids stay
 /// general.
-const PLAIN_WORDS: &str = "PLAIN WORDS TO MEMBERS (the member's words name their own domain; the ids you write stay general, such as items, responses, expected, entries):\n\
+const PLAIN_WORDS: &str = "PLAIN WORDS TO MEMBERS. The member's words name their own domain (a quiz, a question, a student, a class); they belong only in title, description, view titles and note text. Every id stays general, as in the participation example: items, prompt, responses, item, choice, expected (or entries, sessions, tasks, submissions); never build an id from the member's domain words (no questions, answers_to_quiz, student_id).\n\
 - \"each person answers, submits or checks in once per <thing> (a question, an assignment, a session, a day) and can change it\": a shared list of the things and an `own` list of entries with a reference field to the things' records input; one_per_creator: [that reference field]; the entry create writes it.\n\
 - \"until it closes\", \"while it is open\": the things carry state (enum open, closed); the entry create requires {via: <reference field>, field_id: state, comparison: eq, value: {type: enum, value: open}}; the owner closes (and may reopen) with a reviewer_only update writing state, transitions: [].\n\
 - \"closes after N seconds\" (or minutes), \"a timer\": the things also carry opened_at (timestamp); the reviewer_only create that posts a thing and the reopen update carry set_now: [opened_at]; the entry create also requires {via: <reference field>, field_id: opened_at, comparison: gte, value: {type: now, offset_seconds: -N, in seconds}}; add a countdown over the things with timestamp_field opened_at, offset_seconds N and closed_when {field_id: state, comparison: eq, value: {type: enum, value: closed}}.\n\
@@ -982,6 +982,7 @@ mod tests {
             "command set_now: [1..4 timestamp field ids]",
             "{type: reference, target_input: <a `records` input of this content>}",
             "PLAIN WORDS TO MEMBERS",
+            "never build an id from the member's domain words",
             "once per <thing> (a question, an assignment, a session, a day) and can change it",
             "\"closes after N seconds\"",
             "\"a leaderboard\"",
