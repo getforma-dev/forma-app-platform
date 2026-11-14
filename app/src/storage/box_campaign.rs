@@ -2180,12 +2180,14 @@ async fn campaign() {
         &stub,
         &c.fixture,
         &c.stores,
+        &counting,
         &_maya_request,
         &maya_cookie,
         &mate_cookie,
         &outsider_cookie,
     )
     .await;
+    check(&mut checks, "APP-198: a commit landing between a record query's capture and its release is a typed stale snapshot, never the uniform 404: the route captures, runs and releases the view once more and answers 200 over the current list (the engine ran twice); a second commit during that re-capture answers 409 `stale` (a problem document, no `not_found`); the next read is current");
     check(&mut checks, "Editable CSV apps: full 2,505-row import, exact decimal aggregates, independent app copies, assistant proposals write nothing until confirmation, add/update refresh governed totals, stale confirmation denied, replay adds no duplicate, originals byte-identical, owner-only legacy upgrade is atomic and idempotent");
 
     // The local stand for a browser walk (scratch only, synthetic sessions).
@@ -2226,6 +2228,7 @@ async fn qualify_editable_csv(
     stub: &Stub,
     fixture: &Fixture,
     stores: &Stores,
+    counting: &Counting,
     owner_request: &TrustedRequest,
     owner: &str,
     mate: &str,
@@ -2554,6 +2557,68 @@ async fn qualify_editable_csv(
         "313125",
     );
     assert_eq!(scalar(fixture, &format!("SELECT count(*) FROM genui.internal_records WHERE organization_id='{ORG}' AND work_id='{legacy_work}'")).await, 2505);
+
+    // --- APP-198: a commit between capture and release is stale, never 404 ---
+    // The engine is paused after it computed; a commit lands through the
+    // assistant's proposal and confirmation; the release then finds the list
+    // moved. Once: the route captures again and answers the current list.
+    // Twice (the re-capture paused and another commit): the typed `stale`.
+    {
+        let totals_path = format!("/v1/work/{app}/{work}/queries/editable_kpis");
+        let (proposal_path, body) = (&proposal_path, &body);
+        let commit_one = |item: &'static str, amount: &'static str| async move {
+            stub.script(
+                "app_action",
+                json!({"values":{"item":item,"amount":amount,"date":"2026-11-03"}}).to_string(),
+            );
+            let draft = stand
+                .post(proposal_path, Some(owner), &body.to_string())
+                .await;
+            assert_eq!(draft.status, StatusCode::OK, "{}", draft.text());
+            let saved = confirm_csv_action(stand, owner, &draft.json()).await;
+            assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
+        };
+        let rows_before = scalar(fixture, &count_sql).await;
+        let calls = counting.calls();
+        let (computed, resume) = counting.pause_next();
+        let poster = stand.post(&totals_path, Some(owner), r#"{"parameters":{}}"#);
+        let committer = async {
+            computed.await.unwrap();
+            commit_one("Stale one", "1.00").await;
+            resume.send(()).unwrap();
+        };
+        let (reply, ()) = tokio::join!(poster, committer);
+        assert_eq!(
+            reply.status,
+            StatusCode::OK,
+            "the stale snapshot is captured once more: {}",
+            reply.text()
+        );
+        assert_eq!(counting.calls(), calls + 2, "the view ran twice");
+        assert_totals(&reply.json(), &(rows_before + 1).to_string(), "313900");
+        let calls = counting.calls();
+        let (computed, resume) = counting.pause_next();
+        let poster = stand.post(&totals_path, Some(owner), r#"{"parameters":{}}"#);
+        let committer = async {
+            computed.await.unwrap();
+            let (computed_again, resume_again) = counting.pause_next();
+            commit_one("Stale two", "1.00").await;
+            resume.send(()).unwrap();
+            computed_again.await.unwrap();
+            commit_one("Stale three", "1.00").await;
+            resume_again.send(()).unwrap();
+        };
+        let (reply, ()) = tokio::join!(poster, committer);
+        assert_eq!(reply.status, StatusCode::CONFLICT, "{}", reply.text());
+        assert_eq!(reply.text(), r#"{"code":"stale","status":409}"#);
+        assert!(!reply.uniform_404());
+        assert_eq!(counting.calls(), calls + 2, "one re-capture, no third run");
+        assert_totals(
+            &editable_totals(stand, owner, app, work).await,
+            &(rows_before + 3).to_string(),
+            "314100",
+        );
+    }
     super::record_query_campaign::qualify(fixture, stores, owner_request, app, work).await;
 }
 

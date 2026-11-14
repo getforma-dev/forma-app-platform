@@ -205,7 +205,13 @@ pub(super) async fn release(
         .ok_or(Error::Unavailable)?
         .try_get(0)
         .map_err(|_| Error::Unavailable)?;
-    require(current == snapshot.last_commit)
+    // APP-198: the list moved between capture and release (a commit landed):
+    // the snapshot is stale, which is typed, not refused. `Denied` above is
+    // the binding that changed; authority is the callers' fences.
+    if current != snapshot.last_commit {
+        return Err(Error::Stale);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
