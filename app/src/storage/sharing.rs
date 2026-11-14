@@ -487,6 +487,9 @@ pub struct WorkSharing {
     /// Whether this member may remove one person's access: the app's owner
     /// alone, as `genui_private.revoke_work_share` judges it.
     pub can_revoke_members: bool,
+    /// The app's owner, whom no share names as grantee (W4 r1): the
+    /// dialog's person picker leaves them out.
+    pub owner: Option<String>,
     /// Whether the work has a private (`visibility: "own"`) list, where a
     /// member sees and changes only their own entries unless a reviewer.
     pub private_lists: bool,
@@ -529,8 +532,14 @@ impl Workspace {
             )
             .await?
                 > 0;
-            let owner = transaction.query("SELECT 1 FROM genui.apps WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND owner_principal_id=$3::text::uuid", &[&request.organization,&app,&request.principal]).await?;
-            let can_revoke_members = !owner.is_empty();
+            let owner = transaction.query("SELECT owner_principal_id::text FROM genui.apps WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid", &[&request.organization,&app]).await?;
+            let owner = match owner.first() {
+                Some(row) => row
+                    .try_get::<_, Option<String>>(0)
+                    .map_err(|_| Error::Unavailable)?,
+                None => None,
+            };
+            let can_revoke_members = owner.as_deref() == Some(request.principal.as_str());
             let held = |permission: &str| format!("EXISTS(SELECT 1 FROM genui.work_permissions x WHERE x.organization_id=p.organization_id AND x.principal_id=p.principal_id AND x.app_id=p.app_id AND x.work_id=p.work_id AND x.permission='{permission}')");
             let rows = transaction.query(&format!("SELECT p.principal_id::text,{},{} FROM genui.work_permissions p JOIN genui.memberships m ON m.organization_id=p.organization_id AND m.principal_id=p.principal_id AND m.status='active' WHERE p.organization_id=$1::text::uuid AND p.app_id=$2::text::uuid AND p.work_id=$3::text::uuid AND p.permission='record_read' AND p.principal_id<>$4::text::uuid AND NOT EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=p.organization_id AND a.app_id=p.app_id AND a.owner_principal_id=p.principal_id) ORDER BY p.principal_id LIMIT $5", held("record_review"), held("record_write")), &[&request.organization,&app,&work,&request.principal,&MEMBER_LIMIT]).await?;
             let mut members = rows
@@ -562,6 +571,7 @@ impl Workspace {
             Ok(WorkSharing {
                 standing,
                 can_revoke_members,
+                owner,
                 private_lists,
                 members,
             })

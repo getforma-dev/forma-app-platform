@@ -86,6 +86,8 @@ export type TeamSharing = {
   canRevokeMembers: boolean;
   /** The app has a private list (computed in Rust): people see only their own entries there. */
   privateLists: boolean;
+  /** The app's owner: no share names them, so the person picker leaves them out. */
+  owner: string | null;
   organization: { available: boolean; role: TeamRole | null };
   members: TeamMember[];
 };
@@ -108,6 +110,7 @@ export function teamSharing(value: unknown, app: string, work: string): TeamShar
   const body = value as Record<string, unknown>;
   const organization = body.organization as Record<string, unknown> | null;
   if (body.app_id !== app || body.work_id !== work || typeof body.can_revoke_members !== 'boolean' || typeof body.private_lists !== 'boolean') return null;
+  if (body.owner_principal_id !== null && !isUuid(body.owner_principal_id)) return null;
   if (!Array.isArray(body.roles) || body.roles[0] !== 'viewer' || !body.roles.every(isRole)) return null;
   if (!organization || typeof organization !== 'object' || typeof organization.available !== 'boolean') return null;
   if (organization.role !== null && !isRole(organization.role)) return null;
@@ -122,6 +125,7 @@ export function teamSharing(value: unknown, app: string, work: string): TeamShar
     roles: [...body.roles] as TeamRole[],
     canRevokeMembers: body.can_revoke_members,
     privateLists: body.private_lists,
+    owner: body.owner_principal_id as string | null,
     organization: { available: organization.available, role: organization.role as TeamRole | null },
     members,
   };

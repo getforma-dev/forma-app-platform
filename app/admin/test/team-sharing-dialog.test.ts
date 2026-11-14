@@ -10,6 +10,7 @@ import { teamSection } from '../src/sharing/dialog.ts';
 const APP = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const WORK = '11111111-2222-4333-8444-555555555555';
 const ANA = '99999999-8888-4777-8666-555555555555';
+const OWNER = 'cccccccc-dddd-4eee-8fff-000000000001';
 
 type Listener = (event: { preventDefault(): void }) => void;
 class El {
@@ -60,11 +61,11 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 function answer(change: Record<string, unknown> = {}) {
   return {
     app_id: APP, work_id: WORK, roles: ['viewer', 'contributor', 'reviewer'], can_revoke_members: false,
-    private_lists: true, organization: { available: true, role: null },
+    private_lists: true, owner_principal_id: OWNER, organization: { available: true, role: null },
     members: [{ principal_id: ANA, label: 'Ana Diaz', role: 'contributor' }], ...change,
   };
 }
-const colleagues = { members: [{ principal_id: ANA, label: 'Ana Diaz' }] };
+const colleagues = { members: [{ principal_id: OWNER, label: 'Owen Park' }, { principal_id: ANA, label: 'Ana Diaz' }] };
 type Call = { url: string; method: string; body: unknown };
 /** Answers GET .../share with `read()`, /v1/members with colleagues, and every POST with `post(body)`. */
 function server(read: () => Response, post: (body: Record<string, unknown>) => Response = () => new Response('{}', { status: 500 })) {
@@ -254,5 +255,18 @@ test('a lower access for a person says they now have it', async () => {
     await flush(); await flush();
     assert.equal(statusText(section), 'Ana Diaz now has “Can view”.');
     assert.ok(section.all().some(el => el.textContent === 'Can view' && el.tagName === 'P'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('the person picker leaves out the app owner (the caller is never in /v1/members)', async () => {
+  const original = globalThis.fetch;
+  try {
+    const { section } = await open(() => ok(answer()));
+    const picker = select(section, 'grantee');
+    assert.deepEqual(picker.children.map(o => o.value), ['', ANA]);
+    assert.ok(!picker.children.some(o => o.textContent === 'Owen Park'));
+    // An app without a known owner leaves everyone listed in the picker.
+    const unknown = await open(() => ok(answer({ owner_principal_id: null })));
+    assert.deepEqual(select(unknown.section, 'grantee').children.map(o => o.value), ['', OWNER, ANA]);
   } finally { globalThis.fetch = original; }
 });

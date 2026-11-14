@@ -316,6 +316,7 @@ async fn campaign() {
             "app_id": app, "work_id": work,
             "roles": ["viewer", "contributor", "reviewer"],
             "can_revoke_members": true,
+            "owner_principal_id": OWNER,
             "private_lists": true,
             "organization": {"available": true, "role": null},
             "members": [],
@@ -477,6 +478,8 @@ async fn campaign() {
     assert_eq!(hal_dialog.json()["roles"], json!(["viewer", "contributor"]));
     // Removing one person's access is the app owner's alone (W4's rule).
     assert_eq!(hal_dialog.json()["can_revoke_members"], false);
+    // The app's owner is named so the dialog's picker leaves them out.
+    assert_eq!(hal_dialog.json()["owner_principal_id"], OWNER);
     let before = footprint(&fixture).await;
     // The refusal concerns the sharer alone: the same bytes whoever the
     // grantee is (a member, nobody, a revoked member, the sharer itself).

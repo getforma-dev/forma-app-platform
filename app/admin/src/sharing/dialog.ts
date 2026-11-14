@@ -312,7 +312,9 @@ export function teamSection(document: Document, app: string, work: string): { se
     retry.hidden = true;
     try {
       if (!await refresh()) return;
-      const colleagues = await readColleagues();
+      // The caller is never in /v1/members; the app's owner is left out too
+      // (no share names them).
+      const colleagues = (await readColleagues()).filter(colleague => colleague.principal_id !== sharing?.owner);
       if (!section.isConnected) return;
       person.replaceChildren(node(document, 'option', colleagues.length ? 'Choose a person' : 'No one else is in your organization yet', { value: '', disabled: '', selected: '' }));
       for (const colleague of colleagues) person.append(node(document, 'option', colleague.label, { value: colleague.principal_id }));

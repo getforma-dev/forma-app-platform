@@ -1,8 +1,9 @@
 // W2b smoke on the local dev stand (synthetic personas): the share dialog's
 // organization section. Diego creates a work from a first-party template (no
-// model call), opens "Share this app" from its work page, gives Sarah "Can review all entries",
-// shares with everyone as "Can view" (Priya then opens the work page), and
-// stops sharing with everyone (Priya's work page is the uniform 404 again).
+// model call) and opens "Share this app" from its work page. He gives Sarah
+// "Can review all entries" (confirmed first), shares with everyone as "Can
+// view" (Priya then opens the work page), stops sharing with everyone, and
+// removes Sarah's access (her work page is the 404 again).
 // One-off: run once, read smoke.json and the screenshots.
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
@@ -10,7 +11,8 @@ const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const out = process.argv[2];
 const owner = process.env.OWNER_ORIGIN;
 const other = process.env.OTHER_ORIGIN;
-assert.ok(out && owner && other, 'usage: OWNER_ORIGIN=… OTHER_ORIGIN=… node w2b-smoke.mjs <output dir>');
+const reviewer = process.env.REVIEWER_ORIGIN;
+assert.ok(out && owner && other && reviewer, 'usage: OWNER_ORIGIN=… OTHER_ORIGIN=… REVIEWER_ORIGIN=… node w2b-smoke.mjs <output dir>');
 const report = {scope: 'W2b local dev stand smoke, synthetic personas; not hosted acceptance', checks: [], errors: []};
 const browser = await chromium.launch({channel: 'chrome', headless: true});
 try {
@@ -28,11 +30,19 @@ try {
   assert.equal(composed.status, 200, JSON.stringify(composed.body));
   const {app_id: app, work_id: work} = composed.body;
   report.checks.push('a work of Diego\'s own from the equipment-requests template (no model call)');
+  const status = async (origin, path) => {
+    const visitor = await (await browser.newContext({viewport: {width: 1366, height: 900}})).newPage();
+    visitor.on('pageerror', e => report.errors.push(e.message));
+    const answer = await visitor.goto(`${origin}${path}`);
+    await visitor.close();
+    return answer.status();
+  };
+  const workPage = `/w/${app}/${work}`;
 
-  // 1. The dialog opens with the organization section and the three roles.
+  // 1. The dialog: three roles in plain words, colleagues by name.
   // The work page carries the same "Share app" button and dialog module as
   // the canvas (a template work is listed in "My apps", not yet placed).
-  await page.goto(`${owner}/w/${app}/${work}`);
+  await page.goto(owner + workPage);
   await page.locator(`[data-manage-share][data-work="${work}"]`).first().click();
   const dialog = page.getByRole('dialog', {name: 'Share this app', exact: true});
   const team = dialog.locator('.share-team');
@@ -43,38 +53,37 @@ try {
   const person = team.locator('select[name=grantee]');
   await access.locator('option').first().waitFor({state: 'attached'});
   await person.locator('option', {hasText: 'Sarah Chen'}).waitFor({state: 'attached'});
-  assert.deepEqual(await access.locator('option').allTextContents(), ['Can view', 'Can add and edit their entries', 'Can review all entries']);
+  assert.deepEqual(await access.locator('option').allTextContents(), ['Can view', 'Can add and edit entries', 'Can review all entries']);
   const people = await person.locator('option').allTextContents();
-  assert.ok(people.includes('Sarah Chen'), people.join(', '));
   assert.ok(!people.some(label => /[0-9a-f]{8}-[0-9a-f]{4}/.test(label)), 'no principal id shown');
-  // Nothing is shared with everyone yet: no stop control (the first run's
-  // dialog-before-fix.png showed it; a class rule outranked `hidden`).
   assert.equal(await team.getByRole('button', {name: 'Stop sharing with everyone', exact: true}).isVisible(), false);
   await dialog.screenshot({path: `${out}/dialog.png`});
-  report.checks.push('the dialog shows "People in your organization", the three roles in plain words, colleagues by name, and no stop control while nothing is shared with everyone');
+  report.checks.push('the dialog shows "People in your organization", the three roles in plain words ("Can add and edit entries"), colleagues by name, and no stop control while nothing is shared with everyone');
 
-  // 2. A person share as reviewer.
+  // 2. A person share as reviewer: confirmed first, then listed.
+  assert.equal(await status(reviewer, workPage), 404, 'Sarah cannot open the work before the share');
   await person.selectOption({label: 'Sarah Chen'});
   await access.selectOption({label: 'Can review all entries'});
   await team.getByRole('button', {name: 'Share', exact: true}).click();
+  await team.getByText('Sarah Chen will see all entries, including private ones, and can take review actions.').waitFor();
+  await dialog.screenshot({path: `${out}/reviewer-confirmation.png`});
+  await team.getByRole('button', {name: 'Yes, share', exact: true}).click();
   await team.getByRole('status').filter({hasText: 'Shared with Sarah Chen: Can review all entries.'}).waitFor();
   const row = team.locator('.share-member').filter({hasText: 'Sarah Chen'});
   await row.getByText('Can review all entries').waitFor();
+  await row.getByRole('button', {name: 'Remove access for Sarah Chen', exact: true}).waitFor();
   await dialog.screenshot({path: `${out}/shared-with-a-person.png`});
-  report.checks.push('sharing with Sarah Chen as "Can review all entries" lists her by name with that access');
+  assert.equal(await status(reviewer, workPage), 200, 'Sarah opens the work page once shared');
+  report.checks.push('"Can review all entries" for Sarah Chen asks first, naming private entries; after "Yes, share" she is listed with that access and a "Remove access" control, and her work page opens (404 before)');
 
   // 3. Everyone in the organization, as "Can view"; Priya opens the work page.
-  const otherPage = await (await browser.newContext({viewport: {width: 1366, height: 900}})).newPage();
-  otherPage.on('pageerror', e => report.errors.push(e.message));
-  const before = await otherPage.goto(`${other}/w/${app}/${work}`);
-  assert.equal(before.status(), 404, 'Priya cannot open the work before the share');
+  assert.equal(await status(other, workPage), 404, 'Priya cannot open the work before the share');
   await team.locator('select[name=everyone_role]').selectOption({label: 'Can view'});
   await team.getByRole('button', {name: 'Share with everyone', exact: true}).click();
   await team.getByText('Shared with everyone: Can view. This includes people who join later.').waitFor();
   await team.getByRole('button', {name: 'Stop sharing with everyone', exact: true}).waitFor();
   await dialog.screenshot({path: `${out}/shared-with-everyone.png`});
-  const during = await otherPage.goto(`${other}/w/${app}/${work}`);
-  assert.equal(during.status(), 200, 'Priya opens the work page while it is shared with everyone');
+  assert.equal(await status(other, workPage), 200, 'Priya opens the work page while it is shared with everyone');
   report.checks.push('sharing with everyone as "Can view" shows the role and a stop control; Priya, with no share of her own, opens the work page (404 before)');
 
   // 4. Stop sharing with everyone; Priya is refused again, Sarah keeps hers.
@@ -83,9 +92,16 @@ try {
   await row.getByText('Can review all entries').waitFor();
   assert.equal(await team.getByRole('button', {name: 'Stop sharing with everyone', exact: true}).isVisible(), false);
   await dialog.screenshot({path: `${out}/stopped-sharing-with-everyone.png`});
-  const after = await otherPage.goto(`${other}/w/${app}/${work}`);
-  assert.equal(after.status(), 404, 'Priya cannot open the work after the stop');
+  assert.equal(await status(other, workPage), 404, 'Priya cannot open the work after the stop');
   report.checks.push('stopping sharing with everyone: the stop control goes away, Priya\'s work page is the 404 again, Sarah Chen keeps "Can review all entries"');
+
+  // 5. Remove Sarah's access.
+  await row.getByRole('button', {name: 'Remove access for Sarah Chen', exact: true}).click();
+  await team.getByRole('status').filter({hasText: 'Sarah Chen no longer has access.'}).waitFor();
+  await team.getByText('Not shared with anyone in your organization yet.').waitFor();
+  await dialog.screenshot({path: `${out}/removed-access.png`});
+  assert.equal(await status(reviewer, workPage), 404, 'Sarah cannot open the work after the removal');
+  report.checks.push('"Remove access" for Sarah Chen: the dialog says she no longer has access and lists nobody; her work page is the 404 again');
 } finally {
   await browser.close();
   await writeFile(`${out}/smoke.json`, JSON.stringify(report, null, 2) + '\n');

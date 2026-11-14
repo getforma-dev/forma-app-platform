@@ -29,11 +29,13 @@
 //!   them at once. 200 `{"app_id","work_id","role":"<role>"|"none"}`.
 //! - `GET /v1/work/{app}/{work}/share` (APP-192): what the share dialog shows
 //!   a member with share authority: `{"app_id","work_id","roles":[…],
-//!   "can_revoke_members":bool,"private_lists":bool,"organization":
+//!   "can_revoke_members":bool,"owner_principal_id":"<uuid>"|null,
+//!   "private_lists":bool,"organization":
 //!   {"available":bool,"role":"<role>"|null},"members":
 //!   [{"principal_id","label","role"}, …]}` (`Workspace::work_sharing`; the
 //!   roles this sharer may grant; whether it may remove a person's access
-//!   (the app's owner); whether the app has private lists; members
+//!   (the app's owner); the app's owner, whom the picker leaves out (no
+//!   share names them, W4 r1); whether the app has private lists; members
 //!   by label, never by provider identity, each with the role of their live
 //!   permissions on the work).
 //!
@@ -212,6 +214,7 @@ pub(crate) fn sharing_json(app: &str, work: &str, sharing: &storage::WorkSharing
         "work_id": work,
         "roles": standing.roles.iter().map(|r| r.name()).collect::<Vec<_>>(),
         "can_revoke_members": sharing.can_revoke_members,
+        "owner_principal_id": sharing.owner,
         "private_lists": sharing.private_lists,
         "organization": {
             "available": standing.organization_available,
@@ -679,6 +682,7 @@ mod tests {
                 organization: Some(ShareRole::Viewer),
             },
             can_revoke_members: true,
+            owner: Some(GRANTEE.into()),
             private_lists: true,
             members: vec![storage::ShareEntry {
                 principal: GRANTEE.into(),
@@ -693,6 +697,7 @@ mod tests {
                 "work_id": GRANTEE,
                 "roles": ["viewer", "contributor"],
                 "can_revoke_members": true,
+                "owner_principal_id": GRANTEE,
                 "private_lists": true,
                 "organization": {"available": true, "role": "viewer"},
                 "members": [{"principal_id": GRANTEE, "label": "Ana", "role": "contributor"}],
@@ -705,6 +710,7 @@ mod tests {
                 organization: None,
             },
             can_revoke_members: false,
+            owner: None,
             private_lists: false,
             members: vec![],
         };

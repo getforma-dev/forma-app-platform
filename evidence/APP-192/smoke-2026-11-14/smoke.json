@@ -2,10 +2,11 @@
   "scope": "W2b local dev stand smoke, synthetic personas; not hosted acceptance",
   "checks": [
     "a work of Diego's own from the equipment-requests template (no model call)",
-    "the dialog shows \"People in your organization\", the three roles in plain words, colleagues by name, and no stop control while nothing is shared with everyone",
-    "sharing with Sarah Chen as \"Can review all entries\" lists her by name with that access",
+    "the dialog shows \"People in your organization\", the three roles in plain words (\"Can add and edit entries\"), colleagues by name, and no stop control while nothing is shared with everyone",
+    "\"Can review all entries\" for Sarah Chen asks first, naming private entries; after \"Yes, share\" she is listed with that access and a \"Remove access\" control, and her work page opens (404 before)",
     "sharing with everyone as \"Can view\" shows the role and a stop control; Priya, with no share of her own, opens the work page (404 before)",
-    "stopping sharing with everyone: the stop control goes away, Priya's work page is the 404 again, Sarah Chen keeps \"Can review all entries\""
+    "stopping sharing with everyone: the stop control goes away, Priya's work page is the 404 again, Sarah Chen keeps \"Can review all entries\"",
+    "\"Remove access\" for Sarah Chen: the dialog says she no longer has access and lists nobody; her work page is the 404 again"
   ],
   "errors": []
 }

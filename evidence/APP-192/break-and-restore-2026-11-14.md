@@ -84,3 +84,29 @@ Not broken separately:
 - The person-share reviewer confirmation is tested (`team-sharing-dialog.test.ts` 6) but was not broken separately. It is the same component as B17.
 
 The one smoke of the first round, in `smoke-2026-11-14/`, records the earlier copy ("Can add and edit their entries"). It was not rerun for this round.
+
+## Round 3: W4's revoke API merged (2026-11-14)
+
+This round followed the merge of W4's fix round, `126cd74c`, which brought:
+
+- `Workspace::revoke_work_share`;
+- `Shared.removed` for a lower re-share;
+- the per-work lock (MAJOR-1);
+- the RESTRICTIVE policy `work_shares_everyone`.
+
+**Tests first, on the merged tree.** `share-routes` failed on the gate (`can_revoke_members` false for the owner). With only that assertion relaxed, it failed one check earlier: right after the owner's reviewer share, the dialog listed nobody (`members: []`). W4's policy now hides personal share records from the application roles, so a listing built on those records could never list anyone again. A demotion would also leave no live record behind (W4's `share_work` revokes the earlier records and writes none when it grants nothing). The listing now reads live permissions only.
+
+The breaks ran on `e90fc96a` (B23–B29) and on the uncommitted owner-exclusion change (B30), with the same method as round 1. Each restore left the file's SHA-256 equal to the committed one, and `git status --short` empty (B23–B29).
+
+| # | Guard | Break | What failed |
+| --- | --- | --- | --- |
+| B23 | "Remove access" is offered to the app's owner alone | `can_revoke_members` true for every sharer | `share-routes`: Hal, a `share_work` holder, read `can_revoke_members: true` |
+| B24 | A refused removal is the uniform 404 | `Denied` answered as a 200 removal | `share-routes`: Hal's `{"grantee_principal_id":Vic,"role":"none"}` answered 200 instead of 404 |
+| B25 | The list reads `record_read` rows only | `share_work` rows read too | `share-routes`: Hal and Vic were listed twice |
+| B26 | The composer lineage forgets a removed person | `retain` removed | `composer::lineage::tests::a_removed_person_is_not_shared_the_adaptation`: the adaptation still went to Sarah |
+| B27 | A person share is announced only when it grants something | `announces_person` returns `Shared::changed()` | `sharing::tests::a_person_share_is_announced_only_when_it_grants`: a demotion that only removed rows was announced |
+| B28 | A removal is believed only from an answer naming the person and `none` | the check removed | `team-sharing.test.ts` 12 |
+| B29 | The dialog shows "Remove access" only when the server allows it | the gate ignored | `team-sharing-dialog.test.ts` 8 |
+| B30 | The person picker leaves out the app owner (W4 r1: no share names them) | the filter removed | `team-sharing-dialog.test.ts` 10; restored from a copy before commit (SHA-256 `b75559361102244a…`) |
+
+**MAJOR-1 at the route** is a regression check in `share-routes`. It holds the owner's change uncommitted, puts Hal's stop in flight, commits, and then requires the final state to match the final answer. It also checks the other order. The lock itself is W4's definer; W4 broke it in their own record (`evidence/APP-191/break-and-restore-2026-11-14.md`), and it was not broken again here.

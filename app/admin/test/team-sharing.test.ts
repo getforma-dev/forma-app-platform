@@ -15,7 +15,7 @@ const WORK = '11111111-2222-4333-8444-555555555555';
 const ANA = '99999999-8888-4777-8666-555555555555';
 const answer = {
   app_id: APP, work_id: WORK, roles: ['viewer', 'contributor', 'reviewer'], can_revoke_members: false,
-  private_lists: true, organization: { available: true, role: null },
+  private_lists: true, owner_principal_id: 'cccccccc-dddd-4eee-8fff-000000000001', organization: { available: true, role: null },
   members: [{ principal_id: ANA, label: 'Ana Diaz', role: 'contributor' }],
 };
 
@@ -84,6 +84,7 @@ test('the dialog reads the server answer strictly', () => {
     { members: [{ principal_id: ANA, label: 'Ana', role: 'admin' }] },
     { can_revoke_members: 'false' },
     { private_lists: 'yes' }, { private_lists: undefined },
+    { owner_principal_id: 'Diego' }, { owner_principal_id: undefined },
   ]) {
     assert.equal(teamSharing({ ...answer, ...change }, APP, WORK), null, JSON.stringify(change));
   }
