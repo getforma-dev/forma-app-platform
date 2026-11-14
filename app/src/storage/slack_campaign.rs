@@ -1116,7 +1116,9 @@ async fn campaign() {
 
     // --- APP-206 (ADR-020 §8): approver routing through the Slack flow ---
     {
-        use super::actions_campaign::{grant_rows, routing_world, NIA, OLIVE, ROUTING_PREFIX, SAM};
+        use super::actions_campaign::{
+            grant_rows, routing_world, HAL, NIA, OLIVE, RITA, ROUTING_PREFIX, SAM,
+        };
         let world = routing_world(&fixture, &stores).await;
         world.everyone(&stores, ShareRole::Contributor).await;
         let (sam_token, _) = link(mint(SAM, ORG).await, TEAM, "U0SAMLEE").await;
@@ -1166,6 +1168,50 @@ async fn campaign() {
             rows,
             "no grant from a filer without share authority"
         );
+        let newest_of = |principal: &'static str| {
+            let stores = &stores;
+            let world = &world;
+            async move {
+                stores
+                    .data
+                    .list_records(
+                        &super::definition_qualification::request(stores, ORG, principal, 1),
+                        &world.app,
+                        &world.work,
+                    )
+                    .await
+                    .unwrap()
+                    .records[0]
+                    .record_id
+                    .clone()
+            }
+        };
+        let (_, filed) = file("U0SAMLEE", "Rita").await;
+        assert_eq!(grant_rows(&fixture).await, rows);
+        assert!(
+            filed.contains(". Filed for *Rita Okafor*'s review.") && !filed.contains("sent to"),
+            "{filed}"
+        );
+        assert!(
+            world
+                .sees(&stores, RITA, &world.work, &newest_of(SAM).await)
+                .await
+        );
+        world.everyone(&stores, ShareRole::Reviewer).await;
+        let everyone_rows = grant_rows(&fixture).await;
+        let (_, filed) = file("U0SAMLEE", "Hal").await;
+        assert_eq!(grant_rows(&fixture).await, everyone_rows);
+        assert!(
+            filed.contains(". Filed for *Hal Moreno*'s review.") && !filed.contains("sent to"),
+            "{filed}"
+        );
+        assert!(
+            world
+                .sees(&stores, HAL, &world.work, &newest_of(SAM).await)
+                .await
+        );
+        world.everyone(&stores, ShareRole::Contributor).await;
+        let rows = grant_rows(&fixture).await;
         let (_, filed) = file("U0SAMLEE", "Nia").await;
         assert_eq!(grant_rows(&fixture).await, rows);
         assert!(
@@ -1192,7 +1238,7 @@ async fn campaign() {
             after[1] > rows[1] && after[2] == rows[2] + 1,
             "{rows:?} {after:?}"
         );
-        check(&mut checks, "APP-206 through Slack: Sam (a contributor under the organization-wide share, no share authority) files with /forma naming the owner and confirms: \"Filed for Olive Park's review.\", no \"sent to\", the owner's listing shows the record and no grant row changes; naming a member with no reviewer standing gives the plain unreachable note, that member does not see the record and nothing is granted; the owner naming a non-reviewer is still \"sent to Hal Moreno for approval\" with the share written");
+        check(&mut checks, "APP-206 through Slack: Sam (a contributor under the organization-wide share, no share authority) files with /forma naming the owner, a personal reviewer and a member covered by a live organization-wide reviewer share, confirming each: \"Filed for <name>'s review.\", no \"sent to\", each named reviewer's listing shows the record and no grant row changes; naming a member with no reviewer standing gives the plain unreachable note, that member does not see the record and nothing is granted; the owner naming a non-reviewer is still \"sent to Hal Moreno for approval\" with the share written");
     }
 
     // --- D10: /forma at the daily model-call cap ---

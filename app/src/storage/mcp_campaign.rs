@@ -1576,7 +1576,9 @@ async fn campaign() {
 
     // --- APP-206 (ADR-020 §8): approver routing through forma_commit ---
     {
-        use super::actions_campaign::{grant_rows, routing_world, NIA, OLIVE, ROUTING_APP, SAM};
+        use super::actions_campaign::{
+            grant_rows, routing_world, HAL, NIA, OLIVE, RITA, ROUTING_APP, SAM,
+        };
         let world = routing_world(&fixture, &stores).await;
         world.everyone(&stores, ShareRole::Contributor).await;
         let (sam_token, _) = mint_token(&mint(SAM, ORG).await, "Claude").await;
@@ -1644,6 +1646,53 @@ async fn campaign() {
             rows,
             "no grant from a filer without share authority"
         );
+
+        // A personal reviewer: the same.
+        let drafted = ok(&draft_for(&sam_token, "Rita").await).clone();
+        assert_eq!(standings(&drafted), pair("Rita Okafor", "reviewer"));
+        let committed = commit(&sam_token, &drafted).await;
+        assert_eq!(grant_rows(&fixture).await, rows);
+        let said = text(&committed);
+        assert!(
+            said.contains(" Filed for Rita Okafor's review.")
+                && !said.contains("could not be shared"),
+            "{said}"
+        );
+        assert!(
+            world
+                .sees(
+                    &stores,
+                    RITA,
+                    &world.work,
+                    ok(&committed)["record_id"].as_str().unwrap()
+                )
+                .await
+        );
+
+        // Every member under a live organization-wide reviewer share.
+        world.everyone(&stores, ShareRole::Reviewer).await;
+        let everyone_rows = grant_rows(&fixture).await;
+        let drafted = ok(&draft_for(&sam_token, "Hal").await).clone();
+        assert_eq!(standings(&drafted), pair("Hal Moreno", "reviewer"));
+        let committed = commit(&sam_token, &drafted).await;
+        assert_eq!(grant_rows(&fixture).await, everyone_rows);
+        assert!(
+            text(&committed).contains(" Filed for Hal Moreno's review."),
+            "{}",
+            text(&committed)
+        );
+        assert!(
+            world
+                .sees(
+                    &stores,
+                    HAL,
+                    &world.work,
+                    ok(&committed)["record_id"].as_str().unwrap()
+                )
+                .await
+        );
+        world.everyone(&stores, ShareRole::Contributor).await;
+        let rows = grant_rows(&fixture).await;
 
         // A member with no reviewer standing: the plain note, nobody reached.
         let drafted = ok(&draft_for(&sam_token, "Nia").await).clone();
@@ -1721,7 +1770,7 @@ async fn campaign() {
         );
         check(
             &mut checks,
-            "APP-206 through MCP: Sam (a contributor under the organization-wide share, no share authority) drafts with forma_draft_record naming the owner, then a member with no reviewer standing: the held drafts say reviewer and unreachable by label; forma_commit answers \"Filed for Olive Park's review.\" and the plain unreachable note, the owner's listing shows the record and the other member's does not, and no grant row changes; a draft held as unreachable is judged again at the commit and reaches Nia as a reviewer after the owner's reviewer share (its replay reaches nobody); the owner naming a non-reviewer still shares as before APP-206",
+            "APP-206 through MCP: Sam (a contributor under the organization-wide share, no share authority) drafts with forma_draft_record naming the owner, a personal reviewer, a member covered by a live organization-wide reviewer share, then a member with no reviewer standing: the held drafts say reviewer, reviewer, reviewer and unreachable by label; forma_commit answers \"Filed for <name>'s review.\" for each reviewer and the plain unreachable note for the last, each named reviewer's listing shows the record and the other member's does not, and no grant row changes; a draft held as unreachable is judged again at the commit and reaches Nia as a reviewer after the owner's reviewer share (its replay reaches nobody); the owner naming a non-reviewer still shares as before APP-206",
         );
     }
 
