@@ -1959,6 +1959,24 @@ fn private_entries_and_reviewer_only_commands_match_validate_py() {
         assert_eq!(content["record_schemas"][0]["visibility"], "own", "{label}");
         assert_eq!(content["commands"][0]["reviewer_only"], true, "{label}");
     }
+    // An escaped spelling never reaches storage: the document decodes
+    // `"\u006fwn"` to `own` and the canonical bytes carry it literally, so
+    // the database's `owner_only` derivation (0024) sees one spelling.
+    let mut escaped = northstar_definition();
+    set(
+        &mut escaped,
+        "/content/record_schemas/0/visibility",
+        Some(json!("own")),
+    );
+    rehash(&mut escaped);
+    let text = serde_json::to_string(&escaped)
+        .unwrap()
+        .replace(r#""visibility":"own""#, r#""visibility":"\u006fwn""#);
+    assert!(text.contains(r#"\u006fwn"#));
+    let admitted = admit_definition(text.as_bytes()).unwrap();
+    let canonical = String::from_utf8(admitted.canonical.clone()).unwrap();
+    assert!(canonical.contains(r#""visibility":"own""#));
+    assert!(!canonical.contains(r#"\u"#));
     for (pointer, value, code, detail) in [
         (
             "/content/record_schemas/0/visibility",

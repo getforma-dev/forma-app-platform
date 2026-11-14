@@ -67,11 +67,27 @@ pub struct Granted {
     pub inserted: bool,
 }
 /// The result of a share: the grantee (none for an organization-wide share,
-/// APP-192) and the granted subset, in order.
+/// APP-192) and the granted subset, in order; `removed` names the work
+/// permissions a lower role took away from the grantee (review f1).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Shared {
     pub grantee: Option<String>,
     pub granted: Vec<Granted>,
+    pub removed: Vec<String>,
+}
+/// The owner's revocation of a member's personal share (APP-191 review M1):
+/// the work permissions removed, in `record_read`, `record_review`,
+/// `record_write` order (empty when the member held none).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Revoked {
+    pub grantee: String,
+    pub removed: Vec<String>,
+}
+impl Revoked {
+    /// Whether this call wrote anything (and therefore appended its event).
+    pub fn changed(&self) -> bool {
+        !self.removed.is_empty()
+    }
 }
 /// Who a share reaches (APP-192, D9): one member of the sharer's
 /// organization, or every current and future active member of it.
@@ -112,7 +128,7 @@ impl ShareRole {
 impl Shared {
     /// Whether this call wrote anything (and therefore appended its event).
     pub fn changed(&self) -> bool {
-        self.granted.iter().any(|g| g.inserted)
+        self.granted.iter().any(|g| g.inserted) || !self.removed.is_empty()
     }
 }
 /// A member the sharer may pick. Principals carry no display name in the
@@ -293,17 +309,22 @@ impl Workspace {
                 }
             };
             require(!rows.is_empty())?;
-            let granted = rows
-                .iter()
-                .map(|row| {
-                    Ok(Granted {
-                        scope: text(row, 0)?,
+            // The definer answers a stripped permission as scope `revoked`.
+            let mut granted = Vec::new();
+            let mut removed = Vec::new();
+            for row in &rows {
+                let scope = text(row, 0)?;
+                if scope == "revoked" {
+                    removed.push(text(row, 2)?);
+                } else {
+                    granted.push(Granted {
+                        scope,
                         resource: text(row, 1)?,
                         permission: text(row, 2)?,
                         inserted: boolean(row, 3)?,
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
+                    });
+                }
+            }
             // APP-108: a work built from a folder carries read access to
             // exactly the folder files it was built from (every share path:
             // canvas, Slack, MCP), audited, in this same transaction (APP-113
@@ -319,6 +340,49 @@ impl Workspace {
                     Audience::Organization => None,
                 },
                 granted,
+                removed,
+            })
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// The app owner's revocation of `grantee`'s personal share of `work`
+    /// (APP-191 review M1): every `record_read`, `record_write` and
+    /// `record_review` row the member holds on the work goes in one unit
+    /// through `genui_private.revoke_work_share`, the member's share records
+    /// are marked revoked and one `permission.revoked` is appended; a removed
+    /// grant leaves no row that a later organization-wide share could revive.
+    /// The organization-wide share, the app-level `discover`/`run` rows and
+    /// the owner's own standing are untouched. `Denied` for anyone but the
+    /// app's owner, for the owner naming themselves, for a work that does not
+    /// exist and for a malformed id alike; a member who held nothing answers
+    /// an unchanged [`Revoked`].
+    pub async fn revoke_work_share(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+        grantee: &str,
+    ) -> Result<Revoked> {
+        require(valid_id(app) && valid_id(work) && valid_id(grantee))?;
+        require(grantee != request.principal)?;
+        let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let permit = transaction.fence_member().await?;
+            let rows = permit.transaction().query("SELECT permission,removed FROM genui_private.revoke_work_share($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid)", &[&request.organization,&request.principal,&app,&work,&grantee]).await?;
+            require(!rows.is_empty())?;
+            let mut removed = Vec::new();
+            for row in &rows {
+                if boolean(row, 1)? {
+                    removed.push(text(row, 0)?);
+                }
+            }
+            Ok(Revoked {
+                grantee: grantee.to_owned(),
+                removed,
             })
         }
         .await;
@@ -373,8 +437,6 @@ async fn personal_only(
     let files = transaction.query("SELECT 1 FROM genui.box_derivations WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid LIMIT 1", &[&request.organization,&app,&work]).await?;
     Ok((!files.is_empty()).then_some("folder files"))
 }
-
-impl Workspace {}
 
 impl Data {
     /// The event stream's one read per event (review M2): among
@@ -483,6 +545,7 @@ mod tests {
                 permission: "record_read".into(),
                 inserted: false,
             }],
+            removed: Vec::new(),
         };
         assert!(!shared.changed());
     }
