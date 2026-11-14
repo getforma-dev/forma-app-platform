@@ -56,7 +56,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Date | What | Who |
 | --- | --- | --- |
 | Fri Nov 14 | Charter and notice v1 (cohort text), tickets revised. Promotions paused (done). Victor: APP-175 permission readback; reject or cancel run 43157872671. | agents, **Victor** |
-| Sat Nov 15 | After the 65-minute fence: `maintenance inspect`/`abandon`, `reconcile`, re-enable promotion, approve **Release A** (main, 20→22). **Done 2026-11-14 at 07:17 UTC** ([record](../../evidence/APP-175/release-2026-11-14.md)). Victor (no cost): open one shared work page on beta with the browser's developer tools and send the time of its JSON document request. That is the RDS per-transaction datum for the capacity statement (APP-197). | **Victor** (agents prepare the checklist) |
+| Sat Nov 15 | After the 65-minute fence: `maintenance inspect`/`abandon`, `reconcile`, re-enable promotion, approve **Release A** (main, 20→22). **Done 2026-11-14 at 07:17 UTC** ([record](../../evidence/APP-175/release-2026-11-14.md)). Victor (no cost): open one shared work page on beta with the browser's developer tools and send the time of its JSON document request. That is the beta document-read timing the capacity statement scales from (a document read is 11 transactions; APP-197). | **Victor** (agents prepare the checklist) |
 | Nov 15–21 | Parallel build: W1–W4. W5 spike Nov 17–18. | agents |
 | Sat Nov 22 | Tier A reviews closed; merge W1–W4. | agents |
 | Sun Nov 23 | Renewed scan disposition. **Release B** (22→24). Expiry renewal to Dec 15 plus the December month. Alarm template deployed. Anthropic limit set. FormaStack raises the fAuth tenant limit to at least 30. Restore drill. | **Victor** |
@@ -142,7 +142,8 @@ This goes in the runbook (APP-188) and on the Nov 24 checklist. Victor's text:
 >
 > **What students may see during a burst, and what to say:**
 > - "Updates are unavailable": wait a few seconds and press Refresh.
-> - A form that answers "try again": their save didn't go through, so submit once more. Both saves count in summaries, and the reviewer takes the newest.
+> - A form that says "The result of your command could not be confirmed" or "The record was busy. Submit again in a moment": submit the same form again. That is safe, because the same form can't save twice; it can only return the stored result. Only a fresh submission from a new form makes a second entry, and then both count in summaries and the reviewer takes the newest.
+> - "You don't have access to this card" right after someone else saved: the card is stale, not a lost permission, so press Refresh. *(Delete this item once APP-198 has shipped; item 6 of the go/no-go list requires it before codes go out.)*
 >
 > **Fallback:** if live updates misbehave, stop relying on them and refresh your projected summary by hand between items. Submitting through forms doesn't depend on live updates.
 
@@ -171,7 +172,7 @@ All yes, or no codes go out.
 6. **`refresh-herd` green on main** (APP-195, APP-197) at the revised criteria. The catalog-check count and the sustainable commit cadence are written in the runbook, and Victor's beta document-read timing is recorded. APP-198 (stale views are never shown as "no access") is merged.
 7. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
 8. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
-9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer.
+9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer; and a page may take up to ten seconds to show someone else's change (press Refresh to see it sooner).
 
 ## Verification (end to end)
 
