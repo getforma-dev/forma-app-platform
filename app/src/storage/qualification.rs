@@ -1187,9 +1187,10 @@ async fn campaign() {
     let shadow = Stores::new(fixture.settings()).unwrap();
     shadow.readiness().await.unwrap();
     // Hold one clean object only in this test to model a corrupted idle path.
-    // The trap has a view over pg_roles and an `=` on names (APP-197 recheck
-    // R-M1): a reuse must refuse the shadowed session before any statement
-    // that resolves names or operators through its search_path runs.
+    // The trap has a view over pg_roles, an `=` on names, a `text` type with
+    // a cast from `name`, and an `array_to_string` (APP-197 recheck R-M1,
+    // final check F-m1): a reuse must refuse the shadowed session before any
+    // statement that resolves names or operators through its search_path runs.
     let poisoned = shadow.worker.inner.pool.get().await.unwrap();
     fixture.sql(
         "CREATE SCHEMA reviewer_probe; CREATE TABLE reviewer_probe.marker (value integer); \
@@ -1197,6 +1198,10 @@ async fn campaign() {
          CREATE VIEW reviewer_probe.pg_roles AS SELECT r.* FROM pg_catalog.pg_roles r WHERE reviewer_probe.mark(); \
          CREATE FUNCTION reviewer_probe.name_eq(name,name) RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN PERFORM reviewer_probe.mark(); RETURN $1 OPERATOR(pg_catalog.=) $2; END $$; \
          CREATE OPERATOR reviewer_probe.= (LEFTARG=name, RIGHTARG=name, FUNCTION=reviewer_probe.name_eq); \
+         CREATE TYPE reviewer_probe.text AS (value pg_catalog.text); \
+         CREATE FUNCTION reviewer_probe.name_text(pg_catalog.name) RETURNS reviewer_probe.text LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN PERFORM reviewer_probe.mark(); RETURN ROW($1::pg_catalog.text)::reviewer_probe.text; END $$; \
+         CREATE CAST (pg_catalog.name AS reviewer_probe.text) WITH FUNCTION reviewer_probe.name_text(pg_catalog.name); \
+         CREATE FUNCTION reviewer_probe.array_to_string(anyarray, pg_catalog.text) RETURNS pg_catalog.text LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN PERFORM reviewer_probe.mark(); RETURN pg_catalog.array_to_string($1, $2); END $$; \
          GRANT USAGE ON SCHEMA reviewer_probe TO genui_workspace,genui_control,genui_data,genui_worker; \
          GRANT SELECT ON reviewer_probe.pg_roles TO genui_workspace,genui_control,genui_data,genui_worker; \
          SET ROLE genui_worker; SET search_path=reviewer_probe,pg_catalog; SELECT count(*) FROM pg_roles WHERE rolname=current_user; RESET ROLE; RESET search_path; \
@@ -1210,18 +1215,26 @@ async fn campaign() {
         .unwrap();
     assert!(control_count > 0);
     fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
-    // The planted operator alone: a qualified relation, an unqualified `=`.
-    fixture.sql(
-        "SET ROLE genui_worker; SET search_path=reviewer_probe,pg_catalog; SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname=current_user; RESET ROLE; RESET search_path;",
-        "genui",
-    );
-    let operator_count: u64 = fixture
-        .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
-        .trim()
-        .parse()
-        .unwrap();
-    assert!(operator_count > 0);
-    fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
+    // Each planted object alone, as the worker under the shadowing path: the
+    // `=` on names, the `text` type's cast from `name`, and `array_to_string`
+    // (APP-197 recheck R-M1, final check F-m1).
+    for control in [
+        "SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname=current_user",
+        "SELECT session_user::text",
+        "SELECT array_to_string(ARRAY[1],',')",
+    ] {
+        fixture.sql(
+            &format!("SET ROLE genui_worker; SET search_path=reviewer_probe,pg_catalog; {control}; RESET ROLE; RESET search_path;"),
+            "genui",
+        );
+        let marked: u64 = fixture
+            .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
+            .trim()
+            .parse()
+            .unwrap();
+        assert!(marked > 0, "{control} ran no planted object");
+        fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
+    }
     let mut poisoned = poisoned;
     poisoned
         .client
@@ -1263,7 +1276,6 @@ async fn campaign() {
                 .map(drop)
         })
         .await;
-        assert_eq!(probe.lock().unwrap().cause, Some("identity_search_path"));
         assert_eq!(
             fixture
                 .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
@@ -1271,6 +1283,7 @@ async fn campaign() {
             "0",
             "the identity statement used a planted object"
         );
+        assert_eq!(probe.lock().unwrap().cause, Some("identity_search_path"));
     }
     drop(poisoned);
     // Inside the A5 window (APP-197): the poisoned worker session is refused
