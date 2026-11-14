@@ -275,6 +275,21 @@ fn insert_guest_share(
     fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,version,idempotency_key,request_digest,created_at,expires_at) VALUES ('{ORG}','{share}','{app}','{work}','{OWNER}',1,'{email}','{publication}','{definition_digest}',1,'{{{views}}}','{{{collections}}}','campaign guest share',false,1,'{share}','{definition_digest}',clock_timestamp(),clock_timestamp()+interval '7 days'); COMMIT;"), "genui");
 }
 
+/// Whether, within five seconds, another backend waits on a lock while
+/// running a statement that names `needle` (`pg_stat_activity`): the
+/// deterministic sign that a second session queued behind the first's open
+/// transaction instead of reading past it.
+async fn lock_wait(fixture: &Fixture, needle: &str) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        let waiting = scalar(fixture, &format!("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND state='active' AND pid<>pg_backend_pid() AND query LIKE '%{needle}%'")).await;
+        if waiting > 0 {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    false
+}
 async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
     fixture
         .operator()
@@ -625,7 +640,6 @@ async fn campaign() {
     .await;
     let all_claims = sorted(&[OWNER_CLAIM, BEN_CLAIM, REV_CLAIM]);
     let all_notes = sorted(&[OWNER_NOTE, BEN_NOTE]);
-
     // --- list, search, target (canvas, MCP and Slack share these reads) ------
     judged!(&mut checks, "list: a contributor sees only their own claims and every note; a reviewer and the owner see all claims", {
         let b = stores.data.list_records(&ben, PRIVATE_APP, work).await.unwrap();
@@ -1564,6 +1578,89 @@ async fn campaign() {
             .await
             .unwrap());
         check(&mut checks, "review m3: two concurrent set_work_everyone calls for one work serialize on the advisory lock; the second waits, then replaces the first's role as one unit, and both answer rows (no unique violation, no 503); one live row remains");
+    }
+
+    // --- W2b review MAJOR-1: a queued call reads the committed state ---------------
+    // Two sessions, deterministic: the first holds its change open, the second
+    // (the storage path) starts, is seen waiting, the first commits, the
+    // second's outcome is judged.
+    {
+        stores
+            .workspace
+            .share_work(
+                &owner,
+                PRIVATE_APP,
+                work,
+                Audience::Organization,
+                ShareRole::Viewer,
+            )
+            .await
+            .unwrap();
+        let mut first = fixture.operator().await;
+        let t1 = first.client.transaction().await.unwrap();
+        t1.batch_execute("SET LOCAL ROLE genui_workspace")
+            .await
+            .unwrap();
+        t1.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+        let rows1: i64 = t1
+            .query_one(&everyone_sql(OWNER, "contributor"), &[])
+            .await
+            .unwrap()
+            .get(0);
+        assert!(rows1 > 0, "viewer to contributor, left uncommitted");
+        let waiter = stores
+            .workspace
+            .revoke_organization_share(&owner, PRIVATE_APP, work);
+        let committer = async {
+            let waited = lock_wait(&fixture, "set_work_everyone").await;
+            t1.commit().await.unwrap();
+            waited
+        };
+        let (revoked, waited) = tokio::join!(waiter, committer);
+        assert!(waited, "the 'none' call waits behind the open change");
+        assert_eq!(
+            revoked,
+            Ok(true),
+            "the queued 'none' revokes the contributor share the first call committed"
+        );
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id IS NULL AND revoked_at IS NULL")).await, 0, "no organization-wide share stays live");
+        check(&mut checks, "W2b review MAJOR-1: a 'none' queued behind an uncommitted viewer-to-contributor change waits on the per-work lock (taken before any read), then revokes the committed contributor share (storage answers true, no live organization-wide row) instead of answering 'nothing to revoke' over a stale read");
+    }
+    {
+        let mut first = fixture.operator().await;
+        let t1 = first.client.transaction().await.unwrap();
+        t1.batch_execute("SET LOCAL ROLE genui_workspace")
+            .await
+            .unwrap();
+        t1.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+        let rows1: i64 = t1
+            .query_one(&share(OWNER, FAY, "reviewer"), &[])
+            .await
+            .unwrap()
+            .get(0);
+        assert!(
+            rows1 > 0,
+            "the owner's reviewer share to Fay, left uncommitted"
+        );
+        let waiter = stores
+            .workspace
+            .revoke_work_share(&owner, PRIVATE_APP, work, FAY);
+        let committer = async {
+            let waited = lock_wait(&fixture, "revoke_work_share").await;
+            t1.commit().await.unwrap();
+            waited
+        };
+        let (revoked, waited) = tokio::join!(waiter, committer);
+        assert!(waited, "the revocation waits behind the open share");
+        let revoked = revoked.unwrap();
+        assert_eq!(
+            revoked.removed,
+            ["record_read", "record_review", "record_write"],
+            "the queued revocation removes the rows the share committed"
+        );
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{FAY}' AND work_id='{work}'")).await, 0);
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{FAY}' AND work_id='{work}' AND revoked_at IS NULL")).await, 0);
+        check(&mut checks, "W2b review MAJOR-1, the same ordering in share_work and revoke_work_share: an owner's revocation queued behind an uncommitted reviewer share waits on the per-work lock, then removes the three rows that share committed (Fay keeps nothing, her share record marked revoked), instead of answering 'nothing to remove' and leaving the grant live");
     }
 
     // --- review M1: the owner revokes a member's personal share ------------------

@@ -44,9 +44,15 @@
 -- live `work_shares` row with no grantee and a role, which every work-level
 -- clause honors for every active member (a member admitted later is covered)
 -- and which one call revokes as a unit (`'none'`) or replaces (a new role
--- revokes and re-inserts). Concurrent calls for one work serialize on a
--- transaction advisory lock, so each answers a result and the partial unique
--- index below is never hit. The sharer must hold `discover` and `run` on the
+-- revokes and re-inserts). The three sharing definers (`share_work`,
+-- `set_work_everyone`, `revoke_work_share`) take one transaction advisory
+-- lock per work, `forma:work-share:<org>:<work>`, before any read their
+-- decision rests on (W2b review MAJOR-1, narrowing review m3): a call queued
+-- behind another's open transaction reads what that transaction committed
+-- (a `'none'` behind a viewer→contributor change revokes the contributor
+-- share; a revocation behind a grant removes it; two first-time shares both
+-- answer), so the partial unique index below is never hit. The sharer must
+-- hold `discover` and `run` on the
 -- app and `record_read` on the work personally, so the role's set is only
 -- ever what the sharer holds; a live reviewer share is replaced or revoked
 -- only by a reviewer. It is refused for a work with source dependencies
@@ -176,6 +182,11 @@ BEGIN
  IF NOT FOUND OR s_status<>'active' OR s_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
  SELECT m.status INTO g_status FROM genui.memberships m WHERE m.organization_id=p_org AND m.principal_id=p_grantee FOR SHARE;
  IF NOT FOUND OR g_status<>'active' THEN RETURN; END IF;
+ -- One sharing call at a time per work (review m3; W2b review MAJOR-1): the
+ -- lock comes BEFORE every read the decision rests on, so a call queued behind
+ -- another's transaction reads the state that transaction committed (each
+ -- statement of a READ COMMITTED transaction takes a fresh snapshot).
+ PERFORM pg_advisory_xact_lock(hashtextextended('forma:work-share:'||p_org::text||':'||p_work::text,0));
  -- Share authority (ADR-011, unchanged): the unrevoked creator or a
  -- `share_work` holder, with `run` on the app.
  SELECT (w.created_by=p_sharer AND w.creator_revoked_at IS NULL) INTO v_creator FROM genui.saved_work w
@@ -322,6 +333,12 @@ BEGIN
  SELECT m.status,m.membership_epoch INTO s_status,s_epoch FROM genui.memberships m
   WHERE m.organization_id=p_org AND m.principal_id=p_sharer FOR SHARE;
  IF NOT FOUND OR s_status<>'active' OR s_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
+ -- One sharing call at a time per work (review m3; W2b review MAJOR-1): the
+ -- lock comes BEFORE every read the decision rests on (the live share below
+ -- included), so a call queued behind another's transaction reads the state
+ -- that transaction committed; a `'none'` queued behind a viewer→contributor
+ -- change revokes the contributor share rather than finding nothing.
+ PERFORM pg_advisory_xact_lock(hashtextextended('forma:work-share:'||p_org::text||':'||p_work::text,0));
  -- Share authority (ADR-011, unchanged) and `run` on the app.
  SELECT (w.created_by=p_sharer AND w.creator_revoked_at IS NULL) INTO v_creator FROM genui.saved_work w
   WHERE w.organization_id=p_org AND w.app_id=p_app AND w.work_id=p_work;
@@ -352,12 +369,7 @@ BEGIN
  IF p_role<>'none' AND NOT v_read THEN RETURN; END IF;
  IF p_role IN ('contributor','reviewer') AND NOT v_write THEN RETURN; END IF;
  IF p_role='reviewer' AND NOT v_review THEN RETURN; END IF;
- -- One call at a time per work (review m3): concurrent calls queue here and
- -- each sees the other's committed row, so every caller gets a result and the
- -- partial unique index is never the arbiter.
- PERFORM pg_advisory_xact_lock(hashtextextended('forma:work-everyone:'||p_org::text||':'||p_work::text,0));
- -- The live organization-wide share, locked (the partial unique index keeps
- -- a concurrent second insert out).
+ -- The live organization-wide share, read under the lock taken above.
  SELECT s.share_id,s.role INTO v_live_share,v_live_role FROM genui.work_shares s
   WHERE s.organization_id=p_org AND s.app_id=p_app AND s.work_id=p_work AND s.grantee_id IS NULL AND s.revoked_at IS NULL FOR UPDATE;
  -- A live reviewer share is the owner's (or a reviewer's) to replace or
@@ -460,6 +472,9 @@ BEGIN
  SELECT m.status,m.membership_epoch INTO a_status,a_epoch FROM genui.memberships m
   WHERE m.organization_id=p_org AND m.principal_id=p_actor FOR SHARE;
  IF NOT FOUND OR a_status<>'active' OR a_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
+ -- The per-work lock first (W2b review MAJOR-1): a revocation queued behind
+ -- an uncommitted grant removes that grant once it commits.
+ PERFORM pg_advisory_xact_lock(hashtextextended('forma:work-share:'||p_org::text||':'||p_work::text,0));
  -- The owner alone; the work must exist; never the owner's own rows.
  v_owner:=EXISTS (SELECT 1 FROM genui.apps a WHERE a.organization_id=p_org AND a.app_id=p_app AND a.owner_principal_id=p_actor);
  IF NOT v_owner THEN RETURN; END IF;
