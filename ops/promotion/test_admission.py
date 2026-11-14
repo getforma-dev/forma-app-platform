@@ -367,6 +367,29 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(Refused): trial.compose('migrate', [])
         self.assertEqual(len(self.aws.run_requests), 5)
 
+    def test_grant_and_revoke_reviewer_run_their_documented_overrides(self):
+        trial = self.trial()
+        app, work = '0000000a-0000-4000-8000-000000000065', '0000000b-0000-4000-8000-00000000006c'  # letters, so .upper() is not the same id
+        self.aws.results = [(0, {'principal_id': PRINCIPAL, 'permission': 'record_review', 'changed': True, 'membership_epoch': 1}),
+                            (0, {'principal_id': PRINCIPAL, 'permission': 'record_review', 'changed': True, 'membership_epoch': 2})]
+        granted = trial.grant_reviewer(PRINCIPAL, app, work)
+        self.assertEqual((granted['status'], granted['permission']), ('granted-reviewer', 'record_review'))
+        self.assertEqual(self.aws.run_requests[0]['overrides']['containerOverrides'][0]['command'],
+                         ['admission', 'grant-permission', '--organization', ORG, '--principal', PRINCIPAL, '--permission', 'record_review', '--app', app, '--work', work])
+        revoked = trial.revoke_reviewer(PRINCIPAL, app, work)
+        self.assertEqual((revoked['status'], revoked['membership_epoch']), ('revoked-reviewer', 2))
+        self.assertEqual(self.aws.run_requests[1]['overrides']['containerOverrides'][0]['command'],
+                         ['admission', 'revoke-permission', '--organization', ORG, '--principal', PRINCIPAL, '--permission', 'record_review', '--app', app, '--work', work])
+        self.assertEqual(len({r['clientToken'] for r in self.aws.run_requests}), 2)
+        self.assertEqual(self.aws.puts, [])
+        # A pre-0024 database refuses the grant in the task; malformed ids refuse before any task.
+        self.aws.results = [(1, {'refused': 'permission_unsupported'})]
+        with self.assertRaises(Refused): trial.grant_reviewer(PRINCIPAL, app, work)
+        for bad in [(PRINCIPAL, 'x', work), (PRINCIPAL, app, work.upper()), ('x', app, work)]:
+            with self.assertRaises(Refused): trial.revoke_reviewer(*bad)
+            with self.assertRaises(Refused): trial.grant_reviewer(*bad)
+        self.assertEqual(len(self.aws.run_requests), 3)
+
     def test_delete_uploads_removes_every_version_of_the_listed_keys_only(self):
         trial = self.trial()
         box, files = '33333333-4444-4555-8666-777777777777', ['aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee%d' % n for n in range(2)]
@@ -473,8 +496,9 @@ class AdmissionTests(unittest.TestCase):
         document = json.loads(admission.OVERRIDES.read_text())
         trial_entries = [e for e in document['overrides'] if e['name'] in set(admission.ISSUE_OVERRIDES.values())
                          | {'admission-list-trial', 'admission-revoke-trial', 'admission-grant-admin', 'admission-revoke-admin', 'admission-list-box-files',
-                            'admission-stats', 'admission-suspend-organization', 'admission-purge-organization'}]
-        self.assertEqual(len(trial_entries), 10)
+                            'admission-stats', 'admission-suspend-organization', 'admission-purge-organization',
+                            'admission-grant-reviewer', 'admission-revoke-reviewer'}]
+        self.assertEqual(len(trial_entries), 12)
         for entry in trial_entries:
             command = entry['overrides']['containerOverrides'][0]['command']
             self.assertEqual(command[command.index('--organization') + 1], OTHER_ORG)  # the documented example id, never a real one

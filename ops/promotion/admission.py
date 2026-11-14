@@ -18,6 +18,9 @@ list            codes, status, notes and redemptions of the organization (identi
 revoke          revoke one code by id; the task drops its capability and provider invitation.
 grant-admin     the organization's admin_policy row for one member (the Admin page).
 revoke-admin    remove that row (the reviewed undo of a grant to the wrong member).
+grant-reviewer  a member's record_review on one app's saved work (a helper who reviews
+                every entry); needs release B's migration 0024 in the database.
+revoke-reviewer remove that row and advance the member's epoch (W4 review M1).
 delete-uploads  list one member's uploaded box files through the task, then delete every
                 S3 version and delete marker of those keys with the operator's identity.
 restart         force a new deployment of the service, behind --announced: the service
@@ -304,6 +307,22 @@ class Trial:
                 'revoke-admin task did not succeed')
         return dict(outcome['result'], status='revoked-admin', receipts=self.receipts)
 
+    def reviewer(self, grant, principal, app, work):
+        for value in (principal, app, work):
+            require(isinstance(value, str) and UUID_RE.fullmatch(value), 'principal, app and work must be canonical UUIDs')
+        override = 'admission-grant-reviewer' if grant else 'admission-revoke-reviewer'
+        sets = [('--organization', self.organization), ('--principal', principal), ('--app', app), ('--work', work)]
+        outcome = self.operator_task(override, sets, 'grant-reviewer' if grant else 'revoke-reviewer')
+        require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict) and outcome['result'].get('permission') == 'record_review',
+                ('grant' if grant else 'revoke') + '-reviewer task did not succeed: ' + str((outcome['result'] or {}).get('refused') or 'no result'))
+        return dict(outcome['result'], status='granted-reviewer' if grant else 'revoked-reviewer', receipts=self.receipts)
+
+    def grant_reviewer(self, principal, app, work):
+        return self.reviewer(True, principal, app, work)
+
+    def revoke_reviewer(self, principal, app, work):
+        return self.reviewer(False, principal, app, work)
+
     def delete_uploads(self, principal):
         """Every S3 version and delete marker of the member's box-file keys, with the operator's identity."""
         require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
@@ -455,7 +474,8 @@ def _unique(pairs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'revoke-admin', 'delete-uploads', 'restart', 'suspend', 'purge'])
+    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'revoke-admin', 'grant-reviewer', 'revoke-reviewer',
+                                            'delete-uploads', 'restart', 'suspend', 'purge'])
     parser.add_argument('--state-bucket', required=True)
     parser.add_argument('--state-prefix', default='beta')
     parser.add_argument('--expected-state-sha256', required=True)
@@ -467,7 +487,9 @@ def main(argv=None):
     parser.add_argument('--expires-days', type=int, default=14, help='issue: code expiry, 1 to 30 days')
     parser.add_argument('--without-notes', action='store_true', help='issue: before migration 0023 (no access_codes.note column)')
     parser.add_argument('--code', help='revoke: the code id')
-    parser.add_argument('--principal', help='grant-admin, revoke-admin, delete-uploads: the member\'s principal id')
+    parser.add_argument('--principal', help='grant-admin, revoke-admin, grant-reviewer, revoke-reviewer, delete-uploads: the member\'s principal id')
+    parser.add_argument('--app', help='grant-reviewer, revoke-reviewer: the app id')
+    parser.add_argument('--work', help='grant-reviewer, revoke-reviewer: the saved work id')
     parser.add_argument('--announced', action='store_true', help='restart: the members were told the service restarts now')
     parser.add_argument('--confirm', help='purge: the organization id again, typed, for the irreversible deletion')
     args = parser.parse_args(argv)
@@ -477,6 +499,8 @@ def main(argv=None):
         parser.error('revoke needs --code')
     if args.command in ('grant-admin', 'revoke-admin', 'delete-uploads') and not args.principal:
         parser.error(args.command + ' needs --principal')
+    if args.command in ('grant-reviewer', 'revoke-reviewer') and not (args.principal and args.app and args.work):
+        parser.error(args.command + ' needs --principal, --app and --work')
     if args.command == 'purge' and not args.confirm:
         parser.error('purge needs --confirm <organization>')
     output = None
@@ -502,6 +526,10 @@ def main(argv=None):
             result = trial.grant_admin(args.principal)
         elif args.command == 'revoke-admin':
             result = trial.revoke_admin(args.principal)
+        elif args.command == 'grant-reviewer':
+            result = trial.grant_reviewer(args.principal, args.app, args.work)
+        elif args.command == 'revoke-reviewer':
+            result = trial.revoke_reviewer(args.principal, args.app, args.work)
         elif args.command == 'delete-uploads':
             result = trial.delete_uploads(args.principal)
         elif args.command == 'suspend':

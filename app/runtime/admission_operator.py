@@ -168,9 +168,16 @@ OPERATOR_KINDS = ("organization.provisioned", "handle.rotated", "code.issued", "
 # them). admin_policy (the organization's governance row, 0002 organization_permissions)
 # is grantable since the real-user trial decision of 2026-11-14 (D2, D4: the
 # organization's admin is a member the operator names); it takes no app, work or
-# source, and an access code still never carries it (parse_grant).
+# source, and an access code still never carries it (parse_grant). record_review
+# (W4's work-level reviewer permission, in the work_permissions CHECK from
+# migration 0024) is grantable and revocable from the same date (W4 review M1:
+# a personal reviewer grant must be revocable from the operator channel); a
+# grant refuses permission_unsupported below schema 24, a revoke needs no gate.
 GRANTABLE = {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
-             "record_read": "work", "record_write": "work", "source_read": "source", "admin_policy": "organization"}
+             "record_read": "work", "record_write": "work", "record_review": "work", "source_read": "source",
+             "admin_policy": "organization"}
+# Permissions whose table CHECK admits them only from a schema version: a grant below it refuses.
+GATED_PERMISSIONS = {"record_review": 24}
 # The (app, work, source) arguments each resource takes, exactly.
 RESOURCE_SHAPE = {"app": (True, False, False), "work": (True, True, False), "source": (False, False, True),
                   "organization": (False, False, False)}
@@ -1328,6 +1335,10 @@ def grant_permission(c, args):
     """
     org, principal = args.organization, args.principal
     begin(c, org)
+    if args.permission in GATED_PERMISSIONS:
+        # Before any lock or write: the permission's CHECK exists only from this schema version.
+        version = c.execute("SELECT version FROM genui_meta.schema_version WHERE singleton").fetchone()[0]
+        require(version >= GATED_PERMISSIONS[args.permission], "permission_unsupported")
     epoch = lock_active_member(c, org, principal)
     exists, insert, _ = permission_statements(args)
     require(c.execute(*exists).fetchone() is not None, "resource_unknown")

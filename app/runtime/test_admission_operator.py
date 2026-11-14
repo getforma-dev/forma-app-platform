@@ -89,13 +89,15 @@ class PureTests(unittest.TestCase):
     def test_permission_commands_are_a_closed_set(self):
         """ADR-007 amendment (APP-010 review M2): grant/revoke take only the permissions the tables allow,
         never share_work or export, and each permission names exactly its resource. admin_policy (the
-        real-user trial, D2/D4) names the organization alone: no app, work or source."""
+        real-user trial, D2/D4) names the organization alone: no app, work or source; record_review (W4, migration
+        0024) names a work like record_read, and its grant is gated on schema 24."""
         app, work, source, principal = (str(uuid.uuid4()) for _ in range(4))
         parser = op.parser()
         base = ["--organization", ORG, "--principal", principal]
         self.assertEqual(op.GRANTABLE, {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
-                                        "record_read": "work", "record_write": "work", "source_read": "source",
+                                        "record_read": "work", "record_write": "work", "record_review": "work", "source_read": "source",
                                         "admin_policy": "organization"})
+        self.assertEqual(op.GATED_PERMISSIONS, {"record_review": 24})
         self.assertEqual(op.OPERATOR_KINDS[:10], ("organization.provisioned", "handle.rotated", "code.issued", "code.revoked",
                                                   "code.extended", "membership.revoked", "entitlement.revoked",
                                                   "permission.granted", "permission.revoked", "creator_authority.revoked"))
@@ -105,14 +107,15 @@ class PureTests(unittest.TestCase):
         for command in ("grant-permission", "revoke-permission"):
             for good in (["--permission", "run", "--app", app], ["--permission", "review_publish", "--app", app],
                          ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source],
-                         ["--permission", "admin_policy"]):
+                         ["--permission", "record_review", "--app", app, "--work", work], ["--permission", "admin_policy"]):
                 with self.subTest(command=command, good=good[1]):
                     op.validate(parser.parse_args([command, *base, *good]))
             for bad in (["--permission", "admin_policy", "--app", app], ["--permission", "admin_policy", "--source", source],
                         ["--permission", "share_work", "--app", app, "--work", work],
                         ["--permission", "export", "--app", app, "--work", work], ["--permission", "owner", "--app", app],
                         ["--permission", "run"], ["--permission", "run", "--app", app, "--work", work],
-                        ["--permission", "record_read", "--app", app], ["--permission", "source_read", "--app", app],
+                        ["--permission", "record_read", "--app", app], ["--permission", "record_review", "--app", app],
+                        ["--permission", "record_review", "--source", source], ["--permission", "source_read", "--app", app],
                         ["--permission", "run", "--app", app.upper()], ["--permission", "source_read", "--source", source, "--app", app]):
                 with self.subTest(command=command, bad=bad[1:3]), self.assertRaises(op.Refused):
                     op.validate(parser.parse_args([command, *base, *bad]))
@@ -245,6 +248,54 @@ class PureTests(unittest.TestCase):
                 self.assertEqual(inserts[0][1][2], VECTOR_DIGEST)
                 self.assertEqual((result["note"], result["code_digest"], c.committed), ("Ada L.", VECTOR_DIGEST, 1))
                 self.assertNotIn("code", result)
+
+    def test_record_review_grant_is_gated_on_schema_24_and_revoke_is_not(self):
+        """W4 review M1: the operator grants record_review only once migration 0024 widened the work_permissions
+        CHECK (refusing permission_unsupported before any lock or write, like note_unsupported), and revokes
+        it at any schema: the row goes, the epoch advances, permission.revoked is appended."""
+        app, work, principal = (str(uuid.uuid4()) for _ in range(3))
+        parser = op.parser()
+        base = ["--organization", ORG, "--principal", principal, "--permission", "record_review", "--app", app, "--work", work]
+        grant = op.validate(parser.parse_args(["grant-permission", *base]))
+        revoke = op.validate(parser.parse_args(["revoke-permission", *base]))
+        class Connection:
+            def __init__(self, version, rowcount=1):
+                self.version, self.calls, self.committed, self.rowcount = version, [], 0, rowcount
+            def execute(self, statement, params=None):
+                self.calls.append((statement, params)); self.last = statement; return self
+            def fetchone(self):
+                if "genui_meta.schema_version" in self.last: return (self.version,)
+                if "RETURNING membership_epoch" in self.last: return (2,)
+                return (1,)
+            def commit(self): self.committed += 1
+        appended = []
+        with mock.patch.object(op, "begin"), mock.patch.object(op, "lock_active_member", return_value=1), \
+                mock.patch.object(op, "lock_member", return_value=("active", 1)), \
+                mock.patch.object(op, "append", side_effect=lambda c, org, kind, **k: appended.append((kind, k))):
+            c = Connection(23)
+            with self.assertRaises(op.Refused) as refused:
+                op.grant_permission(c, grant)
+            self.assertEqual(str(refused.exception), "permission_unsupported")
+            self.assertEqual(c.committed, 0)
+            self.assertEqual([s for s, _ in c.calls if "INSERT" in s or "FOR UPDATE" in s], [])
+            self.assertEqual(appended, [])
+            c = Connection(24)
+            result = op.grant_permission(c, grant)
+            inserts = [(s, p) for s, p in c.calls if s.strip().startswith("INSERT INTO genui.work_permissions")]
+            self.assertEqual(len(inserts), 1)
+            self.assertEqual(inserts[0][1], (ORG, principal, app, work, "record_review"))
+            self.assertEqual((result["changed"], result["permission"], c.committed), (True, "record_review", 1))
+            self.assertEqual(appended, [("permission.granted", {"actor": principal, "app": app, "work": work})])
+            appended.clear()
+            c = Connection(23)  # a revoke needs no gate
+            result = op.revoke_permission(c, revoke)
+            deletes = [(s, p) for s, p in c.calls if s.strip().startswith("DELETE FROM genui.work_permissions")]
+            self.assertEqual(len(deletes), 1)
+            self.assertEqual(deletes[0][1], (ORG, principal, app, work, "record_review"))
+            self.assertTrue(any("membership_epoch=membership_epoch+1" in s for s, _ in c.calls))
+            self.assertEqual((result["changed"], result["membership_epoch"], c.committed), (True, 2, 1))
+            self.assertEqual(appended, [("permission.revoked", {"actor": principal, "app": app, "work": work})])
+            self.assertFalse(any("genui_meta.schema_version" in s for s, _ in c.calls))
 
     def test_list_box_files_takes_two_identifiers(self):
         parser = op.parser()

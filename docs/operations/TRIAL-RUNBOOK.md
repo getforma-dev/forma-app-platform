@@ -168,6 +168,16 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
    ```
 
    Expected: `{"status": "granted", "permission": "admin_policy", "changed": true, ...}`. A grant to the wrong member is undone with `revoke-admin` (same arguments) → `{"status": "revoked-admin", "changed": true, ...}`; it advances that member's epoch.
+7. **A helper as reviewer of one app's work**, and taking it back. A reviewer sees and changes every entry of the work's own-visibility collections (D7, W4). The app and work ids are in the app's URL and the share dialog; the member's principal id is in `admission list`'s redemptions.
+
+   ```sh
+   $PY -m ops.promotion.admission grant-reviewer --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --principal "<helper principal id>" --app "<app id>" --work "<work id>" --output "$TRIAL/grant-reviewer-<work>.json"
+   $PY -m ops.promotion.admission revoke-reviewer --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --principal "<helper principal id>" --app "<app id>" --work "<work id>" --output "$TRIAL/revoke-reviewer-<work>.json"
+   ```
+
+   Expected: `{"status": "granted-reviewer", "permission": "record_review", "changed": true, ...}` and `{"status": "revoked-reviewer", "permission": "record_review", "changed": true, "membership_epoch": N+1, ...}`. The grant needs release B's migration 0024 in the database (before it the task refuses `permission_unsupported` and writes nothing); the revoke works at any schema, and a revoke of a row that does not exist reports `"changed": false`. The revoke advances the member's epoch, so their next request re-reads their authority. The sharing dialog's own reviewer revoke is W4's; this is the operator's path for any personal `record_review` grant.
 
 ## 4. Codes by wave and the one announced restart (Friday Nov 28)
 
