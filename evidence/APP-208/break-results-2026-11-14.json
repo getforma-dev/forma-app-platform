@@ -1,0 +1,399 @@
+[
+ {
+  "break": "B1",
+  "rule": "storage: a selection out of declaration order is refused",
+  "file": "app/src/storage/commands.rs",
+  "before": "let ordered = last.is_none_or(|previous| previous < position);",
+  "after": "let ordered = last.is_none_or(|previous| previous != position);",
+  "command": "cargo test --locked -p forma-app-platform --lib -- storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 12,
+  "detected": true,
+  "failed_tests": [
+   "storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values"
+  ],
+  "panics": [
+   "thread 'storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values' (68559303) panicked at app/src/storage/commands.rs:1879:13:"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B2",
+  "rule": "storage: an unknown id is refused",
+  "file": "app/src/storage/commands.rs",
+  "before": "let Some(position) = declared.iter().position(|d| d.as_str() == Some(id)) else {\n            return false;\n        };",
+  "after": "let Some(position) = declared.iter().position(|d| d.as_str() == Some(id)) else {\n            return true;\n        };",
+  "command": "cargo test --locked -p forma-app-platform --lib -- storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 11,
+  "detected": true,
+  "failed_tests": [
+   "storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values"
+  ],
+  "panics": [
+   "thread 'storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values' (68559886) panicked at app/src/storage/commands.rs:1879:13:"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B3",
+  "rule": "storage: an empty selection is refused (none selected is null)",
+  "file": "app/src/storage/commands.rs",
+  "before": "!picked.is_empty()\n                            && picked.len() <= MULTI_ENUM_VALUES",
+  "after": "picked.len() <= MULTI_ENUM_VALUES",
+  "command": "cargo test --locked -p forma-app-platform --lib -- storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 17,
+  "detected": true,
+  "failed_tests": [
+   "storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values"
+  ],
+  "panics": [
+   "thread 'storage::commands::tests::multi_select_values_are_an_ordered_subset_of_the_declared_values' (68560600) panicked at app/src/storage/commands.rs:1878:13:"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B4",
+  "rule": "form parse: the empty sentinel is dropped from the composed selection",
+  "file": "app/src/commands/routes.rs",
+  "before": ".filter(|raw| !raw.is_empty())",
+  "after": ".filter(|_| true)",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests::form_checkbox_groups_compose_one_multi_enum_value_in_posted_order",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 18,
+  "detected": true,
+  "failed_tests": [
+   "commands::tests::form_checkbox_groups_compose_one_multi_enum_value_in_posted_order"
+  ],
+  "panics": [
+   "thread 'commands::tests::form_checkbox_groups_compose_one_multi_enum_value_in_posted_order' (68563902) panicked at app/src/commands/tests.rs:1319:5:",
+   "assertion `left == right` failed"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B5",
+  "rule": "form parse: a scalar field posted twice is malformed",
+  "file": "app/src/commands/routes.rs",
+  "before": "let [raw] = raws.as_slice() else {\n                    return None;\n                };",
+  "after": "let Some(raw) = raws.first() else {\n                    return None;\n                };",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests::form_checkbox_groups_compose_one_multi_enum_value_in_posted_order",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 15,
+  "detected": true,
+  "failed_tests": [
+   "commands::tests::form_checkbox_groups_compose_one_multi_enum_value_in_posted_order"
+  ],
+  "panics": [
+   "thread 'commands::tests::form_checkbox_groups_compose_one_multi_enum_value_in_posted_order' (68564556) panicked at app/src/commands/tests.rs:1346:5:",
+   "assertion failed: with(&[field(\"value.title\", \"Two\")]).is_none()"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B6",
+  "rule": "the row's choices mark the held values",
+  "file": "app/src/commands/mod.rs",
+  "before": "selected: held.contains(&value),",
+  "after": "selected: false,",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests::a_multi_select_row_offers_every_declared_value_with_the_held_ones_checked",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 18,
+  "detected": true,
+  "failed_tests": [
+   "commands::tests::a_multi_select_row_offers_every_declared_value_with_the_held_ones_checked"
+  ],
+  "panics": [
+   "thread 'commands::tests::a_multi_select_row_offers_every_declared_value_with_the_held_ones_checked' (68565416) panicked at app/src/commands/tests.rs:1261:5:",
+   "assertion `left == right` failed"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B7",
+  "rule": "the form card renders a multi-select as checkboxes",
+  "file": "app/src/query/canvas.rs",
+  "before": "let has_checkboxes = field.writable && multi;",
+  "after": "let has_checkboxes = false;",
+  "command": "cargo test --locked -p forma-app-platform --lib -- query::canvas::tests::a_form_card_renders_a_multi_select_as_checkboxes_with_the_held_values_checked",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 17,
+  "detected": true,
+  "failed_tests": [
+   "query::canvas::tests::a_form_card_renders_a_multi_select_as_checkboxes_with_the_held_values_checked"
+  ],
+  "panics": [
+   "thread 'query::canvas::tests::a_form_card_renders_a_multi_select_as_checkboxes_with_the_held_values_checked' (68566110) panicked at app/src/query/canvas_tests.rs:471:5:",
+   "assertion failed: boxes.has_checkboxes && boxes.writable"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B8",
+  "rule": "the typed snapshot re-judges the stored selection as an ordered subset",
+  "file": "app/src/storage/record_query.rs",
+  "before": "&& super::commands::ordered_subset(picked, spec.get(\"values\")),",
+  "after": "&& true,",
+  "command": "cargo test --locked -p forma-app-platform --lib -- storage::record_query::tests::a_multi_select_projects_as_joined_text_and_is_rejudged",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 17,
+  "detected": true,
+  "failed_tests": [
+   "storage::record_query::tests::a_multi_select_projects_as_joined_text_and_is_rejudged"
+  ],
+  "panics": [
+   "thread 'storage::record_query::tests::a_multi_select_projects_as_joined_text_and_is_rejudged' (68566871) panicked at app/src/storage/record_query.rs:322:13:"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B9",
+  "rule": "the record-components cell joins the selection",
+  "file": "app/src/query/record_components.rs",
+  "before": "let joined = crate::commands::multi_enum_text(value);",
+  "after": "let joined = String::new();",
+  "command": "cargo test --locked -p forma-app-platform --lib -- query::record_components::tests::a_multi_select_cell_joins_its_values",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 16,
+  "detected": true,
+  "failed_tests": [
+   "query::record_components::tests::a_multi_select_cell_joins_its_values"
+  ],
+  "panics": [
+   "thread 'query::record_components::tests::a_multi_select_cell_joins_its_values' (68568282) panicked at app/src/query/record_components.rs:1005:9:",
+   "assertion `left == right` failed"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B10",
+  "rule": "the typed engine types a multi-select as a text column",
+  "file": "app/src/query/worker.rs",
+  "before": "\"text\" | \"enum\" | \"multi_enum\" => Self::Text,",
+  "after": "\"text\" | \"enum\" => Self::Text,",
+  "command": "cargo test --locked -p forma-app-platform --lib -- query::tests::",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 16,
+  "detected": true,
+  "failed_tests": [
+   "query::tests::column_types_follow_the_typed_query",
+   "query::tests::the_dispatch_log_names_identities_never_parameters"
+  ],
+  "panics": [
+   "thread 'query::tests::column_types_follow_the_typed_query' (68568931) panicked at app/src/query/tests.rs:525:5:",
+   "assertion `left == right` failed",
+   "thread 'query::tests::the_dispatch_log_names_identities_never_parameters' (68568937) panicked at app/src/query/tests.rs:400:5:",
+   "assertion `left == right` failed"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B11",
+  "rule": "the record page renders a multi-select as a checkbox group (SSR)",
+  "file": "app/src/pages.rs",
+  "before": "has_checkboxes: row.writable && row.kind == \"multi_enum\",",
+  "after": "has_checkboxes: false,",
+  "command": "cargo test --locked -p forma-app-platform --bin forma-app-platform -- record_page_renders_rows_and_the_keyed_form_without_javascript",
+  "cwd": ".",
+  "exit": 101,
+  "seconds": 6,
+  "detected": true,
+  "failed_tests": [
+   "tests::record_page_renders_rows_and_the_keyed_form_without_javascript"
+  ],
+  "panics": [
+   "thread 'tests::record_page_renders_rows_and_the_keyed_form_without_javascript' (68570092) panicked at app/src/main.rs:1065:14:"
+  ],
+  "compile_errors": [
+   "error: test failed, to rerun pass `-p forma-app-platform --bin forma-app-platform`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B12",
+  "rule": "the ranking counts a row once per selected value",
+  "file": "app/runtime/record_engine.py",
+  "before": "for label in selection(raw,vt[\"values\"]): groups.setdefault(label,[]).append((row,v))",
+  "after": "for label in selection(raw,vt[\"values\"])[:1]: groups.setdefault(label,[]).append((row,v))",
+  "command": "../../app/runtime/.venv/bin/python -m unittest test_record_engine",
+  "cwd": "app/runtime",
+  "exit": 1,
+  "seconds": 0,
+  "detected": true,
+  "failed_tests": [
+   "test_a_ranking_counts_a_row_once_per_selected_value",
+   "test_the_ranking_page_and_an_all_null_input"
+  ],
+  "panics": [
+   "AssertionError: Lists differ: [{'label': 'red', 'missing': False, 'value': '2', 'co[138 chars]: 1}] != [{'label': 'blue', 'missing': False, 'value': '3', 'c[202 chars]: 1}]",
+   "AssertionError: Lists differ: ['red', 'blue'] != ['blue', 'red']"
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B13",
+  "rule": "the engine refuses an order over a multi-select before any row",
+  "file": "app/runtime/record_engine.py",
+  "before": "require(fields[order[\"field\"]][\"value_type\"][\"type\"]!=\"multi_enum\",\"multi_enum_order_refused\")",
+  "after": "pass",
+  "command": "../../app/runtime/.venv/bin/python -m unittest test_record_engine",
+  "cwd": "app/runtime",
+  "exit": 1,
+  "seconds": 0,
+  "detected": true,
+  "failed_tests": [
+   "test_a_set_is_never_an_order_a_filter_or_a_key"
+  ],
+  "panics": [
+   "record_engine.Refused: value_refused",
+   "with self.assertRaisesRegex(engine.Refused,'multi_enum_order_refused'):engine.execute(r)",
+   "AssertionError: \"multi_enum_order_refused\" does not match \"value_refused\""
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B14",
+  "rule": "the engine refuses a stored selection with a repeat or out of order",
+  "file": "app/runtime/record_engine.py",
+  "before": "require(all(a<b for a,b in zip(positions,positions[1:])),\"value_refused\")",
+  "after": "require(all(a<=b for a,b in zip(positions,positions[1:])),\"value_refused\")",
+  "command": "../../app/runtime/.venv/bin/python -m unittest test_record_engine",
+  "cwd": "app/runtime",
+  "exit": 1,
+  "seconds": 0,
+  "detected": true,
+  "failed_tests": [
+   "test_a_stored_selection_must_be_an_ordered_subset_of_the_declared_values"
+  ],
+  "panics": [
+   "with self.subTest(bad=bad),self.assertRaisesRegex(engine.Refused,'value_refused'):",
+   "AssertionError: Refused not raised"
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B15",
+  "rule": "the typed engine admits the type for a records input only",
+  "file": "app/runtime/query_engine.py",
+  "before": "types = parse_fields(fields, RECORD_COLUMN_TYPES if records else COLUMN_TYPES)",
+  "after": "types = parse_fields(fields, RECORD_COLUMN_TYPES)",
+  "command": "../../app/runtime/.venv/bin/python -m unittest test_record_query",
+  "cwd": "app/runtime",
+  "exit": 1,
+  "seconds": 0,
+  "detected": true,
+  "failed_tests": [
+   "test_a_multi_select_is_one_text_column_of_a_records_input_only"
+  ],
+  "panics": [
+   "with self.assertRaisesRegex(engine.Refused, \"fields_refused\"):",
+   "AssertionError: Refused not raised"
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B16",
+  "rule": "the client sends only declared values, in declaration order, each once",
+  "file": "app/admin/src/canvas/commands.ts",
+  "before": "const values = (declared as string[]).filter((value) => picked.has(value));",
+  "after": "const values = checked.filter((value) => (declared as string[]).includes(value));",
+  "command": "npx tsx --test test/multi-select.test.ts",
+  "cwd": "app/admin",
+  "exit": 1,
+  "seconds": 1,
+  "detected": true,
+  "failed_tests": [
+   "the command request composes the declared values in declaration order, nothing checked as null"
+  ],
+  "panics": [
+   "name: 'AssertionError'"
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B17",
+  "rule": "the canvas client checks the held values",
+  "file": "app/admin/src/canvas/render.ts",
+  "before": "box.checked = choice.selected === true;",
+  "after": "box.checked = false;",
+  "command": "npx tsx --test test/multi-select.test.ts",
+  "cwd": "app/admin",
+  "exit": 1,
+  "seconds": 0,
+  "detected": true,
+  "failed_tests": [
+   "the canvas form renders a multi-select as a checkbox group under one input name"
+  ],
+  "panics": [
+   "name: 'AssertionError'"
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B18",
+  "rule": "the native document renderer checks the held values",
+  "file": "app/admin/src/work/render.ts",
+  "before": "if (choice.selected) { box.setAttribute('checked', ''); box.checked = true; }",
+  "after": "if (false) { box.setAttribute('checked', ''); box.checked = true; }",
+  "command": "npx tsx --test test/multi-select.test.ts",
+  "cwd": "app/admin",
+  "exit": 1,
+  "seconds": 0,
+  "detected": true,
+  "failed_tests": [
+   "the native document form renders the same checkbox group"
+  ],
+  "panics": [
+   "name: 'AssertionError'"
+  ],
+  "compile_errors": [],
+  "restored_clean": true
+ }
+]

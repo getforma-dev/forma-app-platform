@@ -6461,7 +6461,7 @@
       "Depends on": "APP-202, APP-203, APP-204, APP-205",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI (builder B6)",
-      "Branch / PR": "`relc/b6-multi-select` (to open)",
+      "Branch / PR": "`release/c-b6-multiselect` on `release/c-participation` at `51810561` (B6; the pull request is the coordinator's at integration)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
