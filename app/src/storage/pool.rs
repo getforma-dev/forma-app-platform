@@ -25,6 +25,12 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 pub(super) const ACQUIRE: Duration = Duration::from_secs(5);
 pub(super) const TRANSACTION: Duration = Duration::from_secs(3);
 pub(super) const CLEANUP: Duration = Duration::from_secs(2);
+/// ADR-004 amendment A5 (APP-197): a reused connection repeats the
+/// structural catalog comparison only when its own last comparison is older
+/// than this. A new connection and readiness always run it; identity, the
+/// session baseline and the schema version are checked on every reuse. No
+/// environment or configuration value can change it.
+pub(super) const CATALOG_RECHECK: Duration = Duration::from_secs(30);
 const EXPIRY_MARGIN: u64 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -125,9 +131,20 @@ pub(crate) struct TestHooks {
     /// count (APP-113 deferred `open_listed` batching).
     pub transactions: std::sync::atomic::AtomicUsize,
     pub statements: std::sync::atomic::AtomicUsize,
+    /// APP-197: how far these stores' pool clock runs ahead of real time
+    /// (milliseconds), so a test can pass the catalog window without waiting.
+    advanced_ms: std::sync::atomic::AtomicU64,
 }
 #[cfg(test)]
 impl TestHooks {
+    /// Moves these stores' pool clock forward by `by` (APP-197).
+    pub fn advance(&self, by: Duration) {
+        self.advanced_ms
+            .fetch_add(by.as_millis() as u64, Ordering::SeqCst);
+    }
+    fn advanced(&self) -> Duration {
+        Duration::from_millis(self.advanced_ms.load(Ordering::SeqCst))
+    }
     /// `(transactions, statements)` so far.
     pub fn counts(&self) -> (usize, usize) {
         (
@@ -305,6 +322,9 @@ pub(super) struct Connection {
     pub fingerprint: String,
     pub expires_at: u64,
     pub clean: bool,
+    /// When this connection last passed the structural catalog comparison
+    /// (ADR-004 amendment A5, on the pool clock).
+    catalog_verified_at: Instant,
     /// Test executable only (APP-195): how long this connection's last
     /// checkout took to prepare it (its creation or its recycle checks).
     #[cfg(test)]
@@ -319,6 +339,13 @@ pub(super) struct RoleManager {
     pub role: Role,
 }
 impl RoleManager {
+    /// The pool clock. The test executable can run it ahead (`TestHooks::advance`).
+    fn now(&self) -> Instant {
+        let now = Instant::now();
+        #[cfg(test)]
+        let now = now + self.settings.hooks.advanced();
+        now
+    }
     fn configuration(&self) -> Result<Config> {
         let value = Config::load(&self.settings.credentials).map_err(|reason| {
             trace::cause(trace::credentials(reason));
@@ -401,12 +428,14 @@ impl RoleManager {
             fingerprint: value.file_sha256.clone(),
             expires_at: value.expires_at,
             clean: false,
+            catalog_verified_at: self.now(),
             #[cfg(test)]
             prepared_us: 0,
         };
         #[cfg(test)]
         self.settings.hooks.checkpoint("connect").await;
         self.verify_admission(&connected.client).await?;
+        connected.catalog_verified_at = self.now();
         trace::step("reset");
         reset(&mut connected, self.role).await?;
         #[cfg(test)]
@@ -415,13 +444,22 @@ impl RoleManager {
         }
         Ok(connected)
     }
+    /// A new connection's admission, and readiness: identity, the structural
+    /// catalog comparison and the schema version, every time.
     async fn verify_admission(&self, client: &Client) -> Result<()> {
+        self.verify_checks(client, true).await
+    }
+    async fn verify_checks(&self, client: &Client, catalog: bool) -> Result<()> {
         // Only built-in catalog objects may be touched before the structural
         // comparison. Even the version relation could have become a view.
+        // On reuse inside the A5 window the comparison is skipped, so the
+        // version read relies on the comparison made at most 30 s ago.
         trace::step("verify_identity");
         verify_identity(client, self.role).await?;
-        trace::step("catalog_verify");
-        self.catalog.verify(client).await?;
+        if catalog {
+            trace::step("catalog_verify");
+            self.catalog.verify(client).await?;
+        }
         trace::step("verify_schema_version");
         verify_schema_version(client).await
     }
@@ -462,9 +500,18 @@ impl Manager for RoleManager {
         verify_baseline(&connection.client, self.role)
             .await
             .map_err(RecycleError::Backend)?;
-        self.verify_admission(&connection.client)
+        // ADR-004 amendment A5: identity and the schema version on every
+        // reuse; the catalog comparison once its last one is CATALOG_RECHECK
+        // old. A failure here discards the connection, as before.
+        let now = self.now();
+        let recheck =
+            now.saturating_duration_since(connection.catalog_verified_at) >= CATALOG_RECHECK;
+        self.verify_checks(&connection.client, recheck)
             .await
             .map_err(RecycleError::Backend)?;
+        if recheck {
+            connection.catalog_verified_at = now;
+        }
         #[cfg(test)]
         self.settings.hooks.checkpoint("recycle").await;
         #[cfg(test)]

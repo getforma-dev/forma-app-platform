@@ -955,6 +955,10 @@ async fn campaign() {
         "1"
     );
     fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
+    // ADR-004 A5 (APP-197): a reused connection compares the catalog again
+    // once its last comparison is CATALOG_RECHECK old; this store's pooled
+    // connections are past it, so the comparison refuses before any read.
+    metadata.hooks().advance(pool::CATALOG_RECHECK);
     refuse_all_roles(&metadata).await;
     metadata.close().await.unwrap();
     let metadata_fresh = Stores::new(fixture.settings()).unwrap();
@@ -971,7 +975,113 @@ async fn campaign() {
     );
     metadata_fresh.readiness().await.unwrap();
     metadata_fresh.close().await.unwrap();
-    check(&mut checks,"replaced metadata view is refused on new and reused TLS connections with zero marker execution and restored readiness");
+    check(&mut checks,"replaced metadata view is refused on new TLS connections, and on reused ones once the 30 s catalog window has passed, with zero marker execution and restored readiness");
+
+    // ADR-004 A5 (APP-197): the four application roles hold no DDL
+    // privilege, so they cannot cause the drift the comparison detects.
+    let ddl = fixture.sql(
+        "SELECT (SELECT count(*) FROM pg_roles r CROSS JOIN pg_namespace n WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker') AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname<>'information_schema' AND (has_schema_privilege(r.oid,n.oid,'CREATE') OR n.nspowner=r.oid)) \
+         + (SELECT count(*) FROM pg_class c JOIN pg_roles r ON r.oid=c.relowner WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker')) \
+         + (SELECT count(*) FROM pg_roles r WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker') AND (has_database_privilege(r.oid,'genui','CREATE') OR has_database_privilege(r.oid,'genui','TEMP') OR r.rolsuper OR r.rolcreatedb OR r.rolcreaterole))",
+        "genui",
+    );
+    assert_eq!(ddl.trim(), "0", "an application role holds a DDL privilege");
+    // Inside the window a reused connection skips only the comparison.
+    let window = Stores::new(fixture.settings()).unwrap();
+    window.readiness().await.unwrap();
+    let compared = super::catalog::verifications;
+    let drift = "GRANT UPDATE ON genui.publications TO genui_data";
+    let undo = "REVOKE UPDATE ON genui.publications FROM genui_data";
+    fixture.sql(drift, "genui");
+    let before = compared();
+    let reused = Lease::acquire(&window.data.inner).await.unwrap();
+    assert_eq!(
+        compared(),
+        before,
+        "a reuse inside the window runs no comparison"
+    );
+    // A new backend is always compared before it is admitted.
+    assert!(Lease::acquire(&window.data.inner).await.is_err());
+    assert_eq!(compared(), before + 1);
+    reused
+        .finish(false, Instant::now() + pool::TRANSACTION)
+        .await
+        .unwrap();
+    // Readiness always compares, inside the window too.
+    assert!(window.readiness().await.is_err());
+    fixture.sql(undo, "genui");
+    window.readiness().await.unwrap();
+    fixture.sql(drift, "genui");
+    let tolerated = Lease::acquire(&window.data.inner).await.unwrap();
+    tolerated
+        .finish(false, Instant::now() + pool::TRANSACTION)
+        .await
+        .unwrap();
+    // After the window the reuse compares again and refuses.
+    window.hooks().advance(pool::CATALOG_RECHECK);
+    let before = compared();
+    assert!(Lease::acquire(&window.data.inner).await.is_err());
+    // Two comparisons: the reused connection's (refused and discarded),
+    // then the new backend the pool creates in its place (refused too).
+    assert_eq!(compared(), before + 2, "a reuse after the window compares");
+    fixture.sql(undo, "genui");
+    // Identity, the session baseline and the schema version are never
+    // tolerated inside the window.
+    window.readiness().await.unwrap();
+    fixture.sql("ALTER ROLE genui_data CREATEDB", "genui");
+    let before = compared();
+    assert!(Lease::acquire(&window.data.inner).await.is_err());
+    assert_eq!(
+        compared(),
+        before,
+        "identity is refused before any comparison"
+    );
+    fixture.sql("ALTER ROLE genui_data NOCREATEDB", "genui");
+    window.readiness().await.unwrap();
+    let idle = window.data.inner.pool.get().await.unwrap();
+    let poisoned: i32 = idle
+        .client
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(0);
+    // A leftover organization scope: only the session-baseline check sees it
+    // (the identity check covers flags, memberships and the search path).
+    idle.client
+        .batch_execute(&format!(
+            "SELECT pg_catalog.set_config('genui.organization_id','{ORG}',false)"
+        ))
+        .await
+        .unwrap();
+    drop(idle);
+    // The baseline check refuses the poisoned connection on reuse; the
+    // lease gets a newly created (and compared) backend instead.
+    let before = compared();
+    let fresh = Lease::acquire(&window.data.inner).await.unwrap();
+    assert_ne!(
+        pid(&fresh).await,
+        poisoned,
+        "the poisoned connection is never reused"
+    );
+    assert_eq!(
+        compared(),
+        before + 1,
+        "its replacement was compared at creation"
+    );
+    fresh
+        .finish(false, Instant::now() + pool::TRANSACTION)
+        .await
+        .unwrap();
+    window.readiness().await.unwrap();
+    fixture.sql("UPDATE genui_meta.schema_version SET version=1", "genui");
+    assert!(Lease::acquire(&window.data.inner).await.is_err());
+    fixture.sql(
+        &format!("UPDATE genui_meta.schema_version SET version={schema_version}"),
+        "genui",
+    );
+    window.readiness().await.unwrap();
+    window.close().await.unwrap();
+    check(&mut checks,"ADR-004 A5: inside the 30 s window a reused connection skips only the catalog comparison (catalog drift tolerated, no comparison run), while identity, session-baseline and schema-version drift are refused on reuse; a new backend and readiness always compare; after the window a reuse compares again and refuses; the four application roles hold no DDL privilege");
 
     let shadow = Stores::new(fixture.settings()).unwrap();
     shadow.readiness().await.unwrap();
@@ -1000,6 +1110,13 @@ async fn campaign() {
         .await
         .unwrap();
     drop(poisoned);
+    // Inside the A5 window (APP-197): the poisoned worker session is refused
+    // on reuse (the baseline check) and its replacement at startup (the
+    // database default). The other roles' reused sessions are unshadowed;
+    // the probe schema is catalog drift, which they refuse once the window
+    // has passed.
+    assert!(Lease::acquire(&shadow.worker.inner).await.is_err());
+    shadow.hooks().advance(pool::CATALOG_RECHECK);
     refuse_all_roles(&shadow).await;
     shadow.close().await.unwrap();
     let shadow_fresh = Stores::new(fixture.settings()).unwrap();
