@@ -108,8 +108,9 @@ pub use shared_access::{
 pub use shared_identity::*;
 pub use shared_reads::GuestQueryRun;
 pub use sharing::{
-    member_label, Audience, Granted, Member, Openable, Revoked, ShareEntry, ShareMode, ShareRole,
-    ShareStanding, Shared, Standing, WorkSharing, JUDGMENT_LIMIT, SHARE_HANDLER_DEADLINE,
+    member_label, ApproverStanding, Audience, Granted, Member, Openable, Revoked, ShareEntry,
+    ShareMode, ShareRole, ShareStanding, Shared, Standing, WorkSharing, JUDGMENT_LIMIT,
+    SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};
 pub use work_presentation::WorkPresentation;

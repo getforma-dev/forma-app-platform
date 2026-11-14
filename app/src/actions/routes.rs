@@ -11,12 +11,15 @@
 //! "command_id", "record_id", "collection_id", "schema_id", "values":[{
 //! "field_id","label","display","value"}], "command_request": <the contract's
 //! command_request, idempotency key included>, "approver": {"principal_id",
-//! "label"}|null, "target": {"record_id","version","summary"}|null,
-//! "confirm_token", "parse_ms"}`; `{"action":"open","app_id","work_id",
-//! "title","placed"}`; `{"action":"place"}` (the canvas composes). Refusals:
-//! the uniform 404 (no session, a storage denial, a member who may act on
-//! nothing), 403 `cross_site`, 413, 422 `invalid_utterance`, 422
-//! `could_not_parse`, 422 `could_not_draft` (neutral), 429 with `Retry-After`
+//! "label","standing"}|null, "approvers": [the same, in order], "target":
+//! {"record_id","version","summary"}|null, "confirm_token", "parse_ms"}`
+//! (APP-206: `standing` is `reviewer`, `shareable` or `unreachable`,
+//! `storage::Workspace::approver_standing` for the filer on that work);
+//! `{"action":"open","app_id","work_id","title","placed"}`;
+//! `{"action":"place"}` (the canvas composes). Refusals: the uniform 404
+//! (no session, a storage denial, a member who may act on nothing), 403
+//! `cross_site`, 413, 422 `invalid_utterance`, 422 `could_not_parse`, 422
+//! `could_not_draft` (neutral), 429 with `Retry-After`
 //! (`ACT_MEMBER`; or `daily_limit`, D10: the app's daily model-call cap, for
 //! an utterance or a receipt), 503 `composer_unavailable` (no model key and nothing
 //! rehearsed applies), 503 `unavailable`. The session is checked before the
@@ -352,7 +355,17 @@ fn elapsed_ms(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
-fn draft_document(draft: &Draft, parse_ms: u64) -> Value {
+/// One approver on the card: who, by label, and (APP-206) how the record
+/// reaches them, which the canvas follows (it shares only `shareable`).
+fn approver_document(approver: &resolve::Approver) -> Value {
+    json!({
+        "principal_id": approver.principal,
+        "label": approver.label,
+        "standing": approver.standing.name(),
+    })
+}
+
+pub(super) fn draft_document(draft: &Draft, parse_ms: u64) -> Value {
     json!({
         "action": draft.kind.as_str(),
         "app_id": draft.app,
@@ -367,8 +380,8 @@ fn draft_document(draft: &Draft, parse_ms: u64) -> Value {
             "field_id": v.field, "label": v.label, "display": v.display, "value": v.value,
         })).collect::<Vec<_>>(),
         "command_request": draft.request.document(),
-        "approver": draft.approver.as_ref().map(|a| json!({"principal_id": a.principal, "label": a.label})),
-        "approvers": draft.approvers.iter().map(|a| json!({"principal_id": a.principal, "label": a.label})).collect::<Vec<_>>(),
+        "approver": draft.approver.as_ref().map(approver_document),
+        "approvers": draft.approvers.iter().map(approver_document).collect::<Vec<_>>(),
         "rule": draft.rule,
         "flags": draft.flags,
         "target": draft.target.as_ref().map(|t| json!({"record_id": t.record_id, "version": t.version, "summary": t.summary})),
