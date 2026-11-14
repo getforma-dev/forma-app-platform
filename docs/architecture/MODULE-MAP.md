@@ -46,6 +46,8 @@ A module may name modules in a **lower** layer. Layer 2 modules may also name ea
 | 3 Surfaces | `pages` | server-rendered pages | layers 0–2, never each other (`slack` → `mcp` is the one kept exception) |
 | | `mcp` | Forma as an MCP server; agent tokens | |
 | | `slack` | slash command, buttons, approver DMs | |
+| | `org_admin` | the organization's own admin area, `/admin` (trial plan D4, 2026-11-14) | |
+| | `member_name` | the name a member chooses, `POST /me/name` (trial plan D6, 2026-11-14) | |
 | | the canvas (`app/admin`, TypeScript) | the canvas client; it talks to the server over HTTP only | |
 | 4 Composition | `product`, `main.rs`, `lib.rs`, `bin/genui-dev` (ADR-012 D12.1) | the route composition, the crate root and the entry points | anything |
 
@@ -90,7 +92,9 @@ Run `python3 scripts/dev/deps.py` to regenerate this table, or add `--json` for 
 | `pages` | 3 | `auth` `commands` |
 | `mcp` | 3 | `actions` `admission` `auth` `boxes` `commands` `composer` `demo` `directory` `events` `http` `query` `sharing` `storage` |
 | `slack` | 3 | `actions` `auth` `boxes` `commands` `demo` `directory` `events` `http` `origins` `sharing` `storage` |
-| `product` | 4 | `actions` `auth` `boxes` `commands` `composer` `events` `mcp` `query` `sharing` `slack` `widgets` |
+| `org_admin` | 3 | `auth` `http` `query` `storage` |
+| `member_name` | 3 | `auth` `directory` `http` `query` `storage` |
+| `product` | 4 | `actions` `auth` `boxes` `commands` `composer` `events` `mcp` `member_name` `org_admin` `query` `sharing` `slack` `widgets` |
 
 Rule 1 holds: no module below layer 4 names `pages`, `product`, `main` or a binary. The kept exception is `slack` → `mcp`, but in release code `slack` does not name `mcp` today, so the exception is unused.
 

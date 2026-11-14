@@ -27,7 +27,8 @@ use crate::{
 };
 use axum::{
     extract::{Request, State},
-    response::Response,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -169,11 +170,24 @@ pub struct SsrAdminPages {
 }
 impl AdminPages for SsrAdminPages {
     fn page(&self, props: &AdminProps) -> Response {
-        crate::pages::respond(
-            PATH,
-            self.page
-                .render(props, &RenderCtx::new().with_title("Organization admin")),
-        )
+        match self
+            .page
+            .render(props, &RenderCtx::new().with_title("Organization admin"))
+        {
+            Ok(page) => page.into_response(),
+            Err(error) => {
+                tracing::error!(code = error.code(), route = PATH, "{error}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    [
+                        (header::CACHE_CONTROL, "no-store"),
+                        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                    ],
+                    "Internal Server Error",
+                )
+                    .into_response()
+            }
+        }
     }
 }
 
