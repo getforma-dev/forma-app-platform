@@ -95,3 +95,23 @@ The command was `GENUI_ENV_FILE=<the main checkout's .env> app/scripts/composer_
 
 The miss was fixed in the prompt and the smoke re-run once, as acceptance 4 allows. The functional shape held both times. The ids still carry the member's word, so the smoke reports `missed ["general ids"]` and exits 101. Nothing in planning enforces general ids, because an id is data and grants nothing. It stays a prompt matter, recorded under the limits.
 
+
+## Checks
+
+| Command | Tree | Result |
+| --- | --- | --- |
+| `cargo test --locked -p forma-app-platform --lib -- composer:: storage::composer::tests` | `9c8fef16` | 102 passed, 2 ignored (the two real-model smokes). One earlier run failed `composer::matcher::tests::every_example_picks_its_app_and_no_negative_does` at its p95-latency assertion under load. That test is untouched here; it passed alone, passed at the base, and passed in the next two full runs. |
+| `cargo clippy --locked -p forma-app-platform --all-targets [--features dev-stand] -- -D warnings`, `cargo fmt --all --check` | `9c8fef16` | clean |
+| `just campaign composer` | the tree committed as `9c8fef16`, before the general-ids prompt line | passed, 24 checks, the three APP-207 checks among them ([report](composer-campaign-2026-11-14.json)) |
+| `just check` | `2abdbd58` | 19 of 21 steps ok: fmt, admin, clippy, clippy-dev, test (488 lib tests: the composer, prompt and admission suites and every database-free test), http-smoke, msrv, catalog, infra, py-scripts, shared-broker, py-qualification, py-app-scripts, py-ops, py-infra, schema-pins, contracts, board, bash-n. **py-promotion** failed as expected: `test_committed_release_is_bound_to_this_tree`, the release-B record's binding on this branch. **py-runtime** failed only because Docker Desktop went down during the run: `test_admission_operator.DatabaseTests` and `test_provider_invitations.ProviderDatabaseTests` setUpClass, "Cannot connect to the Docker daemon". |
+| `python3 Tickets/_tools/board.py render`, `… check` | `2abdbd58` | OK: 208 tickets |
+| `just campaign composer`, `just campaign participation`, `just campaign actions` | `2abdbd58` | **not run**: Docker Desktop was down, and the coordinator stopped the wait. CI's tenant-foundation workflow runs them. |
+
+## Limits
+
+- **Campaigns at the head.** The `participation` and `actions` campaigns were not run by this builder, and `composer` was not re-run after the prompt's general-ids line. That line changes only the prompt text the stub ignores; the campaign's request check ("PLAIN WORDS TO MEMBERS") still holds. All three are left to CI's tenant-foundation workflow. `py-runtime` needs a re-run with Docker up.
+- **The real model's ids.** Haiku named the quiz's lists from the member's words in both smoke runs (`questions`, `question`). The functional shape was right, and admission and storage treat ids as data. A stronger prompt, or a planner rule, is a follow-up if Victor wants general ids enforced.
+- **`multi_enum`.** It is not in generated content until APP-208 sets `plan::MULTI_ENUM_GENERATED`. The grammar line and the planner switch are in place and tested both ways.
+- **Out-of-row changes.** `app/src/storage/composer.rs` (§17.28), which needed one `find` and a unit test. `composer/mod.rs` was not touched (§17.29).
+- **Not covered here.** The UI (B3) for reviewer-only forms on a contributor's page, and how the canvas lays out a composed participation app. A form whose command the member may not run renders without writable fields. Victor's browser QA covers these.
+- CI was not observed.
