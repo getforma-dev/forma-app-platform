@@ -30,6 +30,8 @@ type AdminProps = {
   notice: string;
   noticeKind: string;
   hasMembers: boolean;
+  /** The list was read and has no member. */
+  empty: boolean;
   members: Member[];
   csrfSignout: string;
 };
@@ -48,7 +50,7 @@ function Admin(props: AdminProps) {
         <p class="org-admin-notice" role="status" data-kind={props.noticeKind}>{props.notice}</p>
       ))}
       <h2>Members</h2>
-      {props.hasMembers ? null : <p>No members yet.</p>}
+      {createShow(() => props.empty, () => <p>No members yet.</p>)}
       {createShow(() => props.hasMembers, () => (
         <div class="org-admin-table-wrap">
           <table class="org-admin-table">
@@ -101,4 +103,4 @@ function Admin(props: AdminProps) {
   );
 }
 
-mount(() => Admin({ organization: '', summary: '', hasNotice: false, notice: '', noticeKind: '', hasMembers: false, members: [], csrfSignout: '' }), '#app');
+mount(() => Admin({ organization: '', summary: '', hasNotice: false, notice: '', noticeKind: '', hasMembers: false, empty: false, members: [], csrfSignout: '' }), '#app');

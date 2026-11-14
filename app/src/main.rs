@@ -2007,7 +2007,7 @@ mod tests {
         let refused = canvas::CanvasProps {
             needs_name: true,
             has_name_notice: true,
-            name_notice: genui::member_name::INVALID_NOTICE.into(),
+            name_notice: genui::member_name::NameNotice::Invalid.words().into(),
             ..empty.clone()
         };
         let (_, _, body) = html(ssr.canvas(&refused)).await;
@@ -2101,6 +2101,7 @@ mod tests {
             notice: "You can't remove the last admin of this organization.".into(),
             notice_kind: "refused".into(),
             has_members: true,
+            empty: false,
             members: vec![
                 member(student, "Ana <b>bold</b>", true),
                 member("00000000-0000-4000-8000-0000000000c3", "Bea", false),
@@ -2136,7 +2137,11 @@ mod tests {
         assert!(body.contains("required"));
         assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
         assert!(body.contains("action=\"/auth/signout\""));
-        let (_, _, empty) = html(ssr.page(&AdminProps::default())).await;
+        let (_, _, empty) = html(ssr.page(&AdminProps {
+            empty: true,
+            ..AdminProps::default()
+        }))
+        .await;
         assert!(empty.contains("No members yet.") && !empty.contains("<table"));
     }
 }

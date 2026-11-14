@@ -42,3 +42,42 @@ Restore: `git checkout --` of the broken files back to `62f4e082`; `git status` 
 ## Not broken
 
 `member_name::tests::the_route_refuses_cross_site_posts_and_strangers` was not targeted in any run.
+
+## Recheck fix round (`f8864d52`): N1, N2, N4, N6 and m3
+
+These are the fixes for the Tier A recheck ([recheck-w2-2026-11-14.md](recheck-w2-2026-11-14.md)). Each guard was broken in the committed `f8864d52`, and the source was restored with `git checkout -- app/src` after every round. `git status` was clean after each restore.
+
+### Round 1: one build, `cargo test -p forma-app-platform --lib`, 6 failed
+
+| Guard broken | Failed at |
+| --- | --- |
+| N1: `/me/name` skips the member write window (`if false && … admit_member_write`) | `member_name::tests::the_name_shares_the_member_write_window`, `member_name.rs:424`: write 121 got `/canvas`, not `/canvas?name=limited` |
+| N2: no visible-base requirement | `directory::tests::a_name_needs_a_visible_base_character`, `directory.rs:454`: `"ㅤ"` (U+3164) was accepted. This also failed `the_name_needs_the_token_…` at `member_name.rs:354` (U+3164 reached storage). |
+| N4: the canvas gate accepts any query (`map_or(CanvasQuery::Plain, …)`) | `member_name::tests::the_canvas_accepts_only_the_closed_notices`, `member_name.rs:460`: `""` gave `Plain`, not `Refused` |
+| N6: an outage on `GET /admin` before the overview is raw JSON again | `org_admin::tests::an_admin_sees_every_member_…`, `org_admin.rs:677`: no outage page was rendered |
+| N6: a Remove outage is raw JSON again | `org_admin::tests::remove_needs_the_token_…`, `org_admin.rs:618`: no `Location` (`/admin?notice=unavailable` expected) |
+
+The `/me/name` outage break was also in this build, but the N2 failure in the same test came first, so it was proven again in round 2.
+
+### Round 2: one build, `cargo test -p forma-app-platform --lib`, 3 failed
+
+| Guard broken | Failed at |
+| --- | --- |
+| N2: U+2028/U+2029 allowed again | `a_name_needs_a_visible_base_character`, `directory.rs:457`: `"Ana\u{2028}Lopez"` was accepted |
+| N6: the overview's outage is raw JSON again | `an_admin_sees_every_member_…`, `org_admin.rs:676`: no outage page for the overview's outage |
+| N6: a `/me/name` outage is raw JSON again | `the_name_needs_the_token_…`, `member_name.rs:287`: no `Location` (`/canvas?name=unavailable` expected) |
+
+### Round 3: the campaign, m3
+
+- **Broken:** both guards for a member of another organization, together. `show` let a non-admin through (`Standing::Stranger => {}`), and the store's `overview` turned storage's refusal into an empty list.
+- **Command:** `just campaign org-admin-routes`.
+- **Failed:** `org_admin_routes_campaign.rs:201`, left 200, right 404: the other organization's member got a page.
+- **Why both:** this check has two guards. Either one alone keeps the uniform 404: the route's admin check, pinned by `an_admin_sees_every_member_…`, and storage's refusal of a non-admin overview (`Denied` → 404). So it was proven with both bypassed.
+
+### After the restores
+
+- `cargo test -p forma-app-platform` passed: lib 432, binary 9, doctests 3.
+- `just check fmt clippy test admin http-smoke`: all ok.
+- `just campaign org-admin-routes`: exit 0 with 5 checks, including the new cross-organization check.
+- `just campaign composer`: see the [APP-184](../APP-184/break-and-restore-2026-11-14.md) record.
+
