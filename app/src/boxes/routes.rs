@@ -1243,11 +1243,14 @@ pub enum BuildRefusal {
     CouldNotCompose(&'static str),
     /// A per-member window is full (`Retry-After` seconds).
     TooMany(u64),
+    /// D10: the app's daily model-call cap is reached (429 `daily_limit`).
+    DailyLimit,
 }
 impl BuildRefusal {
     pub fn response(&self) -> Response {
         match self {
             Self::TooMany(retry_after) => http::too_many_requests(*retry_after),
+            Self::DailyLimit => composer::model::daily_limit(),
             Self::NotFound => http::not_found(),
             Self::Unavailable => http::unavailable(),
             Self::ComposerUnavailable => {
@@ -1270,6 +1273,7 @@ impl BuildRefusal {
             Self::NoData => "no_data_files",
             Self::CouldNotCompose(code) => code,
             Self::TooMany(_) => "too_many_requests",
+            Self::DailyLimit => "daily_limit",
         }
     }
 }
@@ -1498,6 +1502,9 @@ async fn build_with(
             .map_err(|failure| match failure {
                 composer::GenerationFailure::Model(composer::model::ModelError::Unavailable) => {
                     BuildRefusal::ComposerUnavailable
+                }
+                composer::GenerationFailure::Model(composer::model::ModelError::DailyCap) => {
+                    BuildRefusal::DailyLimit
                 }
                 composer::GenerationFailure::Model(error) => {
                     BuildRefusal::CouldNotCompose(error.code())
@@ -1743,6 +1750,7 @@ fn build_refusal(refused: Refused) -> BuildRefusal {
         Refused::StoreUnavailable => BuildRefusal::Unavailable,
         Refused::ComposerUnavailable => BuildRefusal::ComposerUnavailable,
         Refused::CouldNotCompose(code) => BuildRefusal::CouldNotCompose(code),
+        Refused::DailyLimit => BuildRefusal::DailyLimit,
     }
 }
 
@@ -2208,6 +2216,7 @@ pub async fn explain_now(
             Err(composer::model::ModelError::Unavailable) => {
                 return Err(BuildRefusal::ComposerUnavailable)
             }
+            Err(composer::model::ModelError::DailyCap) => return Err(BuildRefusal::DailyLimit),
             Err(_) => (None, "model", bytes),
         }
     };

@@ -7,6 +7,7 @@ import { openFocus } from './focus';
 import { announce, el, isUuid } from './render';
 import { setAppView } from './unite';
 import { appComponentVisible } from '../presentation/presentation';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 const LABEL = 'AI summary';
 type Part = { text: string } | { value: string; exact: string; view_id: string; view_title: string; receipt_digest: string };
@@ -99,6 +100,7 @@ export async function showValue(app: string, work: string, view: string, isCurre
 function message(error: unknown): string {
   if (error instanceof ExplainError && error.code === 'composer_unavailable') return 'Summaries are not available on this server right now.';
   if (error instanceof ExplainError && error.code === 'too_many_requests') return 'Too many summaries in a short time. Try again in a moment.';
+  if (error instanceof ExplainError && error.code === DAILY_LIMIT_CODE) return DAILY_LIMIT_MESSAGE;
   return 'The summary could not be made right now.';
 }
 

@@ -24,6 +24,7 @@ import { isDismissKey, showDockCard } from './dock-card';
 import { ledgerCardFor, setLedgerRange } from './ledger';
 import { RECEIPT_PROMPT, restoreReceipt, takeReceipt, type PendingReceipt } from './receipt';
 import { el, isUuid } from './render';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 export const ACT_URL = '/v1/act';
 
@@ -68,6 +69,7 @@ const MESSAGES: Record<string, string> = {
   could_not_draft: 'That could not be turned into a record: a value is not one the app accepts, or there is nothing to decide. Nothing was changed.',
   composer_unavailable: 'The model is not configured on this server. Nothing was changed.',
   too_many_requests: 'Too many requests in a short time. Try again in a moment.',
+  [DAILY_LIMIT_CODE]: DAILY_LIMIT_MESSAGE,
   failed: 'The action could not be prepared right now. Nothing was changed.',
   invalid_receipt: 'That file can’t be read as a receipt. Attach a JPEG, PNG or WebP photo under 5 MB. Nothing was sent to the model.',
   payload_too_large: 'That photo is larger than 5 MB. Nothing was changed.',

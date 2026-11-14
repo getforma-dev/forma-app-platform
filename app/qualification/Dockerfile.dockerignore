@@ -31,6 +31,9 @@ app/src/bin/**
 !app/src/origins.rs
 !app/src/pages.rs
 !app/src/product.rs
+# Trial plan D4 and D6: the organization admin area and the member's name.
+!app/src/org_admin.rs
+!app/src/member_name.rs
 !app/src/auth/aliases.rs
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
@@ -274,6 +277,7 @@ contracts/fixtures/impl-2026-11-01.2/stored/**
 !app/src/storage/org_admin.rs
 !app/src/storage/org_admin_campaign.rs
 !app/src/storage/private_entries_campaign.rs
+!app/src/storage/org_admin_routes_campaign.rs
 !app/migrations/0022_work_artifact_kinds.sql
 !app/src/storage/artifact_kind.rs
 !app/src/storage/work_presentation_checks.rs

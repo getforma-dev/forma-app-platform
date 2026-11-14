@@ -203,6 +203,9 @@ mod mcp_campaign;
 // Trial plan D4/D5/D6: consent, names and the organization admin definers.
 #[cfg(test)]
 mod org_admin_campaign;
+// Trial plan D4/D6: the /admin and /me/name routes over real rows (W2).
+#[cfg(test)]
+mod org_admin_routes_campaign;
 #[cfg(test)]
 mod private_entries_campaign;
 #[cfg(test)]

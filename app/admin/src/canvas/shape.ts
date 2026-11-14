@@ -53,6 +53,7 @@ import { appComponentVisible } from '../presentation/presentation';
 import type { WidgetCard } from './widgets/card';
 import { widgetFor, widgetKind, widgetOfItem } from './widgets/index';
 import { validState, type WidgetKind, type WidgetState } from './widgets/state';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 export const SHAPE_URL = '/v1/shape';
 type Report = (message: string) => void;
@@ -200,6 +201,7 @@ const REFUSALS: Record<string, string> = {
   could_not_shape: 'That came back as something other than a view, so nothing was shown. Nothing changed.',
   composer_unavailable: 'Shaping that needs the AI model, and none is configured here. Nothing changed.',
   too_many_requests: 'Too many shapes in a short time. Try again in a moment.',
+  [DAILY_LIMIT_CODE]: DAILY_LIMIT_MESSAGE,
   invalid_request: 'Say it in a short sentence (up to 300 characters). Nothing changed.',
 };
 

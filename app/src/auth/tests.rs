@@ -836,9 +836,14 @@ async fn workspace_entry_refuses_cross_site_oversize_and_duplicate_fields() {
             StatusCode::BAD_REQUEST
         );
     }
-    // The form and legacy path share one address-class budget.
-    for _ in 0..3 {
-        let _ = browser.post(&app, "/signin", "workspace=northstar").await;
+    // The form and legacy path share one address-class budget (APP-189:
+    // 40 a minute per address class): the form spends it, then the legacy
+    // path is refused.
+    for _ in 0..crate::http::limits::SIGNIN_ADDRESS[0].limit {
+        let reply = browser.post(&app, "/signin", "workspace=northstar").await;
+        if reply.status == StatusCode::TOO_MANY_REQUESTS {
+            break;
+        }
     }
     let limited = browser
         .post(&app, &format!("/signin/{NORTHSTAR_HANDLE}"), "")
@@ -970,9 +975,10 @@ async fn anonymous_routes_refusals_and_release_router_without_harness() {
             "{\"code\":\"payload_too_large\",\"status\":413}"
         )
     );
-    // 10 per minute per address class (the two above counted), then 429.
+    // The address class's minute window (APP-189: 40; the two above
+    // counted), then 429.
     let mut limited = None;
-    for _ in 0..10 {
+    for _ in 0..crate::http::limits::SIGNIN_ADDRESS[0].limit {
         let reply = browser
             .post(&app, &format!("/signin/{UNKNOWN_HANDLE}"), "")
             .await;

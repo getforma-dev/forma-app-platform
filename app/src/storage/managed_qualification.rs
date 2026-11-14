@@ -178,7 +178,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 223] = [
+const SOURCES: [(&str, &[u8]); 226] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -505,6 +505,11 @@ const SOURCES: [(&str, &[u8]); 223] = [
     ("app/src/mcp/tests.rs", include_bytes!("../mcp/tests.rs")),
     ("app/src/mcp/tokens.rs", include_bytes!("../mcp/tokens.rs")),
     ("app/src/mcp/tools.rs", include_bytes!("../mcp/tools.rs")),
+    (
+        "app/src/member_name.rs",
+        include_bytes!("../member_name.rs"),
+    ),
+    ("app/src/org_admin.rs", include_bytes!("../org_admin.rs")),
     ("app/src/origins.rs", include_bytes!("../origins.rs")),
     ("app/src/pages.rs", include_bytes!("../pages.rs")),
     ("app/src/product.rs", include_bytes!("../product.rs")),
@@ -664,6 +669,10 @@ const SOURCES: [(&str, &[u8]); 223] = [
     (
         "app/src/storage/org_admin_campaign.rs",
         include_bytes!("org_admin_campaign.rs"),
+    ),
+    (
+        "app/src/storage/org_admin_routes_campaign.rs",
+        include_bytes!("org_admin_routes_campaign.rs"),
     ),
     (
         "app/src/storage/pitch_qualification.rs",

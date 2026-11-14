@@ -27,7 +27,11 @@ pub mod http;
 pub mod imports;
 // APP-099 (ADR-011 pitch): Forma as an MCP server; member-minted agent tokens.
 pub mod mcp;
+// Trial plan D6: the name other members see (`POST /me/name`).
+pub mod member_name;
 // APP-100 (DS-59): the channel a record version was committed through.
+// Trial plan D4: the organization's own admin area (`/admin`).
+pub mod org_admin;
 pub mod origins;
 // The binary's server-rendered pages and its product route composition, shared
 // with the local dev binary (`genui::dev`, feature `dev-stand`).

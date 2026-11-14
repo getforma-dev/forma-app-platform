@@ -209,7 +209,7 @@ async fn callback_floods_hit_class_and_global_limits_before_any_work() {
     assert_eq!(
         (limited.status, limited.body.as_str()),
         (StatusCode::TOO_MANY_REQUESTS, neutral_signin),
-        "the 16th callback from one class"
+        "the callback past the class's minute window"
     );
     let retry: u64 = limited.headers[header::RETRY_AFTER]
         .to_str()
@@ -518,8 +518,13 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
     // Sign-in: many handles from one class share the per-class window.
     let mut signin = Browser::new("198.51.100.32:4000", &log);
     let mut signin_statuses = Vec::new();
-    for i in 0..11 {
-        let handle = format!("{}{}", &UNKNOWN_HANDLE[..25], (b'a' + i) as char);
+    let per_minute = http::limits::SIGNIN_ADDRESS[0].limit;
+    for i in 0..=per_minute {
+        let handle = format!(
+            "{}{}",
+            &UNKNOWN_HANDLE[..25],
+            (b'a' + (i % 26) as u8) as char
+        );
         signin_statuses.push(
             signin
                 .post(&app, &format!("/signin/{handle}"), "")
@@ -528,8 +533,10 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
                 .as_u16(),
         );
     }
-    assert_eq!(signin_statuses[..10], [400; 10]);
-    assert_eq!(signin_statuses[10], 429);
+    assert!(signin_statuses[..per_minute]
+        .iter()
+        .all(|status| *status == 400));
+    assert_eq!(signin_statuses[per_minute], 429);
     // Sign-in global: 600 per hour across the service.
     auth.limits.clear();
     let mut count = 0;
@@ -1303,7 +1310,8 @@ async fn campaign() {
         }
     }
     // A registered organization's forged pre-login cookie still costs one
-    // flow lookup, at most 15 a minute from one class: the 16th is 429 with
+    // flow lookup, at most CALLBACK_ADDRESS's minute window from one class
+    // (45 since the ADR-006 amendment of 2026-11-14): the next is 429 with
     // `Retry-After` before any work.
     let mut flood = c.browser("198.51.100.71:7100");
     let mut statuses = Vec::new();
@@ -1317,12 +1325,15 @@ async fn campaign() {
             assert!(reply.headers.contains_key(header::RETRY_AFTER));
         }
     }
-    assert_eq!(statuses.iter().filter(|s| **s == 400).count(), 15);
+    assert_eq!(
+        statuses.iter().filter(|s| **s == 400).count(),
+        http::limits::CALLBACK_ADDRESS[0].limit
+    );
     assert_eq!(statuses.last(), Some(&429));
     assert_eq!(c.counts().await, before);
     assert_eq!(c.issuer.count(|x| &x.exchange), exchanges);
     c.auth.limits.clear();
-    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (15/minute, 80/hour) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 16th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
+    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (45/minute, 250/hour; ADR-006 amendment 2026-11-14) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 46th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
 
     // --- 5. Provider invitation mismatches cannot create an account ----------
     c.auth.limits.clear();

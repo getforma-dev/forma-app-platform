@@ -35,8 +35,9 @@
 //!
 //! Refusals: 403 `cross_site`; the uniform 404; 413; 400
 //! `malformed_request`; 422 `invalid_request` (not a question with at most one UUID `file_id`)
-//! and `could_not_answer` (the reply was not the closed answer); 429; 503
-//! `composer_unavailable` and `unavailable`. Logs carry identities, counts,
+//! and `could_not_answer` (the reply was not the closed answer); 429 (the
+//! member's window, or `daily_limit`: D10, the app's daily model-call cap);
+//! 503 `composer_unavailable` and `unavailable`. Logs carry identities, counts,
 //! codes and durations; never the question, a cell or the answer.
 use super::{
     inspect::{self, ColumnType},
@@ -44,7 +45,10 @@ use super::{
 };
 use crate::{
     auth::csrf,
-    composer::ask::{self as talk, Answer},
+    composer::{
+        ask::{self as talk, Answer},
+        model::{self, ModelError},
+    },
     demo,
     http::{self, UniformPath},
     storage::{BoxFile, Error},
@@ -741,6 +745,9 @@ pub async fn ask_post(
         Ok(reply) => reply,
         Err(error) => {
             log("model", error.code(), 0);
+            if error == ModelError::DailyCap {
+                return model::daily_limit();
+            }
             return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_answer");
         }
     };

@@ -89,6 +89,32 @@ impl Model for Script {
     }
 }
 
+/// A loopback Messages endpoint answering every request with `text`; the
+/// count is of the requests it received.
+async fn messages_stub(text: String) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = calls.clone();
+    let reply = json!({"id": "msg", "model": "stub-model",
+        "content": [{"type": "text", "text": text}],
+        "usage": {"input_tokens": 5, "output_tokens": 7}})
+    .to_string();
+    let app = axum::Router::new().route(
+        "/v1/messages",
+        axum::routing::post(move || {
+            let seen = seen.clone();
+            let reply = reply.clone();
+            async move {
+                seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                ([("content-type", "application/json")], reply)
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/v1/messages", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (endpoint, calls)
+}
+
 fn router_reply(choice: &str, confidence: &str, title: &str) -> String {
     json!({"choice": choice, "confidence": confidence, "reason": "campaign", "title": title})
         .to_string()
@@ -622,6 +648,80 @@ async fn campaign() {
     check(
         &mut checks,
         "a model failure after the router is the neutral could_not_compose with no row written; a revoked member stays refused and no row is written",
+    );
+
+    // --- D10: the daily model-call cap writes nothing and sends nothing ---
+    // The real client over a loopback Messages stub, counting against a cap
+    // of one call: the router takes the call, generation is refused by the
+    // cap before anything leaves, and the next composition is refused at the
+    // router. Both are the daily limit, and no row is written.
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(1);
+    let (endpoint, calls) = messages_stub(router_reply("none", "low", "")).await;
+    let client =
+        crate::composer::model::Anthropic::new("sk-ant-synthetic-not-a-real-key", &endpoint)
+            .unwrap()
+            .with_daily_cap(&DAILY);
+    let capped = Composer::new(
+        Some(Arc::new(client) as Arc<dyn Model>),
+        "router-model",
+        "generation-model",
+    );
+    assert_eq!(
+        compose_for(&stores, &capped, &member, intent).await,
+        Err(Refused::DailyLimit)
+    );
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the router call only"
+    );
+    assert_eq!(
+        compose_for(&stores, &capped, &member, intent).await,
+        Err(Refused::DailyLimit)
+    );
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "nothing reached the endpoint after the cap"
+    );
+    assert_eq!(footprint(&fixture).await, before);
+    check(
+        &mut checks,
+        "D10: with the real client over a loopback stub and a daily cap of one call, the router takes the call and generation is refused by the cap before any request leaves; the next composition is refused at the router; both are Refused::DailyLimit (429 daily_limit) with nothing sent past the cap and no row written",
+    );
+
+    // --- D10 (review M3): a pinned app with a request for more, at the cap ---
+    // The pick needs no model, but the request asks for more than the app's
+    // defaults (a number), so the live transform would call the model. At
+    // the cap that is the daily limit before the standard work is placed,
+    // not a silent `kept` answer.
+    static SPENT: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let spent = Composer::new(
+        Some(Arc::new(
+            crate::composer::model::Anthropic::new("sk-ant-synthetic-not-a-real-key", &endpoint)
+                .unwrap()
+                .with_daily_cap(&SPENT),
+        ) as Arc<dyn Model>),
+        "router-model",
+        "generation-model",
+    );
+    let answer = crate::composer::routes::compose_instant(
+        &stores,
+        &spent,
+        &member,
+        "Northstar investigation for the last 7 days",
+        &crate::composer::routes::Pin::App(APP.into()),
+    )
+    .await;
+    assert!(
+        matches!(answer, Err(Refused::DailyLimit)),
+        "the daily limit"
+    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(footprint(&fixture).await, before, "no standard work placed");
+    check(
+        &mut checks,
+        "D10 (review M3): a composition pinned to a library app whose words ask for more than its defaults, with the composer's real client at a reached daily cap, is Refused::DailyLimit (429 daily_limit) before the standard work is placed: no request leaves and no row is written",
     );
 
     // --- APP-145: one shell when an active member owns no eligible app ---

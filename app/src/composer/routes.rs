@@ -16,7 +16,9 @@
 //! no model key is configured and the organization is not a demo one
 //! (neutral; everything else in the service works); 422 `could_not_compose` when the model's output was refused by
 //! admission on every attempt, the model failed, or publication lost its
-//! race (neutral; nothing of the refused output is disclosed); 503
+//! race (neutral; nothing of the refused output is disclosed); 429
+//! `daily_limit` with `Retry-After` when the app's daily model-call cap is
+//! reached (D10; `model::daily_limit`: nothing composed or written); 503
 //! `unavailable` for a store outage. The route runs under its own deadline
 //! (`COMPOSE_DEADLINE`, `http::uniform_with`) because it waits on the model.
 //!
@@ -152,6 +154,8 @@ pub enum Refused {
     ComposerUnavailable,
     /// A neutral 422 `could_not_compose`; the code is for the log only.
     CouldNotCompose(&'static str),
+    /// D10: the daily model-call cap is reached (429 `daily_limit`).
+    DailyLimit,
 }
 
 /// One composition for a live member, in one phase (module documentation,
@@ -296,6 +300,11 @@ pub(crate) async fn compose_instant(
                     GenerationFailure::Model(super::model::ModelError::Unavailable) => {
                         Refused::ComposerUnavailable
                     }
+                    GenerationFailure::Model(super::model::ModelError::DailyCap) => refused(
+                        "model_daily_cap",
+                        Some(Origin::Adapted),
+                        Refused::DailyLimit,
+                    ),
                     _ => refused(
                         "template_customization_refused",
                         Some(Origin::Adapted),
@@ -374,6 +383,10 @@ pub(crate) async fn compose_instant(
                 Refused::ComposerUnavailable,
             ));
         }
+        Err(super::model::ModelError::DailyCap) => {
+            // D10: generation would be refused by the same cap.
+            return Err(refused("model_daily_cap", None, Refused::DailyLimit));
+        }
         Err(error) => {
             // The library cannot be consulted; generation is still possible.
             tracing::warn!(
@@ -404,6 +417,22 @@ pub(crate) async fn compose_instant(
     let composed = match decision {
         Decision::Retrieve { index } => {
             let library = &context.library[index];
+            // D10 (review M3): a request that needs the live transform asks
+            // the cap first. At the cap it is the 429 every model route
+            // answers, before the standard work is placed, rather than a
+            // silent `kept`.
+            let tailors = matches!(confidence, "matched" | "pinned")
+                && transform::wants(intent, library)
+                && context.authoring.is_some()
+                && context.owner_publish_policy.is_some()
+                && !(demo && transform::rehearsed(intent).is_some());
+            if tailors && composer.enabled() && composer.daily_cap_reached() {
+                return Err(refused(
+                    "model_daily_cap",
+                    Some(Origin::Adapted),
+                    Refused::DailyLimit,
+                ));
+            }
             let standard = retrieve(stores, member, &context, library, intent, started).await?;
             if !matches!(confidence, "matched" | "pinned") || !transform::wants(intent, library) {
                 return Ok(First::Placed(standard, None));
@@ -540,6 +569,11 @@ pub(crate) async fn compose_instant(
                     "out_of_time",
                     Some(Origin::Generated),
                     Refused::CouldNotCompose("out_of_time"),
+                )),
+                Err(GenerationFailure::Model(super::model::ModelError::DailyCap)) => Err(refused(
+                    "model_daily_cap",
+                    Some(Origin::Generated),
+                    Refused::DailyLimit,
                 )),
                 Err(GenerationFailure::Model(error)) => Err(refused(
                     error.code(),
@@ -1243,5 +1277,6 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
         Err(Refused::CouldNotCompose(_)) => {
             problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_compose")
         }
+        Err(Refused::DailyLimit) => super::model::daily_limit(),
     }
 }
