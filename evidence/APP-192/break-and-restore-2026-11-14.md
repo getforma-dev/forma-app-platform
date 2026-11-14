@@ -140,3 +140,16 @@ W4's final round, `903572c7`, plus its final-check record `a32aa597`, made the s
 The unit test `sharing::tests::a_busy_store_is_the_retryable_429_and_nothing_else_changes` checks the mapping alone, header included.
 
 Adaptation in the merge: W4's `private-entries` campaign called `share_with_lineage` with its earlier signature (`record_write: true`). It now names `ShareRole::Contributor` and `ShareMode::Ensure`, which is what that call meant.
+
+## Round 6: the recheck's MINOR-8 and NITs (2026-11-14)
+
+This round answers the Tier A recheck in [review-w2b-2026-11-14.md](review-w2b-2026-11-14.md) (`b9d07fd6`). Both breaks ran on `bc8d0993`, with the same method as round 1. Each restore left `git status --short` empty and the SHA-256 equal to the committed one (`app/src/sharing/mod.rs` `0ab71cf4d3516092…`, `app/admin/src/sharing/dialog.ts` `291eaa7f985a64a9…`).
+
+**Tests first.** The new `share-routes` check holds Ana's membership row `FOR UPDATE` in a raw session. Before the fix it failed: Rev, who holds no access, asked to remove Ana and got `429 {"code":"busy"}` after the lock wait (right: the uniform 404). The new dialog test (a refused lowering) failed before its copy existed.
+
+| # | Guard | Break | What failed |
+| --- | --- | --- | --- |
+| B37 | A removal judges its caller with a lock-free read before the definer (MINOR-8) | `may_remove_access` skipped | `share-routes`: Rev's removal of Ana, while her row was held, answered `{"code":"busy","status":429}` (right: `{"code":"not_found","status":404}`) |
+| B38 | A refused lowering says "Only someone who can give that access can lower it." (NIT-10) | the copy removed | `team-sharing-dialog.test.ts` 11 |
+
+NIT-7 (the module header), NIT-8 (the campaign report's limit) and NIT-9 (the unused `appShareRequest`, which posted to the lowering route, removed along with its test) are text and dead-code changes. They have no guard to break.
