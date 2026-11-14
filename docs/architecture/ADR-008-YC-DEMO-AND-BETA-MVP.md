@@ -72,6 +72,8 @@ Victor decided on 2026-11-14 to run a real live test of the platform with real p
   - **Content deleted:** apps, records, uploads, names, consents and memberships, plus every stored file version.
   - **Kept:** the hash-chained audit log (identifiers, event kinds, times and hashes; no content) and the routing rows for the organization's handle.
   - **Backups:** manual snapshots are deleted at the purge. RDS automated backups lapse seven days later, so the data is fully gone around 2026-12-21.
+  - **Sign-in accounts:** the members' sign-in accounts (email and password) live in the fAuth tenant run by FormaStack, outside this database. The purge procedure includes a written request to FormaStack to delete the tenant's users by 2026-12-14, with the confirmation recorded.
+  - **Guest-share rows:** the few rows of guest shares in `genui_identity` that a guest accepted or linked are kept with their email and title blanked, so each guest account's hash-chained history still verifies.
   - The beta stops about 2026-12-15 unless it is renewed again.
 
 ### Beta notice, version 1
@@ -88,6 +90,6 @@ Shown on the invitation page; the required checkbox records consent to this vers
 >
 > **AI:** to build apps and answer questions, your prompts, and the files and entries you ask it to work with, are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
 >
-> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Copy out anything you want to keep before then.
+> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Your sign-in account (email and password) is held by our identity provider; we ask it to delete the account after the test. Copy out anything you want to keep before then.
 >
 > By checking the box you agree to take part on these terms.
