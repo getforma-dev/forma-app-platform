@@ -1990,6 +1990,15 @@ def qualify():
                   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                   WHERE n.nspname='genui_identity' AND c.relkind='r' ORDER BY c.relname""").fetchall()
                 assert {r[0] for r in identity}==set(identity_tables) and all(r[1:]==(True,True,'genui_owner') for r in identity)
+                # 0024 (the purge's recorded exception, W3 R1): share_events keeps only its
+                # account key, so an organization's live_work_shares can be deleted while
+                # every guest's share_events chain stays verifiable; linked_apps keeps both.
+                keys=c.execute("""SELECT n.nspname||'.'||t.relname,m.nspname||'.'||f.relname FROM pg_constraint k
+                  JOIN pg_class t ON t.oid=k.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+                  JOIN pg_class f ON f.oid=k.confrelid JOIN pg_namespace m ON m.oid=f.relnamespace
+                  WHERE k.contype='f' AND n.nspname='genui_identity' AND t.relname IN ('share_events','linked_apps')""").fetchall()
+                assert set(keys)=={('genui_identity.linked_apps','genui.live_work_shares'),('genui_identity.linked_apps','genui_identity.accounts'),
+                  ('genui_identity.share_events','genui_identity.accounts')},keys
                 policies=c.execute("""SELECT tablename,policyname,permissive,cmd,qual,with_check FROM pg_policies
                   WHERE schemaname='genui_identity' AND policyname='account_scope' ORDER BY tablename""").fetchall()
                 assert len(policies)==5 and all(r[1:4]==('account_scope','PERMISSIVE','ALL') and 'genui.account_id' in r[4] and r[4]==r[5] for r in policies)

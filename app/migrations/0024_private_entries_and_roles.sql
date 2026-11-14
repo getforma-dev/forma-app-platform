@@ -35,6 +35,17 @@
 -- appends `permission.granted` and every revocation `permission.revoked` on
 -- the admission chain, each digest recomputable from the `work_shares` row.
 --
+-- Recorded exception to ADR-009's additive rule (W3's purge review R1,
+-- 2026-11-14): the foreign key from genui_identity.share_events
+-- (organization_id, share_id) to genui.live_work_shares (0017) is dropped.
+-- The end-of-test purge deletes an organization's live_work_shares while each
+-- guest account's share_events hash chain must stay verifiable; those rows
+-- hold only {account_id, organization_id, share_id, kind, share_version,
+-- sequence, previous_hash} and their hash, no content, and with the key in
+-- place a guest-accepted share could never be deleted. linked_apps keeps its
+-- key: a linked app is removed before its share goes. Nothing else is
+-- dropped and no row is rewritten.
+--
 -- Recorded debt, as 0008 and 0023 did: ADR-007 D7.1 names six definers and
 -- D7.3 says permission rows are written only by admit_redemption and the
 -- operator channel; this migration replaces one genui_admit definer and adds
@@ -47,6 +58,9 @@ ALTER TABLE genui_meta.schema_version DROP CONSTRAINT schema_version_version_che
  ADD CONSTRAINT schema_version_version_check CHECK (version BETWEEN 1 AND 24);
 ALTER TABLE genui_meta.schema_migrations DROP CONSTRAINT schema_migrations_version_check,
  ADD CONSTRAINT schema_migrations_version_check CHECK (version BETWEEN 1 AND 24);
+
+-- (0) The purge's exception (above): share_events keeps only its account key.
+ALTER TABLE genui_identity.share_events DROP CONSTRAINT share_events_organization_id_share_id_fkey;
 
 -- (a) Own collections ----------------------------------------------------------
 -- Derived from the canonical schema (forma-json-v1, ASCII by its grammar:

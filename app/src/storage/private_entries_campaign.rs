@@ -1300,6 +1300,34 @@ async fn campaign() {
         }
     );
 
+    // --- the purge's exception (0024, W3 R1): a guest's share_events row
+    // survives deleting its live_work_shares row; linked_apps still holds ---
+    {
+        let operator = fixture.operator().await;
+        let c = &operator.client;
+        let account = "00000000-0000-4000-8000-00000000a501";
+        let share = "00000000-0000-4000-8000-00000000a502";
+        let digest = format!("sha256:{}", "0".repeat(64));
+        c.execute("INSERT INTO genui_identity.accounts(account_id,issuer,provider_tenant_id,provider_subject,verified_email) VALUES ($1::text::uuid,'app008-fixture-only','ten_guest','usr_guest','guest@example.invalid')", &[&account]).await.unwrap();
+        c.execute(&format!("INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,version,idempotency_key,request_digest,created_at,expires_at) VALUES ('{ORG}',$1::text::uuid,'{PRIVATE_APP}','{work}','{OWNER}',1,'guest@example.invalid','{}',$2::text,1,'{{}}','{{}}','schema check',false,1,'00000000-0000-4000-8000-00000000a503',$2::text,now(),now()+interval '7 days')", w.publication), &[&share, &digest]).await.unwrap();
+        c.execute(&format!("INSERT INTO genui_identity.linked_apps(account_id,organization_id,share_id,created_at,grant_version) VALUES ($1::text::uuid,'{ORG}',$2::text::uuid,now(),1)"), &[&account, &share]).await.unwrap();
+        c.execute(&format!("INSERT INTO genui_identity.share_events(account_id,event_id,sequence,organization_id,share_id,kind,share_version,canonical,previous_hash,hash,occurred_at) VALUES ($1::text::uuid,'00000000-0000-4000-8000-00000000a504',1,'{ORG}',$2::text::uuid,'share.accepted',1,'\\x7b7d'::bytea,$3::text,$3::text,now())"), &[&account, &share, &digest]).await.unwrap();
+        // linked_apps keeps its key: the share cannot go while a linked app refers to it.
+        assert!(c.execute(&format!("DELETE FROM genui.live_work_shares WHERE organization_id='{ORG}' AND share_id=$1::text::uuid"), &[&share]).await.is_err());
+        c.execute(&format!("DELETE FROM genui_identity.linked_apps WHERE account_id=$1::text::uuid AND organization_id='{ORG}' AND share_id=$2::text::uuid"), &[&account, &share]).await.unwrap();
+        assert_eq!(c.execute(&format!("DELETE FROM genui.live_work_shares WHERE organization_id='{ORG}' AND share_id=$1::text::uuid"), &[&share]).await.unwrap(), 1);
+        let survived: i64 = c
+            .query_one(
+                "SELECT count(*) FROM genui_identity.share_events WHERE account_id=$1::text::uuid",
+                &[&account],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(survived, 1);
+        check(&mut checks, "0024 purge exception (W3 R1): a guest account's share_events row survives deleting its live_work_shares row (the chain stays verifiable); linked_apps still refuses the delete until the linked app is removed");
+    }
+
     let report = json!({
         "campaign": "APP-191-192-private-entries",
         "passed": true,
