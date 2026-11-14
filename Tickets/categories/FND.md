@@ -22,3 +22,4 @@ Released framework qualification, typed contracts and reproducible application s
 | 184 | [APP-184: An app-wide daily cap on model calls, with a plain message](../0-backlog/APP-184.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-181 |
 | 191 | [APP-191: Private entries and reviewer-only commands](../0-backlog/APP-191.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-181 |
 | 193 | [APP-193: Spike: live interaction from general primitives](../0-backlog/APP-193.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
+| 195 | [APP-195: Refresh herd: bounded waiting at the data pool and jittered live refreshes](../0-backlog/APP-195.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
