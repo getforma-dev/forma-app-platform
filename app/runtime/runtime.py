@@ -933,6 +933,10 @@ def migrate():
                                  options="-c statement_timeout=30000 -c lock_timeout=5000")
     try:
         apply_migrations(connection, migration_directory())
+        # The last statement before the COMMIT (APP-196 recheck): PostgreSQL checks every
+        # pending deferred constraint here, so a violation fails while it still exits 1. At the
+        # COMMIT the server would refuse and roll back, but that refusal exits 4.
+        connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
     except BaseException:
         # No COMMIT is ever sent: closing the open transaction makes the server roll it back.
         connection.close()
@@ -944,8 +948,10 @@ def commit_migration(connection):
     """From the COMMIT onward a failure cannot show whether the server committed (APP-196).
 
     A lost acknowledgement, a failed close or a failed completion line all exit with
-    MIGRATION_COMMIT_OUTCOME_UNKNOWN, never with 1. os._exit, not SystemExit: interpreter
-    shutdown turns a failed flush into exit 120, which must not appear after a commit either.
+    MIGRATION_COMMIT_OUTCOME_UNKNOWN, never with 1. So does a COMMIT the server refuses,
+    although it rolled back; migrate() checks deferred constraints, the usual cause, before
+    it. os._exit, not SystemExit: interpreter shutdown turns a failed flush into exit 120,
+    which must not appear after a commit either.
     """
     try:
         connection.commit()
