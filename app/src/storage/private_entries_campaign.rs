@@ -30,10 +30,13 @@ use super::{
     qualification_cases::{check, ORG},
     *,
 };
-use crate::admission::{self, digest};
+use crate::{
+    admission::{self, digest},
+    events,
+};
 use genui_auth_verifier::VerifiedIdentity;
 use serde_json::{json, Value};
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc};
 
 /// The seeded fixture space (tenant_seed.py).
 const SPACE: &str = "00000000-0000-4000-8000-000000000384";
@@ -402,6 +405,10 @@ async fn chain(fixture: &Fixture, kind: &str) -> i64 {
 }
 
 /// An enforcement check: holds as shipped, fails with the rule bypassed.
+/// The live-hint acceptance case runs twice (as shipped, then bypassed); each
+/// round admits its own members and commits its own rows.
+static LIVE_HINT_ROUND: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 macro_rules! judged {
     ($checks:expr, $name:expr, $body:block) => {{
         BYPASS.store(false, Ordering::SeqCst);
@@ -426,7 +433,7 @@ async fn campaign() {
         "genui",
     );
     operator(&fixture, &["backfill", "--organization", ORG]);
-    let stores = Stores::new(fixture.settings()).unwrap();
+    let stores = Arc::new(Stores::new(fixture.settings()).unwrap());
     stores.readiness().await.unwrap();
     let mut checks = Vec::new();
     for member in [OWNER, REV, BEN, ANA, NIA, KIM] {
@@ -2118,6 +2125,115 @@ async fn campaign() {
             refused && unwritten
         }
     );
+
+    // --- APP-191 acceptance: live hints over an own list, 26 pages ------------
+    // 25 members (contributors through the owner's share) each commit one
+    // claim to the `own` list; 26 pages hold a stream each (the 25 and the
+    // owner's, the reviewer page) through the production gate. A non-reviewer
+    // page receives the hint for its own row only; the reviewer page has all
+    // 25 within 6 s of the last commit. Under bypass every page receives
+    // every hint, so the check fails there.
+    judged!(&mut checks, "APP-191 acceptance: 25 commits to an own list in under 60 s, 26 pages open: no non-reviewer page receives a hint for another member's row, each receives its own, and the reviewer page is current within 6 s of the last commit", {
+        // One counter outside the macro's two expansions of this block: the
+        // bypassed round admits and commits as new members and rows.
+        let round = LIVE_HINT_ROUND.fetch_add(1, Ordering::SeqCst);
+        let students: Vec<String> = (0..25)
+            .map(|i| format!("00000000-0000-4000-8000-00000000b{:03x}", round * 32 + i))
+            .collect();
+        for student in &students {
+            admit_member(&fixture, student);
+            stores
+                .workspace
+                .share_work(&owner, PRIVATE_APP, work, Audience::Member(student), ShareRole::Contributor)
+                .await
+                .unwrap();
+        }
+        let hub = events::hub();
+        let mut pages = Vec::new();
+        for (n, principal) in students.iter().chain(std::iter::once(&OWNER.to_owned())).enumerate() {
+            let registration = hub
+                .register(ORG, principal, &format!("page-{round}-{n}"))
+                .unwrap();
+            let (tx, rx) = events::sink();
+            tokio::spawn(events::pump(
+                events::routes::StoreGate::new(stores.clone(), request(&stores, ORG, principal, 1)),
+                ORG.to_owned(),
+                hub.subscribe(),
+                registration,
+                tx,
+                events::RECHECK,
+                events::STREAM_LIFETIME,
+            ));
+            pages.push((principal.clone(), rx));
+        }
+        let started = std::time::Instant::now();
+        let mut sequences = std::collections::BTreeMap::new();
+        for (i, student) in students.iter().enumerate() {
+            let who = request(&stores, ORG, student, 1);
+            let outcome = committed(
+                &stores,
+                &who,
+                &command(
+                    &w,
+                    "submit",
+                    "claim",
+                    &format!("00000000-0000-4000-8000-0000000c{:04x}", round * 64 + i),
+                    0,
+                    claim_values("7", "filed", &format!("claim {i} of round {round}")),
+                    &format!("{:032x}", 0xc0000 + round * 64 + i),
+                ),
+            )
+            .await;
+            // The command route's hook, after `CommandResult::Committed`.
+            hub.record_committed(ORG, PRIVATE_APP, work, outcome.commit_sequence);
+            sequences.insert(student.clone(), outcome.commit_sequence);
+        }
+        let last_commit = std::time::Instant::now();
+        let commits_within = last_commit.duration_since(started);
+        // The reviewer page: all 25 hints, judged current within 6 s.
+        let (_, reviewer_rx) = pages.last_mut().unwrap();
+        let mut reviewer_seen = std::collections::BTreeSet::new();
+        let reviewer_current = tokio::time::timeout(std::time::Duration::from_secs(6), async {
+            while reviewer_seen.len() < 25 {
+                match reviewer_rx.recv().await {
+                    Some(event) if event.kind == events::Kind::RecordCommitted => {
+                        reviewer_seen.insert(event.sequence.unwrap_or(-1));
+                    }
+                    Some(_) => {}
+                    None => break,
+                }
+            }
+        })
+        .await
+        .is_ok();
+        let reviewer_within = last_commit.elapsed();
+        // The other pumps judged the same announcements (one judgment per
+        // event, shared); a short grace for their deliveries to land.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let mut own_only = true;
+        for (principal, rx) in pages.iter_mut().take(25) {
+            let mut seen = std::collections::BTreeSet::new();
+            while let Ok(event) = rx.try_recv() {
+                if event.kind == events::Kind::RecordCommitted {
+                    seen.insert(event.sequence.unwrap_or(-1));
+                }
+            }
+            let expected: std::collections::BTreeSet<i64> = [sequences[principal]].into_iter().collect();
+            if seen != expected {
+                own_only = false;
+            }
+        }
+        let all_sequences: std::collections::BTreeSet<i64> = sequences.values().copied().collect();
+        println!(
+            "APP-191 live hints: 25 commits in {commits_within:?}; reviewer current {reviewer_current} after {reviewer_within:?}; non-reviewer pages own-only {own_only}"
+        );
+        drop(pages);
+        commits_within < std::time::Duration::from_secs(60)
+            && reviewer_current
+            && reviewer_seen == all_sequences
+            && reviewer_within < std::time::Duration::from_secs(6)
+            && own_only
+    });
 
     // --- the purge's exception (0024, W3 R1): a guest's share_events row
     // survives deleting its live_work_shares row; linked_apps still holds ---

@@ -132,3 +132,13 @@ Fix: each record's current revision is a `LATERAL` subquery by the full primary 
 ### CI (commit `1556eea6`)
 
 `scripts/dev/campaigns.tsv` already named `tenant-foundation` as the workflow of `private-entries`, but `.github/workflows/tenant-foundation.yml` had no step. The step runs after record components, as the other campaigns of the workflow run (`GENUI_PRIVATE_ENTRIES_REPORT` under the uploaded artifact).
+
+## Live hints over an own collection (APP-191, Fable advisor decision of 2026-11-14)
+
+The rule was already in the delivery gate: a `record.committed` announcement carries the committed revision's `commit_sequence`, and `Data::openable_principals` (one read per event for the organization) applies `own_rows` on that row for each subscribed principal. The consequence is now explicit in the `events` module notes and in the ADR-007 amendment: a commit to an `own` collection delivers its hint only to the pages of members who can see the changed row (its creator, the reviewers, the owner); another member's page receives nothing, so it never re-reads for a row it cannot list. `events::routes::StoreGate::new` lets a campaign open streams with the production gate.
+
+Acceptance case (`private-entries` campaign, bypass-judged): 25 members admitted and shared in as contributors, 26 streams registered on the hub (the 25 and the owner's) with the production gate, one claim committed by each member with the command route's hook (`hub.record_committed` with the outcome's `commit_sequence`), then: the reviewer page receives all 25 hints within 6 s of the last commit; after a 500 ms grace, every non-reviewer page has received exactly the hint for its own row; the 25 commits take under 60 s. Measured: **25 commits in 2.56 s; the reviewer page current 67 ms after the last commit; every non-reviewer page own-only**. Under bypass the same run delivered every hint to every page (`own-only false`), so the check fails there. `just campaign private-entries`: ok, **52 checks** (25 judged under bypass). The acceptance line for `Tickets/0-backlog/APP-191.md` (not on this branch) is in the hand-over.
+
+## APP-198: a stale record snapshot is typed, re-captured once, never "no access"
+
+Recorded in `evidence/APP-198/stale-snapshot-2026-11-14.md` (the fix, the light Tier A check, the tests and results). The `box` campaign grows to 19 checks; `record_query_campaign::qualify` asserts `Err(Error::Stale)` after a commit between capture and release and keeps `Err(Error::Denied)` for the binding and permission cases.

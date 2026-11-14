@@ -35,6 +35,18 @@
 //! Heartbeat every `HEARTBEAT`; a stream ends after `STREAM_LIFETIME` so the
 //! client re-resolves its session by reconnecting.
 //!
+//! APP-191 (own collections): a `record.committed` announcement carries the
+//! committed revision's `commit_sequence`, and the judgment applies the one
+//! storage row rule (`authorization::own_rows`) to that row for each
+//! subscriber: a commit to an `own` collection delivers its hint only to the
+//! pages of members who can see the changed row, its creator, the reviewers
+//! and the app's owner; every other member's page receives nothing (not a
+//! hint without ids, nothing), so their canvas never re-reads for a row it
+//! cannot list. The `private-entries` campaign's acceptance case: 25 commits
+//! to an own list by 25 members within 60 s, 26 pages open, no non-reviewer
+//! page receives a hint for another member's row, the reviewer's page is
+//! current within 6 s of the last commit.
+//!
 //! APP-101 adds `app.adapted` (the composer's live transform saved an
 //! adapted work; the document also names the standard work it came from as
 //! `from_app_id`/`from_work_id`, judged on the adapted work) and `app.kept`
