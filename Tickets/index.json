@@ -228,7 +228,7 @@
         "APP-180"
       ],
       "ticket_count": 7,
-      "done_count": 1,
+      "done_count": 2,
       "blocked_count": 1
     },
     {
@@ -363,7 +363,7 @@
         "APP-189"
       ],
       "ticket_count": 31,
-      "done_count": 5,
+      "done_count": 7,
       "blocked_count": 0
     }
   ],
@@ -382,7 +382,8 @@
     "APP-152",
     "APP-165",
     "APP-170",
-    "APP-171"
+    "APP-171",
+    "APP-176"
   ],
   "tickets": [
     {
@@ -2843,11 +2844,11 @@
     {
       "id": "APP-084",
       "title": "Close the admission and provider review residuals (APP-073 reviews)",
-      "path": "2-in-progress/APP-084.md",
+      "path": "4-done/APP-084.md",
       "Field": "Value",
       "---": "---",
       "Epic": "IAM",
-      "Status": "In progress",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S13",
@@ -2861,7 +2862,7 @@
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "GenUI \u2014 Grok residuals, independent review of the migration",
       "Branch / PR": "`chore/app-084-residuals`, [PR 83](https://github.com/getforma-dev/forma-app-platform/pull/83), merged 2026-11-12 as `bf24e95`",
-      "Deployment": "Not deployed. Migration 0021 ships with APP-169's 0022 in one operator schema release, [APP-175](../0-backlog/APP-175.md).",
+      "Deployment": "Not deployed. Migration 0021 ships with APP-169's 0022 in one operator schema release, [APP-175](../4-done/APP-175.md).",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -5312,11 +5313,11 @@
     {
       "id": "APP-169",
       "title": "Persist artifact classification and retire legacy app placement after compatibility review",
-      "path": "2-in-progress/APP-169.md",
+      "path": "4-done/APP-169.md",
       "Field": "Value",
       "---": "---",
       "Epic": "UX",
-      "Status": "In progress",
+      "Status": "Done",
       "Priority": "P2",
       "Type": "Feature",
       "Sprint": "S15",
@@ -5330,7 +5331,7 @@
       "External dependencies": "None",
       "Assignee": "Grok \u2014 GenUI; review fixes by Claude",
       "Branch / PR": "`feat/app-169-artifact-kind` \u2014 [PR 84](https://github.com/getforma-dev/forma-app-platform/pull/84), stacked on APP-084's PR 83, merged 2026-11-12 as `5695869`",
-      "Deployment": "Not deployed. Migration 0022 ships with APP-084's 0021 in one operator schema release, [APP-175](../0-backlog/APP-175.md).",
+      "Deployment": "Not deployed. Migration 0022 ships with APP-084's 0021 in one operator schema release, [APP-175](../4-done/APP-175.md).",
       "Team": "GenUI",
       "Blocked by": "None",
       "Unblock evidence": "Explicit user direction; deployment held while redesign is implemented.",
@@ -5466,7 +5467,7 @@
       "Order": "174",
       "Size": "S",
       "Repos": "forma-app-platform, gatewasm",
-      "Decision": "Split from [APP-084](../2-in-progress/APP-084.md) item 7 on 2026-11-05, as its independent review suggested, so APP-084's code can finish while these AWS changes wait. The plan is [ADR-003](../../docs/architecture/ADR-003-PUBLIC-BETA-ACCESS.md)'s 2026-10-30 managed-invitations amendment.",
+      "Decision": "Split from [APP-084](../4-done/APP-084.md) item 7 on 2026-11-05, as its independent review suggested, so APP-084's code can finish while these AWS changes wait. The plan is [ADR-003](../../docs/architecture/ADR-003-PUBLIC-BETA-ACCESS.md)'s 2026-10-30 managed-invitations amendment.",
       "Requirements": "SR1, SR2, SR12",
       "Depends on": "APP-084",
       "External dependencies": "FormaStack rotates the Northstar management key with its own runbook after GenUI confirms the detach.",
@@ -5482,11 +5483,11 @@
     {
       "id": "APP-175",
       "title": "A reviewed operator schema release for migrations 21 and 22",
-      "path": "0-backlog/APP-175.md",
+      "path": "4-done/APP-175.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Task",
       "Sprint": "S15",
@@ -5501,7 +5502,7 @@
       "Assignee": "Claude \u2014 GenUI",
       "Branch / PR": "`app175/schema-release`, [PR 90](https://github.com/getforma-dev/forma-app-platform/pull/90), merged 2026-11-12 04:54 UTC as `de37a9e`",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog (APP-084 and APP-169 become Done once this release deploys their migrations; its promotion waits for Victor's approval, run 43157872671)",
+      "Blocked by": "None",
       "Unblock evidence": "Not applicable.",
       "dependencies": [
         "APP-084",
@@ -5524,7 +5525,7 @@
       "Order": "176",
       "Size": "M",
       "Repos": "forma-app-platform",
-      "Decision": "Split from [APP-169](../2-in-progress/APP-169.md) on 2026-11-05, as its independent review suggested: these two acceptance tests were ticked there without evidence. [ADR-018](../../docs/architecture/ADR-018-WHOLE-APP-VIEWS.md).",
+      "Decision": "Split from [APP-169](../4-done/APP-169.md) on 2026-11-05, as its independent review suggested: these two acceptance tests were ticked there without evidence. [ADR-018](../../docs/architecture/ADR-018-WHOLE-APP-VIEWS.md).",
       "Requirements": "C11, SR1",
       "Depends on": "APP-169",
       "External dependencies": "None",

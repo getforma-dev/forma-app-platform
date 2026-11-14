@@ -33,7 +33,7 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 167 | [APP-167: Promote merged beta releases through GitHub Actions](../4-done/APP-167.md) | [PH08](../phases/PH08.md) | S14 | OPS | P0 | L | Done | None |
 | 172 | [APP-172: Upgrade GenUI and GateWasm PostgreSQL from 16.13 to 16.15 after the image release](../4-done/APP-172.md) | [PH08](../phases/PH08.md) | S14 | OPS | P1 | L | Done | APP-167 |
 | 173 | [APP-173: Review the November 5 base-image scan findings so beta promotion can continue](../4-done/APP-173.md) | [PH08](../phases/PH08.md) | S14 | OPS | P0 | S | Done | APP-167 |
-| 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](../0-backlog/APP-175.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | M | Backlog | APP-084, APP-169, APP-167 |
+| 175 | [APP-175: A reviewed operator schema release for migrations 21 and 22](../4-done/APP-175.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | M | Done | APP-084, APP-169, APP-167 |
 | 181 | [APP-181: Record the real live test charter and the beta notice](../0-backlog/APP-181.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-139 |
 | 185 | [APP-185: Operator back office for admissions after the cutover](../0-backlog/APP-185.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | M | Backlog | APP-181 |
 | 186 | [APP-186: Renew the beta and the budget for the test window](../0-backlog/APP-186.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-181 |

@@ -26,7 +26,7 @@ The existing budget limits and requirement for a reconciliation basis less than 
 
 ## Schema releases
 
-A schema release carries migrations through the normal packet and the one approval, on the same qualified images ([APP-175](../../Tickets/0-backlog/APP-175.md), [ADR-017 amendment](../architecture/ADR-017-BETA-PROMOTION.md#amendment-2026-11-06-reviewed-schema-releases)). It replaces the by-hand schema 20 crossing of November 4.
+A schema release carries migrations through the normal packet and the one approval, on the same qualified images ([APP-175](../../Tickets/4-done/APP-175.md), [ADR-017 amendment](../architecture/ADR-017-BETA-PROMOTION.md#amendment-2026-11-06-reviewed-schema-releases)). It replaces the by-hand schema 20 crossing of November 4.
 
 **When it applies.** Only when `ops/promotion/schema-release.json` exists and every one of these holds; otherwise preparation refuses before the lock exactly as before:
 
