@@ -514,6 +514,92 @@ class MigrationRunnerTests(unittest.TestCase):
             runtime.verify_schema_catalog(MigrationRecorder(directory, 2), directory, 2)
 
 
+# A stand-in `psycopg` for the real `runtime.py migrate` process: one MigrationRecorder
+# at version 20 under the reviewed migrations, so the real runner applies 21 and 22.
+# Its events file records what reached the "server". Never a database.
+FAKE_PSYCOPG = r'''
+import json, os
+from pathlib import Path
+from test_runtime import MIGRATIONS, MigrationRecorder
+
+EVENTS = Path(os.environ["UNIT_MIGRATION_EVENTS"]); MODE = os.environ["UNIT_MIGRATION_MODE"]
+
+class OperationalError(Exception):
+    pass
+
+def record(**facts):
+    current = json.loads(EVENTS.read_text()) if EVENTS.exists() else {}
+    current.update(facts); EVENTS.write_text(json.dumps(current))
+
+class Connection(MigrationRecorder):
+    def __init__(self):
+        super().__init__(MIGRATIONS, 20)
+        if MODE == "refused": self.drift[20] = "{}"
+    def commit(self):
+        record(applied=self.applied(), commit_sent=True)
+        if MODE == "lost-ack": raise OperationalError("synthetic: the server committed; its acknowledgement was lost")
+        record(committed=True)
+        if MODE == "stdout-lost": os.close(1)
+    def rollback(self):
+        record(rolled_back=True)
+    def close(self):
+        record(closed=True)
+        if MODE == "close-fails": raise OperationalError("synthetic: the connection failed after the commit")
+    # psycopg 3.3.6 Connection.__exit__: commit on a clean exit, rollback otherwise, then close.
+    def __enter__(self):
+        return self
+    def __exit__(self, kind, value, traceback):
+        if kind: self.rollback()
+        else: self.commit()
+        self.close()
+
+def connect(**kwargs):
+    record(connected=True)
+    return Connection()
+'''
+
+
+class MigrationCommitOutcomeTests(unittest.TestCase):
+    """APP-196 MAJOR-1: once COMMIT may have reached the server, no exit can read as "not committed".
+
+    Runs the real `runtime.py migrate` process. Exit 1 must mean the COMMIT was never
+    sent; any failure from the COMMIT onward, including a lost acknowledgement, exits
+    with the one reserved code the restore command refuses.
+    """
+    def run_migrate(self, mode):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / 'fake'; fake.mkdir(); (fake / 'psycopg.py').write_text(FAKE_PSYCOPG)
+            events = Path(tmp) / 'events.json'
+            env = {'PYTHONPATH': os.pathsep.join([str(fake), str(Path(runtime.__file__).resolve().parent)]),
+                   'PGDATABASE': 'genui', 'PGUSER': 'genui_migration', 'PGHOST': 'synthetic.invalid',
+                   'PGPASSWORD': 'unit-only', 'PGSSLROOTCERT': '/unit-only/ca.pem',
+                   'UNIT_MIGRATION_EVENTS': str(events), 'UNIT_MIGRATION_MODE': mode}
+            process = subprocess.run([sys.executable, str(Path(runtime.__file__).resolve()), 'migrate'],
+                                     env=env, capture_output=True, text=True, timeout=60)
+            return process, json.loads(events.read_text()) if events.exists() else {}
+
+    def test_a_failure_from_the_commit_onward_exits_with_the_reserved_code(self):
+        for mode in ('lost-ack', 'close-fails', 'stdout-lost'):
+            with self.subTest(mode=mode):
+                process, events = self.run_migrate(mode)
+                self.assertEqual(events.get('applied'), [21, 22])
+                self.assertTrue(events.get('commit_sent'))
+                self.assertEqual(process.returncode, 4, process.stderr[-400:])
+                self.assertEqual(process.stderr, 'migration_commit_outcome_unknown\n')
+                self.assertNotIn('unit-only', process.stdout + process.stderr)
+        self.assertEqual(runtime.MIGRATION_COMMIT_OUTCOME_UNKNOWN, 4)
+
+    def test_exit_1_means_the_commit_was_never_sent_and_0_means_committed(self):
+        process, events = self.run_migrate('refused')
+        self.assertEqual(process.returncode, 1)
+        self.assertNotIn('commit_sent', events); self.assertTrue(events.get('closed'))
+        self.assertEqual((process.stdout, process.stderr), ('', 'managed_dependency_operation_refused\n'))
+        process, events = self.run_migrate('committed')
+        self.assertEqual(process.returncode, 0, process.stderr[-400:])
+        self.assertEqual((events.get('applied'), events.get('committed'), events.get('closed')), ([21, 22], True, True))
+        self.assertEqual((process.stdout, process.stderr), ('tenant_foundation_migration_complete\n', ''))
+
+
 class GeneratorTests(unittest.TestCase):
     """The real generator over a unit-only stand-in for local PostgreSQL 16.13."""
 
