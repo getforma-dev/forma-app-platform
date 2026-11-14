@@ -587,6 +587,8 @@ app/admin/src/record-components/**
 !app/migrations/0022_work_artifact_kinds.sql
 !app/migrations/catalog-v21.json
 !app/migrations/catalog-v22.json
+!app/migrations/0023_consent_names_org_admin.sql
+!app/migrations/catalog-v23.json
 !app/runtime/box_record_import.py
 !app/src/actions/assistant.rs
 !app/src/actions/record_search.rs
