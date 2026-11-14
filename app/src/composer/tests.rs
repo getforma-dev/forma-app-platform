@@ -2019,9 +2019,6 @@ fn participation_features(content: &Value) -> Vec<(&'static str, bool)> {
             && view["records"]["group_by"] == "creator"
             && view["records"]["measure"]["op"] == "matches"
     });
-    let general = declared_ids(content)
-        .iter()
-        .all(|id| CLASSROOM.iter().all(|word| !id.contains(word)));
     vec![
         (
             "own list keyed by a reference to a records input",
@@ -2035,7 +2032,6 @@ fn participation_features(content: &Value) -> Vec<(&'static str, bool)> {
         ),
         ("countdown", countdown),
         ("ranking by creator with matches", ranking),
-        ("general ids", general),
     ]
 }
 

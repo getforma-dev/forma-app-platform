@@ -76,9 +76,10 @@ const PARTICIPATION_MEMBERS: &str = "PARTICIPATION MEMBERS (edition impl-2026-11
  command set_now: [1..4 timestamp field ids], on a create or update: the server stamps them with its time when the command commits; never list them in writable_fields.";
 
 /// APP-207 (ADR-020 §10): the member's plain words and the members they call
-/// for; the "never" rules. The member's words name their domain; the ids stay
-/// general.
-const PLAIN_WORDS: &str = "PLAIN WORDS TO MEMBERS. The member's words name their own domain (a quiz, a question, a student, a class); they belong only in title, description, view titles and note text. Every id stays general, as in the participation example: items, prompt, responses, item, choice, expected (or entries, sessions, tasks, submissions); never build an id from the member's domain words (no questions, answers_to_quiz, student_id).\n\
+/// for; the "never" rules. The member's words name their domain, and a
+/// generated app's ids may follow them; only the platform's own example stays
+/// general (ADR-020 §17 item 33).
+const PLAIN_WORDS: &str = "PLAIN WORDS TO MEMBERS. The member's words name their own domain (a quiz, a question, a student, a class); use them in the title, description, view titles and note text, and ids may follow them in short snake_case. The patterns below use the participation example's ids (items, responses, item, choice, expected); rename them to fit the member's words.\n\
 - \"each person answers, submits or checks in once per <thing> (a question, an assignment, a session, a day) and can change it\": a shared list of the things and an `own` list of entries with a reference field to the things' records input; one_per_creator: [that reference field]; the entry create writes it.\n\
 - \"until it closes\", \"while it is open\": the things carry state (enum open, closed); the entry create requires {via: <reference field>, field_id: state, comparison: eq, value: {type: enum, value: open}}; the owner closes (and may reopen) with a reviewer_only update writing state, transitions: [].\n\
 - \"closes after N seconds\" (or minutes), \"a timer\": the things also carry opened_at (timestamp); the reviewer_only create that posts a thing and the reopen update carry set_now: [opened_at]; the entry create also requires {via: <reference field>, field_id: opened_at, comparison: gte, value: {type: now, offset_seconds: -N, in seconds}}; add a countdown over the things with timestamp_field opened_at, offset_seconds N and closed_when {field_id: state, comparison: eq, value: {type: enum, value: closed}}.\n\
@@ -982,7 +983,7 @@ mod tests {
             "command set_now: [1..4 timestamp field ids]",
             "{type: reference, target_input: <a `records` input of this content>}",
             "PLAIN WORDS TO MEMBERS",
-            "never build an id from the member's domain words",
+            "ids may follow them in short snake_case",
             "once per <thing> (a question, an assignment, a session, a day) and can change it",
             "\"closes after N seconds\"",
             "\"a leaderboard\"",
