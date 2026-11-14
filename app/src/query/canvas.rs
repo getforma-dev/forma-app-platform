@@ -717,6 +717,10 @@ pub struct FormFieldProps {
     /// target is unbound or the member reads none of it): a disabled select,
     /// "Nothing to choose yet", that posts no value.
     pub no_choices: bool,
+    /// ADR-020 §9 (APP-208): a writable multi-select, one checkbox per
+    /// declared value (`choices`, the held ones selected), all posted under
+    /// the field's one input name after an empty sentinel.
+    pub has_checkboxes: bool,
     pub choices: Vec<ChoiceProps>,
 }
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
@@ -917,12 +921,17 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                         .collect()
                 };
                 let no_choices = field.writable && field.nothing_to_choose;
+                // ADR-020 §9 (APP-208): a multi-select is checkboxes, never a
+                // select or a text box; its value stays the joined text.
+                let multi = field.kind == "multi_enum";
+                let has_checkboxes = field.writable && multi;
                 // A picker's value is its selected record, so that a select
                 // marked by value (the native document form) agrees with it.
                 let value = field
                     .choices
                     .iter()
                     .find(|choice| choice.selected)
+                    .filter(|_| !multi)
                     .map_or_else(|| field.value.clone(), |choice| choice.value.clone());
                 FormFieldProps {
                     id: field.id.clone(),
@@ -940,9 +949,10 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
                     spec_input: field.spec_input.clone(),
                     writable: field.writable,
                     read_only: !field.writable,
-                    has_text: field.writable && choices.is_empty() && !no_choices,
-                    has_choices: field.writable && !choices.is_empty(),
+                    has_text: field.writable && choices.is_empty() && !no_choices && !multi,
+                    has_choices: field.writable && !choices.is_empty() && !multi,
                     no_choices,
+                    has_checkboxes,
                     choices,
                 }
             })

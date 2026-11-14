@@ -94,7 +94,9 @@ pub struct FieldRow {
     pub writable: bool,
     /// ADR-020 (APP-205): a writable reference field's picker, filled by
     /// [`fill_references`]: the target collection's records the member may
-    /// read, newest first, one selected. Empty for every other field.
+    /// read, newest first, one selected. ADR-020 §9 (APP-208): a
+    /// `multi_enum` field's checkboxes, the declared values in declaration
+    /// order, those the record holds selected. Empty for every other field.
     pub choices: Vec<FieldChoice>,
     /// APP-205: a writable reference field whose target input is not bound
     /// in the work, or of which the member can read nothing: the form shows
@@ -313,6 +315,8 @@ fn value_text(value: &serde_json::Value) -> String {
     };
     match value.get("type").and_then(serde_json::Value::as_str) {
         Some("null") => String::new(),
+        // ADR-020 §9 (APP-208): a multi-select reads as its values joined.
+        Some("multi_enum") => multi_enum_text(value),
         Some("decimal") => get("coefficient"),
         Some("money") => money_major_units(
             &get("minor_units"),
@@ -325,6 +329,20 @@ fn value_text(value: &serde_json::Value) -> String {
         Some("reference") => get("record_id"),
         _ => get("value"),
     }
+}
+
+/// ADR-020 §9 (APP-208): a `multi_enum` value as people read it, its
+/// values joined by ", " (the `records_list` cell, the record page, the
+/// records card). Storage admitted the values, so each is a declared id.
+pub fn multi_enum_text(value: &serde_json::Value) -> String {
+    value
+        .get("values")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The page's rows from a storage detail: the form shows the first declared
@@ -421,6 +439,34 @@ pub fn view_for_command(
                     })
                     .unwrap_or_default()
             });
+            // ADR-020 §9 (APP-208): a multi-select's checkboxes are the
+            // declared values in declaration order, those the record holds
+            // checked. The form posts the checked ones under one input name.
+            let choices = if kind == "multi_enum" {
+                let held: Vec<&str> = field
+                    .value
+                    .get("values")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(serde_json::Value::as_str)
+                    .collect();
+                field
+                    .value_type
+                    .get("values")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(|value| FieldChoice {
+                        value: value.to_owned(),
+                        label: value.to_owned(),
+                        selected: held.contains(&value),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
             FieldRow {
                 id: field.id.clone(),
                 kind,
@@ -435,7 +481,7 @@ pub fn view_for_command(
                 writable: command
                     .as_ref()
                     .is_some_and(|c| c.writable_fields.contains(&field.id)),
-                choices: Vec::new(),
+                choices,
                 nothing_to_choose: false,
             }
         })

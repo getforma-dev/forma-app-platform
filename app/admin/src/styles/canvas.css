@@ -600,6 +600,9 @@
 /* Record form card. */
 .cv-command { display: grid; gap: 0.7rem; }
 .cv-field { display: grid; gap: 0.2rem; }
+/* ADR-020 §9 (APP-208): a multi-select's checkbox group, one box per declared value. */
+.cv-choices { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; }
+.cv-choice { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8125rem; }
 .cv-field-label { color: var(--cv-muted); font-size: 0.75rem; font-weight: 560; }
 .cv-field-label::first-letter { text-transform: uppercase; }
 .cv-muted { color: var(--cv-faint); font-size: 0.8125rem; }

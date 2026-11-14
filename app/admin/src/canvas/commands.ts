@@ -57,9 +57,26 @@ function field(form: HTMLFormElement, name: string): string {
   return node instanceof HTMLInputElement || node instanceof HTMLSelectElement ? node.value : '';
 }
 
+/**
+ * ADR-020 §9 (APP-208): a multi-select's typed value from the boxes the member
+ * checked. The client sends only the spec's declared values, in the spec's
+ * (declaration) order, each once; nothing checked is the null value. The spec
+ * is the server's echo, and storage judges the value against the published
+ * schema, so this orders and filters, it never authorizes.
+ */
+export function multiEnumValue(spec: Record<string, unknown>, checked: readonly string[]): Record<string, unknown> | null {
+  const declared = spec.values;
+  if (!Array.isArray(declared) || !declared.every((value) => typeof value === 'string')) return null;
+  const picked = new Set(checked);
+  const values = (declared as string[]).filter((value) => picked.has(value));
+  return values.length === 0 ? { type: 'null' } : { type: 'multi_enum', values };
+}
+
 /** The `command_request` for the form, or null if a value cannot be typed. */
 export function commandRequest(form: HTMLFormElement, app: string, work: string): Record<string, unknown> | null {
   const values: Record<string, unknown>[] = [];
+  /** ADR-020 §9: the checked boxes of each multi-select, composed once per field. */
+  const groups = new Map<string, string[]>();
   for (const element of Array.from(form.elements)) {
     if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) continue;
     if (!element.name.startsWith('value.')) continue;
@@ -73,9 +90,32 @@ export function commandRequest(form: HTMLFormElement, app: string, work: string)
     } catch {
       return null;
     }
+    if (spec.type === 'multi_enum') {
+      let checked = groups.get(id);
+      if (!checked) {
+        checked = [];
+        groups.set(id, checked);
+        values.push({ field_id: id, value: null });
+      }
+      if (element instanceof HTMLInputElement && element.type === 'checkbox' && element.checked) checked.push(element.value);
+      continue;
+    }
     const value = typedFormValue(spec, element.value);
     if (!value) return null;
     values.push({ field_id: id, value });
+  }
+  for (const entry of values) {
+    const checked = groups.get(entry.field_id as string);
+    if (!checked) continue;
+    let spec: Record<string, unknown>;
+    try {
+      spec = JSON.parse(field(form, `spec.${entry.field_id as string}`)) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+    const value = multiEnumValue(spec, checked);
+    if (!value) return null;
+    entry.value = value;
   }
   const integer = (name: string) => Number.parseInt(field(form, name), 10);
   return {

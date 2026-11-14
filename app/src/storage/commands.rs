@@ -744,6 +744,27 @@ fn integer_text(value: Option<&Value>) -> bool {
 fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
     object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k))
 }
+/// The contract's bound on a `multi_enum` type and value (1..32 ids).
+pub(crate) const MULTI_ENUM_VALUES: usize = 32;
+/// ADR-020 §9: `picked` names declared values only, each once, in the
+/// declared order (strictly increasing positions in `declared`).
+pub(crate) fn ordered_subset(picked: &[Value], declared: Option<&Value>) -> bool {
+    let Some(declared) = declared.and_then(Value::as_array) else {
+        return false;
+    };
+    let mut last: Option<usize> = None;
+    picked.iter().all(|value| {
+        let Some(id) = value.as_str() else {
+            return false;
+        };
+        let Some(position) = declared.iter().position(|d| d.as_str() == Some(id)) else {
+            return false;
+        };
+        let ordered = last.is_none_or(|previous| previous < position);
+        last = Some(position);
+        ordered
+    })
+}
 /// The contract rule: a value's tag matches the field's type, its members are
 /// exactly the tag's, and the typed extras (unit, scale, currency, enum
 /// member, reference target) equal the field's.
@@ -821,6 +842,21 @@ pub(super) fn compatible(value: &Value, field: &FieldSpec) -> bool {
                     .get("record_id")
                     .and_then(Value::as_str)
                     .is_some_and(valid_id)
+        }
+        // ADR-020 §9 (APP-208): a non-empty subset of the declared values in
+        // declaration order (`contracts/validate.py` `compatible`); any other
+        // order, a repeat, an unknown id or an empty array is refused. "None
+        // selected" is the null value, judged above.
+        "multi_enum" => {
+            keys_are(object, &["type", "values"])
+                && object
+                    .get("values")
+                    .and_then(Value::as_array)
+                    .is_some_and(|picked| {
+                        !picked.is_empty()
+                            && picked.len() <= MULTI_ENUM_VALUES
+                            && ordered_subset(picked, expected.get("values"))
+                    })
         }
         "money" => {
             keys_are(
@@ -1808,6 +1844,56 @@ mod tests {
         ));
         assert!(integer_text(Some(&json!("0"))) && !integer_text(Some(&json!("-0"))));
         assert!(!integer_text(Some(&json!(&"9".repeat(39)))));
+    }
+
+    /// ADR-020 §9 (APP-208): a stored multi-select is a non-empty subset of
+    /// the declared values in declaration order; any other order, a repeat,
+    /// an unknown id, an empty array, a non-string or an extra member is
+    /// refused, and "none selected" is the null value (so a required
+    /// multi-select is a non-nullable field).
+    #[test]
+    fn multi_select_values_are_an_ordered_subset_of_the_declared_values() {
+        let declared = json!({"type": "multi_enum", "values": ["red", "green", "blue"]});
+        let tags = field("tags", declared.clone(), false);
+        let optional = field("tags", declared, true);
+        let picked = |values: Value| json!({"type": "multi_enum", "values": values});
+        for accepted in [
+            json!(["red"]),
+            json!(["blue"]),
+            json!(["red", "blue"]),
+            json!(["green", "blue"]),
+            json!(["red", "green", "blue"]),
+        ] {
+            assert!(compatible(&picked(accepted.clone()), &tags), "{accepted}");
+        }
+        for refused in [
+            json!(["blue", "red"]),
+            json!(["red", "red"]),
+            json!(["red", "purple"]),
+            json!(["purple"]),
+            json!([]),
+            json!(["red", 1]),
+            json!("red"),
+            json!(null),
+        ] {
+            assert!(!compatible(&picked(refused.clone()), &tags), "{refused}");
+        }
+        assert!(!compatible(
+            &json!({"type": "multi_enum", "values": ["red"], "value": "red"}),
+            &tags
+        ));
+        assert!(!compatible(&json!({"type": "multi_enum"}), &tags));
+        assert!(!compatible(&json!({"type": "enum", "value": "red"}), &tags));
+        assert!(!compatible(
+            &picked(json!(["red"])),
+            &field(
+                "tag",
+                json!({"type": "enum", "values": ["red", "green", "blue"]}),
+                false
+            )
+        ));
+        assert!(!compatible(&json!({"type": "null"}), &tags));
+        assert!(compatible(&json!({"type": "null"}), &optional));
     }
 
     #[test]

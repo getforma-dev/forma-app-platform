@@ -66,6 +66,19 @@ def scalar(value):
     if kind == "date": date(result)
     return result
 
+def selection(value, declared):
+    """ADR-020 section 9: a stored multi-select as storage admitted it, a
+    non-empty subset of the declared values in declaration order (strictly
+    increasing positions); anything else is refused, never grouped."""
+    require(isinstance(value,dict) and value.get("type")=="multi_enum" and set(value)=={"type","values"},"value_refused")
+    picked=value["values"];require(isinstance(picked,list) and 1<=len(picked)<=32,"value_refused")
+    positions=[]
+    for item in picked:
+        require(isinstance(item,str) and item in declared,"value_refused")
+        positions.append(declared.index(item))
+    require(all(a<b for a,b in zip(positions,positions[1:])),"value_refused")
+    return picked
+
 def timestamp(value):
     require(isinstance(value, str) and TIMESTAMP.fullmatch(value) is not None, "timestamp_refused")
     try:
@@ -223,6 +236,8 @@ def execute(request, start=None):
             limit=config.get("limit",50);require(type(limit)is int and 1<=limit<=200)
             if "order" in config:
                 order=config["order"];require(order["field"] in fields and order["direction"] in("asc","desc"))
+                # ADR-020 section 9: a set has no order (admission refuses it too).
+                require(fields[order["field"]]["value_type"]["type"]!="multi_enum","multi_enum_order_refused")
                 # Stable record-id tie breaker; nulls consistently last, independently of direction.
                 candidates.sort(key=lambda item:item[0]["id"])
                 nonnull=[item for item in candidates if scalar(item[1].get(order["field"],{"type":"null"})) is not None]
@@ -274,11 +289,18 @@ def execute(request, start=None):
             elif kind in("record_ranking","record_trend"):
                 field=config["group_field" if kind=="record_ranking" else "date_field"]
                 require(field in fields)
-                expected=("text","enum") if kind=="record_ranking" else ("date",)
-                require(fields[field]["value_type"]["type"] in expected)
+                expected=("text","enum","multi_enum") if kind=="record_ranking" else ("date",)
+                vt=fields[field]["value_type"];require(vt["type"] in expected)
                 groups={}
                 for row,v in candidates:
-                    label=scalar(v.get(field,{"type":"null"}))
+                    raw=v.get(field,{"type":"null"})
+                    if vt["type"]=="multi_enum" and raw.get("type")!="null":
+                        # ADR-020 section 9: a row counts once per selected value
+                        # ("each option's count"); the stored selection is an
+                        # ordered non-empty subset of the declared values.
+                        for label in selection(raw,vt["values"]): groups.setdefault(label,[]).append((row,v))
+                        continue
+                    label=scalar(raw)
                     if label is not None and kind=="record_trend": label=label[:7]
                     groups.setdefault(label,[]).append((row,v))
                 # Null is its own grouping key, never a user-entered sentinel.

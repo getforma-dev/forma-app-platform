@@ -226,4 +226,66 @@ class Matches(unittest.TestCase):
         result=json.loads(p.stdout);self.assertEqual(result['outcome'],'record_components')
         self.assertEqual(result['components'][0]['value'],'2026-11-29T15:05:30Z');self.assertEqual(result['components'][1]['groups'][0]['label'],'Ben Okafor')
 
+
+# ADR-020 section 9 (APP-208): the multi-select. A ranking over a multi_enum
+# field counts a row once per selected value; the list cell carries the typed
+# selection; a set has no order and is never a filter or a key field.
+TAGS={'type':'multi_enum','values':['red','green','blue']}
+def pick(n,title,tags,creator=ALEX):
+    return {'id':f'00000000-0000-4000-8000-{n:012d}','version':1,'sequence':n,'creator':creator,'values':[
+        {'field_id':'title','value':{'type':'text','value':title}},
+        {'field_id':'tags','value':{'type':'multi_enum','values':tags} if tags is not None else {'type':'null'}}]}
+def multi_select(rows=None,components=None,filters=None):
+    common={'version':1,'input_id':'choices','schema_id':'choices'}
+    def view(id,kind,**extra):return {'id':id,'title':id,'kind':kind,'renderer_version':1,'records':dict(common,**extra)}
+    components=components if components is not None else [
+        view('list','records_list',columns=['title','tags']),
+        view('by_tag','record_ranking',measure={'op':'count'},group_field='tags',limit=10),
+        view('count','record_summary',measure={'op':'count'})]
+    rows=rows if rows is not None else [pick(1,'one',['red','blue']),pick(2,'two',['blue']),pick(3,'three',['red','green','blue'],BEN),pick(4,'four',None)]
+    return {'kind':'record_components_v1','deadline_ms':1800,'parameters':{'filter_epoch':1,'filters':[]},'payload':{
+        'creators':[{'id':ALEX,'label':'Alex Rivera'},{'id':BEN,'label':'Ben Okafor'}],'components':components,'filters':filters or [],
+        'datasets':[{'input_id':'choices','schema_id':'choices','fields':[{'id':'title','value_type':{'type':'text'},'nullable':False},{'id':'tags','value_type':TAGS,'nullable':True}],'rows':rows}]}}
+
+class MultiSelect(unittest.TestCase):
+    def test_a_ranking_counts_a_row_once_per_selected_value(self):
+        p=parts(multi_select())
+        self.assertEqual(p['by_tag']['groups'],[
+            {'label':'blue','missing':False,'value':'3','count':3},
+            {'label':'red','missing':False,'value':'2','count':2},
+            {'label':'green','missing':False,'value':'1','count':1},
+            {'label':'Missing value','missing':True,'value':'1','count':1}])
+        # The ranking's population and total, and the count summary, count rows once.
+        self.assertEqual((p['by_tag']['population'],p['by_tag']['value'],p['count']['value']),(4,'4','4'))
+        self.assertEqual(p['list']['rows'][0]['cells'][1],{'type':'multi_enum','values':['red','blue']})
+        self.assertEqual(p['list']['rows'][3]['cells'][1],{'type':'null'})
+        self.assertEqual(p['list']['columns'][1]['value_type'],TAGS)
+    def test_the_ranking_page_and_an_all_null_input(self):
+        r=multi_select();r['payload']['components'][1]['records']['limit']=2
+        p=parts(r);self.assertEqual([g['label'] for g in p['by_tag']['groups']],['blue','red']);self.assertTrue(p['by_tag']['truncated_page'])
+        p=parts(multi_select(rows=[pick(1,'one',None)]))
+        self.assertEqual(p['by_tag']['groups'],[{'label':'Missing value','missing':True,'value':'1','count':1}])
+    def test_a_stored_selection_must_be_an_ordered_subset_of_the_declared_values(self):
+        for bad in (['blue','red'],['red','red'],['purple'],[]):
+            with self.subTest(bad=bad),self.assertRaisesRegex(engine.Refused,'value_refused'):
+                engine.execute(multi_select(rows=[pick(1,'one',bad)]))
+        r=multi_select(rows=[pick(1,'one',['red'])]);r['payload']['datasets'][0]['rows'][0]['values'][1]['value']={'type':'enum','value':'red'}
+        with self.assertRaisesRegex(engine.Refused,'value_refused'):engine.execute(r)
+    def test_a_set_is_never_an_order_a_filter_or_a_key(self):
+        r=multi_select();r['payload']['components'][0]['records']['order']={'field':'tags','direction':'asc'}
+        with self.assertRaisesRegex(engine.Refused,'multi_enum_order_refused'):engine.execute(r)
+        # An order refuses before any row is read.
+        r['payload']['datasets'][0]['rows']=[]
+        with self.assertRaisesRegex(engine.Refused,'multi_enum_order_refused'):engine.execute(r)
+        for kind in ('enum','text_contains'):
+            r=multi_select(filters=[{'id':'tag','input_id':'choices','field':'tags','kind':kind,'targets':['list']}])
+            r['parameters']['filters']=[{'id':'tag','value':'red'}]
+            with self.subTest(kind=kind),self.assertRaises(engine.Refused):engine.execute(r)
+        r=multi_select();r['payload']['datasets'].append({'input_id':'keys','schema_id':'keys','fields':r['payload']['datasets'][0]['fields'],'rows':[]})
+        r['payload']['components'][2]['records']['measure']={'op':'matches','key_input':'keys','fields':['tags']}
+        with self.assertRaises(engine.Refused):engine.execute(r)
+    def test_a_trend_never_groups_a_set(self):
+        r=multi_select();r['payload']['components'][1]={'id':'t','title':'t','kind':'record_trend','renderer_version':1,'records':{'version':1,'input_id':'choices','schema_id':'choices','measure':{'op':'count'},'date_field':'tags'}}
+        with self.assertRaises(engine.Refused):engine.execute(r)
+
 if __name__=='__main__':unittest.main()

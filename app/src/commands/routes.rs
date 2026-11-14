@@ -333,8 +333,30 @@ pub(crate) fn form_typed_value(spec: &Value, raw: &str) -> Option<Value> {
     }
 }
 
+/// ADR-020 §9 (APP-208): a checkbox group's posted texts as one typed
+/// value. The form posts the input name once per checked box, after an empty
+/// sentinel so that "nothing checked" still reaches the parse; the empties
+/// are dropped and what remains is the selection in posted order (the
+/// native form posts boxes in document order, the declaration's). None left
+/// is the null value. Nothing is reordered or deduplicated here: storage
+/// judges the composed value against the published schema (`compatible`).
+pub(crate) fn form_multi_enum(raws: &[String]) -> Value {
+    let values: Vec<&str> = raws
+        .iter()
+        .map(String::as_str)
+        .filter(|raw| !raw.is_empty())
+        .collect();
+    if values.is_empty() {
+        json!({"type": "null"})
+    } else {
+        json!({"type": "multi_enum", "values": values})
+    }
+}
+
 /// The record page's form (D7.16): hidden premise fields, `value.<field>`
-/// texts with their `spec.<field>` echoes, the key and the token.
+/// texts with their `spec.<field>` echoes, the key and the token. A
+/// `multi_enum` field's texts (its checkbox group) compose one value; any
+/// other field posted twice is malformed.
 fn from_form(
     fields: &[(String, String)],
     app: &str,
@@ -342,11 +364,14 @@ fn from_form(
     command: &str,
 ) -> Option<(CommandRequest, String)> {
     let mut map: Map<String, Value> = Map::new();
-    let mut values = Vec::new();
+    let mut values: Vec<(String, Vec<String>)> = Vec::new();
     let mut specs = Map::new();
     for (name, value) in fields {
         if let Some(field) = name.strip_prefix("value.") {
-            values.push((field.to_owned(), value.clone()));
+            match values.iter_mut().find(|(id, _)| id == field) {
+                Some((_, raws)) => raws.push(value.clone()),
+                None => values.push((field.to_owned(), vec![value.clone()])),
+            }
         } else if let Some(field) = name.strip_prefix("spec.") {
             specs.insert(field.to_owned(), serde_json::from_str(value).ok()?);
         } else if map
@@ -360,9 +385,17 @@ fn from_form(
     let number = |key: &str| text(key).and_then(|v| v.parse::<i64>().ok());
     let values = values
         .into_iter()
-        .map(|(field, raw)| {
+        .map(|(field, raws)| {
             let spec = specs.get(&field)?;
-            Some(json!({"field_id": field, "value": form_typed_value(spec, &raw)?}))
+            let value = if spec.get("type").and_then(Value::as_str) == Some("multi_enum") {
+                form_multi_enum(&raws)
+            } else {
+                let [raw] = raws.as_slice() else {
+                    return None;
+                };
+                form_typed_value(spec, raw)?
+            };
+            Some(json!({"field_id": field, "value": value}))
         })
         .collect::<Option<Vec<_>>>()?;
     let request = CommandRequest {

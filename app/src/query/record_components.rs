@@ -403,6 +403,12 @@ fn shown(value: &Value) -> (String, String) {
             id,
         );
     }
+    // ADR-020 §9 (APP-208): a `records_list` cell shows the selection joined
+    // by ", ".
+    if kind == "multi_enum" {
+        let joined = crate::commands::multi_enum_text(value);
+        return (joined.clone(), joined);
+    }
     let raw = match kind {
         "money" => value["minor_units"].as_str().unwrap_or_default().to_owned(),
         "decimal" => value["coefficient"].as_str().unwrap_or_default().to_owned(),
@@ -991,5 +997,19 @@ mod tests {
         assert_eq!(shown(&json!({"type":"money","minor_units":"4500","currency":"USD","minor_unit_exponent":2})).0,"$45.00");
         assert_eq!(fixed_decimal("4500", 2), "45.00");
         assert_eq!(fixed_decimal("-1", 2), "-0.01");
+    }
+    /// ADR-020 §9 (APP-208): a multi-select cell reads as its values joined
+    /// by ", " (text and title alike); a null selection is the dash.
+    #[test]
+    fn a_multi_select_cell_joins_its_values() {
+        assert_eq!(
+            shown(&json!({"type":"multi_enum","values":["red","blue"]})),
+            ("red, blue".to_owned(), "red, blue".to_owned())
+        );
+        assert_eq!(
+            shown(&json!({"type":"multi_enum","values":["green"]})).0,
+            "green"
+        );
+        assert_eq!(shown(&json!({"type":"null"})).0, "—");
     }
 }

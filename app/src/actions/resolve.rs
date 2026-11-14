@@ -158,6 +158,8 @@ pub fn display(value: &Value) -> String {
         }
         "decimal" => text("coefficient"),
         "reference" => text("record_id"),
+        // ADR-020 §9 (APP-208): a multi-select reads as its values joined.
+        "multi_enum" => crate::commands::multi_enum_text(value),
         _ => text("value"),
     }
 }

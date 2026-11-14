@@ -1178,6 +1178,174 @@ fn declared_form_selects_exact_command_and_unconditional_initial_enum() {
     assert!(!offered(&detail, Some("add_book")).can_write);
 }
 
+/// ADR-020 §9 (APP-208): a multi-select field's row carries its declared
+/// values as choices in declaration order, the held ones selected; its text
+/// is the held values joined by ", "; the options hint stays the declared
+/// list; nothing is a picker (`nothing_to_choose` is for references).
+#[test]
+fn a_multi_select_row_offers_every_declared_value_with_the_held_ones_checked() {
+    use crate::storage::{RecordCommand, RecordDetail, RecordField};
+    let command = RecordCommand {
+        id: "pick".into(),
+        operation: "create".into(),
+        writable_fields: vec!["title".into(), "tags".into()],
+        transitions: Vec::new(),
+        rules: crate::storage::rules::Rules::from_declaration(&json!({"transitions": []})).unwrap(),
+    };
+    let declared = json!({"type":"multi_enum","values":["red","green","blue"]});
+    let mut detail = RecordDetail {
+        record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        schema: "choices".into(),
+        schema_version: 1,
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        definition_digest: format!("sha256:{}", "7".repeat(64)),
+        work_version: 1,
+        version: 0,
+        can_write: true,
+        fields: vec![
+            RecordField {
+                id: "title".into(),
+                value_type: json!({"type":"text"}),
+                nullable: false,
+                value: json!({"type":"null"}),
+                writable: true,
+            },
+            RecordField {
+                id: "tags".into(),
+                value_type: declared.clone(),
+                nullable: false,
+                value: json!({"type":"null"}),
+                writable: true,
+            },
+        ],
+        commands: vec![command],
+        bindings: Vec::new(),
+    };
+    let offered = |detail: &RecordDetail| {
+        super::view_for_command(
+            "a",
+            "w",
+            detail,
+            "csrf".into(),
+            "same-key".into(),
+            Some("pick"),
+        )
+    };
+    let fresh = offered(&detail);
+    let tags = &fresh.fields[1];
+    assert_eq!(tags.kind, "multi_enum");
+    assert_eq!(tags.value, "");
+    assert_eq!(tags.options, "red | green | blue");
+    assert_eq!(tags.spec, serde_json::to_string(&declared).unwrap());
+    assert_eq!(
+        tags.choices
+            .iter()
+            .map(|c| (c.value.as_str(), c.label.as_str(), c.selected))
+            .collect::<Vec<_>>(),
+        [
+            ("red", "red", false),
+            ("green", "green", false),
+            ("blue", "blue", false)
+        ]
+    );
+    assert!(!tags.nothing_to_choose && tags.writable);
+    assert!(
+        fresh.fields[0].choices.is_empty(),
+        "a text field has no choices"
+    );
+    detail.version = 2;
+    detail.fields[1].value = json!({"type":"multi_enum","values":["red","blue"]});
+    let held = offered(&detail);
+    assert_eq!(held.fields[1].value, "red, blue");
+    assert_eq!(
+        held.fields[1]
+            .choices
+            .iter()
+            .map(|c| c.selected)
+            .collect::<Vec<_>>(),
+        [true, false, true]
+    );
+    assert_eq!(
+        super::multi_enum_text(&json!({"type":"multi_enum","values":["green"]})),
+        "green"
+    );
+    assert_eq!(super::multi_enum_text(&json!({"type":"null"})), "");
+}
+
+/// ADR-020 §9 (APP-208): the native form's checkbox group posts the input
+/// name once per checked box after an empty sentinel; the parse composes
+/// one ordered `multi_enum` value, the sentinel alone is the null value, and
+/// a scalar field posted twice is malformed. The spec echo grants nothing:
+/// storage judges the composed value against the published schema.
+#[test]
+fn form_checkbox_groups_compose_one_multi_enum_value_in_posted_order() {
+    let (command, _) = fixture_request();
+    let (app, work, id) = (
+        command["app_id"].as_str().unwrap(),
+        command["work_id"].as_str().unwrap(),
+        command["command_id"].as_str().unwrap(),
+    );
+    let field = |name: &str, value: &str| (name.to_owned(), value.to_owned());
+    let spec = r#"{"type":"multi_enum","values":["red","green","blue"]}"#;
+    let premise = vec![
+        field("csrf", "token"),
+        field("idempotency_key", "0123456789abcdef0123456789abcdef"),
+        field("collection_id", "00000000-0000-4000-8000-0000000000ce"),
+        field(
+            "publication_id",
+            command["publication_id"].as_str().unwrap(),
+        ),
+        field("schema_id", "choices"),
+        field("schema_version_expected", "1"),
+        field("record_id", command["record_id"].as_str().unwrap()),
+        field("expected_record_version", "0"),
+        field("expected_work_version", "1"),
+        field("value.title", "One"),
+        field("spec.title", "{\"type\":\"text\"}"),
+    ];
+    let with = |tail: &[(String, String)]| {
+        let mut fields = premise.clone();
+        fields.extend_from_slice(tail);
+        routes::parse_form_for_tests(&fields, app, work, id)
+    };
+    let (form, _) = with(&[
+        field("value.tags", ""),
+        field("value.tags", "red"),
+        field("value.tags", "blue"),
+        field("spec.tags", spec),
+    ])
+    .unwrap();
+    assert_eq!(
+        form.values,
+        json!([
+            {"field_id": "title", "value": {"type": "text", "value": "One"}},
+            {"field_id": "tags", "value": {"type": "multi_enum", "values": ["red", "blue"]}}
+        ])
+    );
+    // Nothing checked: the sentinel alone is null (a non-nullable field then
+    // refuses in storage). The spec may come before or after the boxes.
+    let (form, _) = with(&[field("spec.tags", spec), field("value.tags", "")]).unwrap();
+    assert_eq!(form.values[1]["value"], json!({"type": "null"}));
+    // Posted order is kept as posted: storage, not the parse, refuses an
+    // order other than the declaration's or a repeat.
+    let (form, _) = with(&[
+        field("value.tags", "blue"),
+        field("value.tags", "red"),
+        field("value.tags", "red"),
+        field("spec.tags", spec),
+    ])
+    .unwrap();
+    assert_eq!(
+        form.values[1]["value"],
+        json!({"type": "multi_enum", "values": ["blue", "red", "red"]})
+    );
+    // A multi-select without its spec, and a scalar posted twice, are
+    // malformed.
+    assert!(with(&[field("value.tags", "red")]).is_none());
+    assert!(with(&[field("value.title", "Two")]).is_none());
+}
+
 #[test]
 fn normalized_action_money_and_human_form_money_share_one_minor_unit_request() {
     let spec = json!({"type":"money","currency":"USD","minor_unit_exponent":2});

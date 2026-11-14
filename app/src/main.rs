@@ -1041,6 +1041,66 @@ mod tests {
             "{empty}"
         );
         assert!(body.contains("name=\"value.note\""));
+        // ADR-020 §9 (APP-208): a multi-select is a checkbox group under the
+        // field's one input name, one box per declared value in declaration
+        // order, the held ones checked, after an empty hidden sentinel; no
+        // select and no text box; its spec is echoed once.
+        let mut boxes = view.clone();
+        boxes.notice = None;
+        let mut tags = row("tags", "multi_enum", "red, blue", "red | green | blue");
+        tags.spec = r#"{"type":"multi_enum","values":["red","green","blue"]}"#.into();
+        tags.choices = ["red", "green", "blue"]
+            .into_iter()
+            .map(|value| commands::FieldChoice {
+                value: value.into(),
+                label: value.into(),
+                selected: value != "green",
+            })
+            .collect();
+        boxes.fields = vec![tags, row("note", "text", "", "")];
+        let (status, _, body) = html(pages.record(&boxes)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let group = &body[body
+            .find("<span class=\"choices\"")
+            .expect("a checkbox group")..];
+        let group = &group[..group.find("</span>").unwrap()];
+        // The sentinel's empty value renders as a bare `value` attribute
+        // (HTML: the empty string); it is the group's first input.
+        let sentinel = &group[group.find("<input").unwrap()..];
+        let sentinel = &sentinel[..sentinel.find('>').unwrap()];
+        assert!(
+            sentinel.contains("type=\"hidden\"")
+                && sentinel.contains("name=\"value.tags\"")
+                && (sentinel.contains(" value ")
+                    || sentinel.ends_with(" value")
+                    || sentinel.contains("value=\"\"")),
+            "the empty sentinel: {group}"
+        );
+        let checkbox = |value: &str| -> String {
+            let at = group
+                .find(&format!("value=\"{value}\""))
+                .unwrap_or_else(|| panic!("a box for {value}: {group}"));
+            let start = group[..at].rfind("<input").unwrap();
+            let end = at + group[at..].find('>').unwrap();
+            group[start..end].to_owned()
+        };
+        for value in ["red", "green", "blue"] {
+            let box_ = checkbox(value);
+            assert!(
+                box_.contains("type=\"checkbox\"") && box_.contains("name=\"value.tags\""),
+                "{box_}"
+            );
+            assert_eq!(box_.contains("checked"), value != "green", "{box_}");
+        }
+        assert!(
+            group.find("value=\"red\"").unwrap() < group.find("value=\"green\"").unwrap()
+                && group.find("value=\"green\"").unwrap() < group.find("value=\"blue\"").unwrap(),
+            "declaration order"
+        );
+        assert!(!body.contains("<select id=\"value.tags\""));
+        assert!(!body.contains("type=\"text\" id=\"value.tags\""));
+        assert_eq!(body.matches("name=\"spec.tags\"").count(), 1);
+        assert!(body.contains("red | green | blue") && body.contains("name=\"value.note\""));
     }
 
     /// APP-012: the native work page renders each view state from typed
@@ -1477,6 +1537,31 @@ mod tests {
                 spec_input: "spec.other".into(),
                 ..Default::default()
             });
+        // ADR-020 §9 (APP-208): a multi-select is a checkbox group.
+        document.forms[0]
+            .fields
+            .push(genui::query::canvas::FormFieldProps {
+                id: "tags".into(),
+                kind: "multi_enum".into(),
+                label: "Tags".into(),
+                input: "value.tags".into(),
+                value: "red, blue".into(),
+                writable: true,
+                has_checkboxes: true,
+                spec: r#"{"type":"multi_enum","values":["red","green","blue"]}"#.into(),
+                spec_input: "spec.tags".into(),
+                choices: ["red", "green", "blue"]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, value)| genui::query::canvas::ChoiceProps {
+                        id: format!("o{index}"),
+                        value: value.into(),
+                        label: value.into(),
+                        selected: value != "green",
+                    })
+                    .collect(),
+                ..Default::default()
+            });
         document.record_cards = vec![genui::query::canvas::RecordsCardProps {
             id: "claims".into(),
             title: "Claims".into(),
@@ -1644,6 +1729,33 @@ mod tests {
             empty.contains("disabled") && empty.contains(">Nothing to choose yet</option>"),
             "{empty}"
         );
+        // ADR-020 §9 (APP-208): the native form's multi-select is a checkbox
+        // group (an empty hidden sentinel, then one box per declared value in
+        // declaration order, the held ones checked) under one input name, with
+        // no select and no text box for it.
+        let group = &document_body[document_body
+            .find("<fieldset class=\"document-choices\"")
+            .expect("a checkbox group")..];
+        let group = &group[..group.find("</fieldset>").unwrap()];
+        assert_eq!(group.matches("name=\"value.tags\"").count(), 4, "{group}");
+        assert!(
+            group.contains("type=\"hidden\"")
+                && group.contains("<legend>")
+                && group.contains(">Tags<"),
+            "{group}"
+        );
+        let red = group.find("value=\"red\"").unwrap();
+        let green = group.find("value=\"green\"").unwrap();
+        let blue = group.find("value=\"blue\"").unwrap();
+        assert!(red < green && green < blue, "declaration order: {group}");
+        let box_ = |at: usize| {
+            &group[group[..at].rfind("<input").unwrap()..at + group[at..].find('>').unwrap()]
+        };
+        assert!(box_(red).contains("type=\"checkbox\"") && box_(red).contains("checked"));
+        assert!(!box_(green).contains("checked"), "{}", box_(green));
+        assert!(box_(blue).contains("checked"));
+        assert!(!document_body.contains("<select name=\"value.tags\""));
+        assert!(!document_body.contains("name=\"value.tags\" type=\"text\""));
         assert!(document_body.contains(&format!("value=\"{}\"", "a".repeat(32))));
         assert!(!document_body.contains("<script>untrusted()"));
         assert!(document_body.contains("&lt;script&gt;untrusted()&lt;/script&gt;"));
@@ -1830,6 +1942,20 @@ mod tests {
                 commands::FieldRow {
                     nothing_to_choose: true,
                     ..field("other", "reference", "", true)
+                },
+                // ADR-020 §9 (APP-208): a multi-select, two of three held.
+                commands::FieldRow {
+                    value: "red, blue".into(),
+                    spec: r#"{"type":"multi_enum","values":["red","green","blue"]}"#.into(),
+                    choices: ["red", "green", "blue"]
+                        .into_iter()
+                        .map(|value| commands::FieldChoice {
+                            value: value.into(),
+                            label: value.into(),
+                            selected: value != "green",
+                        })
+                        .collect(),
+                    ..field("tags", "multi_enum", "red | green | blue", true)
                 },
             ],
             command: "record_decision".into(),
@@ -2068,6 +2194,29 @@ mod tests {
             empty.contains("disabled") && empty.contains(">Nothing to choose yet</option>"),
             "{empty}"
         );
+        // ADR-020 §9 (APP-208): the canvas form's multi-select is a checkbox
+        // group under one input name (an empty hidden sentinel, then one box
+        // per declared value in declaration order, the held ones checked), with
+        // no select and no text box for it; the spec is echoed once.
+        let group = &content[content
+            .find("<span class=\"cv-choices\"")
+            .expect("a checkbox group")..];
+        let group = &group[..group.find("</span>").unwrap()];
+        assert_eq!(group.matches("name=\"value.tags\"").count(), 4, "{group}");
+        assert!(group.contains("type=\"hidden\""), "{group}");
+        let red = group.find("value=\"red\"").unwrap();
+        let green = group.find("value=\"green\"").unwrap();
+        let blue = group.find("value=\"blue\"").unwrap();
+        assert!(red < green && green < blue, "declaration order: {group}");
+        let box_ = |at: usize| {
+            &group[group[..at].rfind("<input").unwrap()..at + group[at..].find('>').unwrap()]
+        };
+        assert!(box_(red).contains("type=\"checkbox\"") && box_(red).contains("checked"));
+        assert!(!box_(green).contains("checked"), "{}", box_(green));
+        assert!(box_(blue).contains("checked"));
+        assert!(!content.contains("<select name=\"value.tags\""));
+        assert!(!content.contains("name=\"value.tags\" type=\"text\""));
+        assert_eq!(content.matches("name=\"spec.tags\"").count(), 1);
         assert!(content.contains(">Record decision</button>"));
         assert!(content.contains(&format!("value=\"{}\"", "C".repeat(43))));
         assert!(content.contains("action=\"/auth/signout\"") && content.contains(&"S".repeat(43)));

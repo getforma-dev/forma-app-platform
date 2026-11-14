@@ -25,6 +25,8 @@ type FieldRow = {
   hasChoices: boolean;
   /** APP-205: a reference with nothing to choose (a disabled select). */
   noChoices: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  hasCheckboxes: boolean;
   choices: { id: string; value: string; label: string; selected: boolean }[];
 };
 type RecordProps = {
@@ -151,6 +153,17 @@ function Record(props: RecordProps) {
                   <select id={row.input} name={row.input} disabled>
                     <option value="">Nothing to choose yet</option>
                   </select>
+                ))}
+                {createShow(() => row.hasCheckboxes, () => (
+                  <span class="choices" role="group" aria-label={row.label}>
+                    <input type="hidden" name={row.input} value="" />
+                    {createList(() => row.choices, (choice) => choice.id, (choice) => (
+                      <label class="choice">
+                        <input type="checkbox" name={row.input} value={choice.value} checked={choice.selected} />
+                        {' '}{choice.label}
+                      </label>
+                    ))}
+                  </span>
                 ))}
                 {createShow(() => row.hasText, () => (
                   h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })

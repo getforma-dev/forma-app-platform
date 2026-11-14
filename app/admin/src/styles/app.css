@@ -339,6 +339,13 @@ button, input, select, textarea { font: inherit; }
 .document-form form { display: grid; gap: 16px; }
 .document-field, .document-field label { display: grid; gap: 6px; font-size: 13px; }
 .document-field input, .document-field select { width: 100%; }
+/* ADR-020 §9 (APP-208): a multi-select's checkbox group, one box per declared value. */
+.document-choices { display: flex; flex-wrap: wrap; gap: 6px 14px; border: 0; margin: 0; padding: 0; }
+.document-choices legend { padding: 0; margin-bottom: 6px; }
+.document-field .document-choice { display: inline-flex; align-items: center; gap: 5px; }
+.document-field .document-choice input { width: auto; }
+.page .choices { display: inline-flex; flex-wrap: wrap; gap: 6px 14px; vertical-align: middle; }
+.page .choice { display: inline-flex; align-items: center; gap: 5px; }
 .document-form button { justify-self: start; }
 .document-form [role="status"] { margin: 0; font-size: 13px; }
 .document-records small { display: block; color: var(--muted); white-space: nowrap; }

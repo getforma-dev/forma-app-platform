@@ -69,6 +69,10 @@ FIELDS = [{"id": "time", "value_type": {"type": "timestamp"}, "nullable": False}
           {"id": "bytes", "value_type": {"type": "integer", "unit": "byte"}, "nullable": False}]
 # Contract value types a source column may have (library_sources.py's table); `reference` never is.
 COLUMN_TYPES = ("text", "enum", "boolean", "integer", "money", "decimal", "date", "timestamp")
+# ADR-020 section 9 (APP-208): a records input's multi-select reaches this engine as one text
+# column (the parent joins the selection by ", "); no source column has it, and no literal
+# of it is qualified (admission refuses a filter on the field; `literal_parameter` refuses too).
+RECORD_COLUMN_TYPES = COLUMN_TYPES + ("multi_enum",)
 # Measures that need a numeric field; count/min/max take any column type.
 NUMERIC = ("integer", "money", "decimal")
 LOCAL_ID = re.compile(r"[a-z][a-z0-9_]{0,63}")
@@ -103,7 +107,7 @@ def require(condition, reason):
         raise Refused(reason)
 
 
-def parse_fields(fields):
+def parse_fields(fields, allowed=COLUMN_TYPES):
     """The input contract's field list, re-checked here (defense in depth): id -> value_type."""
     require(isinstance(fields, list) and 0 < len(fields) <= MAX_FIELDS, "fields_refused")
     typed = {}
@@ -111,7 +115,7 @@ def parse_fields(fields):
         require(isinstance(item, dict) and set(item) == {"id", "value_type", "nullable"}, "fields_refused")
         name, value_type = item["id"], item["value_type"]
         require(isinstance(name, str) and LOCAL_ID.fullmatch(name) is not None and name not in typed, "fields_refused")
-        require(isinstance(value_type, dict) and value_type.get("type") in COLUMN_TYPES and isinstance(item["nullable"], bool), "fields_refused")
+        require(isinstance(value_type, dict) and value_type.get("type") in allowed and isinstance(item["nullable"], bool), "fields_refused")
         typed[name] = value_type
     return typed
 
@@ -170,14 +174,14 @@ def compile_query(query, source_path, input_id="events", fields=FIELDS, records=
             and query.get("operator_version") == 1 and query.get("null_policy") == "unknown"
             and isinstance(query.get("operations"), list) and 0 < len(query["operations"]) <= 16, "query_shape_refused")
     require(isinstance(input_id, str) and LOCAL_ID.fullmatch(input_id) is not None, "request_refused")
-    types = parse_fields(fields)
+    types = parse_fields(fields, RECORD_COLUMN_TYPES if records else COLUMN_TYPES)
     if query["inputs"] != [input_id]:
         raise Refused("only the request's one source input is qualified")
     params = [str(source_path)]
     if records:
         # Only already-admitted field identifiers and fixed engine type names
         # enter this SQL. Values remain data in the private snapshot file.
-        physical = {"text": "VARCHAR", "enum": "VARCHAR", "boolean": "BOOLEAN", "integer": "HUGEINT",
+        physical = {"text": "VARCHAR", "enum": "VARCHAR", "multi_enum": "VARCHAR", "boolean": "BOOLEAN", "integer": "HUGEINT",
                     "money": "HUGEINT", "decimal": "HUGEINT", "date": "DATE", "timestamp": "TIMESTAMP"}
         columns = ",".join("'%s':'%s'" % (name, physical[value_type["type"]]) for name, value_type in types.items())
         sql = "SELECT * FROM read_json(?, format='newline_delimited', columns={%s}, maximum_object_size=1048576)" % columns
@@ -377,7 +381,7 @@ def parse_request(raw):
     require(isinstance(digest, str) and DIGEST.fullmatch(digest) is not None, "request_refused")
     require(isinstance(source["input_id"], str) and LOCAL_ID.fullmatch(source["input_id"]) is not None, "request_refused")
     try:
-        parse_fields(source["fields"])
+        parse_fields(source["fields"], RECORD_COLUMN_TYPES if records else COLUMN_TYPES)
     except Refused:
         raise Refused("request_refused") from None
     if not records:

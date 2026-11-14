@@ -108,6 +108,23 @@ fn scalar_row(bytes: &[u8], fields: &[Value]) -> Result<Value> {
             continue;
         }
         require(value["type"] == spec["type"])?;
+        // ADR-020 §9 (APP-208): the typed engine sees a multi-select as one
+        // text, its values joined by ", "; the stored selection is re-judged
+        // as an ordered non-empty subset of the declared values (the
+        // storage `compatible` rule), never trusted from the row bytes.
+        if kind == "multi_enum" {
+            let picked = value["values"].as_array().ok_or(Error::Denied)?;
+            require(
+                !picked.is_empty()
+                    && picked.len() <= super::commands::MULTI_ENUM_VALUES
+                    && super::commands::ordered_subset(picked, spec.get("values")),
+            )?;
+            row.insert(
+                id.into(),
+                Value::String(crate::commands::multi_enum_text(value)),
+            );
+            continue;
+        }
         let scalar = match kind {
             "integer" => {
                 require(value["unit"] == spec["unit"])?;
@@ -269,5 +286,40 @@ mod tests {
             fields.as_array().unwrap()
         )
         .is_err());
+    }
+    /// ADR-020 §9 (APP-208): a multi-select projects as one text, its values
+    /// joined by ", ", so the typed engine sees a string; null stays null on
+    /// a nullable field; a selection that is not an ordered non-empty subset
+    /// of the declared values (or a scalar where the multi-select is
+    /// declared) is refused, as storage would have refused it.
+    #[test]
+    fn a_multi_select_projects_as_joined_text_and_is_rejudged() {
+        let fields = json!([{"id":"tags","value_type":{"type":"multi_enum","values":["red","green","blue"]},"nullable":true}]);
+        let fields = fields.as_array().unwrap();
+        let row = |value: Value| {
+            scalar_row(
+                &admission::encode(&json!([{"field_id":"tags","value":value}])).unwrap(),
+                fields,
+            )
+        };
+        assert_eq!(
+            row(json!({"type":"multi_enum","values":["red","blue"]})).unwrap(),
+            json!({"tags":"red, blue"})
+        );
+        assert_eq!(
+            row(json!({"type":"multi_enum","values":["green"]})).unwrap(),
+            json!({"tags":"green"})
+        );
+        assert_eq!(row(json!({"type":"null"})).unwrap(), json!({"tags":null}));
+        for refused in [
+            json!({"type":"multi_enum","values":["blue","red"]}),
+            json!({"type":"multi_enum","values":["red","red"]}),
+            json!({"type":"multi_enum","values":["purple"]}),
+            json!({"type":"multi_enum","values":[]}),
+            json!({"type":"multi_enum","values":"red"}),
+            json!({"type":"enum","value":"red"}),
+        ] {
+            assert!(row(refused.clone()).is_err(), "{refused}");
+        }
     }
 }

@@ -354,6 +354,8 @@ export type FieldJson = {
   has_choices: boolean; choices: { id: string; value: string; label?: string; selected?: boolean }[];
   /** APP-205: a reference with nothing to choose (a disabled select). */
   no_choices?: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  has_checkboxes?: boolean;
 };
 export type FormJson = {
   component?: string;
@@ -409,6 +411,19 @@ export function buildForm(document_: Document, form: FormJson): HTMLFormElement 
     if (field.no_choices) {
       const select = el(document_, 'select', { name: field.input, 'aria-label': field.label, disabled: '' }, el(document_, 'option', { value: '' }, 'Nothing to choose yet'));
       row.append(select);
+    }
+    if (field.has_checkboxes) {
+      // ADR-020 §9 (APP-208): one checkbox per declared value, in declaration
+      // order, the held ones checked, all under the field's one input name.
+      // The empty hidden sentinel lets "nothing checked" reach the native
+      // parse as the null value; the client composes the typed array itself.
+      const group = el(document_, 'span', { class: 'cv-choices', role: 'group', 'aria-label': field.label }, input(document_, field.input, ''));
+      for (const choice of field.choices) {
+        const box = el(document_, 'input', { type: 'checkbox', name: field.input, value: choice.value });
+        box.checked = choice.selected === true;
+        group.append(el(document_, 'label', { class: 'cv-choice' }, box, ` ${choice.label ?? choice.value}`));
+      }
+      row.append(group);
     }
     if (field.has_text) {
       const text_ = input(document_, field.input, field.value, 'text');
