@@ -1517,6 +1517,7 @@ async fn campaign() {
             FlowKind::SignUp {
                 code_digest: &f.digest,
                 handoff: None,
+                notice_version: notice::NOTICE_VERSION,
             },
             &sealed,
             "v4:192.0.2.64",

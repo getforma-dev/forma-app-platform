@@ -22,6 +22,9 @@ mod data_copy;
 mod definitions;
 mod governance;
 mod labels;
+// Trial plan D4/D6 (ADR-008 amendment 2026-11-14): organization admins and
+// member display names.
+mod org_admin;
 mod pool;
 mod queries;
 mod record_components;
@@ -80,6 +83,7 @@ pub use labels::{
     address_shaped, card_shaped, label_description, label_name, merge_label, shortcut_shaped,
     Label, LabelChange, Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
 };
+pub use org_admin::{MemberRow, RemoveOutcome};
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::QueryActor;
 pub use queries::{

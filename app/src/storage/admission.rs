@@ -259,18 +259,25 @@ impl Workspace {
     /// D7.1 pre-signup validation: holds no redemption slot and grants nothing.
     /// A digest that is not this organization's code is `Err(Denied)`, as is a
     /// malformed argument; callers render both like any other refusal.
+    /// `notice_version` is the beta notice the visitor consented to
+    /// (`auth::notice::NOTICE_VERSION`); the reservation records it (0023) and
+    /// the admission stores it as the member's consent.
     pub async fn reserve_code(
         &self,
         organization: &str,
         code_digest: &str,
         context_digest: &str,
+        notice_version: i32,
     ) -> Result<Reservation> {
         require(
-            valid_id(organization) && digest_shaped(code_digest) && digest_shaped(context_digest),
+            valid_id(organization)
+                && digest_shaped(code_digest)
+                && digest_shaped(context_digest)
+                && (1..=1_000_000).contains(&notice_version),
         )?;
         let transaction = Transaction::begin_nonmember(&self.inner, Some(organization)).await?;
         let result = async {
-            let rows = transaction.query("SELECT reservation_id::text,floor(extract(epoch FROM expires_at))::bigint,outcome FROM genui_private.reserve_code($1::text::uuid,$2,$3)", &[&organization,&code_digest,&context_digest]).await?;
+            let rows = transaction.query("SELECT reservation_id::text,floor(extract(epoch FROM expires_at))::bigint,outcome FROM genui_private.reserve_code($1::text::uuid,$2,$3,$4)", &[&organization,&code_digest,&context_digest,&notice_version]).await?;
             #[cfg(test)]
             transaction.lease.checkpoint("reserve").await;
             outcome(&rows)
