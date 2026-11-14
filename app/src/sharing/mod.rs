@@ -256,8 +256,7 @@ async fn members(State(auth): State<Arc<Auth>>, request: Request) -> Response {
             StatusCode::OK,
             &json!({"members": members.iter().map(|m| json!({"principal_id": m.principal, "label": m.label})).collect::<Vec<_>>()}),
         ),
-        Err(storage::Error::Denied) => http::not_found(),
-        Err(_) => http::unavailable(),
+        Err(error) => storage_refusal(error),
     }
 }
 
@@ -298,6 +297,24 @@ async fn share_request(
     Ok((trusted, bytes))
 }
 
+/// A store refusal on the share routes: `Denied` is the uniform 404; `Busy`
+/// (a lock cycle between two members, W4's r7) is the retryable 409 `busy`
+/// the command routes answer, with its `retry_after_seconds`; anything else
+/// is 503. Nothing was written in any of them.
+fn storage_refusal(error: storage::Error) -> Response {
+    match error {
+        storage::Error::Denied => http::not_found(),
+        storage::Error::Busy => http::problem_with(
+            StatusCode::CONFLICT,
+            "busy",
+            json!({"retry_after_seconds": BUSY_RETRY_SECONDS}),
+        ),
+        _ => http::unavailable(),
+    }
+}
+/// How long a busy share asks the canvas to wait (the command routes' 2 s).
+const BUSY_RETRY_SECONDS: u64 = 2;
+
 /// The sharer's own standing on the work: the uniform 404 without share
 /// authority (or for a work it cannot open), 503 for a store outage.
 async fn standing(
@@ -329,8 +346,7 @@ async fn sharing(
     };
     match stores.workspace.work_sharing(&trusted, &app, &work).await {
         Ok(sharing) => document(StatusCode::OK, &sharing_json(&app, &work, &sharing)),
-        Err(storage::Error::Denied) => http::not_found(),
-        Err(_) => http::unavailable(),
+        Err(error) => storage_refusal(error),
     }
 }
 
@@ -412,8 +428,7 @@ async fn share_person(
                 })).collect::<Vec<_>>(),
             }),
         ),
-        Err(storage::Error::Denied) => http::not_found(),
-        Err(_) => http::unavailable(),
+        Err(error) => storage_refusal(error),
     }
 }
 
@@ -491,8 +506,7 @@ async fn share_organization(
                 &json!({"app_id": app, "work_id": work, "role": name}),
             )
         }
-        Err(storage::Error::Denied) => http::not_found(),
-        Err(_) => http::unavailable(),
+        Err(error) => storage_refusal(error),
     }
 }
 
@@ -530,8 +544,7 @@ async fn remove_access(
                 &json!({"app_id": app, "work_id": work, "grantee_principal_id": grantee, "role": "none"}),
             )
         }
-        Err(storage::Error::Denied) => http::not_found(),
-        Err(_) => http::unavailable(),
+        Err(error) => storage_refusal(error),
     }
 }
 
@@ -830,6 +843,35 @@ mod tests {
         assert!(demotion.changed(), "storage counts the removal as a change");
         assert!(!announces_person(&demotion));
         assert!(!announces_person(&shared(false, &[])));
+    }
+
+    #[tokio::test]
+    async fn a_busy_store_is_the_retryable_409_and_nothing_else_changes() {
+        let body = |response: Response| async move {
+            let status = response.status();
+            let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+            (status, String::from_utf8(bytes.to_vec()).unwrap())
+        };
+        assert_eq!(
+            body(storage_refusal(storage::Error::Busy)).await,
+            (
+                StatusCode::CONFLICT,
+                "{\"code\":\"busy\",\"retry_after_seconds\":2,\"status\":409}".into()
+            )
+        );
+        assert_eq!(
+            body(storage_refusal(storage::Error::Denied)).await,
+            (
+                StatusCode::NOT_FOUND,
+                "{\"code\":\"not_found\",\"status\":404}".into()
+            )
+        );
+        for other in [storage::Error::Unavailable, storage::Error::Deadline] {
+            assert_eq!(
+                storage_refusal(other).status(),
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+        }
     }
 
     /// Without a configured store every protected answer is the uniform 404

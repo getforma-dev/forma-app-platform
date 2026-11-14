@@ -123,3 +123,5 @@ Both breaks ran on `8c239874`, with the same method as round 1. Each restore lef
 | B32 | The canvas approver step uses the additive route | `actions.ts` builds the exact person request | `team-sharing.test.ts` 13 |
 
 The demotion check is re-verified for W4's r4: a demotion through the dialog's `Set` leaves exactly one live record, and the listing (live permissions) shows the lower role.
+| B33 | A busy store (a lock cycle between two members, W4's coming r7) is the retryable 409 `busy` with `retry_after_seconds`, never 503 | `Busy` mapped like any outage | `sharing::tests::a_busy_store_is_the_retryable_409_and_nothing_else_changes`: `(503, "unavailable")` instead of `(409, "busy")`; restored from a copy before commit (`9a71f18948f23540…`) |
+| B34 | The dialog says a busy share plainly and asks for a retry | the 409 copy removed | `team-sharing.test.ts` 7; restored from a copy before commit (`fedaa53b3c3a3130…`) |

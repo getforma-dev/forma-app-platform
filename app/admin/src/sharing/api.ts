@@ -171,6 +171,8 @@ export function teamRefusal(status: number, code: string): string {
   if (status === 400) return 'That request was not understood. Refresh the list and try again.';
   if (status === 403) return 'This page could not confirm the request. Reload the page and try again.';
   if (status === 429) return 'Too many changes at once. Wait a moment and try again.';
+  // A lock cycle between two people sharing at once (busy): nothing changed.
+  if (status === 409) return 'Someone else was changing sharing at the same moment. Nothing was changed. Try again.';
   return 'Sharing is unavailable right now. Try again in a moment.';
 }
 async function teamRequest(url: string, method: 'GET' | 'POST', body?: string): Promise<{ status: number; json: unknown }> {

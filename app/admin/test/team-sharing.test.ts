@@ -108,6 +108,7 @@ test('every refusal has plain copy that names no other member', () => {
     [400, 'malformed_share', /refresh/i],
     [403, 'cross_site', /reload/i],
     [429, 'too_many_requests', /wait/i],
+    [409, 'busy', /^Someone else was changing sharing at the same moment\. Nothing was changed\. Try again\.$/],
     [503, 'unavailable', /right now/],
   ];
   for (const [status, code, pattern] of cases) {

@@ -86,6 +86,9 @@ impl crate::query::canvas::CanvasPages for NoCanvas {
 const EMPLOYEE: &str = "00000000-0000-4000-8000-00000000006f";
 /// A member of the canary organization only.
 const OUTSIDER: &str = "00000000-0000-4000-8000-000000000ab0";
+/// A member admitted for the forma_share success check (APP-192): no access,
+/// no app of their own.
+const NEWCOMER: &str = "00000000-0000-4000-8000-000000000b77";
 const EXPENSE_APP: &str = "00000000-0000-4000-8000-000000001681";
 const EXPENSE_SOURCE: &str = "00000000-0000-4000-8000-000000003000";
 /// The canary organization's seeded app (a foreign app id).
@@ -1532,22 +1535,26 @@ async fn campaign() {
     // APP-192 review (MINOR-6): forma_share succeeds through the canvas
     // route's own share path, and its published `record_write: true` maps to
     // the contributor role: record_read and record_write are copied and the
-    // share row names the role.
+    // share row names the role. The grantee is a member admitted here, who
+    // holds nothing and owns no app (an app's owner is a reviewer by
+    // standing; W4 r1).
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{NEWCOMER}','app008-fixture-only','ten_{ORG}','usr_{NEWCOMER}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{NEWCOMER}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{ORG}','{NEWCOMER}','0000e000-0000-4000-8000-000000000b77','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
+    directory::set_member_name(ORG, NEWCOMER, Some("Nadia Kim"));
     let (sharer, _) = mint_token(&diego, "Share check").await;
     let shared = client
         .call(
             &sharer,
             mcp::tools::SHARE,
-            json!({"app_id": app_id, "work_id": work_id, "member_name": "Priya", "record_write": true}),
+            json!({"app_id": app_id, "work_id": work_id, "member_name": "Nadia", "record_write": true}),
         )
         .await;
     let shared = ok(&shared).clone();
-    assert_eq!(shared["shared_with"], "Priya Natarajan");
+    assert_eq!(shared["shared_with"], "Nadia Kim");
     assert_eq!(shared["work_id"], work_id.as_str());
     let operator = fixture.operator().await;
     let held: Vec<String> = operator
         .client
-        .query(&format!("SELECT permission FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}' AND work_id='{work_id}' ORDER BY permission"), &[])
+        .query(&format!("SELECT permission FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{NEWCOMER}' AND work_id='{work_id}' ORDER BY permission"), &[])
         .await
         .unwrap()
         .iter()
@@ -1556,7 +1563,7 @@ async fn campaign() {
     assert_eq!(held, ["record_read", "record_write"]);
     let role: String = operator
         .client
-        .query_one(&format!("SELECT role FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{PRINCIPAL}' AND work_id='{work_id}' AND revoked_at IS NULL ORDER BY shared_at DESC LIMIT 1"), &[])
+        .query_one(&format!("SELECT role FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{NEWCOMER}' AND work_id='{work_id}' AND revoked_at IS NULL ORDER BY shared_at DESC LIMIT 1"), &[])
         .await
         .unwrap()
         .get(0);
@@ -1564,7 +1571,7 @@ async fn campaign() {
     drop(operator);
     check(
         &mut checks,
-        "forma_share succeeds: Diego's agent shares his expense work with Priya by name with record_write: true; she now holds record_read and record_write on it and the share row names the contributor role (the canvas route's own path)",
+        "forma_share succeeds: Diego's agent shares his expense work by name with a member who holds nothing (Nadia Kim) with record_write: true; she now holds record_read and record_write on it and the share row names the contributor role (the canvas route's own path, Ensure)",
     );
 
     // --- The local stand for the browser and the real MCP clients ---
