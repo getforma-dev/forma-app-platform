@@ -266,13 +266,16 @@ export function teamSection(document: Document, app: string, work: string): { se
     } finally { freeze(false); }
   }
   function sharePerson(grantee: string, label: string, chosen: TeamRole) {
+    // A lower role takes the surplus away (W4's demotion); the list then
+    // shows the person's live access, and the message says what changed.
+    const before = sharing?.members.find(member => member.principal_id === grantee)?.role;
     void act(async () => {
       await shareWithMember(app, work, grantee, chosen);
       return (after: TeamSharing | null) => {
         const held = after?.members.find(member => member.principal_id === grantee)?.role;
-        return held && RANK[held] > RANK[chosen]
-          ? `${label} already had more access, so it stays “${ROLE_WORDS[held]}”.`
-          : `Shared with ${label}: ${ROLE_WORDS[chosen]}.`;
+        if (held && RANK[held] > RANK[chosen]) return `${label} already had more access, so it stays “${ROLE_WORDS[held]}”.`;
+        if (before && held === chosen && before !== chosen) return `${label} now has “${ROLE_WORDS[chosen]}”.`;
+        return `Shared with ${label}: ${ROLE_WORDS[chosen]}.`;
       };
     }, submit);
   }

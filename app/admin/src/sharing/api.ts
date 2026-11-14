@@ -139,9 +139,9 @@ export function everyoneRequest(app: string, work: string, role: TeamRole | 'non
   return { url: `${teamPath(app, work)}/organization`, body: JSON.stringify({ role }) };
 }
 /**
- * Removing one person's access: the owner-side revoke of a personal share
- * (W4's `revoke_work_share`). Its route lands with that API; the dialog shows
- * the control only while the server answers `can_revoke_members: true`.
+ * Removing one person's access: the person route's `none`, the owner's
+ * revocation (`revoke_work_share`). The dialog shows the control only while
+ * the server answers `can_revoke_members: true` (the app's owner).
  */
 export function memberRevokeRequest(app: string, work: string, grantee: string): { url: string; body: string } | null {
   if (!isUuid(app) || !isUuid(work) || !isUuid(grantee)) return null;
@@ -216,5 +216,9 @@ export async function shareWithEveryone(app: string, work: string, role: TeamRol
 export async function revokeMemberShare(app: string, work: string, grantee: string): Promise<void> {
   const request = memberRevokeRequest(app, work, grantee);
   if (!request) throw new ShareError('This person cannot be removed here.');
-  await teamRequest(request.url, 'POST', request.body);
+  const { json } = await teamRequest(request.url, 'POST', request.body);
+  const answer = json as { grantee_principal_id?: unknown; role?: unknown } | null;
+  if (answer?.grantee_principal_id !== grantee || answer?.role !== 'none') {
+    throw new ShareError('The result could not be confirmed. Check the list before trying again.', true);
+  }
 }

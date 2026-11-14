@@ -217,3 +217,42 @@ test('an app with private lists says what that means for each role', async () =>
     assert.equal(note(shared.section), undefined);
   } finally { globalThis.fetch = original; }
 });
+
+test('"Remove access" shows only for the owner, removes the person, and says so', async () => {
+  const original = globalThis.fetch;
+  try {
+    const remove = (section: El) => find(section, el => el.tagName === 'BUTTON' && el.textContent === 'Remove access');
+    const sharer = await open(() => ok(answer({ can_revoke_members: false })));
+    assert.equal(remove(sharer.section), undefined, 'no control for a sharer who is not the owner');
+    let listed = [{ principal_id: ANA, label: 'Ana Diaz', role: 'reviewer' }];
+    const { section, calls } = await open(() => ok(answer({ can_revoke_members: true, members: listed })), body => {
+      listed = [];
+      return ok({ ...body, app_id: APP, work_id: WORK });
+    });
+    const button_ = remove(section)!;
+    assert.equal(button_.getAttribute('aria-label'), 'Remove access for Ana Diaz');
+    button_.fire('click');
+    await flush(); await flush();
+    assert.deepEqual(calls.filter(c => c.method === 'POST').map(c => c.body), [{ grantee_principal_id: ANA, role: 'none' }]);
+    assert.equal(statusText(section), 'Ana Diaz no longer has access.');
+    assert.equal(remove(section), undefined, 'the list no longer shows her');
+    assert.ok(section.all().some(el => el.textContent === 'Not shared with anyone in your organization yet.'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('a lower access for a person says they now have it', async () => {
+  const original = globalThis.fetch;
+  try {
+    let role = 'reviewer';
+    const { section } = await open(() => ok(answer({ members: [{ principal_id: ANA, label: 'Ana Diaz', role }] })), body => {
+      role = String(body.role);
+      return ok({ ...body, app_id: APP, work_id: WORK });
+    });
+    select(section, 'grantee').value = ANA;
+    select(section, 'role').value = 'viewer';
+    find(section, el => el.tagName === 'FORM')!.fire('submit');
+    await flush(); await flush();
+    assert.equal(statusText(section), 'Ana Diaz now has “Can view”.');
+    assert.ok(section.all().some(el => el.textContent === 'Can view' && el.tagName === 'P'));
+  } finally { globalThis.fetch = original; }
+});

@@ -58,9 +58,9 @@ test('everyone in the organization takes a role or none, on its own route', () =
   assert.equal(everyoneRequest(APP, 'card-1', 'viewer'), null);
 });
 
-// Placeholder contract (review NIT-1): the body follows W4's route when it
-// lands; the dialog shows no remove control until the server says so.
-test('removing one person is one request through one function (the route lands with W4)', () => {
+// The person route's `none` (W4's revoke_work_share); the dialog shows the
+// control only when the server says this member may use it (the owner).
+test('removing one person is one request through one function', () => {
   const request = memberRevokeRequest(APP, WORK, ANA);
   assert.ok(request);
   assert.equal(request.url, `/v1/work/${APP}/${WORK}/share`);
@@ -173,4 +173,18 @@ test('a share notice is shown only for an app this canvas does not have yet', as
   const notice = sharedAppNotice(false);
   assert.equal(notice, 'An app was shared with you. Reload the page to find it in My apps.');
   assert.doesNotMatch(notice ?? '', /private link/i);
+});
+
+test('a removal is confirmed only by an answer naming the person and none', async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ app_id: APP, work_id: WORK, grantee_principal_id: ANA, role: 'none' }), { status: 200 });
+    await revokeMemberShare(APP, WORK, ANA);
+    for (const body of [{ app_id: APP, work_id: WORK, grantee_principal_id: ANA, role: 'viewer' }, { app_id: APP, work_id: WORK, role: 'none' }, {}]) {
+      globalThis.fetch = async () => new Response(JSON.stringify(body), { status: 200 });
+      await assert.rejects(revokeMemberShare(APP, WORK, ANA), (error: unknown) => error instanceof ShareError && error.uncertain, JSON.stringify(body));
+    }
+    globalThis.fetch = async () => new Response('{"code":"not_found","status":404}', { status: 404 });
+    await assert.rejects(revokeMemberShare(APP, WORK, ANA), (error: unknown) => error instanceof ShareError && /refused/.test(error.message));
+  } finally { globalThis.fetch = original; }
 });
