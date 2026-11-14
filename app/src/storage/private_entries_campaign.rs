@@ -1387,6 +1387,108 @@ async fn campaign() {
     );
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{OWNER}' AND work_id='{work}'")).await, owner_rows_before, "the owner's rows are untouched");
     check(&mut checks, "recheck r1: share_work refuses the app owner and the sharer as grantee (the definer and storage alike), so no lower re-share strips the owner's rows");
+    // Recheck r6: under 'ensure' the owner is a grantee like any other. Ben
+    // creates his own work of the owner's app; ownership alone does not open
+    // it; Ben shares it through the canvas route's path (share_with_lineage,
+    // Ensure) and the owner can open it. Under 'set' the owner stays refused.
+    let bens = stores
+        .workspace
+        .create_work(
+            &ben,
+            PRIVATE_APP,
+            &publication.publication_id,
+            "Ben's own list (synthetic campaign)",
+            &[
+                WorkBinding::Records {
+                    input: "claims".into(),
+                    schema: "claim".into(),
+                },
+                WorkBinding::Records {
+                    input: "notes".into(),
+                    schema: "note".into(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+    let bens_work = bens.work.clone();
+    assert_eq!(
+        stores
+            .data
+            .can_open(&owner, PRIVATE_APP, &bens_work)
+            .await
+            .err(),
+        Some(Error::Denied),
+        "ownership alone does not open a member's work"
+    );
+    let opened =
+        crate::sharing::share_with_lineage(&stores, &ben, PRIVATE_APP, &bens_work, OWNER, true)
+            .await
+            .unwrap();
+    assert!(opened.changed() && opened.removed.is_empty(), "{opened:?}");
+    stores
+        .data
+        .can_open(&owner, PRIVATE_APP, &bens_work)
+        .await
+        .expect("the owner opens Ben's work after the share");
+    assert_eq!(
+        stores
+            .workspace
+            .share_work(
+                &ben,
+                PRIVATE_APP,
+                &bens_work,
+                Audience::Member(OWNER),
+                ShareRole::Viewer,
+                ShareMode::Set
+            )
+            .await
+            .err(),
+        Some(Error::Denied),
+        "set toward the owner stays refused"
+    );
+    check(&mut checks, "recheck r6: under ensure the app owner is a grantee like any other: a member's own work of the owner's app, shared with the owner through the canvas route's path, inserts the missing rows and the owner can open it; under set the owner stays refused");
+    // Recheck r7: two members sharing with each other cycle on their
+    // membership rows (each holds its own FOR SHARE from the fence and wants
+    // the other's FOR UPDATE). PostgreSQL aborts one side (40P01) or the 1 s
+    // lock_timeout fires (55P03); storage answers the retryable Busy, never
+    // Unavailable. Deterministic: a session holding the owner's row FOR SHARE
+    // runs the owner's share of their work with Ben once Ben's share of his
+    // work with the owner is seen waiting on the owner's row.
+    {
+        let mut first = fixture.operator().await;
+        let t1 = first.client.transaction().await.unwrap();
+        t1.execute(&format!("SELECT 1 FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{OWNER}' FOR SHARE"), &[]).await.unwrap();
+        t1.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &OWNER]).await.unwrap();
+        let waiter = stores.workspace.share_work(
+            &ben,
+            PRIVATE_APP,
+            &bens_work,
+            Audience::Member(OWNER),
+            ShareRole::Contributor,
+            ShareMode::Ensure,
+        );
+        let crossing = async {
+            let waited = lock_wait(&fixture, "share_work").await;
+            let owners: std::result::Result<i64, String> = t1
+                .query_one(&format!("SELECT count(*) FROM genui_private.share_work('{ORG}','{OWNER}','{BEN}','{PRIVATE_APP}','{work}','viewer','ensure')"), &[])
+                .await
+                .map(|r| r.get(0))
+                .map_err(|e| e.to_string());
+            let _ = t1.rollback().await;
+            (waited, owners)
+        };
+        let (bens_share, (waited, owners)) = tokio::join!(waiter, crossing);
+        assert!(waited, "Ben's share waits on the owner's row");
+        let one_side_aborted = (bens_share == Err(Error::Busy) && owners.is_ok())
+            || (bens_share.is_ok() && owners.is_err());
+        assert!(
+            one_side_aborted,
+            "one side of the cycle is aborted and the storage side answers Busy or succeeds: {bens_share:?} / {owners:?}"
+        );
+        assert_ne!(bens_share, Err(Error::Unavailable), "never a 503");
+        check(&mut checks, "recheck r7: two members sharing with each other cycle on their membership rows; PostgreSQL aborts one side (40P01, or 55P03 at lock_timeout) and storage answers the retryable Busy (429), never Unavailable; the other side completes");
+    }
     assert_eq!(
         definer_rows(&fixture, BEN, &share(BEN, FAY, "reviewer")).await,
         0,
@@ -1807,7 +1909,7 @@ async fn campaign() {
             .err(),
         Some(Error::Denied)
     );
-    let digest_ok = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e JOIN genui.work_shares s ON s.organization_id=e.organization_id AND (s.revoke_event_id=e.event_id OR s.audit_event_id=e.event_id) WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.work_id='{work}' AND s.grantee_id='{REV}' AND s.removed IS NOT NULL AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.removed,','),'UTF8')),'hex')")).await;
+    let digest_ok = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e JOIN genui.work_shares s ON s.organization_id=e.organization_id AND s.audit_event_id=e.event_id WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.work_id='{work}' AND s.grantee_id='{REV}' AND s.removed IS NOT NULL AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.removed,','),'UTF8')),'hex')")).await;
     assert!(digest_ok >= 1, "the revocation's digest recomputes from stored rows (recheck r2: the grantee and the removed set on the marked record)");
     check(&mut checks, "recheck r3: the owner's revocation takes the grantee's membership row FOR UPDATE before the work lock (the fence's order) and waits behind the grantee's fenced transaction in flight; r2: its permission.revoked digest (forma:share-member-revoke:v1) recomputes from the stored grantee and removed set");
     check(&mut checks, "review M1: the app owner revokes a member's personal share in one unit (record_read, record_review and record_write removed, the share record marked revoked, one permission.revoked whose digest recomputes); non-owners and the owner's own rows are refused; nothing held is an unchanged outcome");
@@ -1894,20 +1996,34 @@ async fn campaign() {
     // same transaction, audited; the sharer must have been able to grant what
     // it strips.
     let revoked_before = chain(&fixture, "permission.revoked").await;
-    let demoted = stores
-        .workspace
-        .share_work(
-            &owner,
-            PRIVATE_APP,
-            work,
-            Audience::Member(REV),
-            ShareRole::Contributor,
-            ShareMode::Set,
-        )
-        .await
-        .unwrap();
+    // Recheck T1: the demotion (set) takes Rev's membership row FOR UPDATE
+    // and waits behind Rev's open fenced transaction (a session holding the
+    // row FOR SHARE as lock_member_authority does), then strips.
+    let mut fenced = fixture.operator().await;
+    let t1 = fenced.client.transaction().await.unwrap();
+    t1.execute(&format!("SELECT 1 FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{REV}' FOR SHARE"), &[]).await.unwrap();
+    let waiter = stores.workspace.share_work(
+        &owner,
+        PRIVATE_APP,
+        work,
+        Audience::Member(REV),
+        ShareRole::Contributor,
+        ShareMode::Set,
+    );
+    let committer = async {
+        let waited = lock_wait(&fixture, "share_work").await;
+        t1.commit().await.unwrap();
+        waited
+    };
+    let (demoted, waited) = tokio::join!(waiter, committer);
+    assert!(
+        waited,
+        "the demotion waits behind the grantee's fenced transaction"
+    );
+    let demoted = demoted.unwrap();
     assert_eq!(demoted.removed, ["record_review"]);
     assert!(demoted.changed());
+    check(&mut checks, "recheck T1: share_work's demotion takes the grantee's membership row FOR UPDATE (the fence's order) and waits behind the grantee's fenced transaction in flight, then strips");
     assert_eq!(
         chain(&fixture, "permission.revoked").await,
         revoked_before + 1
@@ -1947,6 +2063,18 @@ async fn campaign() {
         .await
         .unwrap();
     assert_eq!(viewer.removed, ["record_write"]);
+    // Recheck r2b: the earlier demotion's live record kept its removed set
+    // (marked revoked, never rewritten) and the viewer demotion wrote its own
+    // record, so every member revocation on this work recomputes from the
+    // record whose audit_event_id is the event.
+    let revoked_events = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.work_id='{work}' AND EXISTS (SELECT 1 FROM genui.work_shares s WHERE s.organization_id=e.organization_id AND s.audit_event_id=e.event_id AND s.grantee_id IS NOT NULL)")).await;
+    let recomputed = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e JOIN genui.work_shares s ON s.organization_id=e.organization_id AND s.audit_event_id=e.event_id WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.work_id='{work}' AND s.grantee_id IS NOT NULL AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.removed,','),'UTF8')),'hex')")).await;
+    assert!(
+        revoked_events >= 3 && recomputed == revoked_events,
+        "every member revocation recomputes from its own record: {recomputed} of {revoked_events}"
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{REV}' AND work_id='{work}' AND revoked_at IS NOT NULL AND array_to_string(removed,',')='work:{work}:record_review'")).await, 1, "the contributor demotion's record keeps its own removed set after the viewer demotion");
+    check(&mut checks, "recheck r2b: a later demotion marks the earlier demotion's live record revoked without rewriting its removed set and writes its own record, so every permission.revoked of a member on the work recomputes from the record whose audit_event_id is the event");
     assert!(
         !stores
             .data

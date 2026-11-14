@@ -277,7 +277,7 @@ async fn campaign() {
                     work,
                     Audience::Member(grantee),
                     ShareRole::Viewer,
-                    ShareMode::Set
+                    ShareMode::Ensure
                 )
                 .await
                 .err(),
@@ -307,7 +307,7 @@ async fn campaign() {
             work,
             Audience::Member(REVIEWER),
             ShareRole::Viewer,
-            ShareMode::Set,
+            ShareMode::Ensure,
         )
         .await
         .unwrap();
@@ -422,7 +422,7 @@ async fn campaign() {
             work,
             Audience::Member(REVIEWER),
             ShareRole::Viewer,
-            ShareMode::Set,
+            ShareMode::Ensure,
         )
         .await
         .unwrap();
@@ -437,7 +437,7 @@ async fn campaign() {
             work,
             Audience::Member(REVIEWER),
             ShareRole::Contributor,
-            ShareMode::Set,
+            ShareMode::Ensure,
         )
         .await
         .unwrap();
@@ -492,7 +492,7 @@ async fn campaign() {
                     work,
                     Audience::Member(grantee),
                     ShareRole::Viewer,
-                    ShareMode::Set
+                    ShareMode::Ensure
                 )
                 .await
                 .err(),
@@ -511,7 +511,7 @@ async fn campaign() {
                 work,
                 Audience::Member(REVIEWER),
                 ShareRole::Viewer,
-                ShareMode::Set
+                ShareMode::Ensure
             )
             .await
             .err(),
@@ -528,7 +528,7 @@ async fn campaign() {
                 work,
                 Audience::Member(PRINCIPAL),
                 ShareRole::Contributor,
-                ShareMode::Set
+                ShareMode::Ensure
             )
             .await
             .err(),
@@ -567,7 +567,7 @@ async fn campaign() {
             work,
             Audience::Member(PRINCIPAL),
             ShareRole::Viewer,
-            ShareMode::Set,
+            ShareMode::Ensure,
         )
         .await
         .unwrap();

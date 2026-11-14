@@ -147,6 +147,30 @@ impl ShareMode {
         }
     }
 }
+/// Runs one sharing definer. A lock wait past `lock_timeout` (55P03) or a
+/// deadlock PostgreSQL resolved against this transaction (40P01) answers
+/// `Busy`, the routes' retryable 429 (recheck r7): the definers take the
+/// other member's membership row `FOR UPDATE` while every member transaction
+/// holds its own `FOR SHARE` from the fence, so two members sharing with each
+/// other, an owner revoking a grantee who shares with the owner, or a member
+/// sharing with an admin who removes them, can cycle; one side is aborted and
+/// retries. Any other database refusal stays `Unavailable`.
+async fn definer(
+    transaction: &Transaction<'_>,
+    sql: &str,
+    params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+) -> Result<Vec<tokio_postgres::Row>> {
+    match transaction.query_classified(sql, params).await? {
+        Ok(rows) => Ok(rows),
+        Err(code)
+            if code == tokio_postgres::error::SqlState::LOCK_NOT_AVAILABLE
+                || code == tokio_postgres::error::SqlState::T_R_DEADLOCK_DETECTED =>
+        {
+            Err(Error::Busy)
+        }
+        Err(_) => Err(Error::Unavailable),
+    }
+}
 impl Shared {
     /// Whether this call wrote anything (and therefore appended its event).
     pub fn changed(&self) -> bool {
@@ -330,10 +354,10 @@ impl Workspace {
             }
             let transaction = permit.transaction();
             let rows = match audience {
-                Audience::Member(grantee) => transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.share_work($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text,$7::text)", &[&request.organization,&request.principal,&grantee,&app,&work,&role.name(),&mode.name()]).await?,
+                Audience::Member(grantee) => definer(transaction, "SELECT scope,resource_id::text,permission,inserted FROM genui_private.share_work($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text,$7::text)", &[&request.organization,&request.principal,&grantee,&app,&work,&role.name(),&mode.name()]).await?,
                 Audience::Organization => {
                     require(personal_only(transaction, request, app, work).await?.is_none())?;
-                    transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text)", &[&request.organization,&request.principal,&app,&work,&role.name()]).await?
+                    definer(transaction, "SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text)", &[&request.organization,&request.principal,&app,&work,&role.name()]).await?
                 }
             };
             require(!rows.is_empty())?;
@@ -400,7 +424,7 @@ impl Workspace {
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
             let permit = transaction.fence_member().await?;
-            let rows = permit.transaction().query("SELECT permission,removed FROM genui_private.revoke_work_share($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid)", &[&request.organization,&request.principal,&app,&work,&grantee]).await?;
+            let rows = definer(permit.transaction(), "SELECT permission,removed FROM genui_private.revoke_work_share($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid)", &[&request.organization,&request.principal,&app,&work,&grantee]).await?;
             require(!rows.is_empty())?;
             let mut removed = Vec::new();
             for row in &rows {
@@ -437,7 +461,7 @@ impl Workspace {
                 .precheck(Action::RecordRead, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
-            let rows = permit.transaction().query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,'none')", &[&request.organization,&request.principal,&app,&work]).await?;
+            let rows = definer(permit.transaction(), "SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,'none')", &[&request.organization,&request.principal,&app,&work]).await?;
             let row = rows.first().ok_or(Error::Denied)?;
             require(text(row, 2)? == "none")?;
             boolean(row, 3)
