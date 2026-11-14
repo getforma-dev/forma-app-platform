@@ -39,7 +39,7 @@ A module may name modules in a **lower** layer. Layer 2 modules may also name ea
 | | `actions` | the action path: utterance, typed draft, confirm | |
 | | `commands` | the declared record command | |
 | | `boxes` | folders: files, data, apps built from them | |
-| | `sharing` | share a work; the members list | |
+| | `sharing` | share a work with a member in a role, or with everyone in the organization (APP-192); the members list; the share dialog's read | |
 | | `widgets` | canvas utility widgets | |
 | | `imports` | the sealed-parser import boundary | |
 | | `events` | the in-process event hub and SSE | |
