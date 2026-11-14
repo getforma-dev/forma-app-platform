@@ -197,6 +197,13 @@ pub(crate) fn announces_organization(
     changed && rank(after) > rank(before)
 }
 
+/// Whether a person share is announced: only when it granted something. A
+/// demotion that only took rows away gives nobody news (review of W2b,
+/// item 6), and a repeat writes nothing.
+pub(crate) fn announces_person(shared: &storage::Shared) -> bool {
+    shared.granted.iter().any(|g| g.inserted)
+}
+
 /// The share dialog's document (`GET /v1/work/{app}/{work}/share`).
 pub(crate) fn sharing_json(app: &str, work: &str, sharing: &storage::WorkSharing) -> Value {
     let standing = &sharing.standing;
@@ -501,9 +508,7 @@ pub async fn share_with_lineage(
         .workspace
         .share_work(trusted, app, work, storage::Audience::Member(grantee), role)
         .await?;
-    // Announced only when something was granted: a demotion that only took
-    // rows away gives nobody news (review of W2b, item 6).
-    if shared.granted.iter().any(|g| g.inserted) {
+    if announces_person(&shared) {
         events::hub().app_shared(trusted.organization(), app, work);
     }
     if let Some((adapted_app, adapted_work)) = crate::composer::lineage::lineage().shared(
@@ -743,6 +748,28 @@ mod tests {
         // Nothing written (a replay, or a stop with nothing live).
         assert!(!announces_organization(None, Some(Viewer), false));
         assert!(!announces_organization(Some(Viewer), Some(Viewer), false));
+    }
+
+    #[test]
+    fn a_person_share_is_announced_only_when_it_grants() {
+        let granted = |inserted: bool| storage::Granted {
+            scope: "work".into(),
+            resource: GRANTEE.into(),
+            permission: "record_read".into(),
+            inserted,
+        };
+        let shared = |inserted: bool, removed: &[&str]| storage::Shared {
+            grantee: Some(GRANTEE.into()),
+            granted: vec![granted(inserted)],
+            removed: removed.iter().map(|r| (*r).to_owned()).collect(),
+        };
+        assert!(announces_person(&shared(true, &[])));
+        assert!(announces_person(&shared(true, &["record_review"])));
+        // A demotion that only removed rows, and a repeat.
+        let demotion = shared(false, &["record_review", "record_write"]);
+        assert!(demotion.changed(), "storage counts the removal as a change");
+        assert!(!announces_person(&demotion));
+        assert!(!announces_person(&shared(false, &[])));
     }
 
     /// Without a configured store every protected answer is the uniform 404
