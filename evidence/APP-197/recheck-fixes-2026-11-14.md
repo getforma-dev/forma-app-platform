@@ -83,3 +83,60 @@ On the final tree above (host load 4–11 during the runs):
 - The static test reads the statements' text. It knows PostgreSQL's operator characters and the keywords that expand to operators, not the full grammar. A new construct needs a new entry.
 - S1 plants one operator, an `=` on names. The static test covers the rest.
 - The recheck's three NITs are all addressed: two are the A5 text corrections, and the third is the forward note. R-m1's follow-ups (above) are open.
+
+## The final check's F-m1: names other than operators
+
+The [final check](review-tier-a-2026-11-14.md) at `3718cf23` found no BLOCKER or MAJOR. Its one MINOR, F-m1, was that the static test guarded only operators. An unqualified cast type (`c.relkind::text`, probe U1) or function call (`array_to_string(`, probe U2) passed the test, and the reviewer showed that both ran planted code on PostgreSQL 16.15 under a poisoned `search_path`. Fixed from `2a93ba42`.
+
+**The static test** (`app/src/storage/pool.rs`, `statement_tests`):
+
+- `search_path_names(statement)` returns every name in a statement that would resolve through the search path. After string literals and `OPERATOR(pg_catalog.…)` are removed, it tokenizes the statement and finds:
+  - an operator character, or a keyword that expands to an operator (as before);
+  - a `::` type or `CAST(… AS` type that is not `pg_catalog.`-qualified, or a `pg_catalog.reg…` type, which resolves the name it is given;
+  - a name before `(` that is not `pg_catalog.`-qualified, apart from `BEFORE_PARENTHESIS`;
+  - a `FROM` or `JOIN` relation (after `LATERAL` or `ONLY`) that is neither `pg_catalog.`-qualified nor a subquery, or a comma join after one;
+  - a quoted identifier, or `COLLATE`.
+- `BEFORE_PARENTHESIS` allows four words, each justified in the code. All four are reserved, so none can name a function unless quoted, and quoted identifiers are refused:
+  - `ARRAY`, the array constructor;
+  - `AND`, boolean grouping;
+  - `LATERAL`, a subquery in `FROM`;
+  - `CAST`, whose target type is checked separately.
+- `unverified_session_statements_resolve_nothing_through_the_search_path` (renamed from `…_resolve_no_operator_…`) asserts that `IDENTITY`, `MEMBERSHIP` and `BASELINE_CHECK` give no findings.
+- `the_search_path_check_refuses_each_unqualified_form` checks the checker itself.
+  - Fifteen counterexamples must each be refused for their named reason, including U1, U2, `CAST(… AS text)`, a `regclass` cast, `lower(`, `FROM pg_roles`, `FROM ONLY genui_meta…`, `JOIN pg_auth_members`, two comma joins, `=`, `IS NOT DISTINCT FROM`, `NOT IN`, a quoted function name and `COLLATE`.
+  - Two fully qualified statements must pass. One has a literal containing `''`, `(`, `FROM`; the other has `CAST(… AS pg_catalog.text)` and `UNION ALL`.
+
+**The shadow trap** (`app/src/storage/qualification.rs`) also plants:
+
+- a composite `reviewer_probe.text` type, with a definer cast from `pg_catalog.name` that calls `mark()`;
+- `reviewer_probe.array_to_string(anyarray, pg_catalog.text)`, which calls `mark()`.
+
+Each planted object has its own control, run as `genui_worker` under the shadowing path: `rolname=current_user`, `session_user::text` and `array_to_string(ARRAY[1],',')`. Each control must mark. The direct identity check now asserts the marker before the refusal cause, so a planted object that ran is reported as such.
+
+**A5** now states exactly the rule the test enforces, its four allowed words, and what it does not cover: a name that a function resolves from a text argument, such as `to_regclass`, which the three statements do not use. The code comment above the consts says the same. The shadow check's plants are listed.
+
+### Break proofs
+
+The final tree: `pool.rs` `250547c02251036919aee11ead1a593bbc79fa99055133a6a524ebd0c5999abb`, `qualification.rs` `4413183c6e7f302b057e064a66e121740e48eb4ab4720ca1808da10f91f8202e`.
+
+- Each break was applied to `IDENTITY` alone. Then `cargo test --lib statement_tests` and `just campaign postgres` ran, and `pool.rs` was restored from a saved copy. `shasum -a 256 -c` printed OK for both files after each restore.
+- The campaign breaks ran on `pool.rs` `860ce084…04aa`. That copy differs from the final one only in the test helper's `CAST` scan, which was rewritten as an iterator for clippy (`needless_range_loop`); the rewrite does not change what the scan finds. Both static-test breaks were redone on the final `pool.rs`, with the same results.
+
+| Break | `statement_tests` | `just campaign postgres` |
+| --- | --- | --- |
+| **Cast:** `session_user::pg_catalog.text` → `session_user::text` | **fails**: `["an unqualified type: text"]` | **fails** at `qualification.rs:1279`, "the identity statement used a planted object": left `"1"`, right `"0"`. The planted cast ran |
+| **Function:** `pg_catalog.array_to_string(` → `array_to_string(` | **fails**: `["an unqualified function: array_to_string("]` | **fails** at `qualification.rs:1279`: left `"1"`, right `"0"`. The planted function ran |
+
+### Commands and results (F-m1)
+
+| Command | Result |
+| --- | --- |
+| `cargo test --lib statement_tests` (in `app/`) | ok, 2 passed |
+| `just check` | 21/21 steps ok (385 s). Library 417 passed, 35 ignored: one more than before, the counterexample test. Admin 311/311. `board` OK. An earlier run failed `clippy` and `clippy-dev` on `needless_range_loop` in the new helper, which was fixed |
+| `just campaign postgres` | ok (52.41 s) on the final tree, 37 checks. Earlier, on `860ce084…`: ok (53.41 s) after one readiness `Deadline` at `qualification.rs:910`. That is the credential-generation readiness step, which this round does not touch, and it failed while another worktree's native campaign ran at the same time |
+| `python3 Tickets/_tools/board.py render`, then `check` | OK |
+
+### Limitations (F-m1)
+
+- The check reads the statements' syntax with a small tokenizer, not PostgreSQL's parser. It fails closed on a form it does not know, such as `EXTRACT(x FROM y)`, where it would refuse `FROM y` as a relation. A form it does not model at all would need a new rule.
+- It does not see names that functions resolve from text arguments at run time (`to_regclass('x')`, `has_table_privilege('x', …)`). The three statements use none.

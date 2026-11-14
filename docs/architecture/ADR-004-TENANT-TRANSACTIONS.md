@@ -63,7 +63,7 @@ Acceptance still requires real per-role/two-tenant catalog/FK/RLS tests, same-co
 
 ## Amendment A5, 2026-11-14: the catalog comparison on reuse runs at most every 30 s (APP-197)
 
-Decided by the Fable advisor in lieu of Victor (his delegation of 2026-11-14), for [APP-197](../../Tickets/0-backlog/APP-197.md), after the [APP-195 refresh-herd campaign](../../evidence/APP-195/refresh-herd-2026-11-14.md). ADR-007's amendments A1–A4 come first; this is A5. Revised the same day after the [Tier A review](../../evidence/APP-197/review-tier-a-2026-11-14.md) (M1, m1, m2, n1, n2), and again after its recheck (R-M1, the text corrections and the forward note below). Victor can reverse it.
+Decided by the Fable advisor in lieu of Victor (his delegation of 2026-11-14), for [APP-197](../../Tickets/0-backlog/APP-197.md), after the [APP-195 refresh-herd campaign](../../evidence/APP-195/refresh-herd-2026-11-14.md). ADR-007's amendments A1–A4 come first; this is A5. Revised the same day after the [Tier A review](../../evidence/APP-197/review-tier-a-2026-11-14.md) (M1, m1, m2, n1, n2), and again after its recheck (R-M1, the text corrections and the forward note below) and its final check (F-m1). Victor can reverse it.
 
 **What it amends.** §Pool and driver lifecycle: "Only fully verified leases return to the pool." A reused lease is now fully verified except for the structural catalog comparison, which it repeats at most every 30 s.
 
@@ -78,7 +78,14 @@ Decided by the Fable advisor in lieu of Victor (his delegation of 2026-11-14), f
   - the version relation's identity check, from `pg_catalog` alone: `genui_meta.schema_version` is still the relation, by OID, that the connection's last comparison saw; it is a plain table without row security, with a `boolean` and an `integer` column;
   - `verify_schema_version`, now `FROM ONLY`;
   - `verify_baseline` again, last. Nothing those reads ran can leave the session changed without being seen.
-- **Defence in depth for an unverified search path.** The statements that can run before a session's search path is verified are a new connection's identity check and a reuse's first baseline check. They name every relation and function in `pg_catalog` and write every operator as `OPERATOR(pg_catalog.…)`, so nothing in them resolves through the search path. A new connection's search path is also fixed by its startup options, whatever the database or role default says. A unit test holds the three statements to this, and the APP-008 shadow check plants a view over `pg_roles` and an `=` on names, then asserts both defences separately.
+- **Defence in depth for an unverified search path.** The statements that can run before a session's search path is verified are a new connection's identity check and a reuse's first baseline check. A new connection's search path is also fixed by its startup options, whatever the database or role default says. A unit test, `search_path_names` in `storage/pool.rs`, holds the three statements to exactly this syntax rule, applied after string literals are removed:
+  - no operator character is left outside `OPERATOR(pg_catalog.…)`, and no keyword that expands to an operator is used (`IN`, `LIKE`, `BETWEEN`, `ANY`, `DISTINCT`, `CASE` and others; `ALL` only in `UNION ALL`);
+  - every `::` type and `CAST(… AS` type is `pg_catalog.`-qualified, and none is a `reg…` type;
+  - every name before `(` is `pg_catalog.`-qualified, apart from four reserved words that cannot name a function unquoted: `ARRAY`, `AND`, `LATERAL` and `CAST`;
+  - every `FROM` or `JOIN` relation is `pg_catalog.`-qualified or a subquery, with no comma join after it;
+  - no quoted identifier and no `COLLATE` is used.
+
+  The test does not cover a name that a function resolves from a text argument, such as `to_regclass`; the three statements use none. The APP-008 shadow check plants a view over `pg_roles`, an `=` on names, a `text` type with a cast from `name`, and an `array_to_string`, then asserts both defences separately.
 - **The catalog comparison on reuse** runs only when the connection's own last comparison is at least `CATALOG_RECHECK` old. That is 30 s, a `const` in `storage/pool.rs` with a compile-time assertion of its value, and no environment or configuration override. The window is measured from the instant before that comparison began, and a reuse that does not compare never moves it.
 - **A failed check on reuse discards the connection, as before.** The driver closes it and its capacity is released.
 - **The test executable** can move the pool clock forward (`TestHooks::advance`). No production path can.
