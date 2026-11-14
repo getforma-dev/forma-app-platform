@@ -312,6 +312,42 @@
           ],
           "name": "CVE-2026-119079",
           "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "name": "CVE-2026-76844",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "package_version",
+              "value": "1.21.23"
+            },
+            {
+              "key": "package_name",
+              "value": "dpkg"
+            }
+          ],
+          "name": "CVE-2026-91094",
+          "severity": "UNDEFINED"
         }
       ],
       "predecessor_manifest_digest": "sha256:9dbe284eb1f244f4b85c2beb741e7e18ba31607023aee98a497182ddbf59518a"
@@ -625,6 +661,42 @@
           ],
           "name": "CVE-2026-119079",
           "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "name": "CVE-2026-76844",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "package_version",
+              "value": "1.21.23"
+            },
+            {
+              "key": "package_name",
+              "value": "dpkg"
+            }
+          ],
+          "name": "CVE-2026-91094",
+          "severity": "UNDEFINED"
         }
       ],
       "predecessor_manifest_digest": "sha256:152088e1d77bd0c15621a896951ff70ac9b6cb2e6f6033b0a8742d6d9c8233a0"
@@ -938,6 +1010,42 @@
           ],
           "name": "CVE-2026-119079",
           "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "CVSS4_SCORE",
+              "value": "8.3"
+            },
+            {
+              "key": "CVSS4_VECTOR",
+              "value": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:H/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X"
+            },
+            {
+              "key": "package_version",
+              "value": "1.2.13.dfsg-1"
+            },
+            {
+              "key": "package_name",
+              "value": "zlib"
+            }
+          ],
+          "name": "CVE-2026-76844",
+          "severity": "HIGH"
+        },
+        {
+          "attributes": [
+            {
+              "key": "package_version",
+              "value": "1.21.23"
+            },
+            {
+              "key": "package_name",
+              "value": "dpkg"
+            }
+          ],
+          "name": "CVE-2026-91094",
+          "severity": "UNDEFINED"
         }
       ],
       "predecessor_manifest_digest": "sha256:1bbf0e4db54db2bc898a5fd19f4042bfbd6e17331382a6d269b4052e532ac466"
