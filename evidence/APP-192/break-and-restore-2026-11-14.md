@@ -33,3 +33,54 @@ Unchanged and asserted as shipped, not broken separately here:
 - The personal-share revoke is not built server-side here: W4 is adding `Workspace::revoke_work_share`. The dialog's control goes through one client function, `revokeMemberShare`. It is shown only while the server answers `can_revoke_members: true`, and the server says `false` until that route exists. Neither the gate nor the route is proven here.
 - B3 breaks the shared front of both POSTs, so the first failing assertion is the person route's. The organization route's 403 cases are in the same test and in the campaign.
 - These are synthetic local fixtures, with sessions minted for tests. The hosted sign-in is not exercised.
+
+## Round 2: the review's fix round (2026-11-14)
+
+This round answers the Tier A review in [review-w2b-2026-11-14.md](review-w2b-2026-11-14.md). It ran on `92215d40` with the same method as round 1.
+
+- Each break was a one-occurrence replacement by a scratch script that prints the SHA-256 before and after.
+- The owning test was run once with the break in place.
+- The file was then restored with `git checkout -- <file>`. Every restore left `git status --short` empty and the file's SHA-256 equal to the committed one:
+
+| File | Committed SHA-256 |
+| --- | --- |
+| `app/src/storage/sharing.rs` | `6f36057448e18613…` |
+| `app/src/sharing/mod.rs` | `b2116d1959681281…` |
+| `app/admin/src/sharing/dialog.ts` | `0aaff39e7ee407d2…` |
+| `app/admin/src/canvas/live.ts` | `218914447cf8f770…` |
+| `app/src/mcp/tools.rs` | `862ae8d58b44bc5b…` |
+
+**Tests first.** Before the storage change, the extended `share-routes` was run without its new `private_lists` assertion. All its new gap checks passed on the old code:
+
+- `contributor_not_allowed`;
+- a member of another organization;
+- 413 and 429.
+
+The new listing check failed there. After an operator `revoke-permission` of Ana's `record_write` and a demotion of Rev, the dialog still said Ana was a contributor and Rev a reviewer. With the assertion in, the run failed at the missing `private_lists`. The unit and TypeScript tests were written first and failed to compile or run against the old code, as expected.
+
+| # | Guard | Break | What failed |
+| --- | --- | --- | --- |
+| B11 | A share row whose `record_read` is gone lists nothing | the listing's `record_read` condition replaced by `TRUE` | `share-routes`: Ana was still listed after her `record_read` was revoked (`[("Ana Diaz","viewer"),…]`, at `share_routes_campaign.rs:844`) |
+| B12 | The shown role is the live permissions', not the share rows' | the reviewer test reads `work_shares.role='reviewer'` instead of `record_review` | `share-routes`: after Rev's demotion he still read `reviewer` (right: `contributor`) |
+| B13 | Contributor is offered only to a sharer with `record_write` (the review's G1, MINOR-1) | `Contributor` pushed for every sharer | `share-routes`: Vic, a viewer-only `share_work` holder, read `["viewer","contributor"]` instead of `["viewer"]` |
+| B14 | An organization-wide change is announced only when it widens access | `rank(after) > rank(before)` changed to `!=` | `sharing::tests::an_organization_share_is_announced_only_when_it_widens`: `Some(Reviewer) -> Some(Viewer)` announced |
+| B15 | `private_lists` is computed from the work's `own` lists | `> 0` changed to `>= 0` | `sharing` campaign: S05 read `private_lists: true` (right: `false`) |
+| B16 | An outage keeps the section, with a message and a retry (MINOR-3) | the old line `section.hidden = sharing === null` | `team-sharing-dialog.test.ts` 4 |
+| B17 | "Can review all entries" for everyone is confirmed first (MINOR-7) | the confirmation bypassed | `team-sharing-dialog.test.ts` 5 |
+| B18 | The stop control shows only while a share with everyone is live (the review's G3) | `everyoneStop.hidden = false` | `team-sharing-dialog.test.ts` 2 |
+| B19 | The section offers only the roles the server names (the review's G2) | `render` offers every role | `team-sharing-dialog.test.ts` 1 |
+| B20 | A share notice only for an app this canvas does not have | the `known` test ignored | `team-sharing.test.ts` 11 |
+| B21 | MCP `forma_share` with `record_write: true` shares as a contributor | `from_record_write(record_write && false)` | `mcp` campaign: Priya held `["record_read"]` (right: also `record_write`) |
+| B22 | The member write window applies to both POSTs | the `admit_member_write` check removed | `share-routes`: the exhausted member's POST answered `(404, "not_found")` instead of `(429, "too_many_requests")` |
+
+Not broken separately:
+
+- The another-organization 404 is structural:
+  - the organization comes from the session;
+  - RLS `tenant_scope`;
+  - `organization_share`'s scoped organization (W4's clause).
+
+  `share-routes` asserts the outcome: byte-identical 404s for Oz on every route and as a grantee, and `can_open` false for Oz while the share with everyone is live.
+- The person-share reviewer confirmation is tested (`team-sharing-dialog.test.ts` 6) but was not broken separately. It is the same component as B17.
+
+The one smoke of the first round, in `smoke-2026-11-14/`, records the earlier copy ("Can add and edit their entries"). It was not rerun for this round.
