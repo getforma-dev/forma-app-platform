@@ -202,7 +202,9 @@ fn stub_receipt_reply(image: &[u8]) -> String {
     json!({"id": "msg", "model": "stub-haiku", "content": [{"type": "text", "text": text}], "usage": {"input_tokens": 1400, "output_tokens": 70}}).to_string()
 }
 fn stub_reply(utterance: &str) -> String {
-    let text = if utterance == "ASSISTANT add a note" {
+    let text = if let Some(routed) = routing_reply(utterance) {
+        routed
+    } else if utterance == "ASSISTANT add a note" {
         json!({"values":{"title":"Assistant campaign note","body":"Synthetic draft"}}).to_string()
     } else if utterance == "ASSISTANT update body" {
         json!({"values":{"body":"Updated after confirmation"}}).to_string()
@@ -676,6 +678,9 @@ async fn campaign() {
     assert_eq!(display("spent_on").len(), 10, "yesterday as YYYY-MM-DD");
     assert_eq!(draft["approver"]["principal_id"], REVIEWER);
     assert_eq!(draft["approver"]["label"], "Sarah Chen");
+    // APP-206: Sarah is no reviewer of his new work and he created it, so
+    // the canvas shares with her exactly as before.
+    assert_eq!(draft["approver"]["standing"], "shareable");
     let request = &draft["command_request"];
     assert_eq!(request["kind"], "command_request");
     assert_eq!(request["expected_record_version"], 0);
@@ -1931,6 +1936,9 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, frozen);
     check(&mut checks,"APP-168 app assistant: selected work/command/record only; anonymous, cross-organization, wrong-work, cross-site, unsupported commands, hostile model fields, read questions and stale premises refuse. Drafts write no records or authority. Explicit create/update confirmation is audited; duplicate confirmation replays; competing record versions conflict; grant revocation denies both fresh draft and previously prepared confirmation.");
 
+    // --- APP-206: approver routing for a filer without share authority ---
+    approver_routing(&fixture, &stores, &auth, &app, &mut checks).await;
+
     // --- D10: the daily model-call cap on the act, receipt and assistant routes ---
     // Two routers, each with its own real client over the same loopback stub,
     // count against one cap of two calls (the app's cap is one static shared
@@ -2129,4 +2137,562 @@ async fn campaign() {
     drop(diego_stream);
     drop(sarah_stream);
     stores.close().await.unwrap();
+}
+
+// --- APP-206 (ADR-020 §8): approver routing, shared with the MCP and Slack campaigns ---
+
+/// The routing world's app: the private-entries campaign's general
+/// definition (an `own` claims list with a `submit` create, a shared notes
+/// list, no source dependency), so it can be shared organization-wide.
+pub(super) const ROUTING_APP: &str = "00000000-0000-4000-8000-000000000a10";
+/// The app's owner and the creator of its work (the class's teacher).
+pub(super) const OLIVE: &str = "00000000-0000-4000-8000-000000000c01";
+/// A personal reviewer of Olive's work (her reviewer share).
+pub(super) const RITA: &str = "00000000-0000-4000-8000-000000000c02";
+/// A contributor under the organization-wide share, with the app in his
+/// library and no share authority (the class's student).
+pub(super) const SAM: &str = "00000000-0000-4000-8000-000000000c03";
+/// An active member with no access of his own.
+pub(super) const NIA: &str = "00000000-0000-4000-8000-000000000c04";
+/// A member with the app in his library and no access to Olive's work.
+pub(super) const HAL: &str = "00000000-0000-4000-8000-000000000c05";
+/// tenant_seed's fixture space and its revoked member of Northstar.
+const ROUTING_SPACE: &str = "00000000-0000-4000-8000-000000000384";
+pub(super) const ROUTING_REVOKED: &str = "00000000-0000-4000-8000-00000000006e";
+/// Well formed, never a member anywhere.
+pub(super) const ROUTING_NOBODY: &str = "00000000-0000-4000-8000-000000000cff";
+/// The utterance (and MCP/Slack prompt) prefix the model stubs answer with a
+/// create on [`ROUTING_APP`] naming the words after it as approvers.
+pub(super) const ROUTING_PREFIX: &str = "APP-206 claim for ";
+
+/// The stub model's parse of a [`ROUTING_PREFIX`] utterance, if it is one.
+pub(super) fn routing_reply(utterance: &str) -> Option<String> {
+    let names = utterance.strip_prefix(ROUTING_PREFIX)?;
+    Some(json!({"action": "create", "app_hint": ROUTING_APP, "values": {"amount": "3", "note": "routing case"}, "approver_name": names, "target_record_hint": null}).to_string())
+}
+
+/// Olive's app and work (module notes above).
+pub(super) struct RoutingWorld {
+    pub app: String,
+    pub work: String,
+}
+
+/// An active Northstar member with a live entitlement (operator stand-in,
+/// as tenant_seed writes fixture authority).
+fn admit_routing_member(fixture: &Fixture, principal: &str) {
+    let tail = &principal[principal.len() - 12..];
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{principal}','app008-fixture-only','ten_{ORG}','usr_{principal}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{principal}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{ORG}','{principal}','0000e000-0000-4000-8000-{tail}','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
+}
+
+/// The routing world in Northstar, with no organization-wide share yet:
+/// five members with their names (0023), Olive's app through the admitted
+/// path with her work, Rita as its personal reviewer, and the app in Sam's
+/// and Hal's libraries (operator `discover` and `run`).
+pub(super) async fn routing_world(fixture: &Fixture, stores: &Stores) -> RoutingWorld {
+    for member in [OLIVE, RITA, SAM, NIA, HAL] {
+        admit_routing_member(fixture, member);
+    }
+    let olive = request(stores, ORG, OLIVE, 1);
+    let definition = super::private_entries_campaign::definition();
+    assert_eq!(definition["app_id"], ROUTING_APP);
+    operator(
+        fixture,
+        &[
+            "create-app",
+            "--organization",
+            ORG,
+            "--app",
+            ROUTING_APP,
+            "--space",
+            ROUTING_SPACE,
+            "--owner",
+            OLIVE,
+        ],
+    );
+    for member in [OLIVE, SAM, HAL] {
+        for permission in ["discover", "run"] {
+            grant(fixture, member, permission, &["--app", ROUTING_APP]);
+        }
+    }
+    let admitted = crate::admission::admit_definition(&serde_json::to_vec(&definition).unwrap())
+        .expect("the routing definition admits");
+    let revision = stores
+        .workspace
+        .create_definition_revision(&olive, ROUTING_APP, &admitted)
+        .await
+        .unwrap();
+    let PublishResult::Published(publication) = stores
+        .control
+        .publish(
+            &olive,
+            ROUTING_APP,
+            &revision.revision,
+            super::definition_qualification::POLICY,
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("uncontended publication is not stale");
+    };
+    let saved = stores
+        .workspace
+        .create_work(
+            &olive,
+            ROUTING_APP,
+            &publication.publication_id,
+            "Claims and notes (synthetic APP-206 routing)",
+            &[
+                WorkBinding::Records {
+                    input: "claims".into(),
+                    schema: "claim".into(),
+                },
+                WorkBinding::Records {
+                    input: "notes".into(),
+                    schema: "note".into(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+    for (principal, name) in [
+        (OLIVE, "Olive Park"),
+        (RITA, "Rita Okafor"),
+        (SAM, "Sam Lee"),
+        (NIA, "Nia Brooks"),
+        (HAL, "Hal Moreno"),
+    ] {
+        stores
+            .workspace
+            .set_display_name(&request(stores, ORG, principal, 1), name)
+            .await
+            .unwrap();
+    }
+    stores
+        .workspace
+        .share_work(
+            &olive,
+            ROUTING_APP,
+            &saved.work,
+            Audience::Member(RITA),
+            ShareRole::Reviewer,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    RoutingWorld {
+        app: ROUTING_APP.to_owned(),
+        work: saved.work,
+    }
+}
+
+impl RoutingWorld {
+    /// Olive's organization-wide share of her work, in exactly `role`.
+    pub(super) async fn everyone(&self, stores: &Stores, role: ShareRole) {
+        stores
+            .workspace
+            .share_work(
+                &request(stores, ORG, OLIVE, 1),
+                &self.app,
+                &self.work,
+                Audience::Organization,
+                role,
+                ShareMode::Set,
+            )
+            .await
+            .unwrap();
+    }
+    /// How storage judges `grantee` for `filer` filing in `work`.
+    pub(super) async fn standing(
+        &self,
+        stores: &Stores,
+        filer: &str,
+        work: &str,
+        grantee: &str,
+    ) -> Result<ApproverStanding> {
+        stores
+            .workspace
+            .approver_standing(&request(stores, ORG, filer, 1), &self.app, work, grantee)
+            .await
+    }
+    /// Whether `principal`'s workspace listing has `work` and its records
+    /// listing shows `record`.
+    pub(super) async fn sees(
+        &self,
+        stores: &Stores,
+        principal: &str,
+        work: &str,
+        record: &str,
+    ) -> bool {
+        let member = request(stores, ORG, principal, 1);
+        let listed = stores
+            .data
+            .openable_works(&member)
+            .await
+            .unwrap()
+            .iter()
+            .any(|w| w.work == work);
+        let shown = match stores.data.list_records(&member, &self.app, work).await {
+            Ok(listing) => listing.records.iter().any(|r| r.record_id == record),
+            Err(Error::Denied) => false,
+            Err(error) => panic!("records listing: {error:?}"),
+        };
+        listed && shown
+    }
+}
+
+/// Every row a share can write in Northstar: the app and work permission
+/// rows, the share rows and the admission chain's grant events.
+pub(super) async fn grant_rows(fixture: &Fixture) -> [i64; 4] {
+    let operator = fixture.operator().await;
+    let mut counts = [0; 4];
+    for (slot, sql) in [
+        format!("SELECT count(*) FROM genui.app_permissions WHERE organization_id='{ORG}'"),
+        format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}'"),
+        format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}'"),
+        format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='admission' AND kind='permission.granted'"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        counts[slot] = operator.client.query_one(&sql, &[]).await.unwrap().get(0);
+    }
+    counts
+}
+
+/// The canvas's approver step (`canvas/actions.ts` `shareWith`), as a
+/// browser runs it after the commit: `/share/add` as a contributor for each
+/// `shareable` approver and nothing for any other standing. The statuses of
+/// the requests sent, in order.
+async fn canvas_share_step(app: &Router, cookie: &str, draft: &Value) -> Vec<StatusCode> {
+    let mut sent = Vec::new();
+    for approver in draft["approvers"].as_array().unwrap() {
+        if approver["standing"] != "shareable" {
+            continue;
+        }
+        let shared = send(
+            app,
+            "POST",
+            &format!(
+                "/v1/work/{}/{}/share/add",
+                draft["app_id"].as_str().unwrap(),
+                draft["work_id"].as_str().unwrap()
+            ),
+            Some(cookie),
+            &json!({"grantee_principal_id": approver["principal_id"], "role": "contributor"})
+                .to_string(),
+            &SAME_ORIGIN,
+        )
+        .await;
+        sent.push(shared.status);
+    }
+    sent
+}
+
+fn standings(draft: &Value) -> Vec<(String, String)> {
+    draft["approvers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| {
+            (
+                a["label"].as_str().unwrap().to_owned(),
+                a["standing"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
+
+/// APP-206 acceptance on the canvas path (ADR-020 §8): storage's judgment
+/// for every kind of approver, then each story through `POST /v1/act`, the
+/// audited command route and the canvas's share step, asserted on the rows.
+async fn approver_routing(
+    fixture: &Fixture,
+    stores: &Arc<Stores>,
+    auth: &Arc<Auth>,
+    app: &Router,
+    checks: &mut Vec<Value>,
+) {
+    use ApproverStanding::{Reviewer, Shareable, Unreachable};
+    let world = routing_world(fixture, stores).await;
+    let olive_work = world.work.clone();
+    let mint = |principal: &'static str| {
+        let auth = auth.clone();
+        let stores = stores.clone();
+        async move {
+            let reference = auth.vault.insert("northstar", &vault_token()).unwrap();
+            stores
+                .workspace
+                .mint_session_for_tests(ORG, principal, &reference)
+                .await
+                .unwrap()
+        }
+    };
+    let file = |cookie: String, names: &str| {
+        let app = app.clone();
+        let body = json!({"utterance": format!("{ROUTING_PREFIX}{names}")}).to_string();
+        async move {
+            let reply = send(
+                &app,
+                "POST",
+                actions::PATH,
+                Some(&cookie),
+                &body,
+                &SAME_ORIGIN,
+            )
+            .await;
+            assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+            let draft = reply.json();
+            assert_eq!(draft["action"], "create", "{draft}");
+            assert_eq!(draft["app_id"], ROUTING_APP);
+            let request = &draft["command_request"];
+            let key = request["idempotency_key"].as_str().unwrap().to_owned();
+            let committed = send(
+                &app,
+                "POST",
+                &format!(
+                    "/v1/work/{}/{}/commands/{}",
+                    draft["app_id"].as_str().unwrap(),
+                    draft["work_id"].as_str().unwrap(),
+                    draft["command_id"].as_str().unwrap()
+                ),
+                Some(&cookie),
+                &request.to_string(),
+                &json_headers(&key),
+            )
+            .await;
+            assert_eq!(committed.status, StatusCode::OK, "{}", committed.body);
+            let record = committed.json()["record_id"].as_str().unwrap().to_owned();
+            (draft, record)
+        }
+    };
+    let olive = mint(OLIVE).await;
+    let sam = mint(SAM).await;
+    let hal = mint(HAL).await;
+
+    // --- Storage's judgment before any organization-wide share ---
+    let judged = |filer: &'static str, work: String, grantee: &'static str| {
+        let world = &world;
+        let stores = stores.clone();
+        async move { world.standing(&stores, filer, &work, grantee).await }
+    };
+    assert_eq!(judged(OLIVE, olive_work.clone(), RITA).await, Ok(Reviewer));
+    for grantee in [NIA, HAL, SAM] {
+        assert_eq!(
+            judged(OLIVE, olive_work.clone(), grantee).await,
+            Ok(Shareable)
+        );
+    }
+    for filer in [SAM, NIA, HAL] {
+        assert_eq!(
+            judged(filer, olive_work.clone(), OLIVE).await,
+            Err(Error::Denied),
+            "a member who cannot write the work learns nothing"
+        );
+    }
+    assert_eq!(
+        judged(OLIVE, olive_work.clone(), OLIVE).await,
+        Err(Error::Denied)
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .approver_standing(
+                &request(stores, ORG, OLIVE, 1),
+                ROUTING_APP,
+                &olive_work,
+                "not-a-uuid"
+            )
+            .await,
+        Err(Error::Denied)
+    );
+    // The pitch's own approver: the library's owner cannot open Diego's own
+    // expense work, so naming them still shares, as before APP-206.
+    let employee = request(stores, ORG, EMPLOYEE, 1);
+    let diego_work = stores
+        .data
+        .openable_works(&employee)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|w| w.app == EXPENSE_APP && w.can_write)
+        .unwrap()
+        .work;
+    let library_owner: String = fixture
+        .operator()
+        .await
+        .client
+        .query_one(&format!("SELECT owner_principal_id::text FROM genui.apps WHERE organization_id='{ORG}' AND app_id='{EXPENSE_APP}'"), &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_ne!(library_owner, EMPLOYEE);
+    for grantee in [library_owner.as_str(), REVIEWER] {
+        assert_eq!(
+            stores
+                .workspace
+                .approver_standing(&employee, EXPENSE_APP, &diego_work, grantee)
+                .await,
+            Ok(Shareable),
+            "{grantee}"
+        );
+    }
+
+    // --- A filer with share authority naming a non-reviewer: shared as today ---
+    let before = grant_rows(fixture).await;
+    let (draft, record) = file(olive.clone(), "Nia").await;
+    assert_eq!(draft["work_id"], olive_work.as_str());
+    assert_eq!(
+        standings(&draft),
+        [("Nia Brooks".to_owned(), "shareable".to_owned())]
+    );
+    assert_eq!(
+        canvas_share_step(app, &olive, &draft).await,
+        [StatusCode::OK]
+    );
+    let after = grant_rows(fixture).await;
+    assert!(
+        after[1] > before[1] && after[2] == before[2] + 1,
+        "{before:?} {after:?}"
+    );
+    assert!(
+        !world.sees(stores, NIA, &olive_work, &record).await,
+        "a contributor of an own list sees only her own"
+    );
+
+    // --- The owner who cannot open a member's own work is not a reviewer of it ---
+    let (draft, record) = file(hal.clone(), "Olive").await;
+    let hal_work = draft["work_id"].as_str().unwrap().to_owned();
+    assert_ne!(hal_work, olive_work);
+    assert_eq!(
+        draft["placed"], true,
+        "Hal's own work, placed the first time"
+    );
+    assert_eq!(
+        standings(&draft),
+        [("Olive Park".to_owned(), "shareable".to_owned())]
+    );
+    assert!(!world.sees(stores, OLIVE, &hal_work, &record).await);
+    assert_eq!(canvas_share_step(app, &hal, &draft).await, [StatusCode::OK]);
+    assert!(
+        world.sees(stores, OLIVE, &hal_work, &record).await,
+        "the share reached her"
+    );
+    assert_eq!(
+        judged(HAL, hal_work.clone(), OLIVE).await,
+        Ok(Reviewer),
+        "now she can open it"
+    );
+    assert_eq!(
+        judged(OLIVE, hal_work.clone(), HAL).await,
+        Ok(Reviewer),
+        "the work's unrevoked creator"
+    );
+    assert_eq!(
+        judged(OLIVE, hal_work.clone(), SAM).await,
+        Ok(Unreachable),
+        "a contributor never holds share_work, so cannot route"
+    );
+    check(
+        checks,
+        "APP-206 storage: approver_standing is reviewer for a reviewer who can open the work (a personal reviewer; the work's unrevoked creator; the owner once they can open it), shareable for anyone else when the filer may share as a contributor (the creator naming a teammate, Diego naming the library's owner who cannot open his work), unreachable for a contributor who may not share, and the uniform Denied for a filer who cannot write the work, for the filer naming themselves and for a malformed id; Olive naming Nia drafts shareable and the canvas step shares as before APP-206; Hal naming Olive (the owner, who could not open Hal's own work) drafts shareable, and the share makes his record visible to her",
+    );
+
+    // --- The class: a contributor under the organization-wide share ---
+    world.everyone(stores, ShareRole::Contributor).await;
+    assert_eq!(judged(SAM, olive_work.clone(), OLIVE).await, Ok(Reviewer));
+    assert_eq!(judged(SAM, olive_work.clone(), RITA).await, Ok(Reviewer));
+    for grantee in [NIA, HAL, OUTSIDER, ROUTING_REVOKED, ROUTING_NOBODY] {
+        assert_eq!(
+            judged(SAM, olive_work.clone(), grantee).await,
+            Ok(Unreachable),
+            "{grantee}"
+        );
+    }
+    assert_eq!(
+        judged(SAM, olive_work.clone(), SAM).await,
+        Err(Error::Denied)
+    );
+    let rows = grant_rows(fixture).await;
+    let (draft, owner_record) = file(sam.clone(), "Olive").await;
+    assert_eq!(
+        draft["work_id"],
+        olive_work.as_str(),
+        "the organization's work, not one of his own"
+    );
+    assert_eq!(draft["placed"], false);
+    assert_eq!(
+        standings(&draft),
+        [("Olive Park".to_owned(), "reviewer".to_owned())]
+    );
+    assert_eq!(draft["approver"]["standing"], "reviewer");
+    assert!(
+        canvas_share_step(app, &sam, &draft).await.is_empty(),
+        "no share request"
+    );
+    assert!(world.sees(stores, OLIVE, &olive_work, &owner_record).await);
+    let (draft, reviewer_record) = file(sam.clone(), "Rita").await;
+    assert_eq!(
+        standings(&draft),
+        [("Rita Okafor".to_owned(), "reviewer".to_owned())]
+    );
+    assert!(canvas_share_step(app, &sam, &draft).await.is_empty());
+    assert!(
+        world
+            .sees(stores, RITA, &olive_work, &reviewer_record)
+            .await
+    );
+    let (draft, mixed_record) = file(sam.clone(), "Olive and Nia").await;
+    assert_eq!(
+        standings(&draft),
+        [
+            ("Olive Park".to_owned(), "reviewer".to_owned()),
+            ("Nia Brooks".to_owned(), "unreachable".to_owned())
+        ]
+    );
+    assert!(canvas_share_step(app, &sam, &draft).await.is_empty());
+    assert!(world.sees(stores, OLIVE, &olive_work, &mixed_record).await);
+    assert!(
+        !world.sees(stores, NIA, &olive_work, &mixed_record).await,
+        "nobody else is reached"
+    );
+    // A replayed draft with a forged standing: the share route judges Sam's
+    // own authority and refuses, and nothing is written.
+    let mut forged = draft.clone();
+    forged["approvers"][1]["standing"] = json!("shareable");
+    forged["approvers"][0]["standing"] = json!("shareable");
+    assert_eq!(
+        canvas_share_step(app, &sam, &forged).await,
+        [StatusCode::NOT_FOUND, StatusCode::NOT_FOUND]
+    );
+    assert_eq!(
+        grant_rows(fixture).await,
+        rows,
+        "no grant from a filer without share authority"
+    );
+    check(
+        checks,
+        "APP-206 canvas path: Sam, a contributor under the organization-wide share with no share authority, files in the organization's work naming the owner, then a personal reviewer, then the owner and a member with no reviewer standing: the drafts say reviewer, reviewer, and reviewer then unreachable; the canvas step sends no share request; each named reviewer's listing shows the record and the other member's does not; the same draft replayed with every standing forged to shareable gets the uniform 404 from both share requests; app_permissions, work_permissions, work_shares and the admission chain's grants are unchanged",
+    );
+
+    // --- Every member under a live organization-wide reviewer share ---
+    world.everyone(stores, ShareRole::Reviewer).await;
+    let rows = grant_rows(fixture).await;
+    let (draft, everyone_record) = file(sam.clone(), "Nia").await;
+    assert_eq!(
+        standings(&draft),
+        [("Nia Brooks".to_owned(), "reviewer".to_owned())]
+    );
+    assert!(canvas_share_step(app, &sam, &draft).await.is_empty());
+    assert!(world.sees(stores, NIA, &olive_work, &everyone_record).await);
+    assert_eq!(grant_rows(fixture).await, rows);
+    world.everyone(stores, ShareRole::Contributor).await;
+    assert_eq!(
+        judged(SAM, olive_work.clone(), NIA).await,
+        Ok(Unreachable),
+        "judged live"
+    );
+    check(
+        checks,
+        "APP-206 organization-wide reviewer share: while it is live Sam naming Nia drafts reviewer, no share request is sent, Nia's listing shows the record and no grant row changes; back to contributor, Nia is unreachable again",
+    );
 }

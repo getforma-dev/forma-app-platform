@@ -20,8 +20,11 @@
 //!   published schema (I5). The result is a held draft, not a write.
 //! - `forma_commit`: the held draft through the command route's
 //!   [`crate::commands::routes::commit`] with its server-minted key
-//!   (I4), then the share route's `Workspace::share_work` to the resolved
-//!   approver; `record.committed` updates the teammates' canvases live.
+//!   (I4), then each resolved approver by the standing judged again after
+//!   the commit (APP-206, `Workspace::approver_standing`): the share route's
+//!   `Workspace::share_work` for a `shareable` one only, a note for a
+//!   reviewer (who already sees the record) or anyone else;
+//!   `record.committed` updates the teammates' canvases live.
 //! - `forma_list_pending`: the records the member may decide now
 //!   (`Data::list_records` over the member's writable works).
 //! - `forma_share`: the share route's `Workspace::share_work`.
@@ -43,7 +46,7 @@ use crate::{
         routes::{run_released, ViewRefusal},
         Failure, QueryError,
     },
-    storage::{self, AgentCaller, CommandResult, Stores},
+    storage::{self, AgentCaller, ApproverStanding, CommandResult, Stores},
 };
 use serde_json::{json, Map, Value};
 use std::time::Instant;
@@ -152,7 +155,7 @@ pub fn definitions() -> Vec<Value> {
         json!({
             "name": COMMIT,
             "title": "Commit a draft",
-            "description": "Commit a draft the user confirmed, through Forma's audited command path (one transaction, idempotent, on the audit chain), then share it with the resolved approver. Committing the same draft again returns the same record. Drafts expire after 10 minutes.",
+            "description": "Commit a draft the user confirmed, through Forma's audited command path (one transaction, idempotent, on the audit chain), then reach the resolved approver: a reviewer of the app already sees the record, a teammate the user may share with gets the share, anyone else gets a note. Committing the same draft again returns the same record. Drafts expire after 10 minutes.",
             "inputSchema": {"type": "object", "properties": {
                 "draft_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
             }, "required": ["draft_id"], "additionalProperties": false},
@@ -1018,8 +1021,8 @@ fn draft_document(state: &Mcp, draft: &Draft) -> Value {
         "placed": draft.placed,
         "record_id": draft.request.record,
         "values": draft.values.iter().map(|v| json!({"field_id": v.field, "label": v.label, "display": v.display})).collect::<Vec<_>>(),
-        "approver": draft.approver.as_ref().map(|a| json!({"label": a.label})),
-        "approvers": draft.approvers.iter().map(|a| json!({"label": a.label})).collect::<Vec<_>>(),
+        "approver": draft.approver.as_ref().map(|a| json!({"label": a.label, "standing": a.standing.name()})),
+        "approvers": draft.approvers.iter().map(|a| json!({"label": a.label, "standing": a.standing.name()})).collect::<Vec<_>>(),
         "rule": draft.rule,
         "flags": draft.flags,
         "target": draft.target.as_ref().map(|t| json!({"record_id": t.record_id, "version": t.version, "summary": t.summary})),
@@ -1165,6 +1168,7 @@ async fn commit(
     let first = state.drafts.spend(caller, id);
     let mut shared_with = Value::Null;
     let mut share_note = String::new();
+    let mut judged = Vec::new();
     if first {
         attribute(
             stores,
@@ -1175,41 +1179,61 @@ async fn commit(
         )
         .await;
         // APP-107: every approver named (a two-level workflow's second too).
-        let mut shared_labels: Vec<String> = Vec::new();
+        // APP-206: each judged again now, after the commit (the held
+        // draft's standing is never trusted); only `shareable` shares.
+        let mut reached: Vec<(String, Reached)> = Vec::new();
         for approver in &draft.approvers {
-            match stores
+            let standing = stores
                 .workspace
-                .share_work(
+                .approver_standing(
                     &caller.request,
                     &draft.app,
                     &draft.work,
-                    crate::storage::Audience::Member(&approver.principal),
-                    crate::storage::ShareRole::Contributor,
-                    crate::storage::ShareMode::Ensure,
+                    &approver.principal,
                 )
-                .await
-            {
-                Ok(shared) => {
-                    if shared.changed() {
-                        events::hub().app_shared(
-                            caller.request.organization(),
-                            &draft.app,
-                            &draft.work,
-                        );
+                .await;
+            judged.push(json!({"label": approver.label, "standing": standing.as_ref().ok().map(|s| s.name())}));
+            let how = match standing {
+                Ok(ApproverStanding::Reviewer) => Reached::Reviewer,
+                Ok(ApproverStanding::Unreachable) => Reached::Unreachable,
+                Ok(ApproverStanding::Shareable) => match stores
+                    .workspace
+                    .share_work(
+                        &caller.request,
+                        &draft.app,
+                        &draft.work,
+                        crate::storage::Audience::Member(&approver.principal),
+                        crate::storage::ShareRole::Contributor,
+                        crate::storage::ShareMode::Ensure,
+                    )
+                    .await
+                {
+                    Ok(shared) => {
+                        if shared.changed() {
+                            events::hub().app_shared(
+                                caller.request.organization(),
+                                &draft.app,
+                                &draft.work,
+                            );
+                        }
+                        if shared_with.is_null() {
+                            shared_with = json!(approver.label);
+                        }
+                        Reached::Shared
                     }
-                    if shared_labels.is_empty() {
-                        shared_with = json!(approver.label);
+                    Err(error) => {
+                        tracing::info!(event = "mcp.share_refused", token_id = caller.token_id, error = %error, "share after commit refused");
+                        Reached::NotShared
                     }
-                    shared_labels.push(approver.label.clone());
-                    share_note =
-                        format!(" Shared with {} for approval.", shared_labels.join(" and "));
-                }
+                },
                 Err(error) => {
-                    tracing::info!(event = "mcp.share_refused", token_id = caller.token_id, error = %error, "share after commit refused");
-                    share_note = " It could not be shared with the approver.".into();
+                    tracing::info!(event = "mcp.approver_unjudged", token_id = caller.token_id, error = %error, "approver standing unavailable after commit");
+                    Reached::NotShared
                 }
-            }
+            };
+            reached.push((approver.label.clone(), how));
         }
+        share_note = approver_notes(&reached);
     }
     let state_label = if first { "committed" } else { "replayed" };
     Ok(Output::ok(
@@ -1228,6 +1252,7 @@ async fn commit(
             "record_id": outcome.record_id, "record_version": outcome.record_version,
             "commit_sequence": outcome.commit_sequence, "audit_event_id": outcome.audit_event_id,
             "shared_with": shared_with,
+            "approvers": judged,
             "link": link(state, &outcome.app, &outcome.work),
         }),
     ))
@@ -1405,6 +1430,59 @@ async fn share(
     ))
 }
 
+/// APP-206: how one approver was reached after a commit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Reached {
+    /// A reviewer of the work: no share was attempted.
+    Reviewer,
+    /// `shareable`, and the share went through.
+    Shared,
+    /// `shareable` and the share failed, or the standing could not be read.
+    NotShared,
+    /// Neither: no share was attempted.
+    Unreachable,
+}
+
+/// The commit's approver sentences, each after a space (empty when no
+/// approver was named): the shared ones together, as before APP-206, then a
+/// note per reviewer and per unreachable approver (the canvas's words,
+/// `actions::resolve`), then one failure note.
+pub(crate) fn approver_notes(reached: &[(String, Reached)]) -> String {
+    let labels = |wanted: Reached| -> Vec<&str> {
+        reached
+            .iter()
+            .filter(|(_, how)| *how == wanted)
+            .map(|(label, _)| label.as_str())
+            .collect()
+    };
+    let mut notes = Vec::new();
+    let shared = labels(Reached::Shared);
+    if !shared.is_empty() {
+        notes.push(format!(
+            "Shared with {} for approval.",
+            shared.join(" and ")
+        ));
+    }
+    notes.extend(
+        labels(Reached::Reviewer)
+            .into_iter()
+            .map(resolve::reviewer_note),
+    );
+    notes.extend(
+        labels(Reached::Unreachable)
+            .into_iter()
+            .map(resolve::unreachable_note),
+    );
+    if !labels(Reached::NotShared).is_empty() {
+        notes.push("It could not be shared with the approver.".to_owned());
+    }
+    notes.iter().map(|note| format!(" {note}")).collect()
+}
+
+#[cfg(test)]
+pub(crate) fn draft_document_for_tests(state: &Mcp, draft: &Draft) -> Value {
+    draft_document(state, draft)
+}
 #[cfg(test)]
 pub(crate) fn app_for_hint_for_tests<'a>(
     catalog: &'a [CatalogApp],

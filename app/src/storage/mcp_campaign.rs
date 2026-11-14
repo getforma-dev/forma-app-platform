@@ -1574,6 +1574,157 @@ async fn campaign() {
         "forma_share succeeds: Diego's agent shares his expense work by name with a member who holds nothing (Nadia Kim) with record_write: true; she now holds record_read and record_write on it and the share row names the contributor role (the canvas route's own path, Ensure)",
     );
 
+    // --- APP-206 (ADR-020 §8): approver routing through forma_commit ---
+    {
+        use super::actions_campaign::{grant_rows, routing_world, NIA, OLIVE, ROUTING_APP, SAM};
+        let world = routing_world(&fixture, &stores).await;
+        world.everyone(&stores, ShareRole::Contributor).await;
+        let (sam_token, _) = mint_token(&mint(SAM, ORG).await, "Claude").await;
+        let (olive_token, _) = mint_token(&mint(OLIVE, ORG).await, "Claude").await;
+        let draft_for = |token: &str, approver: &'static str| {
+            let client = &client;
+            let token = token.to_owned();
+            async move {
+                client
+                    .call(
+                        &token,
+                        mcp::tools::DRAFT_RECORD,
+                        json!({"app_hint": ROUTING_APP, "values": {"amount": "2", "note": "routing case"}, "approver_name": approver}),
+                    )
+                    .await
+            }
+        };
+        let commit = |token: &str, draft: &Value| {
+            let client = &client;
+            let token = token.to_owned();
+            let arguments = json!({"draft_id": draft["draft_id"].as_str().unwrap()});
+            async move { client.call(&token, mcp::tools::COMMIT, arguments).await }
+        };
+        let standings = |document: &Value| -> Vec<(String, String)> {
+            document["approvers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| {
+                    (
+                        a["label"].as_str().unwrap().to_owned(),
+                        a["standing"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect()
+        };
+        let pair = |label: &str, standing: &str| vec![(label.to_owned(), standing.to_owned())];
+        let text = |result: &Value| result["content"][0]["text"].as_str().unwrap().to_owned();
+
+        // The owner, a reviewer: no share, the note, and she sees it.
+        let rows = grant_rows(&fixture).await;
+        let drafted = ok(&draft_for(&sam_token, "Olive").await).clone();
+        assert_eq!(drafted["work_id"], world.work.as_str());
+        assert_eq!(standings(&drafted), pair("Olive Park", "reviewer"));
+        let committed = commit(&sam_token, &drafted).await;
+        assert_eq!(
+            grant_rows(&fixture).await,
+            rows,
+            "no grant from a filer without share authority"
+        );
+        let outcome = ok(&committed).clone();
+        assert_eq!(outcome["state"], "committed");
+        assert_eq!(standings(&outcome), pair("Olive Park", "reviewer"));
+        assert_eq!(outcome["shared_with"], Value::Null);
+        let said = text(&committed);
+        assert!(
+            said.contains(" Filed for Olive Park's review.")
+                && !said.contains("could not be shared"),
+            "{said}"
+        );
+        let record = outcome["record_id"].as_str().unwrap();
+        assert!(world.sees(&stores, OLIVE, &world.work, record).await);
+        assert_eq!(
+            grant_rows(&fixture).await,
+            rows,
+            "no grant from a filer without share authority"
+        );
+
+        // A member with no reviewer standing: the plain note, nobody reached.
+        let drafted = ok(&draft_for(&sam_token, "Nia").await).clone();
+        assert_eq!(standings(&drafted), pair("Nia Brooks", "unreachable"));
+        let committed = commit(&sam_token, &drafted).await;
+        assert_eq!(grant_rows(&fixture).await, rows);
+        let outcome = ok(&committed).clone();
+        let said = text(&committed);
+        assert!(said.contains(" Nia Brooks is not a reviewer of this app; the record is filed and visible to its reviewers."), "{said}");
+        assert!(
+            !world
+                .sees(
+                    &stores,
+                    NIA,
+                    &world.work,
+                    outcome["record_id"].as_str().unwrap()
+                )
+                .await
+        );
+        assert_eq!(grant_rows(&fixture).await, rows);
+
+        // Judged again at the commit: the held draft said unreachable, the
+        // owner then made Nia a reviewer, and the commit reaches her as one.
+        let drafted = ok(&draft_for(&sam_token, "Nia").await).clone();
+        assert_eq!(standings(&drafted), pair("Nia Brooks", "unreachable"));
+        stores
+            .workspace
+            .share_work(
+                &super::definition_qualification::request(&stores, ORG, OLIVE, 1),
+                ROUTING_APP,
+                &world.work,
+                Audience::Member(NIA),
+                ShareRole::Reviewer,
+                ShareMode::Set,
+            )
+            .await
+            .unwrap();
+        let rows = grant_rows(&fixture).await;
+        let committed = commit(&sam_token, &drafted).await;
+        let outcome = ok(&committed).clone();
+        assert_eq!(standings(&outcome), pair("Nia Brooks", "reviewer"));
+        assert!(
+            text(&committed).contains(" Filed for Nia Brooks's review."),
+            "{}",
+            text(&committed)
+        );
+        assert!(
+            world
+                .sees(
+                    &stores,
+                    NIA,
+                    &world.work,
+                    outcome["record_id"].as_str().unwrap()
+                )
+                .await
+        );
+        assert_eq!(grant_rows(&fixture).await, rows);
+        // A repeated commit replays the record and reaches nobody again.
+        let replayed = commit(&sam_token, &drafted).await;
+        assert_eq!(ok(&replayed)["state"], "replayed");
+        assert_eq!(ok(&replayed)["approvers"], json!([]));
+        assert_eq!(grant_rows(&fixture).await, rows);
+
+        // A filer with share authority naming a non-reviewer: shared as today.
+        let drafted = ok(&draft_for(&olive_token, "Hal").await).clone();
+        assert_eq!(standings(&drafted), pair("Hal Moreno", "shareable"));
+        let committed = commit(&olive_token, &drafted).await;
+        let outcome = ok(&committed).clone();
+        assert_eq!(outcome["shared_with"], "Hal Moreno");
+        assert!(text(&committed).contains(" Shared with Hal Moreno for approval."));
+        let after = grant_rows(&fixture).await;
+        assert!(
+            after[1] > rows[1] && after[2] == rows[2] + 1,
+            "{rows:?} {after:?}"
+        );
+        check(
+            &mut checks,
+            "APP-206 through MCP: Sam (a contributor under the organization-wide share, no share authority) drafts with forma_draft_record naming the owner, then a member with no reviewer standing: the held drafts say reviewer and unreachable by label; forma_commit answers \"Filed for Olive Park's review.\" and the plain unreachable note, the owner's listing shows the record and the other member's does not, and no grant row changes; a draft held as unreachable is judged again at the commit and reaches Nia as a reviewer after the owner's reviewer share (its replay reaches nobody); the owner naming a non-reviewer still shares as before APP-206",
+        );
+    }
+
     // --- The local stand for the browser and the real MCP clients ---
     if let Some(seconds) = stand {
         let file = std::env::var("GENUI_MCP_STAND_FILE").unwrap_or_default();

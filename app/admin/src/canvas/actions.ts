@@ -6,11 +6,12 @@
 // with storage's own rules and answers a confirmation card. Nothing is
 // written until the member confirms; Confirm posts the draft, with its
 // server-minted idempotency key, through the existing audited command route
-// (`commands.ts`), then shares the work with the resolved approver through
-// the existing share route. An `open` answer focuses or places the app;
-// `place` falls back to the composer (`compose.ts`). The utterance travels
-// only in a JSON body, never in a URL; the card shows typed values the
-// server composed, never the model's text.
+// (`commands.ts`), then reaches each resolved approver by the standing the
+// server judged (APP-206): a reviewer with no request, a `shareable` approver
+// through the existing share route, anyone else with a note only. An `open`
+// answer focuses or places the app; `place` falls back to the composer
+// (`compose.ts`). The utterance travels only in a JSON body, never in a URL;
+// the card shows typed values the server composed, never the model's text.
 import { addressChip, addressFor } from './address-chip';
 import { appForm } from './command-registry';
 import { focusCard, placeWork, refreshGroupRecords, workCard } from './board';
@@ -30,6 +31,13 @@ import { addShareRequest } from '../sharing/api';
 export const ACT_URL = '/v1/act';
 
 export type DraftValue = { field_id: string; label: string; display: string; value: unknown };
+/**
+ * APP-206 (ADR-020 §8): how the filed record reaches an approver, judged by
+ * the server for this filer on this work. Only `shareable` ever sends a
+ * share request; the share route judges the filer's authority again.
+ */
+export type ApproverStanding = 'reviewer' | 'shareable' | 'unreachable';
+export type DraftApprover = { principal_id: string; label: string; standing?: ApproverStanding };
 export type Draft = {
   action: 'create' | 'decide';
   app_id: string;
@@ -42,14 +50,14 @@ export type Draft = {
   schema_id: string;
   values: DraftValue[];
   command_request: Record<string, unknown>;
-  approver: { principal_id: string; label: string } | null;
+  approver: DraftApprover | null;
   target: { record_id: string; version: number; summary: string } | null;
   confirm_token: string;
   parse_ms: number;
   /** APP-102: the draft was read from an attached receipt. */
   receipt?: boolean;
   /** APP-107: every approver named (a two-level workflow names two); `approver` is the first. */
-  approvers?: { principal_id: string; label: string }[];
+  approvers?: DraftApprover[];
   /** APP-107: the declared rule that chose the status, display only. */
   rule?: string | null;
   /** APP-107: server-computed display flags (the PO match). */
@@ -159,16 +167,33 @@ export function postDraft(draft: Draft): Promise<Posted> {
   });
 }
 
+/** APP-206: the note for an approver reached as a reviewer (no share request). */
+export function reviewerNote(label: string): string {
+  return `Filed for ${label}'s review.`;
+}
+/** APP-206: the note for an approver who is neither; it names no one else's access. */
+export function unreachableNote(label: string): string {
+  return `${label} is not a reviewer of this app; the record is filed and visible to its reviewers.`;
+}
+
 /**
- * The share step: the automatic share (it only adds), as a contributor so the
- * approver can decide; an approver who already reviews keeps that standing.
+ * The approver step after the commit (APP-206, ADR-020 §8), by each
+ * approver's server-judged standing: a reviewer already sees the record, so
+ * no request is sent; a `shareable` approver gets the automatic share (it
+ * only adds), as a contributor so the approver can decide; anyone else, and
+ * any standing the server did not send, gets a note and no request. The
+ * note, and how many share requests were sent.
  */
-async function shareWith(draft: Draft): Promise<string> {
+export async function shareWith(draft: Draft): Promise<{ note: string; sent: number }> {
   const approvers = draft.approvers?.length ? draft.approvers : draft.approver ? [draft.approver] : [];
   const notes: string[] = [];
+  let sent = 0;
   for (const approver of approvers) {
+    if (approver.standing === 'reviewer') { notes.push(reviewerNote(approver.label)); continue; }
+    if (approver.standing !== 'shareable') { notes.push(unreachableNote(approver.label)); continue; }
     const request = addShareRequest(draft.app_id, draft.work_id, approver.principal_id, 'contributor');
     if (!request) { notes.push(`The share with ${approver.label} was refused; the record is filed.`); continue; }
+    sent += 1;
     try {
       const response = await fetch(request.url, {
         method: 'POST',
@@ -182,7 +207,7 @@ async function shareWith(draft: Draft): Promise<string> {
       notes.push(`The share with ${approver.label} could not be sent; the record is filed.`);
     }
   }
-  return notes.join(' ');
+  return { note: notes.join(' '), sent };
 }
 
 /** The verb a decision's target status names (`approved` → "Approve"). */
@@ -418,10 +443,10 @@ export async function submitAction(text: string, report: (message: string) => vo
   showTiming(draft.action === 'create' ? 'Filed' : 'Decided', [
     { ...understood, label: 'draft' },
     { label: 'saved', ms: saved },
-    ...(shared ? [{ label: 'shared', ms: shareMs }] : []),
+    ...(shared.sent ? [{ label: 'shared', ms: shareMs }] : []),
     { label: 'on canvas', ms: placeMs },
   ], workCard(draft.work_id, 'records'));
   clearIntentBar();
   const verb = draft.action === 'create' ? 'Filed' : label(draft.command_id);
-  report(`${verb}: record v${result.recordVersion}, commit ${result.commit}, audit ${result.audit.slice(0, 8)}. ${shared} ${placed === 'That app is already on your canvas.' ? '' : placed}`.trim());
+  report(`${verb}: record v${result.recordVersion}, commit ${result.commit}, audit ${result.audit.slice(0, 8)}. ${shared.note} ${placed === 'That app is already on your canvas.' ? '' : placed}`.trim());
 }

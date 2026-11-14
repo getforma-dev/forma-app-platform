@@ -34,6 +34,13 @@
 //! a command's fence. Each is `current` (an active organization and
 //! membership at the request's epoch with a live entitlement, one statement)
 //! and then a plain scoped SELECT.
+//!
+//! APP-206 (ADR-020 §8, candidate A): [`Workspace::approver_standing`] is
+//! one more such read. It tells the action, MCP and Slack paths whether a
+//! named approver is reached as a reviewer (no share), through the filer's
+//! own contributor share, or not at all. It writes nothing and adds no
+//! definer, and a filer without share authority can never cause a share
+//! through it.
 use super::{
     authorization::{Action, Resource, Transaction},
     pool::{Data, Workspace},
@@ -719,6 +726,92 @@ async fn standing_in(
         organization_available,
         organization,
     })
+}
+
+// --- APP-206 (ADR-020 §8, candidate A): how a filed record reaches an approver
+
+/// How a draft reaches one approver its filer named (ADR-020 §8). Computed
+/// by the server for the filer on the work being filed in; nothing a caller
+/// supplies sets it, and only `Shareable` ever leads to a share, which the
+/// share route and its definer then judge again under the filer's own
+/// authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApproverStanding {
+    /// A reviewer of the work who can open it now: reached with no share.
+    Reviewer,
+    /// Not such a reviewer, and the filer may share the work as a
+    /// contributor (today's automatic share).
+    Shareable,
+    /// Neither: nothing is shared, and the note names no one's access.
+    Unreachable,
+}
+impl ApproverStanding {
+    /// The wire name (`approvers[].standing`).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Reviewer => "reviewer",
+            Self::Shareable => "shareable",
+            Self::Unreachable => "unreachable",
+        }
+    }
+}
+
+impl Workspace {
+    /// APP-206: how `grantee` is reached for a record the member files in
+    /// `work` of `app` (ADR-020 §8, §17). One `REPEATABLE READ READ ONLY`
+    /// snapshot with no fence (it writes nothing). The member must hold
+    /// `record_write` on the work (`precheck`): `Denied` otherwise, for a
+    /// malformed id and for the member naming themselves, alike.
+    ///
+    /// `Reviewer` when the grantee is a reviewer of the work
+    /// (`authorization::reviewer_clause`: the app's owner, the work's
+    /// unrevoked creator, a `record_review` holder, or any active member
+    /// under a live organization-wide reviewer share) **and** can open it
+    /// now as the listing judges it (an active membership with a live
+    /// entitlement, `discover_clause` and the `record_read` work clause):
+    /// such a member already sees the record, so no share is needed.
+    /// Otherwise `Shareable` when the member's [`ShareStanding`] offers a
+    /// contributor share (the unrevoked creator or a `share_work` holder,
+    /// with `run` and `record_write`), and `Unreachable` for everyone else.
+    /// It discloses one fact about a member the filer already named from
+    /// the members list: whether they review this work and can open it.
+    pub async fn approver_standing(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+        grantee: &str,
+    ) -> Result<ApproverStanding> {
+        require(valid_id(app) && valid_id(work) && valid_id(grantee))?;
+        require(grantee != request.principal)?;
+        let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            transaction
+                .precheck(Action::RecordWrite, Resource::Work { app, work })
+                .await?;
+            // The grantee as a reviewer who can open the work now: the
+            // listing's clauses (`openable_principals`) and the reviewer
+            // rule, for that principal, in one scoped statement.
+            let grantee_sql = "$4::text::uuid";
+            let reviewer = transaction.query(&format!("SELECT 1 FROM genui.saved_work w JOIN genui.memberships m ON m.organization_id=w.organization_id AND m.principal_id={grantee_sql} AND m.status='active' WHERE w.organization_id=$1::text::uuid AND w.app_id=$2::text::uuid AND w.work_id=$3::text::uuid AND {LIVE_ENTITLEMENT} AND {} AND {} AND {}", super::authorization::discover_clause(grantee_sql), super::authorization::record_read_clause(grantee_sql), super::authorization::reviewer_clause("w.app_id", "w.work_id", grantee_sql)), &[&request.organization,&app,&work,&grantee]).await?;
+            if !reviewer.is_empty() {
+                return Ok(ApproverStanding::Reviewer);
+            }
+            // Otherwise only the member's own share authority can reach
+            // them, exactly as both share POSTs judge it.
+            match standing_in(&transaction, request, app, work).await {
+                Ok(standing) if standing.roles.contains(&ShareRole::Contributor) => {
+                    Ok(ApproverStanding::Shareable)
+                }
+                Ok(_) | Err(Error::Denied) => Ok(ApproverStanding::Unreachable),
+                Err(error) => Err(error),
+            }
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
 }
 
 impl Data {
