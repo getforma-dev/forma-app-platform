@@ -63,22 +63,27 @@ Victor decided on 2026-11-14 to run a real live test of the platform with real p
   - Deletion during the test is limited to removing access and deleting uploaded files. All other data is purged with the organization after the test.
   - The stack keeps its `Environment=synthetic` tag, because an infrastructure change would block promotion. That is a known mismatch.
   - Victor is the only operator, and alarms reach him by email; no one is paged.
+  - **One classroom network.** Sign-in limits count per IP address (`app/src/http/limits.rs`), and a classroom usually shares one. Students redeem their codes at home on 2026-11-28, and the per-address limits for invitations and sign-in are raised before the last deploy.
+  - **An outage during class.** The class continues without the platform. Victor keeps an offline fallback for attendance and quizzes, and says at the start that this is a beta. During class a broken beta is observed, not repaired.
+  - **Not the record of record.** Grades and attendance in the platform are not the official record, and no export exists. Victor copies them out before 2026-12-12; the purge procedure starts with that copy-out, and students are told their apps are deleted by 2026-12-14.
+  - **Phones.** Desktop first. Phones serve check-ins and submissions; building apps on a phone isn't supported during the test. Students bring a laptop.
+  - **Withdrawal.** Declining the checkbox, or leaving, costs nothing in the class, because the fallback serves them. Victor removes the member in `/admin` at once and deletes their uploads within two days. Their entries in shared apps stay until the purge, as the notice says.
 - **End of the test.** The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook. The beta stops about 2026-12-15 unless it is renewed again.
 
 ### Beta notice, version 1
 
-Shown on the invitation page; the required checkbox records consent to this version. The text is general, because it is platform text, not text for one cohort.
+Shown on the invitation page; the required checkbox records consent to this version. The text is general, because it is platform text, not text for one cohort. Approved on 2026-11-14 by the Fable advisor acting for Victor at his instruction ("Ask Fable for answers and directions in lieu of me").
 
 > **Before you join this Forma workspace**
 >
-> Forma (getforma.dev) is in early beta. It may change, break or go offline without notice, and there is no service guarantee.
+> Forma (getforma.dev) is in early beta. It may change, break or go offline without notice, and there is no service guarantee. You must be 18 or older to take part.
 >
-> You are joining an organization's workspace. Its admins can see who has joined, your agreement to this notice, when you were last active, and how much you have created. Apps shared with you may collect what you enter, and the app's owner and reviewers can see it. Anything you build is private unless you share it.
+> You are joining an organization's workspace. Its admins can see who has joined, your agreement to this notice, when you were last active, and how much you have created. Apps shared with you may collect what you enter. The app's owner and its reviewers can see what you enter; unless the app keeps entries private, so can the other people it is shared with. Anything you build is private unless you share it. Forma's operators can access stored data to run and support the service.
 >
-> **What we keep:** your email address for sign-in, the name you choose, what you create and enter, the files you upload, and basic activity logs.
+> **What we keep:** your email address for sign-in, the name you choose, what you create and enter, the files you upload, and basic activity logs. Data is stored in the United States.
 >
-> **AI:** to build apps and answer questions, your prompts and parts of your files are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
+> **AI:** to build apps and answer questions, your prompts, and the files and entries you ask it to work with, are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
 >
-> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded. This beta workspace's data is deleted after the test, by December 14, 2026.
+> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026. Copy out anything you want to keep before then.
 >
 > By checking the box you agree to take part on these terms.

@@ -39,8 +39,8 @@ What works:
 | D6 | **Real member names (general):** each member sets the name others see, at first sign-in, stored in the database. It is used in share lists, admin, records and Slack. The DS-44 file stays demo-only. |
 | D7 | **Private entries (general):** a record list can be declared "each person sees and changes only their own entries". The app's **reviewers** (its owner, plus members granted reviewer) see and change all entries. The same rule holds on every path: canvas, app page, record page, queries and summaries, live updates, Ask, MCP, Slack, guests and exports. |
 | D8 | **Who may do what (general):** a command can be limited to reviewers (approve, grade, close). Contributors can't run it, even on their own entries. |
-| D9 | **Share with many (general):** share an app with "everyone in the organization", and choose a role when sharing: viewer, contributor or reviewer. |
-| D10 | **Spend:** an app-wide daily model-call cap, default **400 a day** in code (env override for tests), with a plain message when reached. Victor sets an Anthropic spend limit, about **$150 for the class month**. Per-member hourly limits stay. |
+| D9 | **Share with many (general):** share an app with "everyone in the organization", and choose a role when sharing: viewer, contributor or reviewer. A sharer may grant reviewer only if they hold `record_review`, and `share_work` is never copied (ADR-011), so the owner controls who reviews. (Fable advisor, 2026-11-14.) |
+| D10 | **Spend:** an app-wide daily model-call cap, default **1,000 a day** in code (env override for tests). The plain message says building and Ask pause until 00:00 UTC, while apps and entries keep working. Anthropic limits: **$150 for November and $100 for December**, with 50% alerts; raise November to $200 if Nov 29 spends over $60. Per-member hourly limits stay; the per-address limits for invitations and sign-in are raised for one classroom network. (Fable advisor, 2026-11-14.) |
 | D11 | **Live interaction (stretch):** a Kahoot-style live quiz is attempted only if a design spike shows it can be built from general primitives (a shared "current item", timed responses, a live summary). Go or no-go on **Nov 24**; if no, the class uses formative quizzes. |
 | D12 | Invite codes go out from Victor's own email. No app-sent email. Feedback goes to `feedback@getforma.dev`, linked in the app. |
 | D13 | Alarms to Victor's email, plus one restore drill, before codes go out. APP-078 is deferred (one real organization). |
@@ -100,7 +100,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 - **`docs/operations/TRIAL-RUNBOOK.md`:** codes and restarts, removing a member, deny-all, rollback, feedback, the restore drill and the purge.
 
 ### W4: private entries and reviewer commands, end to end (Tier A; one design-it-twice step first, Nov 15)
-- **Grammar:** a record schema gains `visibility: "shared" | "own"` (default `shared`) and commands gain `allowed: "contributor" | "reviewer"` (default `contributor`) in `admission/validate.rs:966`. These go through the contract edition update (`contracts/`, lock), and older definitions stay valid unchanged.
+- **Grammar:** a record schema gains an optional `visibility: "own"` (absent means shared) and a command gains an optional `reviewer_only: true` (`admission/validate.rs:966`, `:1569`). Each meaning has one encoding; an explicit `"shared"` or `false` is refused. These go through the contract edition update (`contracts/`, lock), and older definitions stay valid unchanged.
 - **One storage rule:** in an `own` collection, a member sees and changes only rows they created, unless they hold `record_review` or own the app. Reviewer-only commands need `record_review` or ownership. The rule is applied in **one** helper, called by every path:
   - `storage/actions.rs` (`list_records`, `work_reads`) and `storage/record_query.rs` (queries, summaries, ranks);
   - `query/record_components.rs` and the record routes;
@@ -124,6 +124,18 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 6. `just check`, the focused campaigns, and CI green (28 checks). Merge with `gh pr merge N --merge` only. No force push. **Regression guard:** the existing data, folder, sharing and pitch campaigns stay green, because the data scenarios must not degrade.
 7. Victor-only actions stay his; agents prepare exact checklists with the expected output.
 8. A daily status to Victor: what merged, what is red, and what he does that day.
+
+## Go/no-go for the 25 codes (Nov 28)
+
+All yes, or no codes go out.
+1. **Release B read back:** schema 23, `/health/ready`, expiry 2026-12-16, November and December ledger months, scan disposition valid to Dec 15, nothing left to deploy.
+2. **Rehearsal of Nov 26 passed** on Chrome, Safari and a phone with at least two students. Each red item is fixed and re-run, or accepted in writing. The verification mail reached a Gmail and an Outlook address within five minutes, and not in spam.
+3. **Guards live:** the daily cap and its message seen on beta; Anthropic limits set for November ($150) and December ($100), with 50% alerts; alarms OK and the test email received; the restore drill recorded.
+4. **`/admin`:** Victor is admin, consent v1 shows for the rehearsal members, Remove is tested, and the test members are removed.
+5. **Victor's apps are built and verified** with the helper account (own entries, the reviewer command, summaries) and shared with everyone in the organization with the intended roles.
+6. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
+7. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
+8. **No open Tier A blocker,** CI green on main, and a known-issues list for students written.
 
 ## Verification (end to end)
 
