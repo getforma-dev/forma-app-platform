@@ -2,7 +2,7 @@ import { recordComponentsFor } from '../record-components/controller';
 import { invalidatePresentation, disposePresentation } from '../presentation/presentation';
 import { WidgetCanvas, createCanvasItem, createCanvasSurface } from '../canvas-vendor/index';
 import { isShareKey, setConnected, sharingRequest } from '../sharing/api';
-import { fetchShared, replaceSharedParts, syncSampleNote } from './document';
+import { fetchShared, replaceSharedParts, syncDemoNote, syncSampleNote } from './document';
 import { watchAuthority, type AuthorityMonitor } from './authority';
 
 export type ConnectedEntry = { id: string; title: string; href: string; owner_label: string; can_add_to_canvas: boolean };
@@ -55,7 +55,9 @@ export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] =
     target.card.querySelector('[data-shared-parts]')?.remove();
     const title = target.card.querySelector('h2'); if (title) title.textContent = 'Private app';
     const owner = target.card.querySelector('.connected-owner'); if (owner) owner.textContent = '';
-    syncSampleNote(target.card.querySelector<HTMLElement>('.connected-owner')?.parentElement ?? null, null);
+    const notes = target.card.querySelector<HTMLElement>('.connected-owner')?.parentElement ?? null;
+    syncSampleNote(notes, null);
+    syncDemoNote(notes, null);
     target.item.setAttribute('aria-label', 'Private app'); target.item.dataset.widgetName = 'Private app';
     let status = target.card.querySelector<HTMLElement>('[data-connected-loading]');
     if (!status) { status = node(host.document, 'p', { role: 'status', 'data-connected-loading': '' }); target.card.append(status); }
@@ -84,7 +86,9 @@ export function startConnectedApps(host: ConnectedHost, initial: HTMLElement[] =
       const title = target.card.querySelector('h2'); if (title) title.textContent = props.title;
       const owner = target.card.querySelector('.connected-owner'); if (owner) owner.textContent = props.owner_label;
       // APP-098 DS-84: the card's charts read the same guest JSON, so they carry the same note.
-      syncSampleNote(target.card.querySelector<HTMLElement>('.connected-owner')?.parentElement ?? null, props);
+      const notes = target.card.querySelector<HTMLElement>('.connected-owner')?.parentElement ?? null;
+      syncSampleNote(notes, props);
+      syncDemoNote(notes, props);
       target.item.setAttribute('aria-label', props.title); target.item.dataset.widgetName = props.title;
     } catch { if (epoch === target.epoch) mask(target, 'Live data is temporarily unavailable. Retrying…'); }
     finally { target.busy = false; }
