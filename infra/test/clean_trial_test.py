@@ -93,10 +93,10 @@ class CleanTrialBudget(unittest.TestCase):
         config2 = dict(config, window_id='00000000-0000-4000-8000-0000000000e2', supersedes_window_id=config['window_id'])
         after, second = preflight.reserve(config2, updated, future)
         self.assertEqual(second['cost_by_month']['2026-11']['retained_core_full_month_cents'], first['retained_core_full_month_cents'])
-        self.assertLess(second['cost_by_month']['2026-11']['genui_total_cents'], 18000)
+        self.assertLess(second['cost_by_month']['2026-11']['genui_total_cents'], 21000)
     def test_fresh_organization_management_binding_and_budget_are_required(self):
         for change in ({'clean_trial_organization_id': requests.ORGANIZATIONS[0]}, {'clean_trial_organization_id': True}, {'provider_management_secret_arn':'', 'provider_management_url':''}):
             config, ledger = self.configuration(); config.update(change)
             with self.assertRaises(ValueError): preflight.reserve(config, ledger, WINDOW)
-        config, ledger = self.configuration(); ledger['months']['2026-11']['prior_extra_spend_cents'] = 3000
+        config, ledger = self.configuration(); ledger['months']['2026-11']['prior_extra_spend_cents'] = 6000  # past the 21000-cent GenUI cap
         with self.assertRaisesRegex(ValueError, 'budget exceeded'): preflight.reserve(config, ledger, WINDOW)

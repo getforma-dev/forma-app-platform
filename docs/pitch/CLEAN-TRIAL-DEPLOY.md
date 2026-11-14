@@ -61,6 +61,8 @@ Use the reviewed owning-provider provisioner or the same documented calls: first
 
 The actual provider SMTP configuration uses SES in `us-east-1`. SES sending is enabled but production access is off, so the external recipient must first confirm its SES identity. One specifically authorized verification request was accepted at `2026-11-01T18:27:55Z`. Do not resend while pending. This only permits SES delivery; the recipient must still complete fAuth's own account/email verification. Real owner and guest account actions remain interactive, never supplied through seeded identities.
 
+*2026-11-14 correction (read-only live check, APP-181):* the SES account in `us-east-1` is now out of the sandbox: production access is on (AWS moved it on 2026-11-05), the quota is 50,000 messages a day at 14 a second, the domain identity `getforma.dev` is verified with DKIM, and account-level suppression covers bounces and complaints. The sentence above about production access being off is historical. Whether fAuth's SMTP sender uses this account is confirmed by the trial rehearsal (APP-189).
+
 After provider creation, write these private files under an owned 0700 directory, with files 0600:
 
 1. `clean-trial.json`: exactly `organization_id` (fresh UUID), `tenant_slug` and the returned `provider_tenant_id`. It contains identifiers only. The organization UUID is drawn once and retained across retries.

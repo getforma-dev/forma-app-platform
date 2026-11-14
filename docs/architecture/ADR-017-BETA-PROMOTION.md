@@ -18,7 +18,7 @@ Implementation must prove the denial, concurrency, cancellation and recovery pat
 
 ## Amendment 2026-11-06: reviewed schema releases
 
-Victor chose on 2026-11-05 to ship migrations 21 and 22 with one approval, on the CI-qualified images, by teaching this pipeline a reviewed schema-release mode ([APP-175](../../Tickets/0-backlog/APP-175.md)). The paragraph above that refuses schema changes still holds for every other change.
+Victor chose on 2026-11-05 to ship migrations 21 and 22 with one approval, on the CI-qualified images, by teaching this pipeline a reviewed schema-release mode ([APP-175](../../Tickets/4-done/APP-175.md)). The paragraph above that refuses schema changes still holds for every other change.
 
 A schema release is one committed file, `ops/promotion/schema-release.json`, that names the exact baseline (schema manifest and deployment contract digests, database version) and the exact candidate (the same digests, the target version), the unchanged CDK source digest and an expiry. Every value is also pinned in source, so a JSON edit can neither widen nor retarget it, and a CI test binds the file to the tree. Preparation accepts a changed schema manifest or contract only when all of it matches the canonical baseline, policy schema version, qualified source binding and the candidate's own checkout, before the lock; execution rechecks it before the snapshot and again before the outage. The approval summary names the versions and the file's hash.
 

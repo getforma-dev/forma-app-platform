@@ -61,6 +61,14 @@ class ReconciliationTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(Refused):
                 assessed_ledger(state, assessment, observation, NOW)
 
+    def test_amounts_are_bounded_by_the_code_project_cap(self):
+        # ADR-019 amendment 2026-11-14: the bound follows preflight's project cap (24800 cents), never a stale literal.
+        state, assessment, observation = fixtures(); assessment['amounts']['unallocated_cents'] = 24800
+        assessed_ledger(state, assessment, observation, NOW)
+        state, assessment, observation = fixtures(); assessment['amounts']['unallocated_cents'] = 24801
+        with self.assertRaisesRegex(Refused, 'exceed the existing cap'):
+            assessed_ledger(state, assessment, observation, NOW)
+
     def test_requires_operator_assessment_not_just_new_timestamp(self):
         for key, value in [('rationale', ''), ('billing_lag_and_query_cost_covered', False), ('account_total_usd', '0')]:
             state, assessment, observation = fixtures(); assessment[key] = value

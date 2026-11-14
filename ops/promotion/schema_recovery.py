@@ -9,15 +9,19 @@ healthy. Every mutation is journaled and nothing is replayed: any failure keeps
 the lease and records the outcome.
 
 It applies only while the database must still be at the prior schema version:
-the migration never started, or its task stopped with a known non-zero exit
-code (the runner applies every migration in one transaction). It also proves it:
-the previous images require exactly the prior version on every connection, so
-they become healthy only if that holds. A migration that exited 0 committed the
-new version; the only way forward then is to fix forward.
+the migration never started, or its task exited by itself with the migration's
+own refusal code, 1, which it uses only before COMMIT is sent (the runner applies
+every migration in one transaction). It also proves it: the previous images
+require exactly the prior version on every connection, so they become healthy
+only if that holds. A migration that exited 0 committed the new version; one
+that exited with the reserved code 4 may have; any other code is not the
+program's own. Each of those refuses: read the schema version and fix forward
+(docs/pitch/BETA-PROMOTION.md).
 """
 import hashlib
 import json
 import re
+import uuid
 
 from . import guards, schema_release
 from .aws import body
@@ -44,12 +48,12 @@ def read_receipt(store, path):
 
 
 def migration_outcome(store, active):
-    """Prove the database cannot have moved: no migration, or a known non-zero exit."""
+    """Prove the database cannot have moved: no migration, or its own exit 1 before COMMIT."""
     entries = [x for x in active['journal'] if x['name'] == 'schema-migrate']
     if not entries:
         return {'started': False}
     entry = entries[0]
-    receipt = operation_receipt(store, entry, active['promotion_id'])
+    receipt = operation_receipt(store, entry, active['promotion_id'], 'migration start')
     started = receipt['response']
     tasks = started.get('tasks') if isinstance(started, dict) else None
     require(isinstance(tasks, list) and len(tasks) == 1 and not started.get('failures')
@@ -66,11 +70,16 @@ def migration_outcome(store, active):
     code = rows[0]['containers'][0].get('exitCode')
     require(type(code) is int, 'migration exit code unknown; reconcile')
     require(code != 0, 'the migration exited 0 and committed; fix forward')
-    # Only the program's own failure proves the transaction did not commit: the container
-    # exited by itself with a small code. A task stopped from outside or ended by a signal
-    # (128+N, e.g. 137 or 143) may have stopped just after the commit (review of c856fb8).
-    require(rows[0].get('stopCode') == 'EssentialContainerExited' and 0 < code < 128,
-            'the migration did not fail by itself (stopped from outside or by a signal) and may have committed; reconcile')
+    require(code != schema_release.MIGRATION_COMMIT_OUTCOME_UNKNOWN,
+            'migration commit outcome unknown (exit 4); read the schema version and fix forward if it moved')
+    # Only the program's own refusal proves the transaction did not commit: the container
+    # exited by itself with the one code the migration uses before COMMIT is sent. A task
+    # stopped from outside or ended by a signal (128+N, e.g. 137 or 143) may have stopped
+    # just after the commit (review of c856fb8); any other code, such as Python's 120 for
+    # a failed flush at shutdown, is not the program's own (APP-196).
+    require(rows[0].get('stopCode') == 'EssentialContainerExited' and code == schema_release.MIGRATION_REFUSED,
+            'the migration did not fail by itself before its commit (stopped from outside, by a signal or with '
+            'another code) and may have committed; reconcile')
     return {'started': True, 'task_arn': arn, 'exit_code': code, 'stop_code': rows[0].get('stopCode'),
             'observed_receipt': path, 'observed_sha256': hashlib.sha256(raw).hexdigest()}
 
@@ -122,7 +131,7 @@ def plan(runner, expected_state_sha256, read_run=api):
                'candidate_sha': active['candidate_sha'], 'restored_candidate_sha': state['live']['candidate_sha'],
                'schema_release': release, 'migration': migration, 'identity': identity, 'run': run,
                'stopped_boundary': stopped, 'change_set_inventory': inventory, 'create_request': create,
-               'previous_parameters': previous, 'ledger_after_sha256': digest(ledger), 'ledger_receipt': ledger_receipt,
+               'previous_parameters': previous, 'ledger_receipt': ledger_receipt,
                'limits': 'Restores the previous images and template only. The baseline, the schema policy and the snapshot are unchanged.'}
     public = {'status': 'planned', 'promotion_id': active['promotion_id'], 'before_state_sha256': expected_state_sha256,
               'migration_started': migration['started'], 'migration_exit_code': migration.get('exit_code'),
@@ -138,11 +147,14 @@ def apply(runner, expected_state_sha256, read_run=api):
     state = store.load()
     require(digest(state) == expected_state_sha256, 'state changed during the restore plan')
     active = state['active']; previous = receipt['previous_parameters']; create = receipt['create_request']
-    # Keyed by the reviewed state, so a refused attempt never blocks a later review.
-    plan_sha256 = store.immutable(prefix + 'restore-plan-' + expected_state_sha256[:16] + '.json', receipt)
+    # One receipt per attempt: a phase write that fails leaves the state unchanged, and a
+    # later attempt on the same reviewed state must not collide with this one (APP-196).
+    plan_key = prefix + 'restore-plan-' + expected_state_sha256[:16] + '-' + uuid.uuid4().hex + '.json'
+    plan_sha256 = store.immutable(plan_key, receipt)
     runner.deadline = None  # No execute budget: an operator command, bounded wait by wait.
     store.owner = active['owner']  # The fenced lease passes to the operator, as for abandonment.
-    store.change(lambda d: d['active'].update(phase='restoring', restore_requested_at_utc=now(), restore_plan_sha256=plan_sha256))
+    store.change(lambda d: d['active'].update(phase='restoring', restore_requested_at_utc=now(),
+                                              restore_plan_receipt=plan_key, restore_plan_sha256=plan_sha256))
     try:
         created = runner.mutate('restore-changeset-create', 'cloudformation', 'create_change_set', **create)
         arn = created['Id']
@@ -170,6 +182,8 @@ def apply(runner, expected_state_sha256, read_run=api):
         runner.settle_services(outputs, require_healthy=True)
         healthy = runner.boundary(1, previous, after=True, registry_override=registry)
         probes = runner.probes()
+        store.immutable(prefix + 'restored.json', {'healthy': healthy, 'public_probes': probes, 'migration': receipt['migration'],
+                                                   'restored_candidate_sha': receipt['restored_candidate_sha']})
     except Exception as error:
         try:
             store.immutable(prefix + 'restore-outcome.json', {'status': 'failed-lease-held', 'error': type(error).__name__,
@@ -177,8 +191,6 @@ def apply(runner, expected_state_sha256, read_run=api):
         except Exception:
             pass  # Never hide the original failure behind a receipt failure.
         raise
-    store.immutable(prefix + 'restored.json', {'healthy': healthy, 'public_probes': probes, 'migration': receipt['migration'],
-                                               'restored_candidate_sha': receipt['restored_candidate_sha']})
     def finish(document):
         require(document['active']['phase'] == 'restore-activation-intended', 'restore phase changed')
         ledger, _ = preflight().abandon(document['ledger'], promotion, runner.clock())
@@ -187,7 +199,8 @@ def apply(runner, expected_state_sha256, read_run=api):
         document['baseline'].update(definitions=healthy['definitions'], schedules=healthy['schedules'])
         document['completed'][promotion] = {'status': 'restored-after-failed-migration', 'candidate_sha': active['candidate_sha'],
             'restored_candidate_sha': receipt['restored_candidate_sha'], 'observed_at_utc': now(),
-            'schema_snapshot': active['packet']['schema_release']['snapshot_identifier'], 'migration': receipt['migration']}
+            'schema_snapshot': active['packet']['schema_release']['snapshot_identifier'], 'migration': receipt['migration'],
+            'restore_plan_receipt': plan_key, 'restore_plan_sha256': plan_sha256, 'ledger_sha256': digest(ledger)}
         document['active'] = None
     store.change(finish)
     final = store.load()

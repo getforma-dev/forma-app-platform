@@ -421,7 +421,7 @@ class AlwaysOnPlan(unittest.TestCase):
         self.assertEqual(month['all_window_compute_reservations_cents'], 8580)
         self.assertEqual(month['genui_total_cents'], 15154)
         self.assertEqual(month['project_total_cents'], 18954)
-        self.assertEqual((report['operating_plan'], report['genui_allocation_cents'], report['monthly_budget_cents']), ('always-on-beta', 18000, 21800))
+        self.assertEqual((report['operating_plan'], report['genui_allocation_cents'], report['monthly_budget_cents']), ('always-on-beta', 21000, 24800))
         parameters = report['cloudformation_parameters']
         self.assertEqual(parameters['MonthlyBudgetUsd'], '170')
         self.assertEqual((parameters['QualificationImageDigest'], parameters['OperatorImageDigest']), (QUALIFICATION, OPERATOR))
@@ -455,11 +455,11 @@ class AlwaysOnPlan(unittest.TestCase):
         for auth in [3299, 3801]:
             config, ledger = always_on(); ledger['months']['2026-11']['auth_spent_or_reserved_cents'] = auth
             with self.assertRaisesRegex(ValueError, 'fAuth'): preflight.reserve(config, ledger, WINDOW)
-        config, ledger = always_on(); ledger['months']['2026-11']['prior_extra_spend_cents'] = 18000 - 15154
+        config, ledger = always_on(); ledger['months']['2026-11']['prior_extra_spend_cents'] = 21000 - 15154
         preflight.reserve(config, ledger, WINDOW)
         ledger['months']['2026-11']['prior_extra_spend_cents'] += 1
         with self.assertRaisesRegex(ValueError, 'budget exceeded for 2026-11'): preflight.reserve(config, ledger, WINDOW)
-        config, ledger = always_on(); ledger['months']['2026-11']['unallocated_cents'] = 21800 - 18954 + 1
+        config, ledger = always_on(); ledger['months']['2026-11']['unallocated_cents'] = 24800 - 18954 + 1
         with self.assertRaisesRegex(ValueError, 'budget exceeded'): preflight.reserve(config, ledger, WINDOW)
         config, ledger = always_on(); ledger['months']['2026-11']['variable_reserve_cents'] = 999
         with self.assertRaises(ValueError): preflight.reserve(config, ledger, WINDOW)
@@ -672,10 +672,10 @@ class Supersede(unittest.TestCase):
         self.assertEqual(updated['windows'][LATER]['reserved_compute_cents_by_month'], {'2026-11': 8580})
         self.assertEqual((month['all_window_compute_reservations_cents'], month['superseded_compute_released_cents']), (8580 + 244, 8787 - 244))
         self.assertEqual((month['genui_total_cents'], month['project_total_cents']), (5074 + 8824 + 1500, 5074 + 8824 + 1500 + 3800))
-        self.assertLessEqual(month['genui_total_cents'], 18000)
-        self.assertLessEqual(month['project_total_cents'], 21800)
+        self.assertLessEqual(month['genui_total_cents'], 21000)
+        self.assertLessEqual(month['project_total_cents'], 24800)
         # The caps are unchanged: a supersede that would still exceed them refuses.
-        tight = copy.deepcopy(ledger); tight['months']['2026-11']['prior_extra_spend_cents'] = 18000 - 15398 + 1
+        tight = copy.deepcopy(ledger); tight['months']['2026-11']['prior_extra_spend_cents'] = 21000 - 15398 + 1
         with self.assertRaisesRegex(ValueError, 'budget exceeded for 2026-11'):
             preflight.reserve(self.redeploy(config, supersedes_window_id=EARLIER), tight, REDEPLOY)
 
@@ -754,7 +754,7 @@ class Supersede(unittest.TestCase):
         final, report = preflight.reserve(third, updated, REDEPLOY + timedelta(hours=1))
         self.assertEqual(report['superseded_window_id'], LATER)
         self.assertEqual(len(final['windows']), 3)
-        self.assertLessEqual(report['cost_by_month']['2026-11']['genui_total_cents'], 18000)
+        self.assertLessEqual(report['cost_by_month']['2026-11']['genui_total_cents'], 21000)
 
     def test_future_months_of_the_earlier_window_are_released_entirely(self):
         # Earlier window Nov 20 -> Dec 20; superseded Nov 25: December's reservation (window time and
@@ -813,7 +813,7 @@ class Abandon(unittest.TestCase):
         for entry in restored['months'].values(): entry['reconciled_at_utc'] = '2026-11-01T17:30:00Z'
         again, report = preflight.reserve(dict(self.config, service_desired_count=1), restored, at, activating=True)
         self.assertTrue(report['reused_reservation'])
-        self.assertLessEqual(report['cost_by_month']['2026-11']['genui_total_cents'], 18000)
+        self.assertLessEqual(report['cost_by_month']['2026-11']['genui_total_cents'], 21000)
         self.assertEqual(again['windows'][EARLIER][preflight.ACTIVATION], '2026-11-01T17:30:00Z')
         # Nothing was under-counted: the earlier window counts all of it, the abandoned one what it used.
         month = report['cost_by_month']['2026-11']

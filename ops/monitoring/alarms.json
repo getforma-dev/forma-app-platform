@@ -1,0 +1,208 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Forma beta trial alarms (real-user trial, 2026-11-14 decision D13). A standalone stack beside GenuiSyntheticFoundation: it creates only an SNS topic, its email subscription, CloudWatch alarms and one AWS Budget, and references the beta's load balancer, target group, cluster, service and database by identifier. It never changes them, so promotion's infrastructure digest is untouched. Deploy and delete it by hand with the operator's own identity; confirm the subscription email before relying on it.",
+  "Parameters": {
+    "NotificationEmail": {
+      "Type": "String",
+      "AllowedPattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+      "ConstraintDescription": "One email address.",
+      "Description": "Victor's address: every alarm, recovery and budget notice goes here. SNS sends a confirmation first."
+    },
+    "LoadBalancerFullName": {
+      "Type": "String",
+      "AllowedPattern": "^app/[A-Za-z0-9-]{1,64}/[0-9a-f]{16}$",
+      "ConstraintDescription": "The CloudWatch dimension form app/<name>/<id>, the part of the load balancer ARN after loadbalancer/.",
+      "Description": "The beta load balancer's CloudWatch dimension value (describe-load-balancers: LoadBalancerArn after 'loadbalancer/')."
+    },
+    "TargetGroupFullName": {
+      "Type": "String",
+      "AllowedPattern": "^targetgroup/[A-Za-z0-9-]{1,64}/[0-9a-f]{16}$",
+      "ConstraintDescription": "The CloudWatch dimension form targetgroup/<name>/<id>, the last part of the target group ARN.",
+      "Description": "The main service's target group CloudWatch dimension value (describe-target-groups: TargetGroupArn after ':')."
+    },
+    "ClusterName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,255}$",
+      "Description": "The ECS cluster (stack output ClusterName)."
+    },
+    "ServiceName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,255}$",
+      "Description": "The main ECS service (stack output ServiceName)."
+    },
+    "DBInstanceIdentifier": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z][a-z0-9-]{0,62}$",
+      "Description": "The RDS instance identifier (the host part of stack output DatabaseEndpoint before the first dot)."
+    },
+    "MonthlyBudgetUsd": {
+      "Type": "Number",
+      "Default": 248,
+      "MinValue": 1,
+      "MaxValue": 1000,
+      "Description": "The whole-account monthly cost budget in USD. ADR-019 amendment (2026-11-14): the trial ceiling is $248 for November (GenUI $210 plus fAuth $38) and $118 for December to the Dec 16 stop; change the parameter at the month boundary. Notices at 80% and 100% actual and 100% forecast."
+    }
+  },
+  "Resources": {
+    "AlarmTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "DisplayName": "Forma beta trial alarms"
+      }
+    },
+    "AlarmTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "Topics": [{"Ref": "AlarmTopic"}],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CloudWatchAlarmsPublish",
+              "Effect": "Allow",
+              "Principal": {"Service": "cloudwatch.amazonaws.com"},
+              "Action": "sns:Publish",
+              "Resource": {"Ref": "AlarmTopic"},
+              "Condition": {"StringEquals": {"aws:SourceAccount": {"Ref": "AWS::AccountId"}}}
+            }
+          ]
+        }
+      }
+    },
+    "EmailSubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "Protocol": "email",
+        "Endpoint": {"Ref": "NotificationEmail"},
+        "TopicArn": {"Ref": "AlarmTopic"}
+      }
+    },
+    "LoadBalancer5xxAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-load-balancer-5xx"},
+        "AlarmDescription": "The load balancer itself answered 5xx five or more times in five minutes (no healthy target, or a target refused the connection). Open https://beta.getforma.dev/health/ready and the ECS service events.",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "HTTPCode_ELB_5XX_Count",
+        "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "Target5xxAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-target-5xx"},
+        "AlarmDescription": "The service answered 5xx five or more times in five minutes. Read the service log group for the failing route before anyone restarts anything.",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "HTTPCode_Target_5XX_Count",
+        "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "UnhealthyTargetsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-unhealthy-targets"},
+        "AlarmDescription": "At least one target of the main service was unhealthy for two consecutive minutes, or the target group reported no data. The service may be restarting; if it stays in alarm, read the task's stopped reason.",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "UnHealthyHostCount",
+        "Dimensions": [
+          {"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}},
+          {"Name": "TargetGroup", "Value": {"Ref": "TargetGroupFullName"}}
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "NoRunningTaskAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-no-running-task"},
+        "AlarmDescription": "The main service reported no running task for three consecutive minutes: the AWS/ECS CPUUtilization metric had no sample (Container Insights is off, so the sample count is the running-task signal). The scheduled stop, a failed deployment or a stopped task; check the service's desired and running counts.",
+        "Namespace": "AWS/ECS",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [
+          {"Name": "ClusterName", "Value": {"Ref": "ClusterName"}},
+          {"Name": "ServiceName", "Value": {"Ref": "ServiceName"}}
+        ],
+        "Statistic": "SampleCount",
+        "Period": 60,
+        "EvaluationPeriods": 3,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "DatabaseFreeStorageAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-database-free-storage"},
+        "AlarmDescription": "The database has less than 2 GiB free of its 20 GiB. Uploads and records keep growing it; plan storage before it fills, because a full volume stops writes.",
+        "Namespace": "AWS/RDS",
+        "MetricName": "FreeStorageSpace",
+        "Dimensions": [{"Name": "DBInstanceIdentifier", "Value": {"Ref": "DBInstanceIdentifier"}}],
+        "Statistic": "Minimum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 2147483648,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "MonthlyBudget": {
+      "Type": "AWS::Budgets::Budget",
+      "Properties": {
+        "Budget": {
+          "BudgetName": {"Fn::Sub": "${AWS::StackName}-monthly-cost"},
+          "BudgetType": "COST",
+          "TimeUnit": "MONTHLY",
+          "BudgetLimit": {"Amount": {"Ref": "MonthlyBudgetUsd"}, "Unit": "USD"}
+        },
+        "NotificationsWithSubscribers": [
+          {
+            "Notification": {"NotificationType": "ACTUAL", "ComparisonOperator": "GREATER_THAN", "Threshold": 80, "ThresholdType": "PERCENTAGE"},
+            "Subscribers": [{"SubscriptionType": "EMAIL", "Address": {"Ref": "NotificationEmail"}}]
+          },
+          {
+            "Notification": {"NotificationType": "ACTUAL", "ComparisonOperator": "GREATER_THAN", "Threshold": 100, "ThresholdType": "PERCENTAGE"},
+            "Subscribers": [{"SubscriptionType": "EMAIL", "Address": {"Ref": "NotificationEmail"}}]
+          },
+          {
+            "Notification": {"NotificationType": "FORECASTED", "ComparisonOperator": "GREATER_THAN", "Threshold": 100, "ThresholdType": "PERCENTAGE"},
+            "Subscribers": [{"SubscriptionType": "EMAIL", "Address": {"Ref": "NotificationEmail"}}]
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "AlarmTopicArn": {
+      "Description": "The topic every alarm publishes to; `aws sns publish --topic-arn <this> --message test` sends the test email.",
+      "Value": {"Ref": "AlarmTopic"}
+    }
+  }
+}

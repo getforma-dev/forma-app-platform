@@ -47,7 +47,7 @@ Native presentation, canvas and equivalent keyboard/focused workflows.
 | 160 | [APP-160: Qualify one composed reference app across canvas, page and sharing](../0-backlog/APP-160.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Backlog | APP-154, APP-155, APP-156, APP-157, APP-158, APP-159 |
 | 166 | [APP-166: Theme roles so the canvas, an app, a card and a widget can share or split an identity](../4-done/APP-166.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Done | APP-138 |
 | 168 | [APP-168: One whole app on the canvas and an Apps, Widgets, Cards Library](../4-done/APP-168.md) | [PH09](../phases/PH09.md) | S15 | UX | P1 | L | Done | None |
-| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](../2-in-progress/APP-169.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | In progress | APP-168 |
+| 169 | [APP-169: Persist artifact classification and retire legacy app placement after compatibility review](../4-done/APP-169.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Done | APP-168 |
 | 170 | [APP-170: Publish component visibility consistently across app views and recipients](../0-backlog/APP-170.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-168 |
 | 171 | [APP-171: Evaluate a desktop icon presentation for App Cards](../0-backlog/APP-171.md) | [PH09](../phases/PH09.md) | S15 | UX | P3 | S | Backlog | APP-168 |
 | 176 | [APP-176: Classify existing ambiguous works with owner review and retire legacy app placement](../0-backlog/APP-176.md) | [PH09](../phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-169 |

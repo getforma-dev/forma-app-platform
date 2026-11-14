@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from ops.promotion import github as g
@@ -74,13 +75,14 @@ class GithubTests(unittest.TestCase):
         for mutate in (lambda v: v.update(private_arn="secret"), lambda v: v.pop("review"),
                 lambda v: v["review"]["changes"][0].update(logical_id="arn:aws:private"),
                 lambda v: v["review"]["scan"]["service"].update(introduced=1),
-                lambda v: v["review"].update(outage_required=False), lambda v: v.update(cost_genui_cents=18001)):
+                lambda v: v["review"].update(outage_required=False), lambda v: v.update(cost_genui_cents=21001),
+                lambda v: v.update(cost_total_cents=24801)):
             changed = copy.deepcopy(value)
             mutate(changed)
             with self.assertRaises(ValueError):
                 g.validate_summary(changed, SHA)
-        from ops.promotion.registry import scan_disposition
-        disposition, sha = scan_disposition()
+        from ops.promotion.test_scan import release_a_disposition
+        disposition, sha = release_a_disposition(self)
         value["review"]["deployment_contract_sha256"] = disposition["deployment_contract_sha256"]
         for role in g.NAMES:
             names = sorted(f["name"] for f in disposition["roles"][role]["findings"])
@@ -96,6 +98,10 @@ class GithubTests(unittest.TestCase):
                 with self.assertRaises(ValueError): g.validate_summary(changed, SHA)
         changed = copy.deepcopy(value); changed["review"]["deployment_contract_sha256"] = "0" * 64
         with self.assertRaises(ValueError): g.validate_summary(changed, SHA)
+        # With no disposition committed, a summary naming reviewed findings refuses (never a TypeError).
+        from ops.promotion import registry
+        with patch.object(registry, "DISPOSITION", registry.DISPOSITION.with_name("absent.json")), patch.object(registry, "REVIEWED_DISPOSITION", None):
+            with self.assertRaisesRegex(ValueError, "scan review projection changed"): g.validate_summary(value, SHA)
 
     def test_artifact_requires_same_run_head_id_digest_and_name(self):
         value = {"id": 8, "expired": False, "name": "beta-qualified-" + SHA,

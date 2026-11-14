@@ -25,6 +25,14 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 pub(super) const ACQUIRE: Duration = Duration::from_secs(5);
 pub(super) const TRANSACTION: Duration = Duration::from_secs(3);
 pub(super) const CLEANUP: Duration = Duration::from_secs(2);
+/// ADR-004 amendment A5 (APP-197): a reused connection repeats the
+/// structural catalog comparison only when its own last comparison is older
+/// than this. A new connection and readiness always run it; identity, the
+/// session baseline and the schema version are checked on every reuse. No
+/// environment or configuration value can change it.
+pub(super) const CATALOG_RECHECK: Duration = Duration::from_secs(30);
+// The window is ADR-004 A5's number; a different one is an amendment.
+const _: () = assert!(CATALOG_RECHECK.as_secs() == 30);
 const EXPIRY_MARGIN: u64 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -125,9 +133,20 @@ pub(crate) struct TestHooks {
     /// count (APP-113 deferred `open_listed` batching).
     pub transactions: std::sync::atomic::AtomicUsize,
     pub statements: std::sync::atomic::AtomicUsize,
+    /// APP-197: how far these stores' pool clock runs ahead of real time
+    /// (milliseconds), so a test can pass the catalog window without waiting.
+    advanced_ms: std::sync::atomic::AtomicU64,
 }
 #[cfg(test)]
 impl TestHooks {
+    /// Moves these stores' pool clock forward by `by` (APP-197).
+    pub fn advance(&self, by: Duration) {
+        self.advanced_ms
+            .fetch_add(by.as_millis() as u64, Ordering::SeqCst);
+    }
+    fn advanced(&self) -> Duration {
+        Duration::from_millis(self.advanced_ms.load(Ordering::SeqCst))
+    }
     /// `(transactions, statements)` so far.
     pub fn counts(&self) -> (usize, usize) {
         (
@@ -155,6 +174,19 @@ impl TestHooks {
     }
 }
 
+/// Callers one role admits at once: the two holding its connections and up
+/// to thirty waiting for one. The next caller is refused at once
+/// (`admission_saturated`, `Error::Unavailable`).
+///
+/// This keeps ADR-004 §Pool and driver lifecycle true: the queue of waiters
+/// is bounded, separately from the connections, and every admitted caller
+/// waits inside the one absolute `ACQUIRE` deadline, so a wait is bounded in
+/// length and in time. APP-195 raised it from 8 (two running, six waiting):
+/// one save on a page that 26 members had open made most of their refreshes
+/// answer 503 (APP-193 finding, G6). The connections (two per role, eight in
+/// all) and the 5/3/2 s deadlines are ADR-007's and do not change.
+pub(super) const ADMITTED: usize = 32;
+
 struct Capacity {
     all: Arc<Semaphore>,
     roles: [Arc<Semaphore>; 4],
@@ -165,8 +197,62 @@ fn capacity() -> &'static Capacity {
     VALUE.get_or_init(|| Capacity {
         all: Arc::new(Semaphore::new(8)),
         roles: std::array::from_fn(|_| Arc::new(Semaphore::new(2))),
-        admitted: std::array::from_fn(|_| Arc::new(Semaphore::new(8))),
+        admitted: std::array::from_fn(|_| Arc::new(Semaphore::new(ADMITTED))),
     })
+}
+
+/// Test executable only (APP-195 run C): while the guard lives, `role`
+/// admits at most `admitted` callers. The guard holds the other admission
+/// permits, so the measured path is the production acquisition unchanged.
+#[cfg(test)]
+pub(super) struct AdmittedLimit {
+    _held: OwnedSemaphorePermit,
+}
+#[cfg(test)]
+pub(super) async fn limit_admitted(role: Role, admitted: usize) -> AdmittedLimit {
+    let held = ADMITTED
+        .checked_sub(admitted)
+        .and_then(|held| u32::try_from(held).ok())
+        .expect("a limit within ADMITTED");
+    AdmittedLimit {
+        _held: capacity().admitted[role.index()]
+            .clone()
+            .acquire_many_owned(held)
+            .await
+            .expect("admission permits are never closed"),
+    }
+}
+
+/// Test executable only (APP-195): admission refusals so far, per role in
+/// `Role::index` order, so a campaign can tell whether a caller was refused.
+#[cfg(test)]
+static SATURATED: [std::sync::atomic::AtomicUsize; 4] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; 4];
+#[cfg(test)]
+pub(super) fn saturated() -> [usize; 4] {
+    std::array::from_fn(|i| SATURATED[i].load(Ordering::SeqCst))
+}
+/// Test executable only (APP-195): per role, each lease's service time in
+/// microseconds: preparing its connection (creation or recycle checks) plus
+/// holding it until the lease ended. Drained by `take_service`.
+#[cfg(test)]
+static SERVICE: [std::sync::Mutex<Vec<u64>>; 4] = [const { std::sync::Mutex::new(Vec::new()) }; 4];
+#[cfg(test)]
+pub(super) fn take_service() -> [Vec<u64>; 4] {
+    std::array::from_fn(|i| {
+        SERVICE[i]
+            .lock()
+            .map(|mut samples| std::mem::take(&mut *samples))
+            .unwrap_or_default()
+    })
+}
+/// Test executable only (APP-195): admission permits granted so far, per role.
+#[cfg(test)]
+static ACQUIRED: [std::sync::atomic::AtomicUsize; 4] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; 4];
+#[cfg(test)]
+pub(super) fn acquired() -> [usize; 4] {
+    std::array::from_fn(|i| ACQUIRED[i].load(Ordering::SeqCst))
 }
 
 struct DriverPermits {
@@ -238,6 +324,15 @@ pub(super) struct Connection {
     pub fingerprint: String,
     pub expires_at: u64,
     pub clean: bool,
+    /// When this connection last passed the structural catalog comparison
+    /// (ADR-004 amendment A5, on the pool clock), and the identity of the
+    /// schema-version relation that comparison saw.
+    catalog_verified_at: Instant,
+    version_relation: i64,
+    /// Test executable only (APP-195): how long this connection's last
+    /// checkout took to prepare it (its creation or its recycle checks).
+    #[cfg(test)]
+    prepared_us: u64,
 }
 
 #[derive(Clone)]
@@ -248,6 +343,13 @@ pub(super) struct RoleManager {
     pub role: Role,
 }
 impl RoleManager {
+    /// The pool clock. The test executable can run it ahead (`TestHooks::advance`).
+    fn now(&self) -> Instant {
+        let now = Instant::now();
+        #[cfg(test)]
+        let now = now + self.settings.hooks.advanced();
+        now
+    }
     fn configuration(&self) -> Result<Config> {
         let value = Config::load(&self.settings.credentials).map_err(|reason| {
             trace::cause(trace::credentials(reason));
@@ -275,6 +377,8 @@ impl RoleManager {
         Ok(value)
     }
     async fn connect(&self, value: &Config) -> Result<Connection> {
+        #[cfg(test)]
+        let started = std::time::Instant::now();
         let cap = capacity();
         // These are acquired before opening a transport. During cancellation of
         // connect(), the connect future/transport drops before these locals.
@@ -328,23 +432,53 @@ impl RoleManager {
             fingerprint: value.file_sha256.clone(),
             expires_at: value.expires_at,
             clean: false,
+            catalog_verified_at: self.now(),
+            version_relation: 0,
+            #[cfg(test)]
+            prepared_us: 0,
         };
         #[cfg(test)]
         self.settings.hooks.checkpoint("connect").await;
-        self.verify_admission(&connected.client).await?;
+        // The window is measured from before the checks, never after them.
+        let checked_at = self.now();
+        connected.version_relation = self.verify_admission(&connected.client).await?;
+        connected.catalog_verified_at = checked_at;
         trace::step("reset");
         reset(&mut connected, self.role).await?;
+        #[cfg(test)]
+        {
+            connected.prepared_us = started.elapsed().as_micros() as u64;
+        }
         Ok(connected)
     }
-    async fn verify_admission(&self, client: &Client) -> Result<()> {
+    /// A new connection's admission, and readiness: identity, the structural
+    /// catalog comparison and the schema version, every time. Returns the
+    /// identity of the version relation the comparison saw.
+    async fn verify_admission(&self, client: &Client) -> Result<i64> {
+        self.verify_checks(client, None).await
+    }
+    /// `compared`: `None` compares the catalog; `Some(relation)` is a reuse
+    /// inside the A5 window, whose version relation must still be the one
+    /// its last comparison saw.
+    async fn verify_checks(&self, client: &Client, compared: Option<i64>) -> Result<i64> {
         // Only built-in catalog objects may be touched before the structural
         // comparison. Even the version relation could have become a view.
+        // Inside the A5 window the comparison is skipped, but ADR-004
+        // §Migration and recovery's rule still holds: the version relation is
+        // read only after a pg_catalog check that it is the same plain table,
+        // without row security, that the last comparison saw.
         trace::step("verify_identity");
-        verify_identity(client, self.role).await?;
-        trace::step("catalog_verify");
-        self.catalog.verify(client).await?;
+        let relation = verify_identity(client, self.role).await?;
+        if compared.is_none() {
+            trace::step("catalog_verify");
+            self.catalog.verify(client).await?;
+        }
+        if compared.is_some_and(|seen| seen != relation) {
+            return Err(trace::refuse("version_relation_changed"));
+        }
         trace::step("verify_schema_version");
-        verify_schema_version(client).await
+        verify_schema_version(client).await?;
+        Ok(relation)
     }
 }
 impl Manager for RoleManager {
@@ -368,6 +502,8 @@ impl Manager for RoleManager {
         Err(Error::Unavailable)
     }
     async fn recycle(&self, connection: &mut Connection, _: &Metrics) -> RecycleResult<Error> {
+        #[cfg(test)]
+        let started = std::time::Instant::now();
         if !connection.clean || connection.client.is_closed() {
             return Err(RecycleError::Backend(Error::Unavailable));
         }
@@ -378,14 +514,39 @@ impl Manager for RoleManager {
         {
             return Err(RecycleError::Backend(Error::Configuration));
         }
+        // ADR-004 amendment A5. The session baseline is checked first, so no
+        // statement that resolves a name or an operator runs on a session
+        // whose search path drifted, and last, so nothing the reads between
+        // left the session changed. Between them: identity, the version
+        // relation's identity and the schema version on every reuse; the
+        // catalog comparison once its last one is CATALOG_RECHECK old. A
+        // failure here discards the connection, as before.
         verify_baseline(&connection.client, self.role)
             .await
             .map_err(RecycleError::Backend)?;
-        self.verify_admission(&connection.client)
+        let now = self.now();
+        let recheck =
+            now.saturating_duration_since(connection.catalog_verified_at) >= CATALOG_RECHECK;
+        let relation = self
+            .verify_checks(
+                &connection.client,
+                (!recheck).then_some(connection.version_relation),
+            )
+            .await
+            .map_err(RecycleError::Backend)?;
+        if recheck {
+            connection.catalog_verified_at = now;
+            connection.version_relation = relation;
+        }
+        verify_baseline(&connection.client, self.role)
             .await
             .map_err(RecycleError::Backend)?;
         #[cfg(test)]
         self.settings.hooks.checkpoint("recycle").await;
+        #[cfg(test)]
+        {
+            connection.prepared_us = started.elapsed().as_micros() as u64;
+        }
         connection.clean = true;
         Ok(())
     }
@@ -406,7 +567,13 @@ impl RolePool {
         let admitted = capacity().admitted[self.manager.role.index()]
             .clone()
             .try_acquire_owned()
-            .map_err(|_| trace::refuse("admission_saturated"))?;
+            .map_err(|_| {
+                #[cfg(test)]
+                SATURATED[self.manager.role.index()].fetch_add(1, Ordering::SeqCst);
+                trace::refuse("admission_saturated")
+            })?;
+        #[cfg(test)]
+        ACQUIRED[self.manager.role.index()].fetch_add(1, Ordering::SeqCst);
         trace::step("configuration");
         self.manager.configuration()?;
         trace::step("pool_get");
@@ -426,6 +593,8 @@ impl RolePool {
         // No await between ownership acquisition and the non-reusable guard.
         object.clean = false;
         let lease = Lease {
+            #[cfg(test)]
+            obtained: (std::time::Instant::now(), object.prepared_us),
             object: Some(object),
             owner: self.clone(),
             _admitted: admitted,
@@ -446,12 +615,24 @@ pub(super) struct Lease {
     object: Option<Object<RoleManager>>,
     owner: Arc<RolePool>,
     _admitted: OwnedSemaphorePermit,
+    /// Test executable only (APP-195): when the lease got its connection,
+    /// and how long that checkout took to prepare it.
+    #[cfg(test)]
+    obtained: (std::time::Instant, u64),
 }
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(object) = self.object.take() {
             // No asynchronous cleanup is delegated to ordinary pool return.
             drop(Object::take(object));
+        }
+        #[cfg(test)]
+        {
+            let (at, prepared) = self.obtained;
+            let held = at.elapsed().as_micros() as u64;
+            if let Ok(mut samples) = SERVICE[self.owner.manager.role.index()].lock() {
+                samples.push(prepared + held);
+            }
         }
     }
 }
@@ -563,9 +744,26 @@ impl Lease {
     }
 }
 
-async fn verify_identity(client: &Client, role: Role) -> Result<()> {
-    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path') FROM pg_catalog.pg_roles WHERE rolname=current_user", &[])
-        .await.map_err(trace::unavailable)?;
+// The statements that can run on a session whose search path is not yet
+// verified (a new backend's identity check, a reuse's first baseline check)
+// resolve nothing through the search path (APP-197 recheck R-M1, final
+// check F-m1). Every operator is OPERATOR(pg_catalog.…); every cast type,
+// function and FROM or JOIN relation is pg_catalog-qualified. The test below,
+// `search_path_names`, holds them to exactly that syntax rule.
+const IDENTITY: &str = "SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path'),v.relation,v.shape FROM pg_catalog.pg_roles LEFT JOIN LATERAL (SELECT c.oid::pg_catalog.int8 AS relation,c.relkind::pg_catalog.text OPERATOR(pg_catalog.||) ':' OPERATOR(pg_catalog.||) (c.relrowsecurity OR c.relforcerowsecurity)::pg_catalog.text OPERATOR(pg_catalog.||) ':' OPERATOR(pg_catalog.||) pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.int8 FROM pg_catalog.pg_attribute a WHERE a.attrelid OPERATOR(pg_catalog.=) c.oid AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped ORDER BY a.attnum),',') AS shape FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace WHERE n.nspname OPERATOR(pg_catalog.=) 'genui_meta' AND c.relname OPERATOR(pg_catalog.=) 'schema_version') v ON true WHERE rolname OPERATOR(pg_catalog.=) current_user";
+const MEMBERSHIP: &str = "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.<>) current_user AND rolname OPERATOR(pg_catalog.<>) 'rds_iam' AND pg_catalog.pg_has_role(current_user,oid,'MEMBER') UNION ALL SELECT 'unsafe_membership' FROM pg_catalog.pg_auth_members WHERE member OPERATOR(pg_catalog.=) (SELECT oid FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.=) current_user) AND (admin_option OR inherit_option)";
+const BASELINE_CHECK: &str = "SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_setting('role'),pg_catalog.current_setting('row_security'),pg_catalog.current_setting('search_path'),pg_catalog.current_setting('genui.organization_id',true),pg_catalog.current_setting('genui.principal_id',true),pg_catalog.current_setting('genui.membership_epoch',true),pg_catalog.current_setting('session_replication_role')";
+
+/// The connection's identity checks. The same statement also reads, from
+/// `pg_catalog` alone, the schema-version relation's identity (ADR-004 A5):
+/// returned once it is a plain table without row security whose columns are
+/// exactly a `boolean` and an `integer`, so that reading it runs nothing but
+/// the table scan. One round trip.
+pub(super) async fn verify_identity(client: &Client, role: Role) -> Result<i64> {
+    let row = client
+        .query_one(IDENTITY, &[])
+        .await
+        .map_err(trace::unavailable)?;
     let text = |index| row.try_get::<_, String>(index).map_err(trace::unavailable);
     let boolean = |index| row.try_get::<_, bool>(index).map_err(trace::unavailable);
     // Every field is decoded first; the first refused one names the cause.
@@ -588,18 +786,30 @@ async fn verify_identity(client: &Client, role: Role) -> Result<()> {
             return Err(trace::refuse(cause));
         }
     }
-    let rows = client.query("SELECT rolname FROM pg_catalog.pg_roles WHERE rolname NOT IN (current_user,'rds_iam') AND pg_catalog.pg_has_role(current_user,oid,'MEMBER') UNION ALL SELECT 'unsafe_membership' FROM pg_catalog.pg_auth_members WHERE member=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname=current_user) AND (admin_option OR inherit_option)", &[])
-        .await.map_err(trace::unavailable)?;
+    let rows = client
+        .query(MEMBERSHIP, &[])
+        .await
+        .map_err(trace::unavailable)?;
     if !rows.is_empty() {
         return Err(trace::refuse("identity_extra_membership"));
     }
-    Ok(())
+    // The version relation: a plain table ("r"), no row security ("false"),
+    // a boolean (oid 16) and an integer (oid 23) column, in that order.
+    let relation: Option<i64> = row.try_get(14).map_err(trace::unavailable)?;
+    let shape: Option<String> = row.try_get(15).map_err(trace::unavailable)?;
+    let Some(relation) = relation else {
+        return Err(trace::refuse("version_relation_missing"));
+    };
+    if shape.as_deref() != Some("r:false:16,23") {
+        return Err(trace::refuse("version_relation_shape"));
+    }
+    Ok(relation)
 }
 
 async fn verify_schema_version(client: &Client) -> Result<()> {
     let row = client
         .query_one(
-            "SELECT version FROM genui_meta.schema_version WHERE singleton",
+            "SELECT version FROM ONLY genui_meta.schema_version WHERE singleton",
             &[],
         )
         .await
@@ -643,8 +853,10 @@ async fn reset(connection: &mut Connection, role: Role) -> Result<()> {
     Ok(())
 }
 async fn verify_baseline(client: &Client, role: Role) -> Result<()> {
-    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_setting('role'),pg_catalog.current_setting('row_security'),pg_catalog.current_setting('search_path'),pg_catalog.current_setting('genui.organization_id',true),pg_catalog.current_setting('genui.principal_id',true),pg_catalog.current_setting('genui.membership_epoch',true),pg_catalog.current_setting('session_replication_role')", &[])
-        .await.map_err(trace::unavailable)?;
+    let row = client
+        .query_one(BASELINE_CHECK, &[])
+        .await
+        .map_err(trace::unavailable)?;
     for (index, (expected, cause)) in [
         (role.name(), "baseline_session_user"),
         (role.name(), "baseline_current_user"),
@@ -1172,5 +1384,211 @@ mod lifecycle_tests {
         assert_eq!(observed.load(Ordering::SeqCst), 0);
         assert_eq!(slots.available_permits(), 1);
         assert_eq!(roles.available_permits(), 1);
+    }
+}
+
+#[cfg(test)]
+mod statement_tests {
+    use super::{BASELINE_CHECK, IDENTITY, MEMBERSHIP};
+
+    /// Reserved words that may stand before `(` without being a function
+    /// call. A reserved word cannot name a function unless double-quoted,
+    /// and quoted identifiers are refused, so none of these can resolve
+    /// through the search path.
+    const BEFORE_PARENTHESIS: [&str; 4] = [
+        // `ARRAY(subquery)`: the array constructor.
+        "ARRAY",   // `AND (a OR b)`: boolean grouping.
+        "AND",     // `LATERAL (subquery)`: a subquery in FROM.
+        "LATERAL", // `CAST(x AS type)`: syntax; its target type is checked below.
+        "CAST",
+    ];
+
+    /// Every name in `statement` that would resolve through the search path
+    /// (APP-197 recheck R-M1, final check F-m1). After string literals and
+    /// `OPERATOR(pg_catalog.…)` are removed:
+    /// - no operator character, and no keyword that expands to a
+    ///   search-path-resolved operator, is left;
+    /// - every `::` type and `CAST(… AS` type is `pg_catalog.`-qualified, and
+    ///   none is a `reg…` type, which resolves the name it is given;
+    /// - every name before `(` is `pg_catalog.`-qualified, or one of
+    ///   [`BEFORE_PARENTHESIS`];
+    /// - every `FROM` and `JOIN` relation is `pg_catalog.`-qualified (or a
+    ///   subquery), and no comma join follows it;
+    /// - no quoted identifier and no `COLLATE` is used.
+    ///
+    /// Names that functions resolve from text arguments (`to_regclass`,
+    /// `has_table_privilege`) are not syntax, and are outside this check.
+    fn search_path_names(statement: &str) -> Vec<String> {
+        let mut found = Vec::new();
+        if statement.contains('"') {
+            found.push("a quoted identifier".to_owned());
+        }
+        let mut rest: String = statement
+            .split('\'')
+            .enumerate()
+            .map(|(index, part)| if index % 2 == 1 { " § " } else { part })
+            .collect();
+        while let Some(start) = rest.find("OPERATOR(pg_catalog.") {
+            let end = start + rest[start..].find(')').unwrap();
+            rest.replace_range(start..=end, " § ");
+        }
+        if rest
+            .replace("::", " ")
+            .contains(|c: char| "+-*/<>=~!@#%^&|`?".contains(c))
+        {
+            found.push("an unqualified operator".to_owned());
+        }
+        let mut tokens: Vec<String> = Vec::new();
+        let mut chars = rest.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c.is_whitespace() {
+                continue;
+            }
+            let mut token = c.to_string();
+            if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                while let Some(&next) = chars.peek() {
+                    if !(next.is_ascii_alphanumeric() || next == '_' || next == '.' || next == '$')
+                    {
+                        break;
+                    }
+                    token.push(next);
+                    chars.next();
+                }
+            } else if c == ':' && chars.peek() == Some(&':') {
+                token.push(chars.next().unwrap());
+            }
+            tokens.push(token);
+        }
+        let upper: Vec<String> = tokens.iter().map(|t| t.to_ascii_uppercase()).collect();
+        let at = |index: usize| tokens.get(index).map(String::as_str).unwrap_or("");
+        let qualified = |token: &str| token.starts_with("pg_catalog.");
+        let name = |token: &str| token.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_');
+        let closing = |open: usize| {
+            let mut depth = 0;
+            for (index, token) in tokens.iter().enumerate().skip(open) {
+                match token.as_str() {
+                    "(" => depth += 1,
+                    ")" if depth == 1 => return index,
+                    ")" => depth -= 1,
+                    _ => (),
+                }
+            }
+            tokens.len()
+        };
+        let cast_type = |token: &str, found: &mut Vec<String>| {
+            if !qualified(token) {
+                found.push(format!("an unqualified type: {token}"));
+            } else if token.starts_with("pg_catalog.reg") {
+                found.push(format!("a name-resolving type: {token}"));
+            }
+        };
+        for (index, keyword) in upper.iter().enumerate() {
+            match keyword.as_str() {
+                "IN" | "LIKE" | "ILIKE" | "SIMILAR" | "BETWEEN" | "ANY" | "SOME" | "DISTINCT"
+                | "CASE" | "NULLIF" | "GREATEST" | "LEAST" | "OVERLAPS" | "USING" => {
+                    found.push(format!("{keyword} resolves an operator"));
+                }
+                "ALL" if upper.get(index.wrapping_sub(1)).map(String::as_str) != Some("UNION") => {
+                    found.push("ALL resolves an operator".to_owned());
+                }
+                "COLLATE" => found.push("COLLATE resolves a collation".to_owned()),
+                "::" => cast_type(at(index + 1), &mut found),
+                "CAST" if at(index + 1) == "(" => {
+                    let end = closing(index + 1);
+                    let mut depth = 0;
+                    for (inner, word) in upper.iter().enumerate().take(end).skip(index + 1) {
+                        match word.as_str() {
+                            "(" => depth += 1,
+                            ")" => depth -= 1,
+                            "AS" if depth == 1 => cast_type(at(inner + 1), &mut found),
+                            _ => (),
+                        }
+                    }
+                }
+                "FROM" | "JOIN" => {
+                    let mut target = index + 1;
+                    while matches!(
+                        upper.get(target).map(String::as_str),
+                        Some("LATERAL" | "ONLY")
+                    ) {
+                        target += 1;
+                    }
+                    let mut after = if at(target) == "(" {
+                        closing(target) + 1
+                    } else if qualified(at(target)) {
+                        target + 1
+                    } else {
+                        found.push(format!(
+                            "an unqualified relation: {} {}",
+                            keyword,
+                            at(target)
+                        ));
+                        continue;
+                    };
+                    if upper.get(after).map(String::as_str) == Some("AS") {
+                        after += 1;
+                    }
+                    if name(at(after)) {
+                        after += 1;
+                    }
+                    if at(after) == "," {
+                        found.push(format!("a comma join after {keyword} {}", at(target)));
+                    }
+                }
+                _ => (),
+            }
+            if at(index + 1) == "("
+                && name(at(index))
+                && !qualified(at(index))
+                && !BEFORE_PARENTHESIS.contains(&keyword.as_str())
+            {
+                found.push(format!("an unqualified function: {}(", at(index)));
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn unverified_session_statements_resolve_nothing_through_the_search_path() {
+        for statement in [IDENTITY, MEMBERSHIP, BASELINE_CHECK] {
+            assert_eq!(
+                search_path_names(statement),
+                Vec::<String>::new(),
+                "{statement}"
+            );
+        }
+    }
+
+    /// The check itself: each form below resolves a name through the search
+    /// path and is refused; the qualified forms pass. U1 and U2 are the
+    /// final check's probes, which ran planted code on PostgreSQL 16.15.
+    #[test]
+    fn the_search_path_check_refuses_each_unqualified_form() {
+        for (refused, reason) in [
+            ("SELECT c.relkind::text FROM pg_catalog.pg_class c", "an unqualified type: text"),
+            ("SELECT pg_catalog.array_to_string(ARRAY(SELECT 1),','), array_to_string(ARRAY[1],',')", "an unqualified function: array_to_string("),
+            ("SELECT CAST(rolname AS text) FROM pg_catalog.pg_roles", "an unqualified type: text"),
+            ("SELECT 'genui.items'::pg_catalog.regclass", "a name-resolving type: pg_catalog.regclass"),
+            ("SELECT lower(rolname) FROM pg_catalog.pg_roles", "an unqualified function: lower("),
+            ("SELECT 1 FROM pg_roles", "an unqualified relation: FROM pg_roles"),
+            ("SELECT 1 FROM ONLY genui_meta.schema_version", "an unqualified relation: FROM genui_meta.schema_version"),
+            ("SELECT 1 FROM pg_catalog.pg_roles r JOIN pg_auth_members m ON true", "an unqualified relation: JOIN pg_auth_members"),
+            ("SELECT 1 FROM pg_catalog.pg_roles r, pg_catalog.pg_auth_members m", "a comma join after FROM pg_catalog.pg_roles"),
+            ("SELECT 1 FROM (SELECT 1) v, pg_catalog.pg_roles", "a comma join after FROM ("),
+            ("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=current_user", "an unqualified operator"),
+            ("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname IS NOT DISTINCT FROM current_user", "DISTINCT resolves an operator"),
+            ("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname NOT IN (current_user)", "IN resolves an operator"),
+            ("SELECT \"array_to_string\"(ARRAY[1],',')", "a quoted identifier"),
+            ("SELECT rolname COLLATE pg_catalog.\"C\" FROM pg_catalog.pg_roles", "COLLATE resolves a collation"),
+        ] {
+            let found = search_path_names(refused);
+            assert!(found.iter().any(|f| f == reason), "{refused}: {found:?}");
+        }
+        for accepted in [
+            "SELECT pg_catalog.lower(rolname)::pg_catalog.text FROM pg_catalog.pg_roles r JOIN pg_catalog.pg_auth_members m ON m.member OPERATOR(pg_catalog.=) r.oid WHERE rolname OPERATOR(pg_catalog.<>) 'it''s (x) FROM y'",
+            "SELECT CAST(rolname AS pg_catalog.text) FROM pg_catalog.pg_roles UNION ALL SELECT 'x'",
+        ] {
+            assert_eq!(search_path_names(accepted), Vec::<String>::new(), "{accepted}");
+        }
     }
 }

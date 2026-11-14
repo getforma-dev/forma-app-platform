@@ -61,8 +61,9 @@
 //! where `error` is the storage error variant, `step` the innermost step
 //! (within `acquire`: `configuration`, `pool_get`, `transport_permits`,
 //! `connect`, `verify_identity`, `catalog_verify`, `verify_schema_version`,
-//! `reset`, `generation_recheck`), `cause` a closed code and `sqlstate` the
-//! server's five-character SQLSTATE. A later panic reports the first case
+//! `reset`, `generation_recheck`), `cause` a closed
+//! code and `sqlstate` the server's five-character SQLSTATE. A later panic
+//! reports the first case
 //! without a passed check (one of [`CASES`]) with reason `panic`. Every value
 //! is a compile-time literal, a validated SQLSTATE, an integer or null.
 use super::{
