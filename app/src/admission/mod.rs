@@ -3,10 +3,11 @@
 //!
 //! [`canonical`] is the restricted forma-json-v1 encoding,
 //! [`digest`](mod@digest) the domain-separated SHA-256 identities and
-//! [`validate`] the closed `app_definition` contract of edition
-//! impl-2026-10-29.2 (schema versions 1 and 2, ADR-009 D9.6) and its
-//! `exact_rational` value, reproducing `contracts/schema.py` and
-//! `contracts/validate.py`. Nothing here stores, renders or authorizes: an
+//! [`validate`] the closed `app_definition` contract (schema versions 1 and
+//! 2, ADR-009 D9.6) of the current edition, impl-2026-11-14.2 (ADR-020), its
+//! `exact_rational` value and its problem bodies ([`admit_problem`]),
+//! reproducing `contracts/schema.py` and `contracts/validate.py`.
+//! [`record_receipt`] admits the record-components receipt. Nothing here stores, renders or authorizes: an
 //! admitted digest is content identity, never a grant, and organization scope
 //! always comes from the trusted request.
 use std::fmt;
@@ -20,8 +21,8 @@ pub mod validate;
 pub use canonical::{decode, encode};
 pub use digest::digest;
 pub use validate::{
-    admit_definition, admit_receipt, admit_shared_receipt, check_exact_rational,
-    contract_timestamp, exact_rational, AdmittedDefinition,
+    admit_definition, admit_problem, admit_receipt, admit_shared_receipt, check_exact_rational,
+    contract_timestamp, exact_rational, AdmittedDefinition, PROBLEM_CODES, RECORD_KINDS, RENDERERS,
 };
 
 /// Why a document was refused. Each variant has a stable [`code`](Self::code).

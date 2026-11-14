@@ -1,6 +1,6 @@
 # Real live test: 25 real people on the beta (Victor's class, Nov 29–30)
 
-Status: **approved by Victor on 2026-11-14; executing.** Tickets: APP-175 (release A), APP-181 to APP-200; go-live is APP-189. Earlier drafts of this file are superseded.
+Status: **approved by Victor on 2026-11-14; executing.** Tickets: APP-175 (release A), APP-181 to APP-201; go-live is APP-189. **Release C (participation primitives, APP-202 to APP-209) was decided on 2026-11-14 by the Fable advisor in Victor's place** ("Go and build don't wait on my go remember fable can decide"); its design is [ADR-020](../architecture/ADR-020-PARTICIPATION-PRIMITIVES.md) and its calendar and class guidance are below. Earlier drafts of this file are superseded.
 
 ## Context
 
@@ -41,10 +41,10 @@ What works:
 | D8 | **Who may do what (general):** a command can be limited to reviewers (approve, grade, close). Contributors can't run it, even on their own entries. |
 | D9 | **Share with many (general):** share an app with "everyone in the organization", and choose a role when sharing: viewer, contributor or reviewer. A sharer may grant reviewer only if they hold `record_review`, and `share_work` is never copied (ADR-011), so the owner controls who reviews. (Fable advisor, 2026-11-14.) |
 | D10 | **Spend:** an app-wide daily model-call cap, default **1,000 a day** in code (env override for tests). The plain message says building and Ask pause until 00:00 UTC, while apps and entries keep working. Anthropic limits: **$150 for November and $100 for December**, with 50% alerts; raise November to $200 if Nov 29 spends over $60. Per-member hourly limits stay; the per-address limits for invitations and sign-in are raised for one classroom network. (Fable advisor, 2026-11-14.) |
-| D11 | **Live interaction (stretch):** a Kahoot-style live quiz is attempted only if a design spike shows it can be built from general primitives (a shared "current item", timed responses, a live summary). Go or no-go on **Nov 24**; if no, the class uses formative quizzes. **Decided 2026-11-14: NO-GO** (Fable advisor in lieu of Victor, from the [APP-193 finding](../../evidence/APP-193/finding-2026-11-14.md)). Fair timed play needs several new primitives, and a leaderboard needs an exception to D7. The class uses formative quizzes: an `own` responses list and a reviewer summary that Victor can project. |
+| D11 | **Live interaction (stretch):** a Kahoot-style live quiz is attempted only if a design spike shows it can be built from general primitives (a shared "current item", timed responses, a live summary). Go or no-go on **Nov 24**; if no, the class uses formative quizzes. **Decided 2026-11-14: NO-GO** (Fable advisor in lieu of Victor, from the [APP-193 finding](../../evidence/APP-193/finding-2026-11-14.md)). Fair timed play needs several new primitives, and a leaderboard needs an exception to D7. The class uses formative quizzes: an `own` responses list and a reviewer summary that Victor can project. **Re-decided 2026-11-14 (Release C; Fable advisor in lieu of Victor):** the finding's preconditions landed in release B, so the five gaps are built as general primitives in one normal promotion, [ADR-020](../architecture/ADR-020-PARTICIPATION-PRIMITIVES.md): a countdown, one entry per person per key (replace on resubmit), an "open while" rule with server time and a reviewer stop button, a leaderboard on the reviewer's page, the approver step for filers without share authority, and the composer step; a multi-select is a stretch. Release C is **not a gate**: if it is not promoted by Nov 26, the class runs on release B's formative quizzes exactly as this row first said. |
 | D12 | Invite codes go out from Victor's own email. No app-sent email. Feedback goes to `feedback@getforma.dev`, linked in the app. |
 | D13 | Alarms to Victor's email, plus one restore drill, before codes go out. APP-078 is deferred (one real organization). |
-| D14 | **Two schema releases.** Release A: today's `main` (schema 20→22) before the Nov 20 scan expiry. Release B: migrations 0023 and 0024 (schema 22→24; amended 2026-11-14, when W4's private entries and roles became 0024), all new data capabilities, on Nov 23, with a renewed scan disposition. |
+| D14 | **Two schema releases.** Release A: today's `main` (schema 20→22) before the Nov 20 scan expiry. Release B: migrations 0023 and 0024 (schema 22→24; amended 2026-11-14, when W4's private entries and roles became 0024), all new data capabilities, on Nov 23, with a renewed scan disposition. **Release C (added 2026-11-14) is not a schema release:** it carries no migration, so it ships as a normal one-approval promotion on `main` (ADR-017, ADR-019) after release B is read back, about Nov 25, with no outage. If any Release C item turns out to need a migration it is cut from Release C, never folded into release B. |
 
 Assumptions: adults; no regulated data; English; desktop Chrome and Safari plus phones for check-ins; Victor is the only operator; the class needs internet access.
 Out of scope: anything classroom-specific in the platform; public sign-up; organization per person; app-sent email; more than 25 students; a separate production stack.
@@ -58,10 +58,13 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Fri Nov 14 | Charter and notice v1 (cohort text), tickets revised. Promotions paused (done). Victor: APP-175 permission readback; reject or cancel run 43157872671. | agents, **Victor** |
 | Sat Nov 15 | After the 65-minute fence: `maintenance inspect`/`abandon`, `reconcile`, re-enable promotion, approve **Release A** (main, 20→22). **Done 2026-11-14 at 07:17 UTC** ([record](../../evidence/APP-175/release-2026-11-14.md)). Victor (no cost): open one shared work page on beta with the browser's developer tools and send the time of its JSON document request. That is the beta document-read timing the capacity statement scales from (a document read is 11 transactions; APP-197). | **Victor** (agents prepare the checklist) |
 | Nov 15–21 | Parallel build: W1–W4. W5 spike Nov 17–18. | agents |
-| Sat Nov 22 | Tier A reviews closed; merge W1–W4. | agents |
+| Nov 15–16 | **Release C, B0:** the contract edition `impl-2026-11-14.2` and admission (APP-202), merged by Nov 16 evening UTC. | agents |
+| Nov 16–20 | **Release C, B1–B5 in parallel:** storage rules (APP-203), components (APP-204), forms and the reference picker (APP-205), approver routing (APP-206), the composer (APP-207). The multi-select stretch (APP-208) only after B1–B3 merge and only if merged by Nov 21 noon UTC. | agents |
+| Sat Nov 22 | Tier A reviews closed; merge W1–W4. Release C Tier A reviews (APP-203, APP-204, APP-206) closed; Release C branches rebased onto `main` once release B's branch has merged. | agents |
 | Sun Nov 23 | Renewed scan disposition. **Release B** (22→24). Expiry renewal to Dec 15 plus the December month. **Done 2026-11-14 at 18:15 UTC**, with the renewal (stop 2026-12-15T14:00Z) and a disposition for CVE-2025-6020 ([record](../../evidence/APP-194/release-2026-11-14.md)). Alarm template deployed. Anthropic limit set. FormaStack raises the fAuth tenant limit to at least 30. Restore drill. | **Victor** |
-| Mon Nov 24 | Victor builds his class apps on beta with the composer, using a fresh alias plus one helper account. | **Victor** + agents fix forward |
-| Wed Nov 26 | Rehearsal with 2–3 real students: sign-up, consent, names, his apps, private entries, grading, sharing, building their own app. | **Victor** |
+| Mon Nov 24 | Victor builds his class apps on beta with the composer, using a fresh alias plus one helper account (release B's capabilities: private entries, reviewer commands, formative quizzes). | **Victor** + agents fix forward |
+| Tue Nov 25 | **Release C** (APP-209): a reviewed contract-only release of `main` (schema 24 → 24, [APP-210](../../Tickets/0-backlog/APP-210.md); [record](../../evidence/APP-209/CONTRACT-RELEASE.md)) after release B; no migration, no snapshot, no outage beyond the stop-then-start deploy. Then Victor builds the participation apps (a live poll, a timed quiz, homework with one submission per assignment) with the composer and checks them with the helper account. | **Victor** (approval) + agents |
+| Wed Nov 26 | Rehearsal with 2–3 real students: sign-up, consent, names, his apps, private entries, grading, sharing, building their own app; with Release C, one timed poll end to end (post, answer, change the answer, close, the ranking on the projector). | **Victor** |
 | Fri Nov 28 | Issue 25 codes, then one restart in the evening. Victor emails the codes. No deploys after this. | **Victor** |
 | Nov 29–30 | Class. | Victor + students |
 | Dec 1–12 | Real use continues. Watch and learn. Fixes only in announced windows. | |
@@ -133,6 +136,30 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
     - No load test runs on beta, because beta is the cohort's organization. A scratch-RDS herd is recommended as part of the Nov 23 restore drill, on Victor's word: it needs an IAM policy for the restored instance and one task run, under $2.
   - Post-class order: G1, then G2 with G3 (and G4), then G5 only after an ADR decides the D7 exception.
 
+### Release C: participation primitives (decided 2026-11-14; [ADR-020](../architecture/ADR-020-PARTICIPATION-PRIMITIVES.md))
+
+Victor's go of 2026-11-14 ("Go and build don't wait on my go remember fable can decide"), designed by the Fable advisor in his place the same day. One contract edition (`impl-2026-11-14.2`), no migration, one normal promotion after release B. Builders own disjoint files (ADR-020 §13); the grammar builder goes first.
+
+| Ticket | Primitive | Builder |
+| --- | --- | --- |
+| APP-202 | Contract edition and admission: the grammar below, both validators, retained edition | B0 (first) |
+| APP-203 | One entry per person per key (replace on resubmit); "open while" guards with server time and `set_now` stamps; the 422 refusals | B1 (Tier A) |
+| APP-204 | Countdown; ranking by person with a `matches` score against a reviewer-only key list; limit 50 | B2 (Tier A for D7) |
+| APP-205 | The reference picker in forms; read-only stamped fields | B3 |
+| APP-206 | The approver step for filers without share authority: reviewers are reached without a share, nobody else is | B4 (Tier A for authorization) |
+| APP-207 | The composer generates all of it from plain words | B5 |
+| APP-208 | Multi-select (checkboxes) with per-option counts: stretch under a cut rule | B6 |
+| APP-209 | The Release C promotion and its readback | B7 |
+
+**Go/no-go handling.** Release C is **not** a gate for the codes (section "Go/no-go for the 25 codes" is unchanged). If it is not promoted by Nov 26, or the rehearsal shows a blocker in it, the class runs on release B's features: formative quizzes (an `own` responses list and a reviewer summary), homework and attendance as private entries with reviewer-only grading, and Victor's known-issues list for students stays as written for release B. Nothing in Release C changes the schema, so a rollback is the ordinary previous task definition (ADR-017).
+
+**What Victor's apps may use after Release C** (the composer writes them from his words; nothing is classroom-specific):
+- an item list the reviewer posts, closes and reopens (`set_now` stamps the open time; no declared transition, so he can close his own item);
+- a private responses list with one entry per person per item: a second answer replaces the first; "Already locked in" when it is the same;
+- answers accepted only while the item is open and within its window (`requires` guards; a late answer is refused with "the item this refers to is no longer open", never silently dropped);
+- a countdown card over the item list, ticking from server time;
+- a ranking by person on his page, scored against an answer-key list only reviewers can see; students' devices receive nothing of other students (D7 unchanged). A published leaderboard on students' devices is **phase 2**, after the class, and needs an ADR-007 exception and a notice change: it is named, not designed.
+
 ### Class guidance: live updates with 25 open pages
 
 This goes in the runbook (APP-188) and on the Nov 24 checklist. Victor's text:
@@ -149,6 +176,18 @@ This goes in the runbook (APP-188) and on the Nov 24 checklist. Victor's text:
 > - "You don't have access to this card" right after someone else saved: the card is stale, not a lost permission, so press Refresh. *(Delete this item once APP-198 has shipped; item 6 of the go/no-go list requires it before codes go out.)*
 >
 > **Fallback:** if live updates misbehave, stop relying on them and refresh your projected summary by hand between items. Submitting through forms doesn't depend on live updates.
+
+### Class guidance: the participation tools (Release C; delete if Release C is not promoted)
+
+This goes in the runbook (APP-188, a Release C section from APP-209) and on the Nov 25 checklist. Victor's text:
+
+> **Timed polls and quizzes.** Post an item from your own page; it opens the moment you post it and the countdown on everyone's page starts from the server's clock, not theirs. Students pick the item (the newest one is preselected) and their answer, and press Submit. Submitting again replaces their earlier answer; the same answer again says "Already locked in". When the window ends, or when you press Close, further answers are refused with "the item this refers to is no longer open": a late answer is never saved quietly, so there is nothing to clean up. **Close the open item before you post the next one**: the countdown and the picker follow the item you touched last.
+>
+> **Your screen, their screens.** The ranking by name and the "correct so far" count live on your page: they score against the answer key only you (and your reviewers) can see. A student who opens the ranking card sees only their own name with nothing else, which is by design. Say so once; a public leaderboard is a later change.
+>
+> **Homework.** "One submission per assignment" works the same way: a second submission replaces the first until you close the assignment.
+>
+> **If something looks wrong:** a form that says "Not saved: the item this refers to is no longer open" means the item closed first; reopen it if you meant to accept late answers. A countdown that says "Nothing is open yet" means no item is posted or the student can't see one: post or share again. A countdown that shows "Closed" while you expect it open means the last-touched item is a closed one: reopen the right item, or post the next.
 
 ## Rules for the agents
 
@@ -172,11 +211,11 @@ All yes, or no codes go out.
    - The helper account fills every form field of every app, and no form shows an ID text box (G3). "Which X" fields are enums or short text.
    - "Advance" or "close" is a reviewer-only update of a state field, never a transition, because a record's creator can't fire a transition on it.
    - A shared student page holds at most one typed query view; record summaries are used otherwise.
-   - Every review, grade or approval is a reviewer-only command, and everything students file goes in a private-entries list. No app uses an approver step. The canvas approver step shares the filed record with the approver, and a filer without share authority (a student in Victor's apps, who is neither the work's creator nor a `share_work` holder) sees "The share with X was refused; the record is filed." (APP-189 known issue, 2026-11-14).
+   - Every review, grade or approval is a reviewer-only command, and everything students file goes in a private-entries list. No app uses an approver step. The canvas approver step shares the filed record with the approver, and a filer without share authority (a student in Victor's apps, who is neither the work's creator nor a `share_work` holder) sees "The share with X was refused; the record is filed." (APP-189 known issue, 2026-11-14). **With Release C (APP-206) this message no longer appears:** a named approver who is a reviewer is reached without a share, and anyone else is reported as "not a reviewer of this app"; a filer without share authority can still reach nobody else.
 6. **`refresh-herd` green on main** (APP-195, APP-197). Its CI gate passes in the tenant-foundation workflow: 15 open pages, three herds 10 s apart, every run A criterion (test profile: p95 current within 8 s, every page within 10 s, first-try at least 90%, no terminal failure, delivery to all, command under 1.5 s), and run C reproducing the finding. One recorded release-profile measurement at 26 pages shows no terminal refresh failure, every page current within 10 s, p95 within 6 s and the owner's command under 1.5 s. The runbook carries the catalog-check count, the per-transaction p50, the 26-page first-try share, the sustainable cadence (15 pages at 5 s) and Victor's beta document-read timing. APP-198 (stale views are never shown as "no access") is merged.
 7. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
 8. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
-9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer; and a page may take up to ten seconds to show someone else's change (press Refresh to see it sooner).
+9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer; and a page may take up to ten seconds to show someone else's change (press Refresh to see it sooner). **With Release C promoted and read back,** the first three items are replaced by: a second answer replaces the first in lists that say so; a late answer is refused and says why; the countdown follows the item the teacher touched last. Release C itself is not an item of this list (it is not a gate).
 
 ## Verification (end to end)
 
@@ -189,6 +228,10 @@ All yes, or no codes go out.
   - alarms OK;
   - a test alarm email arrives;
   - the restore drill matches.
+- **Release C (about Nov 25, after release B's readback; APP-209):**
+  - the normal promotion completes; `/health/ready` passes; the schema still reads 24;
+  - on beta, with the helper account: a timed poll posts, counts down from server time, accepts an answer, replaces it on resubmit, says "Already locked in" on the same answer, refuses an answer after Close and after the window, and the ranking by name on Victor's page scores against his key list while the helper's page shows only itself;
+  - a filed record naming Victor as approver shows no "share was refused" message.
 - **Victor's build day (Nov 24):** with the composer, he creates:
   - an attendance app whose check-ins are private, with Victor as reviewer;
   - a homework app with shared assignments, private submissions and a reviewer-only Grade command;

@@ -532,6 +532,11 @@ async fn propose(
         }
         Ok(DryRun::Stale) => return problem("stale"),
         Ok(DryRun::Conflict { .. }) => return problem("conflict"),
+        // ADR-020 (APP-203): a typed refusal is the neutral could_not_draft.
+        Ok(DryRun::Refused(refusal)) => {
+            tracing::info!(event = "assistant.proposal_refused", stage = refusal.code());
+            return problem("could_not_draft");
+        }
         Err(storage::Error::ProjectionLimit) => return problem("app_data_limit"),
         Err(storage::Error::Denied) => {
             tracing::info!(event = "assistant.proposal_refused", stage = "dry_run");

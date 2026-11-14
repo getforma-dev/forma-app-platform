@@ -1,0 +1,84 @@
+{
+  "head": "3464523768b8b52f097a0bbb15677d8e84b3044a",
+  "breaks": [
+    {
+      "id": "S1",
+      "guard": "the rule: a field outside the create's reach that moved locks the entry",
+      "file": "app/src/storage/commands.rs",
+      "old": "        .any(|field| {\n            stored.get(&field.id).unwrap_or(&null) != composed.get(&field.id).unwrap_or(&null)\n        }))",
+      "new": "        .any(|field| {\n            stored.get(&field.id).unwrap_or(&null) != composed.get(&field.id).unwrap_or(&null)\n        })\n        && false)",
+      "command": "cargo test --locked -p forma-app-platform --lib -- a_replace_differs_exactly_when_a_field_outside_the_creates_reach_moved",
+      "exit": 101,
+      "seconds": 15.4,
+      "caught": true,
+      "failure": [
+        "test storage::commands::tests::a_replace_differs_exactly_when_a_field_outside_the_creates_reach_moved ... FAILED",
+        "thread 'storage::commands::tests::a_replace_differs_exactly_when_a_field_outside_the_creates_reach_moved' (68794586) panicked at app/src/storage/commands.rs:2621:9:",
+        "assertion `left == right` failed: once scored, the entry is locked for its creator",
+        "  left: Ok(false)",
+        " right: Ok(true)",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 542 filtered out; finished in 0.00s"
+      ],
+      "restored": true
+    },
+    {
+      "id": "S2",
+      "guard": "the commit refuses a replace that would undo a reviewer's work",
+      "file": "app/src/storage/commands.rs",
+      "old": "            require(!untouched_fields_differ(\n                &published.fields,\n                declaration,\n                &entry.values,\n                &composed,\n            )?)?;\n            target = entry.record;",
+      "new": "            target = entry.record;",
+      "command": "just campaign composer",
+      "exit": 101,
+      "seconds": 28.9,
+      "caught": true,
+      "failure": [
+        "APP008 check: APP-207: the real client over a loopback Messages stub turns the quiz acceptance sentence, an attendance check-in and homework submissions into generated definitions, admitted, owner-published and saved on the member's shell; the generation request carries the participation prompt and the sentence as data; every records input binds its own collection (expected is not bound to responses, whose fields it shares)",
+        "APP008 check: APP-207 acceptance 3: the composed quiz runs end to end: a contributor cannot post; the owner's post stamps opened_at; a contributor's answer is filed, a changed answer replaces it (the same entry at version 2, the second form's id never created), the same answer again is unchanged; the owner's page ranks the contributor by creator with one match against the expected entry and the contributor's page withholds the leaderboard (APP-211: the expected key is unreadable to them) while still counting their response; after the owner's close the countdown reads closed and the next answer is refused requirement_not_met",
+        "test storage::composer_qualification::native_composer_campaign ... FAILED",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 542 filtered out; finished in 13.97s",
+        "thread 'app093-composer-campaign' (68795525) panicked at app/src/storage/composer_qualification.rs:2295:5:",
+        "assertion `left == right` failed: the commit refuses a resubmission of a scored entry"
+      ],
+      "restored": true
+    },
+    {
+      "id": "S3",
+      "guard": "the dry run refuses the same replace",
+      "file": "app/src/storage/actions.rs",
+      "old": "                    require(!untouched_fields_differ(\n                        &published.fields,\n                        declaration,\n                        &entry.values,\n                        &composed,\n                    )?)?;\n                    replaces = Some(entry.record.clone());",
+      "new": "                    replaces = Some(entry.record.clone());",
+      "command": "just campaign composer",
+      "exit": 101,
+      "seconds": 37.8,
+      "caught": true,
+      "failure": [
+        "APP008 check: APP-207: the real client over a loopback Messages stub turns the quiz acceptance sentence, an attendance check-in and homework submissions into generated definitions, admitted, owner-published and saved on the member's shell; the generation request carries the participation prompt and the sentence as data; every records input binds its own collection (expected is not bound to responses, whose fields it shares)",
+        "APP008 check: APP-207 acceptance 3: the composed quiz runs end to end: a contributor cannot post; the owner's post stamps opened_at; a contributor's answer is filed, a changed answer replaces it (the same entry at version 2, the second form's id never created), the same answer again is unchanged; the owner's page ranks the contributor by creator with one match against the expected entry and the contributor's page withholds the leaderboard (APP-211: the expected key is unreadable to them) while still counting their response; after the owner's close the countdown reads closed and the next answer is refused requirement_not_met",
+        "test storage::composer_qualification::native_composer_campaign ... FAILED",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 542 filtered out; finished in 14.21s",
+        "thread 'app093-composer-campaign' (68798638) panicked at app/src/storage/composer_qualification.rs:2287:5:",
+        "assertion `left == right` failed: the dry run refuses a resubmission of a scored entry"
+      ],
+      "restored": true
+    },
+    {
+      "id": "P1",
+      "guard": "the planner refuses a generated matches key list that is not own",
+      "file": "app/src/composer/plan.rs",
+      "old": "        if bound\n            .is_some_and(|schema| schema.get(\"visibility\").and_then(Value::as_str) != Some(\"own\"))\n        {",
+      "new": "        if bound\n            .is_some_and(|schema| schema.get(\"visibility\").and_then(Value::as_str) == Some(\"shared\"))\n        {",
+      "command": "cargo test --locked -p forma-app-platform --lib -- a_generated_matches_key_must_be_an_own_list",
+      "exit": 101,
+      "seconds": 21.6,
+      "caught": true,
+      "failure": [
+        "test composer::tests::a_generated_matches_key_must_be_an_own_list ... FAILED",
+        "---- composer::tests::a_generated_matches_key_must_be_an_own_list stdout ----",
+        "thread 'composer::tests::a_generated_matches_key_must_be_an_own_list' (68803150) panicked at app/src/composer/tests.rs:1332:45:",
+        "    composer::tests::a_generated_matches_key_must_be_an_own_list",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 542 filtered out; finished in 0.01s"
+      ],
+      "restored": true
+    }
+  ]
+}

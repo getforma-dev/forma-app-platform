@@ -10,8 +10,8 @@ use crate::{
     commands::routes::typed_value,
     directory, events,
     storage::{
-        composer_bindings, CommandRequest, DryRun, Error, LibraryApp, Member, OpenableWork,
-        RecordRow, RecordsListing, Stores, TrustedRequest,
+        composer_bindings, ApproverStanding, CommandRequest, DryRun, Error, LibraryApp, Member,
+        OpenableWork, RecordRow, RecordsListing, Stores, TrustedRequest,
     },
 };
 use serde_json::{json, Value};
@@ -32,6 +32,23 @@ pub struct DraftValue {
 pub struct Approver {
     pub principal: String,
     pub label: String,
+    /// APP-206 (ADR-020 §8): how the record reaches this approver, judged
+    /// by [`crate::storage::Workspace::approver_standing`] for the filer on
+    /// the draft's work. A name match alone is `Unreachable` (fail closed)
+    /// until `resolve` judges it.
+    pub standing: ApproverStanding,
+}
+
+/// APP-206: the note for an approver reached as a reviewer (no share).
+pub fn reviewer_note(label: &str) -> String {
+    format!("Filed for {label}'s review.")
+}
+/// APP-206: the note for an approver who is neither a reviewer nor
+/// shareable by this filer. It names no one else's access.
+pub fn unreachable_note(label: &str) -> String {
+    format!(
+        "{label} is not a reviewer of this app; the record is filed and visible to its reviewers."
+    )
 }
 /// The existing record a decision targets.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -141,6 +158,8 @@ pub fn display(value: &Value) -> String {
         }
         "decimal" => text("coefficient"),
         "reference" => text("record_id"),
+        // ADR-020 §9 (APP-208): a multi-select reads as its values joined.
+        "multi_enum" => crate::commands::multi_enum_text(value),
         _ => text("value"),
     }
 }
@@ -328,6 +347,7 @@ pub fn match_approver(name: &str, members: &[Member]) -> Option<Approver> {
     best.map(|(_, member, display)| Approver {
         principal: member.principal.clone(),
         label: display,
+        standing: ApproverStanding::Unreachable,
     })
 }
 
@@ -667,13 +687,21 @@ async fn resolve_draft(
         idempotency_key: fresh_key().ok_or(Refusal::StoreUnavailable)?,
     };
     let values = dry_run(stores, member, &request).await?;
-    let approvers = match parsed.approver_name.as_deref() {
+    let mut approvers = match parsed.approver_name.as_deref() {
         Some(names) => {
             let members = stores.workspace.members(member).await?;
             match_approvers(names, &members)
         }
         None => Vec::new(),
     };
+    // APP-206: each approver's standing for this filer on this work, read
+    // before the commit; MCP and Slack read it again after the commit.
+    for approver in &mut approvers {
+        approver.standing = stores
+            .workspace
+            .approver_standing(member, &request.app, &request.work, &approver.principal)
+            .await?;
+    }
     let flags = super::workflows::draft_flags(stores, member, &request.schema, &values).await;
     Ok(Resolution::Draft(Box::new(Draft {
         kind: Kind::Create,
@@ -703,6 +731,8 @@ async fn dry_run(
         Ok(DryRun::Valid { state, .. }) => state,
         Ok(DryRun::Stale) => return Err(Refusal::CouldNotDraft("stale")),
         Ok(DryRun::Conflict { .. }) => return Err(Refusal::CouldNotDraft("conflict")),
+        // ADR-020 (APP-203): the neutral could_not_draft; the code is logged.
+        Ok(DryRun::Refused(refusal)) => return Err(Refusal::CouldNotDraft(refusal.code())),
         // A value storage refuses under the published schema (or a declared
         // rule) is a neutral refusal (the member may write the work).
         Err(Error::Denied) => return Err(Refusal::CouldNotDraft("refused_by_schema")),

@@ -20,7 +20,11 @@ type Field = {
   input_mode: string;
   label: string; input: string; value: string; spec: string; spec_input: string;
   writable: boolean; read_only: boolean; has_text: boolean; has_choices: boolean;
-  choices: { value: string }[];
+  choices: { value: string; label?: string; selected?: boolean }[];
+  /** APP-205: a reference with nothing to choose (a disabled select). */
+  no_choices?: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  has_checkboxes?: boolean;
 };
 type Form = {
   id?: string; title: string; collection: string; command: string; action: string; csrf: string;
@@ -75,11 +79,29 @@ function formSection(document: Document, props: DocumentProps, form: Form): HTML
     if (field.has_text) { const control = input(document, field.input, field.value, 'text'); control.setAttribute('inputmode', field.input_mode || 'text'); label.append(control); }
     if (field.has_choices) {
       const select = element(document, 'select', { name: field.input });
-      for (const choice of field.choices) select.append(element(document, 'option', { value: choice.value }, choice.value));
+      for (const choice of field.choices) select.append(element(document, 'option', { value: choice.value }, choice.label ?? choice.value));
       // Match the native form: an empty new field uses the first offered
-      // choice; a declared existing value selects its exact choice.
+      // choice; a declared existing value selects its exact choice; a
+      // reference picker (APP-205) selects the choice the server marked.
+      const marked = field.choices.find(choice => choice.selected);
       if (field.choices.some(choice => choice.value === field.value)) select.value = field.value;
+      else if (marked) select.value = marked.value;
       label.append(select);
+    }
+    if (field.no_choices) {
+      label.append(element(document, 'select', { name: field.input, disabled: '' }, element(document, 'option', { value: '' }, 'Nothing to choose yet')));
+    }
+    if (field.has_checkboxes) {
+      // ADR-020 §9 (APP-208): one checkbox per declared value, in declaration
+      // order, the held ones checked, under the field's one input name after
+      // an empty hidden sentinel (so "nothing checked" posts as null).
+      const group = element(document, 'span', { class: 'document-choices', role: 'group' }, input(document, field.input, ''));
+      for (const choice of field.choices) {
+        const box = element(document, 'input', { type: 'checkbox', name: field.input, value: choice.value }) as HTMLInputElement;
+        if (choice.selected) { box.setAttribute('checked', ''); box.checked = true; }
+        group.append(element(document, 'label', { class: 'document-choice' }, box, ` ${choice.label ?? choice.value}`));
+      }
+      label.append(group);
     }
     if (field.read_only) label.append(element(document, 'span', {}, field.value));
     if (field.writable) label.append(input(document, field.spec_input, field.spec));

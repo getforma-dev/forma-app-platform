@@ -15,13 +15,17 @@
 //!   create/transition rule and `compose`), then rolled back. The action path
 //!   uses it to show a confirmation card that storage would accept; the
 //!   member's confirmation still goes through the audited command route,
-//!   which judges everything again.
+//!   which judges everything again. ADR-020: it judges `requires` and the
+//!   `one_per_creator` match at its own transaction's instant, exactly as the
+//!   commit does but without a lock, and names the entry a create replaces.
 use super::record_query::CURRENT;
 use super::{
     authorization::{own_rows, Action, Resource, Transaction, SCOPED},
     commands::{
-        collection, compose, current_state, decode_stored, published, published_content, state_map,
-        work_fence, work_pin, CommandRequest, Published, RecordCommand, RecordField,
+        collection, compose, composed_state, current_state, decode_stored, judge_requires,
+        key_document, keyed_entry, published, published_content, state_map, transaction_instant,
+        untouched_fields_differ, work_fence, work_pin, CommandRequest, Published, RecordCommand,
+        RecordField, Refusal,
     },
     pool::Data,
     queries::{collections_many, ordinal, outline_of, pinned_many, pinned_many_with, Pinned},
@@ -107,11 +111,17 @@ pub enum DryRun {
         collection: String,
         current_version: i64,
         state: Value,
+        /// ADR-020 C2: the creator's own entry this create would replace
+        /// (its record id); `None` when it adds a record or is not a create
+        /// on a keyed schema.
+        replaces: Option<String>,
     },
     /// The work moved past the caller's premise.
     Stale,
     /// `expected_record_version` is not the record's current version.
     Conflict { current_version: i64 },
+    /// ADR-020: the commit would refuse it with this typed refusal (422).
+    Refused(Refusal),
 }
 
 /// The records listing's columns over `genui.internal_records r` and each
@@ -733,6 +743,7 @@ impl Data {
             } else {
                 declaration.operation == "update" || declaration.has_transitions()
             })?;
+            let now = transaction_instant(transaction).await?;
             let bytes = compose(
                 &published.fields,
                 declaration,
@@ -740,15 +751,57 @@ impl Data {
                 &command.values,
                 creator.as_deref() == Some(request.principal.as_str()),
                 reviewer,
+                &now,
             )?;
+            let composed = composed_state(&bytes)?;
+            if !judge_requires(transaction, org, app, work, declaration, &composed, &now).await? {
+                return Ok(DryRun::Refused(Refusal::RequirementNotMet));
+            }
+            let mut replaces = None;
+            let mut target = (command.record.clone(), current_version == 0);
+            if current_version == 0
+                && declaration.operation == "create"
+                && !published.one_per_creator.is_empty()
+            {
+                let key = key_document(&published.one_per_creator, &composed)?;
+                let found = keyed_entry(
+                    transaction,
+                    org,
+                    app,
+                    work,
+                    &collection,
+                    &command.record,
+                    &key,
+                    false,
+                )
+                .await?
+                .ok_or(Error::Unavailable)?;
+                if let Some(entry) = found {
+                    if entry.values == bytes {
+                        return Ok(DryRun::Refused(Refusal::Unchanged));
+                    }
+                    require(entry.creator == request.principal).map_err(|_| Error::Unavailable)?;
+                    // ADR-020 §17.43 (APP-213): the commit refuses a replace
+                    // that would undo another command's work; so does the
+                    // dry run, with the same rule.
+                    require(!untouched_fields_differ(
+                        &published.fields,
+                        declaration,
+                        &entry.values,
+                        &composed,
+                    )?)?;
+                    replaces = Some(entry.record.clone());
+                    target = (entry.record, false);
+                }
+            }
             super::commands::copy_capacity(
                 transaction,
                 org,
                 app,
                 work,
                 &collection,
-                &command.record,
-                current_version == 0,
+                &target.0,
+                target.1,
                 bytes.len(),
             )
             .await?;
@@ -757,6 +810,7 @@ impl Data {
                 collection,
                 current_version,
                 state,
+                replaces,
             })
         }
         .await;

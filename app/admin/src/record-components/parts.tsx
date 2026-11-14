@@ -23,6 +23,7 @@ export function RecordComponentView(props: { component: RecordComponent }) {
         <noscript>Filtering needs JavaScript. The values below use the displayed filters.</noscript>
       </form>)}
       <p class="state" role="status" aria-live="polite">{p.message}</p>
+      {createShow(() => p.hasCountdown, () => <p class="record-metric record-countdown" role="timer" data-countdown={p.countdownState} data-countdown-target={p.countdownTarget} data-server-time={p.serverTime}>{p.countdownText}</p>)}
       {createShow(() => p.hasSummary, () => <p class="record-metric" title={p.summaryRaw}>{p.summary}</p>)}
       {createShow(() => p.hasBudget, () => <div class="record-budget"><p>{p.budget}</p><p>{p.ratio}</p><p>{p.remaining}</p></div>)}
       {createShow(() => p.hasGroups, () => <figure class="record-groups"><ol>{createList(() => p.groups, g => g.id, g => <li><span>{g.label}</span><strong title={g.raw}>{g.value}</strong><svg class="record-bar-track" aria-hidden="true"><rect class="record-bar" width={g.width} height="8" /></svg></li>)}</ol><figcaption>Values cover all matching saved records. Bars show relative magnitude.</figcaption></figure>)}

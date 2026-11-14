@@ -27,3 +27,10 @@ Released framework qualification, typed contracts and reproducible application s
 | 199 | [APP-198: A stale record snapshot is never shown as "no access"](../0-backlog/APP-198.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-191 |
 | 201 | [APP-199: Fewer transactions per read, and a server-advised refresh spread](../0-backlog/APP-199.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | M | Backlog | APP-191, APP-197 |
 | 202 | [APP-200: Record snapshot capacity follows the query worker's admission](../0-backlog/APP-200.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-198 |
+| 204 | [APP-202: Contract edition impl-2026-11-14.2: the participation grammar in both validators](../3-in-review/APP-202.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | In review | None |
+| 205 | [APP-203: One entry per person per key, and "open while" guards with server time](../0-backlog/APP-203.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-202 |
+| 206 | [APP-204: Countdown, and a ranking by person scored against a reviewer-only key list](../0-backlog/APP-204.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-202 |
+| 207 | [APP-205: The reference picker in forms, and read-only stamped fields](../0-backlog/APP-205.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-202 |
+| 210 | [APP-208: Multi-select fields (stretch): checkboxes with per-option counts](../0-backlog/APP-208.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-202, APP-203, APP-204, APP-205 |
+| 213 | [APP-211: No misleading score for a viewer who cannot read the key; grading by name in the record chooser](../0-backlog/APP-211.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-204, APP-205 |
+| 214 | [APP-213: A replacing entry keeps a reviewer's work; generated answer keys are private](../0-backlog/APP-213.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-203, APP-207 |

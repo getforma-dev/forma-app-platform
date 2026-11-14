@@ -4,11 +4,14 @@ use super::{
     decode,
     prompt::{CatalogApp, CatalogCommand},
     rehearsed,
-    resolve::{cents, display, match_approver, match_target},
-    routes::{body, Body},
+    resolve::{
+        cents, display, match_approver, match_approvers, match_target, reviewer_note,
+        unreachable_note, Approver, Draft,
+    },
+    routes::{body, draft_document, Body},
     Kind,
 };
-use crate::storage::{Member, RecordRow};
+use crate::storage::{ApproverStanding, CommandRequest, Member, RecordRow};
 use serde_json::{json, Value};
 
 pub(super) fn expense_app() -> CatalogApp {
@@ -187,6 +190,11 @@ fn money_resolves_to_cents_and_displays_as_dollars() {
         display(&json!({"type": "enum", "value": "approved"})),
         "approved"
     );
+    // ADR-020 §9 (APP-208): a multi-select reads as its values joined.
+    assert_eq!(
+        display(&json!({"type": "multi_enum", "values": ["red", "blue"]})),
+        "red, blue"
+    );
 }
 
 #[test]
@@ -334,6 +342,118 @@ fn approvers_match_display_names_only_and_targets_match_record_words() {
         &["rejected"]
     )
     .is_none());
+}
+
+/// APP-206: a create draft naming `approvers` (label, standing), for the
+/// wire tests; the ids are synthetic.
+fn routed_draft(approvers: &[(&str, &str, ApproverStanding)]) -> Draft {
+    let approvers: Vec<Approver> = approvers
+        .iter()
+        .map(|(principal, label, standing)| Approver {
+            principal: (*principal).into(),
+            label: (*label).into(),
+            standing: *standing,
+        })
+        .collect();
+    Draft {
+        kind: Kind::Create,
+        app: "00000000-0000-4000-8000-000000000c10".into(),
+        work: "00000000-0000-4000-8000-000000000c11".into(),
+        title: "Claims and notes".into(),
+        placed: false,
+        collection: "00000000-0000-4000-8000-000000000c12".into(),
+        request: CommandRequest {
+            app: "00000000-0000-4000-8000-000000000c10".into(),
+            work: "00000000-0000-4000-8000-000000000c11".into(),
+            publication: "00000000-0000-4000-8000-000000000c13".into(),
+            command: "submit".into(),
+            schema: "claim".into(),
+            schema_version_expected: 1,
+            record: "00000000-0000-4000-8000-000000000c14".into(),
+            expected_record_version: 0,
+            expected_work_version: 1,
+            values: json!([]),
+            idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+        },
+        values: vec![],
+        approver: approvers.first().cloned(),
+        approvers,
+        target: None,
+        confirm_token: "t".into(),
+        rule: None,
+        flags: vec![],
+    }
+}
+
+#[test]
+fn each_draft_approver_carries_its_server_judged_standing() {
+    // ADR-020 §8: the three wire names, and nothing else.
+    assert_eq!(
+        [
+            ApproverStanding::Reviewer,
+            ApproverStanding::Shareable,
+            ApproverStanding::Unreachable
+        ]
+        .map(ApproverStanding::name),
+        ["reviewer", "shareable", "unreachable"]
+    );
+    let owner = "00000000-0000-4000-8000-000000000c01";
+    let nia = "00000000-0000-4000-8000-000000000c04";
+    let draft = routed_draft(&[
+        (owner, "Olive Park", ApproverStanding::Reviewer),
+        (nia, "Nia Brooks", ApproverStanding::Unreachable),
+    ]);
+    let document = draft_document(&draft, 7);
+    assert_eq!(
+        document["approvers"],
+        json!([
+            {"principal_id": owner, "label": "Olive Park", "standing": "reviewer"},
+            {"principal_id": nia, "label": "Nia Brooks", "standing": "unreachable"},
+        ])
+    );
+    assert_eq!(
+        document["approver"],
+        json!({"principal_id": owner, "label": "Olive Park", "standing": "reviewer"})
+    );
+    let shareable = draft_document(
+        &routed_draft(&[(nia, "Nia Brooks", ApproverStanding::Shareable)]),
+        7,
+    );
+    assert_eq!(shareable["approvers"][0]["standing"], "shareable");
+    assert_eq!(
+        draft_document(&routed_draft(&[]), 7)["approver"],
+        Value::Null
+    );
+}
+
+#[test]
+fn a_name_match_alone_reaches_no_one_and_the_notes_name_only_the_approver() {
+    let olive = "00000000-0000-4000-8000-000000000c01";
+    let members = [Member {
+        principal: olive.into(),
+        label: "Olive Park".into(),
+    }];
+    // Fail closed: until `resolve` asks storage, nobody is shareable.
+    let matched = match_approver("Olive", &members).unwrap();
+    assert_eq!(matched.standing, ApproverStanding::Unreachable);
+    assert!(match_approvers("Olive and Olive Park", &members)
+        .iter()
+        .all(|a| a.standing == ApproverStanding::Unreachable));
+    // The canvas, MCP and Slack word the two no-share outcomes alike.
+    assert_eq!(
+        reviewer_note("Olive Park"),
+        "Filed for Olive Park's review."
+    );
+    assert_eq!(
+        unreachable_note("Nia Brooks"),
+        "Nia Brooks is not a reviewer of this app; the record is filed and visible to its reviewers."
+    );
+    for note in [reviewer_note("Nia Brooks"), unreachable_note("Nia Brooks")] {
+        assert!(
+            !note.contains("refused") && !note.contains("share"),
+            "no share wording for a record that was never shared: {note}"
+        );
+    }
 }
 
 #[test]

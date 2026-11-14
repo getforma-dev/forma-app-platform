@@ -604,3 +604,85 @@ fn the_rate_is_per_token_and_per_member() {
         "00000000-0000-4000-8000-0000000000fe"
     )));
 }
+
+/// APP-206 (ADR-020 §8): a held draft names each approver's standing (by
+/// label, never a principal id), and the commit words each outcome the way
+/// the canvas does: no share wording for an approver who was never shared.
+#[test]
+fn a_held_draft_shows_each_standing_and_the_commit_words_each_outcome() {
+    use crate::{actions::resolve::Approver, storage::ApproverStanding};
+    use tools::Reached;
+    let olive = "00000000-0000-4000-8000-000000000c01";
+    let nia = "00000000-0000-4000-8000-000000000c04";
+    let mut held = draft();
+    held.approvers = vec![
+        Approver {
+            principal: olive.into(),
+            label: "Olive Park".into(),
+            standing: ApproverStanding::Reviewer,
+        },
+        Approver {
+            principal: nia.into(),
+            label: "Nia Brooks".into(),
+            standing: ApproverStanding::Unreachable,
+        },
+    ];
+    held.approver = held.approvers.first().cloned();
+    let auth = Arc::new(Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap());
+    let work = Arc::new(Work::new(auth, None, Arc::new(RecordingPages::default())));
+    let state = Mcp::new(work, Composer::new(None, "router", "generator"));
+    let document = tools::draft_document_for_tests(&state, &held);
+    assert_eq!(
+        document["approvers"],
+        json!([
+            {"label": "Olive Park", "standing": "reviewer"},
+            {"label": "Nia Brooks", "standing": "unreachable"},
+        ])
+    );
+    assert_eq!(
+        document["approver"],
+        json!({"label": "Olive Park", "standing": "reviewer"})
+    );
+    assert!(!document.to_string().contains(olive) && !document.to_string().contains(nia));
+
+    let notes = |reached: &[(&str, Reached)]| {
+        tools::approver_notes(
+            &reached
+                .iter()
+                .map(|(label, how)| ((*label).to_owned(), *how))
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(notes(&[]), "");
+    assert_eq!(
+        notes(&[("Olive Park", Reached::Reviewer)]),
+        " Filed for Olive Park's review."
+    );
+    assert_eq!(
+        notes(&[("Nia Brooks", Reached::Unreachable)]),
+        " Nia Brooks is not a reviewer of this app; the record is filed and visible to its reviewers."
+    );
+    assert_eq!(
+        notes(&[
+            ("Hal Moreno", Reached::Shared),
+            ("Rita Okafor", Reached::Shared)
+        ]),
+        " Shared with Hal Moreno and Rita Okafor for approval."
+    );
+    assert_eq!(
+        notes(&[
+            ("Olive Park", Reached::Reviewer),
+            ("Hal Moreno", Reached::Shared),
+            ("Nia Brooks", Reached::Unreachable),
+            ("Rita Okafor", Reached::NotShared),
+        ]),
+        " Shared with Hal Moreno for approval. Filed for Olive Park's review. Nia Brooks is not a reviewer of this app; the record is filed and visible to its reviewers. It could not be shared with the approver."
+    );
+    for how in [Reached::Reviewer, Reached::Unreachable] {
+        let said = notes(&[("Olive Park", how)]);
+        assert!(
+            !said.contains("hared") && !said.contains("refused"),
+            "{said}"
+        );
+    }
+}

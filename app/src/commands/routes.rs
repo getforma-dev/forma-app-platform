@@ -2,7 +2,9 @@
 //! in `commands`). Refusal order for the `POST`: fetch metadata (403), the
 //! session (uniform 404), the bounded body (413), the synchronizer token of a
 //! form (403), the body as forma-json-v1, the key and the shape (400), and
-//! only then storage.
+//! only then storage. ADR-020: storage's typed refusals answer 422 with the
+//! code alone (`requirement_not_met`, `unchanged`); a form returns to the
+//! record page with the refused notice.
 use super::{payload, Notice, RecordPage};
 use crate::{
     auth::{capability, cookies, csrf, Auth},
@@ -103,7 +105,9 @@ enum Mode {
     },
 }
 
-/// The route's answer for a storage result (D7.9 HTTP rows).
+/// The route's answer for a storage result (D7.9 HTTP rows). A form returns
+/// to the page of the record the outcome names: the requested record, or
+/// (ADR-020 C2) the creator's own entry a keyed create replaced.
 fn answer(
     mode: &Mode,
     app: &str,
@@ -111,6 +115,14 @@ fn answer(
     record: &str,
     result: Result<CommandResult, storage::Error>,
 ) -> Response {
+    let record = match &result {
+        Ok(CommandResult::Committed(outcome)) | Ok(CommandResult::Replayed(outcome))
+            if storage::valid_identifier(&outcome.record_id) =>
+        {
+            outcome.record_id.clone()
+        }
+        _ => record.to_owned(),
+    };
     match mode {
         Mode::Json => match result {
             Ok(CommandResult::Committed(outcome)) | Ok(CommandResult::Replayed(outcome)) => {
@@ -133,6 +145,11 @@ fn answer(
             ),
             Ok(CommandResult::InFlight) => waiting("in_flight"),
             Ok(CommandResult::Busy) => waiting("busy"),
+            // ADR-020: the code alone (edition impl-2026-11-14.2 pairs no
+            // recovery view, revision, limit or Retry-After with it).
+            Ok(CommandResult::Refused(refusal)) => {
+                http::problem(StatusCode::UNPROCESSABLE_ENTITY, refusal.code())
+            }
             Err(storage::Error::ProjectionLimit) => {
                 http::problem(StatusCode::UNPROCESSABLE_ENTITY, "app_data_limit")
             }
@@ -151,8 +168,10 @@ fn answer(
                 Ok(CommandResult::InFlight) => Notice::InFlight,
                 Ok(CommandResult::Busy) => Notice::Busy,
                 // The session loaded the page it posts from (the token is
-                // bound to it): storage's refusal of a value returns there.
-                Err(storage::Error::Denied | storage::Error::ProjectionLimit) => Notice::Refused,
+                // bound to it): storage's refusal of a value returns there,
+                // and so do ADR-020's typed refusals.
+                Ok(CommandResult::Refused(_))
+                | Err(storage::Error::Denied | storage::Error::ProjectionLimit) => Notice::Refused,
                 Err(storage::Error::UnknownOutcome) => Notice::Unknown,
                 Err(_) => return http::unavailable(),
             };
@@ -314,8 +333,30 @@ pub(crate) fn form_typed_value(spec: &Value, raw: &str) -> Option<Value> {
     }
 }
 
+/// ADR-020 §9 (APP-208): a checkbox group's posted texts as one typed
+/// value. The form posts the input name once per checked box, after an empty
+/// sentinel so that "nothing checked" still reaches the parse; the empties
+/// are dropped and what remains is the selection in posted order (the
+/// native form posts boxes in document order, the declaration's). None left
+/// is the null value. Nothing is reordered or deduplicated here: storage
+/// judges the composed value against the published schema (`compatible`).
+pub(crate) fn form_multi_enum(raws: &[String]) -> Value {
+    let values: Vec<&str> = raws
+        .iter()
+        .map(String::as_str)
+        .filter(|raw| !raw.is_empty())
+        .collect();
+    if values.is_empty() {
+        json!({"type": "null"})
+    } else {
+        json!({"type": "multi_enum", "values": values})
+    }
+}
+
 /// The record page's form (D7.16): hidden premise fields, `value.<field>`
-/// texts with their `spec.<field>` echoes, the key and the token.
+/// texts with their `spec.<field>` echoes, the key and the token. A
+/// `multi_enum` field's texts (its checkbox group) compose one value; any
+/// other field posted twice is malformed.
 fn from_form(
     fields: &[(String, String)],
     app: &str,
@@ -323,11 +364,14 @@ fn from_form(
     command: &str,
 ) -> Option<(CommandRequest, String)> {
     let mut map: Map<String, Value> = Map::new();
-    let mut values = Vec::new();
+    let mut values: Vec<(String, Vec<String>)> = Vec::new();
     let mut specs = Map::new();
     for (name, value) in fields {
         if let Some(field) = name.strip_prefix("value.") {
-            values.push((field.to_owned(), value.clone()));
+            match values.iter_mut().find(|(id, _)| id == field) {
+                Some((_, raws)) => raws.push(value.clone()),
+                None => values.push((field.to_owned(), vec![value.clone()])),
+            }
         } else if let Some(field) = name.strip_prefix("spec.") {
             specs.insert(field.to_owned(), serde_json::from_str(value).ok()?);
         } else if map
@@ -341,9 +385,17 @@ fn from_form(
     let number = |key: &str| text(key).and_then(|v| v.parse::<i64>().ok());
     let values = values
         .into_iter()
-        .map(|(field, raw)| {
+        .map(|(field, raws)| {
             let spec = specs.get(&field)?;
-            Some(json!({"field_id": field, "value": form_typed_value(spec, &raw)?}))
+            let value = if spec.get("type").and_then(Value::as_str) == Some("multi_enum") {
+                form_multi_enum(&raws)
+            } else {
+                let [raw] = raws.as_slice() else {
+                    return None;
+                };
+                form_typed_value(spec, raw)?
+            };
+            Some(json!({"field_id": field, "value": value}))
         })
         .collect::<Option<Vec<_>>>()?;
     let request = CommandRequest {
@@ -466,6 +518,7 @@ pub(crate) async fn commit(
             Ok(CommandResult::Stale(_)) => "stale",
             Ok(CommandResult::InFlight) => "in_flight",
             Ok(CommandResult::Busy) => "busy",
+            Ok(CommandResult::Refused(refusal)) => refusal.code(),
             Err(storage::Error::Denied) => "denied",
             Err(storage::Error::UnknownOutcome) => "unknown_outcome",
             Err(_) => "unavailable",
@@ -567,7 +620,7 @@ async fn record_page(
     let Some(key) = fresh_key() else {
         return http::unavailable();
     };
-    let view = super::view(
+    let mut view = super::view(
         &app,
         &work,
         &detail,
@@ -575,6 +628,21 @@ async fn record_page(
         key,
         notice(request.uri().query()),
     );
+    // ADR-020 (APP-205): a form that writes a reference picks among the
+    // records the member may read (the work's listing, under own_rows), read
+    // under the same pin as the detail or the page is unavailable.
+    if super::writes_reference(&view) {
+        let listing = match stores.data.list_records(&trusted, &app, &work).await {
+            Ok(listing) => listing,
+            Err(storage::Error::Denied) => return http::not_found(),
+            Err(_) => return http::unavailable(),
+        };
+        if listing.publication != detail.publication || listing.work_version != detail.work_version
+        {
+            return http::unavailable();
+        }
+        super::fill_references(&mut view, &detail.bindings, &listing);
+    }
     state.page.record(&view)
 }
 

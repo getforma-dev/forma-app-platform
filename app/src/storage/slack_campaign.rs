@@ -240,7 +240,9 @@ async fn model_stub() -> (String, Arc<AtomicUsize>) {
                     .ok()
                     .and_then(|v| v["utterance"].as_str().map(str::to_owned))
                     .unwrap_or_default();
-                let text = if utterance.contains("slowly") {
+                let text = if let Some(routed) = super::actions_campaign::routing_reply(&utterance) {
+                    routed
+                } else if utterance.contains("slowly") {
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     json!({"action": "create", "app_hint": EXPENSE_APP, "values": {"amount": "240", "merchant": "Offsite <b>&co</b>", "category": "travel", "spent_on": "2026-10-28", "note": "team offsite"}, "approver_name": "Sarah", "target_record_hint": null}).to_string()
                 } else {
@@ -1111,6 +1113,171 @@ async fn campaign() {
         true
     );
     check(&mut checks, &format!("Approve by button: decided as Sarah through the audited route (version 2, approved, updater Sarah, via Slack); the DM is replaced in {} ms with \"Approved by Sarah Chen\" and no buttons; record.committed on both canvases; Diego's DM \"Your Nobu claim ($86.00) was approved by Sarah Chen\" in {} ms; a second Approve or a Reject on the decided record is refused without a change; the audit chains verify", timings["approve_to_replaced_ms"], timings["approve_to_filer_dm_ms"]));
+
+    // --- APP-206 (ADR-020 §8): approver routing through the Slack flow ---
+    {
+        use super::actions_campaign::{
+            grant_rows, routing_world, HAL, NIA, OLIVE, RITA, ROUTING_PREFIX, SAM,
+        };
+        let world = routing_world(&fixture, &stores).await;
+        world.everyone(&stores, ShareRole::Contributor).await;
+        let (sam_token, _) = link(mint(SAM, ORG).await, TEAM, "U0SAMLEE").await;
+        let (olive_token, _) = link(mint(OLIVE, ORG).await, TEAM, "U0OLIVE").await;
+        minted_tokens.extend([sam_token, olive_token]);
+        // `/forma <prefix><names>` from `user`, then Confirm: the filed text.
+        let file = |user: &'static str, names: &'static str| {
+            let harness = &harness;
+            let stub = &stub;
+            async move {
+                let (_, _, _, route) = harness
+                    .command(TEAM, user, &format!("{ROUTING_PREFIX}{names}"))
+                    .await;
+                let card = stub.wait(&route, Duration::from_secs(10)).await;
+                let draft_id = buttons(&card)[0].1.clone();
+                let (_, route) = harness.click(TEAM, user, flows::CONFIRM, &draft_id).await;
+                let filed = stub.wait(&route, Duration::from_secs(5)).await;
+                (card, filed["text"].as_str().unwrap().to_owned())
+            }
+        };
+        let rows = grant_rows(&fixture).await;
+        let (card, filed) = file("U0SAMLEE", "Olive").await;
+        assert_eq!(
+            grant_rows(&fixture).await,
+            rows,
+            "no grant from a filer without share authority"
+        );
+        assert!(card.to_string().contains("Olive Park"), "{card}");
+        assert!(
+            filed.starts_with("Filed: *3")
+                && filed.contains(". Filed for *Olive Park*'s review.")
+                && !filed.contains("sent to"),
+            "{filed}"
+        );
+        let sam = super::definition_qualification::request(&stores, ORG, SAM, 1);
+        let newest = stores
+            .data
+            .list_records(&sam, &world.app, &world.work)
+            .await
+            .unwrap()
+            .records[0]
+            .record_id
+            .clone();
+        assert!(world.sees(&stores, OLIVE, &world.work, &newest).await);
+        assert_eq!(
+            grant_rows(&fixture).await,
+            rows,
+            "no grant from a filer without share authority"
+        );
+        let newest_of = |principal: &'static str| {
+            let stores = &stores;
+            let world = &world;
+            async move {
+                stores
+                    .data
+                    .list_records(
+                        &super::definition_qualification::request(stores, ORG, principal, 1),
+                        &world.app,
+                        &world.work,
+                    )
+                    .await
+                    .unwrap()
+                    .records[0]
+                    .record_id
+                    .clone()
+            }
+        };
+        let (_, filed) = file("U0SAMLEE", "Rita").await;
+        assert_eq!(grant_rows(&fixture).await, rows);
+        assert!(
+            filed.contains(". Filed for *Rita Okafor*'s review.") && !filed.contains("sent to"),
+            "{filed}"
+        );
+        assert!(
+            world
+                .sees(&stores, RITA, &world.work, &newest_of(SAM).await)
+                .await
+        );
+        world.everyone(&stores, ShareRole::Reviewer).await;
+        let everyone_rows = grant_rows(&fixture).await;
+        let (_, filed) = file("U0SAMLEE", "Hal").await;
+        assert_eq!(grant_rows(&fixture).await, everyone_rows);
+        assert!(
+            filed.contains(". Filed for *Hal Moreno*'s review.") && !filed.contains("sent to"),
+            "{filed}"
+        );
+        assert!(
+            world
+                .sees(&stores, HAL, &world.work, &newest_of(SAM).await)
+                .await
+        );
+        world.everyone(&stores, ShareRole::Contributor).await;
+        let rows = grant_rows(&fixture).await;
+        let (_, filed) = file("U0SAMLEE", "Nia").await;
+        assert_eq!(grant_rows(&fixture).await, rows);
+        assert!(
+            filed.contains(". *Nia Brooks* is not a reviewer of this app; the record is filed and visible to its reviewers.") && !filed.contains("sent to"),
+            "{filed}"
+        );
+        let newest = stores
+            .data
+            .list_records(&sam, &world.app, &world.work)
+            .await
+            .unwrap()
+            .records[0]
+            .record_id
+            .clone();
+        assert!(!world.sees(&stores, NIA, &world.work, &newest).await);
+        assert_eq!(grant_rows(&fixture).await, rows);
+        // Judged again at Confirm: the card was drafted while Nia was
+        // unreachable, the owner then made her a reviewer, and Confirm
+        // reaches her as one, with nothing shared by Sam.
+        let (_, _, _, route) = harness
+            .command(TEAM, "U0SAMLEE", &format!("{ROUTING_PREFIX}Nia"))
+            .await;
+        let card = stub.wait(&route, Duration::from_secs(10)).await;
+        let draft_id = buttons(&card)[0].1.clone();
+        stores
+            .workspace
+            .share_work(
+                &super::definition_qualification::request(&stores, ORG, OLIVE, 1),
+                &world.app,
+                &world.work,
+                Audience::Member(NIA),
+                ShareRole::Reviewer,
+                ShareMode::Set,
+            )
+            .await
+            .unwrap();
+        let rows = grant_rows(&fixture).await;
+        let (_, route) = harness
+            .click(TEAM, "U0SAMLEE", flows::CONFIRM, &draft_id)
+            .await;
+        let filed = stub.wait(&route, Duration::from_secs(5)).await["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert_eq!(grant_rows(&fixture).await, rows);
+        assert!(
+            filed.contains(". Filed for *Nia Brooks*'s review."),
+            "{filed}"
+        );
+        assert!(
+            world
+                .sees(&stores, NIA, &world.work, &newest_of(SAM).await)
+                .await
+        );
+        let (_, filed) = file("U0OLIVE", "Hal").await;
+        assert!(
+            filed.contains(", sent to *Hal Moreno* for approval."),
+            "{filed}"
+        );
+        let after = grant_rows(&fixture).await;
+        assert!(
+            after[1] > rows[1] && after[2] == rows[2] + 1,
+            "{rows:?} {after:?}"
+        );
+        check(&mut checks, "APP-206 through Slack: Sam (a contributor under the organization-wide share, no share authority) files with /forma naming the owner, a personal reviewer and a member covered by a live organization-wide reviewer share, confirming each: \"Filed for <name>'s review.\", no \"sent to\", each named reviewer's listing shows the record and no grant row changes; naming a member with no reviewer standing gives the plain unreachable note, that member does not see the record and nothing is granted; a card drafted while she was unreachable is judged again at Confirm and reaches her as a reviewer after the owner's reviewer share, with nothing shared by Sam; the owner naming a non-reviewer is still \"sent to Hal Moreno for approval\" with the share written");
+    }
 
     // --- D10: /forma at the daily model-call cap ---
     // The same Slack app over a parser whose real client is at a reached cap:

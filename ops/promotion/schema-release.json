@@ -1,0 +1,16 @@
+{
+  "evidence": "evidence/APP-209/CONTRACT-RELEASE.md",
+  "expires_at_utc": "2026-11-27T00:00:00Z",
+  "from": {
+    "database_version": 24,
+    "deployment_contract_sha256": "88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356",
+    "schema_manifest_sha256": "176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1"
+  },
+  "infrastructure_sha256": "e74b620e4d9749b5eb47819a1546be1adc00765008f042abbb0b747d9e549da1",
+  "schema_version": 1,
+  "to": {
+    "database_version": 24,
+    "deployment_contract_sha256": "3493b0a68b08b686a245be7ffa602817772895c0f5cc8983c06ad78b7a3e2dd9",
+    "schema_manifest_sha256": "176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1"
+  }
+}

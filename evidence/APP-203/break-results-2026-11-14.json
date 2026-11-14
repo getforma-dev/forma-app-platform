@@ -1,0 +1,466 @@
+[
+ {
+  "break": "A1",
+  "rule": "the key match reads only the committer's rows",
+  "file": "app/src/storage/commands.rs",
+  "before": "format!(\"coalesce(v.creator_id={SCOPED},false)\")",
+  "after": "\"TRUE\".to_owned()",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 61,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:717:5: C2 x D7: a reviewer's own create never matches a contributor's entry, although the reviewer reads every entry does not hold as shipped",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C2 x D7: two creators with the same key keep two entries; neither create (nor the dry run) touches the other's (fails under bypass)",
+  "checks_passed": 5,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A2",
+  "rule": "the via read carries own_rows (current_state)",
+  "file": "app/src/storage/commands.rs",
+  "before": "super::authorization::own_rows(\"v\", \"$2::text::uuid\", \"$3::text::uuid\", super::authorization::SCOPED)), &[&org",
+  "after": "\"TRUE\"), &[&organization,&app,&work,&collection,&record,&version]",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 147,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:910:5: C3 x D7: a via reference into another member's own list is the uniform 404 (commit and dry run); the creator and a reviewer resolve it does not hold as shipped",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C3 set_now on a contributor's create: checked_at is the transaction's instant (the outcome's committed_at)",
+  "checks_passed": 11,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A3",
+  "rule": "every requires guard is judged",
+  "file": "app/src/storage/commands.rs",
+  "before": "held &= guard.holds_at(&read[index].1, now);",
+  "after": "let _ = guard.holds_at(&read[index].1, now);",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 75,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:755:5: assertion `left == right` failed",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C2: the reviewer's listing counts one entry per creator per key (Ben's four answers to item one are one record)",
+  "checks_passed": 7,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A4",
+  "rule": "now is the instant plus the offset",
+  "file": "app/src/storage/rules.rs",
+  "before": "timestamp_of(s + offset)",
+  "after": "timestamp_of(s - offset)",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 64,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:325:18: respond by 00000000-0000-4000-8000-000000000c03 must commit: Ok(Refused(RequirementNotMet))",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C3 set_now: a post stamps opened_at with the transaction's instant, equal to the revision's committed_at and the outcome's; a contributor cannot post (reviewer_only) and nobody can supply the stamp",
+  "checks_passed": 2,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A5",
+  "rule": "set_now stamps the transaction's instant",
+  "file": "app/src/storage/commands.rs",
+  "before": "let value = if declaration.set_now.contains(&field.id) {",
+  "after": "let value = if false && declaration.set_now.contains(&field.id) {",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 68,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:325:18: post by 00000000-0000-4000-8000-000000000c01 must commit: Err(Denied)",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "the ADR-020 \u00a710 example and the sessions app admit, publish and save through the shipped path; `responses` and `expected` are own collections; Rev is a reviewer, everyone else a contributor through the organization-wide share",
+  "checks_passed": 1,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A6",
+  "rule": "identical values are refused unchanged",
+  "file": "app/src/storage/commands.rs",
+  "before": "if entry.values == state {",
+  "after": "if false && entry.values == state {",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 95,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:675:5: assertion `left == right` failed",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C2: a contributor's second create for the same key replaces the first (version 2 of the first record, one command.committed event and one outcome naming it, creator and updater the contributor); the second form's id is never created; the dry run names the entry it replaces; a replay returns the stored outcome",
+  "checks_passed": 3,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A7",
+  "rule": "a keyed create replaces the creator's entry",
+  "file": "app/src/storage/commands.rs",
+  "before": "if current_version == 0",
+  "after": "if false",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 53,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:632:5: assertion `left == right` failed: the replacing create names the first entry at its next version",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C3 set_now: a post stamps opened_at with the transaction's instant, equal to the revision's committed_at and the outcome's; a contributor cannot post (reviewer_only) and nobody can supply the stamp",
+  "checks_passed": 2,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A8",
+  "rule": "the matched row is locked FOR UPDATE",
+  "file": "app/src/storage/commands.rs",
+  "before": "let locking = if lock { \" FOR UPDATE OF r\" } else { \"\" };",
+  "after": "let locking = if lock { \"\" } else { \"\" };",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 138,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:1160:9: the matched entry's row is locked by the key match",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C2 race: 25 simultaneous creates by one creator for one key leave exactly one entry whose state is one of the submitted states; its 21 commits have versions 1..21 and every outcome names it; the other 4 were 422 unchanged; no other requested id exists (848 admission refusals, each resent with its key)",
+  "checks_passed": 16,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A9",
+  "rule": "the dry run names the entry it replaces",
+  "file": "app/src/storage/actions.rs",
+  "before": "replaces = Some(entry.record.clone());",
+  "after": "let _ = Some(entry.record.clone());",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 69,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:622:5: Valid { collection: \"391ba0b3-f505-4ff1-b98b-99a5a6313471\", current_version: 0, state: Array [Object {\"field_id\": String(\"item\"), \"value\": Object {\"input_id\": String(\"items\"), \"record_id\": String(\"00000000-0000-4000-8000-000000001000\"), \"type\": String(\"reference\")}}, Object {\"field_id\": String(\"choice\"), \"value\": Object {\"type\": String(\"enum\"), \"value\": String(\"c\")}}], replaces: None }",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C3 set_now: a post stamps opened_at with the transaction's instant, equal to the revision's committed_at and the outcome's; a contributor cannot post (reviewer_only) and nobody can supply the stamp",
+  "checks_passed": 2,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "A10",
+  "rule": "the dry run judges requires",
+  "file": "app/src/storage/actions.rs",
+  "before": "if !judge_requires(transaction, org, app, work, declaration, &composed, &now).await? {",
+  "after": "if false && !judge_requires(transaction, org, app, work, declaration, &composed, &now).await? {",
+  "command": "cargo test --locked -p forma-app-platform --lib storage::participation_campaign::native_participation_campaign -- --ignored --exact --nocapture",
+  "exit": 101,
+  "seconds": 64,
+  "failed_tests": [
+   "storage::participation_campaign::native_participation_campaign"
+  ],
+  "panics": [
+   "app/src/storage/participation_campaign.rs:755:5: assertion `left == right` failed",
+   "app/src/storage/participation_campaign.rs:448:10: called `Result::unwrap()` on an `Err` value: Any { .. }"
+  ],
+  "last_check_passed": "C2: the reviewer's listing counts one entry per creator per key (Ben's four answers to item one are one record)",
+  "checks_passed": 7,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B1",
+  "rule": "the picker lists only the target collection",
+  "file": "app/src/commands/mod.rs",
+  "before": ".filter(|record| record.collection == collection)",
+  "after": ".filter(|_| !collection.is_empty())",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 56,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:807:5: assertion `left == right` failed"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B2",
+  "rule": "at most 200 choices",
+  "file": "app/src/commands/mod.rs",
+  "before": ".take(REFERENCE_CHOICES)",
+  "after": ".take(usize::MAX)",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 29,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:854:5: assertion `left == right` failed"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B3",
+  "rule": "a label is at most 100 characters",
+  "file": "app/src/commands/mod.rs",
+  "before": ".map(|text| text.chars().take(REFERENCE_LABEL_CHARACTERS).collect())",
+  "after": ".map(|text| text.chars().collect())",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 24,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:807:5: assertion `left == right` failed"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B4",
+  "rule": "only a writable reference gets a picker",
+  "file": "app/src/commands/mod.rs",
+  "before": ".filter(|row| row.writable && row.kind == \"reference\")",
+  "after": ".filter(|row| row.kind == \"reference\")",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 33,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:817:5: assertion failed: shown.fields[2].choices.is_empty() && !shown.fields[2].nothing_to_choose"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B5",
+  "rule": "an empty target is nothing to choose",
+  "file": "app/src/commands/mod.rs",
+  "before": "row.nothing_to_choose = choices.is_empty();",
+  "after": "row.nothing_to_choose = false;",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 39,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:843:9: assertion failed: empty.fields[0].choices.is_empty() && empty.fields[0].nothing_to_choose"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B6",
+  "rule": "the held value stays selected",
+  "file": "app/src/commands/mod.rs",
+  "before": "choices.get_mut(held.unwrap_or(0))",
+  "after": "choices.get_mut(0 * held.unwrap_or(0))",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 26,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:822:5: assertion `left == right` failed"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B7",
+  "rule": "the target resolves through the work's bindings",
+  "file": "app/src/commands/mod.rs",
+  "before": ".and_then(|input| bindings.iter().find(|(bound, _)| bound == input))",
+  "after": ".and_then(|_| bindings.iter().find(|(bound, _)| bound == \"responses\"))",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas_tests",
+  "exit": 101,
+  "seconds": 24,
+  "failed_tests": [
+   "commands::tests::the_reference_picker_lists_the_readable_target_records_newest_first"
+  ],
+  "panics": [
+   "app/src/commands/tests.rs:807:5: assertion `left == right` failed"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B8",
+  "rule": "the form card carries the picker as choices with labels",
+  "file": "app/src/query/canvas.rs",
+  "before": "label: choice.label.clone(),",
+  "after": "label: choice.value.clone(),",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas::tests",
+  "exit": 101,
+  "seconds": 19,
+  "failed_tests": [
+   "query::canvas::tests::a_form_card_carries_the_reference_picker_and_keeps_stamped_fields_read_only"
+  ],
+  "panics": [
+   "app/src/query/canvas_tests.rs:391:5: assertion `left == right` failed"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B9",
+  "rule": "an empty target is a disabled picker on the card",
+  "file": "app/src/query/canvas.rs",
+  "before": "let no_choices = field.writable && field.nothing_to_choose;",
+  "after": "let no_choices = field.writable && false;",
+  "command": "cargo test --locked -p forma-app-platform --lib -- commands::tests query::canvas::tests",
+  "exit": 101,
+  "seconds": 21,
+  "failed_tests": [
+   "query::canvas::tests::a_form_card_carries_the_reference_picker_and_keeps_stamped_fields_read_only"
+  ],
+  "panics": [
+   "app/src/query/canvas_tests.rs:404:5: assertion failed: nothing.no_choices && !nothing.has_choices && !nothing.has_text"
+  ],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [
+   "test failed, to rerun pass `-p forma-app-platform --lib`"
+  ],
+  "restored_clean": true
+ },
+ {
+  "break": "B10",
+  "rule": "the canvas client selects the server-marked choice",
+  "file": "app/admin/src/canvas/render.ts",
+  "before": "option.selected = choice.selected ?? choice.value === field.value;",
+  "after": "option.selected = choice.value === field.value;",
+  "command": "npx tsx --test test/reference-picker.test.ts",
+  "exit": 1,
+  "seconds": 1,
+  "failed_tests": [
+   "the reference picker selects the marked record and an empty target is disabled"
+  ],
+  "panics": [],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [],
+  "restored_clean": true
+ },
+ {
+  "break": "B11",
+  "rule": "the canvas client renders the disabled picker",
+  "file": "app/admin/src/canvas/render.ts",
+  "before": "if (field.no_choices) {",
+  "after": "if (false && field.no_choices) {",
+  "command": "npx tsx --test test/reference-picker.test.ts",
+  "exit": 1,
+  "seconds": 1,
+  "failed_tests": [
+   "the reference picker selects the marked record and an empty target is disabled"
+  ],
+  "panics": [],
+  "last_check_passed": null,
+  "checks_passed": 0,
+  "compile_errors": [],
+  "restored_clean": true
+ }
+]

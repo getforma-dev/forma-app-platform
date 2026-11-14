@@ -1,5 +1,16 @@
 //! APP-158/159 trusted projection protocol, immutable snapshot receipts and
 //! native page props. Values exist only for a complete, released execution.
+//!
+//! ADR-020 (APP-204): a `countdown` projection carries the target instant (a
+//! contract timestamp or null), the current record's `label` and `closed`;
+//! only a countdown carries them. The server's instant is stamped on its
+//! props as the response is built ([`stamp`]), so the first text and the
+//! client's ticking start from the server's clock, never the browser's.
+//!
+//! ADR-020 §17.34 (APP-211): a component storage withheld (its key input is
+//! unreadable to the viewer) is never in the engine's payload or result, so it
+//! has no value, no rows and no receipt; its props carry the state `withheld`
+//! and exactly [`WITHHELD_NOTE`] ([`withheld_props`]), on every path alike.
 use super::{
     page,
     worker::{ColumnType, Failure, QueryError},
@@ -99,7 +110,15 @@ struct Projection {
     budget: Option<ProjectionBudget>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     value_type: Option<Value>,
+    /// ADR-020 C1: a countdown's current record label (at most 200 characters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+    /// ADR-020 C1: whether the countdown's `closed_when` holds or its target is null.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    closed: Option<bool>,
 }
+/// ADR-020 C1: a countdown's label bound, in characters.
+const COUNTDOWN_LABEL: usize = 200;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct ProjectionColumn {
@@ -188,6 +207,32 @@ pub(crate) fn parse_result(
             || v.state != if v.population == 0 { "empty" } else { "ready" }
             || v.rows.len() > 200
             || v.groups.len() > 2000
+        {
+            return Err(failure());
+        }
+        if v.kind == "countdown" {
+            // ADR-020 C1: an instant or null, a bounded label, closed; nothing
+            // else. A null target is closed; nothing readable has neither.
+            if !v.rows.is_empty()
+                || !v.columns.is_empty()
+                || !v.groups.is_empty()
+                || v.budget.is_some()
+                || v.truncated_page
+                || v.value_type != Some(json!({"type": "timestamp"}))
+                || v.value
+                    .as_ref()
+                    .is_some_and(|s| !admission::contract_timestamp(s))
+                || v.label
+                    .as_ref()
+                    .is_none_or(|l| l.chars().count() > COUNTDOWN_LABEL)
+                || v.closed.is_none()
+                || (v.value.is_none() && v.closed != Some(true))
+                || (v.population == 0 && (v.value.is_some() || v.label.as_deref() != Some("")))
+            {
+                return Err(failure());
+            }
+        } else if v.label.is_some()
+            || v.closed.is_some()
             || v.value.as_ref().is_some_and(|s| !integer(s))
         {
             return Err(failure());
@@ -288,6 +333,16 @@ pub struct RecordComponentProps {
     pub has_receipt: bool,
     pub receipt_digest: String,
     pub receipt_json: String,
+    /// ADR-020 C1: a countdown with a readable current record.
+    pub has_countdown: bool,
+    /// `open` or `closed` (the projection's `closed`).
+    pub countdown_state: String,
+    /// The target instant, empty when null.
+    pub countdown_target: String,
+    /// The text at `server_time`: `m:ss`, `h:mm:ss` or "Closed".
+    pub countdown_text: String,
+    /// The server's whole-second UTC instant when the response was built.
+    pub server_time: String,
 }
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct RecordColumnProps {
@@ -352,6 +407,12 @@ fn shown(value: &Value) -> (String, String) {
             format!("{}: {}", value["input_id"].as_str().unwrap_or("Record"), id),
             id,
         );
+    }
+    // ADR-020 §9 (APP-208): a `records_list` cell shows the selection joined
+    // by ", ".
+    if kind == "multi_enum" {
+        let joined = crate::commands::multi_enum_text(value);
+        return (joined.clone(), joined);
     }
     let raw = match kind {
         "money" => value["minor_units"].as_str().unwrap_or_default().to_owned(),
@@ -452,6 +513,31 @@ fn base(run: &RecordComponentsRun, parameters: &Value) -> Vec<RecordComponentPro
         })
         .collect()
 }
+/// ADR-020 §17.34 (APP-211): the one note a withheld component shows, on
+/// every path (the canvas, the pages, the live refresh): no number, no rows.
+pub const WITHHELD_NOTE: &str = "Scores are shown to this app's reviewers.";
+/// ADR-020 §17.34 (APP-211): the props of the components storage withheld
+/// from this viewer, in definition order: the state `withheld`, the note, and
+/// no value, rows, groups, filters or receipt. Built from the declarations
+/// only; no engine result exists for them.
+pub fn withheld_props(run: &RecordComponentsRun, parameters: &Value) -> Vec<RecordComponentProps> {
+    run.withheld()
+        .iter()
+        .map(|v| RecordComponentProps {
+            id: v["id"].as_str().unwrap_or_default().into(),
+            title: v["title"].as_str().unwrap_or_default().into(),
+            kind: v["kind"].as_str().unwrap_or_default().into(),
+            schema: v["records"]["schema_id"]
+                .as_str()
+                .unwrap_or_default()
+                .into(),
+            state: "withheld".into(),
+            message: WITHHELD_NOTE.into(),
+            filter_epoch: parameters["filter_epoch"].as_i64().unwrap_or(0),
+            ..Default::default()
+        })
+        .collect()
+}
 pub fn unavailable(run: &RecordComponentsRun, message: &str) -> Vec<RecordComponentProps> {
     unavailable_with_parameters(run, &default_parameters(), message)
 }
@@ -468,6 +554,7 @@ pub fn unavailable_with_parameters(
             p.message = message.into();
             p
         })
+        .chain(withheld_props(run, parameters))
         .collect()
 }
 pub fn props(
@@ -479,6 +566,8 @@ pub fn props(
     let wire: WireResult =
         serde_json::from_value(result.document.clone()).map_err(|_| failure())?;
     let mut props = base(run, parameters);
+    // `parse_result` matched the engine's components to the payload's, one to
+    // one in order; a withheld component is in neither and follows them.
     for (p, r) in props.iter_mut().zip(wire.components) {
         p.state = r.state;
         p.ready = true;
@@ -488,6 +577,32 @@ pub fn props(
         p.has_receipt = true;
         p.receipt_digest = receipt["digest"].as_str().unwrap_or_default().into();
         p.receipt_json = serde_json::to_string(&receipt).map_err(|_| failure())?;
+        if p.kind == "countdown" {
+            // ADR-020 C1. The text is the server's (`stamp`); the label is the
+            // current record's, as plain text.
+            let label = r.label.unwrap_or_default();
+            p.has_countdown = !p.empty;
+            p.countdown_state = if r.closed == Some(true) {
+                "closed"
+            } else {
+                "open"
+            }
+            .into();
+            p.countdown_target = r.value.unwrap_or_default();
+            p.countdown_text = if p.countdown_state == "closed" {
+                "Closed".into()
+            } else {
+                String::new()
+            };
+            p.message = if p.empty {
+                "Nothing is open yet".into()
+            } else if label.is_empty() {
+                "Current record".into()
+            } else {
+                label
+            };
+            continue;
+        }
         p.has_table = p.kind == "records_list";
         p.columns = r
             .columns
@@ -593,7 +708,50 @@ pub fn props(
             format!("{} matching records", p.population)
         };
     }
+    props.extend(withheld_props(run, parameters));
     Ok(props)
+}
+/// ADR-020 C1: stamps the server's instant (`now`, whole seconds since the
+/// Unix epoch) on every countdown and computes the text a client shows at
+/// that instant. Called once per response, after the release check.
+pub fn stamp(components: &mut [RecordComponentProps], now: i64) {
+    let server_time = crate::boxes::register::utc(now);
+    for p in components.iter_mut().filter(|p| p.has_countdown) {
+        p.server_time = server_time.clone();
+        p.countdown_text = match instant(&p.countdown_target) {
+            Some(target) if p.countdown_state == "open" => countdown_text(target - now),
+            _ => "Closed".into(),
+        };
+    }
+}
+/// `m:ss` below an hour, `h:mm:ss` from one hour, "Closed" at zero or less.
+pub fn countdown_text(remaining: i64) -> String {
+    if remaining <= 0 {
+        return "Closed".into();
+    }
+    let (hours, minutes, seconds) = (remaining / 3600, remaining / 60 % 60, remaining % 60);
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+/// The Unix seconds of a contract timestamp (`YYYY-MM-DDTHH:MM:SSZ`).
+pub fn instant(text: &str) -> Option<i64> {
+    if !admission::contract_timestamp(text) {
+        return None;
+    }
+    let part = |at: std::ops::Range<usize>| text.get(at)?.parse::<i64>().ok();
+    let (year, month, day) = (part(0..4)?, part(5..7)?, part(8..10)?);
+    let (hour, minute, second) = (part(11..13)?, part(14..16)?, part(17..19)?);
+    // Days from the civil date (the inverse of `boxes::register::utc`).
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let yoe = year - era * 400;
+    let doy = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + hour * 3600 + minute * 60 + second)
 }
 fn fixed_decimal(value: &str, places: usize) -> String {
     let (negative, digits) = value
@@ -637,10 +795,374 @@ mod tests {
         ));
         assert!(!parameters_shaped(&json!({"filter_epoch":-1,"filters":[]})));
     }
+    /// ADR-020 C1 and C4 (APP-204): the declared components of the unit tests.
+    fn participation_run() -> RecordComponentsRun {
+        RecordComponentsRun::for_tests(json!({
+            "components": [
+                {"id": "timer", "title": "Time left", "kind": "countdown", "renderer_version": 1, "records": {"version": 1, "input_id": "items", "schema_id": "items", "timestamp_field": "opened_at", "offset_seconds": 30}},
+                {"id": "board", "title": "Leaderboard", "kind": "record_ranking", "renderer_version": 1, "records": {"version": 1, "input_id": "responses", "schema_id": "responses", "group_by": "creator", "measure": {"op": "matches", "key_input": "expected", "fields": ["item", "choice"]}, "limit": 50}}
+            ],
+            "filters": [], "datasets": [], "creators": []
+        }))
+    }
+    fn wire(timer: Value, board: Value) -> Vec<u8> {
+        let mut bytes = admission::encode(&json!({"outcome": "record_components", "filter_epoch": 0, "elapsed_ms": 3, "components": [timer, board]})).unwrap();
+        bytes.push(b'\n');
+        bytes
+    }
+    fn timer(value: Value, label: Value, closed: Value, population: u64) -> Value {
+        let mut v = json!({"id": "timer", "kind": "countdown", "population": population, "truncated_page": false, "partial": false, "total_scope": "full_authorized_filtered_collection", "state": if population == 0 { "empty" } else { "ready" }, "rows": [], "columns": [], "value": value, "groups": [], "budget": null, "value_type": {"type": "timestamp"}});
+        for (key, member) in [("label", label), ("closed", closed)] {
+            if !member.is_null() {
+                v[key] = member;
+            }
+        }
+        v
+    }
+    fn board(groups: Value, truncated: bool) -> Value {
+        json!({"id": "board", "kind": "record_ranking", "population": 3, "truncated_page": truncated, "partial": false, "total_scope": "full_authorized_filtered_collection", "state": "ready", "rows": [], "columns": [], "value": "2", "groups": groups, "budget": null, "value_type": {"type": "integer"}})
+    }
+    fn ben() -> Value {
+        json!([{"label": "Ben Okafor", "missing": false, "value": "2", "count": 2}, {"label": "Member c0000b05", "missing": false, "value": "0", "count": 1}])
+    }
+    /// ADR-020 §17.34 (APP-211): the contributor's run of the same
+    /// definition: storage withheld the board (its key is unreadable), so
+    /// the payload holds the timer alone and the board is only declared.
+    fn contributor_run() -> RecordComponentsRun {
+        let full = participation_run();
+        let mut components = full.payload()["components"].as_array().unwrap().clone();
+        let board = components.remove(1);
+        RecordComponentsRun::for_tests_withholding(
+            json!({"components": components, "filters": [], "datasets": [], "creators": []}),
+            vec![board],
+        )
+    }
+    #[test]
+    fn a_withheld_component_shows_the_note_and_never_a_value() {
+        let run = contributor_run();
+        let parameters = json!({"filter_epoch": 4, "filters": []});
+        let mut bytes = admission::encode(&json!({"outcome": "record_components", "filter_epoch": 4, "elapsed_ms": 3, "components": [timer(json!("2026-11-29T15:05:30Z"), json!("Second"), json!(false), 2)]})).unwrap();
+        bytes.push(b'\n');
+        let result = parse_result(&run, &parameters, &bytes).unwrap();
+        // The receipt covers the computed component only: no claim for the board.
+        let receipt = receipt(&run, &result, &parameters).unwrap();
+        assert_eq!(receipt["components"].as_array().unwrap().len(), 1);
+        assert_eq!(receipt["components"][0]["view_id"], "timer");
+        // The props: the timer as computed, then the board withheld, in that order.
+        let props = props(&run, &result, &parameters).unwrap();
+        assert_eq!(props.len(), 2);
+        assert_eq!(
+            (
+                props[0].id.as_str(),
+                props[0].state.as_str(),
+                props[0].has_receipt
+            ),
+            ("timer", "ready", true)
+        );
+        let shown = &props[1];
+        assert_eq!(
+            (
+                shown.id.as_str(),
+                shown.title.as_str(),
+                shown.kind.as_str(),
+                shown.schema.as_str()
+            ),
+            ("board", "Leaderboard", "record_ranking", "responses")
+        );
+        assert_eq!(
+            (shown.state.as_str(), shown.message.as_str()),
+            ("withheld", WITHHELD_NOTE)
+        );
+        assert_eq!(shown.message, "Scores are shown to this app's reviewers.");
+        assert!(!shown.ready && !shown.empty && !shown.failed);
+        assert!(
+            !shown.has_summary
+                && !shown.has_groups
+                && !shown.has_table
+                && !shown.has_budget
+                && !shown.has_countdown
+                && !shown.has_filters
+                && !shown.has_receipt
+        );
+        assert!(
+            shown.summary.is_empty()
+                && shown.summary_raw.is_empty()
+                && shown.groups.is_empty()
+                && shown.rows.is_empty()
+                && shown.population.is_empty()
+                && shown.receipt_json.is_empty()
+                && shown.receipt_digest.is_empty()
+        );
+        assert_eq!(shown.filter_epoch, 4);
+        // A failure shows the failure on the computed component and still the note on the board.
+        let failed = unavailable_with_parameters(
+            &run,
+            &parameters,
+            "Record views are temporarily unavailable.",
+        );
+        assert_eq!(failed.len(), 2);
+        assert_eq!(
+            (failed[0].state.as_str(), failed[0].message.as_str()),
+            ("failed", "Record views are temporarily unavailable.")
+        );
+        assert_eq!(
+            (
+                failed[1].state.as_str(),
+                failed[1].message.as_str(),
+                failed[1].failed
+            ),
+            ("withheld", WITHHELD_NOTE, false)
+        );
+        // A result that carries a value for the withheld component is refused:
+        // the engine never received it, so nothing may claim it was computed.
+        let smuggled = wire(
+            timer(
+                json!("2026-11-29T15:05:30Z"),
+                json!("Second"),
+                json!(false),
+                2,
+            ),
+            board(ben(), false),
+        );
+        assert!(parse_result(&run, &default_parameters(), &smuggled).is_err());
+        // Nothing to compute: the note alone, and the run is empty for the engine.
+        let only = RecordComponentsRun::for_tests_withholding(
+            json!({"components": [], "filters": [], "datasets": [], "creators": []}),
+            run.withheld().to_vec(),
+        );
+        assert!(only.is_empty());
+        let note = withheld_props(&only, &parameters);
+        assert_eq!(note.len(), 1);
+        assert_eq!(
+            (
+                note[0].id.as_str(),
+                note[0].state.as_str(),
+                note[0].message.as_str()
+            ),
+            ("board", "withheld", WITHHELD_NOTE)
+        );
+        // A reader of the key (the owner, a reviewer) withholds nothing.
+        assert!(withheld_props(&participation_run(), &parameters).is_empty());
+    }
+    #[test]
+    fn a_countdown_projection_carries_an_instant_a_label_and_closed_only() {
+        let run = participation_run();
+        let parameters = default_parameters();
+        let open = wire(
+            timer(
+                json!("2026-11-29T15:05:30Z"),
+                json!("Second"),
+                json!(false),
+                2,
+            ),
+            board(ben(), false),
+        );
+        let result = parse_result(&run, &parameters, &open).unwrap();
+        assert_eq!(result.document["components"][0]["label"], "Second");
+        let empty = wire(
+            timer(Value::Null, json!(""), json!(true), 0),
+            board(ben(), false),
+        );
+        assert!(parse_result(&run, &parameters, &empty).is_ok());
+        let refused = [
+            // An integer, a date or a malformed instant is not a countdown's value.
+            timer(json!("42"), json!("Second"), json!(false), 2),
+            timer(json!("2026-11-29"), json!("Second"), json!(false), 2),
+            timer(
+                json!("2026-11-29T15:05:30+00:00"),
+                json!("Second"),
+                json!(false),
+                2,
+            ),
+            // Label and closed are required and bounded; a null target is closed.
+            timer(json!("2026-11-29T15:05:30Z"), Value::Null, json!(false), 2),
+            timer(
+                json!("2026-11-29T15:05:30Z"),
+                json!("Second"),
+                Value::Null,
+                2,
+            ),
+            timer(
+                json!("2026-11-29T15:05:30Z"),
+                json!("x".repeat(201)),
+                json!(false),
+                2,
+            ),
+            timer(Value::Null, json!("Second"), json!(false), 2),
+            // Nothing readable: no target and no label.
+            timer(json!("2026-11-29T15:05:30Z"), json!(""), json!(false), 0),
+            timer(Value::Null, json!("Second"), json!(true), 0),
+        ];
+        for bad in refused {
+            assert!(
+                parse_result(&run, &parameters, &wire(bad.clone(), board(ben(), false))).is_err(),
+                "{bad}"
+            );
+        }
+        let mut grouped = timer(
+            json!("2026-11-29T15:05:30Z"),
+            json!("Second"),
+            json!(false),
+            2,
+        );
+        grouped["groups"] = ben();
+        assert!(parse_result(&run, &parameters, &wire(grouped, board(ben(), false))).is_err());
+        let mut typed = timer(
+            json!("2026-11-29T15:05:30Z"),
+            json!("Second"),
+            json!(false),
+            2,
+        );
+        typed["value_type"] = json!({"type": "integer"});
+        assert!(parse_result(&run, &parameters, &wire(typed, board(ben(), false))).is_err());
+        // Only a countdown carries label or closed, and only it a timestamp.
+        let mut labelled = board(ben(), false);
+        labelled["label"] = json!("Ben Okafor");
+        assert!(parse_result(
+            &run,
+            &parameters,
+            &wire(
+                timer(
+                    json!("2026-11-29T15:05:30Z"),
+                    json!("Second"),
+                    json!(false),
+                    2
+                ),
+                labelled
+            )
+        )
+        .is_err());
+        let mut timed = board(ben(), false);
+        timed["value"] = json!("2026-11-29T15:05:30Z");
+        assert!(parse_result(
+            &run,
+            &parameters,
+            &wire(
+                timer(
+                    json!("2026-11-29T15:05:30Z"),
+                    json!("Second"),
+                    json!(false),
+                    2
+                ),
+                timed
+            )
+        )
+        .is_err());
+    }
+    #[test]
+    fn countdown_props_and_the_server_instant() {
+        let run = participation_run();
+        let parameters = default_parameters();
+        let shown = |t: Value| {
+            let result = parse_result(&run, &parameters, &wire(t, board(ben(), true))).unwrap();
+            props(&run, &result, &parameters).unwrap()
+        };
+        let mut open = shown(timer(
+            json!("2026-11-29T15:05:30Z"),
+            json!("Second"),
+            json!(false),
+            2,
+        ));
+        assert!(open[0].has_countdown && !open[0].has_summary && !open[0].has_groups);
+        assert_eq!(
+            (
+                open[0].countdown_state.as_str(),
+                open[0].countdown_target.as_str(),
+                open[0].message.as_str()
+            ),
+            ("open", "2026-11-29T15:05:30Z", "Second")
+        );
+        // The server's instant, never a browser's, decides the first text.
+        let at = |text: &str| instant(text).unwrap();
+        stamp(&mut open, at("2026-11-29T15:05:05Z"));
+        assert_eq!(
+            (
+                open[0].server_time.as_str(),
+                open[0].countdown_text.as_str()
+            ),
+            ("2026-11-29T15:05:05Z", "0:25")
+        );
+        stamp(&mut open, at("2026-11-29T13:05:05Z"));
+        assert_eq!(open[0].countdown_text, "2:00:25");
+        stamp(&mut open, at("2026-11-29T15:05:30Z"));
+        assert_eq!(open[0].countdown_text, "Closed");
+        assert!(
+            open[1].server_time.is_empty(),
+            "only a countdown carries the instant"
+        );
+        let mut closed = shown(timer(
+            json!("2026-11-29T15:05:30Z"),
+            json!("Second"),
+            json!(true),
+            2,
+        ));
+        stamp(&mut closed, at("2026-11-29T15:05:05Z"));
+        assert_eq!(
+            (
+                closed[0].countdown_state.as_str(),
+                closed[0].countdown_text.as_str()
+            ),
+            ("closed", "Closed")
+        );
+        let mut untitled = shown(timer(
+            json!("2026-11-29T15:05:30Z"),
+            json!(""),
+            json!(false),
+            2,
+        ));
+        stamp(&mut untitled, at("2026-11-29T15:05:05Z"));
+        assert_eq!(untitled[0].message, "Current record");
+        let mut nothing = shown(timer(Value::Null, json!(""), json!(true), 0));
+        stamp(&mut nothing, at("2026-11-29T15:05:05Z"));
+        assert!(!nothing[0].has_countdown && nothing[0].empty);
+        assert_eq!(nothing[0].message, "Nothing is open yet");
+        // The ranking: labels, the bounded page said so, and no principal id.
+        let board = &open[1];
+        assert_eq!(
+            board
+                .groups
+                .iter()
+                .map(|g| g.label.as_str())
+                .collect::<Vec<_>>(),
+            ["Ben Okafor", "Member c0000b05"]
+        );
+        assert!(board.truncated && board.message.starts_with("Showing a bounded page"));
+    }
+    #[test]
+    fn countdown_text_and_instants() {
+        assert_eq!(countdown_text(0), "Closed");
+        assert_eq!(countdown_text(-5), "Closed");
+        assert_eq!(countdown_text(1), "0:01");
+        assert_eq!(countdown_text(59), "0:59");
+        assert_eq!(countdown_text(600), "10:00");
+        assert_eq!(countdown_text(3599), "59:59");
+        assert_eq!(countdown_text(3600), "1:00:00");
+        assert_eq!(countdown_text(604_830), "168:00:30");
+        for seconds in [0, 951_782_400, 1_795_964_730, 4_102_444_800, -86_400] {
+            let text = crate::boxes::register::utc(seconds);
+            assert_eq!(instant(&text), Some(seconds), "{text}");
+        }
+        assert_eq!(instant("2026-11-29T15:05:30"), None);
+        assert_eq!(instant(""), None);
+    }
     #[test]
     fn exact_money_and_ratio_display() {
         assert_eq!(shown(&json!({"type":"money","minor_units":"4500","currency":"USD","minor_unit_exponent":2})).0,"$45.00");
         assert_eq!(fixed_decimal("4500", 2), "45.00");
         assert_eq!(fixed_decimal("-1", 2), "-0.01");
+    }
+    /// ADR-020 §9 (APP-208): a multi-select cell reads as its values joined
+    /// by ", " (text and title alike); a null selection is the dash.
+    #[test]
+    fn a_multi_select_cell_joins_its_values() {
+        assert_eq!(
+            shown(&json!({"type":"multi_enum","values":["red","blue"]})),
+            ("red, blue".to_owned(), "red, blue".to_owned())
+        );
+        assert_eq!(
+            shown(&json!({"type":"multi_enum","values":["green"]})).0,
+            "green"
+        );
+        assert_eq!(shown(&json!({"type":"null"})).0, "—");
     }
 }

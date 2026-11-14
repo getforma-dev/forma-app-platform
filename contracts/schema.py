@@ -42,14 +42,22 @@ VALUE_TYPES = [tagged("text", {}), tagged("boolean", {}), tagged("integer", {"un
                tagged("date", {}), tagged("timestamp", {}),
                tagged("enum", {"values": {**arr(ID, 32, 1), "uniqueItems": True}}),
                tagged("reference", {"target_input": ID}),
-               tagged("money", {"currency": CURRENCY, "minor_unit_exponent": {"const": 2}})]
+               tagged("money", {"currency": CURRENCY, "minor_unit_exponent": {"const": 2}}),
+               # Edition impl-2026-11-14.2 (ADR-020 C6, stretch): a multi-select over 1..32 declared ids.
+               tagged("multi_enum", {"values": {**arr(ID, 32, 1), "uniqueItems": True}})]
 VALUES = [tagged("text", {"value": TEXT}), tagged("boolean", {"value": {"type": "boolean"}}),
           tagged("integer", {"value": INTEGER_TEXT, "unit": ID}),
           tagged("decimal", {"coefficient": INTEGER_TEXT, "scale": {"type": "integer", "minimum": 0, "maximum": 18}, "unit": ID}),
           tagged("date", {"value": DATE}), tagged("timestamp", {"value": TIME}),
           tagged("enum", {"value": ID}), tagged("reference", {"input_id": ID, "record_id": UUID}),
           tagged("money", {"minor_units": INTEGER_TEXT, "currency": CURRENCY, "minor_unit_exponent": {"const": 2}}),
+          # Edition impl-2026-11-14.2 (ADR-020 C6): a non-empty selection without duplicates; `compatible` (validate.py)
+          # requires a subset of the declared values in declaration order. "None selected" is `{"type": "null"}`.
+          tagged("multi_enum", {"values": {**arr(ID, 32, 1), "uniqueItems": True}}),
           tagged("null", {})]
+# Edition impl-2026-11-14.2 (ADR-020 C1, C3): a signed offset of at most one week. Absence means 0, so an explicit 0 is
+# refused: each meaning has one encoding.
+OFFSET_SECONDS = {"type": "integer", "minimum": -604800, "maximum": 604800, "not": {"const": 0}}
 FIELD_REF = obj({"input_id": ID, "field_id": ID})
 AGG = obj({"id": ID, "operation": enum("count", "sum", "min", "max"), "field": FIELD_REF})
 OPERATORS = [
@@ -63,7 +71,9 @@ OPERATORS = [
     tagged("lookup", {"left": FIELD_REF, "right": FIELD_REF, "rule": enum("exact", "cidr_exact_then_longest"), "cardinality": {"const": "at_most_one"}}),
 ]
 RENDERERS = ("summary", "table", "detail", "timeline", "chart", "filter", "form", "note", "status",
-             "records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
+             "records_list", "record_summary", "record_trend", "record_ranking", "record_budget",
+             # Edition impl-2026-11-14.2 (ADR-020 C1): a records renderer at registry version 1.
+             "countdown")
 DEFS = {
     "value": {"oneOf": VALUES},
     "field": obj({"id": ID, "value_type": {"oneOf": VALUE_TYPES}, "nullable": {"type": "boolean"}}),
@@ -71,15 +81,31 @@ DEFS = {
     # Edition impl-2026-11-14.1 (APP-191, D7): optional `visibility: "own"`, a collection whose entries each member sees and
     # changes only when they created them; the app's reviewers see all. Absent means shared; `"shared"` is refused so that
     # the meaning has one encoding.
-    "record_schema": obj({"id": ID, "version": VERSION, "fields": arr(ref("field"), 32, 1), "visibility": enum("own")}, optional=("visibility",)),
+    # Edition impl-2026-11-14.2 (ADR-020 C2): optional `one_per_creator`, 1..4 distinct field ids: for each creator at
+    # most one record per key tuple, a create whose key matches the creator's entry replacing it. validate.py requires
+    # `visibility: "own"`, no `multi_enum` key, every create writing every key field and no update writing one.
+    "record_schema": obj({"id": ID, "version": VERSION, "fields": arr(ref("field"), 32, 1), "visibility": enum("own"),
+                          "one_per_creator": {**arr(ID, 4, 1), "uniqueItems": True}}, optional=("visibility", "one_per_creator")),
     # Edition impl-2026-10-31.4 (APP-129) records the APP-107 amendment (additive, optional): a declared guard on a transition (`when`, a typed comparison over a field of
     # the same record schema, judged on the record as the command composes it) and `initial`, the starting value of an
     # enum field on a create (the first entry whose guard holds; an entry without a guard always holds).
     "guard": obj({"field_id": ID, "comparison": enum("eq", "ne", "lt", "lte", "gt", "gte"), "value": ref("value")}),
+    # Edition impl-2026-11-14.2 (ADR-020 C3): the server-time literal, admitted only as a `requires` entry's value. The
+    # instant is the command transaction's, never a client's; `offset_seconds` shifts it (absent means 0).
+    "now": obj({"type": {"const": "now"}, "offset_seconds": OFFSET_SECONDS}, optional=("offset_seconds",)),
+    # A `requires` entry: the APP-107 guard plus an optional `via` (a reference field of this record, the guard judged on
+    # the record it names) and the `now` literal. `$defs.guard` is unchanged, so `via` and `now` anywhere else (a
+    # transition's or an initial rule's `when`, a countdown's `closed_when`, a query filter) are refused here.
+    "requirement": obj({"field_id": ID, "comparison": enum("eq", "ne", "lt", "lte", "gt", "gte"),
+                        "value": {"oneOf": [ref("value"), ref("now")]}, "via": ID}, optional=("via",)),
     "command_declaration": obj({"id": ID, "record_schema_id": ID, "operation": enum("create", "update"), "writable_fields": {**arr(ID, 32, 1), "uniqueItems": True}, "transitions": arr(obj({"field_id": ID, "from": ID, "to": ID, "when": ref("guard")}, optional=("when",)), 32), "initial": arr(obj({"field_id": ID, "value": ID, "when": ref("guard")}, optional=("when",)), 8, 1),
                                 # Edition impl-2026-11-14.1 (APP-191, D8): optional `reviewer_only: true`, a command the app's reviewers alone may run.
                                 # Absent means every contributor; `false` is refused so that the meaning has one encoding.
-                                "reviewer_only": {"const": True}}, optional=("initial", "reviewer_only")),
+                                "reviewer_only": {"const": True},
+                                # Edition impl-2026-11-14.2 (ADR-020 C3): optional `requires` (1..4 guards that must all hold when the command
+                                # commits) and `set_now` (1..4 distinct timestamp fields the server stamps, none writable).
+                                "requires": arr(ref("requirement"), 4, 1), "set_now": {**arr(ID, 4, 1), "uniqueItems": True}},
+                               optional=("initial", "reviewer_only", "requires", "set_now")),
     "query": obj({"operator_version": VERSION, "inputs": {**arr(ID, 8, 1), "uniqueItems": True}, "operations": arr({"oneOf": OPERATORS}, 8, 1), "null_policy": {"const": "unknown"}, "window": obj({"start": TIME, "end": TIME, "bounds": {"const": "half_open"}})}, optional=("window",)),
     "view": obj({"id": ID, "kind": enum(*RENDERERS), "renderer_version": VERSION, "title": TEXT, "query": ref("query"), "command_id": ID, "text": TEXT}, optional=("query", "command_id", "text")),
     "definition_content": obj({"title": TEXT, "description": TEXT, "inputs": arr(ref("input_contract"), 8), "views": arr(ref("view"), 24, 1), "record_schemas": arr(ref("record_schema"), 8), "commands": arr(ref("command_declaration"), 16), "links": arr(obj({"from_view": ID, "to_view": ID, "input_id": ID}), 48), "default_layout": arr(obj({"view_id": ID, "column": {"type": "integer", "minimum": 0, "maximum": 11}, "row": {"type": "integer", "minimum": 0, "maximum": 100}, "width": {"type": "integer", "minimum": 1, "maximum": 12}}), 24, 1)}),
@@ -111,16 +137,25 @@ DEFS["definition_content"]["properties"]["presentation"] = ref("app_presentation
 
 
 
-RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget")
+RECORD_KINDS = ("records_list", "record_summary", "record_trend", "record_ranking", "record_budget", "countdown")
 DEFS.update({
-    "record_measure": {"oneOf": [obj({"op": {"const": "count"}}), obj({"op": {"const": "sum"}, "field": ID})]},
+    # Edition impl-2026-11-14.2 (ADR-020 C4): `matches` counts the rows whose values on `fields` equal those of some
+    # row of the records input `key_input` (validate.py: a summary or ranking, another records input, identical types).
+    "record_measure": {"oneOf": [obj({"op": {"const": "count"}}), obj({"op": {"const": "sum"}, "field": ID}),
+                                 obj({"op": {"const": "matches"}, "key_input": ID, "fields": {**arr(ID, 4, 1), "uniqueItems": True}})]},
+    # Edition impl-2026-11-14.2: `group_by: "creator"` (a ranking groups by `group_field` or by creator, exactly one;
+    # ADR-020 C4) and the countdown's `timestamp_field`, `offset_seconds` and `closed_when` (ADR-020 C1). The kind
+    # selects which members a component carries (validate.py `_record_component`).
     "record_component": obj({"version": VERSION, "input_id": ID, "schema_id": ID,
                              "columns": {**arr(ID, 16, 1), "uniqueItems": True},
                              "measure": ref("record_measure"), "group_field": ID, "date_field": ID,
                              "limit": {"type": "integer", "minimum": 1, "maximum": 200},
                              "order": obj({"field": ID, "direction": enum("asc", "desc")}),
-                             "budget": obj({"origin": {"const": "preset"}, "minor_units": {"type": "string", "pattern": r"^(0|[1-9][0-9]{0,37})(?![\s\S])"}, "currency": {"const": "USD"}, "minor_unit_exponent": {"const": 2}})},
-                            optional=("columns", "measure", "group_field", "date_field", "limit", "order", "budget")),
+                             "budget": obj({"origin": {"const": "preset"}, "minor_units": {"type": "string", "pattern": r"^(0|[1-9][0-9]{0,37})(?![\s\S])"}, "currency": {"const": "USD"}, "minor_unit_exponent": {"const": 2}}),
+                             "group_by": {"const": "creator"}, "timestamp_field": ID, "offset_seconds": OFFSET_SECONDS,
+                             "closed_when": ref("guard")},
+                            optional=("columns", "measure", "group_field", "date_field", "limit", "order", "budget",
+                                      "group_by", "timestamp_field", "offset_seconds", "closed_when")),
     "record_filter": obj({"id": ID, "input_id": ID, "field": ID,
                           "kind": enum("text_contains", "enum", "date_range"),
                           "targets": {**arr(ID, 16, 1), "uniqueItems": True}}),
@@ -158,7 +193,10 @@ PROBLEM_CODES = ("source_deleted", "source_quarantined", "unknown_value_in_aggre
                  "resource_limit", "payload_too_large", "limit_exceeded",
                  # Edition impl-2026-10-29.3 (ADR-007 D7.9/D7.15, APP-013): the record command route.
                  "conflict", "stale", "in_flight", "busy", "missing_idempotency_key", "malformed_idempotency_key",
-                 "malformed_command", "unknown_outcome")
+                 "malformed_command", "unknown_outcome",
+                 # Edition impl-2026-11-14.2 (ADR-020 C2, C3): 422 refusals of the record command route, carrying no
+                 # recovery view, current revision, limit or Retry-After.
+                 "requirement_not_met", "unchanged")
 RATIO_V2 = tagged("ratio", {**OPERATORS[6]["properties"], "type": {"const": "ratio"},
                             "denominator": {"oneOf": [*OPERATORS[6]["properties"]["denominator"]["oneOf"], tagged("window_minutes", {})]}})
 assert OPERATOR_IDS[6] == "ratio"
@@ -228,7 +266,7 @@ DEFS["record_components_receipt"] = receipt_schema(UUID, DIGEST, ID, INT, POS)
 ENTITIES = ("record_components_receipt", "app_definition", "publication", "saved_work", "source_revision", "query_receipt", "command_request", "command_outcome", "job_state",
             "app_definition_v2", "publication_v2", "source_revision_v2", "query_receipt_v2", "job_state_v2",
             "recovery_view", "command_claim")
-SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-11-14.1/schema.json", "$defs": DEFS,
+SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://getforma.dev/contracts/impl-2026-11-14.2/schema.json", "$defs": DEFS,
           "oneOf": [ref(n) for n in ENTITIES]}
 
 if __name__ == "__main__":

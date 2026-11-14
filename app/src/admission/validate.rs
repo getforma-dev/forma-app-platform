@@ -17,6 +17,13 @@
 //! class (grant, executable content, unknown field, renderer, operator, view
 //! count, operation count, size, encoding), the first met within that class.
 //!
+//! Edition impl-2026-11-14.2 (ADR-020) widens both shapes compatibly: a
+//! record schema's `one_per_creator`, a command's `requires` (guards with
+//! `via` and the `now` literal) and `set_now`, the `countdown` records
+//! renderer, a ranking `group_by: "creator"` and the `matches` measure, and
+//! the `multi_enum` value type and value. [`admit_problem`] judges the record
+//! command route's problem bodies as `validate.py` `validate_problem` does.
+//!
 //! Free text (titles, descriptions, note text and text literals) is data that
 //! trusted renderers escape; it is bounded but never searched. Everything the
 //! grammar refuses (undeclared keys and their values, mistyped members, strings
@@ -48,8 +55,8 @@ pub const MAX_RATIONAL_DIGITS: usize = 38;
 pub const RENDERER_VERSION: u32 = 1;
 /// The registered operator version.
 pub const OPERATOR_VERSION: u32 = 1;
-/// Registered renderer kinds (C04).
-pub const RENDERERS: [&str; 14] = [
+/// Registered renderer kinds (C04); `countdown` from edition impl-2026-11-14.2.
+pub const RENDERERS: [&str; 15] = [
     "summary",
     "table",
     "detail",
@@ -64,31 +71,48 @@ pub const RENDERERS: [&str; 14] = [
     "record_trend",
     "record_ranking",
     "record_budget",
+    "countdown",
 ];
 /// Registered query operators (C04).
 #[rustfmt::skip]
 pub const OPERATORS: [&str; 8] = [
     "project", "filter", "aggregate", "sort", "limit", "time_bucket", "ratio", "lookup",
 ];
-const RECORD_KINDS: [&str; 5] = [
+/// The records renderer kinds: their views carry a `records` configuration
+/// over one admitted records input and schema, never a query, command or text.
+pub const RECORD_KINDS: [&str; 6] = [
+    "records_list",
+    "record_summary",
+    "record_trend",
+    "record_ranking",
+    "record_budget",
+    "countdown",
+];
+/// The records kinds a record filter may target. A countdown follows the
+/// current record of its input among every record the viewer may read
+/// (ADR-020 §3), so no filter narrows it (ADR-020 clarification, 2026-11-14).
+const FILTERED_KINDS: [&str; 5] = [
     "records_list",
     "record_summary",
     "record_trend",
     "record_ranking",
     "record_budget",
 ];
+/// A signed offset of at most one week; absence means 0, so 0 is refused.
+const MAX_OFFSET_SECONDS: i64 = 604_800;
 const MEASURES: [&str; 4] = ["count", "sum", "min", "max"];
 const COMPARISONS: [&str; 6] = ["eq", "ne", "lt", "lte", "gt", "gte"];
 const LOOKUP_RULES: [&str; 2] = ["exact", "cidr_exact_then_longest"];
 const COVERAGE: [&str; 2] = ["complete", "partial"];
 #[rustfmt::skip]
-const VALUE_TYPES: [&str; 9] = [
+const VALUE_TYPES: [&str; 10] = [
     "text", "boolean", "integer", "decimal", "date", "timestamp", "enum", "reference", "money",
+    "multi_enum",
 ];
 #[rustfmt::skip]
-const LITERALS: [&str; 10] = [
+const LITERALS: [&str; 11] = [
     "text", "boolean", "integer", "decimal", "date", "timestamp", "enum", "reference", "money",
-    "null",
+    "multi_enum", "null",
 ];
 const BUCKET_SECONDS: [u64; 4] = [60, 300, 3600, 86_400];
 /// Free text bound in Unicode scalar values (schema `maxLength`).
@@ -223,6 +247,168 @@ pub fn admit_shared_receipt(document: &Value) -> Result<(), AdmissionError> {
     }
 }
 
+/// Problem codes the contract registers (`contracts/schema.py`
+/// `PROBLEM_CODES`); the HTTP layer's own codes (the uniform 404, the
+/// fetch-metadata refusal, the outage) are outside this registry.
+#[rustfmt::skip]
+pub const PROBLEM_CODES: [&str; 17] = [
+    "source_deleted", "source_quarantined", "unknown_value_in_aggregate", "lookup_ambiguous",
+    "resource_limit", "payload_too_large", "limit_exceeded",
+    "conflict", "stale", "in_flight", "busy", "missing_idempotency_key", "malformed_idempotency_key",
+    "malformed_command", "unknown_outcome",
+    // Edition impl-2026-11-14.2 (ADR-020 C2, C3): the command route's 422s.
+    "requirement_not_met", "unchanged",
+];
+/// The D9.13 limits a 429 body names (`schema.py` `LIMITS`).
+#[rustfmt::skip]
+const LIMITS: [&str; 5] = [
+    "organization_queue", "task_queue", "imports_per_day", "stored_original_bytes", "queries_per_hour",
+];
+#[rustfmt::skip]
+const RECOVERY_VIEW: [&str; 15] = [
+    "kind", "schema_version", "organization_id", "app_id", "work_id", "publication_id",
+    "work_version", "record_id", "command_id", "idempotency_key", "reason",
+    "expected_record_version", "current_record_version", "current_values", "stored_outcome",
+];
+
+/// Edition impl-2026-11-14.2: the Rust equivalent of `contracts/validate.py`
+/// `validate_problem` for one registered problem body, with its messages:
+/// forma-json-v1, the closed `$defs.problem` member set, a status from 400 to
+/// 599, a registered code and limit, a positive Retry-After, and the edition's
+/// pairings (413; 429 and its limit; the waiting codes' Retry-After; the
+/// 422-only `requirement_not_met` and `unchanged`; the recovery view only on a
+/// 409 conflict; the current revision only on a 412 stale). A nested recovery
+/// view is judged by its member set, kind, version and reason, and a current
+/// revision by its four nullable members; storage builds both from typed
+/// values, and `commands::tests` checks the bodies the routes emit.
+pub fn admit_problem(body: &Value) -> Result<(), AdmissionError> {
+    canonical::encode(body)?;
+    const MEMBERS: [&str; 6] = [
+        "status",
+        "code",
+        "limit",
+        "retry_after_seconds",
+        "recovery_view",
+        "current_revision",
+    ];
+    let map = body
+        .as_object()
+        .ok_or_else(|| refused("$", "expected an object"))?;
+    if let Some(key) = map.keys().find(|key| !MEMBERS.contains(&key.as_str())) {
+        return Err(AdmissionError::UnknownField(member("$", key)));
+    }
+    let status = map
+        .get("status")
+        .and_then(Value::as_u64)
+        .filter(|status| (400..=599).contains(status))
+        .ok_or_else(|| refused("$.status", "expected an integer from 400 to 599"))?;
+    let code = map
+        .get("code")
+        .and_then(Value::as_str)
+        .filter(|code| PROBLEM_CODES.contains(code))
+        .ok_or_else(|| refused("$.code", "expected a registered problem code"))?;
+    if let Some(limit) = map.get("limit") {
+        let registered = limit.as_str().is_some_and(|limit| LIMITS.contains(&limit));
+        require(registered, "$.limit", "expected a registered limit")?;
+    }
+    if let Some(seconds) = map.get("retry_after_seconds") {
+        let positive = seconds
+            .as_u64()
+            .is_some_and(|seconds| (1..=9_007_199_254_740_991).contains(&seconds));
+        require(
+            positive,
+            "$.retry_after_seconds",
+            "expected a positive integer",
+        )?;
+    }
+    if let Some(view) = map.get("recovery_view") {
+        let path = "$.recovery_view";
+        let view = view
+            .as_object()
+            .ok_or_else(|| refused(path, "expected an object"))?;
+        let closed = view.len() == RECOVERY_VIEW.len()
+            && RECOVERY_VIEW.iter().all(|key| view.contains_key(*key));
+        require(closed, path, "expected the recovery view members")?;
+        require(
+            view["kind"] == "recovery_view" && view["schema_version"] == 1,
+            path,
+            "expected a recovery_view of schema version 1",
+        )?;
+        let reason = view["reason"].as_str().is_some_and(|reason| {
+            ["expected_version", "payload_mismatch", "retry_expired"].contains(&reason)
+        });
+        require(
+            reason,
+            &member(path, "reason"),
+            "expected a registered reason",
+        )?;
+    }
+    if let Some(revision) = map.get("current_revision") {
+        let path = "$.current_revision";
+        let revision = revision
+            .as_object()
+            .ok_or_else(|| refused(path, "expected an object"))?;
+        let members = [
+            ("publication_id", Grammar::Uuid),
+            ("definition_revision_id", Grammar::Uuid),
+            ("definition_digest", Grammar::Digest),
+        ];
+        let closed = revision.len() == 4
+            && members.iter().all(|(key, grammar)| {
+                revision.get(*key).is_some_and(|value| {
+                    value.is_null() || value.as_str().is_some_and(|text| grammar.admits(text))
+                })
+            })
+            && revision.get("work_version").is_some_and(|value| {
+                value.is_null()
+                    || value
+                        .as_u64()
+                        .is_some_and(|version| (1..=9_007_199_254_740_991).contains(&version))
+            });
+        require(closed, path, "expected the current revision members")?;
+    }
+    let has = |key: &str| map.contains_key(key);
+    require(
+        code != "payload_too_large" || status == 413,
+        "$",
+        "payload_too_large is 413",
+    )?;
+    require(
+        code != "limit_exceeded" || status == 429,
+        "$",
+        "limit_exceeded is 429",
+    )?;
+    require(
+        !matches!(code, "requirement_not_met" | "unchanged") || status == 422,
+        "$",
+        "requirement_not_met and unchanged are 422",
+    )?;
+    let names = code == "limit_exceeded" && has("limit") && has("retry_after_seconds");
+    let waiting = matches!(code, "in_flight" | "busy");
+    require(
+        !waiting || (status == 409 && has("retry_after_seconds") && !has("limit")),
+        "$",
+        "in_flight and busy are 409 with Retry-After seconds",
+    )?;
+    require(
+        (status == 429) == names
+            && has("limit") == names
+            && has("retry_after_seconds") == (names || waiting),
+        "$",
+        "a 429 names its limit and Retry-After seconds, and only a 429, in_flight or busy does",
+    )?;
+    require(
+        (code == "conflict") == has("recovery_view") && (code != "conflict" || status == 409),
+        "$",
+        "a conflict is 409 with the recovery view, and only a conflict carries one",
+    )?;
+    require(
+        (code == "stale") == has("current_revision") && (code != "stale" || status == 412),
+        "$",
+        "stale is 412 with the current revision, and only stale carries one",
+    )
+}
+
 /// The parts of a well-formed definition its reference rules read.
 struct Definition {
     content: Content,
@@ -261,6 +447,10 @@ struct Contract {
     /// A records input declaring partial coverage (schema version 2).
     partial_records: bool,
     record_input: bool,
+    /// A record schema declaring `visibility: "own"` (impl-2026-11-14.1).
+    own: bool,
+    /// A record schema's `one_per_creator` key fields (impl-2026-11-14.2).
+    keys: Option<Vec<String>>,
 }
 
 #[derive(PartialEq)]
@@ -270,7 +460,9 @@ struct Field {
     nullable: bool,
 }
 
-/// Money admits only USD at exponent 2, so every money type is equal.
+/// Money admits only USD at exponent 2, so every money type is equal. A
+/// `MultiEnum` (edition impl-2026-11-14.2, ADR-020 C6) keeps its declared
+/// values in order.
 #[derive(PartialEq)]
 enum ValueType {
     Text,
@@ -282,6 +474,7 @@ enum ValueType {
     Enum(Vec<String>),
     Reference(String),
     Money,
+    MultiEnum(Vec<String>),
 }
 
 struct View {
@@ -302,6 +495,19 @@ struct RecordComponent {
     group: Option<String>,
     date: Option<String>,
     order: Option<String>,
+    limit: Option<u64>,
+    /// Edition impl-2026-11-14.2 (ADR-020 C4): the `matches` measure.
+    matches: Option<Matches>,
+    /// Edition impl-2026-11-14.2 (ADR-020 C1): the countdown's target field
+    /// and its closing guard.
+    timestamp: Option<String>,
+    closed_when: Option<Guard>,
+}
+
+/// `{"op": "matches", "key_input", "fields"}`.
+struct Matches {
+    key_input: String,
+    fields: Vec<String>,
 }
 struct RecordFilter {
     id: String,
@@ -362,6 +568,8 @@ enum Denominator {
     WindowMinutes,
 }
 
+/// A typed literal. A `MultiEnum` selection (edition impl-2026-11-14.2) is
+/// non-empty and without duplicates; [`compatible`] judges its order.
 enum Literal {
     Null,
     Text,
@@ -373,6 +581,7 @@ enum Literal {
     Enum(String),
     Reference(String),
     Money,
+    MultiEnum(Vec<String>),
 }
 
 struct Command {
@@ -383,6 +592,20 @@ struct Command {
     transitions: Vec<Transition>,
     /// APP-107 amendment: the starting value of an enum field on a create.
     initial: Option<Vec<Initial>>,
+    /// Edition impl-2026-11-14.2 (ADR-020 C3): guards that must hold when the
+    /// command commits, and the timestamp fields the server stamps.
+    requires: Vec<Requirement>,
+    set_now: Vec<String>,
+}
+
+/// One `requires` entry: an APP-107 guard over this record, or with `via`
+/// over the record a reference field of it names; its literal may be `now`.
+struct Requirement {
+    via: Option<String>,
+    field_id: String,
+    ordering: bool,
+    /// `None` is the server-time literal `{"type": "now", "offset_seconds"?}`.
+    literal: Option<Literal>,
 }
 
 struct Transition {
@@ -960,26 +1183,40 @@ impl Walk {
             record_input: kind.as_deref() == Some("records"),
             partial_records: kind.as_deref() == Some("records")
                 && coverage.as_deref() == Some("partial"),
+            own: false,
+            keys: None,
         })
     }
 
     fn record_schema(&mut self, path: &str, value: &Value) -> Option<Contract> {
-        let map = self.object(path, value, &["id", "version", "fields"], &["visibility"])?;
+        let optional = ["visibility", "one_per_creator"];
+        let map = self.object(path, value, &["id", "version", "fields"], &optional)?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
         self.version(&at("version"), map.get("version"), 1, None);
         // Edition impl-2026-11-14.1 (APP-191, D7): an `own` collection shows
         // and changes each member's own entries only. Absent means shared;
         // `"shared"` is refused so that the meaning has one encoding.
-        if let Some(visibility) = map.get("visibility") {
-            self.choice(&at("visibility"), Some(visibility), &["own"], None);
-        }
+        let own = match map.get("visibility") {
+            None => Some(false),
+            Some(visibility) => self
+                .choice(&at("visibility"), Some(visibility), &["own"], None)
+                .map(|_| true),
+        };
+        // Edition impl-2026-11-14.2 (ADR-020 C2): 1..4 distinct key fields;
+        // their reference rules are `Content::references`'.
+        let keys = present(
+            map.get("one_per_creator")
+                .map(|keys| self.ids(&at("one_per_creator"), Some(keys), 1..=4)),
+        );
         let fields = self.each(&at("fields"), map.get("fields"), 1..=32, Self::field);
         Some(Contract {
             id: id?,
             fields: fields?,
             partial_records: false,
             record_input: false,
+            own: own?,
+            keys: keys?,
         })
     }
 
@@ -1018,6 +1255,10 @@ impl Walk {
             "enum" => {
                 let map = self.object(path, value, &["type", "values"], &[])?;
                 ValueType::Enum(self.ids(&at("values"), map.get("values"), 1..=32)?)
+            }
+            "multi_enum" => {
+                let map = self.object(path, value, &["type", "values"], &[])?;
+                ValueType::MultiEnum(self.ids(&at("values"), map.get("values"), 1..=32)?)
             }
             "reference" => {
                 let map = self.object(path, value, &["type", "target_input"], &[])?;
@@ -1091,6 +1332,10 @@ impl Walk {
             "enum" => {
                 let map = self.object(path, value, &["type", "value"], &[])?;
                 Literal::Enum(self.id(&at("value"), map.get("value"))?)
+            }
+            "multi_enum" => {
+                let map = self.object(path, value, &["type", "values"], &[])?;
+                Literal::MultiEnum(self.ids(&at("values"), map.get("values"), 1..=32)?)
             }
             "reference" => {
                 let map = self.object(path, value, &["type", "input_id", "record_id"], &[])?;
@@ -1179,13 +1424,20 @@ impl Walk {
                 required.extend(["measure", "date_field"]);
                 vec![]
             }
+            // Edition impl-2026-11-14.2 (ADR-020 C4): exactly one of
+            // `group_field` and `group_by` (judged below).
             "record_ranking" => {
-                required.extend(["measure", "group_field"]);
-                vec!["limit"]
+                required.push("measure");
+                vec!["limit", "group_field", "group_by"]
             }
             "record_budget" => {
                 required.extend(["measure", "budget"]);
                 vec![]
+            }
+            // Edition impl-2026-11-14.2 (ADR-020 C1).
+            "countdown" => {
+                required.push("timestamp_field");
+                vec!["offset_seconds", "closed_when"]
             }
             _ => {
                 self.fail(refused(
@@ -1205,25 +1457,68 @@ impl Walk {
         } else {
             Vec::new()
         };
-        if let Some(value) = map.get("limit") {
-            self.integer(
-                &at("limit"),
-                Some(value),
-                1..=if kind == "record_ranking" { 20 } else { 200 },
-            );
-        }
+        // The schema bound; a ranking's tighter bound is a reference rule, as
+        // in validate.py.
+        let limit = match map.get("limit") {
+            None => Some(None),
+            Some(value) => self.integer(&at("limit"), Some(value), 1..=200).map(Some),
+        };
         let mut sum = false;
         let mut measure_field = None;
+        let mut matches = None;
         if let Some(value) = map.get("measure") {
             let p = at("measure");
-            let map = self.object(&p, value, &["op"], &["field"])?;
-            let op = self.choice(&member(&p, "op"), map.get("op"), &["count", "sum"], None)?;
+            let map = self.object(&p, value, &["op"], &["field", "key_input", "fields"])?;
+            let op = self.choice(
+                &member(&p, "op"),
+                map.get("op"),
+                &["count", "sum", "matches"],
+                None,
+            )?;
             sum = op == "sum";
+            // Each measure is a closed shape: count has no member, sum only
+            // `field`, matches only `key_input` and `fields`.
+            let own: &[&str] = match op.as_str() {
+                "sum" => &["field"],
+                "matches" => &["key_input", "fields"],
+                _ => &[],
+            };
+            for key in ["field", "key_input", "fields"] {
+                if let Some(child) = map.get(key).filter(|_| !own.contains(&key)) {
+                    if op == "count" && key == "field" {
+                        self.fail(refused(&p, "count has no field"));
+                    } else {
+                        self.undeclared(&member(&p, key), key, child);
+                    }
+                }
+            }
             if sum {
                 measure_field = Some(self.id(&member(&p, "field"), map.get("field"))?);
-            } else if map.contains_key("field") {
-                self.fail(refused(&p, "count has no field"));
             }
+            if op == "matches" {
+                for key in ["key_input", "fields"] {
+                    if !map.contains_key(key) {
+                        self.fail(refused(&member(&p, key), "required field missing"));
+                    }
+                }
+                let key_input = self.id(&member(&p, "key_input"), map.get("key_input"));
+                let fields = self.ids(&member(&p, "fields"), map.get("fields"), 1..=4);
+                matches = Some(Matches {
+                    key_input: key_input?,
+                    fields: fields?,
+                });
+            }
+        }
+        if kind == "record_ranking"
+            && map.contains_key("group_field") == map.contains_key("group_by")
+        {
+            self.fail(refused(
+                path,
+                "record ranking requires exactly one of group_field or group_by",
+            ));
+        }
+        if let Some(group_by) = map.get("group_by") {
+            self.choice(&at("group_by"), Some(group_by), &["creator"], None);
         }
         let group = present(
             map.get("group_field")
@@ -1270,6 +1565,17 @@ impl Walk {
                 self.fail(refused(&p, "budget must be nonnegative"));
             }
         }
+        let timestamp = present(
+            map.get("timestamp_field")
+                .map(|v| self.id(&at("timestamp_field"), Some(v))),
+        )?;
+        if let Some(offset) = map.get("offset_seconds") {
+            self.offset_seconds(&at("offset_seconds"), offset);
+        }
+        let closed_when = present(
+            map.get("closed_when")
+                .map(|v| self.guard(&at("closed_when"), v)),
+        )?;
         Some(RecordComponent {
             input: input?,
             schema: schema?,
@@ -1279,7 +1585,23 @@ impl Walk {
             group,
             date,
             order,
+            limit: limit?,
+            matches,
+            timestamp,
+            closed_when,
         })
+    }
+
+    /// Edition impl-2026-11-14.2 (ADR-020 C1, C3): a signed whole number of
+    /// seconds, at most a week either way and never 0 (absence means 0).
+    fn offset_seconds(&mut self, path: &str, value: &Value) {
+        let admitted = value
+            .as_i64()
+            .is_some_and(|seconds| seconds != 0 && seconds.abs() <= MAX_OFFSET_SECONDS);
+        if !admitted {
+            let rule = "expected a nonzero integer from -604800 to 604800";
+            self.mistyped(path, value, refused(path, rule));
+        }
     }
 
     fn record_filter(&mut self, path: &str, value: &Value) -> Option<RecordFilter> {
@@ -1580,7 +1902,8 @@ impl Walk {
             "writable_fields",
             "transitions",
         ];
-        let map = self.object(path, value, &required, &["initial", "reviewer_only"])?;
+        let optional = ["initial", "reviewer_only", "requires", "set_now"];
+        let map = self.object(path, value, &required, &optional)?;
         let at = |key: &str| member(path, key);
         let id = self.id(&at("id"), map.get("id"));
         let record_schema_id = self.id(&at("record_schema_id"), map.get("record_schema_id"));
@@ -1615,6 +1938,16 @@ impl Walk {
                 .each(&at("initial"), Some(value), 1..=8, Self::initial)
                 .map(Some),
         };
+        // Edition impl-2026-11-14.2 (ADR-020 C3): 1..4 guards and 1..4
+        // distinct stamped fields; their reference rules are `references`'.
+        let requires = match map.get("requires") {
+            None => Some(Vec::new()),
+            Some(value) => self.each(&at("requires"), Some(value), 1..=4, Self::requirement),
+        };
+        let set_now = match map.get("set_now") {
+            None => Some(Vec::new()),
+            Some(value) => self.ids(&at("set_now"), Some(value), 1..=4),
+        };
         Some(Command {
             id: id?,
             record_schema_id: record_schema_id?,
@@ -1622,6 +1955,42 @@ impl Walk {
             writable: writable?,
             transitions: transitions?,
             initial: initial?,
+            requires: requires?,
+            set_now: set_now?,
+        })
+    }
+
+    /// `$defs.requirement`: a guard with an optional `via` whose literal may be
+    /// the server-time `now`. Only a `requires` entry is walked here, so `via`
+    /// and `now` anywhere else stay outside the grammar.
+    fn requirement(&mut self, path: &str, value: &Value) -> Option<Requirement> {
+        let map = self.object(path, value, &["field_id", "comparison", "value"], &["via"])?;
+        let at = |key: &str| member(path, key);
+        let field_id = self.id(&at("field_id"), map.get("field_id"));
+        let comparison = self.choice(
+            &at("comparison"),
+            map.get("comparison"),
+            &COMPARISONS,
+            Some(AdmissionError::UnregisteredOperator),
+        );
+        let via = present(map.get("via").map(|v| self.id(&at("via"), Some(v))));
+        let literal = match map.get("value") {
+            None => None,
+            Some(literal) if literal.get("type").and_then(Value::as_str) == Some("now") => {
+                let path = at("value");
+                let now = self.object(&path, literal, &["type"], &["offset_seconds"]);
+                if let Some(offset) = now.and_then(|now| now.get("offset_seconds")) {
+                    self.offset_seconds(&member(&path, "offset_seconds"), offset);
+                }
+                now.map(|_| None)
+            }
+            Some(literal) => self.literal(&at("value"), literal).map(Some),
+        };
+        Some(Requirement {
+            via: via?,
+            field_id: field_id?,
+            ordering: !matches!(comparison?.as_str(), "eq" | "ne"),
+            literal: literal?,
         })
     }
 
@@ -1928,6 +2297,44 @@ impl Content {
             }
         }
 
+        // Edition impl-2026-11-14.2 (ADR-020 C2): one entry per creator per
+        // key, on an own schema only; the filer always chooses the key and a
+        // key never moves, so every create writes every key field and no
+        // update writes one.
+        for (position, schema) in self.record_schemas.iter().enumerate() {
+            let Some(keys) = &schema.keys else {
+                continue;
+            };
+            let path = format!("$.content.record_schemas[{position}].one_per_creator");
+            let declared = &record_fields[schema.id.as_str()];
+            let known = keys.iter().all(|key| declared.contains_key(key.as_str()));
+            require(known, &path, "unknown one_per_creator field")?;
+            require(schema.own, &path, "one_per_creator requires visibility own")?;
+            let scalar = keys
+                .iter()
+                .all(|key| !matches!(declared[key.as_str()].value_type, ValueType::MultiEnum(_)));
+            require(scalar, &path, "one_per_creator key cannot be multi_enum")?;
+            for (slot, command) in self.commands.iter().enumerate() {
+                if command.record_schema_id != schema.id {
+                    continue;
+                }
+                let path = format!("$.content.commands[{slot}].writable_fields");
+                if command.create {
+                    require(
+                        keys.iter().all(|key| command.writable.contains(key)),
+                        &path,
+                        "a create on a keyed schema must write every key field",
+                    )?;
+                } else {
+                    require(
+                        !keys.iter().any(|key| command.writable.contains(key)),
+                        &path,
+                        "an update on a keyed schema cannot write a key field",
+                    )?;
+                }
+            }
+        }
+
         for (position, command) in self.commands.iter().enumerate() {
             let path = format!("$.content.commands[{position}]");
             let Some(schema) = record_fields.get(command.record_schema_id.as_str()) else {
@@ -1973,44 +2380,72 @@ impl Content {
                     }
                 }
             }
+            // Edition impl-2026-11-14.2 (ADR-020 C3): guards that must hold
+            // when the command commits, and the fields the server stamps with
+            // the transaction's instant (one source of a value: not writable).
+            for (slot, requirement) in command.requires.iter().enumerate() {
+                let path = format!("{path}.requires[{slot}]");
+                judge_requirement(requirement, schema, &inputs, &fields, &path)?;
+            }
+            for (slot, field_id) in command.set_now.iter().enumerate() {
+                let path = format!("{path}.set_now[{slot}]");
+                let Some(field) = schema.get(field_id.as_str()) else {
+                    return Err(refused(&path, "unknown set_now field"));
+                };
+                let stamped = matches!(field.value_type, ValueType::Timestamp);
+                require(stamped, &path, "set_now requires a timestamp field")?;
+                let writable = command.writable.contains(field_id);
+                require(!writable, &path, "set_now field cannot be writable")?;
+            }
         }
 
         for (position, view) in self.views.iter().enumerate() {
             let path = format!("$.content.views[{position}]");
             if RECORD_KINDS.contains(&view.kind.as_str()) {
+                // validate.py `_record_component`, in its order and with its
+                // messages; the kind's member set is the walk's.
                 require(
                     view.query.is_none() && view.command_id.is_none() && !view.text,
                     &path,
-                    "records view has no query, command or text",
+                    "record component cannot carry query, command or literal text",
                 )?;
-                let records = view
-                    .records
-                    .as_ref()
-                    .ok_or_else(|| refused(&path, "records view requires records configuration"))?;
-                let input = inputs
-                    .get(records.input.as_str())
-                    .ok_or_else(|| refused(&path, "unknown records input"))?;
-                let schema = record_schemas
-                    .get(records.schema.as_str())
-                    .ok_or_else(|| refused(&path, "unknown record schema"))?;
+                let records = view.records.as_ref().ok_or_else(|| {
+                    refused(&path, "record component requires records configuration")
+                })?;
+                let (Some(input), Some(schema)) = (
+                    inputs
+                        .get(records.input.as_str())
+                        .filter(|input| input.record_input),
+                    record_schemas.get(records.schema.as_str()),
+                ) else {
+                    return Err(refused(&path, "unknown records input or schema"));
+                };
                 require(
-                    input.record_input && input.fields == schema.fields,
+                    input.fields == schema.fields,
                     &path,
-                    "records input/schema mismatch",
+                    "records input and schema fields differ",
                 )?;
                 let fields = &record_fields[records.schema.as_str()];
-                for id in records.columns.iter().chain(records.order.iter()) {
+                for id in &records.columns {
                     require(
                         fields.contains_key(id.as_str()),
                         &path,
-                        "unknown records field",
+                        "unknown record component field",
                     )?;
                 }
                 if let Some(id) = &records.order {
+                    let Some(field) = fields.get(id.as_str()) else {
+                        return Err(refused(&path, "unknown record component order field"));
+                    };
                     require(
-                        !matches!(fields[id.as_str()].value_type, ValueType::Reference(_)),
+                        !matches!(field.value_type, ValueType::Reference(_)),
                         &path,
                         "reference record ordering is not qualified",
+                    )?;
+                    require(
+                        !matches!(field.value_type, ValueType::MultiEnum(_)),
+                        &path,
+                        "multi_enum record ordering is not qualified",
                     )?;
                 }
                 let measure = records
@@ -2029,22 +2464,35 @@ impl Content {
                         "record sum requires integer or money",
                     )?;
                 }
+                if let Some(matches) = &records.matches {
+                    judge_matches(matches, view, records, fields, &inputs, &path)?;
+                }
                 if let Some(id) = &records.date {
                     require(
                         fields
                             .get(id.as_str())
                             .is_some_and(|f| matches!(f.value_type, ValueType::Date)),
                         &path,
-                        "record trend requires date",
+                        "record trend requires date field",
                     )?;
                 }
                 if let Some(id) = &records.group {
                     require(
                         fields.get(id.as_str()).is_some_and(|f| {
-                            matches!(f.value_type, ValueType::Text | ValueType::Enum(_))
+                            matches!(
+                                f.value_type,
+                                ValueType::Text | ValueType::Enum(_) | ValueType::MultiEnum(_)
+                            )
                         }),
                         &path,
-                        "record ranking requires text or enum",
+                        "record ranking requires a text, enum or multi_enum field",
+                    )?;
+                }
+                if view.kind == "record_ranking" {
+                    require(
+                        records.limit.unwrap_or(5) <= 50,
+                        &path,
+                        "record ranking limit exceeds bound",
                     )?;
                 }
                 if view.kind == "record_budget" {
@@ -2054,6 +2502,21 @@ impl Content {
                         &path,
                         "record budget requires money sum",
                     )?;
+                }
+                if let Some(id) = &records.timestamp {
+                    // Edition impl-2026-11-14.2 (ADR-020 C1): the target is
+                    // `timestamp_field + offset_seconds`; `closed_when` is an
+                    // APP-107 guard over the same schema.
+                    require(
+                        fields
+                            .get(id.as_str())
+                            .is_some_and(|f| matches!(f.value_type, ValueType::Timestamp)),
+                        &path,
+                        "countdown requires a timestamp field",
+                    )?;
+                    if let Some(guard) = &records.closed_when {
+                        judge_guard(guard, fields, &format!("{path}.records.closed_when"))?;
+                    }
                 }
                 continue;
             }
@@ -2100,37 +2563,36 @@ impl Content {
             "record filter",
         )?;
         for filter in &self.record_filters {
+            // validate.py `_record_filters`, with its messages.
             let path = "$.content.record_filters";
             require(
                 !views.contains_key(filter.id.as_str()),
                 path,
-                "filter id conflicts with view",
+                "record filter id conflicts with view",
             )?;
-            let input = inputs
+            let records = inputs
                 .get(filter.input.as_str())
-                .ok_or_else(|| refused(path, "unknown records input"))?;
-            require(input.record_input, path, "filter requires records input")?;
-            let field = fields[filter.input.as_str()]
+                .is_some_and(|input| input.record_input);
+            require(records, path, "record filter requires records input")?;
+            let typed = fields[filter.input.as_str()]
                 .get(filter.field.as_str())
-                .ok_or_else(|| refused(path, "unknown filter field"))?;
-            require(
-                matches!(
-                    (filter.kind.as_str(), &field.value_type),
-                    ("text_contains", ValueType::Text)
-                        | ("enum", ValueType::Enum(_))
-                        | ("date_range", ValueType::Date)
-                ),
-                path,
-                "record filter type mismatch",
-            )?;
+                .is_some_and(|field| {
+                    matches!(
+                        (filter.kind.as_str(), &field.value_type),
+                        ("text_contains", ValueType::Text)
+                            | ("enum", ValueType::Enum(_))
+                            | ("date_range", ValueType::Date)
+                    )
+                });
+            require(typed, path, "record filter field type mismatch")?;
             for target in &filter.targets {
                 require(
-                    views
-                        .get(target.as_str())
-                        .and_then(|v| v.records.as_ref())
-                        .is_some_and(|r| r.input == filter.input),
+                    views.get(target.as_str()).is_some_and(|v| {
+                        FILTERED_KINDS.contains(&v.kind.as_str())
+                            && v.records.as_ref().is_some_and(|r| r.input == filter.input)
+                    }),
                     path,
-                    "record filter target/input mismatch",
+                    "record filter target scope mismatch",
                 )?;
             }
         }
@@ -2254,8 +2716,13 @@ impl Query {
                     }
                 }
                 Operation::Filter(reference, literal) => {
-                    let compatible = compatible(literal, lookup(reference)?);
+                    let field = lookup(reference)?;
+                    let compatible = compatible(literal, field);
                     require(compatible, &path, "filter value type/unit mismatch")?;
+                    // Edition impl-2026-11-14.2 (ADR-020 C6): a typed filter
+                    // never compares a multi-select.
+                    let scalar = !matches!(field.value_type, ValueType::MultiEnum(_));
+                    require(scalar, &path, "filter field cannot be multi_enum")?;
                 }
                 Operation::Aggregate {
                     group_by,
@@ -2483,8 +2950,22 @@ fn judge_guard(
     let Some(field) = schema.get(guard.field_id.as_str()) else {
         return Err(refused(path, "unknown guard field"));
     };
-    let typed = !matches!(guard.literal, Literal::Null) && compatible(&guard.literal, field);
+    judge_typed(guard.ordering, &guard.literal, field, path)
+}
+
+/// validate.py `_guard` after its field lookup: a typed non-null literal, never
+/// a multi_enum field (edition impl-2026-11-14.2), ordering only over an
+/// ordered field.
+fn judge_typed(
+    ordering: bool,
+    literal: &Literal,
+    field: &Field,
+    path: &str,
+) -> Result<(), AdmissionError> {
+    let typed = !matches!(literal, Literal::Null) && compatible(literal, field);
     require(typed, path, "guard value type/unit mismatch")?;
+    let scalar = !matches!(field.value_type, ValueType::MultiEnum(_));
+    require(scalar, path, "guard field cannot be multi_enum")?;
     let ordered = matches!(
         field.value_type,
         ValueType::Integer { .. }
@@ -2494,10 +2975,95 @@ fn judge_guard(
             | ValueType::Timestamp
     );
     require(
-        !guard.ordering || ordered,
+        !ordering || ordered,
         path,
         "guard comparison requires an ordered field",
     )
+}
+
+/// validate.py `_requirement` (edition impl-2026-11-14.2, ADR-020 C3): without
+/// `via` an APP-107 guard over this record; with `via` a reference field of
+/// this record whose target is a records input of the definition, the guard
+/// typed against that input's field. `now` needs a timestamp field.
+fn judge_requirement(
+    requirement: &Requirement,
+    schema: &BTreeMap<&str, &Field>,
+    inputs: &BTreeMap<&str, &Contract>,
+    fields: &Fields<'_>,
+    path: &str,
+) -> Result<(), AdmissionError> {
+    let declared = match &requirement.via {
+        None => schema,
+        Some(via) => {
+            let Some(ValueType::Reference(target)) =
+                schema.get(via.as_str()).map(|field| &field.value_type)
+            else {
+                return Err(refused(path, "via requires a reference field"));
+            };
+            let records = inputs
+                .get(target.as_str())
+                .is_some_and(|input| input.record_input);
+            require(records, path, "via target must be a records input")?;
+            &fields[target.as_str()]
+        }
+    };
+    let Some(field) = declared.get(requirement.field_id.as_str()) else {
+        return Err(refused(path, "unknown guard field"));
+    };
+    match &requirement.literal {
+        None => require(
+            matches!(field.value_type, ValueType::Timestamp),
+            path,
+            "now requires a timestamp field",
+        ),
+        Some(literal) => judge_typed(requirement.ordering, literal, field, path),
+    }
+}
+
+/// validate.py `_record_component`'s `matches` rules (edition
+/// impl-2026-11-14.2, ADR-020 C4): a summary or ranking; another records input
+/// as the key; each field in both, of one value type, never multi_enum.
+fn judge_matches(
+    matches: &Matches,
+    view: &View,
+    records: &RecordComponent,
+    fields: &BTreeMap<&str, &Field>,
+    inputs: &BTreeMap<&str, &Contract>,
+    path: &str,
+) -> Result<(), AdmissionError> {
+    require(
+        matches!(view.kind.as_str(), "record_summary" | "record_ranking"),
+        path,
+        "matches measure belongs to a summary or ranking",
+    )?;
+    let key = inputs
+        .get(matches.key_input.as_str())
+        .filter(|input| input.record_input)
+        .ok_or_else(|| refused(path, "matches key input must be a records input"))?;
+    require(
+        matches.key_input != records.input,
+        path,
+        "matches key input must differ from the component input",
+    )?;
+    for id in &matches.fields {
+        let (Some(field), Some(keyed)) = (
+            fields.get(id.as_str()),
+            key.fields.iter().find(|field| field.id == *id),
+        ) else {
+            return Err(refused(path, "unknown matches field"));
+        };
+        require(
+            field.value_type == keyed.value_type,
+            path,
+            "matches field types differ",
+        )?;
+        require(
+            !matches!(field.value_type, ValueType::MultiEnum(_)),
+            path,
+            "matches field cannot be multi_enum",
+        )?;
+    }
+    Ok(())
 }
 
 /// validate.py `compatible`: a filter literal against the field it compares.
@@ -2519,6 +3085,16 @@ fn compatible(literal: &Literal, field: &Field) -> bool {
         ) => unit == declared && scale == places,
         (Literal::Enum(value), ValueType::Enum(values)) => values.contains(value),
         (Literal::Reference(input), ValueType::Reference(target)) => input == target,
+        // Edition impl-2026-11-14.2 (ADR-020 C6): a subset of the declared
+        // values in declaration order (the walk refused empty and repeated
+        // selections).
+        (Literal::MultiEnum(picked), ValueType::MultiEnum(declared)) => {
+            let positions: Option<Vec<usize>> = picked
+                .iter()
+                .map(|value| declared.iter().position(|item| item == value))
+                .collect();
+            positions.is_some_and(|positions| positions.windows(2).all(|pair| pair[0] < pair[1]))
+        }
         _ => false,
     }
 }

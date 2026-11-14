@@ -1,4 +1,4 @@
-import { h, mount, createList } from '@getforma/core';
+import { h, mount, createList, createShow } from '@getforma/core';
 
 // APP-013 record page (design §9 record commands, ADR-007 D7.16): the record
 // as the member may currently see it and one declared command's form. The
@@ -18,6 +18,16 @@ type FieldRow = {
   options: string;
   nullable: boolean;
   writable: boolean;
+  /** Writable as free text (no picker). */
+  hasText: boolean;
+  readOnly: boolean;
+  /** APP-205: a reference picker over the readable target records. */
+  hasChoices: boolean;
+  /** APP-205: a reference with nothing to choose (a disabled select). */
+  noChoices: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  hasCheckboxes: boolean;
+  choices: { id: string; value: string; label: string; selected: boolean }[];
 };
 type RecordProps = {
   app: string;
@@ -126,17 +136,42 @@ function Record(props: RecordProps) {
             () => props.fields,
             (row) => row.id,
             // Only the offered command's writable fields are inputs; storage
-            // refuses a value for any other field (APP-013 review m3).
-            (row) =>
-              h(
-                'p',
-                { class: 'field' },
-                h('label', { for: row.input }, row.label, ' ', h('span', { class: 'muted' }, row.options)),
-                row.writable
-                  ? h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })
-                  : h('span', { class: 'muted' }, 'not changed by this command'),
-                row.writable ? h('input', { type: 'hidden', name: row.specInput, value: row.spec }) : null,
-              ),
+            // refuses a value for any other field (APP-013 review m3). A
+            // reference is a picker of the records the member may read
+            // (APP-205); storage still judges the submitted reference.
+            (row) => (
+              <p class="field">
+                {h('label', { for: row.input }, row.label, ' ', h('span', { class: 'muted' }, row.options))}
+                {createShow(() => row.hasChoices, () => (
+                  <select id={row.input} name={row.input}>
+                    {createList(() => row.choices, (choice) => choice.id, (choice) => (
+                      <option value={choice.value} selected={choice.selected}>{choice.label}</option>
+                    ))}
+                  </select>
+                ))}
+                {createShow(() => row.noChoices, () => (
+                  <select id={row.input} name={row.input} disabled>
+                    <option value="">Nothing to choose yet</option>
+                  </select>
+                ))}
+                {createShow(() => row.hasCheckboxes, () => (
+                  <span class="choices" role="group" aria-label={row.label}>
+                    <input type="hidden" name={row.input} value="" />
+                    {createList(() => row.choices, (choice) => choice.id, (choice) => (
+                      <label class="choice">
+                        <input type="checkbox" name={row.input} value={choice.value} checked={choice.selected} />
+                        {' '}{choice.label}
+                      </label>
+                    ))}
+                  </span>
+                ))}
+                {createShow(() => row.hasText, () => (
+                  h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })
+                ))}
+                {createShow(() => row.readOnly, () => <span class="muted">not changed by this command</span>)}
+                {createShow(() => row.writable, () => <input type="hidden" name={row.specInput} value={row.spec} />)}
+              </p>
+            ),
           )}
           <button type="submit">Submit {props.command}</button>
         </form>

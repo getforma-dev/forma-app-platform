@@ -253,3 +253,24 @@ fn every_record_statement_carries_own_rows() {
     // sequences (member and guest) and the event judgment.
     assert!(with_rule >= 14, "own_rows statements found: {with_rule}");
 }
+
+/// ADR-020 §17.35 (APP-211): a published schema knows whether it is declared
+/// `own`, so a record chooser over it can name each record's creator; a
+/// schema without the member, or with any other spelling, is shared.
+#[test]
+fn a_published_schema_reports_its_own_visibility() {
+    let fields = json!([{"id": "prompt", "value_type": {"type": "text"}, "nullable": false}]);
+    let content = json!({
+        "record_schemas": [
+            {"id": "items", "version": 1, "fields": fields},
+            {"id": "responses", "version": 1, "visibility": "own", "fields": fields}
+        ],
+        "commands": []
+    });
+    let bytes = serde_json::to_vec(&content).unwrap();
+    let digest = format!("sha256:{}", "7".repeat(64));
+    let shared = commands::published_content(&bytes, digest.clone(), "items", 1).unwrap();
+    let own = commands::published_content(&bytes, digest, "responses", 1).unwrap();
+    assert!(!shared.own);
+    assert!(own.own);
+}

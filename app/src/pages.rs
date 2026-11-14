@@ -118,6 +118,25 @@ pub struct FieldRowProps {
     pub options: String,
     pub nullable: bool,
     pub writable: bool,
+    /// Writable as free text (no picker).
+    pub has_text: bool,
+    pub read_only: bool,
+    /// ADR-020 (APP-205): a reference picker over the readable records.
+    pub has_choices: bool,
+    /// APP-205: a reference with nothing to choose (a disabled select).
+    pub no_choices: bool,
+    /// ADR-020 §9 (APP-208): a multi-select, one checkbox per declared
+    /// value (`choices`), the held ones checked, posted under one name.
+    pub has_checkboxes: bool,
+    pub choices: Vec<RecordChoiceProps>,
+}
+/// APP-205: one option of the record page's reference picker.
+#[derive(PageProps)]
+pub struct RecordChoiceProps {
+    pub id: String,
+    pub value: String,
+    pub label: String,
+    pub selected: bool,
 }
 #[derive(PageProps)]
 pub struct RecordProps {
@@ -198,6 +217,27 @@ impl RecordPage for SsrPages {
                             options: row.options.clone(),
                             nullable: row.nullable,
                             writable: row.writable,
+                            has_choices: row.writable
+                                && !row.choices.is_empty()
+                                && row.kind != "multi_enum",
+                            no_choices: row.writable && row.nothing_to_choose,
+                            has_checkboxes: row.writable && row.kind == "multi_enum",
+                            has_text: row.writable
+                                && row.choices.is_empty()
+                                && !row.nothing_to_choose
+                                && row.kind != "multi_enum",
+                            read_only: !row.writable,
+                            choices: row
+                                .choices
+                                .iter()
+                                .enumerate()
+                                .map(|(index, choice)| RecordChoiceProps {
+                                    id: format!("o{index}"),
+                                    value: choice.value.clone(),
+                                    label: choice.label.clone(),
+                                    selected: choice.selected,
+                                })
+                                .collect(),
                         })
                         .collect(),
                     command: view.command.clone(),

@@ -20,3 +20,4 @@ Authorized discovery, bounded generation, explanation and evaluation.
 | 111 | [APP-111: Pro plan: large documents become a cited brief and a shareable app](../0-backlog/APP-111.md) | [PH08](../phases/PH08.md) | S14 | AI | P1 | XL | Backlog | APP-108 |
 | 143 | [APP-143: Ask about the app, the card, or the widget you clicked](../4-done/APP-143.md) | [PH08](../phases/PH08.md) | S14 | AI | P1 | M | Done | APP-094, APP-142 |
 | 153 | [APP-152: An API bank, and an easy way to add an API](../0-backlog/APP-152.md) | [PH08](../phases/PH08.md) | S14 | AI | P2 | L | Backlog | APP-093, APP-104 |
+| 209 | [APP-207: The composer generates the participation primitives from plain words](../0-backlog/APP-207.md) | [PH09](../phases/PH09.md) | S15 | AI | P0 | M | Backlog | APP-202 |

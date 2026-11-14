@@ -518,3 +518,50 @@ fn slack_drafts_are_capped_per_member() {
         .hold(&sarah, "T1", "U2", crate::mcp::tests::draft())
         .is_some());
 }
+
+/// APP-206 (ADR-020 §8): the filed message reaches each approver by the
+/// standing judged after the commit: the shared ones as before, a note for
+/// a reviewer and for anyone else, labels escaped and never a share wording
+/// for an approver who was not shared with.
+#[test]
+fn the_filed_message_words_each_approver_by_standing() {
+    use super::flows::{approver_sentences, Reached};
+    let line = |reached: &[(&str, Reached)]| {
+        approver_sentences(
+            "Filed: *3*".to_owned(),
+            &reached
+                .iter()
+                .map(|(label, how)| ((*label).to_owned(), *how))
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(line(&[]), "Filed: *3*.");
+    assert_eq!(
+        line(&[("Sarah Chen", Reached::Shared)]),
+        "Filed: *3*, sent to *Sarah Chen* for approval."
+    );
+    assert_eq!(
+        line(&[("Olive Park", Reached::Reviewer)]),
+        "Filed: *3*. Filed for *Olive Park*'s review."
+    );
+    assert_eq!(
+        line(&[("Nia <b>&", Reached::Unreachable)]),
+        "Filed: *3*. *Nia &lt;b&gt;&amp;* is not a reviewer of this app; the record is filed and visible to its reviewers."
+    );
+    assert_eq!(
+        line(&[
+            ("Olive Park", Reached::Reviewer),
+            ("Hal Moreno", Reached::Shared),
+            ("Rita Okafor", Reached::NotShared),
+            ("Nia Brooks", Reached::Unreachable),
+        ]),
+        "Filed: *3*, sent to *Hal Moreno* for approval. Filed for *Olive Park*'s review. *Nia Brooks* is not a reviewer of this app; the record is filed and visible to its reviewers."
+    );
+    for how in [Reached::Reviewer, Reached::Unreachable, Reached::NotShared] {
+        let said = line(&[("Olive Park", how)]);
+        assert!(
+            !said.contains("sent to") && !said.contains("refused"),
+            "{said}"
+        );
+    }
+}

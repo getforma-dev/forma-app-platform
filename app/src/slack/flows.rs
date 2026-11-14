@@ -12,7 +12,7 @@ use crate::{
     },
     commands::routes::commit,
     demo, directory, events, origins,
-    storage::{self, CommandOutcome, CommandResult, RecordRow, TrustedRequest},
+    storage::{self, ApproverStanding, CommandOutcome, CommandResult, RecordRow, TrustedRequest},
 };
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc, time::Instant};
@@ -607,8 +607,9 @@ async fn cancel(state: Arc<Slack>, team: String, user: String, id: String, respo
     .await;
 }
 
-/// Confirm: the held draft's command through the audited route, then the
-/// share to the approver (a create) or the filer's DM (a decision).
+/// Confirm: the held draft's command through the audited route, then each
+/// approver by the standing judged after the commit (a create: APP-206, the
+/// share for a `shareable` one only) or the filer's DM (a decision).
 async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, response_url: String) {
     let started = Instant::now();
     let Some(member) = member(&state, &team, &user).await else {
@@ -668,6 +669,15 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
             )
             .await;
         }
+        // ADR-020 (APP-203): storage's typed refusals.
+        Ok(CommandResult::Refused(refusal)) => {
+            return respond(
+                &state,
+                &response_url,
+                text::ephemeral(crate::commands::refusal_copy(*refusal), None, false),
+            )
+            .await;
+        }
         Err(storage::Error::Denied) => {
             return respond(&state, &response_url, text::ephemeral(REFUSED, None, false)).await;
         }
@@ -701,43 +711,60 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
     let message = match draft.kind {
         Kind::Create => {
             let mut line = format!("Filed: *{shown}*");
-            let mut sent = Vec::new();
+            let mut reached: Vec<(String, Reached)> = Vec::new();
             if let Some(rule) = &draft.rule {
                 line.push_str(&format!(" ({})", text::escape(rule)));
             }
             // APP-107: every approver named (a two-level workflow's second too).
+            // APP-206: each judged again now, after the commit (the held
+            // draft's standing is never trusted); only `shareable` shares.
             for approver in &draft.approvers {
-                match stores
+                let standing = stores
                     .workspace
-                    .share_work(
-                        &member,
-                        &draft.app,
-                        &draft.work,
-                        crate::storage::Audience::Member(&approver.principal),
-                        crate::storage::ShareRole::Contributor,
-                        crate::storage::ShareMode::Ensure,
-                    )
-                    .await
-                {
-                    Ok(shared) => {
-                        if shared.changed() {
-                            events::hub().app_shared(
-                                member.organization(),
-                                &draft.app,
-                                &draft.work,
-                            );
+                    .approver_standing(&member, &draft.app, &draft.work, &approver.principal)
+                    .await;
+                let how = match standing {
+                    Ok(ApproverStanding::Reviewer) => Reached::Reviewer,
+                    Ok(ApproverStanding::Unreachable) => Reached::Unreachable,
+                    Ok(ApproverStanding::Shareable) => match stores
+                        .workspace
+                        .share_work(
+                            &member,
+                            &draft.app,
+                            &draft.work,
+                            crate::storage::Audience::Member(&approver.principal),
+                            crate::storage::ShareRole::Contributor,
+                            crate::storage::ShareMode::Ensure,
+                        )
+                        .await
+                    {
+                        Ok(shared) => {
+                            if shared.changed() {
+                                events::hub().app_shared(
+                                    member.organization(),
+                                    &draft.app,
+                                    &draft.work,
+                                );
+                            }
+                            Reached::Shared
                         }
-                        sent.push(format!("*{}*", text::escape(&approver.label)));
-                    }
+                        Err(error) => {
+                            tracing::warn!(event = "slack.share_failed", error = %error, "share to the approver failed");
+                            Reached::NotShared
+                        }
+                    },
                     Err(error) => {
-                        tracing::warn!(event = "slack.share_failed", error = %error, "share to the approver failed");
+                        tracing::warn!(event = "slack.approver_unjudged", error = %error, "approver standing unavailable after commit");
+                        Reached::NotShared
                     }
-                }
+                };
+                reached.push((approver.label.clone(), how));
             }
-            if !sent.is_empty() {
-                line.push_str(&format!(", sent to {} for approval", sent.join(" and ")));
-            }
-            format!("{line}. {}", canvas_link(&state))
+            format!(
+                "{} {}",
+                approver_sentences(line, &reached),
+                canvas_link(&state)
+            )
         }
         _ => {
             if fresh {
@@ -775,6 +802,48 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
     );
     let message = format!("{message}{}", demo_suffix(member.organization()));
     respond(&state, &response_url, text::ephemeral(&message, None, true)).await;
+}
+
+/// APP-206: how one approver was reached after a Confirm.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Reached {
+    /// A reviewer of the work: no share was attempted.
+    Reviewer,
+    /// `shareable`, and the share went through.
+    Shared,
+    /// `shareable` and the share failed, or the standing could not be read
+    /// (logged; the message says nothing, as before APP-206).
+    NotShared,
+    /// Neither: no share was attempted.
+    Unreachable,
+}
+
+/// The filed message's approver part after `head` ("Filed: *…*" and the
+/// rule): the shared approvers as before (", sent to *A* and *B* for
+/// approval"), the full stop, then the canvas's note for each reviewer and
+/// each unreachable approver (`actions::resolve`), labels escaped and bold.
+pub(crate) fn approver_sentences(head: String, reached: &[(String, Reached)]) -> String {
+    let bold = |label: &str| format!("*{}*", text::escape(label));
+    let mut line = head;
+    let sent: Vec<String> = reached
+        .iter()
+        .filter(|(_, how)| *how == Reached::Shared)
+        .map(|(label, _)| bold(label))
+        .collect();
+    if !sent.is_empty() {
+        line.push_str(&format!(", sent to {} for approval", sent.join(" and ")));
+    }
+    line.push('.');
+    for (label, how) in reached {
+        let note = match how {
+            Reached::Reviewer => resolve::reviewer_note(&bold(label)),
+            Reached::Unreachable => resolve::unreachable_note(&bold(label)),
+            Reached::Shared | Reached::NotShared => continue,
+        };
+        line.push(' ');
+        line.push_str(&note);
+    }
+    line
 }
 
 fn capitalized(word: &str) -> String {

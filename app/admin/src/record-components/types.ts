@@ -9,9 +9,12 @@ export type RecordComponent = {
   population: string; truncated: boolean; hasBudget: boolean; budget: string; remaining: string; ratio: string;
   filters: RecordFilter[]; hasFilters: boolean; filterEpoch: number;
   hasReceipt: boolean; receiptDigest: string; receiptJson: string;
+  /** ADR-020 C1: a countdown with a readable current record; the server's instant and text. */
+  hasCountdown: boolean; countdownState: string; countdownTarget: string; countdownText: string; serverTime: string;
 };
 export type WireRecordFilter = Omit<RecordFilter,'isText'|'isEnum'|'isDate'> & { is_text:boolean;is_enum:boolean;is_date:boolean };
-export type WireRecordComponent = Omit<RecordComponent,'cardId'|'hasSummary'|'summaryRaw'|'hasTable'|'hasGroups'|'hasBudget'|'hasFilters'|'filterEpoch'|'hasReceipt'|'receiptDigest'|'receiptJson'|'filters'> & {
+export type WireRecordComponent = Omit<RecordComponent,'cardId'|'hasSummary'|'summaryRaw'|'hasTable'|'hasGroups'|'hasBudget'|'hasFilters'|'filterEpoch'|'hasReceipt'|'receiptDigest'|'receiptJson'|'filters'|'hasCountdown'|'countdownState'|'countdownTarget'|'countdownText'|'serverTime'> & {
   card_id:string;has_summary:boolean;summary_raw:string;has_table:boolean;has_groups:boolean;has_budget:boolean;has_filters:boolean;filter_epoch:number;
   has_receipt:boolean;receipt_digest:string;receipt_json:string;filters:WireRecordFilter[];
+  has_countdown:boolean;countdown_state:string;countdown_target:string;countdown_text:string;server_time:string;
 };

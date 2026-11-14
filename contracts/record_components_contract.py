@@ -9,7 +9,8 @@ def receipt_schema(UUID, DIGEST, ID, INT, POS):
     revision=obj({'record_id':UUID,'version':POS,'commit_sequence':POS})
     snapshot=arr(obj({'input_id':ID,'collection_id':UUID,'schema_id':ID,'schema_version':POS,'records':arr(revision,2000)}),32)
     budget=obj({'origin':{'const':'preset'},'minor_units':{'type':'string','pattern':r'^(0|[1-9][0-9]{0,37})(?![\s\S])'},'currency':{'const':'USD'},'minor_unit_exponent':{'const':2}})
-    components=arr(obj({'view_id':ID,'kind':{'enum':['records_list','record_summary','record_trend','record_ranking','record_budget']},'population':{'type':'integer','minimum':0,'maximum':2000},'truncated_page':{'type':'boolean'},'budget':{'oneOf':[{'type':'null'},budget]}}),32)
+    # Edition impl-2026-11-14.2 (ADR-020 C1) adds `countdown`; the receipt kind, its domain and every other member are unchanged.
+    components=arr(obj({'view_id':ID,'kind':{'enum':['records_list','record_summary','record_trend','record_ranking','record_budget','countdown']},'population':{'type':'integer','minimum':0,'maximum':2000},'truncated_page':{'type':'boolean'},'budget':{'oneOf':[{'type':'null'},budget]}}),32)
     return obj({'kind':{'const':'record_components_receipt'},'schema_version':{'const':1},'organization_id':UUID,'app_id':UUID,'work_id':UUID,'publication_id':UUID,'definition_digest':DIGEST,'work_version':POS,'policy_epoch':POS,'actor':actor,'operator_version':{'const':1},'parameters':obj({'filter_epoch':INT,'filters':filters}),'components':components,'snapshot':snapshot,'snapshot_digest':DIGEST,'result_digest':DIGEST,'partial':{'const':False},'total_scope':{'const':'full_authorized_filtered_collection'},'digest':DIGEST})
 
 def validate_semantics(document):

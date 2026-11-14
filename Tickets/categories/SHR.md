@@ -14,3 +14,4 @@ Separate grants, derived information, revocation and exports.
 | 183 | [APP-183: Organization Admin: see the members and remove one](../0-backlog/APP-183.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | M | Backlog | APP-181 |
 | 190 | [APP-190: Member names that each member sets](../0-backlog/APP-190.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | S | Backlog | APP-181 |
 | 192 | [APP-192: Share with roles and with everyone in the organization](../0-backlog/APP-192.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | M | Backlog | APP-181, APP-191 |
+| 208 | [APP-206: The approver step for a filer without share authority](../3-in-review/APP-206.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | S | In review | None |

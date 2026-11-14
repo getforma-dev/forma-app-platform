@@ -6,6 +6,13 @@ bundles and vectors unchanged, plus the APP-013 recovery view, claim and command
 the APP-107 guard/initial members and the prebuilt library (fixtures/library/, make_library.py).
 Editions impl-2026-10-28.1's, impl-2026-10-29.2's and impl-2026-10-29.3's specimens and vectors are
 retained byte-identically in fixtures/<edition>/ and are never regenerated.
+
+Edition impl-2026-11-14.2 (ADR-020) keeps every earlier specimen byte for byte and adds one,
+fixtures/participation.json (`participation()`): the ADR's general worked example at definition
+schema versions 2 and 1, a multi-select definition, a record-components receipt naming a countdown,
+the publication naming the countdown renderer and the two new 422 problem bodies. It is not a
+bundle: each top-level member is one contract document or problem body, and a negative vector
+judges the member its path names.
 """
 import copy
 import hashlib
@@ -189,10 +196,109 @@ def command_recovery():
     ]
     return {"recovery_views": [stale_edit, reused_key, absent], "claim": claim, "problems": problems}
 
+def records_input(name, fields, version):
+    item = {"id": name, "contract_id": name + "_v1", "contract_version": 1, "kind": "records", "fields": copy.deepcopy(fields)}
+    return {**item, "coverage": "complete"} if version == 2 else item
+
+def records_view(name, kind, title, **records):
+    return {"id": name, "kind": kind, "renderer_version": 1, "title": title, "records": {"version": 1, **records}}
+
+def app_definition(org, app, revision, version, content):
+    return {"kind": "app_definition", "schema_version": version, "organization_id": org, "app_id": app, "revision_id": revision,
+            "content": content, "digest": digest("app-definition", content)}
+
+def participation_content(version):
+    """ADR-020 §10's general worked example: a shared `items` list the owner posts, closes and reopens (reviewer-only,
+    no declared transitions, `opened_at` stamped by the server), an own `responses` list keyed one per creator per
+    item whose `respond` create requires the item to be open and opened within the last 30 s, and an own `expected`
+    list the owner files. No classroom words."""
+    item = [field("prompt", "text"), field("state", "enum", values=["open", "closed"]), field("opened_at", "timestamp")]
+    answer = [field("item", "reference", target_input="items"), field("choice", "enum", values=["a", "b", "c", "d"])]
+    open_item = {"via": "item", "field_id": "state", "comparison": "eq", "value": {"type": "enum", "value": "open"}}
+    recent = {"via": "item", "field_id": "opened_at", "comparison": "gte", "value": {"type": "now", "offset_seconds": -30}}
+    views = [view("respond", "form", command_id="respond"),
+             records_view("timer", "countdown", "Time left", input_id="items", schema_id="items", timestamp_field="opened_at",
+                          offset_seconds=30, closed_when={"field_id": "state", "comparison": "eq", "value": {"type": "enum", "value": "closed"}}),
+             records_view("item_list", "records_list", "Items", input_id="items", schema_id="items", columns=["prompt", "state", "opened_at"]),
+             records_view("response_count", "record_summary", "Responses", input_id="responses", schema_id="responses", measure={"op": "count"}),
+             records_view("leaderboard", "record_ranking", "Leaderboard", input_id="responses", schema_id="responses", group_by="creator",
+                          measure={"op": "matches", "key_input": "expected", "fields": ["item", "choice"]}, limit=50)]
+    return {"title": "Participation", "description": "Synthetic contract example (ADR-020 §10): items, responses and expected answers; no runtime or result is claimed.",
+            "inputs": [records_input("items", item, version), records_input("responses", answer, version), records_input("expected", answer, version)],
+            "views": views,
+            "record_schemas": [{"id": "items", "version": 1, "fields": copy.deepcopy(item)},
+                               {"id": "responses", "version": 1, "fields": copy.deepcopy(answer), "visibility": "own", "one_per_creator": ["item"]},
+                               {"id": "expected", "version": 1, "fields": copy.deepcopy(answer), "visibility": "own"}],
+            "commands": [{"id": "post", "record_schema_id": "items", "operation": "create", "writable_fields": ["prompt", "state"], "transitions": [],
+                          "initial": [{"field_id": "state", "value": "open"}], "reviewer_only": True, "set_now": ["opened_at"]},
+                         {"id": "close", "record_schema_id": "items", "operation": "update", "writable_fields": ["state"], "transitions": [], "reviewer_only": True},
+                         {"id": "reopen", "record_schema_id": "items", "operation": "update", "writable_fields": ["state"], "transitions": [],
+                          "reviewer_only": True, "set_now": ["opened_at"]},
+                         {"id": "respond", "record_schema_id": "responses", "operation": "create", "writable_fields": ["item", "choice"], "transitions": [],
+                          "requires": [open_item, recent]},
+                         {"id": "add_expected", "record_schema_id": "expected", "operation": "create", "writable_fields": ["item", "choice"], "transitions": [],
+                          "reviewer_only": True}],
+            "links": [], "default_layout": [{"view_id": v["id"], "column": 0, "row": i, "width": 12} for i, v in enumerate(views)]}
+
+def multi_select_content():
+    """ADR-020 C6 (stretch): a multi-select field in a form, a list, a ranking (one count per selected value), a
+    trend, a `matches` summary over text and a typed query that projects it. The refusals of §9 are its vectors."""
+    tags = field("tags", "multi_enum", values=["red", "green", "blue"])
+    picks = [field("title", "text"), tags, field("day", "date")]
+    keys = [field("title", "text"), copy.deepcopy(tags)]
+    views = [view("pick", "form", command_id="pick"),
+             records_view("list", "records_list", "Picks", input_id="choices", schema_id="choices", columns=["title", "tags", "day"]),
+             records_view("by_tag", "record_ranking", "By tag", input_id="choices", schema_id="choices", group_field="tags", measure={"op": "count"}),
+             records_view("by_day", "record_trend", "By day", input_id="choices", schema_id="choices", date_field="day", measure={"op": "count"}),
+             records_view("matched", "record_summary", "Matched", input_id="choices", schema_id="choices",
+                          measure={"op": "matches", "key_input": "keys", "fields": ["title"]}),
+             view("tag_rows", "table", query(["choices"], [{"type": "project", "fields": [f("choices", "title"), f("choices", "tags")]}]))]
+    return {"title": "Multi-select", "description": "Synthetic contract example (ADR-020 §9): choose all that apply; no runtime or result is claimed.",
+            "inputs": [records_input("choices", picks, 2), records_input("keys", keys, 2)], "views": views,
+            "record_schemas": [{"id": "choices", "version": 1, "fields": copy.deepcopy(picks), "visibility": "own"},
+                               {"id": "keys", "version": 1, "fields": copy.deepcopy(keys)}],
+            "commands": [{"id": "pick", "record_schema_id": "choices", "operation": "create", "writable_fields": ["title", "tags", "day"], "transitions": []},
+                         {"id": "add_key", "record_schema_id": "keys", "operation": "create", "writable_fields": ["title", "tags"], "transitions": [],
+                          "reviewer_only": True}],
+            "links": [], "default_layout": [{"view_id": v["id"], "column": 0, "row": i, "width": 12} for i, v in enumerate(views)]}
+
+def participation():
+    """Edition impl-2026-11-14.2's specimen (ADR-020 §11). Synthetic: the receipt's snapshot digest is a labeled
+    placeholder (its domain belongs to the record-components path, APP-204), and nothing here was committed."""
+    org, app, principal, revision, revision_v1, work, publication = map(uid, range(300, 307))
+    definition = app_definition(org, app, revision, 2, participation_content(2))
+    content = definition["content"]
+    pub = {"kind": "publication", "schema_version": 2, "organization_id": org, "app_id": app, "publication_id": publication,
+           "definition_revision_id": revision, "definition_digest": definition["digest"],
+           "input_contract_digests": [{"input_id": i["id"], "digest": digest("input-contract", i)} for i in content["inputs"]],
+           "record_schema_digests": [{"schema_id": s["id"], "digest": digest("record-schema", s)} for s in content["record_schemas"]],
+           "renderer_version": 1, "operator_version": 1, "operators": [],
+           "renderers": [{"kind": kind, "version": 1} for kind in sorted({v["kind"] for v in content["views"]})],
+           "admission_digest": raw_hash("participation:synthetic-admission-placeholder"),
+           "policy": {"id": uid(307), "version": 1, "kind": "owner_publish"}, "author_id": principal, "approver_id": principal,
+           "approver_epoch": 1, "published_at": "2026-11-14T12:00:00Z"}
+    receipt = {"kind": "record_components_receipt", "schema_version": 1, "organization_id": org, "app_id": app, "work_id": work,
+               "publication_id": publication, "definition_digest": definition["digest"], "work_version": 1, "policy_epoch": 1,
+               "actor": {"kind": "member", "principal_id": principal, "membership_epoch": 1}, "operator_version": 1,
+               "parameters": {"filter_epoch": 0, "filters": []},
+               "components": [{"view_id": v["id"], "kind": v["kind"], "population": 1, "truncated_page": False, "budget": None}
+                              for v in content["views"] if "records" in v],
+               "snapshot": [{"input_id": name, "collection_id": uid(310 + n), "schema_id": name, "schema_version": 1,
+                             "records": [{"record_id": uid(320 + n), "version": 1, "commit_sequence": n + 1}]}
+                            for n, name in enumerate(("items", "responses", "expected"))],
+               "snapshot_digest": raw_hash("participation:synthetic-snapshot-placeholder"),
+               "result_digest": digest("result", {"example": "participation"}), "partial": False,
+               "total_scope": "full_authorized_filtered_collection"}
+    receipt["digest"] = digest("record-components-receipt", receipt)
+    return {"definition": definition, "definition_v1": app_definition(org, app, revision_v1, 1, participation_content(1)),
+            "multi_select": app_definition(org, uid(330), uid(333), 2, multi_select_content()),
+            "publication": pub, "components_receipt": receipt,
+            "requirement_not_met": {"status": 422, "code": "requirement_not_met"}, "unchanged": {"status": 422, "code": "unchanged"}}
+
 def main():
     (ROOT / "fixtures").mkdir(exist_ok=True)
     for name, value in (("northstar", northstar()), ("spend-review", spend_review()), ("canonical-vectors", canonical_vectors()),
-                        ("command-recovery", command_recovery())):
+                        ("command-recovery", command_recovery()), ("participation", participation())):
         (ROOT / "fixtures" / (name + ".json")).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 if __name__ == "__main__":

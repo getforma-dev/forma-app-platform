@@ -616,18 +616,22 @@ fn current_item() -> Value {
     })
 }
 
-/// APP-193 finding (advisor decisions, 2026-11-14): "which X" is an enum or
-/// short text, never a `reference` (a form shows a raw identifier box), and an
-/// owner-advanced shared item is a reviewer-only update with no transition
-/// (its creator could never fire one). Both as fixtures the planner judges.
+/// Replaces an existing array element or object member at a JSON pointer.
+fn set_at(mut content: Value, pointer: &str, value: Value) -> Value {
+    *content.pointer_mut(pointer).unwrap() = value;
+    content
+}
+
+/// APP-193 finding (advisor decisions, 2026-11-14), narrowed by ADR-020 C7
+/// (APP-207): "which X" of a few fixed things is an enum or short text; a
+/// `reference` is admitted only to a `records` input of the same content
+/// (the form's picker offers its entries, APP-205) and refused to a source
+/// input. An owner-advanced shared item is a reviewer-only update with no
+/// transition (its creator could never fire one). As fixtures the planner
+/// judges.
 #[test]
 fn which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update() {
-    // Replaces an existing array element or object member at a JSON pointer.
-    fn set_at(mut content: Value, pointer: &str, value: Value) -> Value {
-        *content.pointer_mut(pointer).unwrap() = value;
-        content
-    }
-    // A submission naming its assignment by reference is refused; by enum it admits.
+    // A reference to a records input of the same content admits.
     let reference = json!({"id": "assignment", "value_type": {"type": "reference", "target_input": "suggestions"}, "nullable": false});
     let by_reference = set_at(
         prompt::private_entries_example(),
@@ -640,11 +644,24 @@ fn which_x_is_an_enum_or_text_and_an_owner_advances_their_own_item_by_an_update(
         "/commands/0/writable_fields",
         json!(["title", "assignment", "status"]),
     );
-    assert!(
-        plan::admit(&by_reference, ORG, APP).is_ok(),
-        "the grammar admits a reference"
+    plan::plan_generated(&by_reference.to_string(), &[], ORG, APP)
+        .expect("a reference to a records input of the same content");
+    // A reference to a source input is refused, though the grammar admits it.
+    let readable = sources(NORTHSTAR);
+    let events = readable[0].contract.clone();
+    let to_source = json!({"id": "assignment", "value_type": {"type": "reference", "target_input": events["id"]}, "nullable": false});
+    let mut by_source = set_at(
+        by_reference.clone(),
+        "/record_schemas/0/fields/1",
+        to_source.clone(),
     );
-    let refusal = plan::plan_generated(&by_reference.to_string(), &[], ORG, APP).unwrap_err();
+    by_source = set_at(by_source, "/inputs/0/fields/1", to_source);
+    by_source["inputs"].as_array_mut().unwrap().push(events);
+    assert!(
+        plan::admit(&by_source, ORG, APP).is_ok(),
+        "the grammar admits a reference to a source input"
+    );
+    let refusal = plan::plan_generated(&by_source.to_string(), &readable, ORG, APP).unwrap_err();
     assert_eq!(refusal.code, "reference_field");
     assert_ne!(prompt::hint("reference_field"), prompt::hint("unknown"));
     let assignment = json!({"id": "assignment", "value_type": {"type": "enum", "values": ["week_one", "week_two", "final"]}, "nullable": false});
@@ -734,6 +751,648 @@ fn generated_content_meets_the_authoring_verdict_and_offers_an_entry_form() {
     for code in ["authoring_rule", "no_create_form"] {
         assert_ne!(prompt::hint(code), prompt::hint("unknown"), "{code}");
     }
+}
+
+/// Words of the member's domain that no generated id carries.
+const CLASSROOM: [&str; 9] = [
+    "quiz",
+    "student",
+    "question",
+    "class",
+    "teacher",
+    "homework",
+    "attendance",
+    "grade",
+    "exam",
+];
+
+/// Every id a definition declares: inputs, views, schemas, commands, fields.
+fn declared_ids(content: &Value) -> Vec<String> {
+    let mut ids = Vec::new();
+    for list in ["inputs", "views", "record_schemas", "commands"] {
+        for item in content[list].as_array().unwrap() {
+            ids.push(item["id"].as_str().unwrap().to_owned());
+            for field in item["fields"].as_array().into_iter().flatten() {
+                ids.push(field["id"].as_str().unwrap().to_owned());
+            }
+        }
+    }
+    ids
+}
+
+fn by_id<'a>(content: &'a Value, list: &str, id: &str) -> &'a Value {
+    content[list]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == id)
+        .unwrap_or_else(|| panic!("{list} {id}"))
+}
+
+/// The saved work's bindings, `(input, schema)`, as the route makes them.
+fn records_bindings(content: &Value) -> Vec<(String, String)> {
+    let inputs = routes::published_inputs(content);
+    let schemas = routes::record_schemas(content);
+    crate::storage::composer_bindings(&inputs, &schemas, &[])
+        .unwrap()
+        .into_iter()
+        .map(|binding| match binding {
+            crate::storage::WorkBinding::Records { input, schema } => (input, schema),
+            other => panic!("a records binding: {other:?}"),
+        })
+        .collect()
+}
+
+/// APP-207 (ADR-020 §10, acceptance 2): three plain sentences, each answered
+/// by the scripted model with what a model following the prompt returns,
+/// are admitted on the first attempt as general definitions: the quiz with an
+/// `own` responses list keyed by the item reference, `requires` through
+/// `via` with `now`, `set_now` on the reviewer-only post and reopen, a
+/// countdown and a ranking by creator with `matches`; attendance keyed per
+/// session and open while the session is; one submission per task scored by
+/// a reviewer-only update. Every records input binds its own schema.
+#[test]
+fn plain_words_compose_participation_apps_through_admission() {
+    use prompt::plain_words::{attendance, homework, quiz, ATTENDANCE, HOMEWORK, QUIZ};
+    let mut admitted = Vec::new();
+    for (sentence, reply) in [
+        (QUIZ, quiz()),
+        (ATTENDANCE, attendance()),
+        (HOMEWORK, homework()),
+    ] {
+        let script = Script::new(vec![Ok(reply.to_string())]);
+        let generated = runtime()
+            .block_on(composer(&script).generate(sentence, &[], ORG, APP, far()))
+            .unwrap();
+        assert!(generated.refused.is_empty(), "{sentence}");
+        assert_eq!(generated.planned.origin, Origin::Generated);
+        let requests = script.requests();
+        assert!(requests[0].system.contains("PLAIN WORDS TO MEMBERS"));
+        let user: Value = serde_json::from_str(&requests[0].user).unwrap();
+        assert_eq!(user["intent"], sentence, "the sentence travels as data");
+        let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+        // Each records input binds the schema of its own id.
+        for (input, schema) in records_bindings(&content) {
+            assert_eq!(input, schema, "{sentence}");
+        }
+        // The member's words stay theirs; the ids are general.
+        for id in declared_ids(&content) {
+            assert!(CLASSROOM.iter().all(|word| !id.contains(word)), "{id}");
+        }
+        admitted.push(content);
+    }
+
+    let quiz = &admitted[0];
+    let responses = by_id(quiz, "record_schemas", "responses");
+    assert_eq!(responses["visibility"], "own");
+    assert_eq!(responses["one_per_creator"], json!(["item"]));
+    assert_eq!(
+        by_id(responses, "fields", "item")["value_type"],
+        json!({"type": "reference", "target_input": "items"})
+    );
+    let respond = by_id(quiz, "commands", "respond");
+    assert_eq!(respond["operation"], "create");
+    assert!(respond["writable_fields"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("item")));
+    let requires = respond["requires"].as_array().unwrap();
+    assert!(requires.iter().all(|guard| guard["via"] == "item"));
+    assert!(requires.iter().any(|guard| guard["field_id"] == "state"
+        && guard["value"] == json!({"type": "enum", "value": "open"})));
+    assert!(requires.iter().any(|guard| guard["field_id"] == "opened_at"
+        && guard["comparison"] == "gte"
+        && guard["value"] == json!({"type": "now", "offset_seconds": -30})));
+    for (id, operation) in [("post", "create"), ("reopen", "update")] {
+        let command = by_id(quiz, "commands", id);
+        assert_eq!(command["operation"], operation);
+        assert_eq!(command["reviewer_only"], true, "{id}");
+        assert_eq!(command["set_now"], json!(["opened_at"]), "{id}");
+        assert_eq!(
+            command["transitions"],
+            json!([]),
+            "{id}: no declared transition"
+        );
+        assert!(!command["writable_fields"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("opened_at")));
+    }
+    let close = by_id(quiz, "commands", "close");
+    assert_eq!(
+        (close["reviewer_only"].clone(), close["transitions"].clone()),
+        (json!(true), json!([]))
+    );
+    assert!(close.get("set_now").is_none());
+    let views = quiz["views"].as_array().unwrap();
+    let countdown = views
+        .iter()
+        .find(|view| view["kind"] == "countdown")
+        .unwrap();
+    assert_eq!(countdown["records"]["input_id"], "items");
+    assert_eq!(countdown["records"]["timestamp_field"], "opened_at");
+    assert_eq!(countdown["records"]["offset_seconds"], 30);
+    assert_eq!(
+        countdown["records"]["closed_when"]["value"],
+        json!({"type": "enum", "value": "closed"})
+    );
+    let ranking = views
+        .iter()
+        .find(|view| view["kind"] == "record_ranking")
+        .unwrap();
+    assert_eq!(ranking["records"]["input_id"], "responses");
+    assert_eq!(ranking["records"]["group_by"], "creator");
+    assert!(ranking["records"].get("group_field").is_none());
+    assert_eq!(
+        ranking["records"]["measure"],
+        json!({"op": "matches", "key_input": "expected", "fields": ["item", "choice"]})
+    );
+    assert_eq!(
+        by_id(quiz, "commands", "add_expected")["reviewer_only"],
+        true
+    );
+    assert_eq!(
+        by_id(quiz, "record_schemas", "expected")["visibility"],
+        "own"
+    );
+    assert!(
+        by_id(quiz, "record_schemas", "items")
+            .get("visibility")
+            .is_none(),
+        "items are shared"
+    );
+
+    let attendance = &admitted[1];
+    let checkins = by_id(attendance, "record_schemas", "checkins");
+    assert_eq!(checkins["one_per_creator"], json!(["session"]));
+    let check_in = by_id(attendance, "commands", "check_in");
+    assert_eq!(
+        check_in["requires"],
+        json!([{"via": "session", "field_id": "state", "comparison": "eq", "value": {"type": "enum", "value": "open"}}])
+    );
+    assert_eq!(check_in["set_now"], json!(["checked_at"]));
+    assert!(
+        check_in.get("reviewer_only").is_none(),
+        "every member checks in"
+    );
+
+    let homework = &admitted[2];
+    assert_eq!(
+        by_id(homework, "record_schemas", "submissions")["one_per_creator"],
+        json!(["task"])
+    );
+    let submit = by_id(homework, "commands", "submit");
+    assert!(
+        submit.get("requires").is_none(),
+        "no closing words: no requires"
+    );
+    let review = by_id(homework, "commands", "review");
+    assert_eq!(review["operation"], "update");
+    assert_eq!(review["reviewer_only"], true);
+    assert_eq!(review["writable_fields"], json!(["score"]), "never the key");
+    assert_eq!(review["transitions"], json!([]));
+}
+
+/// The smoke's acceptance judgment holds for the worked example and fails
+/// for a records-only list, so a real-model miss is named, not hidden.
+#[test]
+fn the_smokes_participation_features_judge_the_acceptance_shape() {
+    let features = participation_features(&prompt::plain_words::quiz());
+    assert!(features.iter().all(|(_, present)| *present), "{features:?}");
+    let list = participation_features(&prompt::simple_records_example());
+    assert!(
+        list.iter().filter(|(_, present)| !present).count() >= 6,
+        "{list:?}"
+    );
+}
+
+/// A records-only fixture with a multi-select field (ADR-020 C6), which
+/// admission accepts in stored content.
+fn multi_select() -> Value {
+    let fields = json!([
+        {"id": "label", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "options", "value_type": {"type": "multi_enum", "values": ["x", "y", "z"]}, "nullable": true}
+    ]);
+    json!({
+        "title": "Picks",
+        "description": "Pick all that apply.",
+        "inputs": [{"id": "picks", "contract_id": "picks_v1", "contract_version": 1, "kind": "records", "fields": fields}],
+        "views": [{"id": "add", "kind": "form", "renderer_version": 1, "title": "Pick", "command_id": "add"}],
+        "record_schemas": [{"id": "picks", "version": 1, "visibility": "own", "fields": fields}],
+        "commands": [{"id": "add", "record_schema_id": "picks", "operation": "create", "writable_fields": ["label", "options"], "transitions": []}],
+        "links": [],
+        "default_layout": [{"view_id": "add", "column": 0, "row": 0, "width": 12}]
+    })
+}
+
+/// Appends `value` to the array at `pointer`.
+fn push_at(mut content: Value, pointer: &str, value: Value) -> Value {
+    content
+        .pointer_mut(pointer)
+        .unwrap()
+        .as_array_mut()
+        .unwrap()
+        .push(value);
+    content
+}
+
+/// Sets the same field of a records input and of its schema (`slot` is the
+/// position of both in their lists).
+fn set_field(content: Value, slot: usize, field: usize, value: Value) -> Value {
+    let content = set_at(
+        content,
+        &format!("/inputs/{slot}/fields/{field}"),
+        value.clone(),
+    );
+    set_at(
+        content,
+        &format!("/record_schemas/{slot}/fields/{field}"),
+        value,
+    )
+}
+
+/// APP-207: every definition rule of edition impl-2026-11-14.2 is broken
+/// once in a fixture output; admission refuses it, the planner reports the
+/// rule's own static code (`participation_rule: <the edition's message>`),
+/// and the hint is that rule's fix. All 28 rules are covered.
+#[test]
+fn each_participation_rule_is_refused_with_its_own_static_hint() {
+    let example = prompt::participation_example;
+    let readable = sources(NORTHSTAR);
+    let events = readable[0].contract.clone();
+    let multi = json!({"type": "multi_enum", "values": ["a", "b", "c", "d"]});
+    let choice =
+        |value_type: Value| json!({"id": "choice", "value_type": value_type, "nullable": false});
+    let trend = json!({"id": "trend", "kind": "record_trend", "renderer_version": 1, "title": "Trend",
+        "records": {"version": 1, "input_id": "responses", "schema_id": "responses", "date_field": "choice",
+            "measure": {"op": "matches", "key_input": "expected", "fields": ["item", "choice"]}}});
+    let place = |id: &str| json!({"view_id": id, "column": 0, "row": 20, "width": 12});
+    let filtered = json!({"id": "filtered", "kind": "table", "renderer_version": 1, "title": "Filtered",
+        "query": {"operator_version": 1, "inputs": ["picks"], "null_policy": "unknown", "operations": [
+            {"type": "filter", "field": {"input_id": "picks", "field_id": "options"}, "comparison": "eq",
+             "value": {"type": "multi_enum", "values": ["x"]}}]}});
+    let ordered = json!({"id": "ordered", "kind": "records_list", "renderer_version": 1, "title": "Ordered",
+        "records": {"version": 1, "input_id": "picks", "schema_id": "picks", "columns": ["label"],
+            "order": {"field": "options", "direction": "asc"}}});
+    let cases: Vec<(&str, Value)> = vec![
+        ("one_per_creator requires visibility own", {
+            let mut c = example();
+            c["record_schemas"][1]
+                .as_object_mut()
+                .unwrap()
+                .remove("visibility");
+            c
+        }),
+        (
+            "unknown one_per_creator field",
+            set_at(
+                example(),
+                "/record_schemas/1/one_per_creator",
+                json!(["nope"]),
+            ),
+        ),
+        (
+            "one_per_creator key cannot be multi_enum",
+            with(
+                multi_select(),
+                "/record_schemas/0/one_per_creator",
+                json!(["options"]),
+            ),
+        ),
+        (
+            "a create on a keyed schema must write every key field",
+            set_at(example(), "/commands/3/writable_fields", json!(["choice"])),
+        ),
+        (
+            "an update on a keyed schema cannot write a key field",
+            push_at(
+                example(),
+                "/commands",
+                json!({"id": "move", "record_schema_id": "responses", "operation": "update", "writable_fields": ["item"], "transitions": []}),
+            ),
+        ),
+        (
+            "via requires a reference field",
+            set_at(example(), "/commands/3/requires/0/via", json!("choice")),
+        ),
+        ("via target must be a records input", {
+            let origin = json!({"id": "origin", "value_type": {"type": "reference", "target_input": events["id"]}, "nullable": true});
+            let c = push_at(example(), "/inputs", events.clone());
+            let c = push_at(c, "/inputs/1/fields", origin.clone());
+            let c = push_at(c, "/record_schemas/1/fields", origin);
+            set_at(c, "/commands/3/requires/0/via", json!("origin"))
+        }),
+        (
+            "now requires a timestamp field",
+            set_at(
+                example(),
+                "/commands/3/requires/0/value",
+                json!({"type": "now"}),
+            ),
+        ),
+        (
+            "unknown set_now field",
+            set_at(example(), "/commands/0/set_now", json!(["nope"])),
+        ),
+        (
+            "set_now requires a timestamp field",
+            set_at(example(), "/commands/0/set_now", json!(["prompt"])),
+        ),
+        (
+            "set_now field cannot be writable",
+            set_at(
+                example(),
+                "/commands/0/writable_fields",
+                json!(["prompt", "state", "opened_at"]),
+            ),
+        ),
+        (
+            "countdown requires a timestamp field",
+            set_at(
+                example(),
+                "/views/1/records/timestamp_field",
+                json!("prompt"),
+            ),
+        ),
+        (
+            "record ranking requires exactly one of group_field or group_by",
+            with(example(), "/views/4/records/group_field", json!("choice")),
+        ),
+        (
+            "record ranking limit exceeds bound",
+            set_at(example(), "/views/4/records/limit", json!(51)),
+        ),
+        (
+            "matches measure belongs to a summary or ranking",
+            push_at(
+                push_at(example(), "/views", trend),
+                "/default_layout",
+                place("trend"),
+            ),
+        ),
+        (
+            "matches key input must be a records input",
+            set_at(
+                example(),
+                "/views/4/records/measure/key_input",
+                json!("nope"),
+            ),
+        ),
+        (
+            "matches key input must differ from the component input",
+            set_at(
+                example(),
+                "/views/4/records/measure/key_input",
+                json!("responses"),
+            ),
+        ),
+        (
+            "unknown matches field",
+            set_at(
+                example(),
+                "/views/4/records/measure/fields",
+                json!(["item", "nope"]),
+            ),
+        ),
+        (
+            "matches field types differ",
+            set_field(
+                example(),
+                2,
+                1,
+                choice(json!({"type": "enum", "values": ["a", "b"]})),
+            ),
+        ),
+        (
+            "matches field cannot be multi_enum",
+            set_field(
+                set_field(example(), 1, 1, choice(multi.clone())),
+                2,
+                1,
+                choice(multi.clone()),
+            ),
+        ),
+        (
+            "guard field cannot be multi_enum",
+            with(
+                multi_select(),
+                "/commands/0/requires",
+                json!([{"field_id": "options", "comparison": "eq", "value": {"type": "multi_enum", "values": ["x"]}}]),
+            ),
+        ),
+        (
+            "filter field cannot be multi_enum",
+            push_at(
+                push_at(multi_select(), "/views", filtered),
+                "/default_layout",
+                place("filtered"),
+            ),
+        ),
+        (
+            "multi_enum record ordering is not qualified",
+            push_at(
+                push_at(multi_select(), "/views", ordered),
+                "/default_layout",
+                place("ordered"),
+            ),
+        ),
+        (
+            "unknown guard field",
+            set_at(example(), "/commands/3/requires/0/field_id", json!("nope")),
+        ),
+        (
+            "guard value type/unit mismatch",
+            set_at(
+                example(),
+                "/commands/3/requires/0/value",
+                json!({"type": "text", "value": "open"}),
+            ),
+        ),
+        (
+            "record filter target scope mismatch",
+            with(
+                example(),
+                "/record_filters",
+                json!([{"id": "prompt_filter", "input_id": "items", "field": "prompt", "kind": "text_contains", "targets": ["timer"]}]),
+            ),
+        ),
+        (
+            "record filter field type mismatch",
+            with(
+                example(),
+                "/record_filters",
+                json!([{"id": "state_filter", "input_id": "items", "field": "state", "kind": "text_contains", "targets": ["item_list"]}]),
+            ),
+        ),
+        (
+            "transition requires enum field",
+            set_at(
+                multi_select(),
+                "/commands/0/transitions",
+                json!([{"field_id": "options", "from": "x", "to": "y"}]),
+            ),
+        ),
+    ];
+    let mut covered = std::collections::BTreeSet::new();
+    for (message, broken) in cases {
+        let refusal = plan::plan_generated(&broken.to_string(), &readable, ORG, APP).unwrap_err();
+        let rule = prompt::PARTICIPATION_RULES
+            .iter()
+            .find(|rule| rule.message == message)
+            .unwrap();
+        assert_eq!(refusal.code, rule.code, "{message}");
+        assert_eq!(prompt::hint(refusal.code), rule.fix, "{message}");
+        assert!(covered.insert(message), "{message} twice");
+    }
+    assert_eq!(
+        covered.len(),
+        prompt::PARTICIPATION_RULES.len(),
+        "every rule broken once"
+    );
+    // The members the schema step refuses keep admission's own code.
+    for (pointer, value) in [
+        ("/commands/3/requires/1/value/offset_seconds", json!(0)),
+        ("/views/1/records/offset_seconds", json!(0)),
+        ("/views/4/records/group_by", json!("choice")),
+        ("/record_schemas/1/visibility", json!("shared")),
+    ] {
+        let broken = set_at(example(), pointer, value);
+        let refusal = plan::plan_generated(&broken.to_string(), &[], ORG, APP).unwrap_err();
+        assert_eq!(refusal.code, "encoding", "{pointer}");
+    }
+    let now_in_closed_when = set_at(
+        example(),
+        "/views/1/records/closed_when/value",
+        json!({"type": "now"}),
+    );
+    let refusal = plan::plan_generated(&now_in_closed_when.to_string(), &[], ORG, APP).unwrap_err();
+    assert!(
+        !refusal.code.starts_with("participation_rule"),
+        "{}",
+        refusal.code
+    );
+}
+
+/// A refused attempt is retried with the rule's code and static fix, never a
+/// value of the refused document; the corrected attempt is admitted.
+#[test]
+fn a_participation_refusal_retries_with_its_code_and_fix_and_no_value() {
+    let mut broken = set_at(
+        prompt::participation_example(),
+        "/commands/0/writable_fields",
+        json!(["prompt", "state", "opened_at"]),
+    );
+    broken["title"] = json!("Marker 5c1e title");
+    broken["views"][9]["text"] = json!("Marker 9d7b note");
+    let script = Script::new(vec![
+        Ok(broken.to_string()),
+        Ok(prompt::plain_words::quiz().to_string()),
+    ]);
+    let generated = runtime()
+        .block_on(composer(&script).generate(prompt::plain_words::QUIZ, &[], ORG, APP, far()))
+        .unwrap();
+    let rule = "participation_rule: set_now field cannot be writable";
+    assert_eq!(generated.refused, vec![rule]);
+    assert_eq!(generated.planned.title, "Quiz");
+    let requests = script.requests();
+    assert_eq!(requests.len(), 2);
+    let retry: Value = serde_json::from_str(&requests[1].user).unwrap();
+    assert_eq!(
+        retry["refusal"],
+        json!({"code": rule, "fix": prompt::hint(rule)})
+    );
+    assert!(
+        !requests[1].user.contains("Marker"),
+        "no value of the refused document"
+    );
+}
+
+/// ADR-020 §17.44 (APP-213): a generated answer key is private. The worked
+/// example's `expected` list is `own` and plans; the same content with the
+/// `own` dropped from the key list still admits as stored content and is
+/// refused as generated content with its own static hint.
+#[test]
+fn a_generated_matches_key_must_be_an_own_list() {
+    let private = prompt::participation_example();
+    assert!(
+        plan::plan_generated(&private.to_string(), &[], ORG, APP).is_ok(),
+        "an own key list plans"
+    );
+    let mut shared = private.clone();
+    assert_eq!(shared["record_schemas"][2]["id"], "expected");
+    shared["record_schemas"][2]
+        .as_object_mut()
+        .unwrap()
+        .remove("visibility");
+    assert!(
+        plan::admit(&shared, ORG, APP).is_ok(),
+        "stored content is admitted as before"
+    );
+    assert_eq!(
+        plan::require_private_keys(&shared).unwrap_err().code,
+        "shared_matches_key"
+    );
+    let refusal = plan::plan_generated(&shared.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "shared_matches_key");
+    assert_ne!(prompt::hint("shared_matches_key"), prompt::hint("unknown"));
+    assert!(prompt::hint("shared_matches_key").contains("visibility: own"));
+    // A content with no matches measure has no key to judge.
+    assert!(plan::require_private_keys(&prompt::simple_records_example()).is_ok());
+}
+
+/// ADR-020 §9's cut rule and the binding rule: a multi_enum field follows
+/// APP-208's switch in generated content (admission accepts it either way);
+/// records inputs that would bind another list's schema are refused.
+#[test]
+fn multi_enum_follows_app_208s_switch_and_ambiguous_records_inputs_are_refused() {
+    let picks = multi_select();
+    assert!(
+        plan::admit(&picks, ORG, APP).is_ok(),
+        "stored content may carry it"
+    );
+    let planned = plan::plan_generated(&picks.to_string(), &[], ORG, APP);
+    assert!(
+        planned.is_ok(),
+        "generated content may carry it: {:?}",
+        planned.err().map(|refusal| refusal.code)
+    );
+    assert_eq!(
+        plan::require_usable_fields(&picks, false).unwrap_err().code,
+        "unusable_field",
+        "the switch still gates it"
+    );
+    // Two lists of one shape whose schemas carry neither input's id.
+    let mut renamed = prompt::participation_example();
+    renamed["record_schemas"][1]["id"] = json!("response");
+    renamed["record_schemas"][2]["id"] = json!("expected_choice");
+    for command in renamed["commands"].as_array_mut().unwrap() {
+        let schema = match command["record_schema_id"].as_str().unwrap() {
+            "responses" => "response",
+            "expected" => "expected_choice",
+            other => other,
+        };
+        command["record_schema_id"] = json!(schema);
+    }
+    for view in renamed["views"].as_array_mut().unwrap() {
+        if let Some(records) = view.get_mut("records") {
+            let schema = match records["schema_id"].as_str().unwrap() {
+                "responses" => "response",
+                "expected" => "expected_choice",
+                other => other,
+            };
+            records["schema_id"] = json!(schema);
+        }
+    }
+    assert!(plan::admit(&renamed, ORG, APP).is_ok());
+    let refusal = plan::plan_generated(&renamed.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "ambiguous_records_input");
+    // One list of a shape may name its schema freely (the reading list's
+    // books and book).
+    assert!(plan::require_bindable(&prompt::simple_records_example()).is_ok());
+    assert_ne!(
+        prompt::hint("ambiguous_records_input"),
+        prompt::hint("unknown")
+    );
 }
 
 #[test]
@@ -1352,10 +2011,74 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
     });
 }
 
+/// APP-207: which of ADR-020 §10's acceptance features a generated
+/// participation definition carries, whatever its ids: `(feature, present)`.
+fn participation_features(content: &Value) -> Vec<(&'static str, bool)> {
+    let list = |key: &str| content[key].as_array().cloned().unwrap_or_default();
+    let schemas = list("record_schemas");
+    let commands = list("commands");
+    let views = list("views");
+    let records_input = |id: &Value| {
+        list("inputs")
+            .iter()
+            .any(|input| input["id"] == *id && input["kind"] == "records")
+    };
+    let keyed_by_reference = schemas.iter().any(|schema| {
+        schema["visibility"] == "own"
+            && schema["one_per_creator"].as_array().is_some_and(|keys| {
+                keys.iter().all(|key| {
+                    schema["fields"].as_array().unwrap().iter().any(|field| {
+                        field["id"] == *key
+                            && field["value_type"]["type"] == "reference"
+                            && records_input(&field["value_type"]["target_input"])
+                    })
+                })
+            })
+    });
+    let guards = |command: &Value| command["requires"].as_array().cloned().unwrap_or_default();
+    let via_and_now = commands.iter().any(|command| {
+        let guards = guards(command);
+        guards.iter().any(|guard| guard.get("via").is_some())
+            && guards.iter().any(|guard| guard["value"]["type"] == "now")
+    });
+    let stamped = |operation: &str| {
+        commands.iter().any(|command| {
+            command["operation"] == operation
+                && command["reviewer_only"] == true
+                && command["set_now"]
+                    .as_array()
+                    .is_some_and(|ids| !ids.is_empty())
+                && command["transitions"] == json!([])
+        })
+    };
+    let countdown = views.iter().any(|view| view["kind"] == "countdown");
+    let ranking = views.iter().any(|view| {
+        view["kind"] == "record_ranking"
+            && view["records"]["group_by"] == "creator"
+            && view["records"]["measure"]["op"] == "matches"
+    });
+    vec![
+        (
+            "own list keyed by a reference to a records input",
+            keyed_by_reference,
+        ),
+        ("requires with via and now", via_and_now),
+        ("set_now on a reviewer-only create", stamped("create")),
+        (
+            "set_now on a reviewer-only update (reopen)",
+            stamped("update"),
+        ),
+        ("countdown", countdown),
+        ("ranking by creator with matches", ranking),
+    ]
+}
+
 /// A one-shot smoke against the real endpoint. Ignored: it runs only when
 /// `app/scripts/composer_smoke.sh` exports `ANTHROPIC_API_KEY` into this
 /// process from the repository's gitignored `.env` (the Haiku model for
-/// both steps); it prints decisions, codes, counts and durations only.
+/// both steps); it prints decisions, codes, counts and durations, and
+/// (APP-207) the admitted definition the acceptance sentence produced: that
+/// sentence and its output are synthetic.
 #[test]
 #[ignore = "calls the real model; run through app/scripts/composer_smoke.sh with a key in the environment"]
 fn real_model_smoke() {
@@ -1367,6 +2090,38 @@ fn real_model_smoke() {
         composer.generation_model()
     );
     runtime().block_on(async {
+        // APP-207 (ADR-020 §10): the acceptance sentence, first, so that it
+        // is recorded whatever the later steps do; judged at the end.
+        let started = std::time::Instant::now();
+        let participation = composer
+            .generate(prompt::plain_words::QUIZ, &[], ORG, APP, far())
+            .await;
+        let features = match &participation {
+            Ok(generated) => {
+                let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
+                eprintln!(
+                    "smoke: participation refused={:?} views={} digest={} in {} ms",
+                    generated.refused,
+                    generated.planned.admitted.view_count,
+                    generated.planned.admitted.digest,
+                    started.elapsed().as_millis()
+                );
+                eprintln!("smoke: participation content={content}");
+                let features = participation_features(&content);
+                for (feature, present) in &features {
+                    eprintln!("smoke: participation feature {feature}: {present}");
+                }
+                features
+            }
+            Err(failure) => {
+                eprintln!(
+                    "smoke: participation failed {failure:?} in {} ms",
+                    started.elapsed().as_millis()
+                );
+                Vec::new()
+            }
+        };
+
         let library = [
             library_app(NORTHSTAR, "00000000-0000-4000-8000-000000000065"),
             library_app(SPEND, "00000000-0000-4000-8000-0000000000c9"),
@@ -1448,6 +2203,9 @@ fn real_model_smoke() {
                 }
             }
         }
+        assert!(participation.is_ok(), "the acceptance sentence produced no admitted definition");
+        let missing: Vec<&str> = features.iter().filter(|(_, present)| !present).map(|(feature, _)| *feature).collect();
+        assert!(missing.is_empty(), "the acceptance sentence missed {missing:?}");
     });
 }
 

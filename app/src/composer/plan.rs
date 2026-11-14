@@ -17,6 +17,15 @@
 //! Rust admission keeps the stored-document verdict, APP-129 gap 1), and an
 //! app with no data view (a records-only app, the clean workspace's first
 //! app) offers a form for a create command, so its records can be entered.
+//!
+//! APP-207 (ADR-020 §10): a generated `reference` field must target a
+//! `records` input of the same content (the form's picker offers its
+//! entries); `multi_enum` stays refused in generated content until APP-208
+//! sets [`MULTI_ENUM_GENERATED`]; a records input binds the record schema of
+//! its own id when two schemas share its fields, and generated content whose
+//! records inputs would bind ambiguously is refused; a refusal under one of
+//! edition impl-2026-11-14.2's reference rules carries that rule's static
+//! code (`participation_rule: <the edition's message>`).
 use super::Origin;
 use crate::{
     admission::{self, digest, AdmissionError, AdmittedDefinition},
@@ -24,6 +33,13 @@ use crate::{
 };
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
+
+/// ADR-020 §9's cut rule: whether generated content may carry the
+/// `multi_enum` value type. Set at Release C's integration, once APP-208's
+/// forms, listings and rankings render a multi-select; with it unset the
+/// planner refuses it (`unusable_field`) and the prompt says not to write it,
+/// while admission accepts it in stored content either way.
+pub const MULTI_ENUM_GENERATED: bool = true;
 
 /// Persisted by the server in the admitted definition, so a reload can
 /// recover a generated app's origin. Presentation metadata only; never
@@ -97,15 +113,24 @@ pub struct Planned {
     pub origin: Origin,
 }
 
-/// Why one generation attempt was refused: admission's code or one of the
+/// Why one generation attempt was refused: admission's code, one of the
 /// composer's own (`not_json`, `unknown_source_input`, `not_runnable`,
-/// `authoring_rule`, `no_create_form`).
+/// `authoring_rule`, `reference_field`, `unusable_field`,
+/// `ambiguous_records_input`, `shared_matches_key`, `no_create_form`), or,
+/// for one of edition
+/// impl-2026-11-14.2's reference rules, `participation_rule: <message>`
+/// (static: [`super::prompt::PARTICIPATION_RULES`]).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Refusal {
     pub code: &'static str,
 }
 impl From<AdmissionError> for Refusal {
     fn from(error: AdmissionError) -> Self {
+        if let AdmissionError::Encoding(detail) = &error {
+            if let Some(rule) = super::prompt::participation_rule(detail) {
+                return Self { code: rule.code };
+            }
+        }
         Self { code: error.code() }
     }
 }
@@ -158,7 +183,9 @@ pub fn plan_generated(
     let admitted = admit(&content, organization, app)?;
     require_runnable(&content)?;
     require_authored(&content)?;
-    require_usable_fields(&content)?;
+    require_usable_fields(&content, MULTI_ENUM_GENERATED)?;
+    require_bindable(&content)?;
+    require_private_keys(&content)?;
     require_entry(&content)?;
     Ok(Planned {
         title: title(&content),
@@ -167,24 +194,135 @@ pub fn plan_generated(
     })
 }
 
-/// APP-193 finding (advisor decision, 2026-11-14): a `reference` field is
-/// refused in generated content. A form renders it as a raw identifier box
-/// members cannot use (`query/canvas.rs`); "which X" is an enum of the known
-/// values or a short text field. Library and adapted content are untouched.
-pub(crate) fn require_usable_fields(content: &Value) -> Result<(), Refusal> {
+/// APP-193 finding (advisor decision, 2026-11-14), narrowed by ADR-020 C7
+/// (APP-207): a `reference` field in generated content must target a
+/// `records` input of the same content, whose entries the form's picker
+/// offers (APP-205); any other reference (a source input, an id that is no
+/// input) is refused. A `multi_enum` field is refused unless `multi_enum`
+/// (ADR-020 §9's cut rule, [`MULTI_ENUM_GENERATED`]). Library and adapted
+/// content are untouched.
+pub(crate) fn require_usable_fields(content: &Value, multi_enum: bool) -> Result<(), Refusal> {
+    let records_input = |id: &str| {
+        list(content, "inputs").iter().any(|input| {
+            input.get("id").and_then(Value::as_str) == Some(id)
+                && input.get("kind").and_then(Value::as_str) == Some("records")
+        })
+    };
     let fields = list(content, "inputs")
         .iter()
         .chain(list(content, "record_schemas"))
         .flat_map(|item| list(item, "fields"));
     for field in fields {
-        if field
-            .get("value_type")
+        let value_type = field.get("value_type");
+        match value_type
             .and_then(|t| t.get("type"))
             .and_then(Value::as_str)
-            == Some("reference")
+        {
+            Some("reference")
+                if !value_type
+                    .and_then(|t| t.get("target_input"))
+                    .and_then(Value::as_str)
+                    .is_some_and(records_input) =>
+            {
+                return Err(Refusal {
+                    code: "reference_field",
+                })
+            }
+            Some("multi_enum") if !multi_enum => {
+                return Err(Refusal {
+                    code: "unusable_field",
+                })
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// The saved work binds each `records` input to a record schema of its
+/// fields (`storage::composer_bindings`): the schema of the input's own id
+/// when several share its fields, else the only one. Generated content in
+/// which a records input has several such schemas and none of its id, or in
+/// which two records inputs would keep the same schema, is refused
+/// (`ambiguous_records_input`): its entries would be read from another list.
+pub(crate) fn require_bindable(content: &Value) -> Result<(), Refusal> {
+    let refused = Err(Refusal {
+        code: "ambiguous_records_input",
+    });
+    let schemas = list(content, "record_schemas");
+    let mut kept = std::collections::BTreeSet::new();
+    for input in list(content, "inputs")
+        .iter()
+        .filter(|input| input.get("kind").and_then(Value::as_str) == Some("records"))
+    {
+        let (of_shape, bound) = bound_schema(schemas, input);
+        // Admission refuses a records input without a schema of its fields.
+        let Some(schema) = bound
+            .and_then(|schema| schema.get("id"))
+            .and_then(Value::as_str)
+        else {
+            if of_shape == 0 {
+                continue;
+            }
+            return refused;
+        };
+        if !kept.insert(schema) {
+            return refused;
+        }
+    }
+    Ok(())
+}
+
+/// How many record schemas have the records input's fields and, among them,
+/// the one the saved work binds it to (`storage::composer_bindings`): the
+/// schema of the input's own id when several share its fields, else the only
+/// one; `None` when several share them and none has the input's id.
+fn bound_schema<'a>(schemas: &'a [Value], input: &Value) -> (usize, Option<&'a Value>) {
+    let id = input.get("id").and_then(Value::as_str);
+    let equal: Vec<&Value> = schemas
+        .iter()
+        .filter(|schema| schema.get("fields") == input.get("fields"))
+        .collect();
+    let bound = equal
+        .iter()
+        .copied()
+        .find(|schema| schema.get("id").and_then(Value::as_str) == id)
+        .or(match equal.as_slice() {
+            [only] => Some(*only),
+            _ => None,
+        });
+    (equal.len(), bound)
+}
+
+/// ADR-020 §17.44 (APP-213): a generated answer key is private. A
+/// `record_summary` or `record_ranking` whose `matches` key input binds a
+/// record schema without `visibility: "own"` would let every contributor read
+/// the expected values through any view or typed query over that input; such
+/// content is refused (`shared_matches_key`). The binding is the saved work's
+/// (`bound_schema`, after `require_bindable` has made it unambiguous).
+/// Admission of stored content is unchanged.
+pub(crate) fn require_private_keys(content: &Value) -> Result<(), Refusal> {
+    let inputs = list(content, "inputs");
+    let schemas = list(content, "record_schemas");
+    for view in list(content, "views") {
+        let Some(key) = view
+            .pointer("/records/measure/key_input")
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        let Some(input) = inputs
+            .iter()
+            .find(|input| input.get("id").and_then(Value::as_str) == Some(key))
+        else {
+            continue;
+        };
+        let (_, bound) = bound_schema(schemas, input);
+        if bound
+            .is_some_and(|schema| schema.get("visibility").and_then(Value::as_str) != Some("own"))
         {
             return Err(Refusal {
-                code: "reference_field",
+                code: "shared_matches_key",
             });
         }
     }

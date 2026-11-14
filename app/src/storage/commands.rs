@@ -24,6 +24,23 @@
 //! `Error::UnknownOutcome`: the caller re-reads the outcome by key under
 //! current authority (`read_outcome`), never resubmits under a new key.
 //!
+//! ADR-020 (edition impl-2026-11-14.2) adds three rules inside that order,
+//! after the version premise, on the commit and the dry run alike. The
+//! transaction's instant (`now()` to the whole second, the same instant
+//! stored as the revision's `committed_at`) stamps every `set_now` field in
+//! `compose`; then every `requires` guard is judged on the composed record or,
+//! through `via`, on the referenced record's current revision read under
+//! `own_rows` (`judge_requires`: unreadable or absent is `Denied`, a failing
+//! guard `Refused(RequirementNotMet)`); then a `create` of an absent record on
+//! a schema with `one_per_creator` looks for the creator's own entry with the
+//! same key (`keyed_entry`, after the sequence lock and the requested row's
+//! lock, the matched row `FOR UPDATE`): none creates as before, a match with
+//! the composed state is `Refused(Unchanged)`, a match on which a field this
+//! create neither writes nor stamps has moved since it was filed (a
+//! reviewer's score, a transition) is `Denied` with nothing written
+//! (`untouched_fields_differ`, ADR-020 §17.43), any other match writes the
+//! next revision of the matched record and the outcome names it.
+//!
 //! Nothing a caller supplies is trusted as authority or as admitted content:
 //! the organization and principal come from the trusted request, the command
 //! is checked against the declaration of the publication the work pins, every
@@ -246,10 +263,33 @@ impl RecoveryView {
     }
 }
 
+/// ADR-020: a typed refusal of a command the committer may run, judged only
+/// on records the committer may read, after the member fence (422 with the
+/// code alone; nothing is written and the claim is released). A referenced
+/// record the committer may not read is never a refusal: it is `Denied`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Refusal {
+    /// C3: a `requires` guard does not hold.
+    RequirementNotMet,
+    /// C2: a replacing create found the creator's entry already holds
+    /// exactly the composed values.
+    Unchanged,
+}
+impl Refusal {
+    /// The contract problem code (edition impl-2026-11-14.2, status 422).
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::RequirementNotMet => "requirement_not_met",
+            Self::Unchanged => "unchanged",
+        }
+    }
+}
+
 /// ADR-007 D7.9. `Committed`/`Replayed` → 200; `Conflict` → 409 with the
 /// recovery view; `Stale` → 412 with the current revision; `InFlight` → 409
 /// `in_flight`; `Busy` → 409 `busy` (D7.9's "55P03 on an authorization fence"
-/// row, typed here so that no lock wait becomes a 503).
+/// row, typed here so that no lock wait becomes a 503); ADR-020 `Refused` →
+/// 422 with the refusal's code.
 // D7.9 names this shape; the recovery view is the largest variant by design.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq)]
@@ -260,6 +300,7 @@ pub enum CommandResult {
     Stale(CurrentRevision),
     InFlight,
     Busy,
+    Refused(Refusal),
 }
 
 /// One field of a record as the record page shows it: the published schema's
@@ -301,6 +342,15 @@ pub struct RecordDetail {
     pub commands: Vec<RecordCommand>,
     /// Whether the reader also holds `record_write` on the work now.
     pub can_write: bool,
+    /// ADR-020 (APP-205): the work's records bindings, `(input_id,
+    /// collection_id)` in input order, so that a form can resolve a
+    /// reference field's `target_input` to the collection it names.
+    pub bindings: Vec<(String, String)>,
+    /// ADR-020 §17.35 (APP-211): the collection's schema declares
+    /// `visibility: "own"` (each member files their own entries), so a chooser
+    /// over it names each record's creator. Presentation only; the row rule
+    /// is `own_rows`.
+    pub own: bool,
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -355,6 +405,13 @@ pub(super) struct Declaration {
     /// reviewer of the work (`Action::RecordReview`) may run it, and it is
     /// shown only to reviewers.
     pub(super) reviewer_only: bool,
+    /// ADR-020 C3: the guards the command is accepted under, judged after
+    /// `compose` by [`judge_requires`] (a `via` guard on the referenced
+    /// record, a `now` literal at the transaction's instant).
+    pub(super) requires: Vec<super::rules::Guard>,
+    /// ADR-020 C3: the timestamp fields `compose` stamps with the
+    /// transaction's instant (admission: none is writable).
+    pub(super) set_now: Vec<String>,
 }
 impl Declaration {
     /// The declared transitions `(field_id, from, to)`, in declaration order.
@@ -376,6 +433,11 @@ pub(super) struct Published {
     pub(super) definition_digest: String,
     pub(super) fields: Vec<FieldSpec>,
     pub(super) commands: BTreeMap<String, Declaration>,
+    /// ADR-020 C2: the schema's `one_per_creator` key fields, in declaration
+    /// order; empty when the schema declares none.
+    pub(super) one_per_creator: Vec<String>,
+    /// ADR-007 (D7): the schema declares `visibility: "own"`.
+    pub(super) own: bool,
 }
 
 fn string_list(value: Option<&Value>) -> Result<Vec<String>> {
@@ -496,14 +558,32 @@ pub(super) fn published_content(
                 rules: super::rules::Rules::from_declaration(declared).ok_or(Error::Unavailable)?,
                 decided: Vec::new(),
                 reviewer_only: declared.get("reviewer_only").and_then(Value::as_bool) == Some(true),
+                requires: super::rules::requirements(declared).ok_or(Error::Unavailable)?,
+                set_now: match declared.get("set_now") {
+                    None => Vec::new(),
+                    some => string_list(some)?,
+                },
             },
         );
     }
     fence_starts(&mut commands);
+    let one_per_creator = match found.get("one_per_creator") {
+        None => Vec::new(),
+        some => string_list(some)?,
+    };
+    // Admitted content: every key is a field of the schema (a key outside it
+    // would match nothing and silently append).
+    require_stored(
+        one_per_creator
+            .iter()
+            .all(|key| fields.iter().any(|field| &field.id == key)),
+    )?;
     Ok(Published {
         definition_digest,
         fields,
         commands,
+        one_per_creator,
+        own: found.get("visibility").and_then(Value::as_str) == Some("own"),
     })
 }
 
@@ -675,6 +755,27 @@ fn integer_text(value: Option<&Value>) -> bool {
 fn keys_are(object: &Map<String, Value>, keys: &[&str]) -> bool {
     object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k))
 }
+/// The contract's bound on a `multi_enum` type and value (1..32 ids).
+pub(crate) const MULTI_ENUM_VALUES: usize = 32;
+/// ADR-020 §9: `picked` names declared values only, each once, in the
+/// declared order (strictly increasing positions in `declared`).
+pub(crate) fn ordered_subset(picked: &[Value], declared: Option<&Value>) -> bool {
+    let Some(declared) = declared.and_then(Value::as_array) else {
+        return false;
+    };
+    let mut last: Option<usize> = None;
+    picked.iter().all(|value| {
+        let Some(id) = value.as_str() else {
+            return false;
+        };
+        let Some(position) = declared.iter().position(|d| d.as_str() == Some(id)) else {
+            return false;
+        };
+        let ordered = last.is_none_or(|previous| previous < position);
+        last = Some(position);
+        ordered
+    })
+}
 /// The contract rule: a value's tag matches the field's type, its members are
 /// exactly the tag's, and the typed extras (unit, scale, currency, enum
 /// member, reference target) equal the field's.
@@ -753,6 +854,21 @@ pub(super) fn compatible(value: &Value, field: &FieldSpec) -> bool {
                     .and_then(Value::as_str)
                     .is_some_and(valid_id)
         }
+        // ADR-020 §9 (APP-208): a non-empty subset of the declared values in
+        // declaration order (`contracts/validate.py` `compatible`); any other
+        // order, a repeat, an unknown id or an empty array is refused. "None
+        // selected" is the null value, judged above.
+        "multi_enum" => {
+            keys_are(object, &["type", "values"])
+                && object
+                    .get("values")
+                    .and_then(Value::as_array)
+                    .is_some_and(|picked| {
+                        !picked.is_empty()
+                            && picked.len() <= MULTI_ENUM_VALUES
+                            && ordered_subset(picked, expected.get("values"))
+                    })
+        }
         "money" => {
             keys_are(
                 object,
@@ -796,6 +912,12 @@ pub(super) fn state_map(state: Option<&Value>) -> Result<BTreeMap<String, Value>
 /// in every path: canvas, Slack, MCP, the command route). A create never
 /// starts a field at another command's transition target unless this
 /// command declares that field's `initial` value (`Declaration::decided`).
+///
+/// ADR-020 C3: `now` is the transaction's instant (a contract timestamp);
+/// every `set_now` field of the declaration holds it, stamped before the
+/// nullable check (so a non-nullable stamped field composes on a create, and
+/// an update that changes nothing but a stamp within the same second is a
+/// no-op revision, refused like any other).
 pub(super) fn compose(
     spec: &[FieldSpec],
     declaration: &Declaration,
@@ -803,6 +925,7 @@ pub(super) fn compose(
     values: &Value,
     by_filer: bool,
     reviewer: bool,
+    now: &str,
 ) -> Result<Vec<u8>> {
     // APP-191 (D8): a `reviewer_only` command is refused for everyone but a
     // reviewer of the work, before any value is judged; `by_filer` still
@@ -829,12 +952,20 @@ pub(super) fn compose(
     let mut composed = Map::new();
     let mut moves = Vec::new();
     let mut changed = false;
+    let stamp = json!({"type": "timestamp", "value": now});
     for field in spec {
-        let value = supplied
-            .get(&field.id)
-            .or_else(|| current.get(&field.id))
-            .cloned()
-            .unwrap_or_else(|| null.clone());
+        let value = if declaration.set_now.contains(&field.id) {
+            // Admitted content: a stamped field is a timestamp and is not
+            // writable, so `supplied` cannot hold it.
+            require_stored(compatible(&stamp, field) && !supplied.contains_key(&field.id))?;
+            stamp.clone()
+        } else {
+            supplied
+                .get(&field.id)
+                .or_else(|| current.get(&field.id))
+                .cloned()
+                .unwrap_or_else(|| null.clone())
+        };
         require(field.nullable || value != null)?;
         if !creating {
             let before = current.get(&field.id).unwrap_or(&null);
@@ -889,6 +1020,223 @@ pub(super) fn compose(
     let bytes = admission::encode(&Value::Array(state)).map_err(|_| Error::Denied)?;
     require(bytes.len() <= MAX_CANONICAL_BYTES)?;
     Ok(bytes)
+}
+
+/// ADR-020 §3: the transaction's instant, `now()` truncated to the whole
+/// second as a contract timestamp: the same instant `definitions::fresh`
+/// stores as the revision's `committed_at` (PostgreSQL fixes `now()` for the
+/// whole transaction), so every guard, every stamp and the stored commit time
+/// agree and a judgment can be re-derived from stored data.
+pub(super) async fn transaction_instant(transaction: &Transaction<'_>) -> Result<String> {
+    let (_, now) = fresh(transaction, 1).await?;
+    require_stored(admission::contract_timestamp(&now))?;
+    Ok(now)
+}
+
+/// The composed record (`compose`'s canonical bytes) as a field map.
+pub(super) fn composed_state(bytes: &[u8]) -> Result<Map<String, Value>> {
+    let state = admission::decode(bytes).map_err(|_| Error::Unavailable)?;
+    Ok(super::rules::state_of(&state))
+}
+
+/// ADR-020 §17.43 (APP-213): whether a replacing create would undo another
+/// command's work. A create composes fresh, so every field it neither writes
+/// (`writable`) nor stamps (`set_now`) composes to its `initial` value or
+/// null; on the matched entry (`entry`, its stored canonical bytes) such a
+/// field holds whatever the last command wrote: a reviewer's `reviewer_only`
+/// score, a transition's state. When any of them differs the entry is locked
+/// for its creator (the commit and the dry run answer `Denied`, nothing
+/// written) until a command that may write the field moves it back. Before a
+/// reviewer acts both sides hold the initial or null, so a resubmission
+/// replaces as §5 says; a schema whose create writes every field (the quiz's
+/// `responses`) is never locked, and a `set_now` stamp never locks. The
+/// equality is `Unchanged`'s typed one, taken field by field.
+pub(super) fn untouched_fields_differ(
+    spec: &[FieldSpec],
+    declaration: &Declaration,
+    entry: &[u8],
+    composed: &Map<String, Value>,
+) -> Result<bool> {
+    let stored = composed_state(entry)?;
+    let null = json!({"type": "null"});
+    Ok(spec
+        .iter()
+        .filter(|field| {
+            !declaration.writable.contains(&field.id) && !declaration.set_now.contains(&field.id)
+        })
+        .any(|field| {
+            stored.get(&field.id).unwrap_or(&null) != composed.get(&field.id).unwrap_or(&null)
+        }))
+}
+
+/// A reference value's `(input_id, record_id)`; `None` for null or any
+/// other value (a null reference satisfies no guard).
+fn reference_of(value: Option<&Value>) -> Option<(String, String)> {
+    let value = value?;
+    if value.get("type").and_then(Value::as_str) != Some("reference") {
+        return None;
+    }
+    Some((
+        value.get("input_id")?.as_str()?.to_owned(),
+        value.get("record_id")?.as_str()?.to_owned(),
+    ))
+}
+
+/// ADR-020 C3: the current state of record `record` of the collection the
+/// work binds records input `input` to, as the committer may read it:
+/// `current_state` without a lock, which carries `own_rows`. An input bound
+/// to nothing (or to a source), an absent record and a row the committer may
+/// not read are all `Denied`, the uniform 404, so a guard never discloses
+/// another member's row. The row is not locked: every commit of the
+/// organization already queued on its commit sequence, so the read sees each
+/// commit that reached the sequence before this one, and none after.
+async fn referenced_state(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    work: &str,
+    input: &str,
+    record: &str,
+) -> Result<Map<String, Value>> {
+    require(local_id(input) && valid_id(record))?;
+    let rows = transaction.query("SELECT collection_id::text FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND input_id=$4::text AND kind='records' AND revision_policy='committed_snapshot'", &[&organization,&app,&work,&input]).await?;
+    let collection = text(rows.first().ok_or(Error::Denied)?, 0)?;
+    let (version, state, _) = current_state(
+        transaction,
+        organization,
+        app,
+        work,
+        &collection,
+        record,
+        false,
+    )
+    .await?;
+    require(version > 0)?;
+    Ok(super::rules::state_of(&state.ok_or(Error::Denied)?))
+}
+
+/// ADR-020 C3: whether every `requires` guard of `declaration` holds on the
+/// composed record at `now`: a guard without `via` on `composed`; one with
+/// `via` on the current revision of the record its reference names
+/// ([`referenced_state`], read once per record). A referenced record the
+/// committer may not read is `Denied` whatever the other guards say; `false`
+/// is the typed refusal `RequirementNotMet`.
+pub(super) async fn judge_requires(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    work: &str,
+    declaration: &Declaration,
+    composed: &Map<String, Value>,
+    now: &str,
+) -> Result<bool> {
+    let mut held = true;
+    let mut read: Vec<((String, String), Map<String, Value>)> = Vec::new();
+    for guard in &declaration.requires {
+        let Some(via) = &guard.via else {
+            held &= guard.holds_at(composed, now);
+            continue;
+        };
+        let Some(target) = reference_of(composed.get(via)) else {
+            held = false;
+            continue;
+        };
+        let index = match read.iter().position(|(key, _)| *key == target) {
+            Some(index) => index,
+            None => {
+                let state =
+                    referenced_state(transaction, organization, app, work, &target.0, &target.1)
+                        .await?;
+                read.push((target, state));
+                read.len() - 1
+            }
+        };
+        held &= guard.holds_at(&read[index].1, now);
+    }
+    Ok(held)
+}
+
+/// ADR-020 C2: the forma-json-v1 array of the key's `{field_id, value}`
+/// pairs, taken from the composed record (so `initial` and `set_now` values
+/// take part like any other, and a null key value is a key).
+pub(super) fn key_document(keys: &[String], composed: &Map<String, Value>) -> Result<String> {
+    let pairs = keys
+        .iter()
+        .map(|key| {
+            let value = composed.get(key).ok_or(Error::Unavailable)?;
+            // Set equality is not a key (admission refuses a multi_enum key).
+            require_stored(value.get("type").and_then(Value::as_str) != Some("multi_enum"))?;
+            Ok(json!({"field_id": key, "value": value}))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let bytes = admission::encode(&Value::Array(pairs)).map_err(|_| Error::Unavailable)?;
+    String::from_utf8(bytes).map_err(|_| Error::Unavailable)
+}
+
+/// The creator's existing entry a keyed create would replace.
+#[derive(Debug)]
+pub(super) struct KeyedEntry {
+    pub(super) record: String,
+    pub(super) version: i64,
+    pub(super) values: Vec<u8>,
+    pub(super) creator: String,
+}
+
+/// ADR-020 C2, test builds: how long each key-match statement took (the
+/// participation campaign records the bound at 25 creators × 50 keys).
+#[cfg(test)]
+pub(crate) static KEY_MATCH_MICROS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+/// ADR-020 C2: the committer's own current entry in `collection` whose
+/// values contain `key` (jsonb containment of the `{field_id, value}` pairs:
+/// exact for every scalar type), other than `requested`, newest first. The
+/// statement reads only the committer's rows (`creator_id` is the scoped
+/// principal) and carries `own_rows` like every revision read. With `lock`
+/// (the commit, after the organization's sequence lock and the requested
+/// row's, in the D7.9 order) the matched row is taken `FOR UPDATE`: `Ok(None)`
+/// is then a wait past `lock_timeout`. The dry run reads without a lock.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn keyed_entry(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    work: &str,
+    collection: &str,
+    requested: &str,
+    key: &str,
+    lock: bool,
+) -> Result<Option<Option<KeyedEntry>>> {
+    use super::authorization::{bypassed, own_rows, SCOPED};
+    // The creator rule is part of the enforcement the campaigns' bypass
+    // disables (ADR-020 §14.1): with it off the match reads other creators'
+    // rows, and the commit refuses to write over one (`require_stored`).
+    let mine = if bypassed() {
+        "TRUE".to_owned()
+    } else {
+        format!("coalesce(v.creator_id={SCOPED},false)")
+    };
+    let locking = if lock { " FOR UPDATE OF r" } else { "" };
+    #[cfg(test)]
+    let started = std::time::Instant::now();
+    let rows = locked(transaction, &format!("SELECT r.record_id::text,r.current_version::bigint,v.canonical_values,v.creator_id::text FROM genui.internal_records r {current} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id<>$5::text::uuid AND {mine} AND {own} AND convert_from(v.canonical_values,'UTF8')::jsonb @> $6::text::jsonb ORDER BY v.commit_sequence DESC,r.record_id LIMIT 1{locking}", current = super::record_query::CURRENT, own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[&organization,&app,&work,&collection,&requested,&key]).await?;
+    #[cfg(test)]
+    if let Ok(mut timings) = KEY_MATCH_MICROS.lock() {
+        timings.push(u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX));
+    }
+    let Some(rows) = rows else {
+        return Ok(None);
+    };
+    let Some(row) = rows.first() else {
+        return Ok(Some(None));
+    };
+    let values: Vec<u8> = row.try_get(2).map_err(|_| Error::Unavailable)?;
+    require_stored(values.len() <= MAX_CANONICAL_BYTES)?;
+    Ok(Some(Some(KeyedEntry {
+        record: text(row, 0)?,
+        version: integer(row, 1)?,
+        values,
+        creator: text(row, 3)?,
+    })))
 }
 
 /// How one command transaction ended, before COMMIT or ROLLBACK is chosen.
@@ -1028,6 +1376,10 @@ impl Data {
             let (version, state, _) =
                 current_state(transaction, org, app, work, collection, record, false).await?;
             let state = state_map(state.as_ref())?;
+            let bindings = transaction.query("SELECT input_id::text,collection_id::text FROM genui.work_bindings WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND kind='records' AND revision_policy='committed_snapshot' ORDER BY input_id", &[org,&app,&work]).await?
+                .iter()
+                .map(|row| Ok((text(row, 0)?, text(row, 1)?)))
+                .collect::<Result<Vec<_>>>()?;
             // APP-191 (D8), presentation only: a `reviewer_only` command is
             // shown to reviewers; `compose` is the judgment.
             let shown = |declaration: &&Declaration| !declaration.reviewer_only || reviewer;
@@ -1071,6 +1423,8 @@ impl Data {
                     })
                     .collect(),
                 can_write,
+                bindings,
+                own: published.own,
             })
         }
         .await;
@@ -1273,6 +1627,9 @@ async fn commit<'a>(
     } else {
         declaration.operation == "update" || declaration.has_transitions()
     })?;
+    // ADR-020 §3: the transaction's instant, which every `set_now` stamp and
+    // every `now` guard use and the revision stores as `committed_at`.
+    let committed_at = transaction_instant(transaction).await?;
     let state = compose(
         &published.fields,
         declaration,
@@ -1280,35 +1637,100 @@ async fn commit<'a>(
         &command.values,
         creator.as_deref() == Some(request.principal.as_str()),
         reviewer,
+        &committed_at,
     )?;
+    // ADR-020 C3: the guards on the composed record and, through `via`, on
+    // the referenced record as the committer may read it (Denied otherwise).
+    let composed = composed_state(&state)?;
+    if !judge_requires(
+        transaction,
+        org,
+        app,
+        work,
+        declaration,
+        &composed,
+        &committed_at,
+    )
+    .await?
+    {
+        return Ok(Done::Other(CommandResult::Refused(
+            Refusal::RequirementNotMet,
+        )));
+    }
+    // The record the revision is written to: the requested one, or (ADR-020
+    // C2) the creator's own entry with the same key, which a create of an
+    // absent record on a keyed schema replaces.
+    let (mut target, mut base, mut creator) = (command.record.clone(), current_version, creator);
+    if current_version == 0
+        && declaration.operation == "create"
+        && !published.one_per_creator.is_empty()
+    {
+        let key = key_document(&published.one_per_creator, &composed)?;
+        let Some(found) = keyed_entry(
+            transaction,
+            org,
+            app,
+            work,
+            &collection,
+            &command.record,
+            &key,
+            true,
+        )
+        .await?
+        else {
+            return Ok(Done::Other(CommandResult::InFlight));
+        };
+        #[cfg(test)]
+        transaction.lease.checkpoint("key_match").await;
+        if let Some(entry) = found {
+            if entry.values == state {
+                return Ok(Done::Other(CommandResult::Refused(Refusal::Unchanged)));
+            }
+            // The statement reads only the committer's rows; anything else
+            // is a broken store, never a write over another member's entry.
+            require_stored(entry.creator == request.principal && entry.version > 0)?;
+            // ADR-020 §17.43 (APP-213): a replace may not undo a reviewer's
+            // work. A field this create neither writes nor stamps must still
+            // hold what the create composes for it; otherwise the entry is
+            // locked and nothing is written.
+            require(!untouched_fields_differ(
+                &published.fields,
+                declaration,
+                &entry.values,
+                &composed,
+            )?)?;
+            target = entry.record;
+            base = entry.version;
+            creator = Some(entry.creator);
+        }
+    }
     copy_capacity(
         transaction,
         org,
         app,
         work,
         &collection,
-        &command.record,
-        current_version == 0,
+        &target,
+        base == 0,
         state.len(),
     )
     .await?;
-    let version = current_version + 1;
+    let version = base + 1;
     require_stored(version <= SAFE_MAX)?;
     let creator = creator.unwrap_or_else(|| request.principal.clone());
-    let (_, committed_at) = fresh(transaction, 1).await?;
     transaction.query("INSERT INTO genui.internal_record_revisions(organization_id,app_id,work_id,collection_id,record_id,version,creator_id,updater_id,commit_sequence,committed_at,canonical_values) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::bigint,$7::text::uuid,$8::text::uuid,$9::bigint,$10::text::timestamptz,$11)",
-        &[&org,&app,&work,&collection,&command.record,&version,&creator,&request.principal,&sequence,&committed_at,&state]).await?;
-    if current_version == 0 {
+        &[&org,&app,&work,&collection,&target,&version,&creator,&request.principal,&sequence,&committed_at,&state]).await?;
+    if base == 0 {
         transaction.query("INSERT INTO genui.internal_records(organization_id,app_id,work_id,collection_id,record_id,current_version) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,1)",
-            &[&org,&app,&work,&collection,&command.record]).await?;
+            &[&org,&app,&work,&collection,&target]).await?;
     } else {
         let updated = transaction.query("UPDATE genui.internal_records SET current_version=$6::bigint WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid AND current_version=$7::bigint RETURNING 1",
-            &[&org,&app,&work,&collection,&command.record,&version,&current_version]).await?;
+            &[&org,&app,&work,&collection,&target,&version,&base]).await?;
         require_stored(updated.len() == 1)?;
     }
     // C07: the revision names the source revisions the work binds now.
     transaction.query("INSERT INTO genui.record_source_dependencies(organization_id,app_id,work_id,collection_id,record_id,record_version,input_id,source_id,source_revision_id,source_digest) SELECT organization_id,app_id,work_id,$4::text::uuid,$5::text::uuid,$6::bigint,input_id,source_id,source_revision_id,source_digest FROM genui.work_source_dependencies WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid",
-        &[&org,&app,&work,&collection,&command.record,&version]).await?;
+        &[&org,&app,&work,&collection,&target,&version]).await?;
     let event = append(
         transaction,
         Chain::Data,
@@ -1318,7 +1740,7 @@ async fn commit<'a>(
             id: None,
             app: Some(app),
             work: Some(work),
-            record: Some(&command.record),
+            record: Some(&target),
             outcome: Some(payload),
         },
     )
@@ -1326,7 +1748,7 @@ async fn commit<'a>(
     let advanced = transaction.query("UPDATE genui.organization_sequences SET next_commit_sequence=$2::bigint WHERE organization_id=$1::text::uuid AND next_commit_sequence=$3::bigint RETURNING 1", &[&org,&(sequence+1),&sequence]).await?;
     require_stored(advanced.len() == 1)?;
     let outcome = transaction.query("INSERT INTO genui.command_outcomes(organization_id,app_id,work_id,principal_id,command_id,idempotency_key,payload_digest,state,record_id,record_version,work_version,commit_sequence,audit_event_id,committed_at,retry_expires_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text,$6::text,$7::text,'committed',$8::text::uuid,$9::bigint,$10::bigint,$11::bigint,$12::text::uuid,$13::text::timestamptz,$13::text::timestamptz+interval '24 hours') RETURNING to_char(retry_expires_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
-        &[&org,&app,&work,&request.principal,&command.command,&command.idempotency_key,&payload,&command.record,&version,&command.expected_work_version,&sequence,&event,&committed_at]).await?;
+        &[&org,&app,&work,&request.principal,&command.command,&command.idempotency_key,&payload,&target,&version,&command.expected_work_version,&sequence,&event,&committed_at]).await?;
     let retry_expires_at = text(outcome.first().ok_or(Error::Unavailable)?, 0)?;
     Ok(Done::Committed(CommandOutcome {
         organization: org.to_owned(),
@@ -1336,7 +1758,7 @@ async fn commit<'a>(
         command: command.command.clone(),
         idempotency_key: command.idempotency_key.clone(),
         payload_digest: payload.to_owned(),
-        record_id: command.record.clone(),
+        record_id: target,
         record_version: version,
         work_version: command.expected_work_version,
         commit_sequence: sequence,
@@ -1376,6 +1798,8 @@ mod tests {
                 rules: self.rules.clone(),
                 decided: self.decided.clone(),
                 reviewer_only: self.reviewer_only,
+                requires: self.requires.clone(),
+                set_now: self.set_now.clone(),
             }
         }
     }
@@ -1394,8 +1818,12 @@ mod tests {
             },
             decided: Vec::new(),
             reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
         }
     }
+    /// The instant the unit tests compose at.
+    const NOW: &str = "2026-11-29T15:00:00Z";
     /// `compose` as a decider who did not file the record.
     fn compose(
         spec: &[FieldSpec],
@@ -1403,7 +1831,7 @@ mod tests {
         current: Option<&Value>,
         values: &Value,
     ) -> Result<Vec<u8>> {
-        super::compose(spec, declaration, current, values, false, true)
+        super::compose(spec, declaration, current, values, false, true, NOW)
     }
     fn values(status: &str, note: &str) -> Value {
         json!([
@@ -1468,6 +1896,56 @@ mod tests {
         ));
         assert!(integer_text(Some(&json!("0"))) && !integer_text(Some(&json!("-0"))));
         assert!(!integer_text(Some(&json!(&"9".repeat(39)))));
+    }
+
+    /// ADR-020 §9 (APP-208): a stored multi-select is a non-empty subset of
+    /// the declared values in declaration order; any other order, a repeat,
+    /// an unknown id, an empty array, a non-string or an extra member is
+    /// refused, and "none selected" is the null value (so a required
+    /// multi-select is a non-nullable field).
+    #[test]
+    fn multi_select_values_are_an_ordered_subset_of_the_declared_values() {
+        let declared = json!({"type": "multi_enum", "values": ["red", "green", "blue"]});
+        let tags = field("tags", declared.clone(), false);
+        let optional = field("tags", declared, true);
+        let picked = |values: Value| json!({"type": "multi_enum", "values": values});
+        for accepted in [
+            json!(["red"]),
+            json!(["blue"]),
+            json!(["red", "blue"]),
+            json!(["green", "blue"]),
+            json!(["red", "green", "blue"]),
+        ] {
+            assert!(compatible(&picked(accepted.clone()), &tags), "{accepted}");
+        }
+        for refused in [
+            json!(["blue", "red"]),
+            json!(["red", "red"]),
+            json!(["red", "purple"]),
+            json!(["purple"]),
+            json!([]),
+            json!(["red", 1]),
+            json!("red"),
+            json!(null),
+        ] {
+            assert!(!compatible(&picked(refused.clone()), &tags), "{refused}");
+        }
+        assert!(!compatible(
+            &json!({"type": "multi_enum", "values": ["red"], "value": "red"}),
+            &tags
+        ));
+        assert!(!compatible(&json!({"type": "multi_enum"}), &tags));
+        assert!(!compatible(&json!({"type": "enum", "value": "red"}), &tags));
+        assert!(!compatible(
+            &picked(json!(["red"])),
+            &field(
+                "tag",
+                json!({"type": "enum", "values": ["red", "green", "blue"]}),
+                false
+            )
+        ));
+        assert!(!compatible(&json!({"type": "null"}), &tags));
+        assert!(compatible(&json!({"type": "null"}), &optional));
     }
 
     #[test]
@@ -1644,6 +2122,7 @@ mod tests {
                 &values("needs_context", "x"),
                 true,
                 true,
+                NOW,
             )
             .unwrap(),
         )
@@ -1655,7 +2134,8 @@ mod tests {
                 Some(&first),
                 &values("reviewed", "mine"),
                 true,
-                true
+                true,
+                NOW
             )
             .err(),
             Some(Error::Denied)
@@ -1666,14 +2146,15 @@ mod tests {
             Some(&first),
             &values("reviewed", "theirs"),
             false,
-            true
+            true,
+            NOW
         )
         .is_ok());
         let mut edit = record_decision();
         edit.operation = "update".into();
         edit.rules.transitions.clear();
         let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
-        assert!(super::compose(&spec, &edit, Some(&first), &note_only, true, true).is_ok());
+        assert!(super::compose(&spec, &edit, Some(&first), &note_only, true, true, NOW).is_ok());
     }
 
     /// APP-191 (D8): a `reviewer_only` command is refused for a contributor
@@ -1691,6 +2172,7 @@ mod tests {
                 &values("needs_context", "x"),
                 true,
                 false,
+                NOW,
             )
             .unwrap(),
         )
@@ -1700,7 +2182,7 @@ mod tests {
         let decide = values("reviewed", "ok");
         // A contributor deciding another's record: the gate, not the values.
         assert_eq!(
-            super::compose(&spec, &approve, Some(&filed), &decide, false, false).err(),
+            super::compose(&spec, &approve, Some(&filed), &decide, false, false, NOW).err(),
             Some(Error::Denied)
         );
         // A contributor creating through a reviewer-only create: refused too.
@@ -1711,16 +2193,17 @@ mod tests {
                 None,
                 &values("needs_context", "x"),
                 true,
-                false
+                false,
+                NOW
             )
             .err(),
             Some(Error::Denied)
         );
         // A reviewer deciding another's record: allowed.
-        assert!(super::compose(&spec, &approve, Some(&filed), &decide, false, true).is_ok());
+        assert!(super::compose(&spec, &approve, Some(&filed), &decide, false, true, NOW).is_ok());
         // A reviewer deciding their own record: `by_filer` still refuses.
         assert_eq!(
-            super::compose(&spec, &approve, Some(&filed), &decide, true, true).err(),
+            super::compose(&spec, &approve, Some(&filed), &decide, true, true, NOW).err(),
             Some(Error::Denied)
         );
         // A reviewer-only update on the filer's own record: refused for the
@@ -1729,13 +2212,13 @@ mod tests {
         edit.rules.transitions.clear();
         let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
         assert_eq!(
-            super::compose(&spec, &edit, Some(&filed), &note_only, true, false).err(),
+            super::compose(&spec, &edit, Some(&filed), &note_only, true, false, NOW).err(),
             Some(Error::Denied)
         );
-        assert!(super::compose(&spec, &edit, Some(&filed), &note_only, true, true).is_ok());
+        assert!(super::compose(&spec, &edit, Some(&filed), &note_only, true, true, NOW).is_ok());
         // A shared command is unchanged for a contributor.
         let shared = record_decision();
-        assert!(super::compose(&spec, &shared, Some(&filed), &decide, false, false).is_ok());
+        assert!(super::compose(&spec, &shared, Some(&filed), &decide, false, false, NOW).is_ok());
     }
 
     /// APP-113 review (storage 2): a filing create without a declared
@@ -1761,6 +2244,8 @@ mod tests {
                 ("status".into(), "rejected".into()),
             ],
             reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
         };
         let filed = |status: &str| {
             json!([
@@ -1792,6 +2277,152 @@ mod tests {
         assert!(compose(&spec, &auto, None, &small).is_ok());
     }
 
+    fn items() -> Vec<FieldSpec> {
+        vec![
+            field("prompt", json!({"type": "text"}), false),
+            field(
+                "state",
+                json!({"type": "enum", "values": ["open", "closed"]}),
+                false,
+            ),
+            field("opened_at", json!({"type": "timestamp"}), false),
+        ]
+    }
+    fn item_command(operation: &str, writable: &[&str], set_now: &[&str]) -> Declaration {
+        Declaration {
+            operation: operation.into(),
+            writable: writable.iter().map(|w| (*w).to_owned()).collect(),
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: true,
+            requires: Vec::new(),
+            set_now: set_now.iter().map(|w| (*w).to_owned()).collect(),
+        }
+    }
+    fn stamped(bytes: &[u8]) -> Value {
+        composed_state(bytes).unwrap()["opened_at"].clone()
+    }
+
+    /// ADR-020 C3: `set_now` stamps the transaction's instant before the
+    /// nullable check (a non-nullable stamped field composes on a create), a
+    /// stamped field cannot be supplied, an update re-stamps, a stamp that
+    /// changes nothing within the same second is a refused no-op, and a
+    /// command without `set_now` leaves the stamp alone.
+    #[test]
+    fn set_now_stamps_the_instant_and_never_takes_a_supplied_value() {
+        let spec = items();
+        let post = item_command("create", &["prompt", "state"], &["opened_at"]);
+        let open = json!([
+            {"field_id": "prompt", "value": {"type": "text", "value": "Item one"}},
+            {"field_id": "state", "value": {"type": "enum", "value": "open"}},
+        ]);
+        let posted = super::compose(&spec, &post, None, &open, true, true, NOW).unwrap();
+        assert_eq!(stamped(&posted), json!({"type": "timestamp", "value": NOW}));
+        // Without the stamp the non-nullable field refuses the create.
+        let unstamped = item_command("create", &["prompt", "state"], &[]);
+        assert_eq!(
+            super::compose(&spec, &unstamped, None, &open, true, true, NOW).err(),
+            Some(Error::Denied)
+        );
+        // A supplied stamp is a value for a field the command does not write.
+        let mut forged = open.as_array().unwrap().clone();
+        forged.push(json!({"field_id": "opened_at", "value": {"type": "timestamp", "value": "2030-01-01T00:00:00Z"}}));
+        assert_eq!(
+            super::compose(&spec, &post, None, &Value::Array(forged), true, true, NOW).err(),
+            Some(Error::Denied)
+        );
+        // Stored content that would let a client write a stamped field is
+        // not admitted content: unavailability, never the client's value.
+        let both = item_command("create", &["prompt", "state", "opened_at"], &["opened_at"]);
+        let mut with_stamp = open.as_array().unwrap().clone();
+        with_stamp
+            .push(json!({"field_id": "opened_at", "value": {"type": "timestamp", "value": NOW}}));
+        assert_eq!(
+            super::compose(
+                &spec,
+                &both,
+                None,
+                &Value::Array(with_stamp),
+                true,
+                true,
+                NOW
+            )
+            .err(),
+            Some(Error::Unavailable)
+        );
+        let posted: Value = serde_json::from_slice(&posted).unwrap();
+        // close: no stamp, the opened_at carried.
+        let close = item_command("update", &["state"], &[]);
+        let closed_state =
+            json!([{"field_id": "state", "value": {"type": "enum", "value": "closed"}}]);
+        let later = "2026-11-29T15:00:40Z";
+        let closed = super::compose(
+            &spec,
+            &close,
+            Some(&posted),
+            &closed_state,
+            true,
+            true,
+            later,
+        )
+        .unwrap();
+        assert_eq!(stamped(&closed), json!({"type": "timestamp", "value": NOW}));
+        // reopen: re-stamps; the same second with the same state is a no-op.
+        let reopen = item_command("update", &["state"], &["opened_at"]);
+        let open_state = json!([{"field_id": "state", "value": {"type": "enum", "value": "open"}}]);
+        assert_eq!(
+            super::compose(&spec, &reopen, Some(&posted), &open_state, true, true, NOW).err(),
+            Some(Error::Denied)
+        );
+        let reopened = super::compose(
+            &spec,
+            &reopen,
+            Some(&posted),
+            &open_state,
+            true,
+            true,
+            later,
+        )
+        .unwrap();
+        assert_eq!(
+            stamped(&reopened),
+            json!({"type": "timestamp", "value": later})
+        );
+    }
+
+    /// ADR-020 C2: the key document is the forma-json-v1 array of the key
+    /// pairs in declaration order, from the composed state; a null key value
+    /// is a key; a multi_enum value is never one.
+    #[test]
+    fn the_key_is_the_composed_pairs_in_declaration_order() {
+        let composed = super::super::rules::state_of(&json!([
+            {"field_id": "item", "value": {"type": "reference", "input_id": "items", "record_id": "00000000-0000-4000-8000-0000000000f1"}},
+            {"field_id": "choice", "value": {"type": "enum", "value": "b"}},
+            {"field_id": "day", "value": {"type": "null"}},
+        ]));
+        assert_eq!(
+            key_document(&["item".into()], &composed).unwrap(),
+            r#"[{"field_id":"item","value":{"input_id":"items","record_id":"00000000-0000-4000-8000-0000000000f1","type":"reference"}}]"#
+        );
+        assert_eq!(
+            key_document(&["day".into(), "choice".into()], &composed).unwrap(),
+            r#"[{"field_id":"day","value":{"type":"null"}},{"field_id":"choice","value":{"type":"enum","value":"b"}}]"#
+        );
+        assert_eq!(
+            key_document(&["absent".into()], &composed).err(),
+            Some(Error::Unavailable)
+        );
+        let multi = super::super::rules::state_of(
+            &json!([{"field_id": "tags", "value": {"type": "multi_enum", "values": ["a"]}}]),
+        );
+        assert_eq!(
+            key_document(&["tags".into()], &multi).err(),
+            Some(Error::Unavailable)
+        );
+        assert_eq!(Refusal::RequirementNotMet.code(), "requirement_not_met");
+        assert_eq!(Refusal::Unchanged.code(), "unchanged");
+    }
+
     #[test]
     fn decided_starts_are_the_other_commands_targets_without_an_initial() {
         let rules = |value: Value| super::super::rules::Rules::from_declaration(&value).unwrap();
@@ -1801,6 +2432,8 @@ mod tests {
             rules,
             decided: Vec::new(),
             reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
         };
         let mut commands = BTreeMap::from([
             (
@@ -1899,5 +2532,139 @@ mod tests {
         assert!(idempotency_key_shaped("00000000000000000000000000000000"));
         assert!(!idempotency_key_shaped("0000000000000000000000000000000g"));
         assert_eq!(ConflictReason::PayloadMismatch.code(), "payload_mismatch");
+    }
+
+    /// A submissions schema: the filer's key and answer, and a score only a
+    /// reviewer's update writes.
+    fn submissions() -> Vec<FieldSpec> {
+        vec![
+            field("task", json!({"type": "text"}), false),
+            field("answer", json!({"type": "text"}), false),
+            field("score", json!({"type": "integer", "unit": "points"}), true),
+        ]
+    }
+    fn submission(task: &str, answer: &str) -> Value {
+        json!([
+            {"field_id": "task", "value": {"type": "text", "value": task}},
+            {"field_id": "answer", "value": {"type": "text", "value": answer}},
+        ])
+    }
+
+    /// ADR-020 §17.43 (APP-213): a replacing create keeps a reviewer's work.
+    /// Before a reviewer acts, no field outside the create's reach differs
+    /// and a resubmission replaces; once the reviewer's update has written
+    /// `score`, the same resubmission differs on it and is refused. A field
+    /// the create writes, or stamps, never locks the entry; stored bytes that
+    /// do not decode are a broken store, never a judgment.
+    #[test]
+    fn a_replace_differs_exactly_when_a_field_outside_the_creates_reach_moved() {
+        let spec = submissions();
+        let submit = Declaration {
+            operation: "create".into(),
+            writable: vec!["task".into(), "answer".into()],
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
+        };
+        let filed = super::compose(
+            &spec,
+            &submit,
+            None,
+            &submission("one", "draft"),
+            true,
+            false,
+            NOW,
+        )
+        .unwrap();
+        let resubmitted = composed_state(
+            &super::compose(
+                &spec,
+                &submit,
+                None,
+                &submission("one", "final"),
+                true,
+                false,
+                NOW,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            untouched_fields_differ(&spec, &submit, &filed, &resubmitted),
+            Ok(false),
+            "before a reviewer acts, a resubmission replaces"
+        );
+        // The reviewer scores the entry: an update that writes `score` alone.
+        let review = Declaration {
+            operation: "update".into(),
+            writable: vec!["score".into()],
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: true,
+            requires: Vec::new(),
+            set_now: Vec::new(),
+        };
+        let current: Value = serde_json::from_slice(&filed).unwrap();
+        let scored = super::compose(
+            &spec,
+            &review,
+            Some(&current),
+            &json!([{"field_id": "score", "value": {"type": "integer", "value": "9", "unit": "points"}}]),
+            false,
+            true,
+            NOW,
+        )
+        .unwrap();
+        assert_eq!(
+            untouched_fields_differ(&spec, &submit, &scored, &resubmitted),
+            Ok(true),
+            "once scored, the entry is locked for its creator"
+        );
+        // A create that writes every field is never locked (the quiz).
+        let all = Declaration {
+            operation: "create".into(),
+            writable: vec!["task".into(), "answer".into(), "score".into()],
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
+        };
+        assert_eq!(
+            untouched_fields_differ(&spec, &all, &scored, &resubmitted),
+            Ok(false)
+        );
+        // A stamp the create re-stamps never locks (attendance's checked_at).
+        let items = items();
+        let post = item_command("create", &["prompt", "state"], &["opened_at"]);
+        let open = json!([
+            {"field_id": "prompt", "value": {"type": "text", "value": "Item one"}},
+            {"field_id": "state", "value": {"type": "enum", "value": "open"}},
+        ]);
+        let earlier = super::compose(&items, &post, None, &open, true, true, NOW).unwrap();
+        let later = composed_state(
+            &super::compose(
+                &items,
+                &post,
+                None,
+                &open,
+                true,
+                true,
+                "2026-11-29T15:00:40Z",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            untouched_fields_differ(&items, &post, &earlier, &later),
+            Ok(false)
+        );
+        // Stored bytes that do not decode are a broken store.
+        assert_eq!(
+            untouched_fields_differ(&spec, &submit, b"not canonical", &resubmitted),
+            Err(Error::Unavailable)
+        );
     }
 }

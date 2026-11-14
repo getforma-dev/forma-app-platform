@@ -49,7 +49,7 @@ type Card = {
   receipt: Pair[];
   receiptJson: string;
 };
-type Choice = { id: string; value: string; selected: boolean };
+type Choice = { id: string; value: string; label: string; selected: boolean };
 type Field = {
   inputMode: string;
   id: string;
@@ -63,6 +63,10 @@ type Field = {
   readOnly: boolean;
   hasText: boolean;
   hasChoices: boolean;
+  /** APP-205: a reference with nothing to choose (a disabled select). */
+  noChoices: boolean;
+  /** ADR-020 §9 (APP-208): a multi-select, one checkbox per declared value, the held ones checked. */
+  hasCheckboxes: boolean;
   choices: Choice[];
 };
 type FormCard = {
@@ -259,9 +263,19 @@ function Work(props: WorkProps) {
                   </label>)}
                   {createShow(() => field.hasChoices, () => <label>
                     <span>{field.label}</span><select name={field.input} value={field.value}>
-                      {createList(() => field.choices, choice => choice.id, choice => <option value={choice.value} selected={choice.selected}>{choice.value}</option>)}
+                      {createList(() => field.choices, choice => choice.id, choice => <option value={choice.value} selected={choice.selected}>{choice.label}</option>)}
                     </select>
                   </label>)}
+                  {createShow(() => field.noChoices, () => <label>
+                    <span>{field.label}</span><select name={field.input} disabled><option value="">Nothing to choose yet</option></select>
+                  </label>)}
+                  {createShow(() => field.hasCheckboxes, () => <fieldset class="document-choices">
+                    <legend>{field.label}</legend>
+                    <input type="hidden" name={field.input} value="" />
+                    {createList(() => field.choices, choice => choice.id, choice => <label class="document-choice">
+                      <input type="checkbox" name={field.input} value={choice.value} checked={choice.selected} />{' '}{choice.label}
+                    </label>)}
+                  </fieldset>)}
                   {createShow(() => field.readOnly, () => <p>{field.label}: {field.value}</p>)}
                   {createShow(() => field.writable, () => <input type="hidden" name={field.specInput} value={field.spec} />)}
                 </div>
