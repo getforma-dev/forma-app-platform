@@ -206,3 +206,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 201 | [APP-199: Fewer transactions per read, and a server-advised refresh spread](0-backlog/APP-199.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | M | Backlog | APP-191, APP-197 |
 | 202 | [APP-200: Record snapshot capacity follows the query worker's admission](0-backlog/APP-200.md) | [PH09](phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-198 |
 | 203 | [APP-201: A read-only, lock-aware operator command to read the schema version during a held schema release](0-backlog/APP-201.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-196 |
+| 212 | [APP-210: Reviewed contract-only release: image contexts may change without a migration](0-backlog/APP-210.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-194 |

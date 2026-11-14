@@ -181,6 +181,30 @@ The release-B pull request (APP-194) commits `ops/promotion/schema-release.json`
 
    Expected: `{"status": "granted-reviewer", "permission": "record_review", "changed": true, ...}` and `{"status": "revoked-reviewer", "permission": "record_review", "changed": true, "membership_epoch": N+1, ...}`. The grant needs release B's migration 0024 in the database (before it the task refuses `permission_unsupported` and writes nothing); the revoke works at any schema, and a revoke of a row that does not exist reports `"changed": false`. The revoke advances the member's epoch, so their next request re-reads their authority. The sharing dialog's own reviewer revoke is W4's; this is the operator's path for any personal `record_review` grant. The operator's revoke removes a personal `record_review` row only. It does not end a reviewer share with everyone in the organization, which the app's owner stops in the share dialog ("Stop sharing with everyone"), and the dialog shows each person's access from live permissions.
 
+9. **Close out release B** (after the run succeeds; APP-194). Release C (section 3a) starts from this state.
+
+   ```sh
+   $PY -m ops.promotion.maintenance inspect --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX"
+   ```
+
+   Expected: `"active": null`. The run's completed record names schema 24, the snapshot and the migration task. The canonical baseline now holds release B's `to`: contract `88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356`, schema manifest `176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1` and policy schema version 24. Record the run, the candidate and the `beta/` tag in APP-194. Then remove `ops/promotion/schema-release.json` in a follow-up pull request; release C's own pull request may replace it instead. The pin in `schema_release.py` may stay as an inert record until release C's values replace it. Until the file is removed or replaced, CI fails any change to the deployment contract.
+
+## 3a. Release C: a contract-only release (schema 24 → 24)
+
+Release C changes the deployment contract (its qualification image context) and carries no migration. It ships as a reviewed contract-only release ([APP-210](../../Tickets/0-backlog/APP-210.md); [BETA-PROMOTION.md "Contract-only releases"](../pitch/BETA-PROMOTION.md#schema-releases)). It takes no snapshot and runs no migration, so the 05:00–05:45 UTC snapshot window does not apply. Everything else is a normal release: the fresh billing basis within 24 hours, the expiry (section 2), and section 8 if preparation refuses on new scanner findings (with `--contract` set to release C's `to` contract).
+
+1. **Before the merge.** Section 3 step 9 is done and `maintenance inspect` shows `"active": null`. The release-C pull request commits `ops/promotion/schema-release.json` and its pin in `schema_release.py`, with an evidence record and an expiry. Its `from` is the live baseline above (version 24, schema manifest `176d68cb…`, contract `88d17cb5…`). Its `to` has the same version and schema manifest and release C's own contract, and its CI binds that `to` to the merged commit. `schema_release.load` refuses any other shape.
+2. **Merge and read the summary.** `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-C pull request, and read the preparation summary. Approve only if every line holds:
+   - `schema_release: {from_version: 24, to_version: 24, spec_sha256}`, where `spec_sha256` equals `git show <candidate sha>:ops/promotion/schema-release.json | shasum -a 256`;
+   - `schema_version: 24`;
+   - `preserved`: `schema`, `template`, `trial`, `aliases` and `secrets` all `true`;
+   - `sequence`: exactly the five normal steps, `stop both services`, `execute reviewed change set`, `verify stopped boundaries`, `activate both services`, `verify health and images`, with no `snapshot database` and no `run reviewed migration`;
+   - `deployment_contract_sha256` equal to the record's `to.deployment_contract_sha256`;
+   - the stop time and the scan as for any release.
+3. **Approve.** Then `/health/ready` → 200 and `gh run view ... --json conclusion` → `"success"`.
+4. **Verify.** `maintenance inspect` shows `"active": null`. The completed record names the release's versions and hash, with no snapshot and no migration task. The baseline contract is the record's `to`, and the schema manifest digest and policy schema version 24 are unchanged. A failure after the outage began is a normal promotion's failure (BETA-PROMOTION "Deployment state and failures"), and `restore-after-failed-migration` refuses it. A prepared release that is not approved is abandoned as in section 1 step 3.
+5. **Close out.** Remove `ops/promotion/schema-release.json` in a follow-up pull request, as for release B.
+
 ## 4. Codes by wave and the one announced restart (Friday Nov 28)
 
 **Go/no-go before the first wave**, each with its evidence: release B executed and `/health/ready` 200; the caps, December month and expiry applied (section 2) and the stop reads 2026-12-15 14:00 UTC; the alarms stack deployed and the test email received; the restore drill's diff empty; FormaStack's written acknowledgement of the user-limit raise and the Dec 14 deletion (section 3 step 6); the purge path proven on the dev stand with no guest-linked share open, or the R1 decision taken (section 10); your `admin_policy` row granted and `/admin` opening; the rehearsal of Nov 26 done on Safari and a phone. Any "no" delays the codes, not the class date.
