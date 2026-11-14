@@ -1028,6 +1028,16 @@ STATS_TABLES = ("principals", "memberships", "entitlements", "organization_permi
 # organization's code digests go; its sign-in handle and provider tenant routing stay with the row.
 PURGE_KEEPS = frozenset({"organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads", "audit_events"})
 PURGE_PRIVATE = ("code_index",)
+# genui_identity (0017) holds guest accounts, never the organization's: its rows that name an organization
+# are the sign-in flows of its shares (deleted outright) and guests' linked_apps and share_events, whose
+# non-deferrable keys reach the organization's live_work_shares, which in turn reach saved_work,
+# publications and memberships. While a guest has linked or accepted one of the organization's shares the
+# purge refuses (guest_linked_shares_present) instead of failing on a key or deleting a guest's chain
+# (APP-185 recheck R1; decision pending). Any other table outside genui that references a purged table
+# is unknown and refuses too.
+IDENTITY_FLOWS = "genui_identity.shared_auth_flows"
+IDENTITY_GUEST_ROWS = ("genui_identity.linked_apps", "genui_identity.share_events")
+IDENTITY_TABLES = (IDENTITY_FLOWS,) + IDENTITY_GUEST_ROWS
 RELNAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 
 
@@ -1043,11 +1053,32 @@ def content_tables(c):
 
 
 def foreign_keys(c):
-    """(child, parent) for every non-deferrable foreign key among genui tables; deferrable ones are checked at commit."""
-    return [tuple(r) for r in c.execute("""SELECT child.relname,parent.relname FROM pg_catalog.pg_constraint k
+    """(child, parent) for every non-deferrable foreign key whose parent is a genui table, from every schema:
+    a genui child by its bare name, any other child schema-qualified. Deferrable keys are checked at commit."""
+    rows = c.execute("""SELECT n.nspname,child.relname,parent.relname FROM pg_catalog.pg_constraint k
           JOIN pg_catalog.pg_class child ON child.oid=k.conrelid JOIN pg_catalog.pg_class parent ON parent.oid=k.confrelid
           JOIN pg_catalog.pg_namespace n ON n.oid=child.relnamespace JOIN pg_catalog.pg_namespace pn ON pn.oid=parent.relnamespace
-          WHERE k.contype='f' AND NOT k.condeferrable AND n.nspname='genui' AND pn.nspname='genui' ORDER BY 1,2""").fetchall()]
+          WHERE k.contype='f' AND NOT k.condeferrable AND pn.nspname='genui' ORDER BY 1,2,3""").fetchall()
+    return [((child if schema == "genui" else schema + "." + child), parent) for schema, child, parent in rows]
+
+
+def foreign_children(tables, edges):
+    """Tables outside the purged set that reference one of them with a non-deferrable key."""
+    return sorted({child for child, parent in edges if parent in tables and child not in tables})
+
+
+def lift_identity_rls(c, forced):
+    """The migration-0021 precedent, inside the transaction: genui_owner has no BYPASSRLS and the guest tables'
+    policies are account-scoped, so FORCE is lifted to read and delete by organization and restored before
+    anything else runs. A rolled-back transaction restores it by itself."""
+    for table in IDENTITY_TABLES:
+        c.execute("ALTER TABLE " + table + (" FORCE" if forced else " NO FORCE") + " ROW LEVEL SECURITY")
+
+
+def identity_forced(c):
+    rows = c.execute("""SELECT t.relforcerowsecurity FROM pg_catalog.pg_class t JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                        WHERE n.nspname='genui_identity' AND t.relname IN ('shared_auth_flows','linked_apps','share_events')""").fetchall()
+    return len(rows) == len(IDENTITY_TABLES) and all(r[0] for r in rows)
 
 
 def deletion_order(tables, edges):
@@ -1090,9 +1121,20 @@ def purge_organization(c, args):
             "active_memberships_remain")
     tables = content_tables(c)
     require(set(STATS_TABLES) <= set(tables), "purge_tables_differ")
+    edges = foreign_keys(c)
+    require(set(foreign_children(tables, edges)) <= set(IDENTITY_TABLES), "purge_foreign_children_unknown")
     events = c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0]
-    deleted = {}
-    for table in deletion_order(tables, foreign_keys(c)):
+    # Guest rows first, under the lifted FORCE: the organization's sign-in flows go; a guest's link or
+    # accepted share stops the purge before any row is deleted.
+    require(identity_forced(c), "purge_rls_state_refused")
+    lift_identity_rls(c, forced=False)
+    guest_rows = {table: c.execute("SELECT count(*) FROM " + table + " WHERE organization_id=%s", (org,)).fetchone()[0] for table in IDENTITY_GUEST_ROWS}
+    flows = c.execute("DELETE FROM " + IDENTITY_FLOWS + " WHERE owner_organization_id=%s OR provider_organization_id=%s", (org, org)).rowcount
+    lift_identity_rls(c, forced=True)
+    require(identity_forced(c), "purge_rls_not_restored")
+    require(not any(guest_rows.values()), "guest_linked_shares_present")
+    deleted = {IDENTITY_FLOWS: flows}
+    for table in deletion_order(tables, edges):
         deleted[table] = c.execute("DELETE FROM genui." + table + " WHERE organization_id=%s", (org,)).rowcount
     for table in PURGE_PRIVATE:
         deleted["genui_private." + table] = c.execute("DELETE FROM genui_private." + table + " WHERE organization_id=%s", (org,)).rowcount
@@ -1103,7 +1145,9 @@ def purge_organization(c, args):
             "purge_audit_changed")
     c.commit()
     return {"organization_id": org, "status": "purged", "tables": len(tables), "rows_deleted": sum(deleted.values()), "deleted": deleted,
-            "kept": sorted(PURGE_KEEPS) + ["genui_private.handle_index", "genui_private.provider_tenant_index"],
+            "kept": sorted(PURGE_KEEPS) + ["genui_private.handle_index", "genui_private.provider_tenant_index",
+                                           "genui_identity.accounts", "genui_identity.shared_sessions"],
+            "identity": {"shared_auth_flows_deleted": flows, "guest_rows": guest_rows},
             "audit_events_kept": events, "audit_event": None}
 
 

@@ -271,6 +271,11 @@ class PureTests(unittest.TestCase):
             op.deletion_order(["a", "b"], [("a", "b"), ("b", "a")])
         self.assertEqual(op.PURGE_KEEPS, {"organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads", "audit_events"})
         self.assertEqual(op.PURGE_PRIVATE, ("code_index",))
+        self.assertEqual(op.IDENTITY_TABLES, ("genui_identity.shared_auth_flows", "genui_identity.linked_apps", "genui_identity.share_events"))
+        # Children outside the purged set are named, never silently dropped from the order.
+        self.assertEqual(op.foreign_children(["live_work_shares", "apps"], [("genui_identity.share_events", "live_work_shares"), ("apps", "spaces"),
+                                                                          ("live_work_shares", "apps"), ("genui_identity.linked_apps", "live_work_shares")]),
+                         ["genui_identity.linked_apps", "genui_identity.share_events"])
         self.assertFalse(set(op.STATS_TABLES) & op.PURGE_KEEPS)
         parser = op.parser()
         for name in ("suspend-organization", "purge-organization"):
@@ -889,7 +894,9 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertGreaterEqual(purged["rows_deleted"], 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1)  # the rows above plus the code's index row
         self.assertEqual(purged["deleted"]["genui_private.code_index"], 1)
         self.assertEqual(sorted(purged["kept"]), sorted(["organizations", "provider_tenant_bindings", "organization_sequences", "audit_heads",
-                                                        "audit_events", "genui_private.handle_index", "genui_private.provider_tenant_index"]))
+                                                        "audit_events", "genui_private.handle_index", "genui_private.provider_tenant_index",
+                                                        "genui_identity.accounts", "genui_identity.shared_sessions"]))
+        self.assertEqual(purged["identity"], {"shared_auth_flows_deleted": 0, "guest_rows": {"genui_identity.linked_apps": 0, "genui_identity.share_events": 0}})
         after = self.cli("stats", "--organization", org)
         self.assertEqual(set(after["counts"].values()), {0})
         self.assertEqual(after["audit_events"], events_before)
@@ -907,6 +914,110 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.cli("purge-organization", "--organization", org)["rows_deleted"], 0)
         self.assertEqual(self.cli("stats", "--organization", ORG)["counts"], fixture_before["counts"])
         self.cli("purge-organization", "--organization", str(uuid.uuid4()), expect=1)
+
+    def shared_work(self, org, sponsor):
+        """An app with one published saved work for `sponsor` (the live-share fixture's parents)."""
+        app, revision, publication, policy, work = (str(uuid.uuid4()) for _ in range(5))
+        digest = "sha256:" + "e" * 64
+        with self.connect("postgres") as c:
+            space = c.execute("SELECT space_id::text FROM genui.spaces WHERE organization_id=%s", (org,)).fetchone()[0]
+            c.execute("INSERT INTO genui.apps VALUES (%s,%s,%s,%s)", (org, app, space, sponsor))
+            c.execute("INSERT INTO genui.definition_revisions VALUES (%s,%s,%s,1,%s,'\\x7b7d')", (org, app, revision, digest))
+            c.execute("INSERT INTO genui.publication_policies VALUES (%s,%s,1,'owner_publish')", (org, policy))
+            c.execute("""INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,
+                         policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,
+                         published_at,canonical_envelope,publication_sequence)
+                         VALUES (%s,%s,%s,%s,%s,%s,1,'owner_publish',%s,%s,1,1,1,%s,now(),'\\x7b7d',1)""",
+                      (org, app, publication, revision, digest, policy, sponsor, sponsor, digest))
+            c.execute("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context) VALUES (%s,%s,%s,%s,1,'')",
+                      (org, app, work, publication))
+        return app, work, publication
+
+    def live_share(self, org, sponsor, app, work, publication, accepted_by=None):
+        share = str(uuid.uuid4())
+        import datetime as dt
+        accepted_at = None if accepted_by is None else dt.datetime.now(dt.timezone.utc)
+        with self.connect("postgres") as c:
+            c.execute("""INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,
+                         accepted_account_id,accepted_at,publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,
+                         version,idempotency_key,request_digest,created_at,expires_at)
+                         VALUES (%s,%s,%s,%s,%s,1,'guest@example.test',%s,%s,%s,%s,1,'{}','{}','Shared app',false,1,%s,%s,now(),now()+interval '7 days')""",
+                      (org, share, app, work, sponsor, accepted_by, accepted_at, publication, "sha256:" + "e" * 64, "idem-" + share[:24], "sha256:" + "f" * 64))
+            c.execute("""INSERT INTO genui_identity.shared_auth_flows(flow_id,owner_organization_id,share_id,provider_organization_id,cookie_digest,
+                         state_digest,sealed_verifier) VALUES (%s,%s,%s,%s,%s,%s,'\\x01')""",
+                      (str(uuid.uuid4()), org, share, org, "sha256:" + uuid.uuid4().hex * 2, "sha256:" + "1" * 64))
+        return share
+
+    def test_purge_refuses_while_a_guest_holds_one_of_the_shares_and_deletes_unaccepted_shares_and_flows(self):
+        """APP-185 recheck R1: genui_identity rows. A guest account that accepted and linked a share keeps the
+        purge from running at all (its share_events chain and linked_apps row reach the organization's share by
+        non-deferrable keys); an organization whose shares nobody accepted is purged, with its sign-in flows,
+        and the guest's account and chain are untouched either way. FORCE row security is restored."""
+        guest = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui_identity.accounts(account_id,issuer,provider_tenant_id,provider_subject,verified_email) VALUES (%s,%s,%s,%s,%s)",
+                      (guest, ISSUER, TENANT, "usr_guest_" + guest[:8], "guest@example.test"))
+        def organization():
+            org = str(uuid.uuid4())
+            self.cli("provision", "--organization", org, "--display-name", "Share purge test", "--issuer", ISSUER, "--provider-tenant", "ten_" + org[-12:])
+            sponsor = str(uuid.uuid4())
+            with self.connect("postgres") as c:
+                c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (org, sponsor, ISSUER, "ten_" + org[-12:], "usr_" + sponsor))
+                c.execute("INSERT INTO genui.memberships VALUES (%s,%s,'active',1)", (org, sponsor))
+            return org, sponsor
+        # Organization A: a share the guest accepted and linked, with its account-chain event.
+        org_a, sponsor_a = organization()
+        app, work, publication = self.shared_work(org_a, sponsor_a)
+        share_a = self.live_share(org_a, sponsor_a, app, work, publication, accepted_by=guest)
+        canonical = json.dumps({"account_id": guest, "organization_id": org_a, "share_id": share_a, "kind": "share.accepted", "share_version": 1,
+                                "sequence": 1, "previous_hash": "sha256:" + "0" * 64}, sort_keys=True, separators=(",", ":")).encode()
+        event_hash = "sha256:" + hashlib.sha256(b"forma:share-account-event:v1\x00" + canonical).hexdigest()
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui_identity.linked_apps(account_id,organization_id,share_id,created_at,grant_version) VALUES (%s,%s,%s,now(),1)", (guest, org_a, share_a))
+            c.execute("""INSERT INTO genui_identity.share_events(account_id,event_id,sequence,organization_id,share_id,kind,share_version,canonical,previous_hash,hash,occurred_at)
+                         VALUES (%s,%s,1,%s,%s,'share.accepted',1,%s,%s,%s,now())""", (guest, str(uuid.uuid4()), org_a, share_a, canonical, "sha256:" + "0" * 64, event_hash))
+            c.execute("UPDATE genui_identity.accounts SET audit_sequence=1,audit_hash=%s WHERE account_id=%s", (event_hash, guest))
+        self.cli("revoke-membership", "--organization", org_a, "--principal", sponsor_a)
+        self.cli("suspend-organization", "--organization", org_a)
+        before = self.dump()
+        p = self.cli("purge-organization", "--organization", org_a, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "guest_linked_shares_present"})
+        self.assertEqual(self.dump(), before)  # nothing deleted: not even the flow
+        forced = self.query("""SELECT t.relname,t.relforcerowsecurity FROM pg_catalog.pg_class t JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                               WHERE n.nspname='genui_identity' AND t.relkind='r' ORDER BY 1""")
+        self.assertEqual(len(forced), 5)
+        self.assertTrue(all(f for _, f in forced), forced)
+        # The guest's chain is intact and verifiable from its head.
+        head = self.query("SELECT audit_sequence,audit_hash FROM genui_identity.accounts WHERE account_id=%s", (guest,))[0]
+        event = self.query("SELECT sequence,hash,canonical FROM genui_identity.share_events WHERE account_id=%s ORDER BY sequence", (guest,))
+        self.assertEqual((head[0], head[1]), (1, event_hash))
+        self.assertEqual([(e[0], e[1]) for e in event], [(1, event_hash)])
+        self.assertEqual("sha256:" + hashlib.sha256(b"forma:share-account-event:v1\x00" + bytes(event[0][2])).hexdigest(), event_hash)
+        # Organization B: a share nobody accepted, plus its sign-in flow: both go with the purge.
+        org_b, sponsor_b = organization()
+        app, work, publication = self.shared_work(org_b, sponsor_b)
+        self.live_share(org_b, sponsor_b, app, work, publication)
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.shared_auth_flows WHERE owner_organization_id=%s", (org_b,)), [(1,)])
+        self.cli("revoke-membership", "--organization", org_b, "--principal", sponsor_b)
+        self.cli("suspend-organization", "--organization", org_b)
+        purged = self.cli("purge-organization", "--organization", org_b)
+        self.assertEqual((purged["status"], purged["identity"]), ("purged", {"shared_auth_flows_deleted": 1, "guest_rows": {"genui_identity.linked_apps": 0, "genui_identity.share_events": 0}}))
+        self.assertEqual(purged["deleted"]["live_work_shares"], 1)
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.shared_auth_flows WHERE owner_organization_id=%s OR provider_organization_id=%s", (org_b, org_b)), [(0,)])
+        self.assertEqual(self.cli("stats", "--organization", org_b)["counts"]["live_work_shares"], 0)
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.accounts WHERE account_id=%s", (guest,)), [(1,)])
+        self.assertEqual(self.query("SELECT audit_sequence,audit_hash FROM genui_identity.accounts WHERE account_id=%s", (guest,))[0], head)
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.shared_auth_flows WHERE owner_organization_id=%s", (org_a,)), [(1,)])  # A's flow stays with A
+        self.assertTrue(all(f for _, f in self.query("""SELECT t.relname,t.relforcerowsecurity FROM pg_catalog.pg_class t JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                                                        WHERE n.nspname='genui_identity' AND t.relkind='r'""")))
+        # The key map the purge orders by sees the identity children.
+        with self.connect("postgres") as c:
+            edges = op.foreign_keys(c)
+        self.assertIn(("genui_identity.share_events", "live_work_shares"), edges)
+        self.assertIn(("genui_identity.linked_apps", "live_work_shares"), edges)
+        self.assertIn(("genui_identity.shared_auth_flows", "live_work_shares"), edges)
+        with self.connect("postgres") as c:
+            self.assertEqual(op.foreign_children(op.content_tables(c), edges), sorted(op.IDENTITY_TABLES))
 
     def test_revoke_and_extend_are_audited_and_bounded(self):
         out = self.issue("--expires-days", "5")
