@@ -209,7 +209,7 @@ async fn callback_floods_hit_class_and_global_limits_before_any_work() {
     assert_eq!(
         (limited.status, limited.body.as_str()),
         (StatusCode::TOO_MANY_REQUESTS, neutral_signin),
-        "the 16th callback from one class"
+        "the callback past the class's minute window"
     );
     let retry: u64 = limited.headers[header::RETRY_AFTER]
         .to_str()
@@ -1310,7 +1310,8 @@ async fn campaign() {
         }
     }
     // A registered organization's forged pre-login cookie still costs one
-    // flow lookup, at most 15 a minute from one class: the 16th is 429 with
+    // flow lookup, at most CALLBACK_ADDRESS's minute window from one class
+    // (45 since the ADR-006 amendment of 2026-11-14): the next is 429 with
     // `Retry-After` before any work.
     let mut flood = c.browser("198.51.100.71:7100");
     let mut statuses = Vec::new();
@@ -1324,7 +1325,10 @@ async fn campaign() {
             assert!(reply.headers.contains_key(header::RETRY_AFTER));
         }
     }
-    assert_eq!(statuses.iter().filter(|s| **s == 400).count(), 15);
+    assert_eq!(
+        statuses.iter().filter(|s| **s == 400).count(),
+        http::limits::CALLBACK_ADDRESS[0].limit
+    );
     assert_eq!(statuses.last(), Some(&429));
     assert_eq!(c.counts().await, before);
     assert_eq!(c.issuer.count(|x| &x.exchange), exchanges);
