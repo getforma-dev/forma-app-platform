@@ -120,7 +120,7 @@
     {
       "version": 24,
       "file": "0024_private_entries_and_roles.sql",
-      "sha256": "4de90b8aa5f4353b7005b5f9e08210a5cce442bff7c91b4dac244c501cfd03b6"
+      "sha256": "8ff14e6d86f41223abf8f2c626cc6211dcf4de33ad9576d6b9690044f893efa1"
     }
   ],
   "catalog": [
@@ -222,7 +222,7 @@
     },
     {
       "file": "catalog-v24.json",
-      "sha256": "acb08b6d531525a4a551e6e15d047b0aa7ec2f56c00a3804d305b27a9e28b64f"
+      "sha256": "046d84e6a31a9b056d71d59a1473647086fd1d6a66f6ff3dd0382f2211486f82"
     }
   ]
 }
