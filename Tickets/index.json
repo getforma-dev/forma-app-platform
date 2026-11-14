@@ -367,9 +367,10 @@
         "APP-189",
         "APP-199",
         "APP-200",
-        "APP-201"
+        "APP-201",
+        "APP-212"
       ],
-      "ticket_count": 38,
+      "ticket_count": 39,
       "done_count": 7,
       "blocked_count": 0
     }
@@ -6267,6 +6268,35 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-196"
+      ]
+    },
+    {
+      "id": "APP-212",
+      "title": "End-of-test purge deletes guest links at schema 24",
+      "path": "0-backlog/APP-212.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "212",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-14: a real live test with 25 real people (the adult students of his Nov 29\u201330 class) in his organization, enforced to production standards, purged by 2026-12-14 ([ADR-008 amendment, \"End of the test\"](../../docs/architecture/ADR-008-YC-DEMO-AND-BETA-MVP.md#amendment-2026-11-14-a-real-live-test-with-25-real-people)). The purge rule for guest rows was decided in the W3 purge review of PR #121 and recorded in [APP-188](APP-188.md)'s log, [runbook \u00a710](../../docs/operations/TRIAL-RUNBOOK.md#10-the-end-of-trial-purge-by-sunday-dec-14) and the comment block of `app/migrations/0024_private_entries_and_roles.sql`.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-188, APP-194",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`ops/app-212-purge-guest-links`",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-188",
+        "APP-194"
       ]
     }
   ]

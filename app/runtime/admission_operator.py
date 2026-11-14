@@ -685,6 +685,11 @@ def begin(c, organization):
               "set_config('genui.membership_epoch','',true)", (organization,))
 
 
+def schema_version(c):
+    """The database's version row, after begin() has proved the catalog is exactly that version's."""
+    return c.execute("SELECT version FROM genui_meta.schema_version WHERE singleton").fetchone()[0]
+
+
 def lock_organization(c, organization, active=False, lock=True):
     row = c.execute("SELECT status FROM genui.organizations WHERE organization_id=%s" + (" FOR SHARE" if lock else ""),
                     (organization,)).fetchone()
@@ -1038,13 +1043,20 @@ PURGE_PRIVATE = ("code_index",)
 # genui_identity (0017) holds guest accounts, never the organization's: its rows that name an organization
 # are the sign-in flows of its shares (deleted outright) and guests' linked_apps and share_events; linked_apps'
 # non-deferrable key reaches the organization's live_work_shares (share_events' key did until migration
-# 0024 dropped it), which in turn reach saved_work, publications and memberships. While a guest has linked
-# or accepted one of the organization's shares the purge refuses (guest_linked_shares_present) instead of
-# failing on a key or deleting a guest's chain (APP-185 recheck R1; decision pending). Any other table outside genui that references a purged table
-# is unknown and refuses too.
+# 0024 dropped it), which in turn reach saved_work, publications and memberships. Any other table outside
+# genui that references a purged table is unknown and refuses (purge_foreign_children_unknown).
 IDENTITY_FLOWS = "genui_identity.shared_auth_flows"
-IDENTITY_GUEST_ROWS = ("genui_identity.linked_apps", "genui_identity.share_events")
+IDENTITY_LINKS = "genui_identity.linked_apps"
+IDENTITY_EVENTS = "genui_identity.share_events"
+IDENTITY_GUEST_ROWS = (IDENTITY_LINKS, IDENTITY_EVENTS)
 IDENTITY_TABLES = (IDENTITY_FLOWS,) + IDENTITY_GUEST_ROWS
+# The purge's guest-row gate, the GATED_PERMISSIONS pattern (ADR-008 "Guest shares"; APP-212): from the schema
+# version named, the purge deletes the organization's rows of that guest table under the lifted FORCE, as
+# genui_owner, before the live_work_shares their key reaches. linked_apps from 24, when 0024 has dropped
+# share_events' key: share_events has no gate and is never deleted, because those identifier-only rows (no
+# content) are each guest account's hash chain and must keep verifying. Below the gate a guest's link or
+# accepted share refuses guest_linked_shares_present (APP-185 recheck R1) and nothing is deleted.
+GATED_PURGE_DELETIONS = {IDENTITY_LINKS: 24}
 RELNAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 
 
@@ -1088,6 +1100,12 @@ def identity_forced(c):
     return len(rows) == len(IDENTITY_TABLES) and all(r[0] for r in rows)
 
 
+def guest_row_counts(c, organization):
+    """The organization's rows per guest table; readable only under the lifted FORCE (lift_identity_rls)."""
+    return {table: c.execute("SELECT count(*) FROM " + table + " WHERE organization_id=%s", (organization,)).fetchone()[0]
+            for table in IDENTITY_GUEST_ROWS}
+
+
 def deletion_order(tables, edges):
     """Children before parents: a table is emptied only after every table that references it is."""
     remaining, order = set(tables), []
@@ -1118,9 +1136,11 @@ def suspend_organization(c, args):
 def purge_organization(c, args):
     """The end-of-trial purge: every content row of a suspended organization with no active member, in one
     transaction, children before parents; the organization row, its binding, its sequence and the audit
-    chains stay. The S3 objects under o/<org>/ are the caller's (ops/promotion/admission.py purge)."""
+    chains stay, and so do its guests' share_events; their links go from schema 24 (GATED_PURGE_DELETIONS).
+    The S3 objects under o/<org>/ are the caller's (ops/promotion/admission.py purge)."""
     org = args.organization
     begin(c, org)
+    version = schema_version(c)
     row = c.execute("SELECT status FROM genui.organizations WHERE organization_id=%s FOR UPDATE", (org,)).fetchone()
     require(row is not None, "organization_unknown")
     require(row[0] == "suspended", "organization_not_suspended")
@@ -1131,22 +1151,33 @@ def purge_organization(c, args):
     edges = foreign_keys(c)
     require(set(foreign_children(tables, edges)) <= set(IDENTITY_TABLES), "purge_foreign_children_unknown")
     events = c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0]
-    # Guest rows first, under the lifted FORCE: the organization's sign-in flows go; a guest's link or
-    # accepted share stops the purge before any row is deleted.
+    # Guest rows first, under the lifted FORCE: the organization's sign-in flows go, and from the gate
+    # (GATED_PURGE_DELETIONS) its guests' links, here, before the shares their key reaches. Below the gate a
+    # guest's link or accepted share stops the purge before any row is deleted: the refusal rolls back.
     require(identity_forced(c), "purge_rls_state_refused")
     lift_identity_rls(c, forced=False)
-    guest_rows = {table: c.execute("SELECT count(*) FROM " + table + " WHERE organization_id=%s", (org,)).fetchone()[0] for table in IDENTITY_GUEST_ROWS}
+    guest_rows = guest_row_counts(c, org)
     flows = c.execute("DELETE FROM " + IDENTITY_FLOWS + " WHERE owner_organization_id=%s OR provider_organization_id=%s", (org, org)).rowcount
+    gated = [table for table, gate in GATED_PURGE_DELETIONS.items() if version >= gate]
+    links = {table: c.execute("DELETE FROM " + table + " WHERE organization_id=%s", (org,)).rowcount for table in gated}
     lift_identity_rls(c, forced=True)
     require(identity_forced(c), "purge_rls_not_restored")
-    require(not any(guest_rows.values()), "guest_linked_shares_present")
-    deleted = {IDENTITY_FLOWS: flows}
+    require(gated or not any(guest_rows.values()), "guest_linked_shares_present")
+    deleted = {IDENTITY_FLOWS: flows, **links}
     for table in deletion_order(tables, edges):
         deleted[table] = c.execute("DELETE FROM genui." + table + " WHERE organization_id=%s", (org,)).rowcount
     for table in PURGE_PRIVATE:
         deleted["genui_private." + table] = c.execute("DELETE FROM genui_private." + table + " WHERE organization_id=%s", (org,)).rowcount
     remaining = {t: c.execute("SELECT count(*) FROM genui." + t + " WHERE organization_id=%s", (org,)).fetchone()[0] for t in tables}
     require(not any(remaining.values()), "purge_incomplete")
+    # The guest tables after, read under the lifted FORCE once more: no link of the organization remains, and
+    # its guests' chain rows (share_events, never gated) are exactly as many as before.
+    lift_identity_rls(c, forced=False)
+    guest_after = guest_row_counts(c, org)
+    lift_identity_rls(c, forced=True)
+    require(identity_forced(c), "purge_rls_not_restored")
+    require(not any(guest_after[table] for table in gated), "purge_guest_links_remain")
+    require(all(guest_after[table] == guest_rows[table] for table in IDENTITY_GUEST_ROWS if table not in gated), "purge_guest_chains_changed")
     require(c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0] == events
             and c.execute("SELECT count(*) FROM genui.audit_heads WHERE organization_id=%s", (org,)).fetchone()[0] == len(CHAINS),
             "purge_audit_changed")
@@ -1154,7 +1185,8 @@ def purge_organization(c, args):
     return {"organization_id": org, "status": "purged", "tables": len(tables), "rows_deleted": sum(deleted.values()), "deleted": deleted,
             "kept": sorted(PURGE_KEEPS) + ["genui_private.handle_index", "genui_private.provider_tenant_index",
                                            "genui_identity.accounts", "genui_identity.shared_sessions"],
-            "identity": {"shared_auth_flows_deleted": flows, "guest_rows": guest_rows},
+            "identity": {"shared_auth_flows_deleted": flows, "guest_rows": guest_rows,
+                         "linked_apps_deleted": links.get(IDENTITY_LINKS, 0), "share_events_kept": guest_after[IDENTITY_EVENTS]},
             "audit_events_kept": events, "audit_event": None}
 
 
@@ -1163,7 +1195,7 @@ def stats(c, args):
     org = args.organization
     begin(c, org)
     lock_organization(c, org, lock=False)
-    version = c.execute("SELECT version FROM genui_meta.schema_version WHERE singleton").fetchone()[0]
+    version = schema_version(c)
     counts = {}
     for table in STATS_TABLES:
         counts[table] = c.execute("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s", (org,)).fetchone()[0]
@@ -1337,8 +1369,7 @@ def grant_permission(c, args):
     begin(c, org)
     if args.permission in GATED_PERMISSIONS:
         # Before any lock or write: the permission's CHECK exists only from this schema version.
-        version = c.execute("SELECT version FROM genui_meta.schema_version WHERE singleton").fetchone()[0]
-        require(version >= GATED_PERMISSIONS[args.permission], "permission_unsupported")
+        require(schema_version(c) >= GATED_PERMISSIONS[args.permission], "permission_unsupported")
     epoch = lock_active_member(c, org, principal)
     exists, insert, _ = permission_statements(args)
     require(c.execute(*exists).fetchone() is not None, "resource_unknown")
