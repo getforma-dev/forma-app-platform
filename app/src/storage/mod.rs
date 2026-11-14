@@ -104,7 +104,7 @@ pub use shared_access::{
 pub use shared_identity::*;
 pub use shared_reads::GuestQueryRun;
 pub use sharing::{
-    member_label, Granted, Member, Openable, Shared, Standing, JUDGMENT_LIMIT,
+    member_label, Audience, Granted, Member, Openable, ShareRole, Shared, Standing, JUDGMENT_LIMIT,
     SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};

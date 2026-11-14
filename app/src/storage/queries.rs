@@ -782,7 +782,8 @@ impl Data {
             // with their complete current rows (ADR-009 D9.8). Immutable-source
             // views retain their historical work-local sequence semantics.
             let record_snapshot_sequence = if let Some(records) = &records { records.sequence } else {
-                let rows = transaction.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[org,&app,&work]).await?;
+                let own = super::authorization::own_rows("v", "$2::text::uuid", "$3::text::uuid", super::authorization::SCOPED);
+                let rows = transaction.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_record_revisions v WHERE v.organization_id=$1::text::uuid AND v.app_id=$2::text::uuid AND v.work_id=$3::text::uuid AND {own}"), &[org,&app,&work]).await?;
                 integer(rows.first().ok_or(Error::Unavailable)?, 0)?
             };
             let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
@@ -1575,7 +1576,8 @@ impl Data {
 /// prefilter before a listing's cap; `open_listed` stays the judgment).
 pub(super) fn listable(principal: &str) -> String {
     format!(
-        "EXISTS(SELECT 1 FROM genui.app_permissions x WHERE x.organization_id=w.organization_id AND x.principal_id={principal} AND x.app_id=w.app_id AND x.permission='discover') AND {}",
+        "{} AND {}",
+        super::authorization::discover_clause(principal),
         super::authorization::record_read_clause(principal)
     )
 }

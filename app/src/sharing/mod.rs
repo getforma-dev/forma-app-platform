@@ -211,7 +211,13 @@ pub async fn share_with_lineage(
 ) -> Result<storage::Shared, storage::Error> {
     let shared = stores
         .workspace
-        .share_work(trusted, app, work, grantee, record_write)
+        .share_work(
+            trusted,
+            app,
+            work,
+            storage::Audience::Member(grantee),
+            storage::ShareRole::from_record_write(record_write),
+        )
         .await?;
     if shared.changed() {
         events::hub().app_shared(trusted.organization(), app, work);
@@ -220,12 +226,18 @@ pub async fn share_with_lineage(
         trusted.organization(),
         trusted.principal(),
         work,
-        &shared.grantee,
+        grantee,
         record_write,
     ) {
         let adapted = stores
             .workspace
-            .share_work(trusted, &adapted_app, &adapted_work, grantee, record_write)
+            .share_work(
+                trusted,
+                &adapted_app,
+                &adapted_work,
+                storage::Audience::Member(grantee),
+                storage::ShareRole::from_record_write(record_write),
+            )
             .await;
         tracing::info!(
             outcome = if adapted.is_ok() { "shared" } else { "refused" },

@@ -971,8 +971,8 @@ impl Tailor {
                     member,
                     &composed.app,
                     &composed.work,
-                    &grantee,
-                    record_write,
+                    crate::storage::Audience::Member(&grantee),
+                    crate::storage::ShareRole::from_record_write(record_write),
                 )
                 .await;
             tracing::info!(

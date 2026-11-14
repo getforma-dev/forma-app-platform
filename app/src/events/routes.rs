@@ -61,12 +61,18 @@ pub struct StoreGate {
 }
 impl Gate for StoreGate {
     type Judgment = storage::Openable;
-    async fn judge(&self, app: &str, work: &str, subscribers: &[String]) -> Option<Self::Judgment> {
+    async fn judge(
+        &self,
+        app: &str,
+        work: &str,
+        revision: Option<i64>,
+        subscribers: &[String],
+    ) -> Option<Self::Judgment> {
         // A store outage (or a refused read) discloses nothing: the hint is
         // dropped for everyone and no stream is closed on it.
         self.stores
             .data
-            .openable_principals(&self.request, app, work, subscribers)
+            .openable_principals(&self.request, app, work, revision, subscribers)
             .await
             .ok()
     }

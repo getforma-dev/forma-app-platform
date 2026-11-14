@@ -1,6 +1,9 @@
 //! Full, exact-work record snapshots for the existing typed query compiler.
 //! Bounds apply before row bytes leave PostgreSQL; no prefix is ever a total.
-use super::{authorization::Transaction, require, Error, Result};
+use super::{
+    authorization::{own_rows, Transaction, SCOPED},
+    require, Error, Result,
+};
 use crate::admission;
 use serde_json::{Map, Value};
 use std::sync::{Arc, OnceLock};
@@ -125,7 +128,11 @@ pub(super) async fn capture(
     // statement snapshot, including under a READ COMMITTED member transaction.
     // The bounds CTE reads lengths only; the guarded lateral read fetches no
     // canonical row bytes at all when the complete collection exceeds a bound.
-    let rows=tx.query("WITH bounds AS MATERIALIZED (SELECT count(*)::bigint AS n,coalesce(sum(octet_length(v.canonical_values)),0)::bigint AS bytes,coalesce(max(v.commit_sequence),0)::bigint AS last FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version) SELECT b.n,b.bytes,b.last,(SELECT next_commit_sequence-1 FROM genui.organization_sequences WHERE organization_id=$1::text::uuid)::bigint,d.canonical_values FROM bounds b LEFT JOIN LATERAL (SELECT v.canonical_values,r.record_id FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE b.n<=$5 AND b.bytes<=$6 AND r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version ORDER BY r.record_id) d ON true ORDER BY d.record_id", &[&org,&app,&work,&collection,&MAX_ROWS,&MAX_BYTES]).await?;
+    // APP-191: the row rule on the bounds and on the row read alike, so a
+    // contributor's snapshot of an `own` collection is their own rows only
+    // (queries, summaries and ranks count exactly those).
+    let own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED);
+    let rows=tx.query(&format!("WITH bounds AS MATERIALIZED (SELECT count(*)::bigint AS n,coalesce(sum(octet_length(v.canonical_values)),0)::bigint AS bytes,coalesce(max(v.commit_sequence),0)::bigint AS last FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own}) SELECT b.n,b.bytes,b.last,(SELECT next_commit_sequence-1 FROM genui.organization_sequences WHERE organization_id=$1::text::uuid)::bigint,d.canonical_values FROM bounds b LEFT JOIN LATERAL (SELECT v.canonical_values,r.record_id FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE b.n<=$5 AND b.bytes<=$6 AND r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own} ORDER BY r.record_id) d ON true ORDER BY d.record_id"), &[&org,&app,&work,&collection,&MAX_ROWS,&MAX_BYTES]).await?;
     let first = rows.first().ok_or(Error::Unavailable)?;
     let number = |i| first.try_get::<_, i64>(i).map_err(|_| Error::Unavailable);
     let count = number(0)?;
@@ -179,7 +186,8 @@ pub(super) async fn release(
                 snapshot.schema_version,
             ),
     )?;
-    let rows=tx.query("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version", &[&org,&app,&work,&snapshot.collection]).await?;
+    let own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED);
+    let rows=tx.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own}"), &[&org,&app,&work,&snapshot.collection]).await?;
     let current: i64 = rows
         .first()
         .ok_or(Error::Unavailable)?

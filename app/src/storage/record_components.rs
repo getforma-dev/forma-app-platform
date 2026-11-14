@@ -289,7 +289,14 @@ async fn capture(
             .ok_or(Error::Unavailable)?;
         // Aggregate bounds before materializing bytes. No result is calculated
         // from a prefix and called a total. Same snapshot as the row read below.
-        let bounds=tx.query("SELECT count(*)::bigint,coalesce(sum(octet_length(v.canonical_values)),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version", &[&org,&app,&work,&collection]).await?;
+        // APP-191: the row rule on the bounds and the rows alike.
+        let own = super::authorization::own_rows(
+            "v",
+            "$2::text::uuid",
+            "$3::text::uuid",
+            super::authorization::SCOPED,
+        );
+        let bounds=tx.query(&format!("SELECT count(*)::bigint,coalesce(sum(octet_length(v.canonical_values)),0)::bigint FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own}"), &[&org,&app,&work,&collection]).await?;
         let count = usize::try_from(number(&bounds[0], 0)?).map_err(|_| Error::Unavailable)?;
         total_rows = total_rows.checked_add(count).ok_or(Error::Unavailable)?;
         total_bytes = total_bytes
@@ -298,7 +305,7 @@ async fn capture(
         if total_rows > RECORD_COMPONENT_ROWS || total_bytes > RECORD_COMPONENT_BYTES {
             return Err(Error::ProjectionLimit);
         }
-        let rows=tx.query("SELECT r.record_id::text,r.current_version::bigint,v.commit_sequence::bigint,v.canonical_values FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version ORDER BY v.commit_sequence DESC,r.record_id LIMIT 2001", &[&org,&app,&work,&collection]).await?;
+        let rows=tx.query(&format!("SELECT r.record_id::text,r.current_version::bigint,v.commit_sequence::bigint,v.canonical_values FROM genui.internal_records r JOIN genui.internal_record_revisions v USING(organization_id,app_id,work_id,collection_id,record_id) WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND v.version=r.current_version AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT 2001"), &[&org,&app,&work,&collection]).await?;
         require(rows.len() == count)?;
         let mut records = Vec::new();
         let mut revisions = Vec::new();

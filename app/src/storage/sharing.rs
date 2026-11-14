@@ -66,11 +66,48 @@ pub struct Granted {
     /// it (review m1: a sharer learns nothing of the teammate's holdings).
     pub inserted: bool,
 }
-/// The result of a share: the grantee and the granted subset, in order.
+/// The result of a share: the grantee (none for an organization-wide share,
+/// APP-192) and the granted subset, in order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Shared {
-    pub grantee: String,
+    pub grantee: Option<String>,
     pub granted: Vec<Granted>,
+}
+/// Who a share reaches (APP-192, D9): one member of the sharer's
+/// organization, or every current and future active member of it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Audience<'a> {
+    Member(&'a str),
+    Organization,
+}
+/// The role a share grants (APP-192, D9): a viewer holds `record_read`, a
+/// contributor also `record_write`, a reviewer also `record_review` (APP-191:
+/// every row of an `own` collection and the `reviewer_only` commands). Each
+/// permission is copied only when the sharer holds it; a reviewer grant needs
+/// the sharer to be a reviewer (the owner always is).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShareRole {
+    Viewer,
+    Contributor,
+    Reviewer,
+}
+impl ShareRole {
+    /// The definer's role literal.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Viewer => "viewer",
+            Self::Contributor => "contributor",
+            Self::Reviewer => "reviewer",
+        }
+    }
+    /// The role the earlier share request's `record_write` flag maps to.
+    pub fn from_record_write(record_write: bool) -> Self {
+        if record_write {
+            Self::Contributor
+        } else {
+            Self::Viewer
+        }
+    }
 }
 impl Shared {
     /// Whether this call wrote anything (and therefore appended its event).
@@ -202,23 +239,34 @@ impl Workspace {
         result
     }
 
-    /// `POST /v1/work/{app}/{work}/share`: shares `work` of `app` with
-    /// `grantee`, a member of the sharer's own organization, granting
-    /// exactly the sharer's subset (module notes). `Denied` covers a work the
+    /// `POST /v1/work/{app}/{work}/share`: shares `work` of `app` with the
+    /// `audience` in `role` (APP-192, D9), granting exactly the sharer's
+    /// subset (module notes). A member grantee receives permission rows
+    /// through the definer `genui_private.share_work`; the organization
+    /// receives one live `work_shares` row with no grantee through
+    /// `genui_private.set_work_everyone`, which every work-level clause
+    /// honors for every active member (`authorization::organization_share`),
+    /// so a member admitted later is covered and one revocation
+    /// (`revoke_organization_share`) ends it for all. An organization-wide
+    /// share is refused for a work with source dependencies or folder files
+    /// (the v1 limit: those are personal grants). `Denied` covers a work the
     /// sharer cannot open now, a sharer who is neither the unrevoked creator
-    /// nor a `share_work` holder, a `record_write` request the sharer does
-    /// not hold, a grantee who is the sharer, not an active member, or of
-    /// another organization, and a malformed id, alike.
+    /// nor a `share_work` holder, a role the sharer does not hold (a
+    /// contributor needs `record_write`, a reviewer `record_review`), a
+    /// grantee who is the sharer, not an active member, or of another
+    /// organization, and a malformed id, alike.
     pub async fn share_work(
         &self,
         request: &TrustedRequest,
         app: &str,
         work: &str,
-        grantee: &str,
-        record_write: bool,
+        audience: Audience<'_>,
+        role: ShareRole,
     ) -> Result<Shared> {
-        require(valid_id(app) && valid_id(work) && valid_id(grantee))?;
-        require(grantee != request.principal)?;
+        require(valid_id(app) && valid_id(work))?;
+        if let Audience::Member(grantee) = audience {
+            require(valid_id(grantee) && grantee != request.principal)?;
+        }
         let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
         let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let result = async {
@@ -226,12 +274,24 @@ impl Workspace {
                 .precheck(Action::RecordRead, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
-            if record_write {
+            if role != ShareRole::Viewer {
                 permit
                     .also(Action::RecordWrite, Resource::Work { app, work })
                     .await?;
             }
-            let rows = permit.transaction().query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.share_work($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6)", &[&request.organization,&request.principal,&grantee,&app,&work,&record_write]).await?;
+            if role == ShareRole::Reviewer {
+                permit
+                    .also(Action::RecordReview, Resource::Work { app, work })
+                    .await?;
+            }
+            let transaction = permit.transaction();
+            let rows = match audience {
+                Audience::Member(grantee) => transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.share_work($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6::text)", &[&request.organization,&request.principal,&grantee,&app,&work,&role.name()]).await?,
+                Audience::Organization => {
+                    require(personal_only(transaction, request, app, work).await?.is_none())?;
+                    transaction.query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text)", &[&request.organization,&request.principal,&app,&work,&role.name()]).await?
+                }
+            };
             require(!rows.is_empty())?;
             let granted = rows
                 .iter()
@@ -249,16 +309,15 @@ impl Workspace {
             // canvas, Slack, MCP), audited, in this same transaction (APP-113
             // review: a share never commits without its file grants); a work
             // not built from a folder writes nothing.
-            super::boxes::grant_box_files_for_work(
-                permit.transaction(),
-                request,
-                app,
-                work,
-                grantee,
-            )
-            .await?;
+            if let Audience::Member(grantee) = audience {
+                super::boxes::grant_box_files_for_work(transaction, request, app, work, grantee)
+                    .await?;
+            }
             Ok(Shared {
-                grantee: grantee.to_owned(),
+                grantee: match audience {
+                    Audience::Member(grantee) => Some(grantee.to_owned()),
+                    Audience::Organization => None,
+                },
                 granted,
             })
         }
@@ -266,7 +325,56 @@ impl Workspace {
         transaction.finish(result.is_ok()).await?;
         result
     }
+
+    /// Ends the live organization-wide share of `work` of `app` (APP-192) in
+    /// one unit, for every member at once: the `work_shares` row is marked
+    /// revoked and one `permission.revoked` event is appended. `Ok(true)`
+    /// when a live share was revoked, `Ok(false)` when none was live;
+    /// `Denied` for a sharer without share authority over the work.
+    pub async fn revoke_organization_share(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+    ) -> Result<bool> {
+        require(valid_id(app) && valid_id(work))?;
+        let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
+        let mut transaction = Transaction::begin_until(&self.inner, request, cap).await?;
+        let result = async {
+            let precheck = transaction
+                .precheck(Action::RecordRead, Resource::Work { app, work })
+                .await?;
+            let permit = transaction.fence(precheck).await?;
+            let rows = permit.transaction().query("SELECT scope,resource_id::text,permission,inserted FROM genui_private.set_work_everyone($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,'none')", &[&request.organization,&request.principal,&app,&work]).await?;
+            let row = rows.first().ok_or(Error::Denied)?;
+            require(text(row, 2)? == "none")?;
+            boolean(row, 3)
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
 }
+
+/// Why a work can be shared only person by person (APP-192 v1 limit): it has
+/// source dependencies (`source_read` is a personal, organization-wide
+/// copy) or folder files (`box_file_grants` are personal). `None` when an
+/// organization-wide share may proceed.
+async fn personal_only(
+    transaction: &Transaction<'_>,
+    request: &TrustedRequest,
+    app: &str,
+    work: &str,
+) -> Result<Option<&'static str>> {
+    let deps = transaction.query("SELECT 1 FROM genui.work_source_dependencies WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid LIMIT 1", &[&request.organization,&app,&work]).await?;
+    if !deps.is_empty() {
+        return Ok(Some("source dependencies"));
+    }
+    let files = transaction.query("SELECT 1 FROM genui.box_derivations WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid LIMIT 1", &[&request.organization,&app,&work]).await?;
+    Ok((!files.is_empty()).then_some("folder files"))
+}
+
+impl Workspace {}
 
 impl Data {
     /// The event stream's one read per event (review M2): among
@@ -285,6 +393,7 @@ impl Data {
         request: &TrustedRequest,
         app: &str,
         work: &str,
+        revision: Option<i64>,
         principals: &[String],
     ) -> Result<Openable> {
         require(valid_id(app) && valid_id(work))?;
@@ -296,7 +405,13 @@ impl Data {
         let transaction = Transaction::begin_until(&self.inner, request, cap).await?;
         let limit = JUDGMENT_LIMIT as i64;
         let result = async {
-            let rows = transaction.query(&format!("SELECT m.principal_id::text,m.membership_epoch,(EXISTS(SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=m.organization_id AND p.principal_id=m.principal_id AND p.app_id=$3::text::uuid AND p.permission='discover') AND EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=m.organization_id AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND (EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=m.principal_id AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='record_read') OR (w.created_by=m.principal_id AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=m.principal_id AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=m.principal_id AND s.source_id=d.source_id AND s.permission='source_read'))))) FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND o.status='active' AND m.status='active' AND m.principal_id=ANY($2::text[]::uuid[]) AND {LIVE_ENTITLEMENT} ORDER BY m.principal_id LIMIT $5"), &[&request.organization,&principals,&app,&work,&limit]).await?;
+            // The listing's clauses per member (`discover_clause`, the
+            // record_read `work_clause`; APP-192's organization-wide share
+            // included), and (APP-191) when the event names a committed
+            // revision, `own_rows` on that row for that member: an `own`
+            // collection's commit reaches its creator and the reviewers only.
+            let principal = "m.principal_id";
+            let rows = transaction.query(&format!("SELECT m.principal_id::text,m.membership_epoch,(EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=m.organization_id AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND {} AND {}) AND ($6::bigint IS NULL OR EXISTS(SELECT 1 FROM genui.internal_record_revisions v WHERE v.organization_id=m.organization_id AND v.app_id=$3::text::uuid AND v.work_id=$4::text::uuid AND v.commit_sequence=$6::bigint AND {}))) FROM genui.organizations o JOIN genui.memberships m USING(organization_id) WHERE o.organization_id=$1::text::uuid AND o.status='active' AND m.status='active' AND m.principal_id=ANY($2::text[]::uuid[]) AND {LIVE_ENTITLEMENT} ORDER BY m.principal_id LIMIT $5", super::authorization::discover_clause(principal), super::authorization::record_read_clause(principal), super::authorization::own_rows("v", "$3::text::uuid", "$4::text::uuid", principal)), &[&request.organization,&principals,&app,&work,&limit,&revision]).await?;
             let mut judgment = Openable::default();
             for row in &rows {
                 let principal = text(row, 0)?;
@@ -318,7 +433,13 @@ impl Data {
     /// member who is no longer current alike.
     pub async fn can_open(&self, request: &TrustedRequest, app: &str, work: &str) -> Result<()> {
         let judgment = self
-            .openable_principals(request, app, work, std::slice::from_ref(&request.principal))
+            .openable_principals(
+                request,
+                app,
+                work,
+                None,
+                std::slice::from_ref(&request.principal),
+            )
             .await?;
         require(judgment.standing(request) == Standing::Open)
     }
@@ -355,7 +476,7 @@ mod tests {
             "Member abc"
         );
         let shared = Shared {
-            grantee: "g".into(),
+            grantee: Some("g".into()),
             granted: vec![Granted {
                 scope: "work".into(),
                 resource: "w".into(),

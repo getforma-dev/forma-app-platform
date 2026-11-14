@@ -122,6 +122,11 @@ pub struct Event {
     /// `app.adapted` only: the standard `(app, work)` the adapted work was
     /// tailored from (ids only, like the others).
     pub from: Option<(String, String)>,
+    /// APP-191: `record.committed` only, the committed revision's
+    /// `commit_sequence`, so delivery is judged on that row (`own_rows`: an
+    /// `own` collection's event reaches its creator and the reviewers). Never
+    /// on the wire; the document keeps its shape.
+    pub sequence: Option<i64>,
     /// Whole-second UTC, as the audit chain's `occurred_at`.
     pub at: String,
 }
@@ -133,6 +138,7 @@ impl Event {
             app: app.to_owned(),
             work: work.to_owned(),
             from: None,
+            sequence: None,
             at: timestamp(unix_seconds()),
         }
     }
@@ -264,9 +270,13 @@ impl Hub {
         // No subscriber is not an error: the announcement is best effort.
         let _ = self.sender.send(Announcement::new(event));
     }
-    /// The command route's hook after `CommandResult::Committed`.
-    pub fn record_committed(&self, organization: &str, app: &str, work: &str) {
-        self.publish(Event::now(Kind::RecordCommitted, organization, app, work));
+    /// The command route's hook after `CommandResult::Committed`; `sequence`
+    /// is the outcome's `commit_sequence` (APP-191: the row the delivery is
+    /// judged on).
+    pub fn record_committed(&self, organization: &str, app: &str, work: &str, sequence: i64) {
+        let mut event = Event::now(Kind::RecordCommitted, organization, app, work);
+        event.sequence = Some(sequence);
+        self.publish(event);
     }
     /// The share route's hook after a share that wrote a grant.
     pub fn app_shared(&self, organization: &str, app: &str, work: &str) {
@@ -444,13 +454,16 @@ pub enum Verdict {
 /// I/O. `current` is the idle re-check. The production gate is
 /// `routes::StoreGate` (storage); tests substitute scripted ones.
 pub trait Gate: Send + Sync + 'static {
-    /// The organization-wide judgment of `(app, work)` among `subscribers`.
+    /// The organization-wide judgment of `(app, work)` among `subscribers`;
+    /// `revision` is the committed row's `commit_sequence` when the event has
+    /// one (APP-191: judged on that row as well as on the work).
     type Judgment: Send + Sync + 'static;
     /// `None` is a store outage: the hint is dropped for every subscriber.
     fn judge(
         &self,
         app: &str,
         work: &str,
+        revision: Option<i64>,
         subscribers: &[String],
     ) -> impl Future<Output = Option<Self::Judgment>> + Send;
     fn verdict(&self, judgment: &Self::Judgment) -> Verdict;
@@ -510,7 +523,7 @@ pub async fn pump<G: Gate>(
                     }
                     let judged = announcement.judged.get_or_init(|| async {
                         let subscribers = hub.subscribed_principals(&organization);
-                        gate.judge(&event.app, &event.work, &subscribers)
+                        gate.judge(&event.app, &event.work, event.sequence, &subscribers)
                             .await
                             .map(|judgment| Arc::new(judgment) as Arc<dyn Any + Send + Sync>)
                     }).await;

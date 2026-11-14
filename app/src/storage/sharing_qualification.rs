@@ -271,7 +271,13 @@ async fn campaign() {
         assert_eq!(
             stores
                 .workspace
-                .share_work(who, SPEND_APP, work, grantee, false)
+                .share_work(
+                    who,
+                    SPEND_APP,
+                    work,
+                    Audience::Member(grantee),
+                    ShareRole::Viewer
+                )
                 .await
                 .err(),
             Some(Error::Denied)
@@ -294,10 +300,16 @@ async fn campaign() {
     // --- the creator shares read access: exactly the creator's subset ---
     let shared = stores
         .workspace
-        .share_work(&author, SPEND_APP, work, REVIEWER, false)
+        .share_work(
+            &author,
+            SPEND_APP,
+            work,
+            Audience::Member(REVIEWER),
+            ShareRole::Viewer,
+        )
         .await
         .unwrap();
-    assert_eq!(shared.grantee, REVIEWER);
+    assert_eq!(shared.grantee.as_deref(), Some(REVIEWER));
     assert_eq!(names(&shared), expected_subset(&s05, false));
     assert!(shared.granted.iter().all(|g| g.inserted));
     let mut expected_rows = reviewer_before.clone();
@@ -402,7 +414,13 @@ async fn campaign() {
     // --- a repeat share writes nothing; sharing record_write adds only that ---
     let again = stores
         .workspace
-        .share_work(&author, SPEND_APP, work, REVIEWER, false)
+        .share_work(
+            &author,
+            SPEND_APP,
+            work,
+            Audience::Member(REVIEWER),
+            ShareRole::Viewer,
+        )
         .await
         .unwrap();
     assert_eq!(names(&again), expected_subset(&s05, false));
@@ -410,7 +428,13 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, after);
     let write = stores
         .workspace
-        .share_work(&author, SPEND_APP, work, REVIEWER, true)
+        .share_work(
+            &author,
+            SPEND_APP,
+            work,
+            Audience::Member(REVIEWER),
+            ShareRole::Contributor,
+        )
         .await
         .unwrap();
     assert_eq!(names(&write), expected_subset(&s05, true));
@@ -458,7 +482,13 @@ async fn campaign() {
         assert_eq!(
             stores
                 .workspace
-                .share_work(&author, SPEND_APP, work, grantee, false)
+                .share_work(
+                    &author,
+                    SPEND_APP,
+                    work,
+                    Audience::Member(grantee),
+                    ShareRole::Viewer
+                )
                 .await
                 .err(),
             Some(Error::Denied),
@@ -470,7 +500,13 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .share_work(&canary_author, SPEND_APP, work, REVIEWER, false)
+            .share_work(
+                &canary_author,
+                SPEND_APP,
+                work,
+                Audience::Member(REVIEWER),
+                ShareRole::Viewer
+            )
             .await
             .err(),
         Some(Error::Denied)
@@ -480,7 +516,13 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .share_work(&reviewer, SPEND_APP, work, PRINCIPAL, true)
+            .share_work(
+                &reviewer,
+                SPEND_APP,
+                work,
+                Audience::Member(PRINCIPAL),
+                ShareRole::Contributor
+            )
             .await
             .err(),
         Some(Error::Denied)
@@ -512,7 +554,13 @@ async fn campaign() {
     );
     let delegated = stores
         .workspace
-        .share_work(&reviewer, SPEND_APP, work, PRINCIPAL, false)
+        .share_work(
+            &reviewer,
+            SPEND_APP,
+            work,
+            Audience::Member(PRINCIPAL),
+            ShareRole::Viewer,
+        )
         .await
         .unwrap();
     let mut without_discover = expected_subset(&s05, false);
@@ -729,8 +777,12 @@ async fn campaign() {
     // A hint for the shared work reaches the teammate, not the member whose
     // delegated subset lacks discover (the listing clause), and nothing of
     // another organization reaches anyone.
-    events::hub().record_committed(ORG, SPEND_APP, work);
-    events::hub().record_committed(OTHER, SPEND_APP, work);
+    // APP-191: a committed revision's sequence travels with the hint, so the
+    // delivery is judged on that row; the newest revision of the work here.
+    let sequence = scalar(&fixture, &format!("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id='{ORG}' AND work_id='{work}'")).await;
+    assert!(sequence > 0);
+    events::hub().record_committed(ORG, SPEND_APP, work, sequence);
+    events::hub().record_committed(OTHER, SPEND_APP, work, sequence);
     let data = reviewer_stream.expect("record.committed", work).await;
     assert!(data["at"].as_str().unwrap().ends_with('Z'));
     principal_stream.silent(Duration::from_secs(1)).await;
@@ -874,7 +926,7 @@ async fn campaign() {
         REVIEWER,
         moved["membership_epoch"].as_i64().unwrap(),
     );
-    events::hub().record_committed(ORG, SPEND_APP, work);
+    events::hub().record_committed(ORG, SPEND_APP, work, sequence);
     reviewer_stream.ended().await;
     assert_eq!(
         stores

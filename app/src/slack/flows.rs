@@ -706,7 +706,13 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
             for approver in &draft.approvers {
                 match stores
                     .workspace
-                    .share_work(&member, &draft.app, &draft.work, &approver.principal, true)
+                    .share_work(
+                        &member,
+                        &draft.app,
+                        &draft.work,
+                        crate::storage::Audience::Member(&approver.principal),
+                        crate::storage::ShareRole::Contributor,
+                    )
                     .await
                 {
                     Ok(shared) => {

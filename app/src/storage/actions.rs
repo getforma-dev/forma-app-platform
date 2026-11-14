@@ -17,7 +17,7 @@
 //!   member's confirmation still goes through the audited command route,
 //!   which judges everything again.
 use super::{
-    authorization::{Action, Resource, Transaction},
+    authorization::{own_rows, Action, Resource, Transaction, SCOPED},
     commands::{
         collection, compose, current_state, decode_stored, published, published_content, state_map,
         work_fence, work_pin, CommandRequest, Published, RecordCommand, RecordField,
@@ -134,15 +134,21 @@ pub(super) const SEARCH_VALUE_TEXT: &str = r#"(SELECT CASE parts.kind
    (CASE WHEN parts.scale=0 THEN padded.digits ELSE left(padded.digits,length(padded.digits)-parts.scale) || '.' || right(padded.digits,parts.scale) END) AS number) human)"#;
 
 /// One collection of the listing from its published schema and commands.
+/// APP-191 (D8), presentation only: a `reviewer_only` command is listed for a
+/// `reviewer` of the work; `compose` is the judgment on every path.
 fn collection_summary(
     collection: String,
     schema: String,
     schema_version: i32,
     published: &Published,
+    reviewer: bool,
 ) -> CollectionSummary {
+    let shown =
+        |declaration: &&super::commands::Declaration| !declaration.reviewer_only || reviewer;
     let writable: std::collections::BTreeSet<&str> = published
         .commands
         .values()
+        .filter(shown)
         .flat_map(|d| d.writable.iter().map(String::as_str))
         .collect();
     CollectionSummary {
@@ -163,6 +169,7 @@ fn collection_summary(
         commands: published
             .commands
             .iter()
+            .filter(|(_, declaration)| shown(declaration))
             .map(|(id, declaration)| RecordCommand {
                 id: id.clone(),
                 operation: declaration.operation.clone(),
@@ -218,7 +225,9 @@ pub(super) async fn records_many(
     let apps: Vec<&str> = sent.iter().map(|&i| works[i].0).collect();
     let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
     let limit = RECORDS_LIMIT + 1;
-    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k"), &[&organization,&apps,&ids,&limit]).await? {
+    // APP-191: the row rule, per work of the batch (one array per lateral row).
+    let own = own_rows("v", "c.app::uuid", "c.work::uuid", SCOPED);
+    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k"), &[&organization,&apps,&ids,&limit]).await? {
         let i = ordinal(&row, &sent)?;
         records[i].push(row);
     }
@@ -231,6 +240,7 @@ pub(super) async fn records_many(
 pub(super) fn listing_of(
     (app, work): (&str, &str),
     can_write: bool,
+    reviewer: bool,
     pinned: &Pinned,
     collection_rows: &[Row],
     record_rows: &[Row],
@@ -253,6 +263,7 @@ pub(super) fn listing_of(
             schema,
             schema_version,
             &published,
+            reviewer,
         ));
     }
     let truncated = record_rows.len() as i64 > RECORDS_LIMIT;
@@ -361,6 +372,7 @@ impl Data {
                 reads[i].records = Some(listing_of(
                     keys[i],
                     grants[i].record_write,
+                    grants[i].record_review,
                     &pinned,
                     &collections,
                     &records,
@@ -447,6 +459,10 @@ impl Data {
                 .also(Action::RecordWrite, Resource::Work { app, work })
                 .await
                 .is_ok();
+            let reviewer = permit
+                .also(Action::RecordReview, Resource::Work { app, work })
+                .await
+                .is_ok();
             let transaction = permit.transaction();
             let pin = work_pin(transaction, org, app, work).await?;
             let (publication, work_version) = (
@@ -475,8 +491,11 @@ impl Data {
                     schema,
                     schema_version,
                     &published,
+                    reviewer,
                 ));
             }
+            // APP-191: the row rule on the search, the target and the list.
+            let own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED);
             if let Some(RecordFilter::Search {collection, ..} | RecordFilter::Exact {collection, ..}) = &filter {
                 require(collections.iter().any(|value| value.collection == *collection))?;
                 collections.retain(|value| value.collection == *collection);
@@ -484,17 +503,17 @@ impl Data {
             let (rows, count) = match &filter {
                 Some(RecordFilter::Search {collection, query}) => {
                     let limit = SEARCH_RECORDS_LIMIT + 1;
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6"), &[org,&app,&work,collection,query,&limit]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own} AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6"), &[org,&app,&work,collection,query,&limit]).await?;
                     (rows, SEARCH_RECORDS_LIMIT)
                 }
                 Some(RecordFilter::Exact {collection, record}) => {
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid"), &[org,&app,&work,collection,record]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid AND {own}"), &[org,&app,&work,collection,record]).await?;
                     require(rows.len() == 1)?;
                     (rows, 1)
                 }
                 None => {
                     let limit = RECORDS_LIMIT + 1;
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4"), &[org,&app,&work,&limit]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4"), &[org,&app,&work,&limit]).await?;
                     (rows, RECORDS_LIMIT)
                 }
             };
@@ -563,7 +582,7 @@ impl Data {
             let outline = outline_of(pin)?;
             let collections = collections_many(&transaction, org, &works).await?;
             let rows = collections.first().map(Vec::as_slice).unwrap_or_default();
-            let listing = listing_of(works[0], false, pin, rows, &[])?;
+            let listing = listing_of(works[0], false, grants[0].record_review, pin, rows, &[])?;
             Ok((listing.collections, outline))
         }
         .await;
@@ -610,10 +629,10 @@ impl Data {
             let collections = collections_many(&transaction, org, works).await?;
             let records = records_many(&transaction, org, works).await?;
             let mut listings = Vec::with_capacity(works.len());
-            for (((key, pin), collections), records) in
-                works.iter().zip(&pinned).zip(&collections).zip(&records)
+            for ((((key, pin), collections), records), grant) in
+                works.iter().zip(&pinned).zip(&collections).zip(&records).zip(&grants)
             {
-                listings.push(listing_of(*key, false, pin, collections, records)?);
+                listings.push(listing_of(*key, false, grant.record_review, pin, collections, records)?);
             }
             let refused = if force_write {
                 match transaction
@@ -657,6 +676,11 @@ impl Data {
                 .precheck(Action::RecordWrite, Resource::Work { app, work })
                 .await?;
             let permit = transaction.fence(precheck).await?;
+            // APP-191 (D8): judged exactly as the commit judges it.
+            let reviewer = permit
+                .also(Action::RecordReview, Resource::Work { app, work })
+                .await
+                .is_ok();
             let transaction = permit.transaction();
             if !work_fence(
                 transaction,
@@ -716,6 +740,7 @@ impl Data {
                 current_values.as_ref(),
                 &command.values,
                 creator.as_deref() == Some(request.principal.as_str()),
+                reviewer,
             )?;
             super::commands::copy_capacity(
                 transaction,

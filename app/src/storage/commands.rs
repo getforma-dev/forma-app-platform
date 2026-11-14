@@ -351,6 +351,10 @@ pub(super) struct Declaration {
     /// `approved`); a declared `initial` (Deal desk's guarded auto-approval)
     /// governs its field instead.
     pub(super) decided: Vec<(String, String)>,
+    /// APP-191 (D8): the declaration carries `reviewer_only: true`; only a
+    /// reviewer of the work (`Action::RecordReview`) may run it, and it is
+    /// shown only to reviewers.
+    pub(super) reviewer_only: bool,
 }
 impl Declaration {
     /// The declared transitions `(field_id, from, to)`, in declaration order.
@@ -491,6 +495,7 @@ pub(super) fn published_content(
                 writable: string_list(declared.get("writable_fields"))?,
                 rules: super::rules::Rules::from_declaration(declared).ok_or(Error::Unavailable)?,
                 decided: Vec::new(),
+                reviewer_only: declared.get("reviewer_only").and_then(Value::as_bool) == Some(true),
             },
         );
     }
@@ -538,8 +543,16 @@ pub(super) async fn current_state(
         return Ok((0, None, None));
     };
     let version = integer(row, 0)?;
-    let revision = transaction.query("SELECT canonical_values,creator_id::text FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid AND version=$6::bigint", &[&organization,&app,&work,&collection,&record,&version]).await?;
+    // APP-191: the row rule as a column. A record of an `own` collection that
+    // another member created is `Denied` here, before any value, version or
+    // recovery view can reach the detail, commit, recovery or dry-run paths.
+    let revision = transaction.query(&format!("SELECT canonical_values,creator_id::text,{} FROM genui.internal_record_revisions v WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid AND version=$6::bigint", super::authorization::own_rows("v", "$2::text::uuid", "$3::text::uuid", super::authorization::SCOPED)), &[&organization,&app,&work,&collection,&record,&version]).await?;
     let revision = revision.first().ok_or(Error::Unavailable)?;
+    require(
+        revision
+            .try_get::<_, bool>(2)
+            .map_err(|_| Error::Unavailable)?,
+    )?;
     Ok((
         version,
         Some(decode_stored(revision, 0)?),
@@ -789,7 +802,12 @@ pub(super) fn compose(
     current: Option<&Value>,
     values: &Value,
     by_filer: bool,
+    reviewer: bool,
 ) -> Result<Vec<u8>> {
+    // APP-191 (D8): a `reviewer_only` command is refused for everyone but a
+    // reviewer of the work, before any value is judged; `by_filer` still
+    // applies to a reviewer deciding their own record.
+    require(super::authorization::bypassed() || !declaration.reviewer_only || reviewer)?;
     let current = state_map(current)?;
     let creating = current.is_empty();
     let mut supplied = BTreeMap::new();
@@ -984,6 +1002,10 @@ impl Data {
                 .also(Action::RecordWrite, Resource::Work { app, work })
                 .await
                 .is_ok();
+            let reviewer = permit
+                .also(Action::RecordReview, Resource::Work { app, work })
+                .await
+                .is_ok();
             let transaction = permit.transaction();
             let pin = work_pin(transaction, org, app, work).await?;
             let (publication, work_version) = (
@@ -1006,9 +1028,13 @@ impl Data {
             let (version, state, _) =
                 current_state(transaction, org, app, work, collection, record, false).await?;
             let state = state_map(state.as_ref())?;
+            // APP-191 (D8), presentation only: a `reviewer_only` command is
+            // shown to reviewers; `compose` is the judgment.
+            let shown = |declaration: &&Declaration| !declaration.reviewer_only || reviewer;
             let writable: BTreeSet<&str> = published
                 .commands
                 .values()
+                .filter(shown)
                 .flat_map(|d| d.writable.iter().map(String::as_str))
                 .collect();
             let null = json!({"type": "null"});
@@ -1035,6 +1061,7 @@ impl Data {
                 commands: published
                     .commands
                     .iter()
+                    .filter(|(_, declaration)| shown(declaration))
                     .map(|(id, declaration)| RecordCommand {
                         id: id.clone(),
                         operation: declaration.operation.clone(),
@@ -1086,6 +1113,12 @@ async fn commit<'a>(
             return Err(error);
         }
     };
+    // APP-191 (D8): whether the committer is a reviewer of the work, re-read
+    // after the fence; `compose` refuses a `reviewer_only` command otherwise.
+    let reviewer = permit
+        .also(Action::RecordReview, Resource::Work { app, work })
+        .await
+        .is_ok();
     #[cfg(test)]
     permit.transaction().lease.checkpoint("fence").await;
     let transaction = permit.transaction();
@@ -1246,6 +1279,7 @@ async fn commit<'a>(
         current_values.as_ref(),
         &command.values,
         creator.as_deref() == Some(request.principal.as_str()),
+        reviewer,
     )?;
     copy_capacity(
         transaction,
@@ -1333,6 +1367,18 @@ mod tests {
             field("note", json!({"type": "text"}), false),
         ]
     }
+    impl Declaration {
+        /// This declaration as an `update` command (tests).
+        fn clone_for_update(&self) -> Declaration {
+            Declaration {
+                operation: "update".into(),
+                writable: self.writable.clone(),
+                rules: self.rules.clone(),
+                decided: self.decided.clone(),
+                reviewer_only: self.reviewer_only,
+            }
+        }
+    }
     fn record_decision() -> Declaration {
         Declaration {
             operation: "create".into(),
@@ -1347,6 +1393,7 @@ mod tests {
                 initial: Vec::new(),
             },
             decided: Vec::new(),
+            reviewer_only: false,
         }
     }
     /// `compose` as a decider who did not file the record.
@@ -1356,7 +1403,7 @@ mod tests {
         current: Option<&Value>,
         values: &Value,
     ) -> Result<Vec<u8>> {
-        super::compose(spec, declaration, current, values, false)
+        super::compose(spec, declaration, current, values, false, true)
     }
     fn values(status: &str, note: &str) -> Value {
         json!([
@@ -1596,6 +1643,7 @@ mod tests {
                 None,
                 &values("needs_context", "x"),
                 true,
+                true,
             )
             .unwrap(),
         )
@@ -1606,6 +1654,7 @@ mod tests {
                 &declaration,
                 Some(&first),
                 &values("reviewed", "mine"),
+                true,
                 true
             )
             .err(),
@@ -1616,14 +1665,77 @@ mod tests {
             &declaration,
             Some(&first),
             &values("reviewed", "theirs"),
-            false
+            false,
+            true
         )
         .is_ok());
         let mut edit = record_decision();
         edit.operation = "update".into();
         edit.rules.transitions.clear();
         let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
-        assert!(super::compose(&spec, &edit, Some(&first), &note_only, true).is_ok());
+        assert!(super::compose(&spec, &edit, Some(&first), &note_only, true, true).is_ok());
+    }
+
+    /// APP-191 (D8): a `reviewer_only` command is refused for a contributor
+    /// before any value is judged, even on their own record and even for a
+    /// plain update; a reviewer runs it; `by_filer` still refuses a reviewer
+    /// deciding their own record; a shared command is unchanged for both.
+    #[test]
+    fn reviewer_only_commands_are_refused_for_contributors() {
+        let spec = decision();
+        let filed: Value = serde_json::from_slice(
+            &super::compose(
+                &spec,
+                &record_decision(),
+                None,
+                &values("needs_context", "x"),
+                true,
+                false,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut approve = record_decision();
+        approve.reviewer_only = true;
+        let decide = values("reviewed", "ok");
+        // A contributor deciding another's record: the gate, not the values.
+        assert_eq!(
+            super::compose(&spec, &approve, Some(&filed), &decide, false, false).err(),
+            Some(Error::Denied)
+        );
+        // A contributor creating through a reviewer-only create: refused too.
+        assert_eq!(
+            super::compose(
+                &spec,
+                &approve,
+                None,
+                &values("needs_context", "x"),
+                true,
+                false
+            )
+            .err(),
+            Some(Error::Denied)
+        );
+        // A reviewer deciding another's record: allowed.
+        assert!(super::compose(&spec, &approve, Some(&filed), &decide, false, true).is_ok());
+        // A reviewer deciding their own record: `by_filer` still refuses.
+        assert_eq!(
+            super::compose(&spec, &approve, Some(&filed), &decide, true, true).err(),
+            Some(Error::Denied)
+        );
+        // A reviewer-only update on the filer's own record: refused for the
+        // filer as a contributor, allowed for a reviewer.
+        let mut edit = approve.clone_for_update();
+        edit.rules.transitions.clear();
+        let note_only = json!([{"field_id": "note", "value": {"type": "text", "value": "n"}}]);
+        assert_eq!(
+            super::compose(&spec, &edit, Some(&filed), &note_only, true, false).err(),
+            Some(Error::Denied)
+        );
+        assert!(super::compose(&spec, &edit, Some(&filed), &note_only, true, true).is_ok());
+        // A shared command is unchanged for a contributor.
+        let shared = record_decision();
+        assert!(super::compose(&spec, &shared, Some(&filed), &decide, false, false).is_ok());
     }
 
     /// APP-113 review (storage 2): a filing create without a declared
@@ -1648,6 +1760,7 @@ mod tests {
                 ("status".into(), "approved".into()),
                 ("status".into(), "rejected".into()),
             ],
+            reviewer_only: false,
         };
         let filed = |status: &str| {
             json!([
@@ -1687,6 +1800,7 @@ mod tests {
             writable: vec!["status".into()],
             rules,
             decided: Vec::new(),
+            reviewer_only: false,
         };
         let mut commands = BTreeMap::from([
             (

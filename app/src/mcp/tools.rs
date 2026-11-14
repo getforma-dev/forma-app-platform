@@ -1176,8 +1176,8 @@ async fn commit(
                     &caller.request,
                     &draft.app,
                     &draft.work,
-                    &approver.principal,
-                    true,
+                    crate::storage::Audience::Member(&approver.principal),
+                    crate::storage::ShareRole::Contributor,
                 )
                 .await
             {
