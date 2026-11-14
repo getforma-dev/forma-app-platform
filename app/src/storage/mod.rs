@@ -60,7 +60,7 @@ pub use boxes::{
 pub use cards::{Carded, MemberCard, NewCard, ReceiptKey, MAX_MEMBER_CARDS, MAX_SPEC_BYTES};
 pub use commands::{
     idempotency_key_shaped, CommandOutcome, CommandRequest, CommandResult, ConflictReason,
-    RecordCommand, RecordDetail, RecordField, RecoveryView, COMMAND_COMMITTED,
+    RecordCommand, RecordDetail, RecordField, RecoveryView, Refusal, COMMAND_COMMITTED,
     COMMAND_HANDLER_DEADLINE, MAX_COMMAND_VALUES, RETRY_HORIZON_SECONDS,
 };
 pub use composer::{
@@ -214,6 +214,8 @@ mod org_admin_campaign;
 // Trial plan D4/D6: the /admin and /me/name routes over real rows (W2).
 #[cfg(test)]
 mod org_admin_routes_campaign;
+#[cfg(test)]
+mod participation_campaign;
 #[cfg(test)]
 mod private_entries_campaign;
 #[cfg(test)]

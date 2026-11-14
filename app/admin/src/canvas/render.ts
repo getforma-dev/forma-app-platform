@@ -351,7 +351,9 @@ export type FieldJson = {
   input_mode: string;
   id: string; kind: string; label: string; input: string; value: string; spec: string;
   spec_input: string; writable: boolean; read_only: boolean; has_text: boolean;
-  has_choices: boolean; choices: { id: string; value: string }[];
+  has_choices: boolean; choices: { id: string; value: string; label?: string; selected?: boolean }[];
+  /** APP-205: a reference with nothing to choose (a disabled select). */
+  no_choices?: boolean;
 };
 export type FormJson = {
   component?: string;
@@ -399,7 +401,13 @@ export function buildForm(document_: Document, form: FormJson): HTMLFormElement 
     const row = el(document_, 'div', { class: 'cv-field', 'data-field': field.id }, el(document_, 'span', { class: 'cv-field-label' }, field.label));
     if (field.has_choices) {
       const select = el(document_, 'select', { name: field.input, 'aria-label': field.label });
-      for (const choice of field.choices) { const option = el(document_, 'option', { value: choice.value }, choice.value); option.selected = choice.value === field.value; select.append(option); }
+      // APP-205: a reference picker's option reads as its record's label;
+      // the server marks the selected choice (the current record).
+      for (const choice of field.choices) { const option = el(document_, 'option', { value: choice.value }, choice.label ?? choice.value); option.selected = choice.selected ?? choice.value === field.value; select.append(option); }
+      row.append(select);
+    }
+    if (field.no_choices) {
+      const select = el(document_, 'select', { name: field.input, 'aria-label': field.label, disabled: '' }, el(document_, 'option', { value: '' }, 'Nothing to choose yet'));
       row.append(select);
     }
     if (field.has_text) {

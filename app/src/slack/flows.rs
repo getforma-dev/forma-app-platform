@@ -668,6 +668,15 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
             )
             .await;
         }
+        // ADR-020 (APP-203): storage's typed refusals.
+        Ok(CommandResult::Refused(refusal)) => {
+            return respond(
+                &state,
+                &response_url,
+                text::ephemeral(crate::commands::refusal_copy(*refusal), None, false),
+            )
+            .await;
+        }
         Err(storage::Error::Denied) => {
             return respond(&state, &response_url, text::ephemeral(REFUSED, None, false)).await;
         }

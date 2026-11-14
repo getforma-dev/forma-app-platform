@@ -49,7 +49,7 @@ type Card = {
   receipt: Pair[];
   receiptJson: string;
 };
-type Choice = { id: string; value: string; selected: boolean };
+type Choice = { id: string; value: string; label: string; selected: boolean };
 type Field = {
   inputMode: string;
   id: string;
@@ -63,6 +63,8 @@ type Field = {
   readOnly: boolean;
   hasText: boolean;
   hasChoices: boolean;
+  /** APP-205: a reference with nothing to choose (a disabled select). */
+  noChoices: boolean;
   choices: Choice[];
 };
 type FormCard = {
@@ -259,8 +261,11 @@ function Work(props: WorkProps) {
                   </label>)}
                   {createShow(() => field.hasChoices, () => <label>
                     <span>{field.label}</span><select name={field.input} value={field.value}>
-                      {createList(() => field.choices, choice => choice.id, choice => <option value={choice.value} selected={choice.selected}>{choice.value}</option>)}
+                      {createList(() => field.choices, choice => choice.id, choice => <option value={choice.value} selected={choice.selected}>{choice.label}</option>)}
                     </select>
+                  </label>)}
+                  {createShow(() => field.noChoices, () => <label>
+                    <span>{field.label}</span><select name={field.input} disabled><option value="">Nothing to choose yet</option></select>
                   </label>)}
                   {createShow(() => field.readOnly, () => <p>{field.label}: {field.value}</p>)}
                   {createShow(() => field.writable, () => <input type="hidden" name={field.specInput} value={field.spec} />)}

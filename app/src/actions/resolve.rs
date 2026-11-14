@@ -703,6 +703,8 @@ async fn dry_run(
         Ok(DryRun::Valid { state, .. }) => state,
         Ok(DryRun::Stale) => return Err(Refusal::CouldNotDraft("stale")),
         Ok(DryRun::Conflict { .. }) => return Err(Refusal::CouldNotDraft("conflict")),
+        // ADR-020 (APP-203): the neutral could_not_draft; the code is logged.
+        Ok(DryRun::Refused(refusal)) => return Err(Refusal::CouldNotDraft(refusal.code())),
         // A value storage refuses under the published schema (or a declared
         // rule) is a neutral refusal (the member may write the work).
         Err(Error::Denied) => return Err(Refusal::CouldNotDraft("refused_by_schema")),

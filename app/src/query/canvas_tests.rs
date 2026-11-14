@@ -283,6 +283,8 @@ fn a_form_card_offers_the_writable_fields_and_enum_choices_only_to_a_writer() {
         options: options.into(),
         nullable: false,
         writable,
+        choices: Vec::new(),
+        nothing_to_choose: false,
     };
     let mut record = commands::RecordView {
         app: APP.into(),
@@ -320,11 +322,88 @@ fn a_form_card_offers_the_writable_fields_and_enum_choices_only_to_a_writer() {
             .collect::<Vec<_>>(),
         ["needs_context", "reviewed"]
     );
+    assert!(status.choices.iter().all(|c| c.label == c.value));
+    assert!(!status.no_choices);
     assert!(!form.fields[1].has_choices && form.fields[1].writable);
     assert!(!form.fields[2].writable && !form.fields[2].has_choices);
     assert_eq!(form.fields[2].label, "expense id");
     record.can_write = false;
     assert!(form_card(WORK, &record).is_none());
+}
+
+/// ADR-020 (APP-205): a reference picker reaches the form card as choices
+/// valued by record id and read as the record's label, the selected one
+/// marked; a writable reference with nothing to choose is a disabled
+/// picker (no text box); a stamped (`set_now`) field the command does not
+/// write stays read-only, with no input.
+#[test]
+fn a_form_card_carries_the_reference_picker_and_keeps_stamped_fields_read_only() {
+    let row = |id: &str, kind: &str, writable: bool| commands::FieldRow {
+        id: id.into(),
+        kind: kind.into(),
+        value: String::new(),
+        input: format!("value.{id}"),
+        spec: format!("{{\"type\":\"{kind}\"}}"),
+        spec_input: format!("spec.{id}"),
+        options: String::new(),
+        nullable: false,
+        writable,
+        choices: Vec::new(),
+        nothing_to_choose: false,
+    };
+    let mut item = row("item", "reference", true);
+    item.choices = vec![
+        commands::FieldChoice {
+            value: "00000000-0000-4000-8000-0000000000a3".into(),
+            label: "Third item".into(),
+            selected: true,
+        },
+        commands::FieldChoice {
+            value: "00000000-0000-4000-8000-0000000000a2".into(),
+            label: "Record".into(),
+            selected: false,
+        },
+    ];
+    let mut empty = row("other", "reference", true);
+    empty.nothing_to_choose = true;
+    let record = commands::RecordView {
+        app: APP.into(),
+        work: WORK.into(),
+        collection: "00000000-0000-4000-8000-0000000000ce".into(),
+        record_id: "00000000-0000-4000-8000-0000000013b1".into(),
+        schema: "responses".into(),
+        schema_version: "1".into(),
+        publication: "00000000-0000-4000-8000-0000000000cc".into(),
+        work_version: "1".into(),
+        version: "0".into(),
+        exists: false,
+        fields: vec![item, empty, row("opened_at", "timestamp", false)],
+        command: "respond".into(),
+        action: format!("/v1/work/{APP}/{WORK}/commands/respond"),
+        can_write: true,
+        csrf: "C".repeat(43),
+        idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+        notice: None,
+    };
+    let form = form_card(WORK, &record).unwrap();
+    let picker = &form.fields[0];
+    assert!(picker.has_choices && !picker.has_text && !picker.no_choices && picker.writable);
+    assert_eq!(
+        picker
+            .choices
+            .iter()
+            .map(|c| (c.value.as_str(), c.label.as_str(), c.selected))
+            .collect::<Vec<_>>(),
+        [
+            ("00000000-0000-4000-8000-0000000000a3", "Third item", true),
+            ("00000000-0000-4000-8000-0000000000a2", "Record", false)
+        ]
+    );
+    assert_eq!(picker.value, "00000000-0000-4000-8000-0000000000a3");
+    let nothing = &form.fields[1];
+    assert!(nothing.no_choices && !nothing.has_choices && !nothing.has_text);
+    let stamped = &form.fields[2];
+    assert!(stamped.read_only && !stamped.writable && !stamped.has_text && !stamped.no_choices);
 }
 
 #[test]

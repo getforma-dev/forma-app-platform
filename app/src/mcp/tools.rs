@@ -1151,6 +1151,13 @@ async fn commit(
                 "Forma is busy with this record. Try again in a moment.",
             ))
         }
+        // ADR-020 (APP-203): storage's typed refusals, code and copy.
+        Ok(CommandResult::Refused(refusal)) => {
+            return Err(Output::error(
+                refusal.code(),
+                crate::commands::refusal_copy(refusal),
+            ))
+        }
         Err(storage::Error::Denied) => return Err(Output::not_found()),
         Err(storage::Error::UnknownOutcome) => {
             return Err(Output::error(
