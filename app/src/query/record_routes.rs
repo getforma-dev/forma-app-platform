@@ -1,5 +1,8 @@
 //! Record projections share one captured snapshot and one fresh release check.
 //! The UI filter body is bounded data; it never selects another work or source.
+//! ADR-020 C1 (APP-204): every response carries `server_time`, the binary's
+//! whole-second UTC instant taken as the response is built (after release), and
+//! every countdown's props carry it, so no browser clock decides a countdown.
 use super::{
     record_components::{self, RecordComponentProps},
     routes,
@@ -24,6 +27,8 @@ use std::sync::Arc;
 pub(crate) struct Batch {
     pub components: Vec<RecordComponentProps>,
     pub filter_epoch: i64,
+    /// ADR-020 C1: `YYYY-MM-DDTHH:MM:SSZ` when this response was built.
+    pub server_time: String,
     #[serde(skip)]
     pub run: Option<storage::RecordComponentsRun>,
 }
@@ -31,8 +36,38 @@ pub(crate) struct Batch {
 pub(crate) fn is_record_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "records_list" | "record_summary" | "record_trend" | "record_ranking" | "record_budget"
+        "records_list"
+            | "record_summary"
+            | "record_trend"
+            | "record_ranking"
+            | "record_budget"
+            | "countdown"
     )
+}
+
+/// The binary's clock in whole seconds since the Unix epoch.
+fn now_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_secs()).unwrap_or(0))
+        .unwrap_or(0)
+}
+
+/// A released batch: the server's instant is taken here, once, and stamped
+/// on every countdown (ADR-020 C1).
+fn released(
+    mut components: Vec<RecordComponentProps>,
+    parameters: &Value,
+    run: storage::RecordComponentsRun,
+    now: i64,
+) -> Batch {
+    record_components::stamp(&mut components, now);
+    Batch {
+        components,
+        filter_epoch: parameters["filter_epoch"].as_i64().unwrap_or(0),
+        server_time: crate::boxes::register::utc(now),
+        run: Some(run),
+    }
 }
 
 pub(crate) fn response(batch: &Batch) -> Response {
@@ -116,11 +151,7 @@ pub(crate) async fn member_components(
         .release_record_components(member, &run)
         .await
         .map_err(storage_refusal)?;
-    Ok(Batch {
-        components,
-        filter_epoch: parameters["filter_epoch"].as_i64().unwrap_or(0),
-        run: Some(run),
-    })
+    Ok(released(components, parameters, run, now_seconds()))
 }
 
 pub(crate) async fn guest_components(
@@ -140,11 +171,7 @@ pub(crate) async fn guest_components(
         .release_guest_record_components(access, &run)
         .await
         .map_err(storage_refusal)?;
-    Ok(Batch {
-        components,
-        filter_epoch: parameters["filter_epoch"].as_i64().unwrap_or(0),
-        run: Some(run),
-    })
+    Ok(released(components, parameters, run, now_seconds()))
 }
 
 async fn execute(
@@ -214,5 +241,54 @@ pub(crate) async fn member_route(
     match member_components(&work, &member, &app, &saved, &parameters).await {
         Ok(batch) => response(&batch),
         Err(response) => response,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn a_countdown_is_a_record_kind() {
+        assert!(is_record_kind("countdown"));
+        assert!(is_record_kind("record_ranking"));
+        assert!(!is_record_kind("summary"));
+    }
+    #[test]
+    fn every_response_carries_the_server_instant_and_stamps_countdowns() {
+        let run = storage::RecordComponentsRun::for_tests(
+            json!({"components": [], "filters": [], "datasets": [], "creators": []}),
+        );
+        let countdown = RecordComponentProps {
+            id: "timer".into(),
+            kind: "countdown".into(),
+            has_countdown: true,
+            countdown_state: "open".into(),
+            countdown_target: "2026-11-29T15:05:30Z".into(),
+            ..Default::default()
+        };
+        let summary = RecordComponentProps {
+            id: "total".into(),
+            kind: "record_summary".into(),
+            ..Default::default()
+        };
+        let now = record_components::instant("2026-11-29T15:05:05Z").unwrap();
+        let batch = released(
+            vec![countdown, summary],
+            &json!({"filter_epoch": 4, "filters": []}),
+            run,
+            now,
+        );
+        let body: Value = serde_json::from_slice(&serde_json::to_vec(&batch).unwrap()).unwrap();
+        assert_eq!(body["server_time"], "2026-11-29T15:05:05Z");
+        assert_eq!(body["filter_epoch"], 4);
+        assert_eq!(body["components"][0]["server_time"], "2026-11-29T15:05:05Z");
+        assert_eq!(body["components"][0]["countdown_text"], "0:25");
+        assert_eq!(body["components"][1]["server_time"], "");
+        assert!(body.get("run").is_none());
+        // The live clock has the contract grammar.
+        assert!(crate::admission::contract_timestamp(
+            &crate::boxes::register::utc(now_seconds())
+        ));
     }
 }

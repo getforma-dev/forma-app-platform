@@ -1,14 +1,23 @@
 //! Real PostgreSQL + confined child qualification for APP-158/159. Definitions
 //! are admitted through the shipped template path; records are saved by the
 //! production command transaction. Provider proof is synthetic test input only.
+//!
+//! APP-204 (ADR-020 C1, C4) adds a general participation app admitted through
+//! the definition path: a shared `items` list, an `own` `responses` list and an
+//! `own` `expected` key list, with a countdown, a ranking by creator and a
+//! `matches` summary. Its D7 checks run twice: as shipped, where they must
+//! hold, and with `authorization::BYPASS` set, where they must fail (the
+//! contributor's ranking then shows everyone).
 use super::{
     admission_qualification::operator,
-    definition_qualification::request,
+    authorization::BYPASS,
+    definition_qualification::{grant, request, POLICY},
     qualification::{fixture_python, Fixture},
     qualification_cases::{check, ORG, OTHER, PRINCIPAL},
     *,
 };
 use crate::{
+    admission::{self, digest},
     composer::{
         routes::{compose_instant, First, Pin},
         Composer,
@@ -16,11 +25,12 @@ use crate::{
     query::{
         record_components as projections,
         tests::{real_engine, Directory},
+        Engine,
     },
 };
 use genui_auth_verifier::VerifiedIdentity;
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::{sync::atomic::Ordering, time::Duration};
 
 #[test]
 #[ignore = "requires local Docker, OpenSSL and locked migration/contract Python environments"]
@@ -310,7 +320,37 @@ async fn campaign() {
         .resolve_guest_access(&account, &share.key)
         .await
         .unwrap();
+    // ADR-020 C4: a guest is outside the organization and never receives a
+    // member's chosen name, only the neutral handle; a member receives the name.
+    stores
+        .workspace
+        .set_display_name(&owner, "Dana Owner")
+        .await
+        .unwrap();
     let guest = stores.data.guest_record_components(&access).await.unwrap();
+    let named = stores
+        .data
+        .record_components(&owner, app, work)
+        .await
+        .unwrap();
+    stores
+        .data
+        .release_record_components(&owner, &named)
+        .await
+        .unwrap();
+    assert_eq!(
+        named.payload()["creators"],
+        json!([{"id": PRINCIPAL, "label": "Dana Owner"}])
+    );
+    assert_eq!(
+        guest.payload()["creators"],
+        json!([{"id": PRINCIPAL, "label": crate::directory::neutral_label(PRINCIPAL)}])
+    );
+    assert!(guest.payload()["datasets"][0]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|row| row["creator"] == PRINCIPAL));
     let guest_result = engine
         .execute_records(&guest, &parameters, Duration::from_millis(1800))
         .await
@@ -337,6 +377,7 @@ async fn campaign() {
         Err(Error::Denied)
     );
     check(&mut checks,"named external account reads exact shared record components through same confined engine; receipt identifies actual account/share; member/guest release types cannot substitute");
+    check(&mut checks,"APP-204: every captured row names its creator; a member's creators map carries the display name, a guest's only the neutral handle");
     let op = fixture.operator().await;
     op.client.execute("INSERT INTO genui.publication_policies(organization_id,policy_id,policy_version,kind) SELECT organization_id,policy_id,policy_version+1,policy_kind FROM genui.publications WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND publication_id=$3::text::uuid ON CONFLICT DO NOTHING",&[&ORG,&app,&publication]).await.unwrap();
     op.client.execute("UPDATE genui.publications SET policy_version=policy_version+1 WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND publication_id=$3::text::uuid",&[&ORG,&app,&publication]).await.unwrap();
@@ -429,8 +470,626 @@ async fn campaign() {
         Err(Error::Denied)
     );
     check(&mut checks,"expired execution deadline launches no child and yields no values; member revocation denies previously computed release and new snapshot before bounds/data reads");
-    let report = json!({"campaign":"APP-158-159-record-components","passed":true,"checks":checks,"record_operator_version":1,"bounds":{"rows":RECORD_COMPONENT_ROWS,"bytes":RECORD_COMPONENT_BYTES},"provider_identity":"synthetic-test-proof-only","definition":template.content(),"initial_command_outcomes":command_outcomes,"snapshot_datasets":run.payload()["datasets"],"parameters":parameters,"initial_result":result.document,"member_receipt":receipt,"guest_receipt":projections::receipt(&guest,&guest_result,&parameters).unwrap()});
+    let participation = participation(&fixture, &stores, &engine, &mut checks).await;
+    let report = json!({"campaign":"APP-158-159-record-components","passed":true,"checks":checks,"participation":participation,"record_operator_version":1,"bounds":{"rows":RECORD_COMPONENT_ROWS,"bytes":RECORD_COMPONENT_BYTES},"provider_identity":"synthetic-test-proof-only","definition":template.content(),"initial_command_outcomes":command_outcomes,"snapshot_datasets":run.payload()["datasets"],"parameters":parameters,"initial_result":result.document,"member_receipt":receipt,"guest_receipt":projections::receipt(&guest,&guest_result,&parameters).unwrap()});
     if let Some(path) = std::env::var_os("GENUI_RECORD_COMPONENTS_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
+}
+
+// --- APP-204: ADR-020 C1 (countdown) and C4 (ranking by creator, matches) ----
+
+/// The seeded fixture space (tenant_seed.py).
+const SPACE: &str = "00000000-0000-4000-8000-000000000384";
+const QUIZ_APP: &str = "00000000-0000-4000-8000-000000000c10";
+/// Distinct first eight hex digits, so each neutral handle is distinct.
+const P_OWNER: &str = "c0000c01-0000-4000-8000-000000000c01";
+const P_REV: &str = "c0000c02-0000-4000-8000-000000000c02";
+const P_BEN: &str = "c0000c03-0000-4000-8000-000000000c03";
+const P_ANA: &str = "c0000c04-0000-4000-8000-000000000c04";
+const P_CAL: &str = "c0000c05-0000-4000-8000-000000000c05";
+const ITEM_1: &str = "00000000-0000-4000-8000-000000000c21";
+const ITEM_2: &str = "00000000-0000-4000-8000-000000000c22";
+const OPENED_1: &str = "2026-11-29T15:00:00Z";
+const OPENED_2: &str = "2026-11-29T15:05:00Z";
+
+/// ADR-020 §10's shape without classroom words, using only what this base's
+/// storage commits: `opened_at` is written by the reviewer's `post` (the
+/// `set_now` stamp and the `requires` guards are APP-203's; a countdown reads
+/// the stored instant whichever way it was written).
+fn participation_definition() -> Value {
+    let item_fields = json!([
+        {"id": "prompt", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "state", "value_type": {"type": "enum", "values": ["open", "closed"]}, "nullable": false},
+        {"id": "opened_at", "value_type": {"type": "timestamp"}, "nullable": false}
+    ]);
+    let answer_fields = json!([
+        {"id": "item", "value_type": {"type": "reference", "target_input": "items"}, "nullable": false},
+        {"id": "choice", "value_type": {"type": "enum", "values": ["a", "b", "c", "d"]}, "nullable": false}
+    ]);
+    let records = |id: &str, extra: Value| {
+        let mut r = json!({"version": 1, "input_id": id, "schema_id": id});
+        for (k, v) in extra.as_object().unwrap() {
+            r[k] = v.clone();
+        }
+        r
+    };
+    let matches = json!({"op": "matches", "key_input": "expected", "fields": ["item", "choice"]});
+    let views = json!([
+        {"id": "respond", "kind": "form", "renderer_version": 1, "title": "Respond", "command_id": "respond"},
+        {"id": "timer", "kind": "countdown", "renderer_version": 1, "title": "Time left", "records": records("items", json!({"timestamp_field": "opened_at", "offset_seconds": 30, "closed_when": {"field_id": "state", "comparison": "eq", "value": {"type": "enum", "value": "closed"}}}))},
+        {"id": "item_list", "kind": "records_list", "renderer_version": 1, "title": "Items", "records": records("items", json!({"columns": ["prompt", "state", "opened_at"]}))},
+        {"id": "right", "kind": "record_summary", "renderer_version": 1, "title": "Matching responses", "records": records("responses", json!({"measure": matches}))},
+        {"id": "leaderboard", "kind": "record_ranking", "renderer_version": 1, "title": "Leaderboard", "records": records("responses", json!({"group_by": "creator", "measure": matches, "limit": 50}))},
+        {"id": "top", "kind": "record_ranking", "renderer_version": 1, "title": "Top", "records": records("responses", json!({"group_by": "creator", "measure": matches, "limit": 1}))}
+    ]);
+    let layout: Vec<Value> = views
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(row, v)| json!({"view_id": v["id"], "column": 0, "row": row, "width": 12}))
+        .collect();
+    let content = json!({
+        "title": "Participation",
+        "description": "Synthetic campaign app: shared items, each member's own responses, the reviewers' own expected key.",
+        "inputs": [
+            {"id": "items", "contract_id": "items_v1", "contract_version": 1, "kind": "records", "fields": item_fields},
+            {"id": "responses", "contract_id": "responses_v1", "contract_version": 1, "kind": "records", "fields": answer_fields},
+            {"id": "expected", "contract_id": "expected_v1", "contract_version": 1, "kind": "records", "fields": answer_fields}
+        ],
+        "views": views,
+        "record_schemas": [
+            {"id": "items", "version": 1, "fields": item_fields},
+            {"id": "responses", "version": 1, "visibility": "own", "fields": answer_fields},
+            {"id": "expected", "version": 1, "visibility": "own", "fields": answer_fields}
+        ],
+        "commands": [
+            {"id": "post", "record_schema_id": "items", "operation": "create", "writable_fields": ["prompt", "state", "opened_at"], "transitions": [], "initial": [{"field_id": "state", "value": "open"}], "reviewer_only": true},
+            {"id": "close", "record_schema_id": "items", "operation": "update", "writable_fields": ["state"], "transitions": [], "reviewer_only": true},
+            {"id": "respond", "record_schema_id": "responses", "operation": "create", "writable_fields": ["item", "choice"], "transitions": []},
+            {"id": "add_expected", "record_schema_id": "expected", "operation": "create", "writable_fields": ["item", "choice"], "transitions": [], "reviewer_only": true}
+        ],
+        "links": [],
+        "default_layout": layout
+    });
+    let canonical = admission::encode(&content).unwrap();
+    json!({
+        "kind": "app_definition",
+        "schema_version": 1,
+        "organization_id": ORG,
+        "app_id": QUIZ_APP,
+        "revision_id": "00000000-0000-4000-8000-000000000c11",
+        "content": content,
+        "digest": digest::digest(digest::APP_DEFINITION, &canonical),
+    })
+}
+
+/// Operator-channel stand-in (as tenant_seed writes fixture authority): one
+/// active member of the organization with a live entitlement.
+fn admit_member(fixture: &Fixture, principal: &str) {
+    let tail = &principal[principal.len() - 12..];
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{principal}','app008-fixture-only','ten_{ORG}','usr_{principal}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{principal}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{ORG}','{principal}','0000e000-0000-4000-8000-{tail}','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
+}
+
+struct Quiz {
+    work: String,
+    publication: String,
+}
+impl Quiz {
+    fn command(
+        &self,
+        command: &str,
+        schema: &str,
+        record: &str,
+        expected: i64,
+        values: Value,
+        key: usize,
+    ) -> CommandRequest {
+        CommandRequest {
+            app: QUIZ_APP.into(),
+            work: self.work.clone(),
+            publication: self.publication.clone(),
+            command: command.into(),
+            schema: schema.into(),
+            schema_version_expected: 1,
+            record: record.into(),
+            expected_record_version: expected,
+            expected_work_version: 1,
+            values,
+            idempotency_key: format!("{:032x}", 0xc000 + key),
+        }
+    }
+}
+async fn commits(
+    stores: &Stores,
+    who: &TrustedRequest,
+    request: &CommandRequest,
+) -> CommandOutcome {
+    match stores.data.commit_record(who, request).await {
+        Ok(CommandResult::Committed(outcome)) => outcome,
+        other => panic!(
+            "{} by {} must commit: {other:?}",
+            request.command,
+            who.principal()
+        ),
+    }
+}
+fn reference(record: &str) -> Value {
+    json!({"type": "reference", "input_id": "items", "record_id": record})
+}
+fn answer(record: &str, choice: &str) -> Value {
+    json!([
+        {"field_id": "item", "value": reference(record)},
+        {"field_id": "choice", "value": {"type": "enum", "value": choice}}
+    ])
+}
+/// One authorized capture, the confined child and the fresh release check.
+async fn computed(
+    stores: &Stores,
+    engine: &Engine,
+    who: &TrustedRequest,
+    work: &str,
+) -> (RecordComponentsRun, projections::RecordComponentsResult) {
+    let run = stores
+        .data
+        .record_components(who, QUIZ_APP, work)
+        .await
+        .unwrap();
+    let result = engine
+        .execute_records(
+            &run,
+            &projections::default_parameters(),
+            Duration::from_millis(1800),
+        )
+        .await
+        .unwrap();
+    stores
+        .data
+        .release_record_components(who, &run)
+        .await
+        .unwrap();
+    (run, result)
+}
+fn groups(result: &projections::RecordComponentsResult, id: &str) -> Vec<(String, String, u64)> {
+    value(result, id)["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| {
+            (
+                g["label"].as_str().unwrap().to_owned(),
+                g["value"].as_str().unwrap().to_owned(),
+                g["count"].as_u64().unwrap(),
+            )
+        })
+        .collect()
+}
+fn group(label: &str, score: &str, count: u64) -> (String, String, u64) {
+    (label.to_owned(), score.to_owned(), count)
+}
+/// How many revisions of `input` the run's provenance (the receipt's
+/// `snapshot`) lists.
+fn listed(run: &RecordComponentsRun, input: &str) -> usize {
+    run.snapshot()
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["input_id"] == input)
+        .map(|s| s["records"].as_array().unwrap().len())
+        .unwrap_or(usize::MAX)
+}
+
+/// A D7 check: holds as shipped, fails with the row rule bypassed.
+macro_rules! judged {
+    ($checks:expr, $name:expr, $body:block) => {{
+        BYPASS.store(false, Ordering::SeqCst);
+        let held: bool = (async $body).await;
+        BYPASS.store(true, Ordering::SeqCst);
+        let bypassed: bool = (async $body).await;
+        BYPASS.store(false, Ordering::SeqCst);
+        assert!(held, "{} does not hold as shipped", $name);
+        assert!(!bypassed, "{} still holds with own_rows bypassed: the check does not depend on the rule", $name);
+        check($checks, &format!("{} (fails under bypass)", $name));
+    }};
+}
+
+async fn participation(
+    fixture: &Fixture,
+    stores: &Stores,
+    engine: &Engine,
+    checks: &mut Vec<Value>,
+) -> Value {
+    for member in [P_OWNER, P_REV, P_BEN, P_ANA, P_CAL] {
+        admit_member(fixture, member);
+    }
+    let owner = request(stores, ORG, P_OWNER, 1);
+    let rev = request(stores, ORG, P_REV, 1);
+    let ben = request(stores, ORG, P_BEN, 1);
+    let ana = request(stores, ORG, P_ANA, 1);
+    let cal = request(stores, ORG, P_CAL, 1);
+    let created = operator(
+        fixture,
+        &[
+            "create-app",
+            "--organization",
+            ORG,
+            "--app",
+            QUIZ_APP,
+            "--space",
+            SPACE,
+            "--owner",
+            P_OWNER,
+        ],
+    );
+    assert_eq!(created["granted"], json!(["edit_definition"]));
+    for permission in ["discover", "run"] {
+        grant(fixture, P_OWNER, permission, &["--app", QUIZ_APP]);
+    }
+    let admitted =
+        admission::admit_definition(&serde_json::to_vec(&participation_definition()).unwrap())
+            .expect("the participation definition admits");
+    let revision = stores
+        .workspace
+        .create_definition_revision(&owner, QUIZ_APP, &admitted)
+        .await
+        .unwrap();
+    let PublishResult::Published(publication) = stores
+        .control
+        .publish(&owner, QUIZ_APP, &revision.revision, POLICY)
+        .await
+        .unwrap()
+    else {
+        panic!("uncontended publication is not stale");
+    };
+    let saved = stores
+        .workspace
+        .create_work(
+            &owner,
+            QUIZ_APP,
+            &publication.publication_id,
+            "Participation (synthetic campaign)",
+            &["items", "responses", "expected"].map(|id| WorkBinding::Records {
+                input: id.into(),
+                schema: id.into(),
+            }),
+        )
+        .await
+        .unwrap();
+    let quiz = Quiz {
+        work: saved.work.clone(),
+        publication: publication.publication_id.clone(),
+    };
+    let work = quiz.work.as_str();
+    stores
+        .workspace
+        .share_work(
+            &owner,
+            QUIZ_APP,
+            work,
+            Audience::Member(P_REV),
+            ShareRole::Reviewer,
+            ShareMode::Set,
+        )
+        .await
+        .unwrap();
+    for member in [P_BEN, P_ANA, P_CAL] {
+        stores
+            .workspace
+            .share_work(
+                &owner,
+                QUIZ_APP,
+                work,
+                Audience::Member(member),
+                ShareRole::Contributor,
+                ShareMode::Set,
+            )
+            .await
+            .unwrap();
+    }
+    stores
+        .workspace
+        .set_display_name(&ben, "Ben Okafor")
+        .await
+        .unwrap();
+    stores
+        .workspace
+        .set_display_name(&ana, "Ana Lima")
+        .await
+        .unwrap();
+
+    // --- C1: nothing readable yet ---------------------------------------------
+    let at = |text: &str| projections::instant(text).unwrap();
+    let (run, empty) = computed(stores, engine, &ben, work).await;
+    let timer = value(&empty, "timer");
+    assert_eq!(
+        (
+            timer["state"].as_str(),
+            timer["value"].is_null(),
+            timer["label"].as_str(),
+            timer["closed"].as_bool()
+        ),
+        (Some("empty"), true, Some(""), Some(true))
+    );
+    let mut props = projections::props(&run, &empty, &projections::default_parameters()).unwrap();
+    projections::stamp(&mut props, at(OPENED_2));
+    let shown = props.iter().find(|p| p.id == "timer").unwrap();
+    assert!(!shown.has_countdown && shown.empty);
+    assert_eq!(shown.message, "Nothing is open yet");
+    assert_eq!(value(&empty, "leaderboard")["state"], "empty");
+    check(checks, "APP-204 C1: before any item a contributor's countdown is empty: no target, \"Nothing is open yet\", no timer");
+
+    // --- the owner posts two items and files the expected key -----------------
+    let post = |record: &str, prompt: &str, opened: &str, key: usize| {
+        quiz.command(
+            "post",
+            "items",
+            record,
+            0,
+            json!([
+                {"field_id": "prompt", "value": {"type": "text", "value": prompt}},
+                {"field_id": "state", "value": {"type": "enum", "value": "open"}},
+                {"field_id": "opened_at", "value": {"type": "timestamp", "value": opened}}
+            ]),
+            key,
+        )
+    };
+    commits(stores, &owner, &post(ITEM_1, "Which colour?", OPENED_1, 1)).await;
+    commits(stores, &owner, &post(ITEM_2, "Which shape?", OPENED_2, 2)).await;
+    // D8 as shipped: a contributor cannot post.
+    assert!(!matches!(
+        stores
+            .data
+            .commit_record(
+                &ben,
+                &post("00000000-0000-4000-8000-000000000c29", "Mine", OPENED_2, 3)
+            )
+            .await,
+        Ok(CommandResult::Committed(_))
+    ));
+    for (n, (record, choice)) in [(ITEM_1, "a"), (ITEM_2, "c")].into_iter().enumerate() {
+        commits(
+            stores,
+            &owner,
+            &quiz.command(
+                "add_expected",
+                "expected",
+                &format!("00000000-0000-4000-8000-000000000c3{n}"),
+                0,
+                answer(record, choice),
+                10 + n,
+            ),
+        )
+        .await;
+    }
+    let mut ben_response = None;
+    for (n, (who, record, choice)) in [
+        (&ben, ITEM_1, "a"),
+        (&ben, ITEM_2, "c"),
+        (&ana, ITEM_1, "b"),
+        (&ana, ITEM_2, "c"),
+        (&cal, ITEM_1, "a"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let outcome = commits(
+            stores,
+            who,
+            &quiz.command(
+                "respond",
+                "responses",
+                &format!("00000000-0000-4000-8000-000000000c4{n}"),
+                0,
+                answer(record, choice),
+                20 + n,
+            ),
+        )
+        .await;
+        ben_response.get_or_insert(outcome);
+    }
+    let ben_response = ben_response.unwrap();
+
+    // --- C1: the current record, the server's instant, closing ----------------
+    for who in [&owner, &ben] {
+        let (run, result) = computed(stores, engine, who, work).await;
+        let timer = value(&result, "timer");
+        assert_eq!(
+            (
+                timer["state"].as_str(),
+                timer["population"].as_u64(),
+                timer["value"].as_str(),
+                timer["label"].as_str(),
+                timer["closed"].as_bool()
+            ),
+            (
+                Some("ready"),
+                Some(2),
+                Some("2026-11-29T15:05:30Z"),
+                Some("Which shape?"),
+                Some(false)
+            )
+        );
+        let mut props =
+            projections::props(&run, &result, &projections::default_parameters()).unwrap();
+        projections::stamp(&mut props, at("2026-11-29T15:05:05Z"));
+        let shown = props.iter().find(|p| p.id == "timer").unwrap();
+        assert_eq!(
+            (
+                shown.countdown_state.as_str(),
+                shown.countdown_target.as_str(),
+                shown.server_time.as_str(),
+                shown.countdown_text.as_str(),
+                shown.message.as_str()
+            ),
+            (
+                "open",
+                "2026-11-29T15:05:30Z",
+                "2026-11-29T15:05:05Z",
+                "0:25",
+                "Which shape?"
+            )
+        );
+        // The text follows the server's instant given to it, nothing else.
+        projections::stamp(&mut props, at("2026-11-29T14:05:05Z"));
+        assert_eq!(
+            props
+                .iter()
+                .find(|p| p.id == "timer")
+                .unwrap()
+                .countdown_text,
+            "1:00:25"
+        );
+    }
+    check(checks, "APP-204 C1: after two real posts the countdown (owner's and contributor's page alike, a shared list) follows the item with the highest commit sequence: label \"Which shape?\", target opened_at+30 = 15:05:30Z; stamped at the server's 15:05:05Z it reads 0:25 (an hour earlier, 1:00:25)");
+    let close = |record: &str, version: i64, key: usize| {
+        quiz.command(
+            "close",
+            "items",
+            record,
+            version,
+            json!([{"field_id": "state", "value": {"type": "enum", "value": "closed"}}]),
+            key,
+        )
+    };
+    commits(stores, &owner, &close(ITEM_2, 1, 40)).await;
+    let (run, result) = computed(stores, engine, &ben, work).await;
+    let timer = value(&result, "timer");
+    assert_eq!(
+        (timer["label"].as_str(), timer["closed"].as_bool()),
+        (Some("Which shape?"), Some(true))
+    );
+    let mut props = projections::props(&run, &result, &projections::default_parameters()).unwrap();
+    projections::stamp(&mut props, at("2026-11-29T15:05:05Z"));
+    let shown = props.iter().find(|p| p.id == "timer").unwrap();
+    assert_eq!(
+        (
+            shown.countdown_state.as_str(),
+            shown.countdown_text.as_str()
+        ),
+        ("closed", "Closed")
+    );
+    commits(stores, &owner, &close(ITEM_1, 1, 41)).await;
+    let (_, result) = computed(stores, engine, &ben, work).await;
+    assert_eq!(value(&result, "timer")["label"], "Which colour?");
+    assert_eq!(value(&result, "timer")["value"], "2026-11-29T15:00:30Z");
+    check(checks, "APP-204 C1: the reviewer's close (closed_when state = closed) shows \"Closed\" with the time still well ahead; closing the older item makes it current (most recently touched, ADR-020 §3)");
+
+    // --- C4: the ranking by creator, scored against the key --------------------
+    let full = vec![
+        group("Ben Okafor", "2", 2),
+        group("Ana Lima", "1", 2),
+        group("Member c0000c05", "1", 1),
+    ];
+    let mut owner_view = Value::Null;
+    for who in [&owner, &rev] {
+        let (run, result) = computed(stores, engine, who, work).await;
+        assert_eq!(groups(&result, "leaderboard"), full);
+        assert_eq!(
+            (
+                value(&result, "leaderboard")["population"].as_u64(),
+                value(&result, "leaderboard")["truncated_page"].as_bool(),
+                value(&result, "right")["value"].as_str()
+            ),
+            (Some(5), Some(false), Some("4"))
+        );
+        assert_eq!(groups(&result, "top"), vec![group("Ben Okafor", "2", 2)]);
+        assert_eq!(value(&result, "top")["truncated_page"], true);
+        let props = projections::props(&run, &result, &projections::default_parameters()).unwrap();
+        let top = props.iter().find(|p| p.id == "top").unwrap();
+        assert!(
+            top.truncated && top.message.starts_with("Showing a bounded page"),
+            "{}",
+            top.message
+        );
+        // The receipt lists both inputs' revisions and validates.
+        let receipt =
+            projections::receipt(&run, &result, &projections::default_parameters()).unwrap();
+        admission::admit_record_components_receipt(&receipt).unwrap();
+        assert!(super::query_qualification::contract_valid(&receipt));
+        assert_eq!(
+            (
+                listed(&run, "items"),
+                listed(&run, "responses"),
+                listed(&run, "expected")
+            ),
+            (2, 5, 2)
+        );
+        assert!(receipt["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["kind"] == "countdown"));
+        if who.principal() == P_OWNER {
+            owner_view = json!({"result": result.document, "receipt": receipt});
+        }
+    }
+    check(checks, "APP-204 C4: on the owner's and a reviewer's page the ranking by creator lists every contributor by label (Ben Okafor 2, Ana Lima 1, the neutral Member c0000c05 1 for a member with no display name), sorted by score then label; the limit-1 ranking is truncated and says so; the receipt lists items, responses and expected revisions and validates (Rust and contracts)");
+    let mut contributor_view = Value::Null;
+    for (who, label, count) in [
+        (&ben, "Ben Okafor", 2),
+        (&ana, "Ana Lima", 2),
+        (&cal, "Member c0000c05", 1),
+    ] {
+        let (run, result) = computed(stores, engine, who, work).await;
+        assert_eq!(
+            groups(&result, "leaderboard"),
+            vec![group(label, "0", count)]
+        );
+        assert_eq!(value(&result, "right")["value"], "0");
+        assert_eq!(
+            (listed(&run, "responses"), listed(&run, "expected")),
+            (count as usize, 0)
+        );
+        if who.principal() == P_BEN {
+            let receipt =
+                projections::receipt(&run, &result, &projections::default_parameters()).unwrap();
+            assert!(super::query_qualification::contract_valid(&receipt));
+            contributor_view = json!({"result": result.document, "receipt": receipt});
+        }
+    }
+    check(checks, "APP-204 C4: on each contributor's page the ranking lists only that contributor, scored 0 against zero visible key rows; their receipt lists no expected revision");
+
+    // --- labels, never principal ids -----------------------------------------
+    let principals = [P_OWNER, P_REV, P_BEN, P_ANA, P_CAL];
+    for who in [&owner, &ben] {
+        let (run, result) = computed(stores, engine, who, work).await;
+        let document = serde_json::to_string(&result.document).unwrap();
+        assert!(
+            principals.iter().all(|p| !document.contains(p)),
+            "a result document carries a principal id"
+        );
+        // The page props carry the receipt, which names only the viewer.
+        let props = serde_json::to_string(
+            &projections::props(&run, &result, &projections::default_parameters()).unwrap(),
+        )
+        .unwrap();
+        assert!(principals
+            .iter()
+            .filter(|p| **p != who.principal())
+            .all(|p| !props.contains(p)));
+    }
+    check(checks, "APP-204 §14.4: the result document carries labels and no principal id; the page props name no member but the viewer (in their own receipt)");
+
+    // --- D7 under bypass ------------------------------------------------------
+    judged!(checks, "APP-204 D7: a contributor's ranking by creator lists only themselves, scored from zero visible key rows", {
+        let (_, result) = computed(stores, engine, &ben, work).await;
+        groups(&result, "leaderboard") == vec![group("Ben Okafor", "0", 2)] && value(&result, "right")["value"] == "0"
+    });
+    judged!(checks, "APP-204 D7: a contributor's capture reads their own responses and none of the owner's own key list; a reviewer's reads all", {
+        let b = stores.data.record_components(&ben, QUIZ_APP, work).await.unwrap();
+        let r = stores.data.record_components(&rev, QUIZ_APP, work).await.unwrap();
+        let ben_creators: Vec<String> = b.payload()["creators"].as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap().to_owned()).collect();
+        listed(&b, "responses") == 2 && listed(&b, "expected") == 0 && listed(&r, "responses") == 5 && listed(&r, "expected") == 2
+            && ben_creators == [P_OWNER.to_owned(), P_BEN.to_owned()]
+    });
+    judged!(checks, "APP-204 D7 (APP-191's delivery rule, the ranking card open): a contributor's response reaches its creator, the reviewers and the owner, never another contributor", {
+        let judged = stores.data.openable_principals(&owner, QUIZ_APP, work, Some(ben_response.commit_sequence), &principals.map(str::to_owned)).await.unwrap();
+        judged.standing(&owner) == Standing::Open
+            && judged.standing(&rev) == Standing::Open
+            && judged.standing(&ben) == Standing::Open
+            && judged.standing(&ana) == Standing::Closed
+            && judged.standing(&cal) == Standing::Closed
+    });
+    json!({"definition": participation_definition()["content"], "owner": owner_view, "contributor": contributor_view})
 }
