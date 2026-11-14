@@ -35,45 +35,50 @@ The execution plan's Track C becomes the beta go-live path: FormaStack deploys f
 - **SES sandbox accepted for the MVP:** invitation mail goes to recipients verified in SES ahead of each trial (currently `victor@getforma.dev`), which satisfies FORMA-366's controlled-inbox trial; SES production access remains pending and is not required.
 - **Window length:** hosted runs for the MVP (APP-078, APP-076) are kept to minutes and the long campaigns stay in the backlog (APP-079, APP-080), matching the existing split.
 
-## Amendment 2026-11-14: a bounded real-user trial
+## Amendment 2026-11-14: a real live test with 25 real people
 
-Victor decided on 2026-11-14 to admit 25 named real people to the beta, enforced to production standards ([plan](../planning/TRIAL-25-READINESS.md)). This amendment replaces Decision item 1's "synthetic data" for this trial only. Everything else in this ADR stands.
+Victor decided on 2026-11-14 to run a real live test of the platform with real people, enforced to production standards ([plan](../planning/TRIAL-25-READINESS.md)). This amendment replaces Decision item 1's "synthetic data" for this test only. Everything else in this ADR stands.
 
-- **Who and when.** 25 people, invite-only. The operator issues codes, and Victor delivers them by email. Wave 1 is 5 people on 2026-11-21; wave 2 is 20 people on 2026-11-24. The trial ends 2026-12-05.
-- **Where.** One shared trial organization, `forma-trial`, on `https://beta.getforma.dev`. Each member's apps are private unless they share them. The beta is labeled beta, with no SLA.
-- **Enforced before wave 1:**
-  - durable, enforced consent to notice version 1 (below), stored and audited;
+- **First cohort.** The 25 adult students of Victor's weekend class (2026-11-29 and 2026-11-30) join **Victor's organization**, today's clean-trial organization `forma-trial`, as members. Victor is its admin.
+  - Victor builds apps for the class with the platform.
+  - Students use those apps, and can build and share their own apps for anything.
+  - The platform stays general: no classroom feature, name or template is added to it. The class is a use case that tests whether the platform can be shaped to it.
+- **Access.** Invite-only. The operator issues codes, and Victor delivers them by email. Codes go out on 2026-11-28, after a rehearsal with two or three students on 2026-11-26. Real use continues through 2026-12-12.
+- **Enforced before codes go out:**
+  - durable, enforced consent to beta notice version 1 (below), stored and audited;
+  - real member names that each member sets;
   - an Organization Admin area for the organization's admins (`admin_policy`), with member removal;
+  - record lists that keep entries private to their creator and the app's reviewers;
+  - reviewer-only commands;
+  - sharing with roles and with everyone in the organization;
   - an app-wide daily model-call cap and a spend limit on the provider account;
-  - email alarms;
-  - one restore drill;
-  - a trial runbook.
+  - email alarms, one restore drill, and an operations runbook.
 - **Accepted risks** (Victor, 2026-11-14):
   - APP-079 (hosted identity acceptance, FORMA-365) and APP-080 (RDS races, drift and restore comparison) are unfinished. The single restore drill covers only part of APP-080.
   - The APP-078 managed isolation verdict is deferred, because there is one real organization.
-  - One Fargate task: every deploy is an outage of about four minutes that signs everyone out. Deploys during the trial happen only in announced windows.
+  - One Fargate task: every deploy is an outage of about four minutes that signs everyone out. No deploys from 2026-11-28 through the class, and later only in announced windows.
   - A single-AZ `t4g.small` database. Logs are kept 30 days.
   - No per-organization quotas beyond the daily model cap and the per-member hourly limits.
   - Container findings carried under a temporary, reviewed disposition.
-  - Deletion during the trial is limited to removing access and deleting uploaded files. All other trial data is purged with the trial organization after the trial.
+  - Deletion during the test is limited to removing access and deleting uploaded files. All other data is purged with the organization after the test.
   - The stack keeps its `Environment=synthetic` tag, because an infrastructure change would block promotion. That is a known mismatch.
   - Victor is the only operator, and alarms reach him by email; no one is paged.
-- **End of trial.** The trial organization's data is purged by 2026-12-08, by the procedure in the trial runbook.
+- **End of the test.** The organization's data is purged by **2026-12-14**, by the procedure in the operations runbook. The beta stops about 2026-12-15 unless it is renewed again.
 
 ### Beta notice, version 1
 
-Shown on the invitation page. The required checkbox records consent to this version.
+Shown on the invitation page; the required checkbox records consent to this version. The text is general, because it is platform text, not text for one cohort.
 
-> **Before you join the Forma beta**
+> **Before you join this Forma workspace**
 >
-> This is an early beta of Forma (getforma.dev). It may change, break or go offline without notice, and there is no service guarantee.
+> Forma (getforma.dev) is in early beta. It may change, break or go offline without notice, and there is no service guarantee.
 >
-> You join a shared trial workspace with other testers. What you build is private unless you share it.
+> You are joining an organization's workspace. Its admins can see who has joined, your agreement to this notice, when you were last active, and how much you have created. Apps shared with you may collect what you enter, and the app's owner and reviewers can see it. Anything you build is private unless you share it.
 >
-> **What we keep:** your email address for sign-in, what you create (apps, records, notes), the files you upload, and basic logs of what happened.
+> **What we keep:** your email address for sign-in, the name you choose, what you create and enter, the files you upload, and basic activity logs.
 >
 > **AI:** to build apps and answer questions, your prompts and parts of your files are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.
 >
-> **Your data:** you can ask us at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded. All trial data is deleted after the trial, by December 8, 2026.
+> **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded. This beta workspace's data is deleted after the test, by December 14, 2026.
 >
 > By checking the box you agree to take part on these terms.

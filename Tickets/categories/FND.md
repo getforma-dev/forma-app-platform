@@ -20,3 +20,5 @@ Released framework qualification, typed contracts and reproducible application s
 | 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](../0-backlog/APP-180.md) | [PH07](../phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |
 | 182 | [APP-182: Require and record consent to the beta notice at invitation](../0-backlog/APP-182.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
 | 184 | [APP-184: An app-wide daily cap on model calls, with a plain message](../0-backlog/APP-184.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-181 |
+| 191 | [APP-191: Private entries and reviewer-only commands](../0-backlog/APP-191.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-181 |
+| 193 | [APP-193: Spike: live interaction from general primitives](../0-backlog/APP-193.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |

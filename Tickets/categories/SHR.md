@@ -12,3 +12,5 @@ Separate grants, derived information, revocation and exports.
 | 144 | [APP-154: Private live app sharing, external guests and connected canvas placement](../4-done/APP-154.md) | [PH08](../phases/PH08.md) | S14 | SHR | P0 | L | Done | APP-074, APP-095, APP-144 |
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](../4-done/APP-178.md) | [PH09](../phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
 | 183 | [APP-183: Organization Admin: see the members and remove one](../0-backlog/APP-183.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | M | Backlog | APP-181 |
+| 190 | [APP-190: Member names that each member sets](../0-backlog/APP-190.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | S | Backlog | APP-181 |
+| 192 | [APP-192: Share with roles and with everyone in the organization](../0-backlog/APP-192.md) | [PH09](../phases/PH09.md) | S15 | SHR | P0 | M | Backlog | APP-181, APP-191 |
