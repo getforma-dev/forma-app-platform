@@ -29,6 +29,8 @@ from ops.promotion.test_state import MemoryS3
 
 ROOT = Path(__file__).resolve().parents[2]
 REVIEWED = schema_release.REVIEWED_SCHEMA_RELEASE
+# The synthetic releases below carry the reviewed evidence path and expiry.
+EXPIRY = datetime.fromisoformat(REVIEWED['expires_at_utc'].replace('Z', '+00:00'))
 CANDIDATE = encoded({'schema_version': 1, 'database_version': 22, 'migrations': [], 'catalog': []})
 INFRA = '6' * 64
 FROM = {'database_version': 20, 'schema_manifest_sha256': '8' * 64, 'deployment_contract_sha256': '9' * 64}
@@ -90,8 +92,8 @@ class SpecFileTests(unittest.TestCase):
 
     def test_duplicate_keys_and_invalid_json_refuse(self):
         text = json.dumps(spec(), indent=2, sort_keys=True)
-        for changed in [text.replace('"expires_at_utc": "2026-11-20T00:00:00Z"',
-                            '"expires_at_utc": "2026-11-20T00:00:00Z", "expires_at_utc": "2099-01-01T00:00:00Z"'),
+        pinned = '"expires_at_utc": "%s"' % REVIEWED['expires_at_utc']
+        for changed in [text.replace(pinned, pinned + ', "expires_at_utc": "2099-01-01T00:00:00Z"'),
                         text.replace('"to": {', '"to": {"database_version": 23, ', 1),
                         text[:-3], '', 'null', '[]', '"x"', b'\xff\xfe{}']:
             with self.subTest(changed=changed[:40]):
@@ -101,7 +103,7 @@ class SpecFileTests(unittest.TestCase):
     def test_widening_or_reshaping_refuses(self):
         mutations = [
             lambda v: v.update(expires_at_utc='2099-01-01T00:00:00Z'),
-            lambda v: v.update(expires_at_utc='2026-11-21T00:00:00Z'),
+            lambda v: v.update(expires_at_utc=(EXPIRY + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')),
             lambda v: v.update(expires_at_utc='soon'),
             lambda v: v.update(evidence='evidence/APP-173/SCAN-DISPOSITION.md'),
             lambda v: v['from'].update(database_version=19),
@@ -156,11 +158,13 @@ class CommittedReleaseTests(unittest.TestCase):
         value, sha = schema_release.load()
         baseline = {k: value['from'][k] for k in schema_release.DIGESTS}
         source = {k: value['to'][k] for k in schema_release.DIGESTS}
-        clock = datetime(2026, 11, 6, tzinfo=timezone.utc)
+        before, after = value['from']['database_version'], value['to']['database_version']
+        clock = schema_release.expiry(value) - timedelta(days=3)
         head = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
-        self.assertEqual(schema_release.applicable(source, baseline, 20, ROOT, clock, head),
-                         {'from_version': 20, 'to_version': 22, 'spec_sha256': sha})
-        for policy, moment, candidate in [(21, clock, head), (20, schema_release.expiry(value), head), (20, clock, 'f' * 40)]:
+        self.assertEqual(schema_release.applicable(source, baseline, before, ROOT, clock, head),
+                         {'from_version': before, 'to_version': after, 'spec_sha256': sha})
+        for policy, moment, candidate in [(before + 1, clock, head), (before - 1, clock, head), (after, clock, head),
+                                          (before, schema_release.expiry(value), head), (before, clock, 'f' * 40)]:
             with self.assertRaises(Refused): schema_release.applicable(source, baseline, policy, ROOT, moment, candidate)
 
     def test_committed_release_equals_the_source_pin(self):
@@ -196,8 +200,8 @@ class ApplicabilityTests(unittest.TestCase):
             ('candidate contract', lambda: self.source.update(deployment_contract_sha256='0' * 64)),
             ('contract-only change', lambda: self.source.update(schema_manifest_sha256=self.baseline['schema_manifest_sha256'])),
             ('infrastructure', lambda: setattr(self, 'infra', '5' * 64)),
-            ('at expiry', lambda: setattr(self, 'clock', datetime(2026, 11, 20, tzinfo=timezone.utc))),
-            ('after expiry', lambda: setattr(self, 'clock', datetime(2026, 12, 1, tzinfo=timezone.utc))),
+            ('at expiry', lambda: setattr(self, 'clock', EXPIRY)),
+            ('after expiry', lambda: setattr(self, 'clock', EXPIRY + timedelta(days=5))),
             ('policy 19', lambda: setattr(self, 'policy', 19)),
             ('policy 22', lambda: setattr(self, 'policy', 22)),
             ('policy text', lambda: setattr(self, 'policy', '20')),
@@ -476,7 +480,7 @@ class SchemaLifecycleTests(unittest.TestCase):
             ('baseline differs', lambda: (self.initial['baseline'].update(deployment_contract_sha256='0' * 64), self.s3.objects.update({'beta/state.json': encoded(self.initial)}))),
             ('another checkout', lambda: self.enterContext(patch.object(schema_release, 'checkout_head', lambda repo: 'b' * 40))),
             ('infrastructure', lambda: setattr(self, 'infra', '5' * 64)),
-            ('expired', lambda: setattr(self.runner, 'clock', lambda: datetime(2026, 11, 20, tzinfo=timezone.utc))),
+            ('expired', lambda: setattr(self.runner, 'clock', lambda: EXPIRY)),
             ('policy version', lambda: (self.initial['policy'].update(schema_version=19), self.s3.objects.update({'beta/state.json': encoded(self.initial)}))),
         ]
         for name, mutate in cases:
@@ -514,7 +518,7 @@ class SchemaLifecycleTests(unittest.TestCase):
         def reformatted():
             self.file.write(json.dumps(spec(), sort_keys=True))
         def expires_during_final_checks(_):
-            self.runner.clock = lambda: datetime(2026, 11, 20, tzinfo=timezone.utc)
+            self.runner.clock = lambda: EXPIRY
         cases = [('reformatted', reformatted), ('removed', lambda: self.file.write(None)),
                  ('infrastructure', lambda: setattr(self, 'infra', '5' * 64)),
                  ('final checks', lambda: setattr(self.current_mock, 'side_effect', expires_during_final_checks))]
@@ -529,7 +533,7 @@ class SchemaLifecycleTests(unittest.TestCase):
         self.prepared(); calls = []
         def second_check_expires(_):
             calls.append(1)
-            if len(calls) == 2: self.runner.clock = lambda: datetime(2026, 11, 20, tzinfo=timezone.utc)
+            if len(calls) == 2: self.runner.clock = lambda: EXPIRY
         self.current_mock.side_effect = second_check_expires
         with self.assertRaisesRegex(Refused, 'separate reviewed release required'): self.run_execute()
         self.assert_serving_and_prepared([('schema-snapshot', 'confirmed')])
@@ -729,35 +733,44 @@ class SchemaLifecycleTests(unittest.TestCase):
 
     @unittest.skipUnless(schema_release.SPEC.exists(), 'no schema release is pending')
     def test_the_committed_release_and_disposition_promote_together(self):
-        """The committed schema release and the committed scan disposition, end to end:
-        the live predecessors, the release's `to` contract, every reviewed finding."""
-        from ops.promotion.registry import scan_disposition
+        """The committed schema release end to end, from its reviewed baseline and policy
+        version, with the committed scan disposition when one is pending (the live
+        predecessors, the release's `to` contract, every reviewed finding) and with an
+        unchanged scan when none is (release B's case until its preparation says otherwise)."""
+        from ops.promotion import registry
         committed = json.loads(Path(schema_release.__file__).with_name('schema-release.json').read_text())  # setUp patched SPEC
-        disposition, disposition_sha = scan_disposition()
+        disposition, disposition_sha = registry.scan_disposition()
         manifest = subprocess.check_output(['git', '-C', str(ROOT), 'show', 'HEAD:app/migrations/manifest.json'])
-        self.build(candidate=manifest, reviewed=committed)
-        for role, entry in disposition['roles'].items():
-            self.initial['live']['registry'][role]['manifest_digest'] = entry['predecessor_manifest_digest']
-        self.s3.objects['beta/state.json'] = encoded(self.initial); self.aws.state = copy.deepcopy(self.initial)
-        findings = {guards.REPOS[role]: entry['findings'] for role, entry in disposition['roles'].items()}
-        original = self.aws._call
-        def scans(s, o, a):
-            if o == 'describe_image_scan_findings':
-                return {'imageScanStatus': {'status': 'COMPLETE'}, 'imageScanFindings': {'findings': copy.deepcopy(findings[a['repositoryName']])}}
-            return original(s, o, a)
-        self.aws._call = scans
+        self.build(candidate=manifest, reviewed=committed, policy=committed['from']['database_version'])
+        reviewed = len(registry.REVIEWED_DISPOSITION['findings']) if disposition else 0
+        if disposition:
+            for role, entry in disposition['roles'].items():
+                self.initial['live']['registry'][role]['manifest_digest'] = entry['predecessor_manifest_digest']
+            self.s3.objects['beta/state.json'] = encoded(self.initial); self.aws.state = copy.deepcopy(self.initial)
+            findings = {guards.REPOS[role]: entry['findings'] for role, entry in disposition['roles'].items()}
+            original = self.aws._call
+            def scans(s, o, a):
+                if o == 'describe_image_scan_findings':
+                    return {'imageScanStatus': {'status': 'COMPLETE'}, 'imageScanFindings': {'findings': copy.deepcopy(findings[a['repositoryName']])}}
+                return original(s, o, a)
+            self.aws._call = scans
         result = self.prepared()
-        self.assertEqual(result['review']['deployment_contract_sha256'], disposition['deployment_contract_sha256'])
+        self.assertEqual(result['review']['deployment_contract_sha256'], committed['to']['deployment_contract_sha256'])
+        self.assertEqual(result['review']['schema_release'], {'from_version': committed['from']['database_version'],
+            'to_version': committed['to']['database_version'], 'spec_sha256': schema_release.load()[1]})
         for role in guards.REPOS:
             scan = result['review']['scan'][role]
-            self.assertEqual((scan['introduced'], scan['reviewed_count'], scan['unreviewed']), (16, 16, 0))
-            self.assertEqual((scan['disposition_sha256'], scan['review_expires_at_utc']), (disposition_sha, disposition['expires_at_utc']))
+            self.assertEqual((scan['introduced'], scan['reviewed_count'], scan['unreviewed']), (reviewed, reviewed, 0))
+            self.assertEqual((scan['disposition_sha256'], scan['review_expires_at_utc']),
+                             (disposition_sha, disposition['expires_at_utc']) if disposition else (None, None))
         summary = self.run_execute(); validate_summary(summary, self.request['candidate_sha'])
         final = self.store.load()
-        self.assertEqual(final['baseline']['deployment_contract_sha256'], disposition['deployment_contract_sha256'])
-        self.assertEqual(final['policy']['schema_version'], 22)
-        for role in guards.REPOS:
-            self.assertEqual(len(final['live']['registry'][role]['findings']), 16)
+        self.assertEqual(final['baseline']['deployment_contract_sha256'], committed['to']['deployment_contract_sha256'])
+        self.assertEqual(final['baseline']['schema_manifest_sha256'], committed['to']['schema_manifest_sha256'])
+        self.assertEqual(final['policy']['schema_version'], committed['to']['database_version'])
+        if disposition:
+            for role in guards.REPOS:
+                self.assertEqual(len(final['live']['registry'][role]['findings']), reviewed)
 
     def test_the_scan_delta_binds_the_promoted_candidates_contract(self):
         """Fable dry run, 2026-11-12: a schema release must be able to carry a disposition, or no
