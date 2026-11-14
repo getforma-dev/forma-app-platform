@@ -284,7 +284,10 @@ const SOURCES: [(&str, &[u8]); 215] = [
         include_bytes!("../auth/invite_tests.rs"),
     ),
     ("app/src/auth/mod.rs", include_bytes!("../auth/mod.rs")),
-    ("app/src/auth/notice.rs", include_bytes!("../auth/notice.rs")),
+    (
+        "app/src/auth/notice.rs",
+        include_bytes!("../auth/notice.rs"),
+    ),
     (
         "app/src/auth/pending.rs",
         include_bytes!("../auth/pending.rs"),
@@ -654,7 +657,10 @@ const SOURCES: [(&str, &[u8]); 215] = [
         include_bytes!("mcp_campaign.rs"),
     ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
-    ("app/src/storage/org_admin.rs", include_bytes!("org_admin.rs")),
+    (
+        "app/src/storage/org_admin.rs",
+        include_bytes!("org_admin.rs"),
+    ),
     (
         "app/src/storage/org_admin_campaign.rs",
         include_bytes!("org_admin_campaign.rs"),

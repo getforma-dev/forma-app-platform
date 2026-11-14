@@ -218,7 +218,8 @@ impl Workspace {
     pub async fn load_display_names(&self) -> Result<usize> {
         let mut loaded = 0;
         for organization in self.inner.registry.organizations() {
-            let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
+            let transaction =
+                Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
             let result = transaction.query("SELECT principal_id::text,display_name FROM genui.memberships WHERE organization_id=$1::text::uuid AND display_name IS NOT NULL ORDER BY principal_id", &[&organization]).await;
             transaction.finish(false).await?;
             let mut entries = Vec::new();

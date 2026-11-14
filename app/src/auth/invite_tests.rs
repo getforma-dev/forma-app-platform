@@ -771,7 +771,11 @@ impl Run {
     }
     async fn validate(&self, browser: &mut Browser, raw: &str) -> Reply {
         browser
-            .post(&self.app, "/invite/validate", &format!("code={raw}&consent=1"))
+            .post(
+                &self.app,
+                "/invite/validate",
+                &format!("code={raw}&consent=1"),
+            )
             .await
     }
     /// The whole invited signup: validate → hosted registration → callback.
@@ -1025,13 +1029,25 @@ async fn campaign() {
     assert_eq!(c.scalar(&format!("SELECT notice_version::bigint FROM genui.code_reservations WHERE code_id='{}' AND kind='presignup'", a.id)).await, i64::from(notice::NOTICE_VERSION));
     let counted = c.counts().await;
     let mut unconsenting = c.browser("192.0.2.11:2000");
-    for body in [format!("code={}", a.raw), format!("code={}&consent=0", a.raw), format!("code={}&consent=on", a.raw)] {
+    for body in [
+        format!("code={}", a.raw),
+        format!("code={}&consent=0", a.raw),
+        format!("code={}&consent=on", a.raw),
+    ] {
         c.auth.limits.clear();
         let refused = unconsenting.post(&c.app, "/invite/validate", &body).await;
-        assert_eq!((refused.status, refused.body.as_str()), (StatusCode::BAD_REQUEST, NEUTRAL), "{body:.8}");
+        assert_eq!(
+            (refused.status, refused.body.as_str()),
+            (StatusCode::BAD_REQUEST, NEUTRAL),
+            "{body:.8}"
+        );
         assert!(refused.headers.get(header::SET_COOKIE).is_none());
     }
-    assert_eq!(c.counts().await, counted, "no reservation, flow or PAR without consent");
+    assert_eq!(
+        c.counts().await,
+        counted,
+        "no reservation, flow or PAR without consent"
+    );
     c.record("D5: a valid code is refused without `consent=1` (or with any other consent value) before any reservation, flow or provider call, and the reservation the consented form makes records the notice version it agreed to");
     assert_eq!(
         c.scalar(&format!(

@@ -295,15 +295,26 @@ mod tests {
         assert_eq!(label(ORG, ADA), "Member 00000000", "unusable clears");
         replace_member_names(
             ORG,
-            &[(ADA.into(), "Ada".into()), (BOB.into(), "x".repeat(81)), ("bad".into(), "Eve".into())],
+            &[
+                (ADA.into(), "Ada".into()),
+                (BOB.into(), "x".repeat(81)),
+                ("bad".into(), "Eve".into()),
+            ],
         );
         assert_eq!(label(ORG, ADA), "Ada");
         assert_eq!(label(ORG, BOB), "Member 00000000");
         replace_member_names(OTHER, &[(BOB.into(), "Bob".into())]);
-        assert_eq!((label(ORG, ADA), label(OTHER, BOB)), ("Ada".into(), "Bob".into()));
+        assert_eq!(
+            (label(ORG, ADA), label(OTHER, BOB)),
+            ("Ada".into(), "Bob".into())
+        );
         replace_member_names(ORG, &[]);
         assert_eq!(label(ORG, ADA), "Member 00000000");
-        assert_eq!(label(OTHER, BOB), "Bob", "another organization's fill is untouched");
+        assert_eq!(
+            label(OTHER, BOB),
+            "Bob",
+            "another organization's fill is untouched"
+        );
         set_member_name(OTHER, BOB, None);
         assert_eq!(label(OTHER, BOB), "Member 00000000");
     }

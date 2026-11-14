@@ -526,9 +526,21 @@ mod tests {
             vec![pair("code", "ABCD"), pair("consent", "0")],
             vec![pair("code", "ABCD"), pair("consent", "on")],
             vec![pair("code", "ABCD"), pair("consent", "1 ")],
-            vec![pair("code", "ABCD"), pair("consent", "1"), pair("consent", "1")],
-            vec![pair("code", "ABCD"), pair("code", "ABCD"), pair("consent", "1")],
-            vec![pair("code", "ABCD"), pair("consent", "1"), pair("role", "admin")],
+            vec![
+                pair("code", "ABCD"),
+                pair("consent", "1"),
+                pair("consent", "1"),
+            ],
+            vec![
+                pair("code", "ABCD"),
+                pair("code", "ABCD"),
+                pair("consent", "1"),
+            ],
+            vec![
+                pair("code", "ABCD"),
+                pair("consent", "1"),
+                pair("role", "admin"),
+            ],
             vec![pair("code", "ABCD"), pair("Consent", "1")],
         ] {
             assert_eq!(consented_code(&refused), None, "{refused:?}");

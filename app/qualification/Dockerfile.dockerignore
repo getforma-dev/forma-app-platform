@@ -255,6 +255,9 @@ contracts/fixtures/shared-v1/**
 !app/migrations/catalog-v22.json
 !app/migrations/0023_consent_names_org_admin.sql
 !app/migrations/catalog-v23.json
+!app/src/auth/notice.rs
+!app/src/storage/org_admin.rs
+!app/src/storage/org_admin_campaign.rs
 !app/migrations/0022_work_artifact_kinds.sql
 !app/src/storage/artifact_kind.rs
 !app/src/storage/work_presentation_checks.rs

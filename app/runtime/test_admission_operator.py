@@ -405,7 +405,7 @@ class OperatorDatabase:
     def pending_for(self, digest, subject, context):
         """Reserve, then record a pending admission as genui_workspace: (outcome, pending id, expiry, presignup id)."""
         with self.workspace() as c:
-            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)",
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s,1)",
                                                 (ORG, digest, "sha256:" + context * 64)).fetchone()
             self.assertEqual(outcome, "reserved")
             pending, expires, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
@@ -477,7 +477,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(self.query("SELECT count(*) FROM genui.code_grant_templates WHERE organization_id=%s", (org,)), [(0,)])
         with self.connect("genui_workspace") as c:
             c.execute("SELECT set_config('genui.organization_id',%s,true)", (org,))
-            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (org, digest, "sha256:" + "a" * 64)).fetchone()
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s,1)", (org, digest, "sha256:" + "a" * 64)).fetchone()
             self.assertEqual(outcome, "reserved")
             pending, _, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)", (org, reservation, ISSUER, tenant, subject)).fetchone()
             self.assertEqual(outcome, "pending")
@@ -932,7 +932,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         before = next(i for i in self.cli("list", "--organization", ORG)["codes"] if i["code_id"] == out["code_id"])
         self.assertEqual(before["redemptions"], [])
         with self.workspace() as c:
-            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "a" * 64)).fetchone()
+            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s,1)", (ORG, digest, "sha256:" + "a" * 64)).fetchone()
             pending, _, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
                                             (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
             self.assertEqual(outcome, "pending")
@@ -963,7 +963,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         digest = op.code_digest(op.normalize_code(out["code"]))
         subject = "usr_" + uuid.uuid4().hex
         with self.workspace() as c:
-            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "b" * 64)).fetchone()
+            reservation, _, _ = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s,1)", (ORG, digest, "sha256:" + "b" * 64)).fetchone()
             pending, _, _ = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
                                       (ORG, reservation, ISSUER, TENANT, subject)).fetchone()
             principal, _, entitlement, redemption, outcome = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
@@ -1221,7 +1221,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         subject = "usr_" + uuid.uuid4().hex
         with self.connect("genui_workspace") as c:
             c.execute("SELECT set_config('genui.organization_id',%s,true)", (ORG,))
-            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s)", (ORG, digest, "sha256:" + "1" * 64)).fetchone()
+            reservation, _, outcome = c.execute("SELECT * FROM genui_private.reserve_code(%s,%s,%s,1)", (ORG, digest, "sha256:" + "1" * 64)).fetchone()
             self.assertEqual(outcome, "reserved")
             pending, _, outcome = c.execute("SELECT * FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)",
                                             (ORG, reservation, ISSUER, TENANT, subject)).fetchone()

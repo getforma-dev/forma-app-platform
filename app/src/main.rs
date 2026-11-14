@@ -64,7 +64,11 @@ fn qualification_router() -> Option<Router> {
 async fn load_display_names(stores: &Arc<genui::storage::Stores>) -> bool {
     match stores.workspace.load_display_names().await {
         Ok(count) => {
-            tracing::info!(event = "directory.members_loaded", count, "display names loaded");
+            tracing::info!(
+                event = "directory.members_loaded",
+                count,
+                "display names loaded"
+            );
             true
         }
         Err(error) => {
@@ -728,7 +732,10 @@ mod tests {
             1,
             "only the consent checkbox carries a value; a code is never rendered"
         );
-        assert!(body.matches("required").count() >= 2, "the code and the consent are required");
+        assert!(
+            body.matches("required").count() >= 2,
+            "the code and the consent are required"
+        );
         let (_, _, refused) = html(pages.invite(&InviteView {
             failed: true,
             ..InviteView::default()

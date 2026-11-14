@@ -96,7 +96,11 @@ async fn footprint(fixture: &Fixture, organization: &str) -> Value {
 }
 /// The admission chain's events of one kind in an organization, newest last:
 /// `(actor, outcome_digest, code_id is null)`.
-async fn events(fixture: &Fixture, organization: &str, kind: &str) -> Vec<(String, Option<String>, bool)> {
+async fn events(
+    fixture: &Fixture,
+    organization: &str,
+    kind: &str,
+) -> Vec<(String, Option<String>, bool)> {
     rows(fixture, &format!("SELECT actor_principal_id::text,outcome_digest::text,code_id IS NULL FROM genui.audit_events WHERE organization_id='{organization}' AND writer_role='admission' AND kind='{kind}' ORDER BY chain_sequence"))
         .await
         .iter()
@@ -258,7 +262,11 @@ async fn campaign() {
             .err(),
         Some(Error::Denied)
     );
-    assert!(!stores.workspace.is_org_admin(&outsider_in_org).await.unwrap());
+    assert!(!stores
+        .workspace
+        .is_org_admin(&outsider_in_org)
+        .await
+        .unwrap());
     assert_eq!(
         stores
             .workspace
@@ -278,7 +286,11 @@ async fn campaign() {
     // The canary admin sees only the canary organization and cannot reach a
     // Northstar-only member: RLS and the definer's scope agree.
     assert!(stores.workspace.is_org_admin(&other_admin).await.unwrap());
-    let other_overview = stores.workspace.org_admin_overview(&other_admin).await.unwrap();
+    let other_overview = stores
+        .workspace
+        .org_admin_overview(&other_admin)
+        .await
+        .unwrap();
     assert!(other_overview.iter().any(|m| m.principal == OUTSIDER));
     assert!(other_overview.iter().all(|m| m.principal != newcomer));
     assert_eq!(
@@ -290,7 +302,10 @@ async fn campaign() {
         RemoveOutcome::Refused("not_member")
     );
     let after_newcomer = footprint(&fixture, ORG).await;
-    assert_eq!(after_newcomer["members"].as_array().unwrap().len(), before["members"].as_array().unwrap().len() + 1);
+    assert_eq!(
+        after_newcomer["members"].as_array().unwrap().len(),
+        before["members"].as_array().unwrap().len() + 1
+    );
     assert_eq!(footprint(&fixture, OTHER).await, before_other);
     check(
         &mut checks,
@@ -302,8 +317,16 @@ async fn campaign() {
     assert!(stores.workspace.is_org_admin(&admin).await.unwrap());
     let overview = stores.workspace.org_admin_overview(&admin).await.unwrap();
     let listed: Vec<&str> = overview.iter().map(|m| m.principal.as_str()).collect();
-    let seeded = rows(&fixture, &format!("SELECT principal_id::text FROM genui.memberships WHERE organization_id='{ORG}'")).await;
-    assert_eq!(listed.len(), seeded.len(), "every membership, revoked included");
+    let seeded = rows(
+        &fixture,
+        &format!("SELECT principal_id::text FROM genui.memberships WHERE organization_id='{ORG}'"),
+    )
+    .await;
+    assert_eq!(
+        listed.len(),
+        seeded.len(),
+        "every membership, revoked included"
+    );
     for member in &overview {
         assert_eq!(
             [member.apps, member.works, member.records, member.uploads],
@@ -326,10 +349,16 @@ async fn campaign() {
     let fresh = row(&overview, &newcomer);
     assert_eq!(fresh.consent_version, Some(NOTICE_VERSION));
     assert!(fresh.consented_at.as_deref().is_some_and(rfc3339_second));
-    assert!(fresh.last_active.as_deref().is_some_and(rfc3339_second), "the admission events are activity");
+    assert!(
+        fresh.last_active.as_deref().is_some_and(rfc3339_second),
+        "the admission events are activity"
+    );
     assert_eq!(fresh.code_status.as_deref(), Some("exhausted"));
     assert_eq!(fresh.note.as_deref(), Some("first wave"));
-    assert_eq!([fresh.apps, fresh.works, fresh.records, fresh.uploads], [0, 0, 0, 0]);
+    assert_eq!(
+        [fresh.apps, fresh.works, fresh.records, fresh.uploads],
+        [0, 0, 0, 0]
+    );
     check(
         &mut checks,
         "the admin's overview lists every membership of its organization with the superuser's own counts of apps owned, works created, records created and files uploaded, status, admin flag, latest consent (version and RFC 3339 time), last activity, and the redeemed code's status and operator note; no provider subject appears",
@@ -342,7 +371,11 @@ async fn campaign() {
         ..newcomer_request
     };
     assert_eq!(
-        stores.workspace.display_name(&newcomer_request).await.unwrap(),
+        stores
+            .workspace
+            .display_name(&newcomer_request)
+            .await
+            .unwrap(),
         None
     );
     for bad in ["", " ", "a\u{0}b", "tab\tname", &"n".repeat(81)] {
@@ -363,7 +396,12 @@ async fn campaign() {
         .await
         .unwrap();
     assert_eq!(
-        stores.workspace.display_name(&newcomer_request).await.unwrap().as_deref(),
+        stores
+            .workspace
+            .display_name(&newcomer_request)
+            .await
+            .unwrap()
+            .as_deref(),
         Some("Ada Lovelace")
     );
     assert_eq!(crate::directory::label(ORG, &newcomer), "Ada Lovelace");
@@ -373,7 +411,14 @@ async fn campaign() {
         "a name belongs to one organization"
     );
     assert_eq!(member_label(ORG, &newcomer), "Ada Lovelace");
-    assert_eq!(row(&stores.workspace.org_admin_overview(&admin).await.unwrap(), &newcomer).label, "Ada Lovelace");
+    assert_eq!(
+        row(
+            &stores.workspace.org_admin_overview(&admin).await.unwrap(),
+            &newcomer
+        )
+        .label,
+        "Ada Lovelace"
+    );
     // The same name again writes nothing; a new name writes one more event.
     stores
         .workspace
@@ -389,8 +434,16 @@ async fn campaign() {
     assert_eq!(
         named,
         vec![
-            (newcomer.clone(), Some(domain_digest("forma:member-name:v1", "Ada Lovelace")), true),
-            (newcomer.clone(), Some(domain_digest("forma:member-name:v1", "Ada L.")), true),
+            (
+                newcomer.clone(),
+                Some(domain_digest("forma:member-name:v1", "Ada Lovelace")),
+                true
+            ),
+            (
+                newcomer.clone(),
+                Some(domain_digest("forma:member-name:v1", "Ada L.")),
+                true
+            ),
         ]
     );
     assert_eq!(crate::directory::label(ORG, &newcomer), "Ada L.");
@@ -400,13 +453,20 @@ async fn campaign() {
         ..request(&stores, ORG, &newcomer, 1)
     };
     assert_eq!(
-        stores.workspace.set_display_name(&stale, "Mallory").await.err(),
+        stores
+            .workspace
+            .set_display_name(&stale, "Mallory")
+            .await
+            .err(),
         Some(Error::Denied)
     );
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.memberships WHERE organization_id='{ORG}' AND display_name='Mallory'")).await, 0);
     // The startup fill reads the stored names back into the process cache.
     crate::directory::set_member_name(ORG, &newcomer, None);
-    assert_eq!(crate::directory::label(ORG, &newcomer), crate::directory::neutral_label(&newcomer));
+    assert_eq!(
+        crate::directory::label(ORG, &newcomer),
+        crate::directory::neutral_label(&newcomer)
+    );
     assert_eq!(stores.workspace.load_display_names().await.unwrap(), 1);
     assert_eq!(crate::directory::label(ORG, &newcomer), "Ada L.");
     check(
@@ -417,28 +477,57 @@ async fn campaign() {
     // --- self, last admin, non-members -----------------------------------------
     let settled = footprint(&fixture, ORG).await;
     assert_eq!(
-        stores.workspace.admin_remove_member(&admin, ADMIN).await.unwrap(),
+        stores
+            .workspace
+            .admin_remove_member(&admin, ADMIN)
+            .await
+            .unwrap(),
         RemoveOutcome::Refused("last_admin"),
         "the sole admin removing itself"
     );
-    fixture.sql(&format!("INSERT INTO genui.organization_permissions VALUES ('{ORG}','{PEER}','admin_policy')"), "genui");
+    fixture.sql(
+        &format!(
+            "INSERT INTO genui.organization_permissions VALUES ('{ORG}','{PEER}','admin_policy')"
+        ),
+        "genui",
+    );
     assert_eq!(
-        stores.workspace.admin_remove_member(&admin, ADMIN).await.unwrap(),
+        stores
+            .workspace
+            .admin_remove_member(&admin, ADMIN)
+            .await
+            .unwrap(),
         RemoveOutcome::Refused("self")
     );
     assert_eq!(
-        stores.workspace.admin_remove_member(&admin, REVOKED).await.unwrap(),
+        stores
+            .workspace
+            .admin_remove_member(&admin, REVOKED)
+            .await
+            .unwrap(),
         RemoveOutcome::Refused("not_member")
     );
     assert_eq!(
-        stores.workspace.admin_remove_member(&admin, NOBODY).await.unwrap(),
+        stores
+            .workspace
+            .admin_remove_member(&admin, NOBODY)
+            .await
+            .unwrap(),
         RemoveOutcome::Refused("not_member")
     );
     assert_eq!(
-        stores.workspace.admin_remove_member(&admin, "not-an-id").await.err(),
+        stores
+            .workspace
+            .admin_remove_member(&admin, "not-an-id")
+            .await
+            .err(),
         Some(Error::Denied)
     );
-    assert_eq!(footprint(&fixture, ORG).await, settled, "refusals write nothing");
+    assert_eq!(
+        footprint(&fixture, ORG).await,
+        settled,
+        "refusals write nothing"
+    );
     check(
         &mut checks,
         "removal refuses the caller itself (last_admin while it is the only active admin, self once another admin exists), an already revoked member and a stranger (not_member), and a malformed id (Denied); every refusal writes nothing",
@@ -446,7 +535,10 @@ async fn campaign() {
 
     // --- removal: membership, entitlement, epoch, sessions, audit --------------
     let peer = request(&stores, ORG, PEER, 1);
-    assert!(stores.workspace.is_org_admin(&peer).await.unwrap(), "the second admin");
+    assert!(
+        stores.workspace.is_org_admin(&peer).await.unwrap(),
+        "the second admin"
+    );
     let reference = "00000000-0000-4000-8000-00000000c0de";
     let cookie = stores
         .workspace
@@ -455,11 +547,19 @@ async fn campaign() {
         .unwrap();
     let live = |r: &str| r == reference;
     assert!(matches!(
-        stores.workspace.resolve_session(&cookie, &live).await.unwrap(),
+        stores
+            .workspace
+            .resolve_session(&cookie, &live)
+            .await
+            .unwrap(),
         Lookup::Live(_)
     ));
     let removal_before = footprint(&fixture, ORG).await;
-    let outcome = stores.workspace.admin_remove_member(&admin, PEER).await.unwrap();
+    let outcome = stores
+        .workspace
+        .admin_remove_member(&admin, PEER)
+        .await
+        .unwrap();
     assert_eq!(outcome, RemoveOutcome::Removed);
     let member = rows(&fixture, &format!("SELECT status,membership_epoch FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{PEER}'")).await;
     assert_eq!(member[0].get::<_, String>(0), "revoked");
@@ -468,23 +568,49 @@ async fn campaign() {
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.entitlements WHERE organization_id='{ORG}' AND principal_id='{PEER}' AND status='revoked' AND revoked_at IS NOT NULL")).await, 1);
     assert_eq!(
         removal_before["active_entitlements"].as_i64().unwrap() - 1,
-        footprint(&fixture, ORG).await["active_entitlements"].as_i64().unwrap()
+        footprint(&fixture, ORG).await["active_entitlements"]
+            .as_i64()
+            .unwrap()
     );
     // The session dies at its next request; the removed member's requests
     // are refused everywhere, the admin ones included.
     assert!(matches!(
-        stores.workspace.resolve_session(&cookie, &live).await.unwrap(),
+        stores
+            .workspace
+            .resolve_session(&cookie, &live)
+            .await
+            .unwrap(),
         Lookup::Ended(_)
     ));
     assert!(matches!(
-        stores.workspace.resolve_session(&cookie, &live).await.unwrap(),
+        stores
+            .workspace
+            .resolve_session(&cookie, &live)
+            .await
+            .unwrap(),
         Lookup::Absent
     ));
     assert!(!stores.workspace.is_org_admin(&peer).await.unwrap());
-    assert_eq!(stores.workspace.org_admin_overview(&peer).await.err(), Some(Error::Denied));
-    assert_eq!(stores.workspace.admin_remove_member(&peer, ADMIN).await.err(), Some(Error::Denied));
-    assert_eq!(stores.workspace.display_name(&peer).await.err(), Some(Error::Denied));
-    assert_eq!(stores.workspace.set_display_name(&peer, "Back").await.err(), Some(Error::Denied));
+    assert_eq!(
+        stores.workspace.org_admin_overview(&peer).await.err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .admin_remove_member(&peer, ADMIN)
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        stores.workspace.display_name(&peer).await.err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(
+        stores.workspace.set_display_name(&peer, "Back").await.err(),
+        Some(Error::Denied)
+    );
     let target_digest = domain_digest("forma:member-removal:v1", PEER);
     assert_eq!(
         events(&fixture, ORG, "entitlement.revoked").await,
@@ -499,10 +625,21 @@ async fn campaign() {
         (tail[0].get::<_, String>(0), tail[1].get::<_, String>(0)),
         ("membership.revoked".into(), "entitlement.revoked".into())
     );
-    assert_eq!(row(&stores.workspace.org_admin_overview(&admin).await.unwrap(), PEER).status, "revoked");
+    assert_eq!(
+        row(
+            &stores.workspace.org_admin_overview(&admin).await.unwrap(),
+            PEER
+        )
+        .status,
+        "revoked"
+    );
     // Removing again is not_member; the operator chain carries none of this.
     assert_eq!(
-        stores.workspace.admin_remove_member(&admin, PEER).await.unwrap(),
+        stores
+            .workspace
+            .admin_remove_member(&admin, PEER)
+            .await
+            .unwrap(),
         RemoveOutcome::Refused("not_member")
     );
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events WHERE organization_id='{ORG}' AND writer_role='operator' AND kind IN ('membership.revoked','entitlement.revoked')")).await, 0);
@@ -529,8 +666,5 @@ async fn campaign() {
     if let Some(path) = std::env::var_os("GENUI_ORG_ADMIN_REPORT") {
         std::fs::write(path, serde_json::to_vec_pretty(&json!({"schema_version":1,"scope":"trial plan D4/D5/D6: consent, member names and organization admin storage (migration 0023)","postgres_image":super::qualification::IMAGE,"server_version":fixture.server_version,"checks":checks,"passed":true,"limits":["Synthetic local password authentication is not RDS IAM.","The second admin is granted by fixture SQL as the operator stand-in; the operator's grant-admin command is W3's.","The HTTP admin route and page are W2's; this campaign exercises the storage module and the session resolution the route uses.","The directory cache is process-wide: one task (ADR-007 D7.18), refreshed by this process's own writes and the startup fill."]})).unwrap()).unwrap();
     }
-    println!(
-        "org-admin campaign: {} checks passed",
-        checks.len()
-    );
+    println!("org-admin campaign: {} checks passed", checks.len());
 }
