@@ -102,6 +102,16 @@ pub struct CanvasProps {
     /// unavailable: the page still renders, every row without a kind, and the
     /// island keeps this browser's choices unchanged.
     pub artifact_kinds_loaded: bool,
+    /// Trial plan D4: the member holds `admin_policy` in the organization;
+    /// the top bar links the admin area (`/admin`). False when unknown.
+    pub is_org_admin: bool,
+    /// Trial plan D6: the member has no display name yet, so the canvas
+    /// asks "What should others call you?". False when it cannot be read.
+    pub needs_name: bool,
+    /// The display name the member chose (the top bar's form to change it).
+    pub display_name: String,
+    /// The synchronizer token of `POST /me/name` (`csrf::Form::DisplayName`).
+    pub csrf_display_name: String,
 }
 
 /// APP-104: one category of the library pane ("Finance", "My apps").
@@ -1648,6 +1658,27 @@ async fn organization_name(canvas: &Canvas, member: &TrustedRequest) -> String {
     }
 }
 
+/// Trial plan D4 and D6: whether the member is an organization admin, and
+/// their display name (`Some(None)`: none chosen yet; `None`: not readable
+/// now). Either read failing leaves the canvas as it was: no Admin link, no
+/// name prompt.
+async fn member_facts(canvas: &Canvas, member: &TrustedRequest) -> (bool, Option<Option<String>>) {
+    let Some(stores) = &canvas.work.auth().stores else {
+        return (false, None);
+    };
+    let (admin, name) = tokio::join!(
+        stores.workspace.is_org_admin(member),
+        stores.workspace.display_name(member)
+    );
+    if let Err(error) = &admin {
+        tracing::info!(code = %error, "canvas.org_admin_unavailable");
+    }
+    if let Err(error) = &name {
+        tracing::info!(code = %error, "canvas.display_name_unavailable");
+    }
+    (admin.unwrap_or(false), name.ok())
+}
+
 /// APP-169: the member's saved Card or App choices, or `None` when they
 /// cannot be read now. The canvas then renders without them (no row carries
 /// a kind and the page carries no `data-artifact-kinds`), so the island keeps
@@ -1779,6 +1810,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
     );
     let library = library(sources);
     let organization = organization_name(&canvas, &member).await;
+    let (is_org_admin, display_name) = member_facts(&canvas, &member).await;
     let principal = member.principal();
     // DS-40: the synthetic-data note and the demo-safe layout flag (data-demo).
     let demo = is_demo(&canvas.demo_organizations, member.organization());
@@ -1800,6 +1832,12 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         library,
         member_key: member_key(member.organization(), principal),
         artifact_kinds_loaded: kinds.is_some(),
+        is_org_admin,
+        needs_name: display_name
+            .as_ref()
+            .is_some_and(|name| name.as_deref().is_none_or(|name| name.trim().is_empty())),
+        display_name: display_name.flatten().unwrap_or_default(),
+        csrf_display_name: auth.csrf.token(csrf::Form::DisplayName, &cookie),
     };
     canvas.pages.canvas(&props)
 }

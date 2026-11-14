@@ -9,7 +9,7 @@ use crate::{
     boxes,
     commands::{self, RecordPage},
     composer::{self, Composer},
-    events, mcp,
+    events, mcp, member_name, org_admin,
     query::{canvas, Work},
     sharing, slack, widgets,
 };
@@ -38,6 +38,8 @@ pub struct Product {
     pub weather: widgets::weather::OpenMeteo,
     /// APP-108: folders (the caller installs the folder intent).
     pub boxes: Arc<boxes::routes::Boxes>,
+    /// Trial plan D4: the organization admin page (`GET /admin`).
+    pub org_admin_pages: Arc<dyn org_admin::AdminPages>,
 }
 
 /// The product routes: the short-deadline router, and the long-deadline
@@ -57,6 +59,7 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         customizer,
         weather,
         boxes,
+        org_admin_pages,
     } = product;
     let command_routes = Arc::new(commands::routes::Commands {
         auth: auth.clone(),
@@ -125,7 +128,14 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
         .merge(composer::presentation::router(auth.clone()))
         // APP-123: cards made by you and pinned answers.
         .merge(card_routes.clone())
-        .merge(boxes::routes::router(boxes));
+        .merge(boxes::routes::router(boxes))
+        // Trial plan D4 and D6: the organization's admin area and the
+        // member's own display name.
+        .merge(org_admin::router(Arc::new(org_admin::OrgAdmin {
+            auth: auth.clone(),
+            pages: org_admin_pages,
+        })))
+        .merge(member_name::router(auth.clone()));
     let long = vec![
         // The canvas page reads every openable work (library pane).
         (canvas::PATH, canvas_routes),

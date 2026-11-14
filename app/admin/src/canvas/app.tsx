@@ -244,6 +244,12 @@ type CanvasProps = {
   memberKey: string;
   /** APP-169: the member's saved Card or App choices were read for this page. */
   artifactKindsLoaded: boolean;
+  /** Trial plan D4: the member is an admin of the organization (the Admin link). */
+  isOrgAdmin: boolean;
+  /** Trial plan D6: no display name yet, so the canvas asks for one. */
+  needsName: boolean;
+  displayName: string;
+  csrfDisplayName: string;
 };
 
 type IntentProps = { placeholder: string };
@@ -347,7 +353,18 @@ function Canvas(props: CanvasProps) {
           </button>
           <a class="cv-link" href="/shared">Connected apps</a><span class="cv-connected-status" role="status" data-connected-status=""></span>
           <a class="cv-link" href="/workspace">Workspace</a>
+          {createShow(() => props.isOrgAdmin, () => (
+            <a class="cv-link" href="/admin">Admin</a>
+          ))}
           <a class="cv-link" href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
+          <details class="cv-name-menu">
+            <summary class="cv-link" title="The name others see">Your name</summary>
+            <form method="post" action="/me/name" class="cv-name-form">
+              <input type="hidden" name="csrf" value={props.csrfDisplayName} />
+              <label>The name others see <input name="name" value={props.displayName} required maxLength={80} autocomplete="name" /></label>
+              <button type="submit">Save</button>
+            </form>
+          </details>
           <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
             {props.memberInitials}
           </span>
@@ -357,6 +374,14 @@ function Canvas(props: CanvasProps) {
           </form>
         </div>
       </header>
+      {createShow(() => props.needsName, () => (
+        <form method="post" action="/me/name" class="cv-name-prompt">
+          <input type="hidden" name="csrf" value={props.csrfDisplayName} />
+          <label for="cv-name-input">What should others call you?</label>
+          <input id="cv-name-input" name="name" required maxLength={80} autocomplete="name" placeholder="Your name" />
+          <button type="submit">Save</button>
+        </form>
+      ))}
       <main
         id="cv-canvas"
         class="cv-canvas"
@@ -952,6 +977,10 @@ mount(
       librarySummary: '',
       memberKey: '',
       artifactKindsLoaded: false,
+      isOrgAdmin: false,
+      needsName: false,
+      displayName: '',
+      csrfDisplayName: '',
     }),
   '#app',
 );
