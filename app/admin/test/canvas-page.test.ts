@@ -49,15 +49,18 @@ test('a stored page keeps its size, and a record from before size still loads', 
   assert.equal(dropped[1]?.x, 8);
 });
 
-test('sharing a page names the saved work and nobody else', async () => {
+test('sharing a page names the saved work, the member and the role, nobody else', async () => {
   const { appShareRequest } = await import('../src/canvas/page.ts');
   const grantee = '99999999-8888-4777-8666-555555555555';
   const request = appShareRequest(APP, WORK, grantee);
   assert.ok(request);
   assert.equal(request.url, `/v1/work/${APP}/${WORK}/share`);
   const body = JSON.parse(request.body) as Record<string, unknown>;
-  assert.deepEqual(Object.keys(body), ['grantee_principal_id']);
+  // APP-192: every share names its role; a page share is a viewer share.
+  assert.deepEqual(Object.keys(body), ['grantee_principal_id', 'role']);
   assert.equal(body.grantee_principal_id, grantee);
+  assert.equal(body.role, 'viewer');
+  assert.equal(JSON.parse(appShareRequest(APP, WORK, grantee, 'contributor')!.body).role, 'contributor');
   assert.equal(appShareRequest(APP.toUpperCase(), WORK, grantee), null);
   assert.equal(appShareRequest(APP, WORK, 'not-a-member'), null);
   assert.equal(appShareRequest(APP, 'card-1', grantee), null);

@@ -158,7 +158,7 @@ export function postDraft(draft: Draft): Promise<Posted> {
   });
 }
 
-/** The share step: the existing share route, record_write so the approver can decide. */
+/** The share step: the existing share route, as a contributor so the approver can decide. */
 async function shareWith(draft: Draft): Promise<string> {
   const approvers = draft.approvers?.length ? draft.approvers : draft.approver ? [draft.approver] : [];
   const notes: string[] = [];
@@ -169,7 +169,7 @@ async function shareWith(draft: Draft): Promise<string> {
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ grantee_principal_id: approver.principal_id, record_write: true }),
+        body: JSON.stringify({ grantee_principal_id: approver.principal_id, role: 'contributor' }),
       });
       notes.push(response.ok ? `Shared with ${approver.label} for approval.` : `The share with ${approver.label} was refused; the record is filed.`);
     } catch {

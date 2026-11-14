@@ -28,13 +28,13 @@ export function storedPageSize(width: unknown, height: unknown): { width?: numbe
 }
 
 /**
- * The existing share route for the app's saved work. The body names a member.
- * It does not name a card.
+ * The existing share route for the app's saved work. The body names a member
+ * and the role (APP-192: viewer unless asked). It does not name a card.
  */
-export function appShareRequest(app: string, work: string, grantee: string): { url: string; body: string } | null {
+export function appShareRequest(app: string, work: string, grantee: string, role: 'viewer' | 'contributor' | 'reviewer' = 'viewer'): { url: string; body: string } | null {
   if (!UUID.test(app) || !UUID.test(work) || !UUID.test(grantee)) return null;
   return {
     url: `/v1/work/${app}/${work}/share`,
-    body: JSON.stringify({ grantee_principal_id: grantee }),
+    body: JSON.stringify({ grantee_principal_id: grantee, role }),
   };
 }
