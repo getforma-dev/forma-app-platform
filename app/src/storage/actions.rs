@@ -16,6 +16,7 @@
 //!   uses it to show a confirmation card that storage would accept; the
 //!   member's confirmation still goes through the audited command route,
 //!   which judges everything again.
+use super::record_query::CURRENT;
 use super::{
     authorization::{own_rows, Action, Resource, Transaction, SCOPED},
     commands::{
@@ -113,10 +114,10 @@ pub enum DryRun {
     Conflict { current_version: i64 },
 }
 
-/// The records listing's columns over `genui.internal_records r` joined with
-/// each record's current revision `v`.
+/// The records listing's columns over `genui.internal_records r` and each
+/// record's current revision `v` ([`super::record_query::CURRENT`]).
 const RECORD_COLUMNS: &str = "r.record_id::text,r.collection_id::text,r.current_version::bigint,v.commit_sequence::bigint,to_char(v.committed_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),v.creator_id::text,v.updater_id::text,v.canonical_values";
-const RECORDS_FROM: &str = "FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version";
+
 // Values are trusted canonical data, while the searched text stays a SQL
 // parameter. Insert the decimal point into the canonical digits as text. Even
 // PostgreSQL numeric division can round a 38-digit coefficient before round().
@@ -226,7 +227,7 @@ pub(super) async fn records_many(
     let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
     let limit = RECORDS_LIMIT + 1;
     // APP-191: the row rule, per work of the batch (one array per lateral row).
-    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k", own = own_rows("v", "c.app::uuid", "c.work::uuid", SCOPED)), &[&organization,&apps,&ids,&limit]).await? {
+    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k FROM genui.internal_records r {CURRENT} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k", own = own_rows("v", "c.app::uuid", "c.work::uuid", SCOPED)), &[&organization,&apps,&ids,&limit]).await? {
         let i = ordinal(&row, &sent)?;
         records[i].push(row);
     }
@@ -501,17 +502,17 @@ impl Data {
             let (rows, count) = match &filter {
                 Some(RecordFilter::Search {collection, query}) => {
                     let limit = SEARCH_RECORDS_LIMIT + 1;
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own} AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,collection,query,&limit]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} FROM genui.internal_records r {CURRENT} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own} AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,collection,query,&limit]).await?;
                     (rows, SEARCH_RECORDS_LIMIT)
                 }
                 Some(RecordFilter::Exact {collection, record}) => {
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid AND {own}", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,collection,record]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} FROM genui.internal_records r {CURRENT} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid AND {own}", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,collection,record]).await?;
                     require(rows.len() == 1)?;
                     (rows, 1)
                 }
                 None => {
                     let limit = RECORDS_LIMIT + 1;
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,&limit]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} FROM genui.internal_records r {CURRENT} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,&limit]).await?;
                     (rows, RECORDS_LIMIT)
                 }
             };
