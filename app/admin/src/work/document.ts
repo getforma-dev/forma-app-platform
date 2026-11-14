@@ -2,11 +2,36 @@ import { recordComponentsFor } from '../record-components/controller';
 import { presentationFor } from '../presentation/presentation';
 import { renderRegions, type DocumentProps } from './render';
 import { submitCommand } from '../canvas/commands';
-import { subscribeLive, type LiveEvent } from '../canvas/live';
+import { browserTiming, hintSchedule, retryOnce, subscribeLive, type Fetch, type LiveEvent, type Timing } from '../canvas/live';
 
 /** A hint never carries app data or authority. Fetch the exact document again. */
 export function refreshesDocument(event: LiveEvent, app: string, work: string): boolean {
   return event.kind === 'stream.lagged' || (event.app_id === app && event.work_id === work);
+}
+
+/** APP-195: a refresh the member started, or one a live hint or this page's own commit started. */
+export type RefreshMode = 'member' | 'live';
+
+/**
+ * How each trigger starts the document's refresh (APP-195). A live hint waits
+ * a random 0–3 s, and hints while it waits join it. This page's own commit
+ * reads at once, in place of a waiting hint. The member's own refreshes read
+ * at once and leave a waiting hint as it was, exactly as before.
+ */
+export function documentRefresher(refresh: (mode: RefreshMode) => void, timing: Timing = browserTiming) {
+  const hints = hintSchedule(timing);
+  let disposed = false;
+  return {
+    hint: () => { if (!disposed) hints.hint('document', () => refresh('live')); },
+    committed: () => { if (!disposed) hints.now('document', () => refresh('live')); },
+    member: () => { if (!disposed) refresh('member'); },
+    dispose: () => { disposed = true; hints.clear(); },
+  };
+}
+
+/** The read of each mode: the member's is the page's fetch, unchanged; a live one retries once (`retryOnce`). */
+export function documentRead(mode: RefreshMode, timing: Timing = browserTiming, request: Fetch = (input, init) => fetch(input, init)): Fetch {
+  return mode === 'live' ? retryOnce(timing, request) : request;
 }
 
 /** Enhance the native document. Live refresh preserves every unsent form,
@@ -22,8 +47,11 @@ export function startDocument(): void {
   const status = root.querySelector<HTMLElement>('[data-document-state]');
   let stopped = false;
   let refreshing = false;
-  let queued = false;
+  // A refresh asked for while one runs runs once after it. It reads as the
+  // member's when any of the waiting ones was the member's.
+  let queued: RefreshMode | null = null;
   let unsubscribe = () => undefined as void;
+  const reads: Record<RefreshMode, Fetch> = { member: documentRead('member'), live: documentRead('live') };
   const lifecycle = new AbortController();
   const pending = new WeakSet<HTMLFormElement>();
   // BFCache may suspend a request whose answer never reached this controller.
@@ -47,14 +75,15 @@ export function startDocument(): void {
     recordComponents.dispose();
     presentation.dispose();
     unsubscribe();
+    refresher.dispose();
     lifecycle.abort();
     window.clearInterval(timer);
     document.removeEventListener('visibilitychange', visible);
     document.removeEventListener('forma:document-refresh', requested);
   };
-  const refresh = async () => {
+  const refresh = async (mode: RefreshMode = 'member') => {
     if (stopped) return;
-    if (refreshing) { queued = true; return; }
+    if (refreshing) { queued = queued === 'member' || mode === 'member' ? 'member' : 'live'; return; }
     refreshing = true;
     // Only forms committed before this read began may consume its new keys.
     const committedBeforeRead = new Set(completed);
@@ -63,7 +92,7 @@ export function startDocument(): void {
     try {
       const body = new URLSearchParams({ csrf, document_action: 'refresh' });
       for (const [name, value] of selections) body.append(name, value);
-      const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal: lifecycle.signal,
+      const response = await reads[mode](path, { credentials: 'same-origin', cache: 'no-store', signal: lifecycle.signal,
         ...(selections.size ? { method: 'POST', body } : {}), headers: { accept: 'application/json' } });
       if (stopped) return;
       if (response.status === 404) {
@@ -84,7 +113,7 @@ export function startDocument(): void {
       const props = await response.json() as DocumentProps;
       if (stopped) return;
       if (props.action !== path || props.app !== app || props.work !== work) throw new Error('document mismatch');
-      if (selectionAtRead !== selectionGeneration) { queued = true; return; }
+      if (selectionAtRead !== selectionGeneration) { queued ??= mode; return; }
       const regions = renderRegions(document, props);
       recordComponents.beforeRefresh();
       presentation.beforeRefresh();
@@ -129,16 +158,17 @@ export function startDocument(): void {
       const title = root.querySelector<HTMLElement>('[data-document-title]');
       if (title && typeof props.title === 'string') title.textContent = props.title;
       presentation.afterRefresh(props.presentation);
-      recordComponents.afterRefresh();
+      recordComponents.afterRefresh(mode === 'live');
       say('Up to date.');
     } catch {
       presentation.afterRefresh();
       if (!stopped) say('Updates are unavailable. Your unfinished form is kept. Try Refresh.');
     } finally {
       refreshing = false;
-      if (queued && !stopped) { queued = false; void refresh(); }
+      if (queued && !stopped) { const next = queued; queued = null; void refresh(next); }
     }
   };
+  const refresher = documentRefresher(mode => { void refresh(mode); });
   root.addEventListener('submit', async event => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
@@ -153,7 +183,7 @@ export function startDocument(): void {
       selections.set(select.name, select.value);
       replaceForms.add(part.dataset.documentPart);
       selectionGeneration++;
-      void refresh();
+      refresher.member();
       return;
     }
     if (!form.matches('[data-command]')) return;
@@ -177,7 +207,8 @@ export function startDocument(): void {
       if (notice) notice.textContent = `Saved · Commit ${result.commit}. Refreshing the app…`;
       const collection = form.closest<HTMLElement>('[data-document-form]')?.dataset.documentForm;
       if (collection) completed.add(collection);
-      void refresh();
+      // APP-195: the page that committed reads at once, not after a hint's delay.
+      refresher.committed();
     } else {
       if (notice) notice.textContent = result.message;
       // Keep the same key and values for retries, including a lost answer.
@@ -190,16 +221,18 @@ export function startDocument(): void {
       if (button) button.disabled = false;
     }
   }, { signal: lifecycle.signal });
-  root.addEventListener('forma:record-components-unavailable', () => { void refresh(); }, { signal: lifecycle.signal });
-  const visible = () => { if (document.visibilityState === 'visible') void refresh(); };
-  const requested = () => { void refresh(); };
+  // The member's own refreshes, and the page's checks of access, read at once
+  // with the page's plain fetch (unchanged by APP-195).
+  root.addEventListener('forma:record-components-unavailable', () => { refresher.member(); }, { signal: lifecycle.signal });
+  const visible = () => { if (document.visibilityState === 'visible') refresher.member(); };
+  const requested = () => { refresher.member(); };
   // The stream can omit a revocation hint; bounded reads also recheck access.
   const timer = window.setInterval(visible, 30_000);
   document.addEventListener('visibilitychange', visible);
   document.addEventListener('forma:document-refresh', requested);
   document.addEventListener('forma:presentation-saved', event => {
     const detail = (event as CustomEvent<{app: string; work: string}>).detail;
-    if (detail?.app === app && detail.work === work) void refresh();
+    if (detail?.app === app && detail.work === work) refresher.member();
   }, { signal: lifecycle.signal });
   window.addEventListener('online', requested, { signal: lifecycle.signal });
   window.addEventListener('pagehide', event => {
@@ -207,10 +240,10 @@ export function startDocument(): void {
     if (event.persisted) window.addEventListener('pageshow', () => startDocument(), { once: true });
   }, { once: true, signal: lifecycle.signal });
   unsubscribe = subscribeLive('/v1/events', event => {
-    if (refreshesDocument(event, app, work)) void refresh();
+    if (refreshesDocument(event, app, work)) refresher.hint();
   }, state => {
     if (!stopped) say(state === 'live' ? 'Live updates connected.' : 'Reconnecting to updates…');
   });
   // Close the gap between native SSR and opening the live subscription.
-  void refresh();
+  refresher.member();
 }
