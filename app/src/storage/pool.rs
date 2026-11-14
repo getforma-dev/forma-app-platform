@@ -155,6 +155,19 @@ impl TestHooks {
     }
 }
 
+/// Callers one role admits at once: the two holding its connections and up
+/// to thirty waiting for one. The next caller is refused at once
+/// (`admission_saturated`, `Error::Unavailable`).
+///
+/// This keeps ADR-004 §Pool and driver lifecycle true: the queue of waiters
+/// is bounded, separately from the connections, and every admitted caller
+/// waits inside the one absolute `ACQUIRE` deadline, so a wait is bounded in
+/// length and in time. APP-195 raised it from 8 (two running, six waiting):
+/// one save on a page that 26 members had open made most of their refreshes
+/// answer 503 (APP-193 finding, G6). The connections (two per role, eight in
+/// all) and the 5/3/2 s deadlines are ADR-007's and do not change.
+pub(super) const ADMITTED: usize = 32;
+
 struct Capacity {
     all: Arc<Semaphore>,
     roles: [Arc<Semaphore>; 4],
@@ -165,7 +178,7 @@ fn capacity() -> &'static Capacity {
     VALUE.get_or_init(|| Capacity {
         all: Arc::new(Semaphore::new(8)),
         roles: std::array::from_fn(|_| Arc::new(Semaphore::new(2))),
-        admitted: std::array::from_fn(|_| Arc::new(Semaphore::new(8))),
+        admitted: std::array::from_fn(|_| Arc::new(Semaphore::new(ADMITTED))),
     })
 }
 

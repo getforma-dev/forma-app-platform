@@ -787,22 +787,26 @@ async fn campaign() {
     }
     assert_eq!(pids.len(), 8);
     assert_eq!(pool::slots(), (8, [2, 2, 2, 2]));
+    // APP-195: two running and thirty waiting are admitted; the 33rd caller
+    // is refused at once, without waiting.
     let mut waiters = Vec::new();
-    for _ in 0..6 {
+    for _ in 0..30 {
         let pool = stores.data.inner.clone();
         waiters.push(tokio::spawn(async move { Lease::acquire(&pool).await }));
     }
     timeout(Duration::from_secs(1), async {
-        while stores.data.inner.pool.status().waiting != 6 {
+        while stores.data.inner.pool.status().waiting != 30 {
             tokio::task::yield_now().await;
         }
     })
     .await
     .unwrap();
+    let refused_at = WallInstant::now();
     assert!(matches!(
         Lease::acquire(&stores.data.inner).await,
         Err(Error::Unavailable)
     ));
+    assert!(refused_at.elapsed() < Duration::from_millis(100));
     assert_eq!(pool::slots().0, 8);
     for waiter in waiters {
         waiter.abort();
@@ -816,7 +820,7 @@ async fn campaign() {
     assert!(start.elapsed() < Duration::from_millis(5500));
     assert_eq!(pool::slots().0, 8);
     drop(held);
-    check(&mut checks,"eight physical connections, two per role, bounded waiters and absolute acquisition deadline");
+    check(&mut checks,"eight physical connections, two per role, thirty bounded waiters (the 33rd caller refused at once) and absolute acquisition deadline");
     stores.close().await.unwrap();
     empty_slots().await;
     check(
