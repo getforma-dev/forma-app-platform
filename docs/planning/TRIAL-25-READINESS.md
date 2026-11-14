@@ -1,6 +1,6 @@
 # Real live test: 25 real people on the beta (Victor's class, Nov 29–30)
 
-Status: **approved by Victor on 2026-11-14; executing.** Tickets: APP-175 (release A), APP-181 to APP-195; go-live is APP-189. Earlier drafts of this file are superseded.
+Status: **approved by Victor on 2026-11-14; executing.** Tickets: APP-175 (release A), APP-181 to APP-200; go-live is APP-189. Earlier drafts of this file are superseded.
 
 ## Context
 
@@ -56,7 +56,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Date | What | Who |
 | --- | --- | --- |
 | Fri Nov 14 | Charter and notice v1 (cohort text), tickets revised. Promotions paused (done). Victor: APP-175 permission readback; reject or cancel run 43157872671. | agents, **Victor** |
-| Sat Nov 15 | After the 65-minute fence: `maintenance inspect`/`abandon`, `reconcile`, re-enable promotion, approve **Release A** (main, 20→22). | **Victor** (agents prepare the checklist) |
+| Sat Nov 15 | After the 65-minute fence: `maintenance inspect`/`abandon`, `reconcile`, re-enable promotion, approve **Release A** (main, 20→22). **Done 2026-11-14 at 07:17 UTC** ([record](../../evidence/APP-175/release-2026-11-14.md)). Victor (no cost): open one shared work page on beta with the browser's developer tools and send the time of its JSON document request. That is the beta document-read timing the capacity statement scales from (a document read is 11 transactions; APP-197). | **Victor** (agents prepare the checklist) |
 | Nov 15–21 | Parallel build: W1–W4. W5 spike Nov 17–18. | agents |
 | Sat Nov 22 | Tier A reviews closed; merge W1–W4. | agents |
 | Sun Nov 23 | Renewed scan disposition. **Release B** (22→24). Expiry renewal to Dec 15 plus the December month. Alarm template deployed. Anthropic limit set. FormaStack raises the fAuth tenant limit to at least 30. Restore drill. | **Victor** |
@@ -122,7 +122,32 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
     - the data pool's bounded waiter set grows from 8 to 32, within the same 5 s deadline;
     - a `refresh-herd` load campaign proves it;
     - it ships in release B, with no migration. The pool change is W1's area and the client change W2's.
+  - **Measured, then re-decided (2026-11-14, Fable advisor in lieu of Victor).** Built as above, the herd still failed: at most 5 pages passed, and the pre-approved fallback of 4 data connections failed too. One page refresh takes 17 transactions at about 64 ms each, and about 45 ms of each is the catalog comparison that runs on every connection reuse. The re-decision:
+    - **APP-195** keeps the 0–3 s spread and the single retry, adds visibility deferral (a hidden tab refreshes when it is looked at), and keeps the 32-waiter set. Its run A criteria become p95 current within 6 s and every page within 10 s. The `refresh-herd` campaign stays quarantined, out of CI, until APP-197 makes it pass.
+    - **APP-197** (W1 area, Tier A) runs the catalog comparison at connection creation and readiness, and on reuse only when the connection's last check is over 30 s old. Identity, baseline and schema version are still checked on every reuse. ADR-004 gains amendment A5: the check defends against operational drift, the application roles hold no DDL privilege, and no claim against a hostile database administrator is made. This makes each transaction about three times cheaper. Amendment A6 (4 workspace, 4 data, 2 control and 2 worker connections, 12 in all) is drafted and applies only if run A still fails after A5.
+    - **W4 (APP-191):** a commit to an `own` list sends a live hint only to pages that can see the row. The class's real herd is 25 submissions a minute; measured, they land in 2.6 s and the reviewer page is current 67 ms after the last one.
+    - **APP-198** (W4 area): a list that changed while a view ran is re-read once, then shown as "Updating…". It is never shown as "You don't have access to this card".
+    - **APP-199**, after the class: one transaction per read path and a server-advised spread.
+    - **Accepted after A5 (2026-11-14, Fable advisor in lieu of Victor).** A5 cut a data-role transaction from 54 to 10 ms (7.6 ms in release), and a run now makes 4 catalog checks instead of 918. At 26 pages in the release build, no refresh failed, every page was current within 6.1 s and the owner's save took under 125 ms. The only miss was first-try 200 (83–91%), caused by the record snapshot cap of 4 (raised in **APP-200**). The CI gate becomes the measured sustainable load: 15 pages, every criterion (measured passing in both profiles; CI runs the test profile). The 26-page run is the recorded measurement. A6 is not applied, because it made things worse locally where the database is the limit. It stays an RDS-only option.
+    - No load test runs on beta, because beta is the cohort's organization. A scratch-RDS herd is recommended as part of the Nov 23 restore drill, on Victor's word: it needs an IAM policy for the restored instance and one task run, under $2.
   - Post-class order: G1, then G2 with G3 (and G4), then G5 only after an ADR decides the D7 exception.
+
+### Class guidance: live updates with 25 open pages
+
+This goes in the runbook (APP-188) and on the Nov 24 checklist. Victor's text:
+
+> **Live updates and 25 open pages.** When you change something on a page that students have open, every open page re-reads it. Release B makes this about three times cheaper, and the measured limit is written in the runbook. Three rules keep you well inside it:
+> 1. **Anything students write goes in a private-entries list** (answers, submissions, check-ins). Their saves then update only your page and their own, not the other 24.
+> 2. **Shared lists are yours to write.** Post an assignment or advance an item, then wait about ten seconds before the next change to the same page. One change at a time.
+> 3. **One live page on the projector: your reviewer summary.** Students don't need to keep a shared page open after they've submitted. A page they come back to updates when they look at it.
+>
+> **What students may see during a burst, and what to say:**
+> - "Updates are unavailable": wait a few seconds and press Refresh.
+> - A form that says "The result of your command could not be confirmed" or "The record was busy. Submit again in a moment": submit the same form again. That is safe, because the same form can't save twice; it can only return the stored result. Only a fresh submission from a new form makes a second entry, and then both count in summaries and the reviewer takes the newest.
+> - A card that says "Busy. Trying again in a moment…": do nothing; it reads again by itself within a few seconds. If it then says "Still busy. Try again in a few seconds.", press Refresh. *(Delete this item once APP-200 has shipped and the 26-page release measurement reports no view 429.)*
+> - "You don't have access to this card" right after someone else saved: the card is stale, not a lost permission, so press Refresh. *(Delete this item once APP-198 has shipped; item 6 of the go/no-go list requires it before codes go out.)*
+>
+> **Fallback:** if live updates misbehave, stop relying on them and refresh your projected summary by hand between items. Submitting through forms doesn't depend on live updates.
 
 ## Rules for the agents
 
@@ -146,10 +171,10 @@ All yes, or no codes go out.
    - The helper account fills every form field of every app, and no form shows an ID text box (G3). "Which X" fields are enums or short text.
    - "Advance" or "close" is a reviewer-only update of a state field, never a transition, because a record's creator can't fire a transition on it.
    - A shared student page holds at most one typed query view; record summaries are used otherwise.
-6. **`refresh-herd` green on main** (APP-195). The sustainable commit cadence it measured is written in the runbook.
+6. **`refresh-herd` green on main** (APP-195, APP-197). Its CI gate passes in the tenant-foundation workflow: 15 open pages, three herds 10 s apart, every run A criterion, and run C reproducing the finding. One recorded release-profile measurement at 26 pages shows no terminal refresh failure, every page current within 10 s, p95 within 6 s and the owner's command under 1.5 s. The runbook carries the catalog-check count, the per-transaction p50, the 26-page first-try share, the sustainable cadence (15 pages at 5 s) and Victor's beta document-read timing. APP-198 (stale views are never shown as "no access") is merged.
 7. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
 8. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
-9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer.
+9. **No open Tier A blocker,** CI green on main, and a known-issues list for students written. The list includes: a second answer or submission is saved too and both count in summaries (the reviewer takes the newest), a late answer still counts, and there is no timer; and a page may take up to ten seconds to show someone else's change (press Refresh to see it sooner).
 
 ## Verification (end to end)
 

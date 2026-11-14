@@ -23,3 +23,7 @@ Released framework qualification, typed contracts and reproducible application s
 | 191 | [APP-191: Private entries and reviewer-only commands](../0-backlog/APP-191.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-181 |
 | 193 | [APP-193: Spike: live interaction from general primitives](../0-backlog/APP-193.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
 | 195 | [APP-195: Refresh herd: bounded waiting at the data pool and jittered live refreshes](../0-backlog/APP-195.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
+| 198 | [APP-197: Catalog verification at most every 30 s per connection](../0-backlog/APP-197.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-195 |
+| 199 | [APP-198: A stale record snapshot is never shown as "no access"](../0-backlog/APP-198.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-191 |
+| 201 | [APP-199: Fewer transactions per read, and a server-advised refresh spread](../0-backlog/APP-199.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | M | Backlog | APP-191, APP-197 |
+| 202 | [APP-200: Record snapshot capacity follows the query worker's admission](../0-backlog/APP-200.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-198 |
