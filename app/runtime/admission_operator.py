@@ -1026,11 +1026,12 @@ def list_box_files(c, args):
 
 # The closed list of organization-scoped content tables `stats` counts: what a restore drill compares
 # between the live database and a restored snapshot, and what the end-of-trial purge proves empty.
-# The audit chain is counted apart: the purge keeps it (PURGE_KEEPS).
-STATS_TABLES = ("principals", "memberships", "entitlements", "organization_permissions", "access_codes", "code_redemptions",
-                "provider_invitations", "spaces", "apps", "app_permissions", "definition_revisions", "publications", "saved_work",
-                "work_permissions", "work_shares", "live_work_shares", "sources", "source_permissions", "boxes", "box_files",
-                "internal_records", "member_cards", "sessions")
+# The audit chain is counted apart: the purge keeps it (PURGE_KEEPS). member_consents is 0023's consent
+# record (release B integration review, NIT-5); begin() proves the latest catalog, so it always exists here.
+STATS_TABLES = ("principals", "memberships", "member_consents", "entitlements", "organization_permissions", "access_codes",
+                "code_redemptions", "provider_invitations", "spaces", "apps", "app_permissions", "definition_revisions",
+                "publications", "saved_work", "work_permissions", "work_shares", "live_work_shares", "sources",
+                "source_permissions", "boxes", "box_files", "internal_records", "member_cards", "sessions")
 
 
 # The end-of-trial purge keeps exactly these: the organization row (suspended), its provider binding,

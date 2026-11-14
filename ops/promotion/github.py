@@ -203,9 +203,10 @@ def validate_summary(value, candidate):
         release = review["schema_release"]
         if release is not None:
             # schema_version stays the current policy version; the release names both ends.
+            # Equal ends are a contract-only release (APP-210).
             require(isinstance(release, dict) and set(release) == {"from_version", "to_version", "spec_sha256"}
                 and type(release["from_version"]) is int and type(release["to_version"]) is int
-                and release["from_version"] == review["schema_version"] < release["to_version"] <= 10000
+                and release["from_version"] == review["schema_version"] <= release["to_version"] <= 10000
                 and isinstance(release["spec_sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", release["spec_sha256"]),
                 "invalid schema release projection")
             from .schema_release import load
@@ -213,9 +214,13 @@ def validate_summary(value, candidate):
             require(spec is not None and release["spec_sha256"] == spec_sha
                 and release["from_version"] == spec["from"]["database_version"]
                 and release["to_version"] == spec["to"]["database_version"]
-                and review["deployment_contract_sha256"] == spec["to"]["deployment_contract_sha256"],
+                and review["deployment_contract_sha256"] == spec["to"]["deployment_contract_sha256"]
+                and (release["from_version"] != release["to_version"]
+                     or spec["from"]["schema_manifest_sha256"] == spec["to"]["schema_manifest_sha256"]),
                 "schema release projection changed")
-        require(review["preserved"] == {"schema": release is None, "template": True, "trial": True, "aliases": True, "secrets": True},
+        # Only a migration changes the schema, snapshots the database and runs a migration task.
+        migrating = release is not None and release["from_version"] != release["to_version"]
+        require(review["preserved"] == {"schema": not migrating, "template": True, "trial": True, "aliases": True, "secrets": True},
             "preserved state not proven")
         require(isinstance(review["changes"], list) and 1 <= len(review["changes"]) <= 100, "invalid change count")
         ids = set()
@@ -248,7 +253,7 @@ def validate_summary(value, candidate):
             else:
                 require(scan["reviewed"] == [] and scan["disposition_sha256"] is None
                     and scan["review_expires_at_utc"] is None, "unexpected scan disposition")
-        snapshot, migration = ([], []) if release is None else (["snapshot database"], ["run reviewed migration"])
+        snapshot, migration = (["snapshot database"], ["run reviewed migration"]) if migrating else ([], [])
         require(review["sequence"] == [*snapshot, "stop both services", "execute reviewed change set", "verify stopped boundaries",
             *migration, "activate both services", "verify health and images"] and review["outage_required"] is True,
             "operation sequence changed")
