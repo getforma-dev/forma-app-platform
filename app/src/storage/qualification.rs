@@ -1439,8 +1439,11 @@ pub(super) mod refresh_herd {
     /// The canvas view's existing busy handling (`queries.ts`): a 429 waits its
     /// `Retry-After` and reads again, at most three times.
     const BUSY_RETRIES: usize = 3;
-    /// Run A's pass criteria.
+    /// Run A's pass criteria (revised by the Fable advisor in lieu of Victor,
+    /// 2026-11-14): 95% of pages current within `CURRENT_WITHIN` of the
+    /// commit and every page within `CURRENT_MAX`.
     const CURRENT_WITHIN: Duration = Duration::from_secs(6);
+    const CURRENT_MAX: Duration = Duration::from_secs(10);
     const COMMAND_UNDER: Duration = Duration::from_millis(1500);
     const FIRST_TRY_SHARE: f64 = 0.90;
 
@@ -1919,6 +1922,8 @@ pub(super) mod refresh_herd {
 
     async fn run(bench: &Arc<Bench>, plan: Plan, operator: &Operator) -> (Value, bool) {
         let saturated_before = pool::saturated();
+        let catalog_before = super::super::catalog::verifications();
+        drop(pool::take_service());
         let typed_before = bench.counted.typed.read();
         let records_before = bench.counted.records.read();
         let origin = Instant::now() + Duration::from_millis(500);
@@ -2064,11 +2069,13 @@ pub(super) mod refresh_herd {
             }
         }
         // Every page has had time to read, retry and settle.
-        sleep(CURRENT_WITHIN + Duration::from_secs(6)).await;
+        sleep(CURRENT_MAX + Duration::from_secs(4)).await;
         while committed.join_next().await.is_some() {}
         tasks.abort_all();
         while tasks.join_next().await.is_some() {}
         let saturated = pool::saturated();
+        let catalog_checks = super::super::catalog::verifications() - catalog_before;
+        let service = pool::take_service();
         let observed = std::mem::take(&mut *observed.lock().unwrap());
         let report = judge(plan, &observed, plan.pages);
         let passed = report["passed"] == true;
@@ -2082,6 +2089,15 @@ pub(super) mod refresh_herd {
         report["engine"] = json!({
             "typed_view": tally_json(typed_before, bench.counted.typed.read()),
             "record_components": tally_json(records_before, bench.counted.records.read()),
+        });
+        report["catalog_checks"] = json!(catalog_checks);
+        // Per role: each transaction's service time (its checkout's preparation
+        // plus the time it held the connection), not its wait for one.
+        let per =
+            |samples: &Vec<u64>| spread(samples.iter().map(|us| *us as f64 / 1000.0).collect());
+        report["transaction_service"] = json!({
+            "workspace": per(&service[0]),
+            "data": per(&service[2]),
         });
         (report, passed)
     }
@@ -2166,6 +2182,11 @@ pub(super) mod refresh_herd {
                 .iter()
                 .filter(|lag| **lag > millis(CURRENT_WITHIN))
                 .count();
+            let mut sorted = lags.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let p95 = (!sorted.is_empty())
+                .then(|| sorted[((sorted.len() as f64 - 1.0) * 0.95).round() as usize]);
+            let slowest = sorted.last().copied();
             let share = if reads.is_empty() {
                 0.0
             } else {
@@ -2177,7 +2198,8 @@ pub(super) mod refresh_herd {
                 "delivered_to_all": hints.len() == pages,
                 "no_terminal_failure": terminal == 0,
                 "first_try_200_at_least_90_percent": share >= FIRST_TRY_SHARE,
-                "every_page_current_within_6_s": stale.is_empty() && late == 0,
+                "p95_current_within_6_s": stale.is_empty() && p95.is_some_and(|ms| ms <= millis(CURRENT_WITHIN)),
+                "every_page_current_within_10_s": stale.is_empty() && slowest.is_some_and(|ms| ms <= millis(CURRENT_MAX)),
             });
             let herd_passed = criteria.as_object().unwrap().values().all(|v| *v == true);
             passed &= herd_passed;
@@ -2201,6 +2223,7 @@ pub(super) mod refresh_herd {
                 "current_after_send": spread(lags),
                 "pages_not_current": stale,
                 "pages_current_later_than_6_s": late,
+                "current_p95_ms": p95,
                 "criteria": criteria,
                 "passed": herd_passed,
             }));
@@ -2223,11 +2246,13 @@ pub(super) mod refresh_herd {
     /// this build on this host, one at a time.
     async fn costs(fixture: &Fixture, stores: &Stores, owner: &TrustedRequest) -> Value {
         let mut transaction = Vec::new();
+        let checks_before = super::super::catalog::verifications();
         for _ in 0..20 {
             let started = Instant::now();
             stores.data.member_current(owner).await.unwrap();
             transaction.push(millis(started.elapsed()));
         }
+        let checks = super::super::catalog::verifications() - checks_before;
         let operator = fixture.operator().await;
         let catalog = Catalog::embedded().unwrap();
         let mut verify = Vec::new();
@@ -2236,7 +2261,7 @@ pub(super) mod refresh_herd {
             catalog.verify(&operator.client).await.unwrap();
             verify.push(millis(started.elapsed()));
         }
-        json!({"data_transaction": spread(transaction), "catalog_verify": spread(verify)})
+        json!({"data_transaction": spread(transaction), "catalog_checks_in_20_transactions": checks, "catalog_verify": spread(verify)})
     }
 
     /// The role transactions one read takes, alone (admission permits per

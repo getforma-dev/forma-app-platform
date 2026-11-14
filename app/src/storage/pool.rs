@@ -213,6 +213,20 @@ static SATURATED: [std::sync::atomic::AtomicUsize; 4] =
 pub(super) fn saturated() -> [usize; 4] {
     std::array::from_fn(|i| SATURATED[i].load(Ordering::SeqCst))
 }
+/// Test executable only (APP-195): per role, each lease's service time in
+/// microseconds: preparing its connection (creation or recycle checks) plus
+/// holding it until the lease ended. Drained by `take_service`.
+#[cfg(test)]
+static SERVICE: [std::sync::Mutex<Vec<u64>>; 4] = [const { std::sync::Mutex::new(Vec::new()) }; 4];
+#[cfg(test)]
+pub(super) fn take_service() -> [Vec<u64>; 4] {
+    std::array::from_fn(|i| {
+        SERVICE[i]
+            .lock()
+            .map(|mut samples| std::mem::take(&mut *samples))
+            .unwrap_or_default()
+    })
+}
 /// Test executable only (APP-195): admission permits granted so far, per role.
 #[cfg(test)]
 static ACQUIRED: [std::sync::atomic::AtomicUsize; 4] =
@@ -291,6 +305,10 @@ pub(super) struct Connection {
     pub fingerprint: String,
     pub expires_at: u64,
     pub clean: bool,
+    /// Test executable only (APP-195): how long this connection's last
+    /// checkout took to prepare it (its creation or its recycle checks).
+    #[cfg(test)]
+    prepared_us: u64,
 }
 
 #[derive(Clone)]
@@ -328,6 +346,8 @@ impl RoleManager {
         Ok(value)
     }
     async fn connect(&self, value: &Config) -> Result<Connection> {
+        #[cfg(test)]
+        let started = std::time::Instant::now();
         let cap = capacity();
         // These are acquired before opening a transport. During cancellation of
         // connect(), the connect future/transport drops before these locals.
@@ -381,12 +401,18 @@ impl RoleManager {
             fingerprint: value.file_sha256.clone(),
             expires_at: value.expires_at,
             clean: false,
+            #[cfg(test)]
+            prepared_us: 0,
         };
         #[cfg(test)]
         self.settings.hooks.checkpoint("connect").await;
         self.verify_admission(&connected.client).await?;
         trace::step("reset");
         reset(&mut connected, self.role).await?;
+        #[cfg(test)]
+        {
+            connected.prepared_us = started.elapsed().as_micros() as u64;
+        }
         Ok(connected)
     }
     async fn verify_admission(&self, client: &Client) -> Result<()> {
@@ -421,6 +447,8 @@ impl Manager for RoleManager {
         Err(Error::Unavailable)
     }
     async fn recycle(&self, connection: &mut Connection, _: &Metrics) -> RecycleResult<Error> {
+        #[cfg(test)]
+        let started = std::time::Instant::now();
         if !connection.clean || connection.client.is_closed() {
             return Err(RecycleError::Backend(Error::Unavailable));
         }
@@ -439,6 +467,10 @@ impl Manager for RoleManager {
             .map_err(RecycleError::Backend)?;
         #[cfg(test)]
         self.settings.hooks.checkpoint("recycle").await;
+        #[cfg(test)]
+        {
+            connection.prepared_us = started.elapsed().as_micros() as u64;
+        }
         connection.clean = true;
         Ok(())
     }
@@ -485,6 +517,8 @@ impl RolePool {
         // No await between ownership acquisition and the non-reusable guard.
         object.clean = false;
         let lease = Lease {
+            #[cfg(test)]
+            obtained: (std::time::Instant::now(), object.prepared_us),
             object: Some(object),
             owner: self.clone(),
             _admitted: admitted,
@@ -505,12 +539,24 @@ pub(super) struct Lease {
     object: Option<Object<RoleManager>>,
     owner: Arc<RolePool>,
     _admitted: OwnedSemaphorePermit,
+    /// Test executable only (APP-195): when the lease got its connection,
+    /// and how long that checkout took to prepare it.
+    #[cfg(test)]
+    obtained: (std::time::Instant, u64),
 }
 impl Drop for Lease {
     fn drop(&mut self) {
         if let Some(object) = self.object.take() {
             // No asynchronous cleanup is delegated to ordinary pool return.
             drop(Object::take(object));
+        }
+        #[cfg(test)]
+        {
+            let (at, prepared) = self.obtained;
+            let held = at.elapsed().as_micros() as u64;
+            if let Ok(mut samples) = SERVICE[self.owner.manager.role.index()].lock() {
+                samples.push(prepared + held);
+            }
         }
     }
 }
