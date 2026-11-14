@@ -774,7 +774,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(set(entry), {"code_id", "kind", "status", "max_redemptions", "redeemed_count", "live_pending_admissions",
                                       "lapsed_pending_admissions", "denied_for_reconciliation", "live_reservations", "issued_at",
                                       "expires_at", "revoked_at", "provider_invitations", "redemptions", "note"})
-        self.assertIsNone(entry["note"])  # before migration 0023 the column does not exist
+        self.assertIsNone(entry["note"])  # issued without --note
         self.assertEqual((entry["status"], entry["redeemed_count"], entry["live_pending_admissions"], entry["lapsed_pending_admissions"],
                           entry["denied_for_reconciliation"]), ("active", 0, 0, 0, 0))
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
@@ -814,18 +814,22 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.cli("issue", "--organization", str(uuid.uuid4()), "--issued-by", "unit-operator", "--grant", "source_read:" + self.source, expect=1)
         self.assertEqual(self.dump(), before)
 
-    def test_issue_note_refuses_before_0023_and_writes_nothing(self):
-        """The real-user trial (W3): this tree's schema has no access_codes.note, so a note refuses whole
-        with its fixed reason before the code index, the code or the audit event is written."""
+    def test_issue_note_is_stored_once_0023_is_applied(self):
+        """The real-user trial (W3, release B): this tree's schema carries 0023's access_codes.note, so a note
+        is stored on the code, returned by the issue and shown by list. Before 0023 a note refuses
+        note_unsupported before any write: test_issue_with_a_note_binds_it_to_the_insert_and_the_result
+        (the column probe mocked absent), whose probe test_issue_note_is_bounded_and_chooses_the_0023_insert pins."""
         self.ensure_backfill()
-        before = self.dump()
-        p = self.cli("issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source,
-                     "--note", "Ada L.", expect=1)
-        self.assertEqual(json.loads(p.stderr), {"refused": "note_unsupported"})
-        self.assertEqual(self.dump(), before)
         self.assertEqual(self.query("SELECT count(*) FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class t ON t.oid=a.attrelid "
                                     "JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='genui' "
-                                    "AND t.relname='access_codes' AND a.attname='note'"), [(0,)])
+                                    "AND t.relname='access_codes' AND a.attname='note'"), [(1,)])
+        out = self.issue("--note", "Ada L.")
+        self.assertEqual(out["note"], "Ada L.")
+        self.assertEqual(self.query("SELECT note FROM genui.access_codes WHERE organization_id=%s AND code_id=%s", (ORG, out["code_id"])),
+                         [("Ada L.",)])
+        self.assertEqual(self.operator_events()[-1], ("code.issued",))
+        entry = next(item for item in self.cli("list", "--organization", ORG)["codes"] if item["code_id"] == out["code_id"])
+        self.assertEqual(entry["note"], "Ada L.")
 
     def test_grant_and_revoke_admin_policy_are_operator_events(self):
         """The real-user trial (D2, D4): admin_policy is one organization_permissions row for an active member,
@@ -1001,8 +1005,8 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
 
     def test_purge_refuses_while_a_guest_holds_one_of_the_shares_and_deletes_unaccepted_shares_and_flows(self):
         """APP-185 recheck R1: genui_identity rows. A guest account that accepted and linked a share keeps the
-        purge from running at all (its share_events chain and linked_apps row reach the organization's share by
-        non-deferrable keys); an organization whose shares nobody accepted is purged, with its sign-in flows,
+        purge from running at all (its linked_apps row reaches the organization's share by a non-deferrable key, and
+        its share_events chain must stay verifiable); an organization whose shares nobody accepted is purged, with its sign-in flows,
         and the guest's account and chain are untouched either way. FORCE row security is restored."""
         guest = str(uuid.uuid4())
         with self.connect("postgres") as c:
@@ -1064,11 +1068,14 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         # The key map the purge orders by sees the identity children.
         with self.connect("postgres") as c:
             edges = op.foreign_keys(c)
-        self.assertIn(("genui_identity.share_events", "live_work_shares"), edges)
+        # Migration 0024 drops share_events' key (the purge's recorded exception, W3 R1); the purge still
+        # refuses on a guest's share_events rows by count, as above, until the reviewed follow-up (APP-188).
+        self.assertNotIn(("genui_identity.share_events", "live_work_shares"), edges)
         self.assertIn(("genui_identity.linked_apps", "live_work_shares"), edges)
         self.assertIn(("genui_identity.shared_auth_flows", "live_work_shares"), edges)
         with self.connect("postgres") as c:
-            self.assertEqual(op.foreign_children(op.content_tables(c), edges), sorted(op.IDENTITY_TABLES))
+            self.assertEqual(op.foreign_children(op.content_tables(c), edges),
+                             sorted(set(op.IDENTITY_TABLES) - {"genui_identity.share_events"}))
 
     def test_revoke_and_extend_are_audited_and_bounded(self):
         out = self.issue("--expires-days", "5")

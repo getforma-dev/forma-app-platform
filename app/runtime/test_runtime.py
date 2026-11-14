@@ -648,6 +648,9 @@ class MigrationCommitOutcomeTests(unittest.TestCase):
     sent; any failure from the COMMIT onward, including a lost acknowledgement, exits
     with the one reserved code the restore command refuses.
     """
+    # The fake database starts at version 20 and the runner applies every later migration.
+    APPLIED = list(range(21, runtime.DATABASE_SCHEMA_VERSION + 1))
+
     def run_migrate(self, mode):
         with tempfile.TemporaryDirectory() as tmp:
             fake = Path(tmp) / 'fake'; fake.mkdir(); (fake / 'psycopg.py').write_text(FAKE_PSYCOPG)
@@ -664,7 +667,7 @@ class MigrationCommitOutcomeTests(unittest.TestCase):
         for mode in ('lost-ack', 'close-fails', 'stdout-lost'):
             with self.subTest(mode=mode):
                 process, events = self.run_migrate(mode)
-                self.assertEqual(events.get('applied'), [21, 22])
+                self.assertEqual(events.get('applied'), self.APPLIED)
                 self.assertTrue(events.get('commit_sent'))
                 self.assertEqual(process.returncode, 4, process.stderr[-400:])
                 self.assertEqual(process.stderr, 'migration_commit_outcome_unknown\n')
@@ -678,7 +681,7 @@ class MigrationCommitOutcomeTests(unittest.TestCase):
         self.assertEqual((process.stdout, process.stderr), ('', 'managed_dependency_operation_refused\n'))
         process, events = self.run_migrate('committed')
         self.assertEqual(process.returncode, 0, process.stderr[-400:])
-        self.assertEqual((events.get('applied'), events.get('committed'), events.get('closed')), ([21, 22], True, True))
+        self.assertEqual((events.get('applied'), events.get('committed'), events.get('closed')), (self.APPLIED, True, True))
         self.assertEqual((process.stdout, process.stderr), ('tenant_foundation_migration_complete\n', ''))
         # The deferred-constraint check is the last statement, after the final catalog proof.
         self.assertEqual((events.get('last_statement'), events.get('after_catalog_proof')), ('SET CONSTRAINTS ALL IMMEDIATE', True))
@@ -688,7 +691,7 @@ class MigrationCommitOutcomeTests(unittest.TestCase):
         # rolled back. Checked at SET CONSTRAINTS ALL IMMEDIATE, it still exits 1 and the restore works.
         process, events = self.run_migrate('deferred-fk')
         self.assertEqual(process.returncode, 1, process.stderr[-400:])
-        self.assertEqual(events.get('applied'), [21, 22]); self.assertTrue(events.get('deferred_checked'))
+        self.assertEqual(events.get('applied'), self.APPLIED); self.assertTrue(events.get('deferred_checked'))
         self.assertNotIn('commit_sent', events)
         self.assertEqual((process.stdout, process.stderr), ('', 'managed_dependency_operation_refused\n'))
 

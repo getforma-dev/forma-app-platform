@@ -2673,7 +2673,14 @@ pub(super) mod refresh_herd {
         for principal in &members {
             let shared = stores
                 .workspace
-                .share_work(&owner, APP, &work, principal, true)
+                .share_work(
+                    &owner,
+                    APP,
+                    &work,
+                    Audience::Member(principal),
+                    ShareRole::Contributor,
+                    ShareMode::Set,
+                )
                 .await
                 .unwrap();
             assert!(shared.changed());
