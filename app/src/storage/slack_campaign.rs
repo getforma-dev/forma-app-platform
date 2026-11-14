@@ -1228,6 +1228,44 @@ async fn campaign() {
             .clone();
         assert!(!world.sees(&stores, NIA, &world.work, &newest).await);
         assert_eq!(grant_rows(&fixture).await, rows);
+        // Judged again at Confirm: the card was drafted while Nia was
+        // unreachable, the owner then made her a reviewer, and Confirm
+        // reaches her as one, with nothing shared by Sam.
+        let (_, _, _, route) = harness
+            .command(TEAM, "U0SAMLEE", &format!("{ROUTING_PREFIX}Nia"))
+            .await;
+        let card = stub.wait(&route, Duration::from_secs(10)).await;
+        let draft_id = buttons(&card)[0].1.clone();
+        stores
+            .workspace
+            .share_work(
+                &super::definition_qualification::request(&stores, ORG, OLIVE, 1),
+                &world.app,
+                &world.work,
+                Audience::Member(NIA),
+                ShareRole::Reviewer,
+                ShareMode::Set,
+            )
+            .await
+            .unwrap();
+        let rows = grant_rows(&fixture).await;
+        let (_, route) = harness
+            .click(TEAM, "U0SAMLEE", flows::CONFIRM, &draft_id)
+            .await;
+        let filed = stub.wait(&route, Duration::from_secs(5)).await["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert_eq!(grant_rows(&fixture).await, rows);
+        assert!(
+            filed.contains(". Filed for *Nia Brooks*'s review."),
+            "{filed}"
+        );
+        assert!(
+            world
+                .sees(&stores, NIA, &world.work, &newest_of(SAM).await)
+                .await
+        );
         let (_, filed) = file("U0OLIVE", "Hal").await;
         assert!(
             filed.contains(", sent to *Hal Moreno* for approval."),
@@ -1238,7 +1276,7 @@ async fn campaign() {
             after[1] > rows[1] && after[2] == rows[2] + 1,
             "{rows:?} {after:?}"
         );
-        check(&mut checks, "APP-206 through Slack: Sam (a contributor under the organization-wide share, no share authority) files with /forma naming the owner, a personal reviewer and a member covered by a live organization-wide reviewer share, confirming each: \"Filed for <name>'s review.\", no \"sent to\", each named reviewer's listing shows the record and no grant row changes; naming a member with no reviewer standing gives the plain unreachable note, that member does not see the record and nothing is granted; the owner naming a non-reviewer is still \"sent to Hal Moreno for approval\" with the share written");
+        check(&mut checks, "APP-206 through Slack: Sam (a contributor under the organization-wide share, no share authority) files with /forma naming the owner, a personal reviewer and a member covered by a live organization-wide reviewer share, confirming each: \"Filed for <name>'s review.\", no \"sent to\", each named reviewer's listing shows the record and no grant row changes; naming a member with no reviewer standing gives the plain unreachable note, that member does not see the record and nothing is granted; a card drafted while she was unreachable is judged again at Confirm and reaches her as a reviewer after the owner's reviewer share, with nothing shared by Sam; the owner naming a non-reviewer is still \"sent to Hal Moreno for approval\" with the share written");
     }
 
     // --- D10: /forma at the daily model-call cap ---
