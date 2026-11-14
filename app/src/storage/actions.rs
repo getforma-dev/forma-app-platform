@@ -226,8 +226,7 @@ pub(super) async fn records_many(
     let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
     let limit = RECORDS_LIMIT + 1;
     // APP-191: the row rule, per work of the batch (one array per lateral row).
-    let own = own_rows("v", "c.app::uuid", "c.work::uuid", SCOPED);
-    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k"), &[&organization,&apps,&ids,&limit]).await? {
+    for row in transaction.query(&format!("SELECT c.n::bigint,x.* FROM unnest($2::text[],$3::text[]) WITH ORDINALITY AS c(app,work,n) CROSS JOIN LATERAL (SELECT {RECORD_COLUMNS},row_number() OVER (ORDER BY v.commit_sequence DESC,r.record_id) AS k {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=c.app::uuid AND r.work_id=c.work::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4) x ORDER BY c.n,x.k", own = own_rows("v", "c.app::uuid", "c.work::uuid", SCOPED)), &[&organization,&apps,&ids,&limit]).await? {
         let i = ordinal(&row, &sent)?;
         records[i].push(row);
     }
@@ -495,7 +494,6 @@ impl Data {
                 ));
             }
             // APP-191: the row rule on the search, the target and the list.
-            let own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED);
             if let Some(RecordFilter::Search {collection, ..} | RecordFilter::Exact {collection, ..}) = &filter {
                 require(collections.iter().any(|value| value.collection == *collection))?;
                 collections.retain(|value| value.collection == *collection);
@@ -503,17 +501,17 @@ impl Data {
             let (rows, count) = match &filter {
                 Some(RecordFilter::Search {collection, query}) => {
                     let limit = SEARCH_RECORDS_LIMIT + 1;
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own} AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6"), &[org,&app,&work,collection,query,&limit]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND {own} AND (r.record_id::text=$5 OR EXISTS (SELECT 1 FROM jsonb_array_elements(convert_from(v.canonical_values,'UTF8')::jsonb) field WHERE position(lower($5) in lower({SEARCH_VALUE_TEXT})) > 0)) ORDER BY v.commit_sequence DESC,r.record_id LIMIT $6", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,collection,query,&limit]).await?;
                     (rows, SEARCH_RECORDS_LIMIT)
                 }
                 Some(RecordFilter::Exact {collection, record}) => {
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid AND {own}"), &[org,&app,&work,collection,record]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid AND {own}", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,collection,record]).await?;
                     require(rows.len() == 1)?;
                     (rows, 1)
                 }
                 None => {
                     let limit = RECORDS_LIMIT + 1;
-                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4"), &[org,&app,&work,&limit]).await?;
+                    let rows = transaction.query(&format!("SELECT {RECORD_COLUMNS} {RECORDS_FROM} WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND {own} ORDER BY v.commit_sequence DESC,r.record_id LIMIT $4", own = own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[org,&app,&work,&limit]).await?;
                     (rows, RECORDS_LIMIT)
                 }
             };

@@ -157,7 +157,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v23.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v24.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -178,7 +178,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 212] = [
+const SOURCES: [(&str, &[u8]); 221] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -284,6 +284,10 @@ const SOURCES: [(&str, &[u8]); 212] = [
         include_bytes!("../auth/invite_tests.rs"),
     ),
     ("app/src/auth/mod.rs", include_bytes!("../auth/mod.rs")),
+    (
+        "app/src/auth/notice.rs",
+        include_bytes!("../auth/notice.rs"),
+    ),
     (
         "app/src/auth/pending.rs",
         include_bytes!("../auth/pending.rs"),
@@ -654,6 +658,10 @@ const SOURCES: [(&str, &[u8]); 212] = [
     ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
     (
+        "app/src/storage/org_admin.rs",
+        include_bytes!("org_admin.rs"),
+    ),
+    (
         "app/src/storage/pitch_qualification.rs",
         include_bytes!("pitch_qualification.rs"),
     ),
@@ -820,6 +828,38 @@ const SOURCES: [(&str, &[u8]); 212] = [
     (
         "contracts/fixtures/impl-2026-10-29.3/spend-review.json",
         include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/shared-v1/query-receipt.json",
+        include_bytes!(
+            "../../../contracts/fixtures/impl-2026-11-01.2/shared-v1/query-receipt.json"
+        ),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json",
+        include_bytes!(
+            "../../../contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json"
+        ),
     ),
     (
         "contracts/fixtures/library/catalog.json",

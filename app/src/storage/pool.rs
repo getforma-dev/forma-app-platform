@@ -604,7 +604,7 @@ async fn verify_schema_version(client: &Client) -> Result<()> {
         )
         .await
         .map_err(trace::unavailable)?;
-    if row.try_get::<_, i32>(0).map_err(trace::unavailable)? != 23 {
+    if row.try_get::<_, i32>(0).map_err(trace::unavailable)? != 24 {
         return Err(trace::refuse("schema_version_mismatch"));
     }
     Ok(())

@@ -23,6 +23,9 @@ const LOCK: &str = include_str!("../../../contracts/implementation-lock.json");
 /// `storage::queries::every_library_definition_is_admitted_and_in_the_sidecar`.
 /// `stored/` holds edition four's stored-data vectors (documents admitted
 /// before a later rule, which keep their verdict).
+// One line per embed: the managed source bundle's scan reads each embed macro
+// and its quoted path on one line.
+#[rustfmt::skip]
 const FIXTURES: [(&str, &str); 27] = [
     (
         "contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json",
@@ -50,9 +53,7 @@ const FIXTURES: [(&str, &str); 27] = [
     ),
     (
         "contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json",
-        include_str!(
-            "../../../contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json"
-        ),
+        include_str!("../../../contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json"),
     ),
     (
         "contracts/fixtures/shared-v1/query-receipt.json",

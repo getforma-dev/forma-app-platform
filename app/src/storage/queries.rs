@@ -782,8 +782,7 @@ impl Data {
             // with their complete current rows (ADR-009 D9.8). Immutable-source
             // views retain their historical work-local sequence semantics.
             let record_snapshot_sequence = if let Some(records) = &records { records.sequence } else {
-                let own = super::authorization::own_rows("v", "$2::text::uuid", "$3::text::uuid", super::authorization::SCOPED);
-                let rows = transaction.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_record_revisions v WHERE v.organization_id=$1::text::uuid AND v.app_id=$2::text::uuid AND v.work_id=$3::text::uuid AND {own}"), &[org,&app,&work]).await?;
+                let rows = transaction.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_record_revisions v WHERE v.organization_id=$1::text::uuid AND v.app_id=$2::text::uuid AND v.work_id=$3::text::uuid AND {own}", own = super::authorization::own_rows("v", "$2::text::uuid", "$3::text::uuid", super::authorization::SCOPED)), &[org,&app,&work]).await?;
                 integer(rows.first().ok_or(Error::Unavailable)?, 0)?
             };
             let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
