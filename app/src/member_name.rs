@@ -30,6 +30,15 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 pub const PATH: &str = "/me/name";
 
+/// Whether the canvas asks the member "What should others call you?": the
+/// stored name was read and is empty, and no other name is known for them
+/// (a DS-44 persona name of a listed demo organization counts as known). A
+/// name that could not be read never prompts.
+pub(crate) fn asks_for_name(stored: Option<Option<&str>>, known: Option<&str>) -> bool {
+    matches!(stored, Some(name) if name.is_none_or(|name| name.trim().is_empty()))
+        && known.is_none_or(|name| name.trim().is_empty())
+}
+
 type Pending<'a> = Pin<Box<dyn Future<Output = Result<(), storage::Error>> + Send + 'a>>;
 
 /// Where the name is kept (the workspace store; a fake in tests).
@@ -201,6 +210,21 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
             .collect()
+    }
+
+    #[test]
+    fn the_prompt_asks_only_a_member_with_no_known_name() {
+        assert!(asks_for_name(Some(None), None));
+        assert!(asks_for_name(Some(Some("  ")), None));
+        assert!(!asks_for_name(Some(Some("Ana")), None));
+        assert!(
+            !asks_for_name(None, None),
+            "an unreadable name never prompts"
+        );
+        assert!(
+            !asks_for_name(Some(None), Some("Diego Ramos")),
+            "a demo persona's name is known"
+        );
     }
 
     #[tokio::test]

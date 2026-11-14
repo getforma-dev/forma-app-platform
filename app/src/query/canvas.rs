@@ -1833,9 +1833,10 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         member_key: member_key(member.organization(), principal),
         artifact_kinds_loaded: kinds.is_some(),
         is_org_admin,
-        needs_name: display_name
-            .as_ref()
-            .is_some_and(|name| name.as_deref().is_none_or(|name| name.trim().is_empty())),
+        needs_name: crate::member_name::asks_for_name(
+            display_name.as_ref().map(Option::as_deref),
+            crate::directory::display_name(member.organization(), principal).as_deref(),
+        ),
         display_name: display_name.flatten().unwrap_or_default(),
         csrf_display_name: auth.csrf.token(csrf::Form::DisplayName, &cookie),
     };
