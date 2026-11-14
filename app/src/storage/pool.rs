@@ -514,11 +514,16 @@ impl Manager for RoleManager {
         {
             return Err(RecycleError::Backend(Error::Configuration));
         }
-        // ADR-004 amendment A5: identity, the version relation's identity and
-        // the schema version on every reuse; the catalog comparison once its
-        // last one is CATALOG_RECHECK old. The session baseline is checked
-        // last, so nothing the reads above ran can leave the session changed.
-        // A failure here discards the connection, as before.
+        // ADR-004 amendment A5. The session baseline is checked first, so no
+        // statement that resolves a name or an operator runs on a session
+        // whose search path drifted, and last, so nothing the reads between
+        // left the session changed. Between them: identity, the version
+        // relation's identity and the schema version on every reuse; the
+        // catalog comparison once its last one is CATALOG_RECHECK old. A
+        // failure here discards the connection, as before.
+        verify_baseline(&connection.client, self.role)
+            .await
+            .map_err(RecycleError::Backend)?;
         let now = self.now();
         let recheck =
             now.saturating_duration_since(connection.catalog_verified_at) >= CATALOG_RECHECK;
@@ -739,14 +744,25 @@ impl Lease {
     }
 }
 
+// The statements that can run on a session whose search path is not yet
+// verified (a new backend's identity check, a reuse's first baseline check)
+// name every relation and function in pg_catalog and write every operator as
+// OPERATOR(pg_catalog.…), so that nothing in them resolves through the search
+// path (APP-197 recheck R-M1; the test below holds them to it).
+const IDENTITY: &str = "SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path'),v.relation,v.shape FROM pg_catalog.pg_roles LEFT JOIN LATERAL (SELECT c.oid::pg_catalog.int8 AS relation,c.relkind::pg_catalog.text OPERATOR(pg_catalog.||) ':' OPERATOR(pg_catalog.||) (c.relrowsecurity OR c.relforcerowsecurity)::pg_catalog.text OPERATOR(pg_catalog.||) ':' OPERATOR(pg_catalog.||) pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.int8 FROM pg_catalog.pg_attribute a WHERE a.attrelid OPERATOR(pg_catalog.=) c.oid AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped ORDER BY a.attnum),',') AS shape FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace WHERE n.nspname OPERATOR(pg_catalog.=) 'genui_meta' AND c.relname OPERATOR(pg_catalog.=) 'schema_version') v ON true WHERE rolname OPERATOR(pg_catalog.=) current_user";
+const MEMBERSHIP: &str = "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.<>) current_user AND rolname OPERATOR(pg_catalog.<>) 'rds_iam' AND pg_catalog.pg_has_role(current_user,oid,'MEMBER') UNION ALL SELECT 'unsafe_membership' FROM pg_catalog.pg_auth_members WHERE member OPERATOR(pg_catalog.=) (SELECT oid FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.=) current_user) AND (admin_option OR inherit_option)";
+const BASELINE_CHECK: &str = "SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_setting('role'),pg_catalog.current_setting('row_security'),pg_catalog.current_setting('search_path'),pg_catalog.current_setting('genui.organization_id',true),pg_catalog.current_setting('genui.principal_id',true),pg_catalog.current_setting('genui.membership_epoch',true),pg_catalog.current_setting('session_replication_role')";
+
 /// The connection's identity checks. The same statement also reads, from
 /// `pg_catalog` alone, the schema-version relation's identity (ADR-004 A5):
 /// returned once it is a plain table without row security whose columns are
 /// exactly a `boolean` and an `integer`, so that reading it runs nothing but
 /// the table scan. One round trip.
-async fn verify_identity(client: &Client, role: Role) -> Result<i64> {
-    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid=pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path'),v.relation,v.shape FROM pg_catalog.pg_roles LEFT JOIN LATERAL (SELECT c.oid::pg_catalog.int8 AS relation,c.relkind::pg_catalog.text||':'||(c.relrowsecurity OR c.relforcerowsecurity)::pg_catalog.text||':'||pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.int8 FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum),',') AS shape FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui_meta' AND c.relname='schema_version') v ON true WHERE rolname=current_user", &[])
-        .await.map_err(trace::unavailable)?;
+pub(super) async fn verify_identity(client: &Client, role: Role) -> Result<i64> {
+    let row = client
+        .query_one(IDENTITY, &[])
+        .await
+        .map_err(trace::unavailable)?;
     let text = |index| row.try_get::<_, String>(index).map_err(trace::unavailable);
     let boolean = |index| row.try_get::<_, bool>(index).map_err(trace::unavailable);
     // Every field is decoded first; the first refused one names the cause.
@@ -769,8 +785,10 @@ async fn verify_identity(client: &Client, role: Role) -> Result<i64> {
             return Err(trace::refuse(cause));
         }
     }
-    let rows = client.query("SELECT rolname FROM pg_catalog.pg_roles WHERE rolname NOT IN (current_user,'rds_iam') AND pg_catalog.pg_has_role(current_user,oid,'MEMBER') UNION ALL SELECT 'unsafe_membership' FROM pg_catalog.pg_auth_members WHERE member=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname=current_user) AND (admin_option OR inherit_option)", &[])
-        .await.map_err(trace::unavailable)?;
+    let rows = client
+        .query(MEMBERSHIP, &[])
+        .await
+        .map_err(trace::unavailable)?;
     if !rows.is_empty() {
         return Err(trace::refuse("identity_extra_membership"));
     }
@@ -834,8 +852,10 @@ async fn reset(connection: &mut Connection, role: Role) -> Result<()> {
     Ok(())
 }
 async fn verify_baseline(client: &Client, role: Role) -> Result<()> {
-    let row = client.query_one("SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_setting('role'),pg_catalog.current_setting('row_security'),pg_catalog.current_setting('search_path'),pg_catalog.current_setting('genui.organization_id',true),pg_catalog.current_setting('genui.principal_id',true),pg_catalog.current_setting('genui.membership_epoch',true),pg_catalog.current_setting('session_replication_role')", &[])
-        .await.map_err(trace::unavailable)?;
+    let row = client
+        .query_one(BASELINE_CHECK, &[])
+        .await
+        .map_err(trace::unavailable)?;
     for (index, (expected, cause)) in [
         (role.name(), "baseline_session_user"),
         (role.name(), "baseline_current_user"),
@@ -1363,5 +1383,50 @@ mod lifecycle_tests {
         assert_eq!(observed.load(Ordering::SeqCst), 0);
         assert_eq!(slots.available_permits(), 1);
         assert_eq!(roles.available_permits(), 1);
+    }
+}
+
+#[cfg(test)]
+mod statement_tests {
+    use super::{BASELINE_CHECK, IDENTITY, MEMBERSHIP};
+
+    /// APP-197 recheck R-M1: once string literals, casts and
+    /// `OPERATOR(pg_catalog.…)` are removed, no operator character and no
+    /// keyword that expands to a search-path-resolved operator is left.
+    #[test]
+    fn unverified_session_statements_resolve_no_operator_through_the_search_path() {
+        for statement in [IDENTITY, MEMBERSHIP, BASELINE_CHECK] {
+            let mut rest: String = statement
+                .split('\'')
+                .step_by(2)
+                .collect::<Vec<_>>()
+                .join(" ");
+            while let Some(start) = rest.find("OPERATOR(pg_catalog.") {
+                let end = start + rest[start..].find(')').unwrap();
+                rest.replace_range(start..=end, " ");
+            }
+            let rest = rest.replace("::", " ");
+            assert!(
+                !rest.contains(|c: char| "+-*/<>=~!@#%^&|`?".contains(c)),
+                "an unqualified operator in {statement}"
+            );
+            let words: Vec<&str> = rest
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .collect();
+            for keyword in [
+                "IN", "LIKE", "ILIKE", "SIMILAR", "BETWEEN", "ANY", "SOME", "DISTINCT", "CASE",
+                "NULLIF", "GREATEST", "LEAST", "OVERLAPS", "USING",
+            ] {
+                assert!(
+                    !words.contains(&keyword),
+                    "{keyword} resolves an operator in {statement}"
+                );
+            }
+            assert_eq!(
+                words.iter().filter(|word| **word == "ALL").count(),
+                rest.matches("UNION ALL").count(),
+                "ALL outside UNION ALL in {statement}"
+            );
+        }
     }
 }

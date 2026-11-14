@@ -1191,11 +1191,16 @@ async fn campaign() {
     let shadow = Stores::new(fixture.settings()).unwrap();
     shadow.readiness().await.unwrap();
     // Hold one clean object only in this test to model a corrupted idle path.
+    // The trap has a view over pg_roles and an `=` on names (APP-197 recheck
+    // R-M1): a reuse must refuse the shadowed session before any statement
+    // that resolves names or operators through its search_path runs.
     let poisoned = shadow.worker.inner.pool.get().await.unwrap();
     fixture.sql(
         "CREATE SCHEMA reviewer_probe; CREATE TABLE reviewer_probe.marker (value integer); \
          CREATE FUNCTION reviewer_probe.mark() RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN INSERT INTO reviewer_probe.marker VALUES (1); RETURN true; END $$; \
          CREATE VIEW reviewer_probe.pg_roles AS SELECT r.* FROM pg_catalog.pg_roles r WHERE reviewer_probe.mark(); \
+         CREATE FUNCTION reviewer_probe.name_eq(name,name) RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN PERFORM reviewer_probe.mark(); RETURN $1 OPERATOR(pg_catalog.=) $2; END $$; \
+         CREATE OPERATOR reviewer_probe.= (LEFTARG=name, RIGHTARG=name, FUNCTION=reviewer_probe.name_eq); \
          GRANT USAGE ON SCHEMA reviewer_probe TO genui_workspace,genui_control,genui_data,genui_worker; \
          GRANT SELECT ON reviewer_probe.pg_roles TO genui_workspace,genui_control,genui_data,genui_worker; \
          SET ROLE genui_worker; SET search_path=reviewer_probe,pg_catalog; SELECT count(*) FROM pg_roles WHERE rolname=current_user; RESET ROLE; RESET search_path; \
@@ -1209,17 +1214,75 @@ async fn campaign() {
         .unwrap();
     assert!(control_count > 0);
     fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
+    // The planted operator alone: a qualified relation, an unqualified `=`.
+    fixture.sql(
+        "SET ROLE genui_worker; SET search_path=reviewer_probe,pg_catalog; SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname=current_user; RESET ROLE; RESET search_path;",
+        "genui",
+    );
+    let operator_count: u64 = fixture
+        .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
+        .trim()
+        .parse()
+        .unwrap();
+    assert!(operator_count > 0);
+    fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
+    let mut poisoned = poisoned;
     poisoned
         .client
         .batch_execute("SET search_path=reviewer_probe,pg_catalog")
         .await
         .unwrap();
+    // The reuse's first check is the session baseline: it refuses the
+    // shadowed session before the identity statement, or any other check,
+    // runs on it (APP-197 recheck R-M1). Called directly, so the pool's
+    // replacement backend does not overwrite the recorded refusal.
+    {
+        use deadpool::managed::{Manager, Object};
+        let probe = Arc::new(std::sync::Mutex::new(pool::trace::Probe::default()));
+        let metrics = *Object::metrics(&poisoned);
+        pool::trace::scope(probe.clone(), Instant::now(), async {
+            shadow
+                .worker
+                .inner
+                .pool
+                .manager()
+                .recycle(&mut poisoned, &metrics)
+                .await
+                .map_err(|_| Error::Unavailable)
+        })
+        .await;
+        let probe = *probe.lock().unwrap();
+        assert_eq!(
+            (probe.step, probe.cause, probe.error),
+            (None, Some("baseline_search_path"), Some(Error::Unavailable)),
+            "the baseline refuses the shadowed reuse first"
+        );
+        // The second defence on its own: the identity statement, run on the
+        // shadowed session, resolves nothing through its search path (the
+        // planted view and `=` stay unused) and refuses it.
+        let probe = Arc::new(std::sync::Mutex::new(pool::trace::Probe::default()));
+        pool::trace::scope(probe.clone(), Instant::now(), async {
+            pool::verify_identity(&poisoned.client, shadow.worker.inner.role())
+                .await
+                .map(drop)
+        })
+        .await;
+        assert_eq!(probe.lock().unwrap().cause, Some("identity_search_path"));
+        assert_eq!(
+            fixture
+                .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
+                .trim(),
+            "0",
+            "the identity statement used a planted object"
+        );
+    }
     drop(poisoned);
     // Inside the A5 window (APP-197): the poisoned worker session is refused
-    // on reuse (the baseline check) and its replacement at startup (the
-    // database default). The other roles' reused sessions are unshadowed;
-    // the probe schema is catalog drift, which they refuse once the window
-    // has passed.
+    // on reuse (above). Its replacement starts with the search path its
+    // connection options fix, whatever the database default says, and is
+    // refused by its catalog comparison: the probe schema is drift. The other
+    // roles' reused sessions are unshadowed; they refuse that drift once the
+    // window has passed.
     assert!(Lease::acquire(&shadow.worker.inner).await.is_err());
     shadow.hooks().advance(pool::CATALOG_RECHECK);
     refuse_all_roles(&shadow).await;
