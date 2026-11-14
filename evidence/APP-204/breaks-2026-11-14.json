@@ -1,0 +1,547 @@
+[
+ {
+  "break": "B1",
+  "rule": "own_rows on the capture (bounds and rows)",
+  "file": "app/src/storage/record_components.rs",
+  "before": "own = super::authorization::own_rows(\"v\", \"$2::text::uuid\", \"$3::text::uuid\", super::authorization::SCOPED)",
+  "after": "own = \"TRUE\"",
+  "occurrences": 2,
+  "runs": [
+   {
+    "command": "just campaign record-components",
+    "exit": 101,
+    "seconds": 104,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "panic: called `Result::unwrap()` on an `Err` value: Any { .. }",
+     "storage::record_components_campaign::native_record_components_campaign"
+    ],
+    "tail": [
+     "called `Result::unwrap()` on an `Err` value: Any { .. }",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`",
+     "error: recipe `campaign` failed on line 49 with exit code 101"
+    ]
+   },
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- storage::tests::every_record_statement_carries_own_rows",
+    "exit": 101,
+    "seconds": 1,
+    "failing": [
+     "panic: statements naming an internal record table without own_rows( and not on the allowlist:",
+     "storage::tests::every_record_statement_carries_own_rows"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "head_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B2",
+  "rule": "the key input is captured",
+  "file": "app/src/storage/record_components.rs",
+  "before": "v[\"records\"][\"measure\"][\"key_input\"].as_str(),",
+  "after": "None,",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 141,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "storage::record_components::tests::a_matches_key_input_is_captured_beside_the_component_inputs"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 19s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "head_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B3",
+  "rule": "a guest sees only the neutral handle",
+  "file": "app/src/storage/record_components.rs",
+  "before": "    if guest {\n        crate::directory::neutral_label(principal)",
+  "after": "    if false {\n        crate::directory::neutral_label(principal)",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 49,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "storage::record_components::tests::a_guest_never_sees_a_members_chosen_name"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 48.26s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "head_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B4",
+  "rule": "the payload bound",
+  "file": "app/src/storage/record_components.rs",
+  "before": "if encoded.len() > RECORD_COMPONENT_PAYLOAD_BYTES {",
+  "after": "if false {",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 40,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "storage::record_components::tests::a_payload_the_child_cannot_read_whole_is_a_projection_limit"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.03s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "head_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B5",
+  "rule": "the snapshot domain is v2",
+  "file": "app/src/storage/record_components.rs",
+  "before": "pub const SNAPSHOT_DOMAIN: &str = \"forma:record-components-snapshot:v2\";",
+  "after": "pub const SNAPSHOT_DOMAIN: &str = \"forma:record-components-snapshot:v1\";",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 39,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "storage::record_components::tests::the_snapshot_domain_is_v2_only"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.40s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "head_blob": "f88376f5e0f684e6ecd2f269caa45d9932825c71",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B6",
+  "rule": "a countdown value is a contract timestamp",
+  "file": "app/src/query/record_components.rs",
+  "before": ".is_some_and(|s| !admission::contract_timestamp(s))",
+  "after": ".is_some_and(|_| false)",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 34,
+    "failing": [
+     "panic: {\"budget\":null,\"closed\":false,\"columns\":[],\"groups\":[],\"id\":\"timer\",\"kind\":\"countdown\",\"label\":\"Second\",\"partial\":false,\"population\":2,\"rows\":[],\"state\":\"ready\",\"total_scope\":\"full_authorized_filtered",
+     "query::record_components::tests::a_countdown_projection_carries_an_instant_a_label_and_closed_only"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.11s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "0f8f99c2c456545268bad8ee67fc1f1e08bd0a0a",
+  "head_blob": "0f8f99c2c456545268bad8ee67fc1f1e08bd0a0a",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B7",
+  "rule": "only a countdown carries label and closed",
+  "file": "app/src/query/record_components.rs",
+  "before": "} else if v.label.is_some()\n            || v.closed.is_some()\n            || v.value",
+  "after": "} else if v.value",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 31,
+    "failing": [
+     "panic: assertion failed: parse_result(&run, &parameters,",
+     "query::record_components::tests::a_countdown_projection_carries_an_instant_a_label_and_closed_only"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 30.12s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "0f8f99c2c456545268bad8ee67fc1f1e08bd0a0a",
+  "head_blob": "0f8f99c2c456545268bad8ee67fc1f1e08bd0a0a",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B8",
+  "rule": "a closed countdown reads Closed",
+  "file": "app/src/query/record_components.rs",
+  "before": "Some(target) if p.countdown_state == \"open\" => countdown_text(target - now),",
+  "after": "Some(target) => countdown_text(target - now),",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 31,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "query::record_components::tests::countdown_props_and_the_server_instant"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 30.83s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "0f8f99c2c456545268bad8ee67fc1f1e08bd0a0a",
+  "head_blob": "0f8f99c2c456545268bad8ee67fc1f1e08bd0a0a",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B9",
+  "rule": "every response carries server_time",
+  "file": "app/src/query/record_routes.rs",
+  "before": "server_time: crate::boxes::register::utc(now),",
+  "after": "server_time: String::new(),",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 25,
+    "failing": [
+     "panic: assertion `left == right` failed",
+     "query::record_routes::tests::every_response_carries_the_server_instant_and_stamps_countdowns"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.43s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "bf9240a6fd12fdb3a5cb6330b328baddc2ea93d0",
+  "head_blob": "bf9240a6fd12fdb3a5cb6330b328baddc2ea93d0",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "B10",
+  "rule": "countdown is a record kind",
+  "file": "app/src/query/record_routes.rs",
+  "before": "            | \"record_budget\"\n            | \"countdown\"",
+  "after": "            | \"record_budget\"",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "cargo test --locked -p forma-app-platform --lib -- record_components record_routes",
+    "exit": 101,
+    "seconds": 31,
+    "failing": [
+     "panic: assertion failed: is_record_kind(\"countdown\")",
+     "query::record_routes::tests::a_countdown_is_a_record_kind"
+    ],
+    "tail": [
+     "    Finished `test` profile [unoptimized + debuginfo] target(s) in 30.93s",
+     "     Running unittests src/lib.rs (target/debug/deps/genui-8b8c7cd29a962b92)",
+     "error: test failed, to rerun pass `-p forma-app-platform --lib`"
+    ]
+   }
+  ],
+  "restored_blob": "bf9240a6fd12fdb3a5cb6330b328baddc2ea93d0",
+  "head_blob": "bf9240a6fd12fdb3a5cb6330b328baddc2ea93d0",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E1",
+  "rule": "the current record is the highest commit sequence",
+  "file": "app/runtime/record_engine.py",
+  "before": "current=max(candidates,key=lambda item:(item[0][\"sequence\"],item[0][\"id\"]),default=None)",
+  "after": "current=next(iter(candidates),None)",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 0,
+    "failing": [
+     "test_child_protocol_carries_the_new_members",
+     "test_the_current_record_is_the_highest_commit_sequence"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.122s",
+     "",
+     "FAILED (failures=2)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E2",
+  "rule": "a creator group is labelled, never identified",
+  "file": "app/runtime/record_engine.py",
+  "before": "{\"label\":creators[creator],\"missing\":False",
+  "after": "{\"label\":creator,\"missing\":False",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 1,
+    "failing": [
+     "test_child_protocol_carries_the_new_members",
+     "test_contributor_snapshot_is_their_own_rows_and_no_key",
+     "test_labels_never_ids_leave_the_engine",
+     "test_reviewer_snapshot_ranks_every_contributor_by_label",
+     "test_ties_follow_labels_then_a_stable_hidden_order"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.433s",
+     "",
+     "FAILED (failures=5)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E3",
+  "rule": "matches is typed equality on the whole value",
+  "file": "app/runtime/record_engine.py",
+  "before": "return json.dumps(value, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False)",
+  "after": "return json.dumps({k: v for k, v in value.items() if k != \"input_id\"} if isinstance(value, dict) else value, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False)",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 0,
+    "failing": [
+     "test_typed_equality_on_every_named_field"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.156s",
+     "",
+     "FAILED (failures=1)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E4",
+  "rule": "a ranking page is at most 50",
+  "file": "app/runtime/record_engine.py",
+  "before": "RANKING_LIMIT = 50",
+  "after": "RANKING_LIMIT = 51",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 0,
+    "failing": [
+     "test_fifty_is_the_bound_and_truncation_is_reported"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.095s",
+     "",
+     "FAILED (failures=1)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E5",
+  "rule": "creators is id-sorted with no duplicate",
+  "file": "app/runtime/record_engine.py",
+  "before": "require(entry[\"id\"]>last);last=entry[\"id\"]",
+  "after": "last=entry[\"id\"]",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 0,
+    "failing": [
+     "test_group_by_and_group_field_are_exclusive_and_creators_must_cover_rows"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.119s",
+     "",
+     "FAILED (failures=2)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E6",
+  "rule": "closed_when closes the countdown",
+  "file": "app/runtime/record_engine.py",
+  "before": "closed=value is None or (current is not None and \"closed_when\" in config and holds(config[\"closed_when\"],current[1],fields))",
+  "after": "closed=value is None",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 0,
+    "failing": [
+     "test_closed_when_and_a_null_timestamp_close_it",
+     "test_the_current_record_is_the_highest_commit_sequence"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.105s",
+     "",
+     "FAILED (failures=2)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "E7",
+  "rule": "no filter narrows a countdown",
+  "file": "app/runtime/record_engine.py",
+  "before": "require(kind!=\"countdown\" or not applied)",
+  "after": "pass",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "app/runtime/.venv/bin/python -m unittest app/runtime/test_record_engine.py",
+    "exit": 1,
+    "seconds": 0,
+    "failing": [
+     "test_malformed_countdowns_refuse"
+    ],
+    "tail": [
+     "Ran 22 tests in 0.101s",
+     "",
+     "FAILED (failures=1)"
+    ]
+   }
+  ],
+  "restored_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "head_blob": "8c4ec1c94b4f6f7c6982f404ef50342eca2da4b1",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "T1",
+  "rule": "the client never reads the wall clock",
+  "file": "app/admin/src/record-components/controller.ts",
+  "before": "const end = instant(target), start = instant(serverTime);",
+  "after": "const end = instant(target), start = Math.floor(Date.now() / 1000);",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "npx --prefix app/admin tsx --test app/admin/test/record-components-controller.test.ts",
+    "exit": 1,
+    "seconds": 1,
+    "failing": [
+     "a browser clock an hour off changes nothing",
+     "remaining time is the target minus the server instant and the elapsed monotonic time"
+    ],
+    "tail": [
+     "# skipped 0",
+     "# todo 0",
+     "# duration_ms 265.756167"
+    ]
+   }
+  ],
+  "restored_blob": "0b9335272d137c950afcb996e2aeb376dcce54f4",
+  "head_blob": "0b9335272d137c950afcb996e2aeb376dcce54f4",
+  "byte_identical": true,
+  "tree_clean": true
+ },
+ {
+  "break": "T2",
+  "rule": "a closed countdown never restarts",
+  "file": "app/admin/src/record-components/controller.ts",
+  "before": "if (timer.dataset.countdown !== 'open') continue;",
+  "after": "",
+  "occurrences": 1,
+  "runs": [
+   {
+    "command": "npx --prefix app/admin tsx --test app/admin/test/record-components-controller.test.ts",
+    "exit": 1,
+    "seconds": 1,
+    "failing": [
+     "a browser clock an hour off changes nothing"
+    ],
+    "tail": [
+     "# skipped 0",
+     "# todo 0",
+     "# duration_ms 167.799667"
+    ]
+   }
+  ],
+  "restored_blob": "0b9335272d137c950afcb996e2aeb376dcce54f4",
+  "head_blob": "0b9335272d137c950afcb996e2aeb376dcce54f4",
+  "byte_identical": true,
+  "tree_clean": true
+ }
+]
