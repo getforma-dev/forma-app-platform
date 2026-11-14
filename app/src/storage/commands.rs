@@ -35,8 +35,11 @@
 //! a schema with `one_per_creator` looks for the creator's own entry with the
 //! same key (`keyed_entry`, after the sequence lock and the requested row's
 //! lock, the matched row `FOR UPDATE`): none creates as before, a match with
-//! the composed state is `Refused(Unchanged)`, any other match writes the next
-//! revision of the matched record and the outcome names it.
+//! the composed state is `Refused(Unchanged)`, a match on which a field this
+//! create neither writes nor stamps has moved since it was filed (a
+//! reviewer's score, a transition) is `Denied` with nothing written
+//! (`untouched_fields_differ`, ADR-020 §17.43), any other match writes the
+//! next revision of the matched record and the outcome names it.
 //!
 //! Nothing a caller supplies is trusted as authority or as admitted content:
 //! the organization and principal come from the trusted request, the command
@@ -1036,6 +1039,36 @@ pub(super) fn composed_state(bytes: &[u8]) -> Result<Map<String, Value>> {
     Ok(super::rules::state_of(&state))
 }
 
+/// ADR-020 §17.43 (APP-213): whether a replacing create would undo another
+/// command's work. A create composes fresh, so every field it neither writes
+/// (`writable`) nor stamps (`set_now`) composes to its `initial` value or
+/// null; on the matched entry (`entry`, its stored canonical bytes) such a
+/// field holds whatever the last command wrote: a reviewer's `reviewer_only`
+/// score, a transition's state. When any of them differs the entry is locked
+/// for its creator (the commit and the dry run answer `Denied`, nothing
+/// written) until a command that may write the field moves it back. Before a
+/// reviewer acts both sides hold the initial or null, so a resubmission
+/// replaces as §5 says; a schema whose create writes every field (the quiz's
+/// `responses`) is never locked, and a `set_now` stamp never locks. The
+/// equality is `Unchanged`'s typed one, taken field by field.
+pub(super) fn untouched_fields_differ(
+    spec: &[FieldSpec],
+    declaration: &Declaration,
+    entry: &[u8],
+    composed: &Map<String, Value>,
+) -> Result<bool> {
+    let stored = composed_state(entry)?;
+    let null = json!({"type": "null"});
+    Ok(spec
+        .iter()
+        .filter(|field| {
+            !declaration.writable.contains(&field.id) && !declaration.set_now.contains(&field.id)
+        })
+        .any(|field| {
+            stored.get(&field.id).unwrap_or(&null) != composed.get(&field.id).unwrap_or(&null)
+        }))
+}
+
 /// A reference value's `(input_id, record_id)`; `None` for null or any
 /// other value (a null reference satisfies no guard).
 fn reference_of(value: Option<&Value>) -> Option<(String, String)> {
@@ -1656,6 +1689,16 @@ async fn commit<'a>(
             // The statement reads only the committer's rows; anything else
             // is a broken store, never a write over another member's entry.
             require_stored(entry.creator == request.principal && entry.version > 0)?;
+            // ADR-020 §17.43 (APP-213): a replace may not undo a reviewer's
+            // work. A field this create neither writes nor stamps must still
+            // hold what the create composes for it; otherwise the entry is
+            // locked and nothing is written.
+            require(!untouched_fields_differ(
+                &published.fields,
+                declaration,
+                &entry.values,
+                &composed,
+            )?)?;
             target = entry.record;
             base = entry.version;
             creator = Some(entry.creator);
@@ -2489,5 +2532,139 @@ mod tests {
         assert!(idempotency_key_shaped("00000000000000000000000000000000"));
         assert!(!idempotency_key_shaped("0000000000000000000000000000000g"));
         assert_eq!(ConflictReason::PayloadMismatch.code(), "payload_mismatch");
+    }
+
+    /// A submissions schema: the filer's key and answer, and a score only a
+    /// reviewer's update writes.
+    fn submissions() -> Vec<FieldSpec> {
+        vec![
+            field("task", json!({"type": "text"}), false),
+            field("answer", json!({"type": "text"}), false),
+            field("score", json!({"type": "integer", "unit": "points"}), true),
+        ]
+    }
+    fn submission(task: &str, answer: &str) -> Value {
+        json!([
+            {"field_id": "task", "value": {"type": "text", "value": task}},
+            {"field_id": "answer", "value": {"type": "text", "value": answer}},
+        ])
+    }
+
+    /// ADR-020 §17.43 (APP-213): a replacing create keeps a reviewer's work.
+    /// Before a reviewer acts, no field outside the create's reach differs
+    /// and a resubmission replaces; once the reviewer's update has written
+    /// `score`, the same resubmission differs on it and is refused. A field
+    /// the create writes, or stamps, never locks the entry; stored bytes that
+    /// do not decode are a broken store, never a judgment.
+    #[test]
+    fn a_replace_differs_exactly_when_a_field_outside_the_creates_reach_moved() {
+        let spec = submissions();
+        let submit = Declaration {
+            operation: "create".into(),
+            writable: vec!["task".into(), "answer".into()],
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
+        };
+        let filed = super::compose(
+            &spec,
+            &submit,
+            None,
+            &submission("one", "draft"),
+            true,
+            false,
+            NOW,
+        )
+        .unwrap();
+        let resubmitted = composed_state(
+            &super::compose(
+                &spec,
+                &submit,
+                None,
+                &submission("one", "final"),
+                true,
+                false,
+                NOW,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            untouched_fields_differ(&spec, &submit, &filed, &resubmitted),
+            Ok(false),
+            "before a reviewer acts, a resubmission replaces"
+        );
+        // The reviewer scores the entry: an update that writes `score` alone.
+        let review = Declaration {
+            operation: "update".into(),
+            writable: vec!["score".into()],
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: true,
+            requires: Vec::new(),
+            set_now: Vec::new(),
+        };
+        let current: Value = serde_json::from_slice(&filed).unwrap();
+        let scored = super::compose(
+            &spec,
+            &review,
+            Some(&current),
+            &json!([{"field_id": "score", "value": {"type": "integer", "value": "9", "unit": "points"}}]),
+            false,
+            true,
+            NOW,
+        )
+        .unwrap();
+        assert_eq!(
+            untouched_fields_differ(&spec, &submit, &scored, &resubmitted),
+            Ok(true),
+            "once scored, the entry is locked for its creator"
+        );
+        // A create that writes every field is never locked (the quiz).
+        let all = Declaration {
+            operation: "create".into(),
+            writable: vec!["task".into(), "answer".into(), "score".into()],
+            rules: Default::default(),
+            decided: Vec::new(),
+            reviewer_only: false,
+            requires: Vec::new(),
+            set_now: Vec::new(),
+        };
+        assert_eq!(
+            untouched_fields_differ(&spec, &all, &scored, &resubmitted),
+            Ok(false)
+        );
+        // A stamp the create re-stamps never locks (attendance's checked_at).
+        let items = items();
+        let post = item_command("create", &["prompt", "state"], &["opened_at"]);
+        let open = json!([
+            {"field_id": "prompt", "value": {"type": "text", "value": "Item one"}},
+            {"field_id": "state", "value": {"type": "enum", "value": "open"}},
+        ]);
+        let earlier = super::compose(&items, &post, None, &open, true, true, NOW).unwrap();
+        let later = composed_state(
+            &super::compose(
+                &items,
+                &post,
+                None,
+                &open,
+                true,
+                true,
+                "2026-11-29T15:00:40Z",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            untouched_fields_differ(&items, &post, &earlier, &later),
+            Ok(false)
+        );
+        // Stored bytes that do not decode are a broken store.
+        assert_eq!(
+            untouched_fields_differ(&spec, &submit, b"not canonical", &resubmitted),
+            Err(Error::Unavailable)
+        );
     }
 }

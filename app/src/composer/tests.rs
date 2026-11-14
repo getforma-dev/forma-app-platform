@@ -1307,6 +1307,39 @@ fn a_participation_refusal_retries_with_its_code_and_fix_and_no_value() {
     );
 }
 
+/// ADR-020 §17.44 (APP-213): a generated answer key is private. The worked
+/// example's `expected` list is `own` and plans; the same content with the
+/// `own` dropped from the key list still admits as stored content and is
+/// refused as generated content with its own static hint.
+#[test]
+fn a_generated_matches_key_must_be_an_own_list() {
+    let private = prompt::participation_example();
+    assert!(
+        plan::plan_generated(&private.to_string(), &[], ORG, APP).is_ok(),
+        "an own key list plans"
+    );
+    let mut shared = private.clone();
+    assert_eq!(shared["record_schemas"][2]["id"], "expected");
+    shared["record_schemas"][2]
+        .as_object_mut()
+        .unwrap()
+        .remove("visibility");
+    assert!(
+        plan::admit(&shared, ORG, APP).is_ok(),
+        "stored content is admitted as before"
+    );
+    assert_eq!(
+        plan::require_private_keys(&shared).unwrap_err().code,
+        "shared_matches_key"
+    );
+    let refusal = plan::plan_generated(&shared.to_string(), &[], ORG, APP).unwrap_err();
+    assert_eq!(refusal.code, "shared_matches_key");
+    assert_ne!(prompt::hint("shared_matches_key"), prompt::hint("unknown"));
+    assert!(prompt::hint("shared_matches_key").contains("visibility: own"));
+    // A content with no matches measure has no key to judge.
+    assert!(plan::require_private_keys(&prompt::simple_records_example()).is_ok());
+}
+
 /// ADR-020 §9's cut rule and the binding rule: a multi_enum field follows
 /// APP-208's switch in generated content (admission accepts it either way);
 /// records inputs that would bind another list's schema are refused.

@@ -88,7 +88,7 @@ const PLAIN_WORDS: &str = "PLAIN WORDS TO MEMBERS. The member's words name their
 - \"only I\" (or reviewers) \"post\", \"close\", \"grade\", \"mark\": reviewer_only: true on that command; a grade or mark is a reviewer_only update writing its own field (never a key field), transitions: [].\n\
 - how many entries: record_summary {op: count}; entries per person: record_ranking with group_by: \"creator\" and {op: count}.\n\
 When two records inputs have the same fields, give each the id of its record_schema (input expected with record_schema expected) so their entries stay apart.\n\
-NEVER: {type: now} outside requires (not in a query filter, a transition's or initial rule's when, or a closed_when); one_per_creator on a list without visibility: \"own\"; a set_now field in writable_fields; a declared transition for the owner's post, close or reopen; offset_seconds: 0; group_by beside group_field, or any group_by but \"creator\"; a reference field to a `source` input.";
+NEVER: {type: now} outside requires (not in a query filter, a transition's or initial rule's when, or a closed_when); one_per_creator on a list without visibility: \"own\"; a set_now field in writable_fields; a declared transition for the owner's post, close or reopen; offset_seconds: 0; group_by beside group_field, or any group_by but \"creator\"; a reference field to a `source` input; a matches key_input whose list lacks visibility: \"own\" (contributors would read the expected values).";
 
 /// ADR-020 §9: `multi_enum` once APP-208 lands, and until then the refusal.
 const MULTI_ENUM_ON: &str = "CHOOSE ALL THAT APPLY: a field {type: multi_enum, values: [1..32 ids]} lets a member pick several values; its value is {type: multi_enum, values: [the chosen ids, in declaration order]}, and none chosen is {type: null} (make the field nullable unless a choice is required). Never use a multi_enum field in requires, closed_when, a query filter, a record filter, one_per_creator, a matches measure, a records_list order or a transition.";
@@ -598,6 +598,7 @@ pub fn hint(code: &str) -> &'static str {
         "reference_field" => "Give a reference field a target_input that is a records input of this content; to name a source's data or one of a few fixed things, use an enum of the known values or a short text field instead.",
         "unusable_field" => "Replace every multi_enum field with one boolean field per option; multi_enum is not offered yet.",
         "ambiguous_records_input" => "When two records inputs have the same fields, give each records input the id of its own record_schema (input expected with record_schema expected), and never let two records inputs keep the same record_schema.",
+        "shared_matches_key" => "A matches key_input must be an `own` list that only reviewers file (visibility: own with a reviewer_only create), so contributors never read the expected values.",
         "no_create_form" => "An app with no data view needs a form view for a create command, so members can add records.",
         _ => "Produce a corrected, complete definition content object.",
     }
@@ -1007,6 +1008,7 @@ mod tests {
             "offset_seconds: 0",
             "group_by beside group_field",
             "a reference field to a `source` input",
+            "a matches key_input whose list lacks visibility: \"own\"",
         ] {
             assert!(never.contains(rule), "{rule}");
         }
@@ -1064,6 +1066,7 @@ mod tests {
         for code in [
             "unusable_field",
             "ambiguous_records_input",
+            "shared_matches_key",
             "reference_field",
         ] {
             assert_ne!(hint(code), hint("unknown"), "{code}");

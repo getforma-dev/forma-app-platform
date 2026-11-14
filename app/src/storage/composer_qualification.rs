@@ -2236,7 +2236,17 @@ async fn participation_phase(
         )
     };
     let first = committed(stores, &contributor, &submit("draft")).await;
-    let resubmitted = committed(stores, &contributor, &submit("final")).await;
+    // APP-213: before a reviewer acts, the dry run names the entry a
+    // resubmission replaces, and the commit replaces it.
+    let again = submit("final");
+    assert!(
+        matches!(
+            stores.data.dry_run_command(&contributor, &again).await,
+            Ok(DryRun::Valid { ref replaces, .. }) if replaces.as_deref() == Some(first.record_id.as_str())
+        ),
+        "the dry run names the entry a resubmission replaces"
+    );
+    let resubmitted = committed(stores, &contributor, &again).await;
     assert_eq!(
         (resubmitted.record_id.as_str(), resubmitted.record_version),
         (first.record_id.as_str(), 2)
@@ -2268,6 +2278,85 @@ async fn participation_phase(
     check(
         checks,
         "APP-207: the composed attendance app takes one check-in per person per session (a second replaces the first) and refuses one after the owner closes the session, counting one check-in per person; the composed homework app replaces a resubmission, refuses a contributor's score (reviewer_only) and commits the owner's",
+    );
+    // APP-213 (ADR-020 §17.43): once the reviewer has scored the entry, a
+    // resubmission would reset the score. The dry run and the commit refuse
+    // it alike (the uniform refusal), the fresh id is never created, the
+    // entry keeps its revision, its answer and its score.
+    let after_score = submit("third try");
+    assert_eq!(
+        stores
+            .data
+            .dry_run_command(&contributor, &after_score)
+            .await,
+        Err(Error::Denied),
+        "the dry run refuses a resubmission of a scored entry"
+    );
+    assert_eq!(
+        stores.data.commit_record(&contributor, &after_score).await,
+        Err(Error::Denied),
+        "the commit refuses a resubmission of a scored entry"
+    );
+    let kept = stores
+        .data
+        .list_records(owner, &tasks.app, &tasks.work)
+        .await
+        .unwrap();
+    let entry = kept
+        .records
+        .iter()
+        .find(|row| row.record_id == first.record_id)
+        .expect("the scored entry");
+    let value_of = |field: &str| -> Value {
+        entry
+            .values
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["field_id"] == field)
+            .map(|item| item["value"].clone())
+            .unwrap_or(Value::Null)
+    };
+    assert_eq!(entry.version, 3, "no revision was written");
+    assert_eq!(
+        value_of("answer"),
+        json!({"type": "text", "value": "final"})
+    );
+    assert_eq!(
+        value_of("score"),
+        json!({"type": "integer", "value": "9", "unit": "points"})
+    );
+    assert_eq!(
+        scalar(fixture, &format!("SELECT count(*) FROM genui.internal_records WHERE organization_id='{ORG}' AND record_id='{}'", after_score.record)).await,
+        0,
+        "the refused form's id is never created"
+    );
+    assert_eq!(
+        scalar(fixture, &format!("SELECT count(*) FROM genui.internal_record_revisions WHERE organization_id='{ORG}' AND record_id='{}'", first.record_id)).await,
+        3,
+        "the scored entry has exactly its three revisions"
+    );
+    // The reviewer may still act on it: a rescore is an ordinary update.
+    assert_eq!(
+        committed(
+            stores,
+            owner,
+            &command_on(
+                tasks,
+                &listing,
+                "review",
+                "submissions",
+                Some((&first.record_id, 3)),
+                json!([{"field_id": "score", "value": {"type": "integer", "value": "7", "unit": "points"}}]),
+            ),
+        )
+        .await
+        .record_version,
+        4
+    );
+    check(
+        checks,
+        "APP-213 (ADR-020 §17.43): in the composed homework app a resubmission before the reviewer's score replaces the entry (the dry run names it), a resubmission after the score is refused by the dry run and the commit alike with nothing written (the entry keeps its revision, answer and score, the fresh id is never created), and the reviewer can still rescore it",
     );
     json!({
         "sentences": sentences.iter().map(|(sentence, _)| *sentence).collect::<Vec<_>>(),

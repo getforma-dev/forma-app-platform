@@ -116,7 +116,8 @@ pub struct Planned {
 /// Why one generation attempt was refused: admission's code, one of the
 /// composer's own (`not_json`, `unknown_source_input`, `not_runnable`,
 /// `authoring_rule`, `reference_field`, `unusable_field`,
-/// `ambiguous_records_input`, `no_create_form`), or, for one of edition
+/// `ambiguous_records_input`, `shared_matches_key`, `no_create_form`), or,
+/// for one of edition
 /// impl-2026-11-14.2's reference rules, `participation_rule: <message>`
 /// (static: [`super::prompt::PARTICIPATION_RULES`]).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -184,6 +185,7 @@ pub fn plan_generated(
     require_authored(&content)?;
     require_usable_fields(&content, MULTI_ENUM_GENERATED)?;
     require_bindable(&content)?;
+    require_private_keys(&content)?;
     require_entry(&content)?;
     Ok(Planned {
         title: title(&content),
@@ -253,30 +255,75 @@ pub(crate) fn require_bindable(content: &Value) -> Result<(), Refusal> {
         .iter()
         .filter(|input| input.get("kind").and_then(Value::as_str) == Some("records"))
     {
-        let id = input.get("id").and_then(Value::as_str);
-        let equal: Vec<&Value> = schemas
-            .iter()
-            .filter(|schema| schema.get("fields") == input.get("fields"))
-            .collect();
-        let schema = equal
-            .iter()
-            .find(|schema| schema.get("id").and_then(Value::as_str) == id)
-            .or(match equal.as_slice() {
-                [only] => Some(only),
-                _ => None,
-            });
+        let (of_shape, bound) = bound_schema(schemas, input);
         // Admission refuses a records input without a schema of its fields.
-        let Some(schema) = schema
+        let Some(schema) = bound
             .and_then(|schema| schema.get("id"))
             .and_then(Value::as_str)
         else {
-            if equal.is_empty() {
+            if of_shape == 0 {
                 continue;
             }
             return refused;
         };
         if !kept.insert(schema) {
             return refused;
+        }
+    }
+    Ok(())
+}
+
+/// How many record schemas have the records input's fields and, among them,
+/// the one the saved work binds it to (`storage::composer_bindings`): the
+/// schema of the input's own id when several share its fields, else the only
+/// one; `None` when several share them and none has the input's id.
+fn bound_schema<'a>(schemas: &'a [Value], input: &Value) -> (usize, Option<&'a Value>) {
+    let id = input.get("id").and_then(Value::as_str);
+    let equal: Vec<&Value> = schemas
+        .iter()
+        .filter(|schema| schema.get("fields") == input.get("fields"))
+        .collect();
+    let bound = equal
+        .iter()
+        .copied()
+        .find(|schema| schema.get("id").and_then(Value::as_str) == id)
+        .or(match equal.as_slice() {
+            [only] => Some(*only),
+            _ => None,
+        });
+    (equal.len(), bound)
+}
+
+/// ADR-020 §17.44 (APP-213): a generated answer key is private. A
+/// `record_summary` or `record_ranking` whose `matches` key input binds a
+/// record schema without `visibility: "own"` would let every contributor read
+/// the expected values through any view or typed query over that input; such
+/// content is refused (`shared_matches_key`). The binding is the saved work's
+/// (`bound_schema`, after `require_bindable` has made it unambiguous).
+/// Admission of stored content is unchanged.
+pub(crate) fn require_private_keys(content: &Value) -> Result<(), Refusal> {
+    let inputs = list(content, "inputs");
+    let schemas = list(content, "record_schemas");
+    for view in list(content, "views") {
+        let Some(key) = view
+            .pointer("/records/measure/key_input")
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        let Some(input) = inputs
+            .iter()
+            .find(|input| input.get("id").and_then(Value::as_str) == Some(key))
+        else {
+            continue;
+        };
+        let (_, bound) = bound_schema(schemas, input);
+        if bound
+            .is_some_and(|schema| schema.get("visibility").and_then(Value::as_str) != Some("own"))
+        {
+            return Err(Refusal {
+                code: "shared_matches_key",
+            });
         }
     }
     Ok(())

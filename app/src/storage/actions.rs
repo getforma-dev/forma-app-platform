@@ -24,7 +24,8 @@ use super::{
     commands::{
         collection, compose, composed_state, current_state, decode_stored, judge_requires,
         key_document, keyed_entry, published, published_content, state_map, transaction_instant,
-        work_fence, work_pin, CommandRequest, Published, RecordCommand, RecordField, Refusal,
+        untouched_fields_differ, work_fence, work_pin, CommandRequest, Published, RecordCommand,
+        RecordField, Refusal,
     },
     pool::Data,
     queries::{collections_many, ordinal, outline_of, pinned_many, pinned_many_with, Pinned},
@@ -780,6 +781,15 @@ impl Data {
                         return Ok(DryRun::Refused(Refusal::Unchanged));
                     }
                     require(entry.creator == request.principal).map_err(|_| Error::Unavailable)?;
+                    // ADR-020 §17.43 (APP-213): the commit refuses a replace
+                    // that would undo another command's work; so does the
+                    // dry run, with the same rule.
+                    require(!untouched_fields_differ(
+                        &published.fields,
+                        declaration,
+                        &entry.values,
+                        &composed,
+                    )?)?;
                     replaces = Some(entry.record.clone());
                     target = (entry.record, false);
                 }
