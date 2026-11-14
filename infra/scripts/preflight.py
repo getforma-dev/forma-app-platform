@@ -80,7 +80,10 @@ PLANS = {
     # ADR-019 (2026-11-03): the reservation ceiling is $180 GenUI and $218 with
     # fAuth. MonthlyBudgetUsd stays 170 so an image promotion does not change
     # the stack parameter. The tag is not this check, and it is not a bill.
-    ALWAYS_ON: {'ledger_schema': 2, 'monthly_budget_usd': '170', 'genui_cap_cents': 18000, 'project_cap_cents': 18000 + 3800,
+    # ADR-019 amendment (2026-11-14, the real-user trial): $210 GenUI and $248
+    # with fAuth, the charter's November ceiling, applied to the canonical
+    # policy by `python -m ops.promotion.reservation_cap` while idle.
+    ALWAYS_ON: {'ledger_schema': 2, 'monthly_budget_usd': '170', 'genui_cap_cents': 21000, 'project_cap_cents': 21000 + 3800,
                 'max_expiry': timedelta(days=32), 'auth_min_cents': 3300, 'auth_max_cents': 3800,
                 'decision': 'ADR-008 always-on beta: GenUI about $150-170/month plus FormaStack lean fAuth about $33 (up to $38)'},
 }

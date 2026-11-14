@@ -171,7 +171,7 @@ app/runtime/.venv/bin/python -m ops.promotion.expiry_policy \
   --output "$PRIVATE_RECONCILIATION/expiry-policy-plan.json"
 ```
 
-The eighteen-hour value is the November 2 follow-up proposal, not a universal default. Review its proposed expiry and budget projection. Planning proves a healthy unchanged runtime, no pending change sets and a fresh canonical budget basis. It cannot refresh a stale assessment, reduce reservations, change the reservation ceiling (18000/21800 cents as of ADR-019; earlier packets were checked against 17000/20800), alter authority, or run while a deployment holds the lock. If the plan refuses, investigate its cause rather than increasing hours automatically.
+The eighteen-hour value is the November 2 follow-up proposal, not a universal default. Review its proposed expiry and budget projection. Planning proves a healthy unchanged runtime, no pending change sets and a fresh canonical budget basis. It cannot refresh a stale assessment, reduce reservations, change the reservation ceiling (21000/24800 cents since the ADR-019 amendment of 2026-11-14; earlier packets were checked against 18000/21800, and before November 3 against 17000/20800), alter authority, or run while a deployment holds the lock. If the plan refuses, investigate its cause rather than increasing hours automatically.
 
 Apply that reviewed value against the same idle hash using another new output path:
 
