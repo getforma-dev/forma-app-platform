@@ -297,7 +297,9 @@ impl Workspace {
                 // APP-191: a pinned answer is derived from the rows its maker
                 // could read; it is listed to anyone else only when no
                 // collection of any work it read (or sits on) is hidden
-                // from the reader (`cardinality(hidden(...))=0`).
+                // from the reader (`cardinality(hidden(...))=0`). Defence in
+                // depth today: 0015's CHECK (kind = 'card' OR NOT everyone)
+                // and `share_card` keep every answer its maker's alone.
                 let hidden_read = super::authorization::hidden("k.app_id", "k.work_id", super::authorization::SCOPED);
                 let hidden_own = super::authorization::hidden("c.app_id", "c.work_id", super::authorization::SCOPED);
                 let rows = t.query(&format!("SELECT {CARD_COLUMNS},(c.app_id IS NOT NULL AND EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=c.organization_id AND a.app_id=c.app_id AND {OWNER_OR_ADMIN})) FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.removed_at IS NULL AND (c.principal_id=$2::text::uuid OR (c.everyone AND EXISTS(SELECT 1 FROM genui.memberships m WHERE m.organization_id=c.organization_id AND m.principal_id=c.principal_id AND m.status='active'))) AND (c.app_id IS NULL OR EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=c.app_id AND w.work_id=c.work_id AND {readable})) AND NOT EXISTS(SELECT 1 FROM unnest(c.read_apps,c.read_works) AS k(app_id,work_id) WHERE NOT EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id AND {readable})) AND (c.principal_id=$2::text::uuid OR c.kind<>'answer' OR (NOT EXISTS(SELECT 1 FROM unnest(c.read_apps,c.read_works) AS k(app_id,work_id) WHERE cardinality({hidden_read})>0) AND (c.app_id IS NULL OR cardinality({hidden_own})=0))) ORDER BY c.created_at,c.card_id LIMIT $3"), &[&request.organization,&request.principal,&LIST_LIMIT]).await?;

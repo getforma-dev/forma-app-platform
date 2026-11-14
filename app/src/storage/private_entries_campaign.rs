@@ -805,6 +805,12 @@ async fn campaign() {
     });
 
     // --- pinned answers -------------------------------------------------------
+    // A pinned answer is its maker's alone: `share_card` refuses adding one for
+    // everyone and 0015's CHECK (kind = 'card' OR NOT everyone) refuses it in
+    // the database, so no other member ever lists it. The `member_cards`
+    // clause that would hide an answer over hidden rows from a non-maker is
+    // therefore defence in depth today; what is asserted here is the
+    // outcome it protects: another member never sees the answer.
     let card = NewCard {
         card: ANSWER_CARD.into(),
         kind: "answer",
@@ -813,21 +819,31 @@ async fn campaign() {
         source: String::new(),
         address: String::new(),
         title: "Claims so far".into(),
-        spec: admission::encode(&json!({"answer": "three claims"})).unwrap(),
+        spec: admission::encode(&json!({"answer": "four claims"})).unwrap(),
         reads: vec![(PRIVATE_APP.into(), work.into())],
     };
-    stores.workspace.make_card(&rev, &card).await.unwrap();
-    stores
-        .workspace
-        .share_card(&rev, ANSWER_CARD, true)
-        .await
-        .unwrap();
-    judged!(&mut checks, "pinned answers: a reviewer's answer over the work lists to the owner and its maker, not to a contributor with hidden rows", {
-        let has = |cards: Vec<MemberCard>| cards.iter().any(|c| c.card == ANSWER_CARD);
-        has(stores.workspace.member_cards(&rev).await.unwrap())
-            && has(stores.workspace.member_cards(&owner).await.unwrap())
-            && !has(stores.workspace.member_cards(&ben).await.unwrap())
-    });
+    assert!(matches!(
+        stores.workspace.make_card(&owner, &card).await.unwrap(),
+        Carded::Saved(_)
+    ));
+    assert!(matches!(
+        stores
+            .workspace
+            .share_card(&owner, ANSWER_CARD, true)
+            .await
+            .unwrap(),
+        Carded::Refused("not_shareable")
+    ));
+    let forced = fixture.operator().await.client.execute(&format!("UPDATE genui.member_cards SET everyone=true WHERE organization_id='{ORG}' AND card_id='{ANSWER_CARD}'"), &[]).await;
+    assert!(
+        forced.is_err(),
+        "0015's CHECK keeps a pinned answer personal"
+    );
+    let has = |cards: Vec<MemberCard>| cards.iter().any(|c| c.card == ANSWER_CARD);
+    assert!(has(stores.workspace.member_cards(&owner).await.unwrap()));
+    assert!(!has(stores.workspace.member_cards(&rev).await.unwrap()));
+    assert!(!has(stores.workspace.member_cards(&ben).await.unwrap()));
+    check(&mut checks, "pinned answers (as shipped): an answer derived from the work's rows lists to its maker only; neither the share route nor the database lets it reach another member, so no hidden row leaks through it");
 
     // --- D9: no access, the organization-wide share, a future member, roles ---
     assert_eq!(
@@ -1078,12 +1094,10 @@ async fn campaign() {
     check(&mut checks, "D9: revoking the organization-wide share ends it for every covered member at once (a second revocation changes nothing); personal grants stay");
     // Only a sharer who is a reviewer may grant reviewer: Ben with share_work
     // may share what he holds (viewer, contributor), never the reviewer role.
-    grant(
-        &fixture,
-        BEN,
-        "share_work",
-        &["--app", PRIVATE_APP, "--work", work],
-    );
+    // Operator-channel stand-in for a `share_work` grant (the operator's
+    // closed GRANTABLE set has no share_work; tenant_seed writes fixture
+    // authority the same way).
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.work_permissions(organization_id,principal_id,app_id,work_id,permission) VALUES ('{ORG}','{BEN}','{PRIVATE_APP}','{work}','share_work'); COMMIT;"), "genui");
     assert_eq!(
         stores
             .workspace
