@@ -118,6 +118,10 @@ pub struct SharedPageProps {
     /// source. Set only on an authorized, available read; a neutral or
     /// pending page never carries it.
     pub sample_data: bool,
+    /// APP-098 DS-40: the sharing organization is a listed demo organization,
+    /// so its people and records are synthetic. Set only on an authorized,
+    /// available read, like `sample_data`.
+    pub demo_data: bool,
 }
 #[derive(PageProps, Serialize, Clone, Debug, Default, Eq, PartialEq)]
 pub struct SharedAppProps {
@@ -747,7 +751,9 @@ async fn guest_document(
         views,
         records_truncated: listing.truncated && !record_cards.is_empty(),
         record_cards,
-        sample_data: outline.sample_data,
+        // The "Synthetic data" note wins in a demo organization (as in MCP).
+        sample_data: outline.sample_data && !crate::demo::is_demo_org(access.organization()),
+        demo_data: crate::demo::is_demo_org(access.organization()),
         ..Default::default()
     })
 }

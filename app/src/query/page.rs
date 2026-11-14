@@ -67,6 +67,9 @@ pub struct WorkProps {
     /// APP-098 DS-84: the work reads the library's synthetic sample source,
     /// so its page says the numbers are sample data, as its canvas chip does.
     pub sample_data: bool,
+    /// APP-098 DS-40: the page is shown in a listed demo organization, so it
+    /// says its people and records are synthetic, as the canvas does.
+    pub demo_data: bool,
 }
 
 /// One admitted part. The discriminants and closed layout classes are made
@@ -658,6 +661,9 @@ pub struct WorkChrome {
     pub records: Vec<RecordLinkProps>,
     pub record_components: Vec<super::record_components::RecordComponentProps>,
     pub canvas: String,
+    /// APP-098 DS-40: the viewer's organization is a listed demo organization
+    /// (`demo::is_demo_org`), whose people and records are synthetic.
+    pub demo: bool,
 }
 
 /// Trusted admitted order/layout shared by member and read-only guest documents.
@@ -773,7 +779,10 @@ pub fn props(
         records: chrome.records,
         canvas: chrome.canvas,
         can_share: chrome.can_share,
-        sample_data: outline.sample_data,
+        // In a demo organization the "Synthetic data" note covers the records
+        // too, so the sample note (whose records are the member's own) yields.
+        sample_data: outline.sample_data && !chrome.demo,
+        demo_data: chrome.demo,
     }
 }
 

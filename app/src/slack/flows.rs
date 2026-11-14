@@ -322,6 +322,16 @@ fn claim_blocks(organization: &str, record: &RecordRow) -> Vec<Value> {
     vec![text::fields(&pairs)]
 }
 
+/// APP-098 DS-40: in a listed demo organization, the one line a message ends
+/// with that says its people and records are synthetic, as the canvas does.
+fn demo_line(organization: &str) -> Option<Value> {
+    crate::demo::is_demo_org(organization).then(|| {
+        text::context(
+            "*Synthetic data:* The organization, people and records here are made up for the demo.",
+        )
+    })
+}
+
 /// `open`: what is waiting for this member's decision.
 async fn pending_message(state: &Slack, member: &TrustedRequest, catalog: &[CatalogApp]) -> Value {
     let Some(stores) = state.auth.stores.as_ref() else {
@@ -362,6 +372,7 @@ async fn pending_message(state: &Slack, member: &TrustedRequest, catalog: &[Cata
         }
     );
     blocks.insert(0, text::section(&headline));
+    blocks.extend(demo_line(member.organization()));
     blocks.push(text::context(&canvas_link(state)));
     text::ephemeral(
         &format!("{count} waiting for your approval"),
@@ -928,6 +939,7 @@ async fn decide(
                     time_now()
                 )),
             );
+            blocks.extend(demo_line(member.organization()));
             blocks.push(text::context(&canvas_link(&state)));
             text::ephemeral(
                 &format!(
@@ -1010,6 +1022,7 @@ pub(crate) fn approval_request(
     ))];
     blocks.extend(claim_blocks(organization, record));
     blocks.push(decision_buttons(record));
+    blocks.extend(demo_line(organization));
     blocks.push(text::context(&canvas_link(state)));
     (format!("{filer} filed a {what} for your approval"), blocks)
 }

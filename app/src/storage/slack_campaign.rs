@@ -1000,6 +1000,14 @@ async fn campaign() {
             .starts_with("1 waiting for your approval"),
         "{waiting}"
     );
+    // APP-098 DS-40: the demo organization's message says its people and
+    // records are synthetic.
+    assert!(
+        waiting.to_string().contains(
+            "*Synthetic data:* The organization, people and records here are made up for the demo."
+        ),
+        "{waiting}"
+    );
     assert_eq!(
         buttons(&waiting)[0],
         (flows::APPROVE.to_owned(), record_id.clone())

@@ -3252,7 +3252,7 @@
       "Depends on": "APP-091",
       "External dependencies": "None beyond listed local predecessors",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "Register verification and box 1: `app098/demo-register`, PR #102. DS-84 sample-data labels: PR #103 (canvas and MCP), PR #107 (work page), PR #108 (guest page and connected canvas), PR #109 (a view must read the source). DS-44 persona names in demo organizations only: PR #110. All merged 2026-11-12 to 2026-11-13.",
+      "Branch / PR": "Register verification and box 1: `app098/demo-register`, PR #102. DS-84 sample-data labels: PR #103 (canvas and MCP), PR #107 (work page), PR #108 (guest page and connected canvas), PR #109 (a view must read the source). DS-44 persona names in demo organizations only: PR #110. All merged 2026-11-12 to 2026-11-13. DS-40 demo note on the work page, guest page and Slack: `app098/demo-note-surfaces`.",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

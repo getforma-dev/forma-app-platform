@@ -1219,6 +1219,51 @@ mod tests {
                 && note.contains("Records you file are your own"),
             "{note}"
         );
+        // APP-098 DS-40: inside a listed demo organization the work page says
+        // its organization, people and records are synthetic, as the canvas
+        // does; elsewhere it says nothing.
+        assert!(!sample_body.contains("data-demo-data"));
+        let demo = work::props(
+            &outline,
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            false,
+            Vec::new(),
+            work::WorkChrome {
+                canvas: work::canvas_href("work"),
+                demo: true,
+                ..Default::default()
+            },
+        );
+        assert!(demo.demo_data);
+        // In a demo organization the Synthetic data note wins over the sample
+        // note, whose "Records you file are your own" would contradict it.
+        let both = work::props(
+            &genui::storage::WorkOutline {
+                sample_data: true,
+                ..outline.clone()
+            },
+            "/w/a/w".into(),
+            "Q".repeat(43),
+            &work::FormValues::default(),
+            false,
+            Vec::new(),
+            work::WorkChrome {
+                demo: true,
+                ..Default::default()
+            },
+        );
+        assert!(both.demo_data && !both.sample_data);
+        let (_, _, demo_body) = html(ssr.work(&demo)).await;
+        let demo_note = &demo_body[demo_body
+            .find("data-demo-data")
+            .unwrap_or_else(|| panic!("no demo note: {demo_body}"))..];
+        let demo_note = &demo_note[..demo_note.find("</p>").unwrap()];
+        assert!(
+            demo_note.contains(">Synthetic data<") && demo_note.contains("made up for the demo"),
+            "{demo_note}"
+        );
         // APP-144: the admitted form and current records are real native HTML;
         // values remain escaped and commands retain their existing route/key.
         let mut document = only.clone();
@@ -1377,6 +1422,24 @@ mod tests {
                 .into_response(),
         )
         .await;
+        assert!(!sample_shared.contains("data-demo-data"));
+        let (_, _, demo_shared) = html(
+            shared_page
+                .render(
+                    &genui::sharing::live::SharedPageProps {
+                        demo_data: true,
+                        ..shared.clone()
+                    },
+                    &RenderCtx::new(),
+                )
+                .unwrap()
+                .into_response(),
+        )
+        .await;
+        assert!(
+            demo_shared.contains("data-demo-data") && demo_shared.contains(">Synthetic data<"),
+            "no demo note on the guest page"
+        );
         let note = &sample_shared[sample_shared
             .find("data-sample-data")
             .unwrap_or_else(|| panic!("no sample note: {sample_shared}"))..];
