@@ -471,6 +471,20 @@ fn the_approver_dm_names_any_record_app() {
             "{demo_rendered}"
         );
     }
+    // The plain-text messages (filed, the filer's DM, the link DM) carry
+    // the same words as a suffix, in a demo organization only.
+    {
+        let _guard = crate::demo::lock_for_tests();
+        const DEMO: &str = "00000000-0000-4000-8000-0000000000d1";
+        crate::demo::configure_for_tests(true, &[DEMO]);
+        assert!(super::flows::demo_suffix(DEMO).contains("made up for the demo"));
+        assert_eq!(
+            super::flows::demo_suffix("00000000-0000-4000-8000-0000000000d2"),
+            ""
+        );
+        crate::demo::configure_for_tests(false, &[]);
+        assert_eq!(super::flows::demo_suffix(DEMO), "", "the switch is off");
+    }
     let mut claim = record;
     claim.schema = "expense_claim".into();
     assert!(

@@ -264,12 +264,14 @@ pub async fn confirm(State(state): State<Arc<Slack>>, request: Request) -> Respo
                 "slack user linked"
             );
             let label = crate::directory::label(member.organization(), member.principal());
+            let suffix = super::flows::demo_suffix(member.organization());
             let slack = state.clone();
             let user = claim.user.clone();
             tokio::spawn(async move {
                 let text = format!(
-                    "You're linked to Forma as *{}*. Try `/forma what's waiting for my approval`.",
-                    super::text::escape(&label)
+                    "You're linked to Forma as *{}*. Try `/forma what's waiting for my approval`.{}",
+                    super::text::escape(&label),
+                    suffix
                 );
                 if let Err(error) = slack.api.direct(&user, &text, None).await {
                     tracing::warn!(

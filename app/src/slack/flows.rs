@@ -148,7 +148,7 @@ async fn unlink(state: Arc<Slack>, team: String, user: String, response_url: Str
 }
 
 /// The draft as a confirmation card.
-fn draft_card(state: &Slack, draft: &Draft, id: &str) -> Value {
+fn draft_card(organization: &str, state: &Slack, draft: &Draft, id: &str) -> Value {
     let pairs: Vec<(String, String)> = draft
         .values
         .iter()
@@ -207,6 +207,7 @@ fn draft_card(state: &Slack, draft: &Draft, id: &str) -> Value {
         note = format!("{approver} · {note}");
     }
     blocks.push(text::context(&note));
+    blocks.extend(demo_line(organization));
     blocks.push(text::actions(
         "forma-draft",
         vec![
@@ -330,6 +331,16 @@ fn demo_line(organization: &str) -> Option<Value> {
             "*Synthetic data:* The organization, people and records here are made up for the demo.",
         )
     })
+}
+
+/// The same words for a plain-text message (the filed line, the filer's DM,
+/// the link DM): empty outside a listed demo organization.
+pub(super) fn demo_suffix(organization: &str) -> &'static str {
+    if crate::demo::is_demo_org(organization) {
+        " _Synthetic data: The organization, people and records here are made up for the demo._"
+    } else {
+        ""
+    }
 }
 
 /// `open`: what is waiting for this member's decision.
@@ -477,7 +488,7 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
                 Ok(Resolution::Draft(draft)) => {
                     let draft = *draft;
                     match state.hold(&member, team, user, draft.clone()) {
-                        Some(id) => draft_card(state, &draft, &id),
+                        Some(id) => draft_card(member.organization(), state, &draft, &id),
                         None => text::ephemeral(UNAVAILABLE, None, false),
                     }
                 }
@@ -746,6 +757,7 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
         duration_ms = elapsed_ms(started),
         "slack draft confirmed"
     );
+    let message = format!("{message}{}", demo_suffix(member.organization()));
     respond(&state, &response_url, text::ephemeral(&message, None, true)).await;
 }
 
@@ -786,12 +798,13 @@ async fn notify_filer_record(
         }
     };
     let text_line = format!(
-        "Your {what} was *{}* by *{}*.",
+        "Your {what} was *{}* by *{}*.{}",
         text::escape(status),
         text::escape(&directory::label(
             decider.organization(),
             decider.principal()
-        ))
+        )),
+        demo_suffix(decider.organization())
     );
     for (team, user, principal) in links.into_iter().filter(|(_, _, p)| *p == record.creator) {
         // The filer's link is judged again before anything is sent to it.
