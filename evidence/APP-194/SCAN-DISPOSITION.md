@@ -40,17 +40,18 @@ Read from the security tracker on 2026-11-14 at about 16:15 UTC:
 - **forky and sid `1.7.0-8`:** fixed.
 - **bullseye:** fixed by DLA-4306-1.
 
-No bookworm fix exists, so waiting is not an option before the expiry. Pinning a newer `pam` would change the Dockerfiles and therefore the deployment contract.
+The tracker notes "Incomplete fix in pam/1.5.2-6+deb12u2: Patch not applied correctly during build", which is why deb12u2 is listed as vulnerable. There is no bookworm-security row and no DSA. No bookworm fix exists today, so waiting is not an option before the expiry. Pinning a newer `pam` would change the Dockerfiles and therefore the deployment contract.
 
 ## Applicability
 
 The flaw is in `pam_namespace`. A *local* user can escalate to root through symlink races in paths that module handles. It is reached only when a PAM-aware program (`login`, `su`, `sshd` and similar) runs a PAM stack that loads `pam_namespace`.
 
-A local build of the qualification image on the same `python:3.11.14-slim-bookworm` base (`forma248-local:qualification`) shows:
-- `libpam-modules` 1.5.2-6+deb12u2 and `pam_namespace.so` are present;
-- **no file in `/etc/pam.d` references `pam_namespace`**, so no PAM stack loads it;
-- `login` and `su` exist, from the base image;
-- there is no `sshd`.
+The pinned base of all three final stages, `python:3.11.14-slim-bookworm@sha256:65a93d69…`, was pulled for linux/arm64 (Debian 12.13) and inspected. It was found by the independent review of PR #125:
+- it carries `libpam-modules`, `libpam0g` and `libpam-runtime` 1.5.2-6+deb12u2, and `pam_namespace.so`;
+- its 16 `/etc/pam.d` files are Debian's defaults, and **none references `pam_namespace`**;
+- `login` and a setuid `su` exist; there is no `sshd` and no `sudo`.
+
+None of the three Dockerfiles installs or upgrades a pam package, or touches `/etc/pam.d`, `/etc/security` or user accounts. Their `--only-upgrade` lists contain no `libpam*`. So the final images' PAM configuration is the base's.
 
 The three images run as `USER 65532:65532`. Their entrypoints are `python3 /app/runtime.py serve`, the operator's `python3 -I -u …/operator.py` and the qualification supervisor. None of them invokes PAM or starts `login` or `su`.
 
@@ -58,8 +59,9 @@ Every container also has a read-only root filesystem (`infra/src`). There is no 
 
 ## Limits
 
-- The image checked was an earlier local amd64 build, not the ECR ARM64 images. The base and package list are the same, by Dockerfile.
+- The pinned base image was inspected, not the ECR candidate images. Their PAM configuration comes from that base unchanged, per the Dockerfiles.
 - The check covers static configuration and entrypoints, not `dlopen`.
+- **Correction.** An earlier draft of this record cited `forma248-local:qualification` as "a local build of the qualification image". That local image is a GateWasm server build, not this repo's image. The same misidentification appears in APP-175's records; see APP-175's Log.
 
 ## Approval
 
