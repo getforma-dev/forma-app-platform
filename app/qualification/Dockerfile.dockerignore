@@ -31,6 +31,9 @@ app/src/bin/**
 !app/src/origins.rs
 !app/src/pages.rs
 !app/src/product.rs
+# Trial plan D4 and D6: the organization admin area and the member's name.
+!app/src/org_admin.rs
+!app/src/member_name.rs
 !app/src/auth/aliases.rs
 !app/src/auth/capability.rs
 !app/src/auth/cookies.rs
@@ -38,6 +41,8 @@ app/src/bin/**
 !app/src/auth/invite.rs
 !app/src/auth/invite_tests.rs
 !app/src/auth/mod.rs
+# W1 (trial plan D1/D5): the beta notice.
+!app/src/auth/notice.rs
 !app/src/auth/pending.rs
 !app/src/auth/pkce.rs
 !app/src/auth/provider.rs
@@ -143,6 +148,8 @@ app/src/bin/**
 !app/src/storage/agents.rs
 !app/src/storage/governance.rs
 !app/src/storage/labels.rs
+# W1 (trial plan D4/D6): organization admins and display names.
+!app/src/storage/org_admin.rs
 !app/src/storage/work_labels.rs
 !app/src/storage/cards.rs
 !app/src/storage/admission_qualification.rs
