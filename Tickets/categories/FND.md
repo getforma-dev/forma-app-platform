@@ -26,3 +26,4 @@ Released framework qualification, typed contracts and reproducible application s
 | 198 | [APP-197: Catalog verification at most every 30 s per connection](../0-backlog/APP-197.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-195 |
 | 199 | [APP-198: A stale record snapshot is never shown as "no access"](../0-backlog/APP-198.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-191 |
 | 201 | [APP-199: Fewer transactions per read, and a server-advised refresh spread](../0-backlog/APP-199.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | M | Backlog | APP-191, APP-197 |
+| 202 | [APP-200: Record snapshot capacity follows the query worker's admission](../0-backlog/APP-200.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-198 |

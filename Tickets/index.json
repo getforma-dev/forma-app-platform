@@ -365,9 +365,10 @@
         "APP-197",
         "APP-198",
         "APP-189",
-        "APP-199"
+        "APP-199",
+        "APP-200"
       ],
-      "ticket_count": 36,
+      "ticket_count": 37,
       "done_count": 7,
       "blocked_count": 0
     }
@@ -6104,7 +6105,7 @@
       "Depends on": "APP-195",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`trial/app-197-catalog-cadence` (pushed, no PR)",
+      "Branch / PR": "to be set by the builder (planned: `trial/app-197-catalog-cadence`, from `trial/app-195-refresh-herd`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -6132,7 +6133,7 @@
       "Depends on": "APP-191",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "W4: `trial/w4-private-entries` (`1c59b202`)",
+      "Branch / PR": "W4: `trial/w4-private-entries` (`1c59b202`; harness `Stale` at head `126cd74c`)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -6209,6 +6210,34 @@
       "dependencies": [
         "APP-191",
         "APP-197"
+      ]
+    },
+    {
+      "id": "APP-200",
+      "title": "Record snapshot capacity follows the query worker's admission",
+      "path": "0-backlog/APP-200.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "FND",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "202",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Fable advisor in lieu of Victor, 2026-11-14, from the APP-197 measurement: raise the snapshot ceiling from 4 to 24, the query worker's running set plus one organization's queue. It is not a go/no-go dependency.",
+      "Requirements": "SR1, C11",
+      "Depends on": "APP-198",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "W4 area (`storage/record_query.rs`), after APP-198 on `trial/w4-private-entries`",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-198"
       ]
     }
   ]
