@@ -1050,16 +1050,30 @@ async fn campaign() {
     // Readiness always compares, inside the window too.
     assert!(window.readiness().await.is_err());
     fixture.sql(undo, "genui");
-    window.readiness().await.unwrap();
     // The window's bound (APP-197 review M1), measured from the connection's
-    // last comparison (its creation by readiness just above): drift injected
-    // at 10 s is tolerated by reuses at 20 s and 29 s, and the reuse at 31 s
+    // last comparison (its creation by readiness here): drift injected at
+    // 10 s is tolerated by reuses at 20 s and 29 s, and the reuse at 31 s
     // compares and refuses. A window that restarted on every reuse would
-    // still tolerate it.
-    window.hooks().advance(Duration::from_secs(10));
+    // still tolerate it. The pool clock is real time plus the advanced
+    // offset, so each step subtracts the real time already spent: up to the
+    // instant before readiness for the tolerated reuses (their age is then
+    // at most 20 s and 29 s), from the instant after it for the refused one
+    // (its age is at least 31 s).
+    let before_readiness = WallInstant::now();
+    window.readiness().await.unwrap();
+    let after_readiness = WallInstant::now();
+    let mut advanced = Duration::ZERO;
+    let mut age = |target: u64, since: WallInstant| {
+        let step = Duration::from_secs(target)
+            .saturating_sub(since.elapsed())
+            .saturating_sub(advanced);
+        window.hooks().advance(step);
+        advanced += step;
+    };
+    age(10, before_readiness);
     fixture.sql(drift, "genui");
-    for (at, step) in [(20, 10), (29, 9)] {
-        window.hooks().advance(Duration::from_secs(step));
+    for at in [20, 29] {
+        age(at, before_readiness);
         let before = compared();
         let tolerated = Lease::acquire(&window.data.inner)
             .await
@@ -1070,7 +1084,7 @@ async fn campaign() {
             .await
             .unwrap();
     }
-    window.hooks().advance(Duration::from_secs(2));
+    age(31, after_readiness);
     let before = compared();
     assert!(
         Lease::acquire(&window.data.inner).await.is_err(),
@@ -1134,9 +1148,41 @@ async fn campaign() {
         &format!("UPDATE genui_meta.schema_version SET version={schema_version}"),
         "genui",
     );
+    // A plain-table replacement of the version relation (the same shape and
+    // rows, a new OID) is refused on reuse inside the window: it is not the
+    // relation that connection's last comparison saw (APP-197 review m1).
+    window.readiness().await.unwrap();
+    let idle = window.data.inner.pool.get().await.unwrap();
+    let compared_pid: i32 = idle
+        .client
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(0);
+    drop(idle);
+    fixture.sql(
+        "ALTER TABLE genui_meta.schema_version RENAME TO reviewer_old_version; \
+         CREATE TABLE genui_meta.schema_version (LIKE genui_meta.reviewer_old_version INCLUDING ALL); \
+         INSERT INTO genui_meta.schema_version SELECT * FROM genui_meta.reviewer_old_version; \
+         ALTER TABLE genui_meta.schema_version OWNER TO genui_owner; \
+         GRANT SELECT ON genui_meta.schema_version TO genui_workspace,genui_control,genui_data,genui_worker;",
+        "genui",
+    );
+    if let Ok(lease) = Lease::acquire(&window.data.inner).await {
+        assert_ne!(
+            pid(&lease).await,
+            compared_pid,
+            "a replaced version relation is never read on reuse"
+        );
+        drop(lease);
+    }
+    fixture.sql(
+        "DROP TABLE genui_meta.schema_version; ALTER TABLE genui_meta.reviewer_old_version RENAME TO schema_version;",
+        "genui",
+    );
     window.readiness().await.unwrap();
     window.close().await.unwrap();
-    check(&mut checks,"ADR-004 A5: inside the 30 s window a reused connection skips only the catalog comparison (catalog drift tolerated, no comparison run), while identity, session-baseline and schema-version drift are refused on reuse; a new backend and readiness always compare; after the window a reuse compares again and refuses; the four application roles hold no DDL privilege");
+    check(&mut checks,"ADR-004 A5: inside the 30 s window a reused connection skips only the catalog comparison (catalog drift tolerated, no comparison run), while identity, session-baseline and schema-version drift are refused on reuse; a new backend and readiness always compare; after the window a reuse compares again and refuses; a replaced version relation is refused on reuse inside the window; the four application roles hold no DDL privilege");
 
     let shadow = Stores::new(fixture.settings()).unwrap();
     shadow.readiness().await.unwrap();
