@@ -658,6 +658,14 @@ async fn campaign() {
                 "{}",
                 page.body
             );
+            // APP-098 DS-40: the persona named is labelled synthetic in the
+            // demo organization (Northstar's team), not in the canary.
+            assert_eq!(
+                page.body.contains("made up for the demo"),
+                team == TEAM,
+                "{}",
+                page.body
+            );
             let form = format!("t={token}");
             let linked = send(
                 &app,
@@ -761,11 +769,19 @@ async fn campaign() {
         bound, 1,
         "the outsider's link is written in the outsider's own organization"
     );
+    // APP-098 DS-40: the canary organization is not a demo, so its DM has no suffix.
+    stub.wait_for(&format!("dm:{STRANGER}"), Duration::from_secs(5), |m| {
+        let text = m["text"].as_str().unwrap_or("");
+        text.contains("linked to Forma as") && !text.contains("Synthetic data")
+    })
+    .await;
     stub.wait_for(&format!("dm:{DIEGO}"), Duration::from_secs(5), |m| {
         m["text"]
             .as_str()
             .unwrap_or("")
             .contains("linked to Forma as *Diego Ramos*")
+            // APP-098 DS-40: a demo organization's DM says its people are synthetic.
+            && m["text"].as_str().unwrap_or("").ends_with("made up for the demo._")
     })
     .await;
     check(&mut checks, "linking: /forma link answers a single-use 10-minute token; the signed-in member's page names the Slack user; the confirmation binds the confirming member in its own organization (3 Northstar links, the outsider's in the canary organization); a reused or tampered token is refused, an anonymous visitor is asked to sign in, a cross-site POST is 403; the linked user gets a DM");
@@ -793,6 +809,13 @@ async fn campaign() {
     ] {
         assert!(shown.contains(expected), "{expected}: {shown}");
     }
+    // APP-098 DS-40: the draft card in the demo organization says so.
+    assert!(
+        card.to_string().contains(
+            "*Synthetic data:* The organization, people and records here are made up for the demo."
+        ),
+        "{card}"
+    );
     let card_buttons = buttons(&card);
     assert_eq!(
         card_buttons
@@ -840,7 +863,8 @@ async fn campaign() {
     let filed_text = filed["text"].as_str().unwrap();
     assert!(
         filed_text.starts_with("Filed: *$86.00")
-            && filed_text.contains("sent to *Sarah Chen* for approval"),
+            && filed_text.contains("sent to *Sarah Chen* for approval")
+            && filed_text.ends_with("made up for the demo._"),
         "{filed_text}"
     );
     diego_stream
@@ -1040,7 +1064,7 @@ async fn campaign() {
     timings.insert("approve_to_filer_dm_ms".into(), json!(ms(started)));
     assert_eq!(
         notice["text"],
-        "Your Nobu claim ($86.00) was *approved* by *Sarah Chen*."
+        format!("Your Nobu claim ($86.00) was *approved* by *Sarah Chen*.{}", " _Synthetic data: The organization, people and records here are made up for the demo._")
     );
     let records = send(
         &app,
