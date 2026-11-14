@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
-  ROLE_WORDS, ShareError, everyoneRequest, memberRevokeRequest, memberShareRequest, offeredRoles,
+  ROLE_WORDS, ShareError, addShareRequest, everyoneRequest, memberRevokeRequest, memberShareRequest, offeredRoles,
   readTeamSharing, revokeMemberShare, shareWithEveryone, shareWithMember, teamPath, teamRefusal, teamSharing,
   type TeamSharing,
 } from '../src/sharing/api.ts';
@@ -188,4 +188,17 @@ test('a removal is confirmed only by an answer naming the person and none', asyn
     globalThis.fetch = async () => new Response('{"code":"not_found","status":404}', { status: 404 });
     await assert.rejects(revokeMemberShare(APP, WORK, ANA), (error: unknown) => error instanceof ShareError && /refused/.test(error.message));
   } finally { globalThis.fetch = original; }
+});
+
+test('an automatic share (the approver step) only adds: its own route, the same closed body', () => {
+  const request = addShareRequest(APP, WORK, ANA, 'contributor');
+  assert.ok(request);
+  assert.equal(request.url, `/v1/work/${APP}/${WORK}/share/add`);
+  assert.deepEqual(JSON.parse(request.body), { grantee_principal_id: ANA, role: 'contributor' });
+  assert.equal(addShareRequest(APP, WORK, ANA, 'none' as never), null);
+  assert.equal(addShareRequest(APP, WORK, 'Ana', 'contributor'), null);
+  // The canvas approver step sends exactly this request.
+  const actions = readFileSync(new URL('../src/canvas/actions.ts', import.meta.url), 'utf8');
+  assert.match(actions, /addShareRequest\(draft\.app_id, draft\.work_id, approver\.principal_id, 'contributor'\)/);
+  assert.doesNotMatch(actions, /\/share`/);
 });

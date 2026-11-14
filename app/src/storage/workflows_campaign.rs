@@ -425,7 +425,7 @@ async fn campaign() {
         let app = app.clone();
         let cookie = cookie.to_owned();
         let uri = format!(
-            "/v1/work/{}/{}/share",
+            "/v1/work/{}/{}/share/add",
             draft["app_id"].as_str().unwrap(),
             draft["work_id"].as_str().unwrap()
         );

@@ -824,7 +824,7 @@ async fn campaign() {
     let shared = send(
         &app,
         "POST",
-        &format!("/v1/work/{app_id}/{work_id}/share"),
+        &format!("/v1/work/{app_id}/{work_id}/share/add"),
         Some(&diego),
         &json!({"grantee_principal_id": REVIEWER, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
@@ -1001,7 +1001,7 @@ async fn campaign() {
     let repeat = send(
         &app,
         "POST",
-        &format!("/v1/work/{app_id}/{work_id}/share"),
+        &format!("/v1/work/{app_id}/{work_id}/share/add"),
         Some(&diego),
         &json!({"grantee_principal_id": REVIEWER, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
@@ -1148,7 +1148,7 @@ async fn campaign() {
     let onward = send(
         &app,
         "POST",
-        &format!("/v1/work/{app_id}/{work_id}/share"),
+        &format!("/v1/work/{app_id}/{work_id}/share/add"),
         Some(&sarah),
         &json!({"grantee_principal_id": PRINCIPAL, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,

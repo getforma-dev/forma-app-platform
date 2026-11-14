@@ -861,9 +861,10 @@ async fn campaign() {
     );
 
     // --- a demotion over the route keeps the person listed -----------------
-    // W4 (f1): a lower re-share takes the surplus away and revokes the
-    // grantee's earlier share rows; when nothing new is granted no live row
-    // remains, and the person must still be listed with the lower role.
+    // W4 (f1, r4): a lower re-share (the dialog's exact `Set`) takes the
+    // surplus away, revokes the grantee's earlier share records and leaves
+    // one live record for the remaining access; the person stays listed with
+    // the lower role (the listing reads live permissions).
     let before = footprint(&fixture).await;
     let demoted = post(Some(&owner_cookie), &share_uri, share_body(HAL, "viewer")).await;
     assert_eq!(demoted.status, StatusCode::OK, "{}", demoted.body);
@@ -877,8 +878,8 @@ async fn campaign() {
     assert_eq!(after[4], before[4], "nothing granted");
     assert_eq!(
         scalar(&fixture, &format!("SELECT count(*) FROM genui.work_shares WHERE organization_id='{ORG}' AND work_id='{work}' AND grantee_id='{HAL}' AND revoked_at IS NULL")).await,
-        0,
-        "the demotion left Hal no live share row"
+        1,
+        "the demotion leaves exactly one live record (W4 r4)"
     );
     assert_eq!(
         people().await,
@@ -890,7 +891,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "a demotion over the route (Hal re-shared as viewer) removes record_write with one permission.revoked and nothing granted, leaves Hal no live share row, and the dialog still lists him, now as a viewer",
+        "a demotion over the route (Hal re-shared as viewer, the dialog's exact Set) removes record_write with one permission.revoked and nothing granted, leaves exactly one live record (W4 r4), and the dialog lists him, now as a viewer",
     );
 
     // --- removing one person's access: the owner alone ---------------------
@@ -1033,6 +1034,105 @@ async fn campaign() {
     check(
         &mut checks,
         "MAJOR-1 at the route: with the owner's change to contributor held uncommitted, Hal's \"Stop sharing with everyone\" waits on the per-work lock and, once the change commits, stops the new share: it answers none and nothing is shared with everyone (Nia cannot open the work); in the other order, with a stop held, Hal's share as viewer waits, then answers viewer and the share with everyone is live as viewer",
+    );
+
+    // --- an automatic share only adds: a reviewer approver keeps standing ---
+    // The canvas approver step (`actions.ts`) posts to /share/add (W4's
+    // `Ensure`): it grants what is missing and never takes anything away.
+    let add_uri = format!("{share_uri}/add");
+    let reviewer = post(Some(&owner_cookie), &share_uri, share_body(FAY, "reviewer")).await;
+    assert_eq!(reviewer.status, StatusCode::OK, "{}", reviewer.body);
+    let full = ["record_read", "record_review", "record_write"];
+    assert_eq!(work_permissions(&fixture, FAY, work).await, full);
+    let before = footprint(&fixture).await;
+    // The owner files a record naming Fay as approver: the automatic share.
+    let approver = post(
+        Some(&owner_cookie),
+        &add_uri,
+        share_body(FAY, "contributor"),
+    )
+    .await;
+    assert_eq!(approver.status, StatusCode::OK, "{}", approver.body);
+    assert_eq!(approver.json()["grantee_principal_id"], FAY);
+    assert_eq!(work_permissions(&fixture, FAY, work).await, full);
+    assert_eq!(
+        footprint(&fixture).await,
+        before,
+        "an automatic share that adds nothing writes nothing"
+    );
+    assert!(people()
+        .await
+        .contains(&pair("Member 00000000", "reviewer")));
+    // The same with a viewer role, and from a sharer who may only view.
+    let viewer = post(Some(&hal_cookie), &add_uri, share_body(FAY, "viewer")).await;
+    assert_eq!(viewer.status, StatusCode::OK, "{}", viewer.body);
+    assert_eq!(work_permissions(&fixture, FAY, work).await, full);
+    // The additive route keeps the closed body and the share standing.
+    for (cookie, body, expected) in [
+        (
+            &owner_cookie,
+            share_body(FAY, "none"),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            &owner_cookie,
+            json!({"grantee_principal_id": FAY, "record_write": true}).to_string(),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            &hal_cookie,
+            share_body(FAY, "contributor"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            &nia_cookie,
+            share_body(FAY, "viewer"),
+            StatusCode::TOO_MANY_REQUESTS,
+        ),
+        (
+            &rev_cookie,
+            share_body(FAY, "viewer"),
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        assert_eq!(
+            post(Some(cookie), &add_uri, body.clone()).await.status,
+            expected,
+            "{body}"
+        );
+    }
+    let cross = send(
+        &router,
+        "POST",
+        &add_uri,
+        Some(&owner_cookie),
+        &share_body(FAY, "viewer"),
+        &[
+            ("sec-fetch-site", "cross-site"),
+            ("content-type", "application/json"),
+        ],
+    )
+    .await;
+    assert_eq!(
+        code(&cross),
+        (StatusCode::FORBIDDEN, "cross_site".to_owned())
+    );
+    assert_eq!(work_permissions(&fixture, FAY, work).await, full);
+    // By contrast the dialog's exact choice (/share, `Set`) does lower it.
+    let lowered = post(
+        Some(&owner_cookie),
+        &share_uri,
+        share_body(FAY, "contributor"),
+    )
+    .await;
+    assert_eq!(lowered.status, StatusCode::OK, "{}", lowered.body);
+    assert_eq!(
+        work_permissions(&fixture, FAY, work).await,
+        ["record_read", "record_write"]
+    );
+    check(
+        &mut checks,
+        "an automatic share only adds: after the owner shares with Fay as reviewer, the canvas approver path (POST /share/add, contributor) answers 200 and writes nothing, so Fay keeps record_review and is listed as reviewer; a viewer add from a viewer-only sharer changes nothing either; /share/add refuses none and record_write (400), a role the sharer may not grant (422), an exhausted write window (429), no share authority (404) and a cross-site post (403); the dialog's exact /share as contributor does lower Fay to contributor",
     );
 
     stores.close().await.unwrap();

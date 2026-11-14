@@ -123,7 +123,7 @@ async fn confirm(app: &Router, cookie: &str, draft: &Value) -> Result<String, St
 
 async fn share(app: &Router, cookie: &str, draft: &Value) -> Result<(), String> {
     let uri = format!(
-        "/v1/work/{}/{}/share",
+        "/v1/work/{}/{}/share/add",
         text(draft, "app_id")?,
         text(draft, "work_id")?
     );

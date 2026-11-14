@@ -138,6 +138,15 @@ export function memberShareRequest(app: string, work: string, grantee: string, r
   if (!isUuid(app) || !isUuid(work) || !isUuid(grantee) || !isRole(role)) return null;
   return { url: teamPath(app, work), body: JSON.stringify({ grantee_principal_id: grantee, role }) };
 }
+/**
+ * The automatic share (the canvas approver step): the person share's body on
+ * its own route, which only adds what the person lacks and never takes any
+ * access away, so a reviewer approver keeps their standing.
+ */
+export function addShareRequest(app: string, work: string, grantee: string, role: TeamRole): { url: string; body: string } | null {
+  const request = memberShareRequest(app, work, grantee, role);
+  return request && { url: `${request.url}/add`, body: request.body };
+}
 export function everyoneRequest(app: string, work: string, role: TeamRole | 'none'): { url: string; body: string } | null {
   if (!isUuid(app) || !isUuid(work) || !(role === 'none' || isRole(role))) return null;
   return { url: `${teamPath(app, work)}/organization`, body: JSON.stringify({ role }) };
