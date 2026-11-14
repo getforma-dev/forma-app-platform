@@ -121,7 +121,7 @@ Steps 2.1–2.2: **`just deploy push <window-id> --approved "…"`** (digests in
   | `service_desired_count` | `0` |
   | `deployment_expires_at_utc` | the always-on backstop: whole-second UTC with `Z`, between 10 minutes and 32 days from now. Keep the live window's value while it is still more than a day away; otherwise renew it. |
 
-  All other fields keep the live window's values. Before running the preflight, check the ledger's month-to-date. The caps stay $170 GenUI and $208 project.
+  All other fields keep the live window's values. Before running the preflight, check the ledger's month-to-date. The reservation caps are the code's: $180 GenUI and $218 project since [ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) (they were $170 / $208 before November 3); the real-user trial ceilings Victor confirms are in its 2026-11-14 amendment.
 
   Then run `python3 infra/scripts/preflight.py --input $W/deployment-input.json --ledger $PRIV/budget-ledger.json > $W/receipt.json`. → **`just deploy preflight <window-id>`** [local] writes `deployment-input.json` from `base-input.json` with the window id, supersedes, the three digests and count 0, and prints the expiry it kept, then runs this; **`just deploy abandon <window-id>`** is the `--abandon` below.
 
