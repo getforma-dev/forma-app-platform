@@ -31,6 +31,8 @@ pub(super) const CLEANUP: Duration = Duration::from_secs(2);
 /// session baseline and the schema version are checked on every reuse. No
 /// environment or configuration value can change it.
 pub(super) const CATALOG_RECHECK: Duration = Duration::from_secs(30);
+// The window is ADR-004 A5's number; a different one is an amendment.
+const _: () = assert!(CATALOG_RECHECK.as_secs() == 30);
 const EXPIRY_MARGIN: u64 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -323,8 +325,10 @@ pub(super) struct Connection {
     pub expires_at: u64,
     pub clean: bool,
     /// When this connection last passed the structural catalog comparison
-    /// (ADR-004 amendment A5, on the pool clock).
+    /// (ADR-004 amendment A5, on the pool clock), and the identity of the
+    /// schema-version relation that comparison saw.
     catalog_verified_at: Instant,
+    version_relation: i64,
     /// Test executable only (APP-195): how long this connection's last
     /// checkout took to prepare it (its creation or its recycle checks).
     #[cfg(test)]
@@ -429,13 +433,16 @@ impl RoleManager {
             expires_at: value.expires_at,
             clean: false,
             catalog_verified_at: self.now(),
+            version_relation: 0,
             #[cfg(test)]
             prepared_us: 0,
         };
         #[cfg(test)]
         self.settings.hooks.checkpoint("connect").await;
-        self.verify_admission(&connected.client).await?;
-        connected.catalog_verified_at = self.now();
+        // The window is measured from before the checks, never after them.
+        let checked_at = self.now();
+        connected.version_relation = self.verify_admission(&connected.client).await?;
+        connected.catalog_verified_at = checked_at;
         trace::step("reset");
         reset(&mut connected, self.role).await?;
         #[cfg(test)]
@@ -445,23 +452,35 @@ impl RoleManager {
         Ok(connected)
     }
     /// A new connection's admission, and readiness: identity, the structural
-    /// catalog comparison and the schema version, every time.
-    async fn verify_admission(&self, client: &Client) -> Result<()> {
-        self.verify_checks(client, true).await
+    /// catalog comparison and the schema version, every time. Returns the
+    /// identity of the version relation the comparison saw.
+    async fn verify_admission(&self, client: &Client) -> Result<i64> {
+        self.verify_checks(client, None).await
     }
-    async fn verify_checks(&self, client: &Client, catalog: bool) -> Result<()> {
+    /// `compared`: `None` compares the catalog; `Some(relation)` is a reuse
+    /// inside the A5 window, whose version relation must still be the one
+    /// its last comparison saw.
+    async fn verify_checks(&self, client: &Client, compared: Option<i64>) -> Result<i64> {
         // Only built-in catalog objects may be touched before the structural
         // comparison. Even the version relation could have become a view.
-        // On reuse inside the A5 window the comparison is skipped, so the
-        // version read relies on the comparison made at most 30 s ago.
+        // Inside the A5 window the comparison is skipped, but ADR-004
+        // §Migration and recovery's rule still holds: the version relation is
+        // read only after a pg_catalog check that it is the same plain table,
+        // without row security, that the last comparison saw.
         trace::step("verify_identity");
         verify_identity(client, self.role).await?;
-        if catalog {
+        if compared.is_none() {
             trace::step("catalog_verify");
             self.catalog.verify(client).await?;
         }
+        trace::step("version_relation");
+        let relation = version_relation(client).await?;
+        if compared.is_some_and(|seen| seen != relation) {
+            return Err(trace::refuse("version_relation_changed"));
+        }
         trace::step("verify_schema_version");
-        verify_schema_version(client).await
+        verify_schema_version(client).await?;
+        Ok(relation)
     }
 }
 impl Manager for RoleManager {
@@ -497,21 +516,28 @@ impl Manager for RoleManager {
         {
             return Err(RecycleError::Backend(Error::Configuration));
         }
-        verify_baseline(&connection.client, self.role)
-            .await
-            .map_err(RecycleError::Backend)?;
-        // ADR-004 amendment A5: identity and the schema version on every
-        // reuse; the catalog comparison once its last one is CATALOG_RECHECK
-        // old. A failure here discards the connection, as before.
+        // ADR-004 amendment A5: identity, the version relation's identity and
+        // the schema version on every reuse; the catalog comparison once its
+        // last one is CATALOG_RECHECK old. The session baseline is checked
+        // last, so nothing the reads above ran can leave the session changed.
+        // A failure here discards the connection, as before.
         let now = self.now();
         let recheck =
             now.saturating_duration_since(connection.catalog_verified_at) >= CATALOG_RECHECK;
-        self.verify_checks(&connection.client, recheck)
+        let relation = self
+            .verify_checks(
+                &connection.client,
+                (!recheck).then_some(connection.version_relation),
+            )
             .await
             .map_err(RecycleError::Backend)?;
         if recheck {
             connection.catalog_verified_at = now;
+            connection.version_relation = relation;
         }
+        verify_baseline(&connection.client, self.role)
+            .await
+            .map_err(RecycleError::Backend)?;
         #[cfg(test)]
         self.settings.hooks.checkpoint("recycle").await;
         #[cfg(test)]
@@ -748,10 +774,34 @@ async fn verify_identity(client: &Client, role: Role) -> Result<()> {
     Ok(())
 }
 
+/// The schema-version relation's identity, from `pg_catalog` alone: it must
+/// be a plain table without row security, with exactly a `boolean` and an
+/// `integer` column. Reading it then runs nothing but the table scan.
+async fn version_relation(client: &Client) -> Result<i64> {
+    let rows = client
+        .query(
+            "SELECT c.oid::pg_catalog.int8,c.relkind::pg_catalog.text,c.relrowsecurity OR c.relforcerowsecurity,pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.regtype::pg_catalog.text FROM pg_catalog.pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum),',') FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui_meta' AND c.relname='schema_version'",
+            &[],
+        )
+        .await
+        .map_err(trace::unavailable)?;
+    let [row] = rows.as_slice() else {
+        return Err(trace::refuse("version_relation_missing"));
+    };
+    let relation: i64 = row.try_get(0).map_err(trace::unavailable)?;
+    let kind: String = row.try_get(1).map_err(trace::unavailable)?;
+    let secured: bool = row.try_get(2).map_err(trace::unavailable)?;
+    let columns: String = row.try_get(3).map_err(trace::unavailable)?;
+    if kind != "r" || secured || columns != "boolean,integer" {
+        return Err(trace::refuse("version_relation_shape"));
+    }
+    Ok(relation)
+}
+
 async fn verify_schema_version(client: &Client) -> Result<()> {
     let row = client
         .query_one(
-            "SELECT version FROM genui_meta.schema_version WHERE singleton",
+            "SELECT version FROM ONLY genui_meta.schema_version WHERE singleton",
             &[],
         )
         .await

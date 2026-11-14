@@ -955,10 +955,10 @@ async fn campaign() {
         "1"
     );
     fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
-    // ADR-004 A5 (APP-197): a reused connection compares the catalog again
-    // once its last comparison is CATALOG_RECHECK old; this store's pooled
-    // connections are past it, so the comparison refuses before any read.
-    metadata.hooks().advance(pool::CATALOG_RECHECK);
+    // ADR-004 A5 (APP-197) keeps §Migration and recovery's rule inside the
+    // 30 s window: this store's pooled connections were compared moments
+    // ago, and their reuse still refuses the replaced relation before
+    // anything in it runs (the relation's identity is checked first).
     refuse_all_roles(&metadata).await;
     metadata.close().await.unwrap();
     let metadata_fresh = Stores::new(fixture.settings()).unwrap();
@@ -975,13 +975,53 @@ async fn campaign() {
     );
     metadata_fresh.readiness().await.unwrap();
     metadata_fresh.close().await.unwrap();
-    check(&mut checks,"replaced metadata view is refused on new TLS connections, and on reused ones once the 30 s catalog window has passed, with zero marker execution and restored readiness");
+    // The same rule for a row-security policy whose expression runs code.
+    let policy = Stores::new(fixture.settings()).unwrap();
+    policy.readiness().await.unwrap();
+    fixture.sql(
+        "CREATE SCHEMA reviewer_probe; CREATE TABLE reviewer_probe.marker (value integer); \
+         CREATE FUNCTION reviewer_probe.mark() RETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN INSERT INTO reviewer_probe.marker VALUES (1); RETURN true; END $$; \
+         GRANT USAGE ON SCHEMA reviewer_probe TO genui_workspace,genui_control,genui_data,genui_worker; \
+         ALTER TABLE genui_meta.schema_version ENABLE ROW LEVEL SECURITY; \
+         CREATE POLICY reviewer_probe_policy ON genui_meta.schema_version USING (reviewer_probe.mark()); \
+         SET ROLE genui_worker; SELECT version FROM genui_meta.schema_version WHERE singleton; RESET ROLE;",
+        "genui",
+    );
+    assert_eq!(
+        fixture
+            .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
+            .trim(),
+        "1"
+    );
+    fixture.sql("TRUNCATE reviewer_probe.marker", "genui");
+    refuse_all_roles(&policy).await;
+    policy.close().await.unwrap();
+    assert_eq!(
+        fixture
+            .sql("SELECT count(*) FROM reviewer_probe.marker", "genui")
+            .trim(),
+        "0"
+    );
+    fixture.sql(
+        "DROP POLICY reviewer_probe_policy ON genui_meta.schema_version; ALTER TABLE genui_meta.schema_version DISABLE ROW LEVEL SECURITY; DROP SCHEMA reviewer_probe CASCADE",
+        "genui",
+    );
+    let policy_fresh = Stores::new(fixture.settings()).unwrap();
+    policy_fresh.readiness().await.unwrap();
+    policy_fresh.close().await.unwrap();
+    check(&mut checks,"a replaced metadata view, or a row-security policy that runs code on it, is refused on new and reused TLS connections (inside the 30 s catalog window too) with zero marker execution and restored readiness");
 
-    // ADR-004 A5 (APP-197): the four application roles hold no DDL
-    // privilege, so they cannot cause the drift the comparison detects.
+    // ADR-004 A5 (APP-197): the four application roles own nothing (schemas,
+    // relations, functions, types, large objects) and hold no CREATE or TEMP
+    // privilege or elevated flag. PostgreSQL still lets each set its own
+    // per-role defaults, which only new connections see, and those are
+    // always compared.
     let ddl = fixture.sql(
         "SELECT (SELECT count(*) FROM pg_roles r CROSS JOIN pg_namespace n WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker') AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname<>'information_schema' AND (has_schema_privilege(r.oid,n.oid,'CREATE') OR n.nspowner=r.oid)) \
          + (SELECT count(*) FROM pg_class c JOIN pg_roles r ON r.oid=c.relowner WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker')) \
+         + (SELECT count(*) FROM pg_proc f JOIN pg_roles r ON r.oid=f.proowner WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker')) \
+         + (SELECT count(*) FROM pg_type t JOIN pg_roles r ON r.oid=t.typowner WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker')) \
+         + (SELECT count(*) FROM pg_largeobject_metadata l JOIN pg_roles r ON r.oid=l.lomowner WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker')) \
          + (SELECT count(*) FROM pg_roles r WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker') AND (has_database_privilege(r.oid,'genui','CREATE') OR has_database_privilege(r.oid,'genui','TEMP') OR r.rolsuper OR r.rolcreatedb OR r.rolcreaterole))",
         "genui",
     );
@@ -1011,16 +1051,31 @@ async fn campaign() {
     assert!(window.readiness().await.is_err());
     fixture.sql(undo, "genui");
     window.readiness().await.unwrap();
+    // The window's bound (APP-197 review M1), measured from the connection's
+    // last comparison (its creation by readiness just above): drift injected
+    // at 10 s is tolerated by reuses at 20 s and 29 s, and the reuse at 31 s
+    // compares and refuses. A window that restarted on every reuse would
+    // still tolerate it.
+    window.hooks().advance(Duration::from_secs(10));
     fixture.sql(drift, "genui");
-    let tolerated = Lease::acquire(&window.data.inner).await.unwrap();
-    tolerated
-        .finish(false, Instant::now() + pool::TRANSACTION)
-        .await
-        .unwrap();
-    // After the window the reuse compares again and refuses.
-    window.hooks().advance(pool::CATALOG_RECHECK);
+    for (at, step) in [(20, 10), (29, 9)] {
+        window.hooks().advance(Duration::from_secs(step));
+        let before = compared();
+        let tolerated = Lease::acquire(&window.data.inner)
+            .await
+            .unwrap_or_else(|e| panic!("the reuse at {at} s is inside the window: {e:?}"));
+        assert_eq!(compared(), before, "the reuse at {at} s runs no comparison");
+        tolerated
+            .finish(false, Instant::now() + pool::TRANSACTION)
+            .await
+            .unwrap();
+    }
+    window.hooks().advance(Duration::from_secs(2));
     let before = compared();
-    assert!(Lease::acquire(&window.data.inner).await.is_err());
+    assert!(
+        Lease::acquire(&window.data.inner).await.is_err(),
+        "the reuse at 31 s compares and refuses"
+    );
     // Two comparisons: the reused connection's (refused and discarded),
     // then the new backend the pool creates in its place (refused too).
     assert_eq!(compared(), before + 2, "a reuse after the window compares");
@@ -1486,9 +1541,15 @@ pub(super) mod refresh_herd {
     //!   its hint, no retry. Measured only.
     //! - Run C: run B with every role admitting 8 callers (the pool before
     //!   APP-195). It must reproduce the APP-193 finding: at least ten 503s.
-    //! - When 26 pages fail run A, run A with 20, 15, 10 and 5 pages, to the
-    //!   first that passes; then run A's herds at shorter intervals for that
-    //!   many pages (26 if run A passed), to the first cadence that fails.
+    //!
+    //! By default the campaign is the CI gate (Fable advisor in lieu of
+    //! Victor, 2026-11-14): run A and run C with 15 pages (the owner and 14
+    //! members), asserted. With `GENUI_REFRESH_HERD_FULL=1` it also records
+    //! the full measurement, not asserted: runs A, B and C with all 26 pages
+    //! (and run A's own 10 s / 6 s / 1.5 s measurement criteria), then, when
+    //! 26 pages fail run A, run A with 20, 15, 10 and 5 pages to the first
+    //! that passes, and that many pages at shorter cadences to the first that
+    //! fails.
     //! - Also measured alone: one page's three reads, one data-role
     //!   transaction, one catalog comparison, and the role transactions each
     //!   read takes.
@@ -1563,6 +1624,12 @@ pub(super) mod refresh_herd {
     const CURRENT_MAX: Duration = Duration::from_secs(10);
     const COMMAND_UNDER: Duration = Duration::from_millis(1500);
     const FIRST_TRY_SHARE: f64 = 0.90;
+    /// The CI gate's open pages: the owner and 14 members.
+    const GATE_PAGES: usize = 15;
+    /// Set to `1` for the full measurement: 26 pages, run B, and the
+    /// page-count and cadence searches (`GENUI_REFRESH_HERD_FULL=1 just
+    /// campaign refresh-herd`). Without it the campaign is the CI gate.
+    const FULL_ENV: &str = "GENUI_REFRESH_HERD_FULL";
 
     fn member(index: usize) -> String {
         format!("00000000-0000-4000-8000-{:012x}", 0x195_0001 + index)
@@ -1800,6 +1867,44 @@ pub(super) mod refresh_herd {
         seed: u64,
         /// The first `pages` pages (the owner's first) have the work open.
         pages: usize,
+    }
+
+    /// Run C: `plan` with every role admitting 8 callers again (the pool
+    /// before APP-195). Returns the report and its first-attempt 503s.
+    async fn run_admitted_8(bench: &Arc<Bench>, plan: Plan, operator: &Operator) -> (Value, usize) {
+        let limits = [
+            pool::limit_admitted(Role::Workspace, 8).await,
+            pool::limit_admitted(Role::Control, 8).await,
+            pool::limit_admitted(Role::Data, 8).await,
+            pool::limit_admitted(Role::Worker, 8).await,
+        ];
+        let (report, _) = run(bench, plan, operator).await;
+        drop(limits);
+        let refused = report["per_herd"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|herd| herd["first_attempt"]["503"].as_u64().unwrap_or(0) as usize)
+            .sum();
+        (report, refused)
+    }
+
+    /// The 26-page measurement's own criteria (APP-197, Fable advisor in lieu
+    /// of Victor): no terminal failure, every page current within 10 s, p95
+    /// within 6 s and the owner's command under 1.5 s, in every herd; with
+    /// the first-try share, catalog checks and per-transaction p50 beside it.
+    fn measurement(run: &Value) -> Value {
+        let herds = run["per_herd"].as_array().unwrap();
+        let every = |criterion: &str| herds.iter().all(|herd| herd["criteria"][criterion] == true);
+        json!({
+            "no_terminal_failure": every("no_terminal_failure"),
+            "every_page_current_within_10_s": every("every_page_current_within_10_s"),
+            "p95_current_within_6_s": every("p95_current_within_6_s"),
+            "command_under_1500_ms": every("command_under_1500_ms"),
+            "first_try_200_share": herds.iter().map(|herd| herd["first_try_200_share"].clone()).collect::<Vec<_>>(),
+            "catalog_checks": run["catalog_checks"],
+            "data_transaction_service_p50_ms": run["transaction_service"]["data"]["p50_ms"],
+        })
     }
 
     /// The highest herd whose label or number `body` shows.
@@ -2627,111 +2732,127 @@ pub(super) mod refresh_herd {
 
         report.insert("transactions_per_read".into(), transactions(&bench).await);
 
-        // --- the runs ---
+        // --- the CI gate (Fable advisor in lieu of Victor, 2026-11-14): the
+        // measured sustainable load, 15 pages (the owner and 14 members),
+        // three herds 10 s apart, every run A criterion; and run C at the
+        // same size reproducing the APP-193 finding ---
         let operator = fixture.operator().await;
         let pages = bench.pages.len();
         let mut runs = Vec::new();
-        let a = Plan {
-            name: "A: jitter 0-3 s, one retry, admitted 32",
+        let gate = Plan {
+            name: "gate A: 15 pages, jitter 0-3 s, one retry, admitted 32",
             jitter: true,
             retry: true,
             herds: 3,
             cadence: Duration::from_secs(10),
             seed: 1,
-            pages,
+            pages: GATE_PAGES,
         };
-        let (run_a, passed_a) = run(&bench, a, &operator).await;
-        println!("APP195 run A: {run_a}");
-        runs.push(run_a);
-        let b = Plan {
-            name: "B: barrier, no jitter, no retry, admitted 32",
+        let (gate_a, passed_gate) = run(&bench, gate, &operator).await;
+        println!("APP195 gate A: {gate_a}");
+        runs.push(gate_a);
+        let gate_c = Plan {
+            name: "gate C: 15 pages at one instant, no retry, admitted 8 per role (before APP-195)",
             jitter: false,
             retry: false,
             seed: 2,
-            ..a
+            ..gate
         };
-        let (run_b, _) = run(&bench, b, &operator).await;
-        println!("APP195 run B: {run_b}");
-        runs.push(run_b);
-        let c = Plan {
-            name: "C: run B with admitted 8 per role (before APP-195)",
-            seed: 3,
-            ..b
-        };
-        let limits = [
-            pool::limit_admitted(Role::Workspace, 8).await,
-            pool::limit_admitted(Role::Control, 8).await,
-            pool::limit_admitted(Role::Data, 8).await,
-            pool::limit_admitted(Role::Worker, 8).await,
-        ];
-        let (run_c, _) = run(&bench, c, &operator).await;
-        drop(limits);
-        println!("APP195 run C: {run_c}");
-        let c_503: usize = run_c["per_herd"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|herd| herd["first_attempt"]["503"].as_u64().unwrap_or(0) as usize)
-            .sum();
+        let (run_c, c_503) = run_admitted_8(&bench, gate_c, &operator).await;
+        println!("APP195 gate C: {run_c}");
         runs.push(run_c);
+        report.insert("gate_passed".into(), json!(passed_gate));
+        report.insert("gate_c_503".into(), json!(c_503));
+        let full = std::env::var_os(FULL_ENV).is_some_and(|value| value == "1");
+        report.insert("full_measurement".into(), json!(full));
+
+        // --- the full measurement (GENUI_REFRESH_HERD_FULL=1): 26 pages, the
+        // page-count and cadence searches. Recorded, not asserted ---
+        if full {
+            let a = Plan {
+                name: "A: 26 pages, jitter 0-3 s, one retry, admitted 32",
+                seed: 11,
+                pages,
+                ..gate
+            };
+            let (run_a, passed_a) = run(&bench, a, &operator).await;
+            println!("APP195 run A: {run_a}");
+            report.insert("run_a_passed".into(), json!(passed_a));
+            report.insert("measurement_26_pages".into(), measurement(&run_a));
+            runs.push(run_a);
+            let b = Plan {
+                name: "B: 26 pages at one instant, no jitter, no retry, admitted 32",
+                jitter: false,
+                retry: false,
+                seed: 12,
+                ..a
+            };
+            let (run_b, _) = run(&bench, b, &operator).await;
+            println!("APP195 run B: {run_b}");
+            runs.push(run_b);
+            let c = Plan {
+                name: "C: run B with admitted 8 per role (before APP-195)",
+                seed: 13,
+                ..b
+            };
+            let (run_c, c_503) = run_admitted_8(&bench, c, &operator).await;
+            println!("APP195 run C: {run_c}");
+            report.insert("run_c_503".into(), json!(c_503));
+            runs.push(run_c);
+
+            // The most pages that pass run A, and the shortest cadence for them.
+            let mut seed = 14;
+            let mut sizes = Vec::new();
+            let mut largest = passed_a.then_some(pages);
+            if !passed_a {
+                for size in [20, 15, 10, 5] {
+                    let plan = Plan {
+                        name: "A with fewer pages",
+                        seed,
+                        pages: size,
+                        ..a
+                    };
+                    seed += 1;
+                    let (result, passed) = run(&bench, plan, &operator).await;
+                    println!("APP195 run A with {size} pages: passed={passed}");
+                    sizes.push(result);
+                    if passed {
+                        largest = Some(size);
+                        break;
+                    }
+                }
+            }
+            report.insert("page_counts".into(), json!(sizes));
+            report.insert("largest_passing_pages".into(), json!(largest));
+            let mut cadences = Vec::new();
+            let mut sustainable = largest.map(|_| 10_000_u64);
+            if let Some(size) = largest {
+                for ms in [5000_u64, 3000, 2000, 1500, 1000] {
+                    let plan = Plan {
+                        name: "A at a shorter cadence",
+                        herds: 4,
+                        cadence: Duration::from_millis(ms),
+                        seed,
+                        pages: size,
+                        ..a
+                    };
+                    seed += 1;
+                    let (result, passed) = run(&bench, plan, &operator).await;
+                    println!("APP195 cadence {ms} ms with {size} pages: passed={passed}");
+                    cadences.push(result);
+                    if !passed {
+                        break;
+                    }
+                    sustainable = Some(ms);
+                }
+            }
+            report.insert("cadences".into(), json!(cadences));
+            report.insert(
+                "sustainable_cadence".into(),
+                json!({"pages": largest, "cadence_ms": sustainable}),
+            );
+        }
         report.insert("runs".into(), json!(runs));
-        report.insert("run_a_passed".into(), json!(passed_a));
-        report.insert("run_c_503".into(), json!(c_503));
-
-        // --- when 26 pages fail run A: the most pages that pass it ---
-        let mut seed = 4;
-        let mut sizes = Vec::new();
-        let mut largest = passed_a.then_some(pages);
-        if !passed_a {
-            for size in [20, 15, 10, 5] {
-                let plan = Plan {
-                    name: "A with fewer pages",
-                    seed,
-                    pages: size,
-                    ..a
-                };
-                seed += 1;
-                let (result, passed) = run(&bench, plan, &operator).await;
-                println!("APP195 run A with {size} pages: passed={passed}");
-                sizes.push(result);
-                if passed {
-                    largest = Some(size);
-                    break;
-                }
-            }
-        }
-        report.insert("page_counts".into(), json!(sizes));
-        report.insert("largest_passing_pages".into(), json!(largest));
-
-        // --- the shortest commit cadence at which run A still passes (for
-        // 26 pages, or else for the most pages that pass) ---
-        let mut cadences = Vec::new();
-        let mut sustainable = largest.map(|_| 10_000_u64);
-        if let Some(size) = largest {
-            for ms in [5000_u64, 3000, 2000, 1500, 1000] {
-                let plan = Plan {
-                    name: "A at a shorter cadence",
-                    herds: 4,
-                    cadence: Duration::from_millis(ms),
-                    seed,
-                    pages: size,
-                    ..a
-                };
-                seed += 1;
-                let (result, passed) = run(&bench, plan, &operator).await;
-                println!("APP195 cadence {ms} ms with {size} pages: passed={passed}");
-                cadences.push(result);
-                if !passed {
-                    break;
-                }
-                sustainable = Some(ms);
-            }
-        }
-        report.insert("cadences".into(), json!(cadences));
-        report.insert(
-            "sustainable_cadence".into(),
-            json!({"pages": largest, "cadence_ms": sustainable}),
-        );
         report.insert(
             "limits".into(),
             json!("Local Docker PostgreSQL on a shared, loaded macOS host; HTTP through the composed router in process (no TLS to the client, no browser, no network); the replay is the APP-195 client's timing, not a browser. Each page plays both the work page's document read and the canvas board's batch and view reads at once. The test profile is unoptimized; the service image is a release build."),
@@ -2747,11 +2868,11 @@ pub(super) mod refresh_herd {
         }
         assert!(
             c_503 >= 10,
-            "run C reproduces the APP-193 finding: {c_503} answers 503"
+            "gate C reproduces the APP-193 finding: {c_503} answers 503"
         );
         assert!(
-            passed_a,
-            "run A meets the APP-195 criteria with 26 pages (largest passing: {largest:?})"
+            passed_gate,
+            "gate A meets every APP-195 run A criterion with {GATE_PAGES} pages"
         );
     }
 }
