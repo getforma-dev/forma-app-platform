@@ -20,7 +20,9 @@ Every `ops.promotion` command here takes `--expected-state-sha256`: read it fres
 
 ## 1. Release A: today's `main` (schema 20 → 22), Friday Nov 14 and Saturday Nov 15
 
-Run 43157872671 is stuck on a stale ledger basis; its packet must not be approved. Promotion is paused (`PROMOTION_ENABLED=false`).
+**Done on 2026-11-14 at 07:17 UTC; do not re-run.** Run 43564578519 (candidate `511d97e3`) went live and was sealed as `beta/20261114-511d97e`. The live expiry is 2026-11-24T14:00Z. The record is [`evidence/APP-175/release-2026-11-14.md`](../../evidence/APP-175/release-2026-11-14.md). The steps below are kept as written, for reference.
+
+Run 43157872671 was stuck on a stale ledger basis, and its packet was never approved. Promotion was paused (`PROMOTION_ENABLED=false`).
 
 1. **Cancel the run and record its terminal time** (Nov 14):
 
@@ -82,7 +84,7 @@ Run 43157872671 is stuck on a stale ledger basis; its packet must not be approve
    gh run list --repo $REPO --workflow beta-promote.yml --limit 1
    ```
 
-   The preparation summary must show `schema_release: {from_version: 20, to_version: 22, spec_sha256: ...}`, the sequence starting with `snapshot database`, the scan disposition hash `e60169964ed009b973dd24a342b10fe3a211e3dc297bb0ab411fc3b496562213` with its Nov 20 expiry, and a stop time (the proposed expiry) 18 hours before the current backstop. Approve only if it does.
+   The preparation summary must show `schema_release: {from_version: 20, to_version: 22, spec_sha256: ...}`, the sequence starting with `snapshot database`, the scan disposition hash `f00adb9a047ce880535966ef5551d543b611be31c144be08efbc3e0345b5025b` (the 2026-11-14 renewal; 16 findings per role) with its Nov 20 expiry, and a stop time (the proposed expiry) 18 hours before the current backstop. Approve only if it does.
 
 6. **Approve** in the run's **Review deployments**, outside **05:00–05:45 UTC** (the RDS backup window; a refused snapshot leaves beta serving and needs a new merge) and within 24 hours of step 4. Execution: snapshot, stop, change set, migration 21–22, activate, health. Then:
 
@@ -144,12 +146,12 @@ After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packe
 
    If release B then does not merge within 24 hours, either repeat steps 1, 3 and 4 the next day (the cap raise is done once), or `--revert` (same arguments plus `--revert`) to put the config back to the window's recorded expiry; `reconcile apply` refuses while the config is renewed and no release has consumed it.
 
-## 3. Release B: migration 0023 and the trial capabilities (Sunday Nov 23)
+## 3. Release B: migrations 0023 and 0024 and the trial capabilities (Sunday Nov 23)
 
-W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's operator changes (`--note`, `admin_policy`, `list-box-files`, `stats`) ride the same operator image. Within 24 hours of section 2:
+W1 commits `ops/promotion/schema-release.json` for 22 → 24 (migrations 0023 and 0024) with its pins; W3's operator changes (`--note`, `admin_policy`, `list-box-files`, `stats`) ride the same operator image. Within 24 hours of section 2:
 
 1. If `main` carries new scanner findings, preparation refuses before approval: section 8 (the scan disposition renewal). Otherwise:
-2. `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-B pull request, read the summary: `schema_release: {from_version: 22, to_version: 23}`, the stop time **2026-12-15T14:00:00Z**, the disposition (if any) with its Dec 16 expiry.
+2. `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-B pull request, read the summary: `schema_release: {from_version: 22, to_version: 24}`, the stop time **2026-12-15T14:00:00Z**, the disposition (if any) with its Dec 16 expiry.
 3. Approve outside 05:00–05:45 UTC. Then `/health/ready` → 200, `gh run view ... --json conclusion` → `"success"`.
 4. **Verify from the back office** (the operator task now has `stats`):
 
@@ -160,7 +162,7 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
    The expiry is in the live parameters of the state the apply wrote; `aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "Stacks[0].Parameters[?ParameterKey=='DeploymentExpiresAtUtc'].ParameterValue" --output text` prints `2026-12-15T14:00:00Z`, and `aws scheduler get-schedule --group-name <DeploymentExpiryGroup output> --name <schedule>` shows `at(2026-12-15T14:00:00)`.
 5. **Deploy the alarms** (section 6), **set the Anthropic spend limit** (about $150 for the month, in the Anthropic console), and run the **restore drill** (section 9) while only Victor's account exists.
 6. **Write to FormaStack** (one email, kept with the trial's private evidence): raise the fAuth tenant's user limit to at least 30 by Nov 28, and **delete the tenant's users (or the tenant) by Dec 14** on your word, because the students' sign-in accounts and addresses live there, not in the beta's database (section 10 step 6). Ask for a written acknowledgement now and a written confirmation after the deletion; record both. Without the acknowledgement the notice's "deleted by December 14" is not true for the sign-in accounts, and the Nov 28 go/no-go says no.
-6. **Victor's admin row** (Monday Nov 24, before building the class apps; the Admin page requires it). Your principal id is in `admission list`'s redemption of the owner code:
+7. **Victor's admin row** (Monday Nov 24, before building the class apps; the Admin page requires it). Your principal id is in `admission list`'s redemption of the owner code:
 
    ```sh
    $PY -m ops.promotion.admission grant-admin --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
@@ -168,7 +170,7 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
    ```
 
    Expected: `{"status": "granted", "permission": "admin_policy", "changed": true, ...}`. A grant to the wrong member is undone with `revoke-admin` (same arguments) → `{"status": "revoked-admin", "changed": true, ...}`; it advances that member's epoch.
-7. **A helper as reviewer of one app's work**, and taking it back. A reviewer sees and changes every entry of the work's own-visibility collections (D7, W4). The app and work ids are in the app's URL and the share dialog; the member's principal id is in `admission list`'s redemptions.
+8. **A helper as reviewer of one app's work**, and taking it back. A reviewer sees and changes every entry of the work's own-visibility collections (D7, W4). The app and work ids are in the app's URL and the share dialog; the member's principal id is in `admission list`'s redemptions.
 
    ```sh
    $PY -m ops.promotion.admission grant-reviewer --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
@@ -177,7 +179,7 @@ W1 commits `ops/promotion/schema-release.json` for 22 → 23 with its pins; W3's
      --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --principal "<helper principal id>" --app "<app id>" --work "<work id>" --output "$TRIAL/revoke-reviewer-<work>.json"
    ```
 
-   Expected: `{"status": "granted-reviewer", "permission": "record_review", "changed": true, ...}` and `{"status": "revoked-reviewer", "permission": "record_review", "changed": true, "membership_epoch": N+1, ...}`. The grant needs release B's migration 0024 in the database (before it the task refuses `permission_unsupported` and writes nothing); the revoke works at any schema, and a revoke of a row that does not exist reports `"changed": false`. The revoke advances the member's epoch, so their next request re-reads their authority. The sharing dialog's own reviewer revoke is W4's; this is the operator's path for any personal `record_review` grant.
+   Expected: `{"status": "granted-reviewer", "permission": "record_review", "changed": true, ...}` and `{"status": "revoked-reviewer", "permission": "record_review", "changed": true, "membership_epoch": N+1, ...}`. The grant needs release B's migration 0024 in the database (before it the task refuses `permission_unsupported` and writes nothing); the revoke works at any schema, and a revoke of a row that does not exist reports `"changed": false`. The revoke advances the member's epoch, so their next request re-reads their authority. The sharing dialog's own reviewer revoke is W4's; this is the operator's path for any personal `record_review` grant. The operator's revoke removes a personal `record_review` row only. It does not end a reviewer share with everyone in the organization, which the app's owner stops in the share dialog ("Stop sharing with everyone"), and the dialog shows each person's access from live permissions.
 
 ## 4. Codes by wave and the one announced restart (Friday Nov 28)
 
@@ -277,7 +279,7 @@ Feedback arrives at `feedback@getforma.dev` (the link in the app, D12). Read it 
 
 ## 8. Scan disposition renewal (if release B's preparation refuses on new findings)
 
-The current disposition covers release A only (APP-175: contract 14a161a0…, 14 findings, expiry Nov 20). Once A lands those findings are baseline, and B needs a disposition only if the scanner introduces more. If B's preparation refuses with `new scan findings require separately reviewed disposition`:
+The current disposition was release A's (APP-175, renewed 2026-11-14: contract 14a161a0…, 16 findings per role, `f00adb9a…`, expiry Nov 20). Release A landed on 2026-11-14, so those findings are now baseline, and B needs a disposition only if the scanner introduces more. If B's preparation refuses with `new scan findings require separately reviewed disposition`:
 
 1. `gh variable set PROMOTION_ENABLED --body false`; after the 65-minute fence, `maintenance abandon` (section 1 step 3; the pre-change-set case needs every journal entry to be a confirmed ECR upload, which this refusal leaves).
 2. Extract, privately, each role's baseline findings from the canonical state (`live.registry.<role>` → `{"manifest_digest": ..., "findings": [...]}`) and fetch each candidate image's scan: `aws ecr describe-image-scan-findings --repository-name genui-synthetic --image-id imageDigest=<the summary's digest> > $TRIAL/scan-service.json` (and `genui-qualification`, `genui-operator`).
@@ -292,10 +294,10 @@ The current disposition covers release A only (APP-175: contract 14a161a0…, 14
      --evidence evidence/APP-<ticket>/SCAN-DISPOSITION.md --expires-at-utc 2026-12-16T00:00:00Z --output ops/promotion/scan-disposition.json
    ```
 
-   `--contract` is release B's `to` deployment contract: `schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256']` (W1's pin, equal to `schema-release.json`'s `to`); the guard checks the disposition against the contract of the candidate being promoted. `scan_renewal check` binds the file to its delta but not to that pin; `test_scan.py`'s `ReleaseBindingTests` does (`test_contract_and_expiry_are_the_schema_releases`), so edit `ReleaseBindingTests.setUp` (`test_scan.py:186`) to read the new delta file and expect the new evidence path. The tool prints the finding names and the exact `REVIEWED_DISPOSITION` block for `ops/promotion/registry.py`. It refuses a CRITICAL finding and roles whose introduced sets differ. Paste the pin, write the evidence record in the APP-175 form (scope, method, each CVE's applicability, limits), and keep `schema-release.json`'s expiry equal to the disposition's (the tests bind them; W1 owns that file). `scan_renewal check --delta <the delta>` must print `"status": "bound"` and `python3 -m unittest ops.promotion.test_scan` must pass.
+   `--contract` is release B's `to` deployment contract: `schema_release.REVIEWED_SCHEMA_RELEASE['to']['deployment_contract_sha256']` (W1's release-B pin; until it lands, `REVIEWED_SCHEMA_RELEASE` is release A's spent 20→22 record and `schema-release.json` is absent on main); the guard checks the disposition against the contract of the candidate being promoted. `scan_renewal check` binds the file to its delta but not to that pin; `test_scan.py`'s `ReleaseBindingTests` does (`test_contract_and_expiry_are_the_schema_releases`), so edit `ReleaseBindingTests.setUp` (`test_scan.py:186`) to read the new delta file and expect the new evidence path. The tool prints the finding names and the exact `REVIEWED_DISPOSITION` block for `ops/promotion/registry.py`. It refuses a CRITICAL finding and roles whose introduced sets differ. Paste the pin, write the evidence record in the APP-175 form (scope, method, each CVE's applicability, limits), and keep `schema-release.json`'s expiry equal to the disposition's (the tests bind them; W1 owns that file). `scan_renewal check --delta <the delta>` must print `"status": "bound"` and `python3 -m unittest ops.promotion.test_scan` must pass.
 4. An independent review of the record, merge, `PROMOTION_ENABLED=true`, merge release B again.
 
-If release A has **not** landed by Nov 19, the same `generate` with the APP-175 delta (`evidence/APP-175/scan-delta-2026-11-12.json`) and the new expiry extends A's disposition unchanged in scope; the schema release's expiry moves with it (W1). The committed file never changes until the coordinator says which case applies.
+(Release A landed on 2026-11-14, so the earlier "if release A has not landed by Nov 19" extension no longer applies.)
 
 ## 9. The restore drill (Nov 23, after release B, before any code goes out)
 
@@ -331,7 +333,7 @@ done
 diff <(jq -S . "$TRIAL/drill-live.stats.json") <(jq -S . "$TRIAL/drill-scratch.env.stats.json") && echo "restore drill: identical"
 ```
 
-Expected: both print `{"organization_id": ..., "schema_version": 23, "counts": {...}, "audit_heads": {...}}` and the diff is empty. The operator task's log group is in its task definition (`aws ecs describe-task-definition --task-definition <OperatorTaskDefinition output> --query "taskDefinition.containerDefinitions[0].logConfiguration.options"`). Then delete the scratch instance; it is never left running:
+Expected: both print `{"organization_id": ..., "schema_version": 24, "counts": {...}, "audit_heads": {...}}` and the diff is empty. The operator task's log group is in its task definition (`aws ecs describe-task-definition --task-definition <OperatorTaskDefinition output> --query "taskDefinition.containerDefinitions[0].logConfiguration.options"`). Then delete the scratch instance; it is never left running:
 
 ```sh
 aws rds delete-db-instance --db-instance-identifier "$SCRATCH" --skip-final-snapshot --delete-automated-backups
@@ -344,7 +346,7 @@ Record the snapshot id, the two task ARNs and the diff result in the trial's pri
 
 The charter promises the organization's data is deleted by Dec 14; the beta then stops at its Dec 15 14:00 UTC schedule. The purge is two operator tasks and one object sweep, all through `admission.py`, after the memberships are gone. **What it keeps**, and what the charter and the notice must say: the organization row (suspended), its provider binding and sign-in routing, its record sequence, and the hash-chained audit heads and events (identifiers, kinds and hashes; no content, no name, no address). Everything else of the organization goes: members, principals, codes, apps, works, records, uploads, shares, sessions, cards, and every object version under `o/<org>/`. Manual snapshots are deleted the same day; automated backups lapse seven days later, so the bytes are fully gone about **Dec 21**.
 
-**`genui_identity`, the guest side of live sharing.** Guest sign-in accounts and their sessions are never the organization's and stay. The organization's share sign-in flows (`shared_auth_flows`) are deleted with the purge. A guest's `linked_apps` and `share_events` rows (identifiers, kinds, versions and hashes; no content) name the organization's shares with keys the purge cannot cut, so **the purge refuses `guest_linked_shares_present` and deletes nothing** while any guest has accepted or linked one of the organization's live shares. Do not force it; the decision on those rows is open (APP-185 recheck R1). Before Dec 14, have every live share to an outside guest revoked by its sponsor and the guest's link removed, or expect the refusal and report it. If a purge refuses with the generic `admission_operator_refused`, the likely cause is a statement that outran `connect()`'s 5-second statement timeout or 3-second lock timeout (the identity tables are briefly locked exclusively): nothing was deleted; run it again off-hours, with no one signed in. The purge also requires exactly the five audit heads an organization is provisioned with (`workspace`, `control`, `data`, `admission`, `operator`); the trial organization has them, an older hand-made one might not, and such a one refuses rather than guess which chains to keep.
+**`genui_identity`, the guest side of live sharing.** Guest sign-in accounts and their sessions are never the organization's and stay. The organization's share sign-in flows (`shared_auth_flows`) are deleted with the purge. That includes any short-lived (10-minute) flow routed through the trial tenant as provider for another organization's share; such a flow simply has to be started again. A guest's `linked_apps` and `share_events` rows (identifiers, kinds, versions and hashes; no content) name the organization's shares with keys the purge cannot cut, so **the purge refuses `guest_linked_shares_present` and deletes nothing** while any guest has accepted or linked one of the organization's live shares. Do not force it. **Revoking the shares does not clear the refusal**, because removed links and chain rows remain. The fix is a follow-up after migration 0024 is live, which drops the `share_events` key: at schema 24 or later the purge deletes the organization's `linked_apps` rows under the lifted FORCE and keeps the identifier-only `share_events`, as the charter (ADR-008) says; below 24 it refuses as now. That follow-up must land and be reviewed before Dec 14 (APP-188). Until then, expect the refusal if any guest ever accepted one of the organization's shares. If a purge refuses with the generic `admission_operator_refused`, the likely cause is a statement that outran `connect()`'s 5-second statement timeout or 3-second lock timeout (the identity tables are briefly locked exclusively): nothing was deleted; run it again off-hours, with no one signed in. The purge also requires exactly the five audit heads an organization is provisioned with (`workspace`, `control`, `data`, `admission`, `operator`); the trial organization has them, an older hand-made one might not, and such a one refuses rather than guess which chains to keep.
 
 1. **Codes.** `admission list`; `admission revoke --code` for every code still `active`.
 2. **Members.** On `/admin`, remove every member but yourself; then your own membership through the operator channel, which the Admin page refuses for the last admin:
