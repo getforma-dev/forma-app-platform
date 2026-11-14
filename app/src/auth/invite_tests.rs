@@ -510,8 +510,13 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
     // Sign-in: many handles from one class share the per-class window.
     let mut signin = Browser::new("198.51.100.32:4000", &log);
     let mut signin_statuses = Vec::new();
-    for i in 0..11 {
-        let handle = format!("{}{}", &UNKNOWN_HANDLE[..25], (b'a' + i) as char);
+    let per_minute = http::limits::SIGNIN_ADDRESS[0].limit;
+    for i in 0..=per_minute {
+        let handle = format!(
+            "{}{}",
+            &UNKNOWN_HANDLE[..25],
+            (b'a' + (i % 26) as u8) as char
+        );
         signin_statuses.push(
             signin
                 .post(&app, &format!("/signin/{handle}"), "")
@@ -520,8 +525,10 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
                 .as_u16(),
         );
     }
-    assert_eq!(signin_statuses[..10], [400; 10]);
-    assert_eq!(signin_statuses[10], 429);
+    assert!(signin_statuses[..per_minute]
+        .iter()
+        .all(|status| *status == 400));
+    assert_eq!(signin_statuses[per_minute], 429);
     // Sign-in global: 600 per hour across the service.
     auth.limits.clear();
     let mut count = 0;
@@ -1277,7 +1284,7 @@ async fn campaign() {
     assert_eq!(c.counts().await, before);
     assert_eq!(c.issuer.count(|x| &x.exchange), exchanges);
     c.auth.limits.clear();
-    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (15/minute, 80/hour) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 16th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
+    c.record("item 4 (redemption, review M2): GET /auth/callback is limited per address class (45/minute, 250/hour; ADR-006 amendment 2026-11-14) and across the service (800/hour), sized at the sum of the sign-in and invitation starts, before the query, the cookie or any database work (the 46th forged callback from one class is 429 with Retry-After and the neutral page); with the database paused, forged pre-login, session and pre-access cookies of an organization the closed registry does not bind answer at once (neutral page, uniform 404) because nothing reaches the store; no flood consumed a slot, created a record or reached the token endpoint");
 
     // --- 5. Provider invitation mismatches cannot create an account ----------
     c.auth.limits.clear();
