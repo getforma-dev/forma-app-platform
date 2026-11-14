@@ -163,7 +163,7 @@ This goes in the runbook (APP-188) and on the Nov 24 checklist. Victor's text:
 ## Go/no-go for the 25 codes (Nov 28)
 
 All yes, or no codes go out.
-1. **Release B read back:** schema 24, `/health/ready`, expiry 2026-12-16, November and December ledger months, scan disposition valid to Dec 15, nothing left to deploy.
+1. **Release B read back:** schema 24, `/health/ready`, expiry 2026-12-16, November and December ledger months, no unreviewed scan finding, nothing left to deploy. A release-B scan disposition, if preparation needed one, expires with the release file on Nov 26 and is spent once release B is live: its findings become baseline findings (APP-194).
 2. **Rehearsal of Nov 26 passed** on Chrome, Safari and a phone with at least two students. Each red item is fixed and re-run, or accepted in writing. The verification mail reached a Gmail and an Outlook address within five minutes, and not in spam.
 3. **Guards live:** the daily cap and its message seen on beta; Anthropic limits set for November ($150) and December ($100), with 50% alerts; alarms OK and the test email received; the restore drill recorded.
 4. **`/admin`:** Victor is admin, consent v1 shows for the rehearsal members, Remove is tested, and the test members are removed.
@@ -171,6 +171,7 @@ All yes, or no codes go out.
    - The helper account fills every form field of every app, and no form shows an ID text box (G3). "Which X" fields are enums or short text.
    - "Advance" or "close" is a reviewer-only update of a state field, never a transition, because a record's creator can't fire a transition on it.
    - A shared student page holds at most one typed query view; record summaries are used otherwise.
+   - Every review, grade or approval is a reviewer-only command, and everything students file goes in a private-entries list. No app uses an approver step. The canvas approver step shares the filed record with the approver, and a filer without share authority (a student in Victor's apps, who is neither the work's creator nor a `share_work` holder) sees "The share with X was refused; the record is filed." (APP-189 known issue, 2026-11-14).
 6. **`refresh-herd` green on main** (APP-195, APP-197). Its CI gate passes in the tenant-foundation workflow: 15 open pages, three herds 10 s apart, every run A criterion, and run C reproducing the finding. One recorded release-profile measurement at 26 pages shows no terminal refresh failure, every page current within 10 s, p95 within 6 s and the owner's command under 1.5 s. The runbook carries the catalog-check count, the per-transaction p50, the 26-page first-try share, the sustainable cadence (15 pages at 5 s) and Victor's beta document-read timing. APP-198 (stale views are never shown as "no access") is merged.
 7. **Externals:** FormaStack confirms in writing an fAuth tenant limit of at least 30; a test mail to feedback@getforma.dev arrives; the per-address limits are raised, and the code email says to redeem at home.
 8. **Codes path:** `admission.py issue --count 25` passed with fake AWS; codes exist only in the private file; the one-shot secret is cleared; the evening restart is scheduled; the code email is drafted with "bring a laptop", the beta statement and the fallback.
@@ -192,7 +193,7 @@ All yes, or no codes go out.
   - a homework app with shared assignments, private submissions and a reviewer-only Grade command;
   - a quiz app with private answers and a summary.
 
-  Using a helper account, confirm that each person sees only their own entries, Victor sees all, a contributor can't grade, and the summaries match. The helper fills every field of every form. The 25-member herd is proved by the `refresh-herd` evidence (APP-195), because a rehearsal with 2–3 students can't show it.
+  Using a helper account, confirm that each person sees only their own entries, Victor sees all, a contributor can't grade, and the summaries match. The helper fills every field of every form. No app has an approver step (grading and review are reviewer-only commands), so no helper submission shows "The share with … was refused; the record is filed." The 25-member herd is proved by the `refresh-herd` evidence (APP-195), because a rehearsal with 2–3 students can't show it.
 - **Rehearsal (Nov 26) with 2–3 students:**
   1. Code, notice and checkbox; sign up; the verification email arrives.
   2. Set a name.
