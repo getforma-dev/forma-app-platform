@@ -21,7 +21,7 @@ pub const NOTICE_PARAGRAPHS: [&str; 6] = [
     "You are joining an organization's workspace. Its admins can see who has joined, your agreement to this notice, when you were last active, and how much you have created. Apps shared with you may collect what you enter. The app's owner and its reviewers can see what you enter; unless the app keeps entries private, so can the other people it is shared with. Anything you build is private unless you share it. Forma's operators can access stored data to run and support the service.",
     "**What we keep:** your email address for sign-in, the name you choose, what you create and enter, the files you upload, and basic activity logs. Data is stored in the United States.",
     "**AI:** to build apps and answer questions, your prompts, and the files and entries you ask it to work with, are sent to Anthropic, our AI provider. Please don't upload sensitive personal, health or payment information.",
-    "**Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Copy out anything you want to keep before then.",
+    "**Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Your sign-in account (email and password) is held by our identity provider; we ask it to delete the account after the test. Copy out anything you want to keep before then.",
     "By checking the box you agree to take part on these terms.",
 ];
 
@@ -70,6 +70,14 @@ mod tests {
         ] {
             assert!(text.contains(phrase), "revised text: {phrase}");
         }
+        // The "Your data" paragraph, word for word (the charter's PR #117 text).
+        assert_eq!(
+            lead_in(NOTICE_PARAGRAPHS[4]),
+            (
+                Some("Your data:"),
+                "you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Your sign-in account (email and password) is held by our identity provider; we ask it to delete the account after the test. Copy out anything you want to keep before then."
+            )
+        );
         assert_eq!(lead_in(NOTICE_PARAGRAPHS[0]).0, None);
         assert_eq!(lead_in("**unterminated"), (None, "**unterminated"));
     }
