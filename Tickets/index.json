@@ -6104,7 +6104,7 @@
       "Depends on": "APP-195",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`trial/app-197-catalog-cadence` (to be pushed)",
+      "Branch / PR": "`trial/app-197-catalog-cadence` (pushed, no PR)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",

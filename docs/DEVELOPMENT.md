@@ -106,7 +106,7 @@ APP-131 repaired the missing `jsonschema` dependency, updated command/race fixtu
 
 | Quarantined | Since | Limitation | Owning ticket; what makes it pass |
 | --- | --- | --- | --- |
-| `refresh-herd` (catalog `ci` column `-`; not a tenant-foundation step) | 2026-11-14 | Run A fails: a 26-page refresh herd exceeds two connections per role, because every lease reuse repeats the catalog comparison ([evidence](../evidence/APP-195/refresh-herd-2026-11-14.md)). It still runs with `just campaign refresh-herd`, and its report is kept as evidence. | [APP-195](../Tickets/0-backlog/APP-195.md); APP-197 (the catalog check's cadence, not yet opened on this branch) makes it pass, and restores the step and the `ci` value |
+| `refresh-herd` (catalog `ci` column `-`; not a tenant-foundation step) | 2026-11-14 | Run A fails: a 26-page refresh herd exceeds two connections per role, because every lease reuse repeats the catalog comparison ([evidence](../evidence/APP-195/refresh-herd-2026-11-14.md)). It still runs with `just campaign refresh-herd`, and its report is kept as evidence. | [APP-195](../Tickets/0-backlog/APP-195.md); [APP-197](../Tickets/0-backlog/APP-197.md), the catalog check's cadence, is meant to make it pass, and restores the step and the `ci` value |
 
 ## Campaigns
 
