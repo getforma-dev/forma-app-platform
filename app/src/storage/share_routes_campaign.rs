@@ -958,6 +958,43 @@ async fn campaign() {
         "removing one person's access ({\"grantee_principal_id\",\"role\":\"none\"}): the app's owner removes Rev's record_read, record_write and record_review in one unit with one permission.revoked, his share rows are revoked, he can no longer open the work and is no longer listed; a share_work holder who is not the owner, a member without share authority, a member of another organization, the owner naming themselves and a nonexistent work get the byte-identical uniform 404 and write nothing; a repeat, or a person who holds nothing, answers 200 and writes nothing",
     );
 
+    // --- MINOR-8: a removal judges the caller before taking any lock --------
+    // A raw session holds Ana's membership row FOR UPDATE (as any of her
+    // fenced transactions would). A caller who is not the app's owner, asking
+    // to remove Ana, gets the uniform 404 at once: no lock wait, no busy, so
+    // nothing tells them Ana is mid-request and they cannot make her wait.
+    let mut held = fixture.operator().await;
+    let hold = held.client.transaction().await.unwrap();
+    hold.execute(
+        &format!("SELECT 1 FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{ANA}' FOR UPDATE"),
+        &[],
+    )
+    .await
+    .unwrap();
+    // Rev holds no access by now (the owner removed it); Nia's write window
+    // is spent (the 429 check), so Rev stands in for a member without access.
+    for (cookie, uri) in [
+        (&rev_cookie, &share_uri),
+        (&rev_cookie, &missing_uri),
+        (&hal_cookie, &share_uri),
+        (&oz_cookie, &share_uri),
+    ] {
+        let started = std::time::Instant::now();
+        let refused = post(Some(cookie), uri, share_body(ANA, "none")).await;
+        let waited = started.elapsed();
+        assert_eq!(refused.body, anonymous.body, "{uri}");
+        assert!(
+            waited < std::time::Duration::from_millis(700),
+            "{uri}: answered after {waited:?}, inside lock_timeout"
+        );
+    }
+    hold.rollback().await.unwrap();
+    drop(held);
+    check(
+        &mut checks,
+        "MINOR-8: with Ana's membership row held FOR UPDATE, a removal of Ana asked by a member without access (on the work and on a nonexistent work), by a share_work holder who is not the owner, and by a member of another organization answers the byte-identical uniform 404 at once (well inside lock_timeout), never busy: the owner check is a lock-free read before the definer",
+    );
+
     // --- MAJOR-1 at the route: a stop queued behind a role change ----------
     let set = post(Some(&owner_cookie), &everyone_uri, role_body("viewer")).await;
     assert_eq!(set.status, StatusCode::OK, "{}", set.body);
@@ -1192,7 +1229,7 @@ async fn campaign() {
 
     stores.close().await.unwrap();
     if let Some(path) = std::env::var_os("GENUI_SHARE_ROUTES_REPORT") {
-        std::fs::write(path, serde_json::to_vec_pretty(&json!({"schema_version":1,"scope":"APP-192 (trial plan D9): the share routes with roles and the organization-wide share, over real rows (W2b)","postgres_image":super::qualification::IMAGE,"server_version":fixture.server_version,"checks":checks,"passed":true,"limits":["Synthetic local password authentication is not RDS IAM.","Sessions are minted for tests; the hosted sign-in is not exercised.","Storage semantics (definers, reviewer rule, own collections, the organization-wide clause in every read) are W4's private-entries campaign.","A personal share is not revoked over a route here: the owner-side revoke is W4's pending API."]})).unwrap()).unwrap();
+        std::fs::write(path, serde_json::to_vec_pretty(&json!({"schema_version":1,"scope":"APP-192 (trial plan D9): the share routes with roles and the organization-wide share, over real rows (W2b)","postgres_image":super::qualification::IMAGE,"server_version":fixture.server_version,"checks":checks,"passed":true,"limits":["Synthetic local password authentication is not RDS IAM.","Sessions are minted for tests; the hosted sign-in is not exercised.","Storage semantics (definers, reviewer rule, own collections, the organization-wide clause in every read) are W4's private-entries campaign.","The definers' own rules (the owner, the reviewer rule, the lock order) are W4's; this campaign proves the routes over them, the personal revoke and its lock-free owner check included."]})).unwrap()).unwrap();
     }
     println!("share-routes campaign: {} checks passed", checks.len());
 }

@@ -44,9 +44,13 @@
 //!   by label, never by provider identity, each with the role of their live
 //!   permissions on the work).
 //!
-//! Refusal order on both POSTs: fetch metadata (403 `cross_site`), the ids
-//! (uniform 404), the session (uniform 404), the member write limit (429),
-//! the body (413, then 400 `malformed_share`), then the sharer's own
+//! Refusal order on the three POSTs (`/share`, `/share/add`,
+//! `/share/organization`): fetch metadata (403 `cross_site`), the ids
+//! (uniform 404), the session (uniform 404), the member write limit (429
+//! `too_many_requests`), the body (413, then 400 `malformed_share`). A
+//! removal (`/share` with `none`) is then judged by a lock-free owner read
+//! (`Workspace::may_remove_access`; uniform 404 for anyone but the app's
+//! owner) and the owner's definer; every other share by the sharer's own
 //! standing (`Workspace::share_standing`): `Denied` is the uniform 404 (a work
 //! the sharer cannot open, no authority to share; identical for existing and
 //! nonexistent works). A sharer **with** share authority then learns, in 422,
@@ -57,7 +61,9 @@
 //! (the work has source dependencies or folder files: shared person by
 //! person, the v1 limit). Then storage: `Denied` is the uniform 404 (a
 //! grantee who is not an active member of the same organization or is the
-//! sharer; the standing changed meanwhile), 503 for a store outage. The
+//! sharer; the standing changed meanwhile), 429 `busy` with `Retry-After`
+//! when a sharing definer met a lock cycle (retryable, nothing written), 503
+//! for a store outage (`storage_refusal`). The
 //! definers still judge every rule on their own (`share_work`,
 //! `set_work_everyone`) and write the audit rows. A person share that wrote
 //! a grant announces `app.shared` on the event hub (`events`); an
@@ -513,12 +519,15 @@ async fn share_organization(
     }
 }
 
-/// The owner's removal of one person's access (`role: none`): storage alone
-/// judges it (`Workspace::revoke_work_share`: the app's owner, not naming
-/// themselves, an existing work), so no share standing is asked first and a
-/// refusal is the uniform 404. The answer is the same whether the person held
-/// anything (nothing tells the owner what they held). The composer lineage
-/// forgets the person, so a later adaptation is not shared with them.
+/// The owner's removal of one person's access (`role: none`). First a
+/// lock-free read (`Workspace::may_remove_access`, MINOR-8): a caller who is
+/// not the app's owner, or a work that does not exist, gets the uniform 404
+/// before any lock is taken. Then storage judges it again under its locks
+/// (`Workspace::revoke_work_share`: the app's owner, not naming themselves,
+/// an existing work), and a refusal there is the same 404. The answer is the
+/// same whether the person held anything (nothing tells the owner what they
+/// held). The composer lineage forgets the person, so a later adaptation is
+/// not shared with them.
 async fn remove_access(
     stores: &storage::Stores,
     trusted: &TrustedRequest,
@@ -526,6 +535,10 @@ async fn remove_access(
     work: &str,
     grantee: &str,
 ) -> Response {
+    if let Err(error) = stores.workspace.may_remove_access(trusted, app, work).await {
+        tracing::info!(outcome = "denied", "share.remove");
+        return storage_refusal(error);
+    }
     let result = stores
         .workspace
         .revoke_work_share(trusted, app, work, grantee)

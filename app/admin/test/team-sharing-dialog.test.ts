@@ -270,3 +270,24 @@ test('the person picker leaves out the app owner (the caller is never in /v1/mem
     assert.deepEqual(select(unknown.section, 'grantee').children.map(o => o.value), ['', OWNER, ANA]);
   } finally { globalThis.fetch = original; }
 });
+
+test('a refused lower access says only who may lower it, naming nobody', async () => {
+  const original = globalThis.fetch;
+  try {
+    const { section } = await open(
+      () => ok(answer({ members: [{ principal_id: ANA, label: 'Ana Diaz', role: 'reviewer' }] })),
+      () => new Response('{"code":"not_found","status":404}', { status: 404 }),
+    );
+    select(section, 'grantee').value = ANA;
+    select(section, 'role').value = 'viewer';
+    find(section, el => el.tagName === 'FORM')!.fire('submit');
+    await flush(); await flush();
+    assert.equal(statusText(section), 'Only someone who can give that access can lower it.');
+    // A refused share that lowers nothing keeps the general copy.
+    select(section, 'role').value = 'reviewer';
+    find(section, el => el.tagName === 'FORM')!.fire('submit');
+    button(section, 'Yes, share')!.fire('click');
+    await flush(); await flush();
+    assert.equal(statusText(section), 'That share was refused. Refresh the list and try again.');
+  } finally { globalThis.fetch = original; }
+});

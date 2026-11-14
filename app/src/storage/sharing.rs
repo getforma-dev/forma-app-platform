@@ -633,6 +633,35 @@ impl Workspace {
         result
     }
 
+    /// Whether the member may ask to remove a person's access to `work` of
+    /// `app`, judged with no lock (W2b recheck MINOR-8): one read-only
+    /// snapshot, the member's currency (`read_only_member`: membership,
+    /// epoch, entitlement) and a plain read that the work exists and the
+    /// member owns its app. `Denied` otherwise, before
+    /// [`Workspace::revoke_work_share`] takes the person's membership row or
+    /// the work's sharing lock, so a caller who is not the owner can neither
+    /// make the person wait nor tell that they are mid-request. The definer
+    /// still judges everything again under its locks; this is only the
+    /// early refusal.
+    pub async fn may_remove_access(
+        &self,
+        request: &TrustedRequest,
+        app: &str,
+        work: &str,
+    ) -> Result<()> {
+        require(valid_id(app) && valid_id(work))?;
+        let cap = Instant::now() + SHARE_HANDLER_DEADLINE;
+        let transaction = Transaction::begin_read_only(&self.inner, request, cap).await?;
+        let result = async {
+            transaction.read_only_member().await?;
+            let rows = transaction.query("SELECT 1 FROM genui.apps a JOIN genui.saved_work w ON w.organization_id=a.organization_id AND w.app_id=a.app_id WHERE a.organization_id=$1::text::uuid AND a.app_id=$2::text::uuid AND w.work_id=$3::text::uuid AND a.owner_principal_id=$4::text::uuid", &[&request.organization,&app,&work,&request.principal]).await?;
+            require(!rows.is_empty())
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
     /// The member's [`ShareStanding`] on `work` of `app` alone (both share
     /// POSTs; review of W2b, NIT-5: no member list is read). One read-only
     /// snapshot with no fence: the member precheck (`record_read` on the

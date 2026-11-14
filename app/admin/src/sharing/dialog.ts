@@ -269,8 +269,16 @@ export function teamSection(document: Document, app: string, work: string): { se
     // A lower role takes the surplus away (W4's demotion); the list then
     // shows the person's live access, and the message says what changed.
     const before = sharing?.members.find(member => member.principal_id === grantee)?.role;
+    const lowering = !!before && RANK[before] > RANK[chosen];
     void act(async () => {
-      await shareWithMember(app, work, grantee, chosen);
+      try {
+        await shareWithMember(app, work, grantee, chosen);
+      } catch (error) {
+        // The server's refusal is the uniform 404; here the dialog knows it
+        // was a lowering, and says who may do it without naming anyone.
+        if (lowering && (error as { status?: number }).status === 404) throw new ShareError('Only someone who can give that access can lower it.');
+        throw error;
+      }
       return (after: TeamSharing | null) => {
         const held = after?.members.find(member => member.principal_id === grantee)?.role;
         if (held && RANK[held] > RANK[chosen]) return `${label} already had more access, so it stays “${ROLE_WORDS[held]}”.`;
