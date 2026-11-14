@@ -347,6 +347,7 @@ function Canvas(props: CanvasProps) {
           </button>
           <a class="cv-link" href="/shared">Connected apps</a><span class="cv-connected-status" role="status" data-connected-status=""></span>
           <a class="cv-link" href="/workspace">Workspace</a>
+          <a class="cv-link" href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
           <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
             {props.memberInitials}
           </span>
