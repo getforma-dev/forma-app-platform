@@ -50,6 +50,19 @@ def spec(candidate=CANDIDATE, contract=CONTRACT, infra=INFRA):
                    'deployment_contract_sha256': contract}}
 
 
+# APP-210: a contract-only release, 24 -> 24. The schema manifest and version stay; only the
+# deployment contract (image contexts, Dockerfiles, runtime.py) moves, as for release C.
+CONTRACT_CANDIDATE = encoded({'schema_version': 1, 'database_version': 24, 'migrations': [], 'catalog': []})
+
+
+def contract_spec():
+    schema = hashlib.sha256(CONTRACT_CANDIDATE).hexdigest()
+    return {'schema_version': 1, 'evidence': REVIEWED['evidence'], 'expires_at_utc': REVIEWED['expires_at_utc'],
+            'from': {'database_version': 24, 'schema_manifest_sha256': schema, 'deployment_contract_sha256': FROM['deployment_contract_sha256']},
+            'infrastructure_sha256': INFRA,
+            'to': {'database_version': 24, 'schema_manifest_sha256': schema, 'deployment_contract_sha256': CONTRACT}}
+
+
 class SpecFile:
     """Point schema_release at a temporary file (None removes it) and pin the
     source constant to a synthetic reviewed release, `spec()` by default."""
@@ -141,6 +154,33 @@ class SpecFileTests(unittest.TestCase):
                 with self.assertRaises(Refused): self.load(value)
         with self.assertRaises(Refused): self.load([['schema_version', 1]])
 
+    def load_pinned(self, value):
+        """Load `value` with the source pin equal to it, so only the shape rules can refuse."""
+        SpecFile(self, value, pinned=value)
+        return schema_release.load()
+
+    def test_a_contract_only_release_loads(self):
+        # APP-210: same version and schema manifest, another deployment contract.
+        value, sha = self.load_pinned(contract_spec())
+        self.assertEqual(value, contract_spec())
+        self.assertEqual(sha, hashlib.sha256((json.dumps(contract_spec(), indent=2, sort_keys=True) + '\n').encode()).hexdigest())
+        self.assertFalse(schema_release.migrates({'from_version': 24, 'to_version': 24, 'spec_sha256': sha}))
+        self.assertTrue(schema_release.migrates({'from_version': 20, 'to_version': 22, 'spec_sha256': sha}))
+
+    def test_a_release_is_one_migration_or_one_contract_change(self):
+        """The contract always moves; the schema manifest moves exactly when the version rises."""
+        def both_ends_equal(v): v['to'] = dict(v['from'])
+        def contract_kept(v): v['to']['deployment_contract_sha256'] = v['from']['deployment_contract_sha256']
+        def schema_kept_while_the_version_moves(v): v['to']['schema_manifest_sha256'] = v['from']['schema_manifest_sha256']
+        def schema_moves_while_the_version_stays(v): v['to']['schema_manifest_sha256'] = '1' * 64
+        def downgrade(v): v['from']['database_version'], v['to']['database_version'] = 22, 20
+        for base, mutate in [(contract_spec, both_ends_equal), (contract_spec, contract_kept), (spec, contract_kept),
+                             (spec, schema_kept_while_the_version_moves), (contract_spec, schema_moves_while_the_version_stays),
+                             (spec, downgrade)]:
+            with self.subTest(base=base.__name__, mutate=mutate.__name__):
+                value = base(); mutate(value)
+                with self.assertRaisesRegex(Refused, 'invalid schema release'): self.load_pinned(value)
+
 
 @unittest.skipUnless(schema_release.SPEC.exists(), 'no schema release is pending')
 class CommittedReleaseTests(unittest.TestCase):
@@ -163,9 +203,12 @@ class CommittedReleaseTests(unittest.TestCase):
         head = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
         self.assertEqual(schema_release.applicable(source, baseline, before, ROOT, clock, head),
                          {'from_version': before, 'to_version': after, 'spec_sha256': sha})
-        for policy, moment, candidate in [(before + 1, clock, head), (before - 1, clock, head), (after, clock, head),
+        # Every policy version but `from` refuses. A contract-only release's `to` is its `from` (APP-210).
+        wrong = sorted({before + 1, before - 1, after} - {before})
+        for policy, moment, candidate in [*[(version, clock, head) for version in wrong],
                                           (before, schema_release.expiry(value), head), (before, clock, 'f' * 40)]:
-            with self.assertRaises(Refused): schema_release.applicable(source, baseline, policy, ROOT, moment, candidate)
+            with self.subTest(policy=policy, moment=moment, candidate=candidate), self.assertRaises(Refused):
+                schema_release.applicable(source, baseline, policy, ROOT, moment, candidate)
 
     def test_committed_release_equals_the_source_pin(self):
         value, _ = schema_release.load()
@@ -801,6 +844,152 @@ class SchemaLifecycleTests(unittest.TestCase):
                              for _, o, a in self.aws.calls))
         self.assertEqual(self.store.load()['active']['phase'], 'preparing')
 
+    # APP-210: a reviewed contract-only release (24 -> 24) promotes as a normal release does.
+
+    def contract_only(self, candidate=CONTRACT_CANDIDATE):
+        """A contract-only release from a live baseline at schema 24."""
+        self.build(candidate=candidate, reviewed=contract_spec(), policy=24)
+
+    def test_a_contract_only_release_promotes_with_exactly_the_normal_mutations(self):
+        self.contract_only()
+        result = self.prepared(); promotion = result['promotion_id']; sha = schema_release.load()[1]
+        release = {'from_version': 24, 'to_version': 24, 'spec_sha256': sha}
+        self.assertEqual(result['review']['schema_release'], release)
+        self.assertEqual(result['review']['schema_version'], 24)
+        self.assertEqual(result['review']['deployment_contract_sha256'], CONTRACT)
+        self.assertEqual(result['review']['preserved'], dict.fromkeys(['schema', 'template', 'trial', 'aliases', 'secrets'], True))
+        self.assertEqual(result['review']['sequence'], SEQUENCE)
+        # No snapshot is named, because none is taken.
+        self.assertEqual(self.store.load()['active']['packet']['schema_release'], release)
+
+        summary = self.run_execute(); validate_summary(summary, self.request['candidate_sha'])
+        self.assertEqual(self.mutations(), [('update_service', 'main', 0), ('update_service', 'broker', 0), ('execute_change_set', None, None),
+            ('update_service', 'broker', 1), ('update_service', 'main', 1)])
+        self.assertFalse(any(s == 'rds' or o == 'run_task' for s, o, _ in self.aws.calls))
+        # Prepare checks the trunk twice and execute once: there is no snapshot to recheck after.
+        self.assertEqual(self.current_mock.call_count, 3)
+
+        final = self.store.load(); origin = contract_spec()['from']
+        self.assertIsNone(final['active']); self.assertEqual(self.aws.counts, {'main': 1, 'broker': 1})
+        self.assertEqual(final['baseline']['deployment_contract_sha256'], CONTRACT)
+        self.assertEqual(final['baseline']['schema_manifest_sha256'], origin['schema_manifest_sha256'])
+        self.assertEqual(final['baseline']['template'], self.initial['baseline']['template'])
+        self.assertEqual(final['policy']['schema_version'], 24)
+        self.assertEqual(final['completed'][promotion], dict(summary, schema_release=release))
+        self.assertEqual(self.receipt(promotion, 'verified.json')['schema_release'], release)
+        for name in ['schema-snapshot.json', 'schema-migrate.json', 'schema-snapshot-observed.json',
+                     'schema-migration-observed.json', 'stopped-after-migration.json', 'schema-release.json']:
+            self.assertNotIn('beta/promotions/' + promotion + '/' + name, self.s3.objects)
+        # The admitted baseline now treats this candidate as an ordinary promotion.
+        self.assertIsNone(self.runner.reviewed_release(self.manifest['source'], self.request['candidate_sha']))
+
+    def test_a_policy_version_moved_during_execution_admits_nothing(self):
+        for kind in ['migration', 'contract-only']:
+            with self.subTest(kind=kind):
+                self.contract_only() if kind == 'contract-only' else self.build()
+                self.prepared(); original = self.aws._call; contract = self.initial['baseline']['deployment_contract_sha256']
+                def transport(s, o, a, original=original):
+                    value = original(s, o, a)
+                    if o == 'execute_change_set':
+                        # Synthetic out-of-band write: the stored policy moves after the final checks.
+                        state = json.loads(self.s3.objects['beta/state.json']); state['policy']['schema_version'] += 1
+                        self.s3.objects['beta/state.json'] = encoded(state)
+                    return value
+                self.aws._call = transport
+                with self.assertRaisesRegex(Refused, 'schema policy changed during release'): self.run_execute()
+                persisted = self.store.load()
+                self.assertEqual(persisted['active']['phase'], 'activation-intended')
+                self.assertEqual(persisted['baseline']['deployment_contract_sha256'], contract)
+                self.assertNotIn(self.execute['promotion_id'], persisted['completed'])
+
+    def test_a_contract_only_release_off_its_baseline_refuses_before_the_lock(self):
+        def persisted(change):
+            return lambda: (change(self.initial), self.s3.objects.update({'beta/state.json': encoded(self.initial)}))
+        def moved(version):
+            # The candidate's manifest moved while the record says it stays (Tier A review, NIT-4).
+            return encoded({'schema_version': 1, 'database_version': version, 'migrations': [{'name': '0025_moved.sql'}], 'catalog': []})
+        changed, checkout = 'separate reviewed release required', 'checkout differs from the candidate'
+        cases = [('baseline contract', CONTRACT_CANDIDATE, persisted(lambda s: s['baseline'].update(deployment_contract_sha256='0' * 64)), changed),
+                 ('baseline schema', CONTRACT_CANDIDATE, persisted(lambda s: s['baseline'].update(schema_manifest_sha256='0' * 64)), changed),
+                 ('policy version', CONTRACT_CANDIDATE, persisted(lambda s: s['policy'].update(schema_version=23)), changed),
+                 ('expired', CONTRACT_CANDIDATE, lambda: setattr(self.runner, 'clock', lambda: EXPIRY), changed),
+                 ('infrastructure', CONTRACT_CANDIDATE, lambda: setattr(self, 'infra', '5' * 64), changed),
+                 ('manifest moved at 24', moved(24), lambda: None, changed),
+                 ('manifest moved at 25', moved(25), lambda: None, changed),
+                 ('committed manifest differs from the qualified source', CONTRACT_CANDIDATE, lambda: setattr(self, 'candidate', moved(24)), changed),
+                 ('another checkout', CONTRACT_CANDIDATE,
+                  lambda: self.enterContext(patch.object(schema_release, 'checkout_head', lambda repo: 'b' * 40)), checkout)]
+        for name, candidate, mutate, message in cases:
+            with self.subTest(name=name):
+                self.contract_only(candidate); mutate()
+                with self.assertRaisesRegex(Refused, message): self.runner.prepare(self.request, self.directory)
+                persisted_state = self.store.load()
+                self.assertIsNone(persisted_state['active']); self.assertEqual(persisted_state['revision'], 0)
+                self.assertEqual(self.aws.calls, [])
+
+    def test_a_contract_only_release_changed_or_expired_after_preparation_cannot_stop(self):
+        def expires_during_final_checks(_):
+            self.runner.clock = lambda: EXPIRY
+        cases = [('reformatted', lambda: self.file.write(json.dumps(contract_spec(), sort_keys=True))),
+                 ('removed', lambda: self.file.write(None)),
+                 ('infrastructure', lambda: setattr(self, 'infra', '5' * 64)),
+                 ('final checks', lambda: setattr(self.current_mock, 'side_effect', expires_during_final_checks))]
+        for name, mutate in cases:
+            with self.subTest(name=name):
+                self.contract_only(); self.prepared(); mutate()
+                with self.assertRaises(Refused): self.run_execute()
+                self.assertFalse(any(o in ['update_service', 'execute_change_set', 'create_db_snapshot', 'run_task'] for _, o, _ in self.aws.calls))
+                self.assertEqual(self.store.load()['active']['phase'], 'prepared')
+
+    def test_a_prepared_contract_only_release_abandons_like_a_normal_promotion(self):
+        self.contract_only(); self.prepared()
+        result = self.abandon()
+        self.assertEqual(result['status'], 'abandoned')
+        final = self.store.load()
+        self.assertIsNone(final['active']); self.assertEqual(final['completed'][result['promotion_id']]['status'], 'abandoned')
+        self.assertEqual(self.aws.counts, {'main': 1, 'broker': 1})
+        self.assertFalse(any(s == 'rds' or o in ['update_service', 'execute_change_set', 'run_task'] for s, o, _ in self.aws.calls))
+        self.assertEqual([o for _, o, _ in self.aws.calls if o == 'delete_change_set'], ['delete_change_set'])
+        for name in ['abandon-fence.json', 'abandoned.json']:
+            self.assertIsNone(self.receipt(result['promotion_id'], name)['retained_schema_snapshot'])
+        # Nothing was admitted: the baseline and the policy are the release's `from`.
+        self.assertEqual(final['baseline']['deployment_contract_sha256'], contract_spec()['from']['deployment_contract_sha256'])
+        self.assertEqual(final['policy']['schema_version'], 24)
+
+    def test_a_snapshot_entry_beside_a_contract_only_release_refuses_abandonment_by_name(self):
+        # Tier A review, NIT-1: the packet names no snapshot, so a journaled one is a named refusal, not a KeyError.
+        self.contract_only(); self.prepared()
+        self.store.change(lambda d: d['active']['journal'].append({'name': 'schema-snapshot', 'status': 'confirmed'}))
+        state = self.store.load(); calls = len(self.aws.calls)
+        with self.assertRaisesRegex(Refused, 'only one pre-outage snapshot may be abandoned'): self.abandon()
+        self.assertEqual(self.store.load(), state)
+        self.assertFalse(any(s == 'rds' or o == 'delete_change_set' for s, o, _ in self.aws.calls[calls:]))
+
+    def test_restore_after_failed_migration_refuses_a_contract_only_release(self):
+        from ops.promotion import schema_recovery
+        self.contract_only(); self.prepared()
+        # The stack update rolls back: the outage began, both services are stopped, every entry is confirmed.
+        original_stack, original_call, executed = self.aws.stack, self.aws._call, []
+        self.aws.stack = lambda: dict(original_stack(), StackStatus='UPDATE_ROLLBACK_COMPLETE') if executed else original_stack()
+        def transport(s, o, a):
+            value = original_call(s, o, a)
+            if o == 'execute_change_set': executed.append(1)
+            return value
+        self.aws._call = transport
+        with self.assertRaisesRegex(Refused, 'stack update failed'): self.run_execute()
+        state = self.store.load()
+        self.assertEqual(state['active']['phase'], 'executing'); self.assertEqual(self.aws.counts, {'main': 0, 'broker': 0})
+        self.assertTrue(all(x['status'] == 'confirmed' for x in state['active']['journal']))
+        self.aws.phase = 'operator'; calls = len(self.aws.calls)
+        finished = dict(workflow_run(), status='completed', updated_at=(NOW - timedelta(minutes=66)).isoformat())
+        with patch.dict('os.environ', {'GITHUB_ACTIONS': 'false'}):
+            for command in (schema_recovery.plan, schema_recovery.apply):
+                with self.subTest(command=command.__name__):
+                    with self.assertRaisesRegex(Refused, r'\Aonly an executing schema migration can be restored; '
+                                                         r'reconcile a contract-only release as a normal promotion\Z'):
+                        command(self.runner, digest(state), read_run=lambda _: finished)
+        self.assertEqual(self.store.load(), state); self.assertEqual(len(self.aws.calls), calls)
+
 
 class SummaryTests(unittest.TestCase):
     def setUp(self):
@@ -831,6 +1020,36 @@ class SummaryTests(unittest.TestCase):
             with self.subTest(mutate=mutate):
                 changed = copy.deepcopy(self.value); mutate(changed['review'])
                 with self.assertRaises(ValueError): validate_summary(changed, self.candidate)
+
+    def contract_only(self):
+        """APP-210: the projection of a contract-only release, bound to its committed file."""
+        SpecFile(self, contract_spec(), pinned=contract_spec())
+        value = copy.deepcopy(self.value); review = value['review']
+        review.update(schema_version=24, schema_release={'from_version': 24, 'to_version': 24, 'spec_sha256': schema_release.load()[1]},
+                      sequence=list(SEQUENCE))
+        review['preserved']['schema'] = True
+        return value
+
+    def test_a_contract_only_projection_is_valid_and_exact(self):
+        value = self.contract_only()
+        self.assertEqual(validate_summary(copy.deepcopy(value), self.candidate), value)
+        for mutate in [lambda r: r['preserved'].update(schema=False), lambda r: r.update(sequence=list(SCHEMA_SEQUENCE)),
+                       lambda r: r.update(schema_version=23), lambda r: r['schema_release'].update(from_version=23),
+                       lambda r: r['schema_release'].update(to_version=25), lambda r: r['schema_release'].update(from_version=25, to_version=25),
+                       lambda r: r['schema_release'].update(spec_sha256=self.sha),
+                       lambda r: r.update(deployment_contract_sha256=FROM['deployment_contract_sha256'])]:
+            with self.subTest(mutate=mutate):
+                changed = copy.deepcopy(value); mutate(changed['review'])
+                with self.assertRaises(ValueError): validate_summary(changed, self.candidate)
+
+    def test_equal_versions_need_one_schema_manifest_in_the_spec(self):
+        value = self.contract_only(); loaded, sha = schema_release.load()
+        drifted = copy.deepcopy(loaded); drifted['to']['schema_manifest_sha256'] = '1' * 64
+        with patch.object(schema_release, 'load', lambda: (drifted, sha)):
+            with self.assertRaisesRegex(ValueError, 'schema release projection changed'):
+                validate_summary(copy.deepcopy(value), self.candidate)
+        # The same projection passes with the committed spec, so only that rule refused it.
+        self.assertEqual(validate_summary(copy.deepcopy(value), self.candidate), value)
 
 
 if __name__ == '__main__':

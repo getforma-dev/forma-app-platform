@@ -1660,11 +1660,15 @@ pub(super) mod refresh_herd {
     //! route over the real pool, storage, engine child and release checks.
     //!
     //! - Run A (the APP-195 client): each page starts after a uniform random
-    //!   0–3 s from its hint (seeded), the page that committed reads at once, a
-    //!   503 is read once more after a random 1–3 s, and hints for a page while
-    //!   one waits join it. Three herds 10 s apart, with the pass criteria below.
+    //!   0–3 s from its hint (seeded), the page that committed reads at once,
+    //!   each request is asked once more after a 503, a random 1–3 s later
+    //!   (`retryOnce`), and hints for a page while one waits join it. Three
+    //!   herds 10 s apart, with the pass criteria below.
+    //! - Every run keeps the view's own loop (`queries.ts` `runView`): a 429
+    //!   waits its `Retry-After`, and APP-198's `409 stale` waits a fixed 1 s,
+    //!   then the view reads again, at most three more times for both together.
     //! - Run B (the client before APP-195): every page reads at one instant after
-    //!   its hint, no retry. Measured only.
+    //!   its hint, no 503 retry. Measured only.
     //! - Run C: run B with every role admitting 8 callers (the pool before
     //!   APP-195). It must reproduce the APP-193 finding: at least ten 503s.
     //!
@@ -1682,12 +1686,17 @@ pub(super) mod refresh_herd {
     //!   The gate's p95 bound is 8 s (test profile, 2-vCPU runner); the
     //!   release measurement's stays 6 s.
     //!
-    //! The share is the existing per-member share (`Workspace::share_work`, 25
-    //! times, with record_write): an organization-wide share is not on this
-    //! branch. The second list is shared too: per-person (`own`) lists are not on
-    //! this branch either. Each page plays both the work page's read (the
-    //! document) and the canvas board's (the batch and the view) at once, which
-    //! is more than either page reads alone.
+    //! The workload is narrower than the class's (release B integration
+    //! review, MINOR-2). The share is 25 personal Contributor shares
+    //! (`Workspace::share_work`, one per member); the organization-wide share
+    //! is in this tree but not exercised. Both lists are shared: the
+    //! private-entries (`own`) visibility is in this tree too, but no `own`
+    //! list is exercised, though every record read already pays its
+    //! authorization clause. The only writer during a run is the owner, one
+    //! change per herd, so the herd measures the shared-list fan-out with one
+    //! writer; the 8 entries are written before the runs. Each page plays both
+    //! the work page's read (the document) and the canvas board's (the batch
+    //! and the view) at once, which is more than either page reads alone.
     use super::super::{
         admission_qualification::operator,
         catalog::Catalog,
@@ -1738,13 +1747,19 @@ pub(super) mod refresh_herd {
     /// The one shared row the owner changes.
     const ITEM: &str = "00000000-0000-4000-8000-000001952000";
 
-    /// The APP-195 client (`app/admin/src/canvas/live-refresh.ts`).
+    /// The APP-195 client (`app/admin/src/canvas/live.ts`: `hintSchedule`
+    /// and `retryOnce`).
     const SPREAD_MS: u64 = 3000;
     const RETRY_MIN_MS: u64 = 1000;
     const RETRY_MAX_MS: u64 = 3000;
-    /// The canvas view's existing busy handling (`queries.ts`): a 429 waits its
-    /// `Retry-After` and reads again, at most three times.
+    /// The canvas view's own loop (`queries.ts` `runView`), one attempt count
+    /// for both: a 429 waits its `Retry-After` and reads again while fewer
+    /// than `MAX_BUSY_RETRIES` attempts have gone before; APP-198's `409
+    /// stale` waits a fixed 1 s, no jitter, and reads again while fewer than
+    /// `MAX_STALE_RETRIES` have.
     const BUSY_RETRIES: usize = 3;
+    const STALE_RETRIES: usize = 3;
+    const STALE_WAIT: Duration = Duration::from_secs(1);
     /// Run A's pass criteria (revised by the Fable advisor in lieu of Victor,
     /// 2026-11-14): 95% of pages current within the plan's p95 bound and
     /// every page within `CURRENT_MAX`. The 26-page release measurement's
@@ -1994,7 +2009,7 @@ pub(super) mod refresh_herd {
         name: &'static str,
         /// APP-195: each page starts 0–3 s after its hint; the committer at once.
         jitter: bool,
-        /// APP-195: a 503 is read once more after 1–3 s.
+        /// APP-195: each request is asked once more after a 503, 1–3 s later.
         retry: bool,
         herds: usize,
         cadence: Duration,
@@ -2141,8 +2156,13 @@ pub(super) mod refresh_herd {
                 Read::View => self.post_view(page).await,
             }
         }
-        /// One read as the page's client makes it: the view's existing 429
-        /// handling, and with `retry` (APP-195) one more read after a 503.
+        /// One read as the page's client makes it: `queries.ts` `runView`
+        /// over `live.ts` `retryOnce`. With `retry` (APP-195, a hinted read)
+        /// each request is asked once more after a 503, a random 1–3 s later.
+        /// The view then keeps its own loop, with one attempt count for both
+        /// causes: a 429 reads again after its `Retry-After`, and APP-198's
+        /// `409 stale` after a fixed 1 s. The document and the batch have no
+        /// loop of their own.
         async fn read(
             &self,
             page: &Page,
@@ -2152,16 +2172,21 @@ pub(super) mod refresh_herd {
             herds: usize,
         ) -> ReadResult {
             let mut statuses = Vec::new();
-            let mut busy = 0;
-            let mut retried = false;
+            let mut attempt = 0;
             let reply = loop {
-                let reply = self.attempt(page, read).await;
+                let mut reply = self.attempt(page, read).await;
                 statuses.push(reply.status.as_u16());
+                if retry && reply.status == StatusCode::SERVICE_UNAVAILABLE {
+                    let wait = random.lock().unwrap().between(RETRY_MIN_MS, RETRY_MAX_MS);
+                    sleep(wait).await;
+                    reply = self.attempt(page, read).await;
+                    statuses.push(reply.status.as_u16());
+                }
                 if read == Read::View
                     && reply.status == StatusCode::TOO_MANY_REQUESTS
-                    && busy < BUSY_RETRIES
+                    && attempt < BUSY_RETRIES
                 {
-                    busy += 1;
+                    attempt += 1;
                     let wait = reply.headers[header::RETRY_AFTER]
                         .to_str()
                         .ok()
@@ -2171,10 +2196,14 @@ pub(super) mod refresh_herd {
                     sleep(Duration::from_secs(wait)).await;
                     continue;
                 }
-                if retry && !retried && reply.status == StatusCode::SERVICE_UNAVAILABLE {
-                    retried = true;
-                    let wait = random.lock().unwrap().between(RETRY_MIN_MS, RETRY_MAX_MS);
-                    sleep(wait).await;
+                if read == Read::View
+                    && reply.status == StatusCode::CONFLICT
+                    && serde_json::from_str::<Value>(&reply.body)
+                        .is_ok_and(|body| body["code"] == "stale")
+                    && attempt < STALE_RETRIES
+                {
+                    attempt += 1;
+                    sleep(STALE_WAIT).await;
                     continue;
                 }
                 break reply;
@@ -2507,11 +2536,14 @@ pub(super) mod refresh_herd {
                 .iter()
                 .filter(|read| read.statuses.contains(&503))
                 .count();
-            let view_busy = reads
-                .iter()
-                .filter(|read| read.read == Read::View)
-                .map(|read| read.statuses.iter().filter(|s| **s == 429).count())
-                .sum::<usize>();
+            let view_answers = |status: u16| {
+                reads
+                    .iter()
+                    .filter(|read| read.read == Read::View)
+                    .map(|read| read.statuses.iter().filter(|s| **s == status).count())
+                    .sum::<usize>()
+            };
+            let (view_busy, view_stale) = (view_answers(429), view_answers(409));
             let document_degraded: BTreeMap<String, usize> = reads
                 .iter()
                 .flat_map(|read| read.degraded.iter())
@@ -2578,6 +2610,7 @@ pub(super) mod refresh_herd {
                 "reads_with_a_503": retried_503,
                 "terminal_failures": terminal,
                 "view_429_answers": view_busy,
+                "view_409_stale_answers": view_stale,
                 "document_parts_not_ready": document_degraded,
                 "current_after_send": spread(lags),
                 "pages_not_current": stale,
@@ -2757,6 +2790,11 @@ pub(super) mod refresh_herd {
             .await
             .unwrap();
         assert!(matches!(posted, CommandResult::Committed(_)), "{posted:?}");
+        // `Set` is the share dialog's personal role choice, which is how an
+        // owner shares with each member. For a member with no rows it writes
+        // exactly what `Ensure` (the literal form of the additive share this
+        // setup made before W4) writes, so the measured shape is the same
+        // either way (release B integration review, NIT-4).
         for principal in &members {
             let shared = stores
                 .workspace
@@ -2793,8 +2831,8 @@ pub(super) mod refresh_herd {
             "setup".into(),
             json!({
                 "owner": 1, "members": MEMBERS,
-                "share": "Workspace::share_work per member with record_write (25 shares); no organization-wide share on this branch",
-                "lists": "items: one shared row the owner changes; entries: a second shared list (no per-person list on this branch), 8 entries",
+                "share": "25 personal Contributor shares (Workspace::share_work, ShareMode::Set, one per member); the organization-wide share exists but is not exercised",
+                "lists": "items: one shared row the owner changes once per herd, the only write during a run; entries: a second shared list with 8 entries written before the runs; no private-entries (own) list is exercised",
                 "views": ["current (records_list)", "total (record_summary)", "by_choice (record_ranking)", "by_item (typed table over items)", "answer_form (form)"],
             }),
         );
@@ -3001,7 +3039,7 @@ pub(super) mod refresh_herd {
         report.insert("runs".into(), json!(runs));
         report.insert(
             "limits".into(),
-            json!("Local Docker PostgreSQL on a shared, loaded macOS host; HTTP through the composed router in process (no TLS to the client, no browser, no network); the replay is the APP-195 client's timing, not a browser. Each page plays both the work page's document read and the canvas board's batch and view reads at once. The test profile is unoptimized; the service image is a release build."),
+            json!("Local Docker PostgreSQL on a shared, loaded macOS host; HTTP through the composed router in process (no TLS to the client, no browser, no network); the replay is the shipped client's timing (APP-195's jitter and 503 retry, the view's 429 and APP-198 stale re-reads), not a browser. One writer per herd on shared lists: no own list and no organization-wide share. Each page plays both the work page's document read and the canvas board's batch and view reads at once. The test profile is unoptimized; the service image is a release build."),
         );
 
         println!("APP195 report: {}", serde_json::to_string(&report).unwrap());

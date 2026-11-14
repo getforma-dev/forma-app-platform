@@ -127,17 +127,20 @@ DISPOSITION = Path(__file__).with_name('scan-disposition.json')
 # needs a reviewed change to this constant. The JSON adds only what binds the review
 # to real images: each role's predecessor manifest, the deployment contract and the
 # complete scanner fingerprints. The file and this pin land and leave together; a
-# disposition covers one release (its contract is that release's `to` contract and it
-# expires with it).
+# disposition covers one promotion. Its contract is the promoted candidate's (a schema
+# release's `to` contract), and while a schema release is committed it expires with
+# it; with none committed it names its own expiry (test_scan.binding_problems).
 #
 # None: no disposition is pending, and any newly introduced finding refuses
-# ('new scan findings require separately reviewed disposition'). Release A's
-# (APP-175: 16 findings, f00adb9a..., expired 2026-11-20) was spent when release A
-# went live on 2026-11-14, because its predecessors are no longer live; it was removed
-# with release B's schema record (APP-194) and stays a test fixture
-# (test_scan.release_a_disposition). If release B's preparation introduces findings,
-# ops.promotion.scan_renewal generates the next file and this pin against release B's
-# `to` contract (docs/operations/TRIAL-RUNBOOK.md section 8). Earlier records
+# ('new scan findings require separately reviewed disposition'). Release B's
+# (APP-194: CVE-2025-6020, HIGH, pam, one per role, e35d6b45..., expiring 2026-11-26)
+# was spent when release B went live on 2026-11-14, because its predecessors are no
+# longer live; it was removed in release B's close-out
+# (evidence/APP-194/release-2026-11-14.md). Release A's (APP-175: 16 findings,
+# f00adb9a..., expired 2026-11-20) was spent the same way and stays a test fixture
+# (test_scan.release_a_disposition). If a later preparation introduces findings,
+# ops.promotion.scan_renewal generates the next file and this pin against the promoted
+# candidate's contract (docs/operations/TRIAL-RUNBOOK.md section 8). Earlier records
 # (APP-173, APP-167) stay under evidence/.
 REVIEWED_DISPOSITION = None
 

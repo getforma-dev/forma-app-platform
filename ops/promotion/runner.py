@@ -59,10 +59,11 @@ SCHEMA_SEQUENCE = ['snapshot database'] + SEQUENCE[:3] + ['run reviewed migratio
 # checks, venv, CI recheck, OIDC) run first under its 75-minute timeout; the
 # role session lasts 3600 s from just before this step. The per-wait bounds
 # alone exceed the session: stop settle 900 + stack update 1200 + settle 900 +
-# activation settle 900 + health 900 = 4800 s, and a schema release adds its
-# snapshot (720 s) and migration (720 s). So execute carries one 55-minute
-# budget and clips every wait to what remains; once it is spent the run refuses
-# with the lease held instead of being killed mid-call. Each AWS wait can
+# activation settle 900 + health 900 = 4800 s, and a schema migration adds its
+# snapshot (720 s) and migration (720 s); a contract-only release adds neither
+# (APP-210). So execute carries one 55-minute budget and clips every wait to
+# what remains; once it is spent the run refuses with the lease held instead of
+# being killed mid-call. Each AWS wait can
 # overrun its bound by one 10 s poll and one call. Outside the budget, after
 # the health wait: one boundary read (about 17 AWS calls), six public probes and two
 # S3 writes. Each is short in practice; their bounds are 65 s per AWS call
@@ -202,7 +203,10 @@ class Runner:
         expected = packet.get('schema_release')
         if expected is None:
             return release is None
-        return release is not None and dict(release, snapshot_identifier=schema_release.snapshot_identifier(promotion, release['to_version'])) == expected
+        if release is not None and schema_release.migrates(release):
+            # Only a migration names a snapshot (APP-210).
+            release = dict(release, snapshot_identifier=schema_release.snapshot_identifier(promotion, release['to_version']))
+        return release is not None and release == expected
 
     def prepare(self, request, directory):
         guards.request(request, 'prepare')
@@ -211,7 +215,8 @@ class Runner:
         self.store.load(); self.caller('prepare')
         bundle, release = self.bundle(directory, request)
         promotion = str(uuid.uuid4())
-        if release:
+        if release and schema_release.migrates(release):
+            # A contract-only release takes no snapshot, so it names none (APP-210).
             release = dict(release, snapshot_identifier=schema_release.snapshot_identifier(promotion, release['to_version']))
         self.store.acquire(promotion, request['authorization'], request['candidate_sha'])
         before = self.boundary(1, require_settled=False)
@@ -263,6 +268,8 @@ class Runner:
         self.store.immutable('promotions/' + promotion + '/packet.json', packet)
         self.store.change(lambda d: d['active'].update(phase='prepared', packet=packet, packet_sha256=packet_sha))
         cost = receipt['cost_by_month'][self.clock().strftime('%Y-%m')]
+        # A contract-only release preserves the schema and runs the normal sequence (APP-210).
+        migrating = bool(release) and schema_release.migrates(release)
         return {'status': 'prepared', 'candidate_sha': request['candidate_sha'], 'promotion_id': promotion,
                 'packet_sha256': packet_sha,
                 'review': {'images': {role: bundle['images'][role]['index_digest'] for role in guards.REPOS},
@@ -270,11 +277,11 @@ class Runner:
                     'deployment_contract_sha256': bundle['source']['deployment_contract_sha256'],
                     'schema_version': state['policy']['schema_version'],
                     'schema_release': release and {key: release[key] for key in ['from_version', 'to_version', 'spec_sha256']},
-                    'preserved': dict(dict.fromkeys(['schema', 'template', 'trial', 'aliases', 'secrets'], True), schema=not release),
+                    'preserved': dict(dict.fromkeys(['schema', 'template', 'trial', 'aliases', 'secrets'], True), schema=not migrating),
                     'changes': [{'logical_id': c['ResourceChange']['LogicalResourceId'], 'resource_type': c['ResourceChange']['ResourceType'],
                                  'action': c['ResourceChange']['Action'], 'replacement': c['ResourceChange']['Replacement']} for c in described['Changes']],
                     'scan': scan_delta,
-                    'sequence': SCHEMA_SEQUENCE if release else SEQUENCE,
+                    'sequence': SCHEMA_SEQUENCE if migrating else SEQUENCE,
                     'outage_required': True},
                 'cost_genui_cents': cost['genui_total_cents'],
                 'cost_total_cents': cost['project_total_cents'], 'expires_at_utc': config['deployment_expires_at_utc']}
@@ -401,7 +408,10 @@ class Runner:
         validate_approval(approval, request['authorization']['run_id'], request['candidate_sha'])
         self.store.immutable('promotions/' + active['promotion_id'] + '/approval.json', approval)
         before = self.final_checks(request, packet, active['promotion_id'])
-        if packet.get('schema_release'):
+        reviewed = packet.get('schema_release')
+        # A contract-only release snapshots and migrates nothing (APP-210).
+        migrating = bool(reviewed) and schema_release.migrates(reviewed)
+        if migrating:
             # Snapshot before the outage, then recheck everything again so the
             # outage still starts immediately after a complete recheck.
             self.snapshot_schema(active['promotion_id'], packet, before['outputs'])
@@ -422,7 +432,7 @@ class Runner:
         after = self.boundary(0, packet['parameters'], after=True)
         self.store.immutable('promotions/' + active['promotion_id'] + '/stopped-after-execute.json', after)
         migrated = None
-        if packet.get('schema_release'):
+        if migrating:
             migrated = self.migrate_schema(active['promotion_id'], packet, after)
             # The migration took minutes; prove nothing else moved before activation intent.
             after = self.boundary(0, packet['parameters'], after=True)
@@ -445,22 +455,25 @@ class Runner:
                    'service_revision': int(outputs['TaskDefinition'].rsplit(':', 1)[1]),
                    'broker_revision': int(outputs['SharedBrokerTaskDefinition'].rsplit(':', 1)[1])}
         verified = {'summary': summary, 'healthy': healthy, 'public_probes': probes}
-        if migrated:
-            verified['schema_release'] = migrated
+        # The migration's record names its snapshot and task; a contract-only release's is the release itself.
+        record = migrated or (dict(reviewed) if reviewed else None)
+        if record:
+            verified['schema_release'] = record
         self.store.immutable('promotions/' + active['promotion_id'] + '/verified.json', verified)
         def finish(document):
             document['live'].update(candidate_sha=request['candidate_sha'], window_id=active['promotion_id'], config=packet['config'],
                 parameters=packet['parameters'], outputs=outputs, registry=packet['registry'], stack_execution_role_arn=document['authority']['execution_role_arn'])
             document['baseline'].update(definitions=healthy['definitions'], schedules=healthy['schedules'])
             document['completed'][active['promotion_id']] = summary
-            if migrated:
-                # The migrated schema and its contract become the next promotion's baseline.
-                require(document['policy']['schema_version'] == migrated['from_version'], 'schema policy changed during release')
+            if record:
+                # The release's schema and contract become the next promotion's baseline. A
+                # contract-only release keeps the schema digest and version, which equal its `to`.
+                require(document['policy']['schema_version'] == record['from_version'], 'schema policy changed during release')
                 source = packet['bundle']['source']
                 document['baseline'].update(schema_manifest_sha256=source['schema_manifest_sha256'],
                                             deployment_contract_sha256=source['deployment_contract_sha256'])
-                document['policy']['schema_version'] = migrated['to_version']
-                document['completed'][active['promotion_id']] = dict(summary, schema_release=migrated)
+                document['policy']['schema_version'] = record['to_version']
+                document['completed'][active['promotion_id']] = dict(summary, schema_release=record)
             document['active'] = None
         self.store.change(finish)
         return summary

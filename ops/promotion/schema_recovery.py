@@ -16,7 +16,8 @@ require exactly the prior version on every connection, so they become healthy
 only if that holds. A migration that exited 0 committed the new version; one
 that exited with the reserved code 4 may have; any other code is not the
 program's own. Each of those refuses: read the schema version and fix forward
-(docs/pitch/BETA-PROMOTION.md).
+(docs/pitch/BETA-PROMOTION.md). A contract-only release (APP-210) also refuses:
+it has no migration to have failed, and its failures are a normal promotion's.
 """
 import hashlib
 import json
@@ -94,6 +95,10 @@ def plan(runner, expected_state_sha256, read_run=api):
     packet = (active or {}).get('packet') or {}
     release = packet.get('schema_release')
     require(active and active['phase'] == 'executing' and release, 'only an executing schema release can be restored')
+    # A contract-only release (APP-210) took no snapshot and ran no migration: a failure in it
+    # is a normal promotion's failure, reconciled as one, never restored here.
+    require(schema_release.migrates(release),
+            'only an executing schema migration can be restored; reconcile a contract-only release as a normal promotion')
     journal = active['journal']
     names = [x['name'] for x in journal]
     require(all(x['status'] == 'confirmed' for x in journal), 'unknown operation must be reconciled')

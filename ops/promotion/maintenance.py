@@ -106,13 +106,14 @@ def pre_outage_snapshot(runner, active, state, store):
     receipt. An unknown outcome (an intent: refused, denied or unanswered) is
     read back once by its deterministic name and the observation is recorded:
     absent, or present with its status. Any snapshot is kept as evidence; this
-    makes no other RDS call and never deletes one.
+    makes no other RDS call and never deletes one. A contract-only release
+    (APP-210) names no snapshot, so any `schema-` entry beside one refuses.
     """
     entries = [x for x in active['journal'] if x['name'].startswith('schema-')]
     if not entries:
         return None
     release = (active.get('packet') or {}).get('schema_release')
-    require(active['phase'] == 'prepared' and release and len(entries) == 1
+    require(active['phase'] == 'prepared' and release and schema_release.migrates(release) and len(entries) == 1
             and entries[0]['name'] == 'schema-snapshot' and entries[0]['status'] in ['confirmed', 'intent', 'read-back'],
             'only one pre-outage snapshot may be abandoned')
     entry = entries[0]

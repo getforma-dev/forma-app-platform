@@ -199,7 +199,7 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 193 | [APP-193: Spike: live interaction from general primitives](0-backlog/APP-193.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
 | 194 | [APP-194: Schema release B: migrations 0023 and 0024](0-backlog/APP-194.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-182, APP-183, APP-186, APP-190, APP-191, APP-192 |
 | 195 | [APP-195: Refresh herd: bounded waiting at the data pool and jittered live refreshes](0-backlog/APP-195.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
-| 197 | [APP-196: Tier A review of the schema restore command and the scan-delta binding](0-backlog/APP-196.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-175 |
+| 197 | [APP-196: Tier A review of the schema restore command and the scan-delta binding](4-done/APP-196.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Done | APP-175 |
 | 198 | [APP-197: Catalog verification at most every 30 s per connection](0-backlog/APP-197.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-195 |
 | 199 | [APP-198: A stale record snapshot is never shown as "no access"](0-backlog/APP-198.md) | [PH09](phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-191 |
 | 200 | [APP-189: Go-live: build day, rehearsal, codes and the class](0-backlog/APP-189.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-182, APP-183, APP-184, APP-185, APP-186, APP-187, APP-188, APP-190, APP-191, APP-192, APP-194, APP-195, APP-196, APP-197, APP-198 |
@@ -214,4 +214,5 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 209 | [APP-207: The composer generates the participation primitives from plain words](0-backlog/APP-207.md) | [PH09](phases/PH09.md) | S15 | AI | P0 | M | Backlog | APP-202 |
 | 210 | [APP-208: Multi-select fields (stretch): checkboxes with per-option counts](0-backlog/APP-208.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-202, APP-203, APP-204, APP-205 |
 | 211 | [APP-209: Release C: the participation primitives as one normal promotion](0-backlog/APP-209.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-202, APP-203, APP-204, APP-205, APP-206, APP-207 |
+| 212 | [APP-210: Reviewed contract-only release: image contexts may change without a migration](0-backlog/APP-210.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-194 |
 | 213 | [APP-211: No misleading score for a viewer who cannot read the key; grading by name in the record chooser](0-backlog/APP-211.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-204, APP-205 |
