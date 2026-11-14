@@ -7,7 +7,7 @@ This disposition covers only the APP-194 schema release, 22 → 24. It is bound 
 - the three live images of release A as predecessors (`live.registry.<role>.manifest_digest`);
 - an expiry of **2026-11-26 00:00 UTC**, the schema release's own.
 
-It accepts one finding per image: **CVE-2025-6020**, HIGH (CVSS 3.1 7.8, `AV:L/AC:L/PR:L/UI:N`), in `pam` 1.5.2-6+deb12u2. None is CRITICAL and none is removed. The exact fingerprints are in [`scan-disposition.json`](../../ops/promotion/scan-disposition.json). The source pin in `ops/promotion/registry.py` names this record, the three roles, the expiry and the finding's severity and package.
+It accepts one finding per image: **CVE-2025-6020**, HIGH (CVSS 3.1 7.8, `AV:L/AC:L/PR:L/UI:N`), in `pam` 1.5.2-6+deb12u2. None is CRITICAL and none is removed. The exact fingerprints are in [`scan-disposition.json`](https://github.com/getforma-dev/forma-app-platform/blob/140a5a9f7bfcbea8545ca3410f7c9b6a5ace6d6f/ops/promotion/scan-disposition.json). The source pin in `ops/promotion/registry.py` names this record, the three roles, the expiry and the finding's severity and package.
 
 Any other finding, severity, package, predecessor, contract or later date is refused. Once release B succeeds, the finding becomes an ordinary baseline finding.
 

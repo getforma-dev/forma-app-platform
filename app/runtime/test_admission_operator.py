@@ -886,8 +886,14 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         # Read-only: no operator event and no row changed.
         self.assertNotIn(("permission.granted",), self.operator_events()[-1:])
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
-        # stats counts every closed table for the organization and names the proved schema version.
+        # stats counts every closed table for the organization and names the proved schema version,
+        # including 0023's consent records (release B integration review, NIT-5).
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.member_consents VALUES (%s,%s,1,now(),%s)", (ORG, uploader, str(uuid.uuid4())))
         counted = self.cli("stats", "--organization", ORG)
+        consents = self.query("SELECT count(*) FROM genui.member_consents WHERE organization_id=%s", (ORG,))[0][0]
+        self.assertGreaterEqual(consents, 1)
+        self.assertEqual(counted["counts"]["member_consents"], consents)
         self.assertEqual(set(counted), {"organization_id", "schema_version", "counts", "audit_heads", "audit_events"})
         self.assertEqual(counted["audit_events"], self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,))[0][0])
         self.assertEqual(set(counted["counts"]), set(op.STATS_TABLES))

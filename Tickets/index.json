@@ -370,7 +370,7 @@
         "APP-201"
       ],
       "ticket_count": 38,
-      "done_count": 7,
+      "done_count": 8,
       "blocked_count": 0
     }
   ],
@@ -391,7 +391,7 @@
     "APP-170",
     "APP-171",
     "APP-176",
-    "APP-196"
+    "APP-201"
   ],
   "tickets": [
     {
@@ -6016,7 +6016,7 @@
       "Depends on": "APP-175, APP-182, APP-183, APP-186, APP-190, APP-191, APP-192",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`release/b-schema-24`, PR #124",
+      "Branch / PR": "`release/b-schema-24`, PR #124 (merged as `c40d4535`); the scan disposition, PR #125 (`140a5a9f`); the close-out, `chore/app-194-close-out`",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
@@ -6061,11 +6061,11 @@
     {
       "id": "APP-196",
       "title": "Tier A review of the schema restore command and the scan-delta binding",
-      "path": "0-backlog/APP-196.md",
+      "path": "4-done/APP-196.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "Done",
       "Priority": "P1",
       "Type": "Verification",
       "Sprint": "S15",
@@ -6078,10 +6078,10 @@
       "Depends on": "APP-175",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`review/app-196` (the review) and `fix/app-196-restore` (the fixes), [PR #122](https://github.com/getforma-dev/forma-app-platform/pull/122)",
+      "Branch / PR": "`review/app-196` (the review) and `fix/app-196-restore` (the fixes), [PR #122](https://github.com/getforma-dev/forma-app-platform/pull/122), merged with release B (PR #124, `c40d4535`, 2026-11-14 15:24 UTC)",
       "Team": "GenUI",
-      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
-      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "Blocked by": "None",
+      "Unblock evidence": "Not applicable.",
       "dependencies": [
         "APP-175"
       ]
