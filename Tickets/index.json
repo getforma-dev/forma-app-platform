@@ -6290,7 +6290,7 @@
       "Depends on": "APP-188, APP-194",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`ops/app-212-purge-guest-links`",
+      "Branch / PR": "`ops/app-212-purge-guest-links`, PR #130",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
