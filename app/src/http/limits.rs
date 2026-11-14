@@ -25,13 +25,17 @@ pub const fn per(limit: usize, seconds: u64) -> Window {
     }
 }
 
-/// ADR-006 `POST /signin/{handle}`: 10/minute and 60/hour per address class.
-pub const SIGNIN_ADDRESS: &[Window] = &[per(10, 60), per(60, 3600)];
+/// ADR-006 `POST /signin/{handle}`: 10/minute per address class, and 150/hour
+/// (ADR-006 said 60). APP-189 classroom network risk: a class of 25 shares
+/// one address behind NAT, so the hourly window is sized for the room.
+pub const SIGNIN_ADDRESS: &[Window] = &[per(10, 60), per(150, 3600)];
 /// ADR-006 `POST /signin/{handle}`: 600/hour across the service.
 pub const SIGNIN_GLOBAL: &[Window] = &[per(600, 3600)];
-/// ADR-006 `POST /invite/validate`: 5/minute and 20/day per address class
-/// (under fAuth's registration burst of 5).
-pub const INVITE_ADDRESS: &[Window] = &[per(5, 60), per(20, 86_400)];
+/// ADR-006 `POST /invite/validate`: 5/minute per address class (under fAuth's
+/// registration burst of 5), and 100/day (ADR-006 said 20). APP-189
+/// classroom network risk: 25 invitations are redeemed from one shared
+/// address behind NAT.
+pub const INVITE_ADDRESS: &[Window] = &[per(5, 60), per(100, 86_400)];
 /// ADR-006 `POST /invite/validate`: 200/day across the service.
 pub const INVITE_GLOBAL: &[Window] = &[per(200, 86_400)];
 /// ADR-006 resend: a 60-second per-account cooldown mirrored ahead of fAuth's
@@ -40,14 +44,14 @@ pub const RESEND_ACCOUNT: &[Window] = &[per(1, 60), per(5, 86_400)];
 /// APP-074 review M2 (ADR-006 amendment, callback row): `GET /auth/callback`
 /// per address class, sized at the sum of the starts that precede a
 /// legitimate return (sign-in 10/minute + invitation 5/minute; sign-in
-/// 60/hour + invitation 20/day), so no real return is refused.
-pub const CALLBACK_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
+/// 150/hour + invitation 100/day, APP-189), so no real return is refused.
+pub const CALLBACK_ADDRESS: &[Window] = &[per(15, 60), per(250, 3600)];
 /// The callback across the service: sign-in 600/hour + invitation 200/day.
 pub const CALLBACK_GLOBAL: &[Window] = &[per(800, 3600)];
 /// Failed cookie lookups (no record, an unregistered organization) on
 /// `GET /workspace` and `GET /auth/pending` per address class, at the
-/// callback's size: a legitimate browser fails a lookup at most once per
-/// arrival before its cookie is replaced.
+/// callback's ADR-006 size: a legitimate browser fails a lookup at most once
+/// per arrival before its cookie is replaced, so a room of 25 fits.
 pub const LOOKUP_FAILURE_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
 
 /// APP-113 review: per member, the routes that create or change rows with
@@ -281,10 +285,13 @@ mod tests {
         }
         let minute = limiter.admit_blocked_at(&checks("a"), start).unwrap_err();
         assert_eq!((minute.key, minute.period), (0, Duration::from_secs(60)));
+        // APP-189 classroom network risk: the day window is 100 (ADR-006: 20),
+        // reached here a minute's five at a time.
+        let per_minute = INVITE_ADDRESS[0].limit;
         let mut at = start;
-        for _ in 0..3 {
+        for _ in 1..INVITE_ADDRESS[1].limit / per_minute {
             at += Duration::from_secs(61);
-            for _ in 0..5 {
+            for _ in 0..per_minute {
                 assert!(limiter.admit_blocked_at(&checks("a"), at).is_ok());
             }
         }
@@ -293,6 +300,11 @@ mod tests {
             .unwrap_err();
         assert_eq!((day.key, day.period), (0, Duration::from_secs(86_400)));
         assert!(day.retry_after > 80_000);
+        assert_eq!(
+            (INVITE_ADDRESS[1].limit, SIGNIN_ADDRESS[1].limit),
+            (100, 150),
+            "APP-189 classroom network risk: a room of 25 behind one address"
+        );
         // The service window: 200 a day across classes.
         let global = Limiter::default();
         for i in 0..200 {
