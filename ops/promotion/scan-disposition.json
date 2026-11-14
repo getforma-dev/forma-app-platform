@@ -1,0 +1,89 @@
+{
+  "deployment_contract_sha256": "88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356",
+  "evidence": "evidence/APP-194/SCAN-DISPOSITION.md",
+  "expires_at_utc": "2026-11-26T00:00:00Z",
+  "roles": {
+    "operator": {
+      "findings": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.5.2-6+deb12u2"
+            },
+            {
+              "key": "package_name",
+              "value": "pam"
+            }
+          ],
+          "name": "CVE-2025-6020",
+          "severity": "HIGH"
+        }
+      ],
+      "predecessor_manifest_digest": "sha256:b6f961aef02015015205074d71d21372484bf34f6d31e4791cf4f135214593f4"
+    },
+    "qualification": {
+      "findings": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.5.2-6+deb12u2"
+            },
+            {
+              "key": "package_name",
+              "value": "pam"
+            }
+          ],
+          "name": "CVE-2025-6020",
+          "severity": "HIGH"
+        }
+      ],
+      "predecessor_manifest_digest": "sha256:0a5c0de768dcf026222414f6206b2dc2f4ed01ac22aeb5c400c714932889e97b"
+    },
+    "service": {
+      "findings": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.5.2-6+deb12u2"
+            },
+            {
+              "key": "package_name",
+              "value": "pam"
+            }
+          ],
+          "name": "CVE-2025-6020",
+          "severity": "HIGH"
+        }
+      ],
+      "predecessor_manifest_digest": "sha256:d6ff41a5232203e8a89fa6de6201069efafb2735f352cc7fbca58694bdcb6708"
+    }
+  },
+  "schema_version": 2
+}
