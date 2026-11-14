@@ -1,4 +1,4 @@
-import { h, mount } from '@getforma/core';
+import { h, mount, createList } from '@getforma/core';
 
 // APP-074 (ADR-006 GET /invite): the public invitation entry. One labeled
 // code field posts to /invite/validate (same origin, no JavaScript). Every
@@ -10,6 +10,11 @@ import { h, mount } from '@getforma/core';
 // APP-074 review m4: a limit names the ADR-006 window that refused it (this
 // network's minute or day, or the service's day), and an outage before any
 // code is judged (`unavailable`, status 503) is this page, never raw JSON.
+// Trial plan D5 (ADR-008 amendment 2026-11-14): the beta notice is shown in
+// full, from the one constant in `auth::notice`, and the required `consent`
+// checkbox (value 1) records agreement to that notice version; the handler
+// refuses a submission without it before any work.
+type NoticeParagraph = { id: string; lead: string; hasLead: boolean; text: string };
 type InviteProps = {
   failed: boolean;
   limitMinute: boolean;
@@ -17,6 +22,10 @@ type InviteProps = {
   limitService: boolean;
   unavailable: boolean;
   describedBy: string;
+  noticeTitle: string;
+  noticeVersion: string;
+  notice: NoticeParagraph[];
+  consentLabel: string;
 };
 
 function Invite(props: InviteProps) {
@@ -58,6 +67,16 @@ function Invite(props: InviteProps) {
           minutes.
         </p>
       ) : null}
+      <section class="beta-notice" aria-labelledby="invite-notice-title" data-notice-version={props.noticeVersion}>
+        <h2 id="invite-notice-title">{props.noticeTitle}</h2>
+        {createList(() => props.notice, paragraph => paragraph.id, paragraph => (
+          <p>
+            {paragraph.hasLead ? <strong>{paragraph.lead}</strong> : null}
+            {paragraph.hasLead ? ' ' : ''}
+            {paragraph.text}
+          </p>
+        ))}
+      </section>
       <form method="post" action="/invite/validate" class="entry">
         <label for="invite-code">Invitation code</label>
         <input
@@ -74,6 +93,10 @@ function Invite(props: InviteProps) {
           Dashes and spaces are ignored. After this step you create your account
           with the email address the invitation names.
         </p>
+        <p class="consent">
+          <input id="invite-consent" name="consent" type="checkbox" value="1" required />
+          <label for="invite-consent">{props.consentLabel}</label>
+        </p>
         <button type="submit">Continue</button>
       </form>
       <p>
@@ -86,6 +109,6 @@ function Invite(props: InviteProps) {
 
 // The native build uses Invite as its typed root and publishes no JS.
 mount(
-  () => Invite({ failed: false, limitMinute: false, limitDay: false, limitService: false, unavailable: false, describedBy: 'invite-help' }),
+  () => Invite({ failed: false, limitMinute: false, limitDay: false, limitService: false, unavailable: false, describedBy: 'invite-help', noticeTitle: '', noticeVersion: '', notice: [], consentLabel: '' }),
   '#app',
 );

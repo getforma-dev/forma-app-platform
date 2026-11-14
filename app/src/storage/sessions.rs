@@ -753,6 +753,9 @@ impl Workspace {
                 .admit(&pre.nonmember(), organization, &pending, &payload)
                 .await?
             {
+                // 0023 (D6): the directory cache follows the membership row;
+                // a newly admitted member has no display name yet.
+                crate::directory::set_member_name(organization, &principal, None);
                 return Ok(Completion::Member(AdmittedMember {
                     principal,
                     entitlement,

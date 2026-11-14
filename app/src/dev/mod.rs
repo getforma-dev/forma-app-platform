@@ -410,6 +410,12 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         .readiness()
         .await
         .map_err(|e| format!("database readiness: {e}"))?;
+    // 0023 (D6): the member display names the directory label reads.
+    stores
+        .workspace
+        .load_display_names()
+        .await
+        .map_err(|e| format!("display names: {e}"))?;
 
     // --- The binary's pages ---
     let mut manifest = forma_server::assets::try_load_manifest::<Assets>()
