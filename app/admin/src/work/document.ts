@@ -33,6 +33,27 @@ export function documentRefresher(refresh: (mode: RefreshMode) => void, timing: 
   };
 }
 
+/**
+ * The page's own refresh triggers (APP-195). Shown again, the 30 s check
+ * while visible, and the Refresh button read at once with the page fetch,
+ * as before. Coming back `online` is treated like a live hint (0–3 s, one
+ * retry): every device on one network comes back at the same moment, and
+ * the event stream's reconnect sends `stream.lagged` anyway. Returns the
+ * 30 s check. Every listener ends with `signal`.
+ */
+export function listenForRefreshes(
+  page: EventTarget & { visibilityState: string },
+  network: EventTarget,
+  refresher: { shown(): void; member(): void; hint(): void },
+  signal: AbortSignal,
+): () => void {
+  const visible = () => { if (page.visibilityState === 'visible') refresher.shown(); };
+  page.addEventListener('visibilitychange', visible, { signal });
+  page.addEventListener('forma:document-refresh', () => { refresher.member(); }, { signal });
+  network.addEventListener('online', () => { refresher.hint(); }, { signal });
+  return visible;
+}
+
 /** The read of each mode: the member's is the page's fetch, unchanged; a live one retries once (`retryOnce`). */
 export function documentRead(mode: RefreshMode, timing: Timing = browserTiming, request: Fetch = (input, init) => fetch(input, init)): Fetch {
   return mode === 'live' ? retryOnce(timing, request) : request;
@@ -82,8 +103,6 @@ export function startDocument(): void {
     refresher.dispose();
     lifecycle.abort();
     window.clearInterval(timer);
-    document.removeEventListener('visibilitychange', visible);
-    document.removeEventListener('forma:document-refresh', requested);
   };
   const refresh = async (mode: RefreshMode = 'member') => {
     if (stopped) return;
@@ -228,17 +247,13 @@ export function startDocument(): void {
   // The member's own refreshes, and the page's checks of access, read at once
   // with the page's plain fetch (unchanged by APP-195).
   root.addEventListener('forma:record-components-unavailable', () => { refresher.member(); }, { signal: lifecycle.signal });
-  const visible = () => { if (document.visibilityState === 'visible') refresher.shown(); };
-  const requested = () => { refresher.member(); };
+  const visible = listenForRefreshes(document, window, refresher, lifecycle.signal);
   // The stream can omit a revocation hint; bounded reads also recheck access.
   const timer = window.setInterval(visible, 30_000);
-  document.addEventListener('visibilitychange', visible);
-  document.addEventListener('forma:document-refresh', requested);
   document.addEventListener('forma:presentation-saved', event => {
     const detail = (event as CustomEvent<{app: string; work: string}>).detail;
     if (detail?.app === app && detail.work === work) refresher.member();
   }, { signal: lifecycle.signal });
-  window.addEventListener('online', requested, { signal: lifecycle.signal });
   window.addEventListener('pagehide', event => {
     stop();
     if (event.persisted) window.addEventListener('pageshow', () => startDocument(), { once: true });

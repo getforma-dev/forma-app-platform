@@ -182,7 +182,8 @@ function streamLive(
 // delay of 0–3 s, and a read that fails with a 503 or a network error is tried
 // once more after a uniform random 1–3 s before the page shows that it failed.
 // The page that committed reads at once. Refreshes the member starts (Refresh,
-// coming back to the tab, coming back online) do not use this section.
+// coming back to the tab) do not use this section. Coming back online does,
+// like a hint: every device on one network comes back at the same moment.
 // A hidden page schedules nothing for a hint: it is marked stale and reads
 // once when it is shown again (APP-195, Fable decision of 2026-11-14).
 // The random source, the clock and the page's visibility are injectable, so
@@ -329,6 +330,8 @@ export function retryOnce(timing: Timing = browserTiming, request: Fetch = (inpu
     try {
       const response = await request(input, init);
       if (response.status !== 503) return response;
+      // Free the refused answer's connection now, not at garbage collection.
+      void response.body?.cancel().catch(() => undefined);
     } catch (error) {
       if (init?.signal?.aborted) throw error;
     }

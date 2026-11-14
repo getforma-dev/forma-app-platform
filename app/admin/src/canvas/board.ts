@@ -1497,7 +1497,8 @@ export function onLiveEvent(listener: (event: LiveEvent) => void): void {
   liveListeners.push(listener);
 }
 
-function onLive(event: LiveEvent): void {
+/** The board's reaction to one live event (exported for its wiring test). */
+export function onLive(event: LiveEvent): void {
   if (event.kind !== 'stream.lagged') liveArrivals.set(event.work_id, performance.now());
   // APP-195: every page that has the work open gets the same hint at once, so
   // what a hint re-reads (the cards here and the listeners' own reads) starts
