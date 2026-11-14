@@ -378,6 +378,7 @@ async fn handoff(auth: &Auth, code: &str, class: &str) -> Result<(String, String
             FlowKind::SignUp {
                 code_digest: &digest,
                 handoff: Some(&capability.invitation),
+                notice_version: super::notice::NOTICE_VERSION,
             },
             &sealed,
             class,
