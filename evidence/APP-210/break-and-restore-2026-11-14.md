@@ -51,3 +51,25 @@ Without B17 the restore still refused, but on its journal check ("restore requir
 - Fake AWS only. No AWS call was made and no canonical state was read. That the live baseline will hold release B's `to` after release B rests on release B's own execution, which is in progress.
 - The scratch script that applied the breaks is not committed. The table records each break's exact change.
 - The simulated committed record used a synthetic `from` contract. Release C's real record needs its own evidence record and pin, and its own review.
+
+## After the Tier A review: the four NITs (2026-11-14)
+
+The [review](review-2026-11-14.md) of `40c08dc9` found no BLOCKER and no MAJOR, and four NITs. They were fixed on the same branch, tests first. The new test for NIT-1 (`test_a_snapshot_entry_beside_a_contract_only_release_refuses_abandonment_by_name`), run before the fix, ended in `KeyError: 'snapshot_identifier'` at `maintenance.py:123`, the review's R5. The five NIT-4 subtests added to `test_a_contract_only_release_off_its_baseline_refuses_before_the_lock` (`infrastructure`, `manifest moved at 24`, `manifest moved at 25`, `committed manifest differs from the qualified source`, `another checkout`) passed before any change, because `applicable` is unchanged; the breaks below show that each one has a guard to lose. NIT-2 and NIT-3 are documentation (the trial runbook's section 3a and BETA-PROMOTION's "Contract-only releases") and have no test.
+
+Each break was applied by a scratch script (not committed), the whole suite ran (249 tests), the file was written back from its saved bytes, and its SHA-256 was compared. The one targeted test then ran under the same break, for the subtest names.
+
+| # | Guard | Where | Break | Result with the break |
+| --- | --- | --- | --- | --- |
+| B18 | A contract-only packet carries no snapshot to abandon (NIT-1) | `maintenance.pre_outage_snapshot` | `schema_release.migrates(release)` removed from the `require` | 1 error: the NIT-1 test, `KeyError: 'snapshot_identifier'` (the review's R5) |
+| B19 | The infrastructure pin (NIT-4) | `schema_release.applicable` | the `infrastructure_digest(repo) == spec['infrastructure_sha256']` line removed | 5 failures: the new `infrastructure` subtest ("Refused not raised"), with `test_a_contract_only_release_changed_or_expired_after_preparation_cannot_stop`, `test_release_changed_or_expired_after_preparation_cannot_stop`, `test_scope_mismatch_refuses_before_the_lock` and `ApplicabilityTests.test_every_scope_mismatch_refuses` |
+| B20 | The checkout is the candidate (NIT-4) | `schema_release.applicable` | `and checkout_head(repo) == candidate` removed | 4 failures: the new `another checkout` subtest, with `CommittedReleaseTests.test_committed_release_applies_only_to_its_reviewed_baseline`, `test_scope_mismatch_refuses_before_the_lock` and `test_every_scope_mismatch_refuses` |
+| B21 | `to.schema_manifest_sha256` equals the qualified source's (NIT-4) | `schema_release.applicable` | `after[key] == source[key]` skipped for the schema manifest key | 1 failure: the new `manifest moved at 24` subtest only. `manifest moved at 25` still refused, on the candidate manifest's `database_version` (25 is not the `to` version 24) |
+| B22 | The committed manifest bytes hash to the qualified source's digest (NIT-4) | `schema_release.applicable` | the `sha256(raw) == source['schema_manifest_sha256']` line removed | 2 failures: the new `committed manifest differs from the qualified source` subtest and `test_every_scope_mismatch_refuses` |
+
+Hashes: `maintenance.py` was `82fb31f9bffaf518…` before and after B18. `schema_release.py` was `24ba9635735e3836…` before and after each of B19–B22; that is the review's B3 value, so this commit leaves the file unchanged. The suite after the last restore: 249 tests, OK.
+
+### Commands and results
+
+- `python3 -m unittest discover -s ops/promotion -p 'test_*.py'`: 249 tests, OK (248 before: NIT-1 adds one test, and NIT-4 adds five subtests to an existing one).
+- `just check py-promotion py-ops board`: ok (249 promotion tests, 40 ops tests, board OK).
+- No Rust, `app/runtime` or `infra` file changed; the earlier limits on the Rust and Docker-backed steps stand, and CI on the pushed branch runs them.

@@ -846,9 +846,9 @@ class SchemaLifecycleTests(unittest.TestCase):
 
     # APP-210: a reviewed contract-only release (24 -> 24) promotes as a normal release does.
 
-    def contract_only(self):
+    def contract_only(self, candidate=CONTRACT_CANDIDATE):
         """A contract-only release from a live baseline at schema 24."""
-        self.build(candidate=CONTRACT_CANDIDATE, reviewed=contract_spec(), policy=24)
+        self.build(candidate=candidate, reviewed=contract_spec(), policy=24)
 
     def test_a_contract_only_release_promotes_with_exactly_the_normal_mutations(self):
         self.contract_only()
@@ -905,14 +905,24 @@ class SchemaLifecycleTests(unittest.TestCase):
     def test_a_contract_only_release_off_its_baseline_refuses_before_the_lock(self):
         def persisted(change):
             return lambda: (change(self.initial), self.s3.objects.update({'beta/state.json': encoded(self.initial)}))
-        cases = [('baseline contract', persisted(lambda s: s['baseline'].update(deployment_contract_sha256='0' * 64))),
-                 ('baseline schema', persisted(lambda s: s['baseline'].update(schema_manifest_sha256='0' * 64))),
-                 ('policy version', persisted(lambda s: s['policy'].update(schema_version=23))),
-                 ('expired', lambda: setattr(self.runner, 'clock', lambda: EXPIRY))]
-        for name, mutate in cases:
+        def moved(version):
+            # The candidate's manifest moved while the record says it stays (Tier A review, NIT-4).
+            return encoded({'schema_version': 1, 'database_version': version, 'migrations': [{'name': '0025_moved.sql'}], 'catalog': []})
+        changed, checkout = 'separate reviewed release required', 'checkout differs from the candidate'
+        cases = [('baseline contract', CONTRACT_CANDIDATE, persisted(lambda s: s['baseline'].update(deployment_contract_sha256='0' * 64)), changed),
+                 ('baseline schema', CONTRACT_CANDIDATE, persisted(lambda s: s['baseline'].update(schema_manifest_sha256='0' * 64)), changed),
+                 ('policy version', CONTRACT_CANDIDATE, persisted(lambda s: s['policy'].update(schema_version=23)), changed),
+                 ('expired', CONTRACT_CANDIDATE, lambda: setattr(self.runner, 'clock', lambda: EXPIRY), changed),
+                 ('infrastructure', CONTRACT_CANDIDATE, lambda: setattr(self, 'infra', '5' * 64), changed),
+                 ('manifest moved at 24', moved(24), lambda: None, changed),
+                 ('manifest moved at 25', moved(25), lambda: None, changed),
+                 ('committed manifest differs from the qualified source', CONTRACT_CANDIDATE, lambda: setattr(self, 'candidate', moved(24)), changed),
+                 ('another checkout', CONTRACT_CANDIDATE,
+                  lambda: self.enterContext(patch.object(schema_release, 'checkout_head', lambda repo: 'b' * 40)), checkout)]
+        for name, candidate, mutate, message in cases:
             with self.subTest(name=name):
-                self.contract_only(); mutate()
-                with self.assertRaisesRegex(Refused, 'separate reviewed release required'): self.runner.prepare(self.request, self.directory)
+                self.contract_only(candidate); mutate()
+                with self.assertRaisesRegex(Refused, message): self.runner.prepare(self.request, self.directory)
                 persisted_state = self.store.load()
                 self.assertIsNone(persisted_state['active']); self.assertEqual(persisted_state['revision'], 0)
                 self.assertEqual(self.aws.calls, [])
@@ -945,6 +955,15 @@ class SchemaLifecycleTests(unittest.TestCase):
         # Nothing was admitted: the baseline and the policy are the release's `from`.
         self.assertEqual(final['baseline']['deployment_contract_sha256'], contract_spec()['from']['deployment_contract_sha256'])
         self.assertEqual(final['policy']['schema_version'], 24)
+
+    def test_a_snapshot_entry_beside_a_contract_only_release_refuses_abandonment_by_name(self):
+        # Tier A review, NIT-1: the packet names no snapshot, so a journaled one is a named refusal, not a KeyError.
+        self.contract_only(); self.prepared()
+        self.store.change(lambda d: d['active']['journal'].append({'name': 'schema-snapshot', 'status': 'confirmed'}))
+        state = self.store.load(); calls = len(self.aws.calls)
+        with self.assertRaisesRegex(Refused, 'only one pre-outage snapshot may be abandoned'): self.abandon()
+        self.assertEqual(self.store.load(), state)
+        self.assertFalse(any(s == 'rds' or o == 'delete_change_set' for s, o, _ in self.aws.calls[calls:]))
 
     def test_restore_after_failed_migration_refuses_a_contract_only_release(self):
         from ops.promotion import schema_recovery
