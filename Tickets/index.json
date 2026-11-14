@@ -377,7 +377,6 @@
     "APP-165",
     "APP-170",
     "APP-171",
-    "APP-202",
     "APP-206"
   ],
   "tickets": [
@@ -5649,11 +5648,11 @@
     {
       "id": "APP-202",
       "title": "Contract edition impl-2026-11-14.2: the participation grammar in both validators",
-      "path": "0-backlog/APP-202.md",
+      "path": "3-in-review/APP-202.md",
       "Field": "Value",
       "---": "---",
       "Epic": "FND",
-      "Status": "Backlog",
+      "Status": "In review",
       "Priority": "P0",
       "Type": "Feature",
       "Sprint": "S15",
@@ -5666,7 +5665,7 @@
       "Depends on": "None",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI (builder B0)",
-      "Branch / PR": "`relc/b0-grammar` (to open)",
+      "Branch / PR": "`release/c-participation` (no PR; Release C's branch, ADR-020 \u00a713)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection. Starts after release B's code (W1, W2, W4, W2b; edition `impl-2026-11-14.1`) is on the branch base.",
