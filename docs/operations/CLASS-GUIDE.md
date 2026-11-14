@@ -191,7 +191,7 @@ What a rehearsal cannot show: the 25-page herd. That is proved by the load evide
 
 - `Saving…` then `Saved · Commit <n>. Refreshing the app…`: done. The page re-reads itself.
 - `The record was busy. Submit again in a moment.` or `The result of your command could not be confirmed. Submitting again with the same form is safe: it can only return the stored outcome.`: press the button again on the **same form**. The same form can't save twice. Only a fresh form makes a new entry.
-- `The command was refused: a value is not one this command accepts. Nothing was changed.`: a field is empty or the wrong kind. Fix it and submit again.
+- `The command was refused: a value is not one this command accepts. Nothing was changed.`: a field is empty or the wrong kind. Fix it and submit again. *Release C:* on homework the teacher has already graded, it means the submission is locked with its grade; ask the teacher if you need to change it (APP-213).
 - `The record changed before your command. Nothing was changed by this submission. Start a new record and submit again.` or `The saved work moved to a newer revision. Start a new record under it.`: press Refresh and fill in a fresh form.
 - *Release C:* `Already locked in: your entry already holds these values.`: your answer was already saved as it is. Nothing to do.
 - *Release C:* `Not saved: the item this refers to is no longer open.`: the question or assignment closed before your answer arrived. Late answers are never saved quietly. Tell the teacher if you think it should still count.
