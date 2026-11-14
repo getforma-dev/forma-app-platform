@@ -330,15 +330,20 @@ fn demo_line(organization: &str) -> Option<Value> {
         .then(|| text::context(&format!("*Synthetic data:* {DEMO_NOTE}")))
 }
 
-/// DS-40: the words every demo-organization surface uses for its synthetic data.
-pub(super) const DEMO_NOTE: &str =
-    "The organization, people and records here are made up for the demo.";
+/// DS-40: the words every demo-organization surface uses for its synthetic
+/// data, one literal for both the constant and the plain-text suffix.
+macro_rules! demo_note {
+    () => {
+        "The organization, people and records here are made up for the demo."
+    };
+}
+pub(super) const DEMO_NOTE: &str = demo_note!();
 
 // DS-40: the same words for a plain-text message (the filed line, the
 // filer's DM, the link DM); empty outside a listed demo organization.
 pub(super) fn demo_suffix(organization: &str) -> &'static str {
     if crate::demo::is_demo_org(organization) {
-        " _Synthetic data: The organization, people and records here are made up for the demo._"
+        concat!(" _Synthetic data: ", demo_note!(), "_")
     } else {
         ""
     }

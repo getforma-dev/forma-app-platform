@@ -49,3 +49,25 @@ The campaign assertions match the new text: `ends_with("made up for the demo._")
 - `cargo test --locked -p forma-app-platform --lib slack::`: 11 passed, 0 failed, 438 filtered out.
 - `cargo fmt --check -p forma-app-platform`: exit 0, no files changed.
 - Not run, per the brief: `just campaign slack`, clippy, `just check`.
+
+## Recheck (4a85bacc)
+
+Verdict: **approve with one change to the box 5 note.**
+
+1. **Link page escaping: sound.** `who`, `user`, `team` and `token` are still escaped with `html_escape`. The new paragraph is fixed markup around `html_escape(DEMO_NOTE)`, a constant with no markup characters. The organization is the signed-in member's, which `confirm` then links (`slack/link.rs:210-229`). The campaign check keys on the Slack team rather than the member's organization (`slack_campaign.rs:663-668`). The two coincide in this campaign. That is acceptable.
+2. **MCP: consistent.** `forma_list_pending` uses the same rule (`is_demo_org(member.organization())`), the same sentence as `forma_run_view` (" Synthetic data.") and the same `synthetic` field (`mcp/tools.rs:1323-1335`). `forma_list_apps` says " The data is synthetic." The difference already existed. No output schema or script parses the pending summary.
+3. **Box 5 note: accurate except for one overclaim.**
+   - Limits 1 to 4 state Part 2 correctly, including the corrected wording ("outside a listed demo organization").
+   - The overclaim is in "In the product": "every surface that shows a demo organization's data or personas now labels them". Three MCP results still name a persona with no synthetic words or field:
+     - `forma_draft_record` and `forma_draft_decision`: " Approver: Sarah Chen." (`mcp/tools.rs:973-977`);
+     - `forma_commit`: " Shared with Sarah Chen for approval." (`:1196-1197`);
+     - `forma_share`: "Shared with Sarah Chen." (`:1384-1386`).
+   - My Part 2 item 3 missed these too.
+   - **Fix:** add the suffix and `synthetic` field to these three tools, or record them in Limit 3 next to the Slack fallback texts and soften "every surface".
+   - Nit: the tick holds only once #113 merges, since this branch is stacked on it.
+   - Not verified here: the 2026-11-12 delegation the note cites. Line 239 cites it too.
+4. **Nits.**
+   - `docs/pitch/SCENARIOS.md:123` says the messages "end with" the line. In the DMs and the decision a canvas link follows it, and in the card the buttons do (`flows.rs:955-956`, `:1038-1039`, `:210-211`). Say "carry" instead.
+   - `demo_suffix` still spells out `DEMO_NOTE`'s words instead of reusing the constant, so the two can drift.
+
+Commands: `cargo test --locked -p forma-app-platform --lib slack::`: 11 passed, 0 failed. `cargo test --locked -p forma-app-platform --lib mcp::`: 12 passed, 0 failed. No campaign was run.

@@ -120,7 +120,7 @@ Click **Approve**. The DM is replaced by "**Approved by Sarah Chen** · 2:14 PM"
 
 Say: "Sarah's click was judged as Sarah: her link, her current session epoch, her grant on this work. Anyone else clicking that button gets a refusal; clicking it twice changes nothing."
 
-*2026-11-13 (APP-098 DS-40):* in the demo organization each of these Slack messages now also says its data is synthetic. The card, Sarah's DM, the waiting list and the decision end with "**Synthetic data:** The organization, people and records here are made up for the demo." The "Filed:" line, Diego's DM and the link DM end with the same words in italics. The link page says so under the persona's name. The quoted texts above are as they were before that line was added.
+*2026-11-13 (APP-098 DS-40):* in the demo organization each of these Slack messages now also says its data is synthetic. The card, Sarah's DM, the waiting list and the decision carry the line "**Synthetic data:** The organization, people and records here are made up for the demo." The "Filed:" line, Diego's DM and the link DM end with the same words in italics. The link page says so under the persona's name. The quoted texts above are as they were before that line was added.
 
 Alternatives on stage: Sarah can type `/forma what's waiting for my approval` (the pending list with Approve / Reject on each claim) or `/forma approve the Nobu dinner` (a confirmation card, then **Confirm**).
 
