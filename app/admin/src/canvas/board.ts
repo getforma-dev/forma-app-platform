@@ -768,8 +768,8 @@ function pulse(card: HTMLElement): void {
 
 /** Pending live re-runs by work (APP-113). */
 const liveRuns = new Map<string, number>();
-/** APP-195: each live hint's re-reads wait a random 0–3 s, one wait per hint key (`live.ts`). */
-const hints = hintSchedule();
+/** APP-195: each live hint's re-reads wait a random 0–3 s, one wait per hint key; a hidden page re-reads once when shown (`live.ts`). */
+const hints = hintSchedule(undefined, { resumeWhenShown: true });
 /** APP-195: a hinted re-read tries a 503 or a network error once more, 1–3 s later. */
 const liveRead = retryOnce();
 /**

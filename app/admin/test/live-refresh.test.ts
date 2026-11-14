@@ -1,8 +1,9 @@
 // APP-195: a refresh that a live hint triggers starts after a uniform random
 // delay of 0–3 s; the page that committed reads at once; a read that fails
 // with a 503 or a network error is tried once more after 1–3 s before the page
-// shows it failed; refreshes the member starts are unchanged. The clock and the
-// random source are fakes, so every delay here is exact.
+// shows it failed; refreshes the member starts are unchanged; a hidden page
+// schedules nothing and reads once when it is shown. The clock, the random
+// source and the page's visibility are fakes, so every delay here is exact.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hintDelay, hintSchedule, retryDelay, retryOnce, type Fetch, type Timing } from '../src/canvas/live.ts';
@@ -16,6 +17,8 @@ function fakeTiming(randoms: number[] = []) {
   let next = 1;
   const timers = new Map<number, { at: number; run: () => void }>();
   const draws: number[] = [];
+  let hidden = false;
+  const shown = new Set<() => void>();
   const timing: Timing = {
     random: () => {
       const value = randoms.shift();
@@ -29,6 +32,17 @@ function fakeTiming(randoms: number[] = []) {
       return id;
     },
     clearTimeout: (id) => { timers.delete(id as number); },
+    hidden: () => hidden,
+    onVisible: (listener) => {
+      shown.add(listener);
+      return () => { shown.delete(listener); };
+    },
+  };
+  /** The page is hidden, or shown again (which calls the visibility listeners). */
+  const hide = () => { hidden = true; };
+  const show = () => {
+    hidden = false;
+    for (const listener of [...shown]) listener();
   };
   /** Runs every timer due within `ms`, in order, letting promises settle between them. */
   const advance = async (ms: number) => {
@@ -45,7 +59,7 @@ function fakeTiming(randoms: number[] = []) {
     now = until;
     await flush();
   };
-  return { timing, advance, timers, draws, now: () => now };
+  return { timing, advance, timers, draws, now: () => now, hide, show, listeners: () => shown.size };
 }
 
 /** A deterministic uniform source (a 32-bit LCG). */
@@ -247,4 +261,69 @@ test('a disposed page runs no waiting hint', async () => {
   await page.advance(5000);
   assert.deepEqual(modes, []);
   assert.equal(page.timers.size, 0);
+});
+
+test('a hidden page schedules nothing for a hint and reads once when it is shown', async () => {
+  // The canvas: no refresh of its own on visibility, so the schedule resumes.
+  const canvas = fakeTiming([0.5]);
+  const hints = hintSchedule(canvas.timing, { resumeWhenShown: true });
+  const runs: string[] = [];
+  canvas.hide();
+  hints.hint('work-a', () => runs.push('a'));
+  hints.hint('work-a', () => runs.push('a again'));
+  hints.hint('work-b', () => runs.push('b'));
+  await canvas.advance(10000);
+  assert.deepEqual(runs, [], 'nothing is read while hidden');
+  assert.equal(canvas.timers.size, 0, 'nothing is scheduled');
+  assert.deepEqual(canvas.draws, [], 'no delay drawn');
+  assert.equal(hints.stale('work-a'), true);
+  canvas.show();
+  assert.deepEqual(runs, ['a again', 'b'], 'each stale key reads once, at once');
+  assert.equal(hints.stale('work-a'), false);
+  assert.equal(canvas.listeners(), 0, 'the visibility listener is released');
+  canvas.show();
+  await canvas.advance(10000);
+  assert.deepEqual(runs, ['a again', 'b'], 'once only');
+  // Shown, a hint waits 0–3 s again.
+  hints.hint('work-a', () => runs.push('visible'));
+  await canvas.advance(1499);
+  assert.deepEqual(runs, ['a again', 'b']);
+  await canvas.advance(1);
+  assert.deepEqual(runs, ['a again', 'b', 'visible']);
+
+  // The work document: its own visibility refresh covers the stale hint.
+  const page = fakeTiming();
+  const modes: [RefreshMode, number][] = [];
+  const refresher = documentRefresher((mode) => modes.push([mode, page.now()]), page.timing);
+  page.hide();
+  refresher.hint();
+  refresher.hint();
+  await page.advance(10000);
+  assert.deepEqual(modes, [], 'a hidden page schedules nothing');
+  assert.equal(page.timers.size, 0);
+  assert.deepEqual(page.draws, []);
+  assert.equal(refresher.stale(), true, 'it is marked stale');
+  assert.equal(page.listeners(), 0, 'the document does not subscribe: its own handler reads');
+  page.show();
+  refresher.shown();
+  assert.deepEqual(modes, [['member', 10000]], 'one read on becoming visible');
+  assert.equal(refresher.stale(), false);
+  await page.advance(10000);
+  assert.deepEqual(modes, [['member', 10000]], 'and no other');
+  refresher.dispose();
+});
+
+test('the committer on a visible page is unchanged by the visibility rule', async () => {
+  const page = fakeTiming([0.6]);
+  const modes: [RefreshMode, number][] = [];
+  const refresher = documentRefresher((mode) => modes.push([mode, page.now()]), page.timing);
+  refresher.committed();
+  assert.deepEqual(modes, [['live', 0]], 'at once');
+  assert.deepEqual(page.draws, [], 'no delay drawn');
+  refresher.hint();
+  refresher.committed();
+  await page.advance(5000);
+  assert.deepEqual(modes, [['live', 0], ['live', 0]], 'and it still replaces a waiting hint');
+  assert.equal(refresher.stale(), false);
+  refresher.dispose();
 });

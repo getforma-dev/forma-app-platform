@@ -183,7 +183,10 @@ function streamLive(
 // once more after a uniform random 1–3 s before the page shows that it failed.
 // The page that committed reads at once. Refreshes the member starts (Refresh,
 // coming back to the tab, coming back online) do not use this section.
-// The random source and the clock are injectable, so tests are exact.
+// A hidden page schedules nothing for a hint: it is marked stale and reads
+// once when it is shown again (APP-195, Fable decision of 2026-11-14).
+// The random source, the clock and the page's visibility are injectable, so
+// tests are exact.
 
 /** Hinted refreshes start uniformly within this window after the hint. */
 export const HINT_SPREAD_MS = 3000;
@@ -196,11 +199,24 @@ export type Timing = {
   random(): number;
   setTimeout(run: () => void, ms: number): unknown;
   clearTimeout(handle: unknown): void;
+  /** Whether the page is hidden now (absent: never). */
+  hidden?(): boolean;
+  /** Calls `listener` each time the page is shown again; returns the unsubscribe. */
+  onVisible?(listener: () => void): () => void;
 };
+const pageDocument = () => (typeof document === 'undefined' ? null : document);
 export const browserTiming: Timing = {
   random: () => Math.random(),
   setTimeout: (run, ms) => globalThis.setTimeout(run, ms),
   clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  hidden: () => pageDocument()?.visibilityState === 'hidden',
+  onVisible: (listener) => {
+    const page = pageDocument();
+    if (!page) return () => undefined;
+    const shown = () => { if (page.visibilityState === 'visible') listener(); };
+    page.addEventListener('visibilitychange', shown);
+    return () => page.removeEventListener('visibilitychange', shown);
+  },
 };
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -228,16 +244,37 @@ export function retryDelay(timing: Timing = browserTiming): number {
  * waits join it, because the read that starts later covers them all. `now`
  * runs at once in place of a waiting hint (the page that committed), for the
  * same reason. This is the hints' coalescing; each caller keeps its own.
+ *
+ * A hint that arrives while the page is hidden schedules nothing: the key is
+ * marked stale. With `resumeWhenShown` (the canvas, which has no refresh of
+ * its own on visibility) each stale key's latest run happens once, at once,
+ * when the page is shown again. Without it (the work document, whose own
+ * `visibilitychange` refresh covers the hint) `shown` clears the mark.
  */
-export function hintSchedule(timing: Timing = browserTiming) {
+export function hintSchedule(timing: Timing = browserTiming, options: { resumeWhenShown?: boolean } = {}) {
   const waiting = new Map<string, unknown>();
+  const stale = new Map<string, () => void>();
+  let unsubscribe: (() => void) | null = null;
   const cancel = (key: string) => {
+    stale.delete(key);
     if (!waiting.has(key)) return;
     timing.clearTimeout(waiting.get(key));
     waiting.delete(key);
   };
+  const resume = () => {
+    unsubscribe?.();
+    unsubscribe = null;
+    const runs = [...stale.values()];
+    stale.clear();
+    for (const run of runs) run();
+  };
   return {
     hint(key: string, run: () => void): void {
+      if (timing.hidden?.()) {
+        stale.set(key, run);
+        if (options.resumeWhenShown && !unsubscribe && timing.onVisible) unsubscribe = timing.onVisible(resume);
+        return;
+      }
       if (waiting.has(key)) return;
       waiting.set(key, timing.setTimeout(() => {
         waiting.delete(key);
@@ -248,9 +285,17 @@ export function hintSchedule(timing: Timing = browserTiming) {
       cancel(key);
       run();
     },
+    /** The page's own refresh on being shown covered every stale key. */
+    shown(): void {
+      stale.clear();
+    },
     waiting: (key: string) => waiting.has(key),
+    stale: (key: string) => stale.has(key),
     clear(): void {
       for (const key of [...waiting.keys()]) cancel(key);
+      stale.clear();
+      unsubscribe?.();
+      unsubscribe = null;
     },
   };
 }

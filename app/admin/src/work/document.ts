@@ -14,9 +14,10 @@ export type RefreshMode = 'member' | 'live';
 
 /**
  * How each trigger starts the document's refresh (APP-195). A live hint waits
- * a random 0–3 s, and hints while it waits join it. This page's own commit
- * reads at once, in place of a waiting hint. The member's own refreshes read
- * at once and leave a waiting hint as it was, exactly as before.
+ * a random 0–3 s, and hints while it waits join it; on a hidden page it waits
+ * for the page's own refresh when it is shown (`shown`). This page's own
+ * commit reads at once, in place of a waiting hint. The member's own
+ * refreshes read at once and leave a waiting hint as it was, as before.
  */
 export function documentRefresher(refresh: (mode: RefreshMode) => void, timing: Timing = browserTiming) {
   const hints = hintSchedule(timing);
@@ -25,6 +26,9 @@ export function documentRefresher(refresh: (mode: RefreshMode) => void, timing: 
     hint: () => { if (!disposed) hints.hint('document', () => refresh('live')); },
     committed: () => { if (!disposed) hints.now('document', () => refresh('live')); },
     member: () => { if (!disposed) refresh('member'); },
+    /** The page's own refresh when shown (and its 30 s check while visible); it covers a stale hint. */
+    shown: () => { if (disposed) return; hints.shown(); refresh('member'); },
+    stale: () => hints.stale('document'),
     dispose: () => { disposed = true; hints.clear(); },
   };
 }
@@ -224,7 +228,7 @@ export function startDocument(): void {
   // The member's own refreshes, and the page's checks of access, read at once
   // with the page's plain fetch (unchanged by APP-195).
   root.addEventListener('forma:record-components-unavailable', () => { refresher.member(); }, { signal: lifecycle.signal });
-  const visible = () => { if (document.visibilityState === 'visible') refresher.member(); };
+  const visible = () => { if (document.visibilityState === 'visible') refresher.shown(); };
   const requested = () => { refresher.member(); };
   // The stream can omit a revocation hint; bounded reads also recheck access.
   const timer = window.setInterval(visible, 30_000);
