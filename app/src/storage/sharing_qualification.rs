@@ -271,7 +271,14 @@ async fn campaign() {
         assert_eq!(
             stores
                 .workspace
-                .share_work(who, SPEND_APP, work, grantee, false)
+                .share_work(
+                    who,
+                    SPEND_APP,
+                    work,
+                    Audience::Member(grantee),
+                    ShareRole::Viewer,
+                    ShareMode::Ensure
+                )
                 .await
                 .err(),
             Some(Error::Denied)
@@ -294,10 +301,17 @@ async fn campaign() {
     // --- the creator shares read access: exactly the creator's subset ---
     let shared = stores
         .workspace
-        .share_work(&author, SPEND_APP, work, REVIEWER, false)
+        .share_work(
+            &author,
+            SPEND_APP,
+            work,
+            Audience::Member(REVIEWER),
+            ShareRole::Viewer,
+            ShareMode::Ensure,
+        )
         .await
         .unwrap();
-    assert_eq!(shared.grantee, REVIEWER);
+    assert_eq!(shared.grantee.as_deref(), Some(REVIEWER));
     assert_eq!(names(&shared), expected_subset(&s05, false));
     assert!(shared.granted.iter().all(|g| g.inserted));
     let mut expected_rows = reviewer_before.clone();
@@ -402,7 +416,14 @@ async fn campaign() {
     // --- a repeat share writes nothing; sharing record_write adds only that ---
     let again = stores
         .workspace
-        .share_work(&author, SPEND_APP, work, REVIEWER, false)
+        .share_work(
+            &author,
+            SPEND_APP,
+            work,
+            Audience::Member(REVIEWER),
+            ShareRole::Viewer,
+            ShareMode::Ensure,
+        )
         .await
         .unwrap();
     assert_eq!(names(&again), expected_subset(&s05, false));
@@ -410,7 +431,14 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, after);
     let write = stores
         .workspace
-        .share_work(&author, SPEND_APP, work, REVIEWER, true)
+        .share_work(
+            &author,
+            SPEND_APP,
+            work,
+            Audience::Member(REVIEWER),
+            ShareRole::Contributor,
+            ShareMode::Ensure,
+        )
         .await
         .unwrap();
     assert_eq!(names(&write), expected_subset(&s05, true));
@@ -458,7 +486,14 @@ async fn campaign() {
         assert_eq!(
             stores
                 .workspace
-                .share_work(&author, SPEND_APP, work, grantee, false)
+                .share_work(
+                    &author,
+                    SPEND_APP,
+                    work,
+                    Audience::Member(grantee),
+                    ShareRole::Viewer,
+                    ShareMode::Ensure
+                )
                 .await
                 .err(),
             Some(Error::Denied),
@@ -470,7 +505,14 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .share_work(&canary_author, SPEND_APP, work, REVIEWER, false)
+            .share_work(
+                &canary_author,
+                SPEND_APP,
+                work,
+                Audience::Member(REVIEWER),
+                ShareRole::Viewer,
+                ShareMode::Ensure
+            )
             .await
             .err(),
         Some(Error::Denied)
@@ -480,7 +522,14 @@ async fn campaign() {
     assert_eq!(
         stores
             .workspace
-            .share_work(&reviewer, SPEND_APP, work, PRINCIPAL, true)
+            .share_work(
+                &reviewer,
+                SPEND_APP,
+                work,
+                Audience::Member(PRINCIPAL),
+                ShareRole::Contributor,
+                ShareMode::Ensure
+            )
             .await
             .err(),
         Some(Error::Denied)
@@ -512,7 +561,14 @@ async fn campaign() {
     );
     let delegated = stores
         .workspace
-        .share_work(&reviewer, SPEND_APP, work, PRINCIPAL, false)
+        .share_work(
+            &reviewer,
+            SPEND_APP,
+            work,
+            Audience::Member(PRINCIPAL),
+            ShareRole::Viewer,
+            ShareMode::Ensure,
+        )
         .await
         .unwrap();
     let mut without_discover = expected_subset(&s05, false);
@@ -635,8 +691,10 @@ async fn campaign() {
         ("sec-fetch-site", "same-origin"),
         ("content-type", "application/json"),
     ];
+    // APP-192: every share names its role (contributor carries record_write).
     let body = |grantee: &str, write: bool| {
-        format!("{{\"grantee_principal_id\":\"{grantee}\",\"record_write\":{write}}}")
+        let role = if write { "contributor" } else { "viewer" };
+        format!("{{\"grantee_principal_id\":\"{grantee}\",\"role\":\"{role}\"}}")
     };
     let http_before = footprint(&fixture).await;
     // Refusals before any write: cross-site, no session, a non-creator, a
@@ -702,6 +760,46 @@ async fn campaign() {
         (malformed.status, malformed.json()["code"].as_str()),
         (StatusCode::BAD_REQUEST, Some("malformed_share"))
     );
+    // APP-192: one encoding: the earlier `record_write` flag is refused,
+    // alone or beside a role.
+    for old in [
+        format!("{{\"grantee_principal_id\":\"{PRINCIPAL}\",\"record_write\":true}}"),
+        format!("{{\"grantee_principal_id\":\"{PRINCIPAL}\",\"record_write\":false}}"),
+        format!("{{\"grantee_principal_id\":\"{PRINCIPAL}\",\"role\":\"viewer\",\"record_write\":false}}"),
+    ] {
+        let refused = send(&app, "POST", &share_uri, Some(&author_cookie), &old, &same_origin).await;
+        assert_eq!(
+            (refused.status, refused.json()["code"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("malformed_share")),
+            "{old}"
+        );
+    }
+    // The S05 work reads a source: it is shared person by person (the v1
+    // limit). Its creator is told so in plain terms; nothing is written.
+    let everyone = send(
+        &app,
+        "POST",
+        &format!("{share_uri}/organization"),
+        Some(&author_cookie),
+        "{\"role\":\"viewer\"}",
+        &same_origin,
+    )
+    .await;
+    assert_eq!(
+        (everyone.status, everyone.json()["code"].as_str()),
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Some("organization_share_unavailable")
+        )
+    );
+    let dialog = send(&app, "GET", &share_uri, Some(&author_cookie), "", &[]).await;
+    assert_eq!(dialog.status, StatusCode::OK, "{}", dialog.body);
+    assert_eq!(
+        dialog.json()["organization"],
+        json!({"available": false, "role": null})
+    );
+    // The S05 decisions are a shared list: no private lists to explain.
+    assert_eq!(dialog.json()["private_lists"], false);
     let form = send(
         &app,
         "POST",
@@ -718,7 +816,7 @@ async fn campaign() {
     assert_eq!(footprint(&fixture).await, http_before);
     check(
         &mut checks,
-        "over HTTP: the members route answers labels only under a session and the uniform 404 without one; the share route refuses a cross-site post (403), no session, a member without authority and a nonexistent work with byte-identical uniform 404s, and a body naming a permission or not JSON with 400, writing nothing",
+        "over HTTP: the members route answers labels only under a session and the uniform 404 without one; the share route refuses a cross-site post (403), no session, a member without authority and a nonexistent work with byte-identical uniform 404s, and a body naming a permission, the earlier `record_write` flag or not JSON with 400; the organization-wide share of a work that reads a source answers 422 `organization_share_unavailable` and the dialog read says it is unavailable; nothing is written",
     );
 
     // Two streams: the teammate (can open the work) and the author.
@@ -729,8 +827,12 @@ async fn campaign() {
     // A hint for the shared work reaches the teammate, not the member whose
     // delegated subset lacks discover (the listing clause), and nothing of
     // another organization reaches anyone.
-    events::hub().record_committed(ORG, SPEND_APP, work);
-    events::hub().record_committed(OTHER, SPEND_APP, work);
+    // APP-191: a committed revision's sequence travels with the hint, so the
+    // delivery is judged on that row; the newest revision of the work here.
+    let sequence = scalar(&fixture, &format!("SELECT coalesce(max(commit_sequence),0) FROM genui.internal_record_revisions WHERE organization_id='{ORG}' AND work_id='{work}'")).await;
+    assert!(sequence > 0);
+    events::hub().record_committed(ORG, SPEND_APP, work, sequence);
+    events::hub().record_committed(OTHER, SPEND_APP, work, sequence);
     let data = reviewer_stream.expect("record.committed", work).await;
     assert!(data["at"].as_str().unwrap().ends_with('Z'));
     principal_stream.silent(Duration::from_secs(1)).await;
@@ -874,7 +976,7 @@ async fn campaign() {
         REVIEWER,
         moved["membership_epoch"].as_i64().unwrap(),
     );
-    events::hub().record_committed(ORG, SPEND_APP, work);
+    events::hub().record_committed(ORG, SPEND_APP, work, sequence);
     reviewer_stream.ended().await;
     assert_eq!(
         stores

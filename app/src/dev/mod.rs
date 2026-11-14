@@ -410,6 +410,12 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         .readiness()
         .await
         .map_err(|e| format!("database readiness: {e}"))?;
+    // 0023 (D6): the member display names the directory label reads.
+    stores
+        .workspace
+        .load_display_names()
+        .await
+        .map_err(|e| format!("display names: {e}"))?;
 
     // --- The binary's pages ---
     let mut manifest = forma_server::assets::try_load_manifest::<Assets>()
@@ -444,6 +450,11 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
     });
     let canvas_pages = Arc::new(SsrCanvasPages {
         page: modules.bind::<CanvasProps>("canvas").map_err(bind_error)?,
+    });
+    let org_admin_pages = Arc::new(crate::org_admin::SsrAdminPages {
+        page: modules
+            .bind::<crate::org_admin::AdminProps>("orgAdmin")
+            .map_err(bind_error)?,
     });
     let shared_pages = Arc::new(crate::sharing::live::SsrSharedPages {
         auth_origin: None,
@@ -532,6 +543,7 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         customizer: widgets::customize::Customizer::from_env(),
         weather: widgets::weather::OpenMeteo::new(),
         boxes: box_state,
+        org_admin_pages,
     });
     let app = served(product_routes, long);
 

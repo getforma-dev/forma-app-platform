@@ -13,6 +13,18 @@ credentialed fetch that copies one source revision's Parquet object from the
 organization's own prefix with that organization's scoped storage credentials,
 verifies its `normalized_digest` and renames it atomically into the read-only
 revision cache. The two never run in one process.
+
+Exit codes. Every mode exits 0 on success and 1 when it refuses or fails; argparse
+exits 2 on a malformed command line. `object` exits 3 when its write-once PutObject
+finds the key already present. `serve` returns its service child's code. `migrate`
+has exactly three outcomes (APP-196): 0, committed; 1, refused or failed before the
+COMMIT was sent, so the database is unchanged; MIGRATION_COMMIT_OUTCOME_UNKNOWN (4),
+the COMMIT may have reached the server and something failed from then on (a lost
+acknowledgement, a failed close or completion line), so the database may be at
+either version. The schema restore (ops/promotion/schema_recovery.py) accepts only
+1. Python reports an uncaught exception as 1, a failed flush at shutdown as 120 and
+a signal as 128+N; `migrate` exits through its own paths so that none of these
+follows a COMMIT.
 """
 import argparse
 import hashlib
@@ -35,7 +47,7 @@ ROLES = ("workspace", "control", "data", "worker")
 # probe comparisons then use the pinned manifest itself.
 # scripts/check-schema-pins.py keeps this value, the manifest, the native
 # version check and both embedded catalogs on the same version.
-DATABASE_SCHEMA_VERSION = 22
+DATABASE_SCHEMA_VERSION = 24
 # Byte bound of the canonical catalog projection and of each catalog file
 # (ADR-007 D7.12, moved once in 0003's slice). It must equal catalog-query.json
 # max_output_bytes and its SQL octet_length literal and the native BOUND;
@@ -45,6 +57,10 @@ CATALOG_BOUND = 786432
 # always starts at its historical BETWEEN 1 AND 2 bound; every later migration
 # ALTERs both version CHECKs to its own number (ADR-007 D7.12).
 LEDGER_VERSION = 2
+# `migrate` exits with this code, and only this code, once the COMMIT may have
+# reached the server (module notes). ops/promotion/schema_release.py pins the same
+# value and its test reads it from this file.
+MIGRATION_COMMIT_OUTCOME_UNKNOWN = 4
 INITIAL_MIGRATION_SHA256 = "f98f67b7b516483692e5873741080df8ebf023dd9af9872f958258e98e3bd963"
 QUALIFICATION_JSON_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_JSON"
 QUALIFICATION_FILE_ENV = "GENUI_AUTH_QUALIFICATION_CONFIG_FILE"
@@ -912,11 +928,40 @@ def migrate():
     # Exactly one DNS name or IPv4 address, as app/operator/operator.py requires: libpq
     # also reads '@' as an abstract socket and ',' as a host list (APP-084 review).
     require(PGHOST_NAME.fullmatch(os.environ["PGHOST"]) is not None)
-    with psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
-                         sslmode="verify-full", gssencmode="disable", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
-                         options="-c statement_timeout=30000 -c lock_timeout=5000") as connection:
+    connection = psycopg.connect(host=os.environ["PGHOST"], port=5432, dbname="genui", user="genui_migration", password=os.environ["PGPASSWORD"],
+                                 sslmode="verify-full", gssencmode="disable", sslrootcert=os.environ["PGSSLROOTCERT"], connect_timeout=5,
+                                 options="-c statement_timeout=30000 -c lock_timeout=5000")
+    try:
         apply_migrations(connection, migration_directory())
-    print("tenant_foundation_migration_complete")
+        # The last statement before the COMMIT (APP-196 recheck): PostgreSQL checks every
+        # pending deferred constraint here, so a violation fails while it still exits 1. At the
+        # COMMIT the server would refuse and roll back, but that refusal exits 4.
+        connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+    except BaseException:
+        # No COMMIT is ever sent: closing the open transaction makes the server roll it back.
+        connection.close()
+        raise
+    commit_migration(connection)
+
+
+def commit_migration(connection):
+    """From the COMMIT onward a failure cannot show whether the server committed (APP-196).
+
+    A lost acknowledgement, a failed close or a failed completion line all exit with
+    MIGRATION_COMMIT_OUTCOME_UNKNOWN, never with 1. So does a COMMIT the server refuses,
+    although it rolled back; migrate() checks deferred constraints, the usual cause, before
+    it. os._exit, not SystemExit: interpreter shutdown turns a failed flush into exit 120,
+    which must not appear after a commit either.
+    """
+    try:
+        connection.commit()
+        connection.close()
+        print("tenant_foundation_migration_complete", flush=True)
+    except BaseException:
+        try:
+            print("migration_commit_outcome_unknown", file=sys.stderr, flush=True)
+        finally:
+            os._exit(MIGRATION_COMMIT_OUTCOME_UNKNOWN)
 
 
 def qualification(path):

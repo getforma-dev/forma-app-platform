@@ -59,14 +59,27 @@ pub struct StoreGate {
     stores: Arc<Stores>,
     request: TrustedRequest,
 }
+impl StoreGate {
+    /// The gate of one subscriber's stream (the campaigns open streams with
+    /// the production gate, without the HTTP route).
+    pub fn new(stores: Arc<Stores>, request: TrustedRequest) -> Self {
+        Self { stores, request }
+    }
+}
 impl Gate for StoreGate {
     type Judgment = storage::Openable;
-    async fn judge(&self, app: &str, work: &str, subscribers: &[String]) -> Option<Self::Judgment> {
+    async fn judge(
+        &self,
+        app: &str,
+        work: &str,
+        revision: Option<i64>,
+        subscribers: &[String],
+    ) -> Option<Self::Judgment> {
         // A store outage (or a refused read) discloses nothing: the hint is
         // dropped for everyone and no stream is closed on it.
         self.stores
             .data
-            .openable_principals(&self.request, app, work, subscribers)
+            .openable_principals(&self.request, app, work, revision, subscribers)
             .await
             .ok()
     }

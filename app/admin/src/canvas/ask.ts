@@ -51,6 +51,7 @@ import { requestAsk, ASK_URL, type AskScope, type WidgetScope } from '../ask/cli
 import { mountAskPanel, type AskPanel } from '../ask/panel';
 import { setFocusAsk } from './focus';
 import { widgetOfItem } from './widgets/index';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 export { ASK_URL };
 const MAX_WORKS = 12;
@@ -206,6 +207,7 @@ const REFUSALS: Record<string, string> = {
   folder_unavailable: 'That question needs the AI model, and none is configured here. Nothing changed.',
   too_many_requests: 'Too many questions in a short time. Try again in a moment.',
   invalid_request: 'Ask in a short sentence (up to 500 characters).',
+  [DAILY_LIMIT_CODE]: DAILY_LIMIT_MESSAGE,
 };
 
 function entry(document_: Document, who: 'you' | 'forma' | 'note', ...children: (Node | string)[]): HTMLElement {

@@ -15,7 +15,12 @@
 //! (through its reservation), the server-bound organization, the provider
 //! invitation reference (`signup_handoff_id` = the invitation id) and the
 //! 10-minute expiry, single use. No client-supplied organization, tenant,
-//! role or destination exists in the form: any field but `code` refuses.
+//! role or destination exists in the form: it carries exactly `code` and the
+//! beta notice's consent checkbox `consent=1` (trial plan D5; the notice and
+//! its version are `super::notice`), in either order; any other field, a
+//! second copy of either, or a missing or different consent value refuses
+//! before any work. The reservation the handoff makes records the consented
+//! `NOTICE_VERSION`, which the admission stores as the member's consent.
 //!
 //! Every refusal of a code (malformed, unknown, expired, revoked, exhausted,
 //! foreign, without a usable invitation, not reservable, provider refusal or
@@ -378,6 +383,7 @@ async fn handoff(auth: &Auth, code: &str, class: &str) -> Result<(String, String
             FlowKind::SignUp {
                 code_digest: &digest,
                 handoff: Some(&capability.invitation),
+                notice_version: super::notice::NOTICE_VERSION,
             },
             &sealed,
             class,
@@ -412,9 +418,22 @@ async fn handoff(auth: &Auth, code: &str, class: &str) -> Result<(String, String
     }
 }
 
+/// The one accepted form: exactly two fields, `code` and `consent=1`, in
+/// either order. Anything else is `None` (the neutral refusal).
+fn consented_code(fields: &[(String, String)]) -> Option<&str> {
+    match fields {
+        [(a, code), (b, consent)] | [(b, consent), (a, code)]
+            if a == "code" && b == "consent" && consent == "1" =>
+        {
+            Some(code.as_str())
+        }
+        _ => None,
+    }
+}
+
 /// ADR-006 `POST /invite/validate`. Order: fetch metadata (403), the limits
-/// (429), the 4 KiB body (413), then the single `code` field, and only then
-/// hashing, database or provider work.
+/// (429), the 4 KiB body (413), then exactly the `code` and `consent=1`
+/// fields, and only then hashing, database or provider work.
 pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, auth.origin()) {
@@ -453,14 +472,12 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
     let Some(fields) = http::form(body).await else {
         return http::payload_too_large();
     };
-    // Exactly one `code` field: an organization, tenant, role, destination
-    // or any other client-supplied field refuses the request.
-    let code = match fields.as_slice() {
-        [(name, value)] if name == "code" => value.as_str(),
-        _ => {
-            tracing::info!(outcome = "refused", stage = ?Refusal::Malformed, "invite.validate");
-            return neutral(&auth);
-        }
+    // Exactly `code` and `consent=1`: an organization, tenant, role,
+    // destination or any other client-supplied field refuses the request, and
+    // so does a submission without the notice's consent (D5).
+    let Some(code) = consented_code(&fields) else {
+        tracing::info!(outcome = "refused", stage = ?Refusal::Malformed, "invite.validate");
+        return neutral(&auth);
     };
     let judged = tokio::time::timeout(ENTRY_DEADLINE, handoff(&auth, code, &class))
         .await
@@ -488,6 +505,47 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// D5: the form is exactly `code` and `consent=1`, in either order; a
+    /// missing, repeated or different consent, or any extra field, refuses.
+    #[test]
+    fn the_form_is_exactly_a_code_and_the_consent() {
+        let pair = |a: &str, b: &str| (a.to_owned(), b.to_owned());
+        assert_eq!(
+            consented_code(&[pair("code", "ABCD"), pair("consent", "1")]),
+            Some("ABCD")
+        );
+        assert_eq!(
+            consented_code(&[pair("consent", "1"), pair("code", "ABCD")]),
+            Some("ABCD")
+        );
+        for refused in [
+            vec![pair("code", "ABCD")],
+            vec![pair("consent", "1")],
+            vec![],
+            vec![pair("code", "ABCD"), pair("consent", "0")],
+            vec![pair("code", "ABCD"), pair("consent", "on")],
+            vec![pair("code", "ABCD"), pair("consent", "1 ")],
+            vec![
+                pair("code", "ABCD"),
+                pair("consent", "1"),
+                pair("consent", "1"),
+            ],
+            vec![
+                pair("code", "ABCD"),
+                pair("code", "ABCD"),
+                pair("consent", "1"),
+            ],
+            vec![
+                pair("code", "ABCD"),
+                pair("consent", "1"),
+                pair("role", "admin"),
+            ],
+            vec![pair("code", "ABCD"), pair("Consent", "1")],
+        ] {
+            assert_eq!(consented_code(&refused), None, "{refused:?}");
+        }
+    }
 
     #[test]
     fn capability_timestamps_and_token_shapes() {

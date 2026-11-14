@@ -71,7 +71,8 @@ impl Data {
                 .await?
                 .pop()
                 .ok_or(Error::Unavailable)?;
-            let mut listing = listing_of(keys[0], false, &pinned, &collections, &records)?;
+            // A guest is never a reviewer: no `reviewer_only` command is shown.
+            let mut listing = listing_of(keys[0], false, false, &pinned, &collections, &records)?;
             require(
                 listing
                     .collections
@@ -136,7 +137,7 @@ impl Data {
             let dependencies=queries::dependencies(&tx,org,app,work).await?;
             if let Some(source)=&source {require(dependencies.contains(source))?;}
             let snapshot: i64 = if let Some(records) = &records { records.sequence } else {
-                let rows = tx.query("SELECT coalesce(max(commit_sequence),0)::bigint FROM genui.internal_record_revisions WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid", &[&org,&app,&work]).await?;
+                let rows = tx.query(&format!("SELECT coalesce(max(v.commit_sequence),0)::bigint FROM genui.internal_record_revisions v WHERE v.organization_id=$1::text::uuid AND v.app_id=$2::text::uuid AND v.work_id=$3::text::uuid AND {own}", own = super::authorization::own_rows("v", "$2::text::uuid", "$3::text::uuid", super::authorization::SCOPED)), &[&org,&app,&work]).await?;
                 rows.first().ok_or(Error::Unavailable)?.try_get(0).map_err(|_| Error::Unavailable)?
             };
             let query = parameters.apply(&stored, &fields).ok_or(Error::Denied)?;
@@ -197,6 +198,14 @@ impl Data {
                 .await?;
                 require(&source == expected)?;
             }
+            require(
+                queries::dependencies(&tx, access.organization(), access.app(), access.work())
+                    .await?
+                    == plan.dependencies(),
+            )?;
+            check_guest(&tx, access).await?;
+            // APP-198 (recheck N3): the snapshot's sequence last, after the
+            // guest's final check, so `Stale` never precedes a `Denied`.
             if let Some(records) = plan.records() {
                 require(access.collections.contains(&records.collection))?;
                 super::record_query::release(
@@ -208,12 +217,7 @@ impl Data {
                 )
                 .await?;
             }
-            require(
-                queries::dependencies(&tx, access.organization(), access.app(), access.work())
-                    .await?
-                    == plan.dependencies(),
-            )?;
-            check_guest(&tx, access).await
+            Ok(())
         }
         .await;
         tx.finish(result.is_ok()).await?;

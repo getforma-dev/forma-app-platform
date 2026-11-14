@@ -35,6 +35,18 @@
 //! Heartbeat every `HEARTBEAT`; a stream ends after `STREAM_LIFETIME` so the
 //! client re-resolves its session by reconnecting.
 //!
+//! APP-191 (own collections): a `record.committed` announcement carries the
+//! committed revision's `commit_sequence`, and the judgment applies the one
+//! storage row rule (`authorization::own_rows`) to that row for each
+//! subscriber: a commit to an `own` collection delivers its hint only to the
+//! pages of members who can see the changed row, its creator, the reviewers
+//! and the app's owner; every other member's page receives nothing (not a
+//! hint without ids, nothing), so their canvas never re-reads for a row it
+//! cannot list. The `private-entries` campaign's acceptance case: 25 commits
+//! to an own list by 25 members within 60 s, 26 pages open, no non-reviewer
+//! page receives a hint for another member's row, the reviewer's page is
+//! current within 6 s of the last commit.
+//!
 //! APP-101 adds `app.adapted` (the composer's live transform saved an
 //! adapted work; the document also names the standard work it came from as
 //! `from_app_id`/`from_work_id`, judged on the adapted work) and `app.kept`
@@ -122,6 +134,11 @@ pub struct Event {
     /// `app.adapted` only: the standard `(app, work)` the adapted work was
     /// tailored from (ids only, like the others).
     pub from: Option<(String, String)>,
+    /// APP-191: `record.committed` only, the committed revision's
+    /// `commit_sequence`, so delivery is judged on that row (`own_rows`: an
+    /// `own` collection's event reaches its creator and the reviewers). Never
+    /// on the wire; the document keeps its shape.
+    pub sequence: Option<i64>,
     /// Whole-second UTC, as the audit chain's `occurred_at`.
     pub at: String,
 }
@@ -133,6 +150,7 @@ impl Event {
             app: app.to_owned(),
             work: work.to_owned(),
             from: None,
+            sequence: None,
             at: timestamp(unix_seconds()),
         }
     }
@@ -264,9 +282,13 @@ impl Hub {
         // No subscriber is not an error: the announcement is best effort.
         let _ = self.sender.send(Announcement::new(event));
     }
-    /// The command route's hook after `CommandResult::Committed`.
-    pub fn record_committed(&self, organization: &str, app: &str, work: &str) {
-        self.publish(Event::now(Kind::RecordCommitted, organization, app, work));
+    /// The command route's hook after `CommandResult::Committed`; `sequence`
+    /// is the outcome's `commit_sequence` (APP-191: the row the delivery is
+    /// judged on).
+    pub fn record_committed(&self, organization: &str, app: &str, work: &str, sequence: i64) {
+        let mut event = Event::now(Kind::RecordCommitted, organization, app, work);
+        event.sequence = Some(sequence);
+        self.publish(event);
     }
     /// The share route's hook after a share that wrote a grant.
     pub fn app_shared(&self, organization: &str, app: &str, work: &str) {
@@ -444,13 +466,16 @@ pub enum Verdict {
 /// I/O. `current` is the idle re-check. The production gate is
 /// `routes::StoreGate` (storage); tests substitute scripted ones.
 pub trait Gate: Send + Sync + 'static {
-    /// The organization-wide judgment of `(app, work)` among `subscribers`.
+    /// The organization-wide judgment of `(app, work)` among `subscribers`;
+    /// `revision` is the committed row's `commit_sequence` when the event has
+    /// one (APP-191: judged on that row as well as on the work).
     type Judgment: Send + Sync + 'static;
     /// `None` is a store outage: the hint is dropped for every subscriber.
     fn judge(
         &self,
         app: &str,
         work: &str,
+        revision: Option<i64>,
         subscribers: &[String],
     ) -> impl Future<Output = Option<Self::Judgment>> + Send;
     fn verdict(&self, judgment: &Self::Judgment) -> Verdict;
@@ -510,7 +535,7 @@ pub async fn pump<G: Gate>(
                     }
                     let judged = announcement.judged.get_or_init(|| async {
                         let subscribers = hub.subscribed_principals(&organization);
-                        gate.judge(&event.app, &event.work, &subscribers)
+                        gate.judge(&event.app, &event.work, event.sequence, &subscribers)
                             .await
                             .map(|judgment| Arc::new(judgment) as Arc<dyn Any + Send + Sync>)
                     }).await;

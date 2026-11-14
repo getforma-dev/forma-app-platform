@@ -182,7 +182,8 @@ def verify_seed_manifest(state, setup, bundles, seed_module, tables):
         exact_rows(tables["organizations"], [{"organization_id": oid, "display_name": "Synthetic organization " + oid[-4:], "status": "active"}], "organization manifest mismatch")
         exact_rows(tables["provider_tenant_bindings"], [{"organization_id": oid, **binding, "active": True}], "provider binding mismatch")
         exact_rows(tables["principals"], [{"organization_id": oid, **binding, "principal_id": p["principal_id"], "provider_subject": p["provider_subject"]} for p in org["principals"]], "principal inventory mismatch")
-        exact_rows(tables["memberships"], [{"organization_id": oid, "principal_id": p["principal_id"], "status": p["status"], "membership_epoch": p["membership_epoch"]} for p in org["principals"]], "membership inventory mismatch")
+        # Migration 0023 (D6): each member sets their own display name; a seeded member has none.
+        exact_rows(tables["memberships"], [{"organization_id": oid, "principal_id": p["principal_id"], "status": p["status"], "membership_epoch": p["membership_epoch"], "display_name": None} for p in org["principals"]], "membership inventory mismatch")
         exact_rows(tables["organization_permissions"], [{"organization_id": oid, "principal_id": ADMIN, "permission": "admin_policy"}], "organization grants mismatch")
         apps, work, records, app_grants, work_grants, source_grants = [], [], [], [], [], []
         for fixture in org["contract_shape_seeds"]:

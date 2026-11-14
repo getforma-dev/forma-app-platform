@@ -353,6 +353,12 @@ fn id_arg(arguments: &Map<String, Value>, key: &str) -> Result<String, Output> {
 fn storage_output(error: storage::Error) -> Output {
     match error {
         storage::Error::Denied => Output::not_found(),
+        // APP-198: the list moved while the view computed (twice over, after
+        // the route's one re-capture): a typed not-ready, never the denial.
+        storage::Error::Stale => Output::error(
+            "stale",
+            "The list changed while this view was computed. Run it again.",
+        ),
         _ => Output::unavailable(),
     }
 }
@@ -710,6 +716,7 @@ async fn compose_app(
                 "could_not_compose",
                 "That could not be composed into an admitted app. Nothing was placed.",
             ),
+            Refused::DailyLimit => Output::error("daily_limit", composer::model::DAILY_LIMIT_TEXT),
         })?;
     attribute(stores, caller, &composed.app, &composed.work, None).await;
     let origin = composed.origin.as_str();
@@ -1176,8 +1183,9 @@ async fn commit(
                     &caller.request,
                     &draft.app,
                     &draft.work,
-                    &approver.principal,
-                    true,
+                    crate::storage::Audience::Member(&approver.principal),
+                    crate::storage::ShareRole::Contributor,
+                    crate::storage::ShareMode::Ensure,
                 )
                 .await
             {
@@ -1369,13 +1377,17 @@ async fn share(
     // another organization is never named).
     let grantee = resolve::match_approver(&name, &members).ok_or_else(Output::not_found)?;
     // The canvas route's own path, the composition's adaptation included.
+    // The agent tool keeps its `record_write` flag (its own published
+    // argument list); it maps to the viewer or contributor role, and an
+    // agent's share only adds (`Ensure`): it never lowers what a person holds.
     let shared = crate::sharing::share_with_lineage(
         stores,
         member,
         &app,
         &work,
         &grantee.principal,
-        record_write,
+        crate::storage::ShareRole::from_record_write(record_write),
+        crate::storage::ShareMode::Ensure,
     )
     .await
     .map_err(storage_output)?;
@@ -1554,6 +1566,9 @@ fn folder_refused(refused: crate::boxes::routes::BuildRefusal) -> Output {
             "too_many_requests",
             "Too many folder requests in the last hour. Try again later.",
         ),
+        crate::boxes::routes::BuildRefusal::DailyLimit => {
+            Output::error("daily_limit", composer::model::DAILY_LIMIT_TEXT)
+        }
         _ => Output::unavailable(),
     }
 }

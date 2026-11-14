@@ -306,11 +306,15 @@ fn invalid_parameters() -> Response {
 
 /// Storage refusals: `Denied` is the uniform 404 (a lock wait during session
 /// resolution is already `Denied`, D7.9). Snapshot capacity is retryable;
-/// a complete projection over the resource bound must be narrowed. Other
+/// a complete projection over the resource bound must be narrowed. A stale
+/// snapshot (APP-198: the list moved between capture and release, once more
+/// after the one re-capture) is the typed not-ready `409 stale`, which the
+/// client shows as "Updating…" and re-reads; never the uniform 404. Other
 /// variants are store outages (design §9: 503).
 pub fn storage_refusal(error: &Error) -> Response {
     match error {
         Error::Denied => http::not_found(),
+        Error::Stale => problem(StatusCode::CONFLICT, "stale"),
         Error::Busy => http::too_many_requests(RETRY_AFTER_SECONDS),
         Error::ProjectionLimit => problem(StatusCode::UNPROCESSABLE_ENTITY, "narrow_the_query"),
         _ => http::unavailable(),
@@ -427,6 +431,7 @@ fn run_result_digest(receipt: &receipt::QueryReceipt) -> &str {
 fn release_code(error: &Error) -> &'static str {
     match error {
         Error::Denied => "denied",
+        Error::Stale => "stale",
         Error::Busy => "snapshot_busy",
         Error::ProjectionLimit => "narrow_the_query",
         _ => "store_unavailable",
@@ -533,50 +538,78 @@ pub(crate) async fn run_released(
     let Some(stores) = &work.auth.stores else {
         return Err(ViewRefusal::Storage(Error::Denied));
     };
-    let run = match stores
-        .data
-        .run_query(member, app, saved, view, parameters)
-        .await
-    {
-        Ok(run) => run,
-        Err(error) => {
-            log_refused(
-                member.organization(),
-                app,
-                saved,
-                view,
-                release_code(&error),
-                started,
-            );
-            return Err(ViewRefusal::Storage(error));
+    // APP-198: a release that finds the list moved since the capture (a
+    // commit landed in between) is `Stale`, not a refusal: the view is
+    // captured, run and released once more while the handler's budget leaves
+    // room for an execution (the one-retry pattern of APP-012); a second
+    // stale release is the typed `stale` answer. Never the uniform 404.
+    let mut attempt = 0u8;
+    loop {
+        attempt += 1;
+        let run = match stores
+            .data
+            .run_query(member, app, saved, view, parameters)
+            .await
+        {
+            Ok(run) => run,
+            Err(error) => {
+                log_refused(
+                    member.organization(),
+                    app,
+                    saved,
+                    view,
+                    release_code(&error),
+                    started,
+                );
+                return Err(ViewRefusal::Storage(error));
+            }
+        };
+        let Some(executor) = &work.executor else {
+            return Err(ViewRefusal::NoEngine);
+        };
+        let result = executor
+            .execute(&run, INTERACTIVE_DEADLINE)
+            .await
+            .map_err(ViewRefusal::Engine)?;
+        // A receipt outside the contract's receipt rule is never delivered.
+        let Some(receipt) = receipt::build(&run, &result) else {
+            super::worker::log_failed_after_dispatch(&run, "receipt_nonconforming", result.wall);
+            return Err(ViewRefusal::Engine(QueryError::Failed(Failure::Engine)));
+        };
+        let document = json!({
+            "view_id": run.view(),
+            "columns": result.columns,
+            // APP-093 review M4: each column's value type, for display only.
+            "column_types": super::worker::column_types_json(&result.column_types),
+            "rows": result.rows,
+            "truncated_page": result.truncated_page,
+            "receipt": receipt.document,
+        });
+        // C07: the last authorization check, immediately before the body.
+        let released = stores.data.release_result(member, &run).await;
+        log_release(&run, &receipt, &released, started);
+        match released {
+            Ok(()) => return Ok(document),
+            Err(Error::Stale) if attempt == 1 && started.elapsed() < stale_retry_budget() => {
+                tracing::info!(
+                    event = "query.stale_recaptured",
+                    organization_id = run.organization(),
+                    app_id = run.app(),
+                    work_id = run.work(),
+                    view_id = run.view(),
+                    "the list moved between capture and release; captured once more"
+                );
+            }
+            Err(error) => return Err(ViewRefusal::Storage(error)),
         }
-    };
-    let Some(executor) = &work.executor else {
-        return Err(ViewRefusal::NoEngine);
-    };
-    let result = executor
-        .execute(&run, INTERACTIVE_DEADLINE)
-        .await
-        .map_err(ViewRefusal::Engine)?;
-    // A receipt outside the contract's receipt rule is never delivered.
-    let Some(receipt) = receipt::build(&run, &result) else {
-        super::worker::log_failed_after_dispatch(&run, "receipt_nonconforming", result.wall);
-        return Err(ViewRefusal::Engine(QueryError::Failed(Failure::Engine)));
-    };
-    let document = json!({
-        "view_id": run.view(),
-        "columns": result.columns,
-        // APP-093 review M4: each column's value type, for display only.
-        "column_types": super::worker::column_types_json(&result.column_types),
-        "rows": result.rows,
-        "truncated_page": result.truncated_page,
-        "receipt": receipt.document,
-    });
-    // C07: the last authorization check, immediately before the body.
-    let released = stores.data.release_result(member, &run).await;
-    log_release(&run, &receipt, &released, started);
-    released.map_err(ViewRefusal::Storage)?;
-    Ok(document)
+    }
+}
+
+/// How late into the handler's budget a stale view is still captured once
+/// more (APP-198): there must be room for another execution before the
+/// handler deadline, else the typed `stale` answers at once.
+fn stale_retry_budget() -> Duration {
+    http::HANDLER_DEADLINE.saturating_sub(INTERACTIVE_DEADLINE)
 }
 
 fn action(app: &str, saved: &str) -> String {
@@ -1203,6 +1236,9 @@ pub(crate) async fn run_views(
                 match released {
                     Ok(()) => page::card(&view, Outcome::Released(&result, &receipt)),
                     Err(Error::Denied) => page::card(&view, Outcome::Denied),
+                    // APP-198: the list moved while the view computed; the
+                    // typed not-ready card, never the denied one.
+                    Err(Error::Stale) => page::card(&view, Outcome::Stale),
                     Err(_) => page::card(&view, Outcome::Failed(Reason::Store)),
                 }
             }

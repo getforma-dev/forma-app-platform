@@ -22,6 +22,9 @@ app/src/**
 !app/src/origins.rs
 !app/src/pages.rs
 !app/src/product.rs
+# Trial plan D4 and D6: the organization admin area and the member's name.
+!app/src/org_admin.rs
+!app/src/member_name.rs
 !app/src/imports/
 app/src/imports/**
 !app/src/imports/mod.rs
@@ -207,6 +210,10 @@ app/admin/src/denied/**
 !app/admin/src/workspace/
 app/admin/src/workspace/**
 !app/admin/src/workspace/app.tsx
+# Trial plan D4: the organization admin page.
+!app/admin/src/org-admin/
+app/admin/src/org-admin/**
+!app/admin/src/org-admin/app.tsx
 !app/admin/src/record/
 app/admin/src/record/**
 !app/admin/src/record/app.tsx
@@ -279,6 +286,8 @@ app/admin/src/canvas/**
 !app/admin/src/canvas/data-sheet.ts
 !app/admin/src/canvas/explain.ts
 !app/admin/src/canvas/folder-bar.ts
+# Trial plan D10: the daily model-call cap's canvas copy.
+!app/admin/src/canvas/daily-limit.ts
 # APP-112 / APP-116: plain-word canvas actions and the timing chips.
 !app/admin/src/canvas/sentences.ts
 !app/admin/src/canvas/timing.ts
@@ -325,6 +334,7 @@ app/admin/src/styles/**
 !app/admin/src/styles/themes.css
 !app/admin/src/styles/app.css
 !app/admin/src/styles/ask.css
+!app/admin/src/styles/org-admin.css
 !app/admin/src/styles/sharing.css
 !app/admin/src/fonts/
 app/admin/src/fonts/**
@@ -587,6 +597,12 @@ app/admin/src/record-components/**
 !app/migrations/0022_work_artifact_kinds.sql
 !app/migrations/catalog-v21.json
 !app/migrations/catalog-v22.json
+!app/migrations/0023_consent_names_org_admin.sql
+!app/migrations/catalog-v23.json
+!app/migrations/0024_private_entries_and_roles.sql
+!app/migrations/catalog-v24.json
+!app/src/auth/notice.rs
+!app/src/storage/org_admin.rs
 !app/runtime/box_record_import.py
 !app/src/actions/assistant.rs
 !app/src/actions/record_search.rs

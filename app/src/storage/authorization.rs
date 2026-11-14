@@ -52,6 +52,10 @@ pub enum Action {
     SourceRead,
     RecordRead,
     RecordWrite,
+    /// APP-191 (D7, D8): a reviewer of the work: `record_read` on it and the
+    /// reviewer rule (`reviewer_clause`). Reviewers see and change every row
+    /// of an `own` collection and alone run `reviewer_only` commands.
+    RecordReview,
     EditDefinition,
     ReviewPublish,
     ShareWork,
@@ -67,6 +71,7 @@ impl TryFrom<&str> for Action {
             "source_read" => Self::SourceRead,
             "record_read" => Self::RecordRead,
             "record_write" => Self::RecordWrite,
+            "record_review" => Self::RecordReview,
             "edit_definition" => Self::EditDefinition,
             "review_publish" => Self::ReviewPublish,
             "share_work" => Self::ShareWork,
@@ -84,6 +89,7 @@ impl Action {
             Self::SourceRead => "source_read",
             Self::RecordRead => "record_read",
             Self::RecordWrite => "record_write",
+            Self::RecordReview => "record_review",
             Self::EditDefinition => "edit_definition",
             Self::ReviewPublish => "review_publish",
             Self::ShareWork => "share_work",
@@ -547,9 +553,12 @@ impl<'a> Transaction<'a> {
         let ids: Vec<&str> = sent.iter().map(|&i| works[i].1).collect();
         let principal = "$2::text::uuid";
         let sql = format!(
-            "SELECT c.n::bigint,EXISTS(SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=c.app::uuid AND p.permission='discover'),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}) FROM unnest($3::text[],$4::text[]) WITH ORDINALITY AS c(app,work,n)",
+            "SELECT c.n::bigint,EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {}),EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=c.app::uuid AND w.work_id=c.work::uuid AND {} AND {}) FROM unnest($3::text[],$4::text[]) WITH ORDINALITY AS c(app,work,n)",
+            discover_clause(principal),
             work_clause(principal, "record_read"),
             work_clause(principal, "record_write"),
+            work_clause(principal, "record_read"),
+            reviewer_clause("w.app_id", "w.work_id", principal),
         );
         let rows = self
             .query(
@@ -567,6 +576,7 @@ impl<'a> Transaction<'a> {
                 discover: boolean(row, 1)?,
                 record_read: boolean(row, 2)?,
                 record_write: boolean(row, 3)?,
+                record_review: boolean(row, 4)?,
             };
         }
         Ok(grants)
@@ -590,7 +600,15 @@ impl<'a> Transaction<'a> {
         let rows = match precheck.resource {
             Resource::Organization if precheck.action == Action::AdminPolicy => self.query(
                 "SELECT 1 FROM genui.organization_permissions WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND permission=$3", &[org,principal,&action]).await?,
-            Resource::App(app) if matches!(precheck.action, Action::Discover | Action::Run | Action::EditDefinition | Action::ReviewPublish) => {
+            // APP-192 (D9): `discover` and `run` on an app are also held by
+            // every active member while a live organization-wide share of a
+            // work of that app exists (the app-level rows a personal share
+            // copies); `edit_definition` and `review_publish` are grants only.
+            Resource::App(app) if matches!(precheck.action, Action::Discover | Action::Run) => {
+                require(valid_id(app))?;
+                self.query(&format!("SELECT 1 FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND (EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=a.app_id AND p.permission=$4) OR {})", organization_share("a.app_id", None, "$2::text::uuid", None)), &[org,principal,&app,&action]).await?
+            }
+            Resource::App(app) if matches!(precheck.action, Action::EditDefinition | Action::ReviewPublish) => {
                 require(valid_id(app))?;
                 self.query("SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=$3::text::uuid AND p.permission=$4", &[org,principal,&app,&action]).await?
             }
@@ -604,7 +622,20 @@ impl<'a> Transaction<'a> {
             // work_permissions lookup; the app `run` clause and every
             // dependency's live `source_read` still apply, and membership
             // revocation ends it at the precheck above.
-            Resource::Work { app, work } if matches!(precheck.action, Action::RecordRead | Action::RecordWrite | Action::ShareWork | Action::Export) => {
+            // APP-191/APP-192: `record_read` and `record_write` are the
+            // `work_clause` (a grant, the unrevoked creator or a live
+            // organization-wide share of the work); `record_review` is
+            // `record_read` and the reviewer rule.
+            Resource::Work { app, work } if matches!(precheck.action, Action::RecordRead | Action::RecordWrite) => {
+                require(valid_id(app) && valid_id(work))?;
+                let permission = if precheck.action == Action::RecordRead { "record_read" } else { "record_write" };
+                self.query(&format!("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND {}", work_clause("$2::text::uuid", permission)), &[org,principal,&app,&work]).await?
+            }
+            Resource::Work { app, work } if precheck.action == Action::RecordReview => {
+                require(valid_id(app) && valid_id(work))?;
+                self.query(&format!("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND {} AND {}", work_clause("$2::text::uuid", "record_read"), reviewer_clause("w.app_id", "w.work_id", "$2::text::uuid")), &[org,principal,&app,&work]).await?
+            }
+            Resource::Work { app, work } if matches!(precheck.action, Action::ShareWork | Action::Export) => {
                 require(valid_id(app) && valid_id(work))?;
                 self.query("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND (EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission=$5) OR ($5 IN ('record_read','record_write') AND w.created_by=$2::text::uuid AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=$2::text::uuid AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=$2::text::uuid AND s.source_id=d.source_id AND s.permission='source_read')))", &[org,principal,&app,&work,&action]).await?
             }
@@ -651,10 +682,145 @@ pub(super) fn record_read_clause(principal: &str) -> String {
 /// The `permissions` clause for `record_read` or `record_write` (the two
 /// permissions the unrevoked creator also holds) on a `genui.saved_work`
 /// row `w`, for `principal` (an SQL expression); `permission` is one of
-/// those two literals, never request data.
-fn work_clause(principal: &str, permission: &'static str) -> String {
+/// those two literals, never request data. APP-192 (D9): a live
+/// organization-wide share of the work ([`organization_share`]) stands in
+/// for the work grant and for `run` on the app, for every active member.
+pub(super) fn work_clause(principal: &str, permission: &'static str) -> String {
     debug_assert!(matches!(permission, "record_read" | "record_write"));
-    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='{permission}') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
+    let shared = organization_share("w.app_id", Some("w.work_id"), principal, Some(permission));
+    let run = organization_share("w.app_id", Some("w.work_id"), principal, None);
+    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='{permission}') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL) OR {shared}) AND (EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') OR {run}) AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
+}
+
+/// APP-192 (D9): a live organization-wide share (`genui.work_shares` with no
+/// grantee and no `revoked_at`) of a work of app `{app}` (and of work
+/// `{work}` when given), while `{principal}` is an active member of the
+/// scoped organization; `permission`, when given, narrows the share's role to
+/// those that carry it (viewer: `record_read`; contributor: also
+/// `record_write`; reviewer: also `record_review`). Arguments are SQL
+/// expressions. Aliases are private to this clause (`os`, `om`).
+pub(super) fn organization_share(
+    app: &str,
+    work: Option<&str>,
+    principal: &str,
+    permission: Option<&'static str>,
+) -> String {
+    let roles = match permission {
+        None | Some("record_read") => "'viewer','contributor','reviewer'",
+        Some("record_write") => "'contributor','reviewer'",
+        Some("record_review") => "'reviewer'",
+        Some(other) => unreachable!("not a role-carried permission: {other}"),
+    };
+    let work = work
+        .map(|work| format!(" AND os.work_id={work}"))
+        .unwrap_or_default();
+    format!("EXISTS(SELECT 1 FROM genui.work_shares os WHERE os.organization_id={SCOPED_ORG} AND os.app_id={app}{work} AND os.grantee_id IS NULL AND os.revoked_at IS NULL AND os.role IN ({roles}) AND EXISTS(SELECT 1 FROM genui.memberships om WHERE om.organization_id=os.organization_id AND om.principal_id={principal} AND om.status='active'))")
+}
+
+/// The listing's `discover` on the app of a `genui.saved_work` row `w` for
+/// `principal`: a `discover` grant, or (APP-192) a live organization-wide
+/// share of the work. The one clause behind `grants`, `listable` and
+/// `openable_principals`.
+pub(super) fn discover_clause(principal: &str) -> String {
+    format!(
+        "(EXISTS(SELECT 1 FROM genui.app_permissions x WHERE x.organization_id=w.organization_id AND x.principal_id={principal} AND x.app_id=w.app_id AND x.permission='discover') OR {})",
+        organization_share("w.app_id", Some("w.work_id"), principal, None)
+    )
+}
+
+/// `discover` on a `genui.apps` row `{app_alias}` for `principal`: a grant,
+/// or a live organization-wide share of any work of the app (labels).
+pub(super) fn app_discover_clause(app_alias: &str, principal: &str) -> String {
+    format!(
+        "(EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id={app_alias}.organization_id AND p.principal_id={principal} AND p.app_id={app_alias}.app_id AND p.permission='discover') OR {})",
+        organization_share(&format!("{app_alias}.app_id"), None, principal, None)
+    )
+}
+
+/// The transaction's scoped organization as an SQL expression.
+const SCOPED_ORG: &str = "nullif(current_setting('genui.organization_id',true),'')::uuid";
+/// The transaction's scoped principal as an SQL expression: set for every
+/// member transaction (`Transaction::open`), NULL for a guest or nonmember
+/// entry, so that a guest is never a creator and never a reviewer.
+pub(super) const SCOPED: &str = "nullif(current_setting('genui.principal_id',true),'')::uuid";
+
+/// The `private-entries` campaign's bypass (APP-191 acceptance: every check
+/// fails with the enforcement bypassed): `own_rows` becomes TRUE, `hidden`
+/// empty, `own_collections` zero and `compose` skips the `reviewer_only` gate
+/// while set. Test builds only; a campaign runs alone, so no other test
+/// reads it.
+#[cfg(test)]
+pub(crate) static BYPASS: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) fn bypassed() -> bool {
+    BYPASS.load(Ordering::SeqCst)
+}
+#[cfg(not(test))]
+#[inline]
+pub(super) fn bypassed() -> bool {
+    false
+}
+
+/// APP-191 (D7): the one row rule of an `own` collection, over a
+/// `genui.internal_record_revisions` row aliased `{row}` of work `{work}` of
+/// app `{app}`: the row is the principal's own (`creator_id`), or its
+/// collection is not hidden from the principal ([`hidden`]). Every record
+/// read and write of storage carries it (the scan test
+/// `every_record_statement_carries_own_rows` enforces that); `{principal}` is
+/// [`SCOPED`] in a member or guest transaction, or a membership column in a
+/// per-member judgment. Arguments are SQL expressions, never request data.
+pub(super) fn own_rows(row: &str, app: &str, work: &str, principal: &str) -> String {
+    if bypassed() {
+        return "TRUE".to_owned();
+    }
+    format!(
+        "(coalesce({row}.creator_id={principal},false) OR {row}.collection_id<>ALL({}))",
+        hidden(app, work, principal)
+    )
+}
+
+/// The collections of work `{work}` of app `{app}` hidden from `{principal}`:
+/// the pinned publication's record schemas declared `visibility: "own"`
+/// (`definition_record_schemas.owner_only`, derived in the database from the
+/// stored canonical schema, migration 0024) unless the principal is a
+/// reviewer of the work ([`reviewer_clause`]). An `ARRAY(...)` subquery with
+/// no outer row reference, so PostgreSQL evaluates it once per statement (an
+/// InitPlan) and each row costs one array comparison. Aliases are private
+/// (`hc`, `hp`, `hd`).
+pub(super) fn hidden(app: &str, work: &str, principal: &str) -> String {
+    if bypassed() {
+        return "ARRAY[]::uuid[]".to_owned();
+    }
+    format!(
+        "ARRAY(SELECT hc.collection_id FROM genui.record_collections hc JOIN genui.publication_record_schemas hp ON hp.organization_id=hc.organization_id AND hp.app_id=hc.app_id AND hp.publication_id=hc.publication_id AND hp.schema_id=hc.schema_id AND hp.schema_version=hc.schema_version JOIN genui.definition_record_schemas hd ON hd.organization_id=hp.organization_id AND hd.app_id=hp.app_id AND hd.revision_id=hp.definition_revision_id AND hd.schema_id=hp.schema_id AND hd.schema_version=hp.schema_version AND hd.digest=hp.digest WHERE hc.organization_id={SCOPED_ORG} AND hc.app_id={app} AND hc.work_id={work} AND hd.owner_only AND NOT {})",
+        reviewer_clause(app, work, principal)
+    )
+}
+
+/// APP-191: whether `{principal}` is a reviewer of work `{work}` of app
+/// `{app}`: an active member of the scoped organization who is the app's
+/// owner, the work's unrevoked creator (Victor, 2026-11-14), a holder of
+/// `record_review` on the work, or covered by a live organization-wide share
+/// with the reviewer role. Arguments are SQL expressions. Aliases are private
+/// (`rm`, `ra`, `rw`, `rp`, `rs`), so the clause composes inside any statement.
+pub(super) fn reviewer_clause(app: &str, work: &str, principal: &str) -> String {
+    format!("(EXISTS(SELECT 1 FROM genui.memberships rm WHERE rm.organization_id={SCOPED_ORG} AND rm.principal_id={principal} AND rm.status='active') AND (EXISTS(SELECT 1 FROM genui.apps ra WHERE ra.organization_id={SCOPED_ORG} AND ra.app_id={app} AND ra.owner_principal_id={principal}) OR EXISTS(SELECT 1 FROM genui.saved_work rw WHERE rw.organization_id={SCOPED_ORG} AND rw.app_id={app} AND rw.work_id={work} AND rw.created_by={principal} AND rw.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions rp WHERE rp.organization_id={SCOPED_ORG} AND rp.principal_id={principal} AND rp.app_id={app} AND rp.work_id={work} AND rp.permission='record_review') OR EXISTS(SELECT 1 FROM genui.work_shares rs WHERE rs.organization_id={SCOPED_ORG} AND rs.app_id={app} AND rs.work_id={work} AND rs.grantee_id IS NULL AND rs.revoked_at IS NULL AND rs.role='reviewer')))")
+}
+
+/// How many collections of work `work` of app `app` are declared `own`
+/// (APP-191): a live (guest) share of such a work is refused, since a guest
+/// is nobody's creator and no reviewer.
+pub(super) async fn own_collections(
+    transaction: &Transaction<'_>,
+    organization: &str,
+    app: &str,
+    work: &str,
+) -> Result<i64> {
+    if bypassed() {
+        return Ok(0);
+    }
+    let rows = transaction.query("SELECT count(*)::bigint FROM genui.record_collections hc JOIN genui.publication_record_schemas hp ON hp.organization_id=hc.organization_id AND hp.app_id=hc.app_id AND hp.publication_id=hc.publication_id AND hp.schema_id=hc.schema_id AND hp.schema_version=hc.schema_version JOIN genui.definition_record_schemas hd ON hd.organization_id=hp.organization_id AND hd.app_id=hp.app_id AND hd.revision_id=hp.definition_revision_id AND hd.schema_id=hp.schema_id AND hd.schema_version=hp.schema_version AND hd.digest=hp.digest WHERE hc.organization_id=$1::text::uuid AND hc.app_id=$2::text::uuid AND hc.work_id=$3::text::uuid AND hd.owner_only", &[&organization,&app,&work]).await?;
+    integer(rows.first().ok_or(Error::Unavailable)?, 0)
 }
 
 fn text(row: &Row, index: usize) -> Result<String> {
@@ -684,6 +850,8 @@ pub(super) struct Grants {
     pub discover: bool,
     pub record_read: bool,
     pub record_write: bool,
+    /// APP-191: `Action::RecordReview` (the reviewer rule, after the fence).
+    pub record_review: bool,
 }
 
 impl<'r> Permit<'_, 'r> {
@@ -739,7 +907,9 @@ impl<'r> Permit<'_, 'r> {
         let locked = self.transaction.query("SELECT publication_id::text,work_version FROM genui_private.lock_work_revision($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5)", &[&self.request.organization,&app,&work,&publication,&version]).await?;
         let locked = locked.first().ok_or(Error::Denied)?;
         require(text(locked, 0)? == publication && integer(locked, 1)? == version)?;
-        let rows = self.transaction.query("SELECT record_id::text,current_version FROM genui.internal_records WHERE organization_id=$1::text::uuid AND app_id=$2::text::uuid AND work_id=$3::text::uuid AND collection_id=$4::text::uuid AND record_id=$5::text::uuid", &[&self.request.organization,&app,&work,&collection,&record]).await?;
+        // APP-191: a record of an `own` collection another member created is
+        // absent to a non-reviewer (the uniform 404), like an unknown record.
+        let rows = self.transaction.query(&format!("SELECT r.record_id::text,r.current_version FROM genui.internal_records r JOIN genui.internal_record_revisions v ON v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version WHERE r.organization_id=$1::text::uuid AND r.app_id=$2::text::uuid AND r.work_id=$3::text::uuid AND r.collection_id=$4::text::uuid AND r.record_id=$5::text::uuid AND {}", own_rows("v", "$2::text::uuid", "$3::text::uuid", SCOPED)), &[&self.request.organization,&app,&work,&collection,&record]).await?;
         let row = rows.first().ok_or(Error::Denied)?;
         Ok(Record {
             record_id: text(row, 0)?,

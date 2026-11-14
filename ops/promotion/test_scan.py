@@ -1,5 +1,7 @@
 import copy
 from datetime import datetime, timedelta, timezone
+import functools
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -8,8 +10,63 @@ from unittest.mock import patch
 
 from ops.promotion import registry
 from ops.promotion.guards import REPOS
-from ops.promotion.registry import REVIEWED_DISPOSITION, guard_scan_delta, scan_disposition
+from ops.promotion.registry import guard_scan_delta, scan_disposition
 from ops.promotion.state import Refused
+
+ROOT = Path(__file__).resolve().parents[2]
+# Release A's disposition (APP-175; approved 2026-11-14 as f00adb9a..., expired
+# 2026-11-20) is the fixture for every test that needs a real one. It was spent when
+# release A went live and was removed from ops/promotion with release B's record
+# (APP-194). It is regenerated from its committed delta by the renewal tool, and its
+# bytes must hash to the approved file's, so nothing here is retyped but the pin below,
+# which is the registry pin as it was reviewed.
+RELEASE_A_DELTA = ROOT / 'evidence/APP-175/scan-delta-2026-11-14.json'
+RELEASE_A_EVIDENCE = 'evidence/APP-175/SCAN-DISPOSITION.md'
+RELEASE_A_EXPIRY = '2026-11-20T00:00:00Z'
+RELEASE_A_SHA256 = 'f00adb9a047ce880535966ef5551d543b611be31c144be08efbc3e0345b5025b'
+RELEASE_A_PIN = {
+    'evidence': RELEASE_A_EVIDENCE,
+    'roles': frozenset(REPOS),
+    'expires_at_utc': RELEASE_A_EXPIRY,
+    'findings': {
+        'CVE-2026-100290': ('LOW', 'glibc'),
+        'CVE-2026-112314': ('HIGH', 'krb5'),
+        'CVE-2026-112315': ('MEDIUM', 'krb5'),
+        'CVE-2026-112316': ('MEDIUM', 'krb5'),
+        'CVE-2026-112317': ('MEDIUM', 'krb5'),
+        'CVE-2026-112318': ('MEDIUM', 'krb5'),
+        'CVE-2026-112319': ('MEDIUM', 'krb5'),
+        'CVE-2026-112320': ('HIGH', 'krb5'),
+        'CVE-2026-112321': ('HIGH', 'krb5'),
+        'CVE-2026-112322': ('HIGH', 'krb5'),
+        'CVE-2026-112323': ('HIGH', 'krb5'),
+        'CVE-2026-115456': ('LOW', 'gcc-12'),
+        'CVE-2026-115819': ('MEDIUM', 'glibc'),
+        'CVE-2026-119079': ('HIGH', 'krb5'),
+        'CVE-2026-76844': ('HIGH', 'zlib'),
+        'CVE-2026-91094': ('UNDEFINED', 'dpkg'),
+    },
+}
+
+
+@functools.lru_cache(maxsize=None)
+def release_a_bytes():
+    from ops.promotion import scan_renewal
+    disposition, pin = scan_renewal.generate(json.loads(RELEASE_A_DELTA.read_text()), RELEASE_A_EVIDENCE, RELEASE_A_EXPIRY)
+    raw = scan_renewal.encoded(disposition)
+    if hashlib.sha256(raw).hexdigest() != RELEASE_A_SHA256 or pin != RELEASE_A_PIN:
+        raise AssertionError('release A fixture differs from the approved disposition')
+    return raw
+
+
+def release_a_disposition(test):
+    """Install release A's disposition and its pin in place of the committed ones for one test."""
+    directory = tempfile.TemporaryDirectory(); test.addCleanup(directory.cleanup)
+    path = Path(directory.name) / 'scan-disposition.json'
+    path.write_bytes(release_a_bytes())
+    for name, value in [('DISPOSITION', path), ('REVIEWED_DISPOSITION', RELEASE_A_PIN)]:
+        patcher = patch.object(registry, name, value); patcher.start(); test.addCleanup(patcher.stop)
+    return scan_disposition()
 
 
 def expiry(value):
@@ -18,14 +75,14 @@ def expiry(value):
 
 class ScanDispositionTests(unittest.TestCase):
     def setUp(self):
-        self.disposition, self.sha = scan_disposition()
+        self.disposition, self.sha = release_a_disposition(self)
         self.baseline = {role: {'manifest_digest': self.disposition['roles'][role]['predecessor_manifest_digest'],
                                 'findings': []} for role in REPOS}
         self.current = copy.deepcopy(self.baseline)
         for role in REPOS:
             self.current[role]['findings'] = copy.deepcopy(self.disposition['roles'][role]['findings'])
         self.contract = self.disposition['deployment_contract_sha256']
-        self.reviewed = sorted(REVIEWED_DISPOSITION['findings'])
+        self.reviewed = sorted(RELEASE_A_PIN['findings'])
         self.clock = expiry(self.disposition) - timedelta(days=1)
 
     def check(self):
@@ -101,8 +158,62 @@ class ScanDispositionTests(unittest.TestCase):
             self.assertIsNone(delta['disposition_sha256'])
 
 
+class CommittedDispositionTests(unittest.TestCase):
+    def test_the_committed_file_and_its_pin_land_and_leave_together(self):
+        self.assertEqual(registry.DISPOSITION.exists(), registry.REVIEWED_DISPOSITION is not None)
+        if not registry.DISPOSITION.exists():
+            self.assertEqual(scan_disposition(), (None, None))
+
+
+class NoDispositionTests(unittest.TestCase):
+    """No disposition pending: the guard never reads one for an unchanged scan and refuses, never crashes, otherwise."""
+
+    def setUp(self):
+        self.disposition, _ = release_a_disposition(self)  # for real fingerprints only
+        self.baseline = {role: {'manifest_digest': 'sha256:' + c * 64, 'findings': []} for role, c in zip(sorted(REPOS), 'abd')}
+        self.finding = copy.deepcopy(self.disposition['roles']['service']['findings'][0])
+        self.contract = 'c' * 64
+        self.clock = datetime(2026, 11, 23, tzinfo=timezone.utc)
+        self.absent = Path(tempfile.mkdtemp()) / 'scan-disposition.json'
+        self.addCleanup(self.absent.parent.rmdir)
+
+    def state(self, path, pin):
+        for name, value in [('DISPOSITION', path), ('REVIEWED_DISPOSITION', pin)]:
+            patcher = patch.object(registry, name, value); patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_an_unchanged_scan_never_reads_a_disposition(self):
+        current = copy.deepcopy(self.baseline)
+        for role in REPOS:
+            self.baseline[role]['findings'] = [copy.deepcopy(self.finding)]
+            current[role]['findings'] = [copy.deepcopy(self.finding)]
+        with patch.object(registry, 'scan_disposition', side_effect=AssertionError('read')):
+            result = guard_scan_delta(current, self.baseline, self.contract, self.clock)
+        self.assertEqual({r['introduced'] for r in result.values()}, {0})
+        self.assertEqual({r['disposition_sha256'] for r in result.values()}, {None})
+
+    def test_introduced_findings_with_no_disposition_refuse_cleanly(self):
+        for pin in [None, RELEASE_A_PIN]:  # nothing committed; a pin whose file is gone
+            for role in REPOS:
+                with self.subTest(pin=pin is not None, role=role):
+                    self.state(self.absent, pin)
+                    current = copy.deepcopy(self.baseline); current[role]['findings'] = [copy.deepcopy(self.finding)]
+                    with self.assertRaisesRegex(Refused, 'new scan findings require separately reviewed disposition: ' + role):
+                        guard_scan_delta(current, self.baseline, self.contract, self.clock)
+
+    def test_a_disposition_without_its_source_pin_refuses(self):
+        self.state(registry.DISPOSITION, None)  # release A's bytes, its pin gone
+        with self.assertRaisesRegex(Refused, 'scan disposition has no reviewed source pin'): scan_disposition()
+        current = copy.deepcopy(self.baseline); current['operator']['findings'] = [copy.deepcopy(self.finding)]
+        with self.assertRaisesRegex(Refused, 'no reviewed source pin'):
+            guard_scan_delta(current, self.baseline, self.contract, self.clock)
+
+
 class DispositionFileTests(unittest.TestCase):
     """Editing scan-disposition.json alone must never widen what is accepted."""
+
+    def setUp(self):
+        release_a_disposition(self)
+        self.text = release_a_bytes().decode()
 
     def load_text(self, text):
         with tempfile.TemporaryDirectory() as directory:
@@ -112,13 +223,13 @@ class DispositionFileTests(unittest.TestCase):
                 return scan_disposition()
 
     def load(self, mutate):
-        value = json.loads(registry.DISPOSITION.read_bytes())
+        value = json.loads(self.text)
         replaced = mutate(value)  # only a mutation that rebuilds the document returns it
         return self.load_text(json.dumps(replaced if isinstance(replaced, list) else value))
 
     def test_duplicate_keys_and_invalid_json_refuse(self):
-        text = registry.DISPOSITION.read_text()
-        pinned = '"expires_at_utc": "' + REVIEWED_DISPOSITION['expires_at_utc'] + '"'
+        text = self.text
+        pinned = '"expires_at_utc": "' + RELEASE_A_PIN['expires_at_utc'] + '"'
         self.assertIn(pinned, text)
         for changed in [text.replace(pinned, pinned + ', "expires_at_utc": "2099-01-01T00:00:00Z"'),
                         text.replace('"roles": {', '"roles": {"operator": {}, ', 1),
@@ -127,10 +238,10 @@ class DispositionFileTests(unittest.TestCase):
                 self.assertNotEqual(changed, text)
                 with self.assertRaises(Refused): self.load_text(changed)
 
-    def test_the_committed_file_is_valid(self):
+    def test_the_fixture_is_valid(self):
         value, sha = scan_disposition()
         self.assertEqual(set(value['roles']), set(REPOS))
-        self.assertEqual(len(sha), 64)
+        self.assertEqual(sha, RELEASE_A_SHA256)
 
     def test_widening_or_reshaping_the_file_refuses(self):
         first = lambda v: v['roles']['service']['findings'][0]
@@ -173,17 +284,41 @@ class DispositionFileTests(unittest.TestCase):
                 with self.assertRaises(Refused): self.load(mutate)
 
 
-class ReleaseBindingTests(unittest.TestCase):
-    """The committed disposition belongs to the APP-175 schema release and its evidence.
+class ReleaseAFixtureTests(unittest.TestCase):
+    """The fixture reviews exactly release A's committed scan delta (the record behind the approved packet)."""
 
-    Not bindable here: that each predecessor is the live image (the canonical state is
-    private) and that the candidate images report the same findings. The guard checks
-    both at preparation and again before the outage.
+    def test_every_role_reviews_exactly_the_committed_scan_delta(self):
+        from ops.promotion.registry import finding_set
+        value, _ = release_a_disposition(self)
+        delta = json.loads(RELEASE_A_DELTA.read_text())
+        self.assertEqual(delta['deployment_contract_sha256'], value['deployment_contract_sha256'])
+        # Release A's `to` contract (evidence/APP-175/release-2026-11-14.md), now the live baseline.
+        self.assertEqual(value['deployment_contract_sha256'], '14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b')
+        for role, entry in value['roles'].items():
+            with self.subTest(role=role):
+                observed = delta['roles'][role]
+                self.assertEqual(finding_set(entry['findings']), finding_set(observed['introduced']))
+                # The one removed fingerprint is CVE-2026-76844's November 5 vector; the scanner re-vectored
+                # it on 2026-11-14 (same package, version and score), so it is also among the introduced.
+                self.assertEqual((observed['removed_count'], observed['critical_count']), (1, 0))
+                self.assertIn('CVE-2026-76844', {f['name'] for f in observed['introduced']})
+
+
+@unittest.skipUnless(registry.DISPOSITION.exists(), 'no scan disposition is pending')
+class ReleaseBindingTests(unittest.TestCase):
+    """A committed disposition belongs to the pending schema release and to its own evidence.
+
+    It is read from the one `scan-delta-*.json` beside its evidence record. Not bindable
+    here: that each predecessor is the live image (the canonical state is private) and
+    that the candidate images report the same findings. The guard checks both at
+    preparation and again before the outage.
     """
 
     def setUp(self):
         self.value, _ = scan_disposition()
-        self.delta = json.loads((Path(__file__).resolve().parents[2] / 'evidence/APP-175/scan-delta-2026-11-14.json').read_text())
+        deltas = sorted((ROOT / self.value['evidence']).parent.glob('scan-delta-*.json'))
+        self.assertEqual(len(deltas), 1, 'one scan delta beside the disposition record')
+        self.delta = json.loads(deltas[0].read_text())
 
     def test_contract_and_expiry_are_the_schema_releases(self):
         from ops.promotion import schema_release
@@ -192,7 +327,7 @@ class ReleaseBindingTests(unittest.TestCase):
         if schema_release.SPEC.exists():
             spec, _ = schema_release.load()
             self.assertEqual(self.value['deployment_contract_sha256'], spec['to']['deployment_contract_sha256'])
-        self.assertEqual(self.value['evidence'], 'evidence/APP-175/SCAN-DISPOSITION.md')
+        self.assertEqual(self.value['evidence'], registry.REVIEWED_DISPOSITION['evidence'])
 
     def test_every_role_reviews_exactly_the_committed_scan_delta(self):
         from ops.promotion.registry import finding_set
@@ -206,11 +341,8 @@ class ReleaseBindingTests(unittest.TestCase):
                 self.assertEqual(entry['predecessor_manifest_digest'], observed['manifest_digest'])
                 self.assertEqual(finding_set(entry['findings']), finding_set(observed['introduced']))
                 self.assertEqual(observed['introduced_count'], len(entry['findings']))
-                # The one removed fingerprint is CVE-2026-76844's November 5 vector; the scanner re-vectored
-                # it on 2026-11-14 (same package, version and score), so it is also among the introduced.
-                self.assertEqual((observed['removed_count'], observed['critical_count']), (1, 0))
-                self.assertIn('CVE-2026-76844', {f['name'] for f in observed['introduced']})
-                self.assertEqual(sorted(f['name'] for f in entry['findings']), sorted(REVIEWED_DISPOSITION['findings']))
+                self.assertEqual(observed['critical_count'], 0)
+                self.assertEqual(sorted(f['name'] for f in entry['findings']), sorted(registry.REVIEWED_DISPOSITION['findings']))
                 predecessors.add(entry['predecessor_manifest_digest'])
         self.assertEqual(len(predecessors), len(REPOS))
 

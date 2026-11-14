@@ -47,7 +47,7 @@ use super::{
     authorization::Transaction,
     boxes::{file_visible, serialize_member},
     definitions::{append, confirm_identity, Chain, Event},
-    labels::{DISCOVER, OWNER_OR_ADMIN},
+    labels::{discover_clause, OWNER_OR_ADMIN},
     pool::{Data, Workspace},
     queries::listable,
     require, valid_id, Error, Result, TrustedRequest, QUERY_HANDLER_DEADLINE,
@@ -294,7 +294,15 @@ impl Workspace {
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
                 let readable = listable("$2::text::uuid");
-                let rows = t.query(&format!("SELECT {CARD_COLUMNS},(c.app_id IS NOT NULL AND EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=c.organization_id AND a.app_id=c.app_id AND {OWNER_OR_ADMIN})) FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.removed_at IS NULL AND (c.principal_id=$2::text::uuid OR (c.everyone AND EXISTS(SELECT 1 FROM genui.memberships m WHERE m.organization_id=c.organization_id AND m.principal_id=c.principal_id AND m.status='active'))) AND (c.app_id IS NULL OR EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=c.app_id AND w.work_id=c.work_id AND {readable})) AND NOT EXISTS(SELECT 1 FROM unnest(c.read_apps,c.read_works) AS k(app_id,work_id) WHERE NOT EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id AND {readable})) ORDER BY c.created_at,c.card_id LIMIT $3"), &[&request.organization,&request.principal,&LIST_LIMIT]).await?;
+                // APP-191: a pinned answer is derived from the rows its maker
+                // could read; it is listed to anyone else only when no
+                // collection of any work it read (or sits on) is hidden
+                // from the reader (`cardinality(hidden(...))=0`). Defence in
+                // depth today: 0015's CHECK (kind = 'card' OR NOT everyone)
+                // and `share_card` keep every answer its maker's alone.
+                let hidden_read = super::authorization::hidden("k.app_id", "k.work_id", super::authorization::SCOPED);
+                let hidden_own = super::authorization::hidden("c.app_id", "c.work_id", super::authorization::SCOPED);
+                let rows = t.query(&format!("SELECT {CARD_COLUMNS},(c.app_id IS NOT NULL AND EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=c.organization_id AND a.app_id=c.app_id AND {OWNER_OR_ADMIN})) FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.removed_at IS NULL AND (c.principal_id=$2::text::uuid OR (c.everyone AND EXISTS(SELECT 1 FROM genui.memberships m WHERE m.organization_id=c.organization_id AND m.principal_id=c.principal_id AND m.status='active'))) AND (c.app_id IS NULL OR EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=c.app_id AND w.work_id=c.work_id AND {readable})) AND NOT EXISTS(SELECT 1 FROM unnest(c.read_apps,c.read_works) AS k(app_id,work_id) WHERE NOT EXISTS(SELECT 1 FROM genui.saved_work w WHERE w.organization_id=c.organization_id AND w.app_id=k.app_id AND w.work_id=k.work_id AND {readable})) AND (c.principal_id=$2::text::uuid OR c.kind<>'answer' OR (NOT EXISTS(SELECT 1 FROM unnest(c.read_apps,c.read_works) AS k(app_id,work_id) WHERE cardinality({hidden_read})>0) AND (c.app_id IS NULL OR cardinality({hidden_own})=0))) ORDER BY c.created_at,c.card_id LIMIT $3"), &[&request.organization,&request.principal,&LIST_LIMIT]).await?;
                 let cards = rows.iter().map(|row| card_row(row, flag(row, 11)?)).collect::<Result<Vec<_>>>()?;
                 let mut pins = Vec::new();
                 let mut indices = Vec::new();
@@ -371,7 +379,8 @@ impl Workspace {
                 if let Some(file) = &file { require(readable_file_pins(t, request, std::slice::from_ref(file)).await? == [true])?; }
                 let mut steward = false;
                 if let Some(app) = &card.app {
-                    let allowed = t.query(&format!("SELECT {OWNER_OR_ADMIN} FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {DISCOVER}"), &[&request.organization,&request.principal,app]).await?;
+                    let discover = discover_clause();
+                    let allowed = t.query(&format!("SELECT {OWNER_OR_ADMIN} FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND {discover}"), &[&request.organization,&request.principal,app]).await?;
                     steward = flag(allowed.first().ok_or(Error::Denied)?, 0)?;
                 }
                 let existing = t.query(&format!("SELECT {CARD_COLUMNS},c.removed_at IS NULL,c.read_apps=$4::text[]::uuid[] AND c.read_works=$5::text[]::uuid[] FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.card_id=$3::text::uuid AND c.principal_id=$2::text::uuid"), &[&request.organization,&request.principal,&card.card,&read_apps,&read_works]).await?;
@@ -433,7 +442,8 @@ impl Workspace {
                 let permit = transaction.fence_member().await?;
                 let t = permit.transaction();
                 // RLS shows the member's own rows and those added for everyone.
-                let rows = t.query(&format!("SELECT {CARD_COLUMNS},(c.app_id IS NOT NULL AND EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=c.organization_id AND a.app_id=c.app_id AND {DISCOVER} AND {OWNER_OR_ADMIN})) FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.card_id=$3::text::uuid AND c.removed_at IS NULL"), &[&request.organization,&request.principal,&card]).await?;
+                let discover = discover_clause();
+                let rows = t.query(&format!("SELECT {CARD_COLUMNS},(c.app_id IS NOT NULL AND EXISTS(SELECT 1 FROM genui.apps a WHERE a.organization_id=c.organization_id AND a.app_id=c.app_id AND {discover} AND {OWNER_OR_ADMIN})) FROM genui.member_cards c WHERE c.organization_id=$1::text::uuid AND c.card_id=$3::text::uuid AND c.removed_at IS NULL"), &[&request.organization,&request.principal,&card]).await?;
                 let row = rows.first().ok_or(Error::Denied)?;
                 let current = card_row(row, flag(row, 11)?)?;
                 if !current.mine {
@@ -562,7 +572,8 @@ impl Data {
             );
             let versions: Vec<i64> = receipts.iter().map(|r| r.version).collect();
             let sequences: Vec<i64> = receipts.iter().map(|r| r.commit_sequence).collect();
-            let rows = transaction.query("SELECT count(*) FROM unnest($2::text[],$3::text[],$4::text[],$5::text[],$6::bigint[],$7::bigint[],$8::text[],$9::text[]) AS k(app,work,collection,record,version,seq,publication,digest) WHERE EXISTS(SELECT 1 FROM genui.internal_record_revisions v WHERE v.organization_id=$1::text::uuid AND v.app_id=k.app::uuid AND v.work_id=k.work::uuid AND v.collection_id=k.collection::uuid AND v.record_id=k.record::uuid AND v.version=k.version AND v.commit_sequence=k.seq) AND EXISTS(SELECT 1 FROM genui.saved_work w JOIN genui.publications p ON p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND w.app_id=k.app::uuid AND w.work_id=k.work::uuid AND p.publication_id=k.publication::uuid AND p.definition_digest::text=k.digest)", &[&request.organization,&apps,&works_,&collections,&records,&versions,&sequences,&publications,&digests]).await?;
+            // APP-191: a receipt over a row the member may not see is unknown.
+            let rows = transaction.query(&format!("SELECT count(*) FROM unnest($2::text[],$3::text[],$4::text[],$5::text[],$6::bigint[],$7::bigint[],$8::text[],$9::text[]) AS k(app,work,collection,record,version,seq,publication,digest) WHERE EXISTS(SELECT 1 FROM genui.internal_record_revisions v WHERE v.organization_id=$1::text::uuid AND v.app_id=k.app::uuid AND v.work_id=k.work::uuid AND v.collection_id=k.collection::uuid AND v.record_id=k.record::uuid AND v.version=k.version AND v.commit_sequence=k.seq AND {own}) AND EXISTS(SELECT 1 FROM genui.saved_work w JOIN genui.publications p ON p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.publication_id=w.publication_id WHERE w.organization_id=$1::text::uuid AND w.app_id=k.app::uuid AND w.work_id=k.work::uuid AND p.publication_id=k.publication::uuid AND p.definition_digest::text=k.digest)", own = super::authorization::own_rows("v", "k.app::uuid", "k.work::uuid", super::authorization::SCOPED)), &[&request.organization,&apps,&works_,&collections,&records,&versions,&sequences,&publications,&digests]).await?;
             let found: i64 = rows.first().ok_or(Error::Unavailable)?.try_get(0).map_err(|_| Error::Unavailable)?;
             Ok(usize::try_from(found).is_ok_and(|found| found == receipts.len()))
         }

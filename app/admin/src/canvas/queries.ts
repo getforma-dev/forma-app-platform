@@ -6,11 +6,15 @@
 // at a time (the engine admits two per organization); a 429 waits its
 // `Retry-After` and retries, showing busy meanwhile.
 import { released, renderNoValue, renderReleased } from './render';
+import type { Fetch } from './live';
 
 export type Parameters = { window?: { start: string; end: string }; destination?: string };
 
 const MAX_IN_FLIGHT = 2;
 const MAX_BUSY_RETRIES = 3;
+// APP-198: a `409 stale` answer (the list changed while the view computed,
+// twice over) is "Updating…" and a re-read, not a denial.
+const MAX_STALE_RETRIES = 3;
 let inFlight = 0;
 const waiting: (() => void)[] = [];
 
@@ -57,6 +61,9 @@ const NO_NUMBER = 'No number is shown.';
 const WINDOW = 'That time range isn’t valid: the start must come before the end.';
 function failure(status: number, code: string): [string, string, string] {
   if (status === 404) return ['denied', 'denied', 'You don’t have access to this card.'];
+  if (status === 409 && code === 'stale') {
+    return ['failed', 'stale', 'This list keeps changing. Try again in a moment.'];
+  }
   if (status === 422 && code === 'narrow_the_query') {
     return ['failed', 'failed', 'Too much data for one card. Narrow the time range.'];
   }
@@ -72,8 +79,12 @@ function failure(status: number, code: string): [string, string, string] {
 
 const sleep = (seconds: number) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 
-/** Runs one view card; a newer run of the same card supersedes this one (its answer is dropped). */
-export async function runView(card: HTMLElement, parameters: Parameters): Promise<void> {
+/**
+ * Runs one view card; a newer run of the same card supersedes this one (its
+ * answer is dropped). `request`: the read; a live hint's run passes one that
+ * tries a 503 or a network error once more (APP-195).
+ */
+export async function runView(card: HTMLElement, parameters: Parameters, request: Fetch = (input, init) => fetch(input, init)): Promise<void> {
   const url = card.dataset.query;
   if (!url || !url.startsWith('/v1/work/')) return;
   const epoch = String(Number(card.dataset.epoch ?? '0') + 1);
@@ -85,7 +96,7 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
     try {
       // APP-113: a run superseded while it waited for a slot never fetches.
       response = await slot(() => (current()
-        ? fetch(url, {
+        ? request(url, {
           method: 'POST',
           credentials: 'same-origin',
           cache: 'no-store',
@@ -120,6 +131,14 @@ export async function runView(card: HTMLElement, parameters: Parameters): Promis
     const code = typeof body === 'object' && body !== null && typeof (body as { code?: unknown }).code === 'string'
       ? (body as { code: string }).code
       : '';
+    // APP-198: the list moved while the view computed (the server already
+    // captured it once more): show "Updating…" and read again, never "no access".
+    if (response.status === 409 && code === 'stale' && attempt < MAX_STALE_RETRIES) {
+      renderNoValue(card, 'loading', 'stale', 'Updating…');
+      await sleep(1);
+      if (!current()) return;
+      continue;
+    }
     const [state, badge, message] = failure(response.status, code);
     renderNoValue(card, state, badge, message);
     return;

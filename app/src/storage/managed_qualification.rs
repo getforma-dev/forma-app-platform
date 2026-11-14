@@ -61,8 +61,9 @@
 //! where `error` is the storage error variant, `step` the innermost step
 //! (within `acquire`: `configuration`, `pool_get`, `transport_permits`,
 //! `connect`, `verify_identity`, `catalog_verify`, `verify_schema_version`,
-//! `reset`, `generation_recheck`), `cause` a closed code and `sqlstate` the
-//! server's five-character SQLSTATE. A later panic reports the first case
+//! `reset`, `generation_recheck`), `cause` a closed
+//! code and `sqlstate` the server's five-character SQLSTATE. A later panic
+//! reports the first case
 //! without a passed check (one of [`CASES`]) with reason `panic`. Every value
 //! is a compile-time literal, a validated SQLSTATE, an integer or null.
 use super::{
@@ -157,7 +158,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v22.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v24.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -178,7 +179,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 212] = [
+const SOURCES: [(&str, &[u8]); 227] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -284,6 +285,10 @@ const SOURCES: [(&str, &[u8]); 212] = [
         include_bytes!("../auth/invite_tests.rs"),
     ),
     ("app/src/auth/mod.rs", include_bytes!("../auth/mod.rs")),
+    (
+        "app/src/auth/notice.rs",
+        include_bytes!("../auth/notice.rs"),
+    ),
     (
         "app/src/auth/pending.rs",
         include_bytes!("../auth/pending.rs"),
@@ -501,6 +506,11 @@ const SOURCES: [(&str, &[u8]); 212] = [
     ("app/src/mcp/tests.rs", include_bytes!("../mcp/tests.rs")),
     ("app/src/mcp/tokens.rs", include_bytes!("../mcp/tokens.rs")),
     ("app/src/mcp/tools.rs", include_bytes!("../mcp/tools.rs")),
+    (
+        "app/src/member_name.rs",
+        include_bytes!("../member_name.rs"),
+    ),
+    ("app/src/org_admin.rs", include_bytes!("../org_admin.rs")),
     ("app/src/origins.rs", include_bytes!("../origins.rs")),
     ("app/src/pages.rs", include_bytes!("../pages.rs")),
     ("app/src/product.rs", include_bytes!("../product.rs")),
@@ -654,10 +664,26 @@ const SOURCES: [(&str, &[u8]); 212] = [
     ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
     (
+        "app/src/storage/org_admin.rs",
+        include_bytes!("org_admin.rs"),
+    ),
+    (
+        "app/src/storage/org_admin_campaign.rs",
+        include_bytes!("org_admin_campaign.rs"),
+    ),
+    (
+        "app/src/storage/org_admin_routes_campaign.rs",
+        include_bytes!("org_admin_routes_campaign.rs"),
+    ),
+    (
         "app/src/storage/pitch_qualification.rs",
         include_bytes!("pitch_qualification.rs"),
     ),
     ("app/src/storage/pool.rs", include_bytes!("pool.rs")),
+    (
+        "app/src/storage/private_entries_campaign.rs",
+        include_bytes!("private_entries_campaign.rs"),
+    ),
     (
         "app/src/storage/qualification.rs",
         include_bytes!("qualification.rs"),
@@ -694,6 +720,10 @@ const SOURCES: [(&str, &[u8]); 212] = [
     ("app/src/storage/registry.rs", include_bytes!("registry.rs")),
     ("app/src/storage/rules.rs", include_bytes!("rules.rs")),
     ("app/src/storage/sessions.rs", include_bytes!("sessions.rs")),
+    (
+        "app/src/storage/share_routes_campaign.rs",
+        include_bytes!("share_routes_campaign.rs"),
+    ),
     (
         "app/src/storage/shared_access.rs",
         include_bytes!("shared_access.rs"),
@@ -820,6 +850,38 @@ const SOURCES: [(&str, &[u8]); 212] = [
     (
         "contracts/fixtures/impl-2026-10-29.3/spend-review.json",
         include_bytes!("../../../contracts/fixtures/impl-2026-10-29.3/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/canonical-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/command-recovery.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/command-recovery.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/negative-vectors.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/negative-vectors.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/northstar.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/northstar.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/shared-v1/query-receipt.json",
+        include_bytes!(
+            "../../../contracts/fixtures/impl-2026-11-01.2/shared-v1/query-receipt.json"
+        ),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/spend-review.json",
+        include_bytes!("../../../contracts/fixtures/impl-2026-11-01.2/spend-review.json"),
+    ),
+    (
+        "contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json",
+        include_bytes!(
+            "../../../contracts/fixtures/impl-2026-11-01.2/stored/expense-claims-d70710d3.json"
+        ),
     ),
     (
         "contracts/fixtures/library/catalog.json",
@@ -985,6 +1047,7 @@ fn storage_error(error: super::Error) -> &'static str {
         super::Error::ProjectionLimit => "ProjectionLimit",
         super::Error::Busy => "Busy",
         super::Error::UnknownOutcome => "UnknownOutcome",
+        super::Error::Stale => "Stale",
     }
 }
 fn probe_value(pool: &'static str, probe: &Probe) -> Value {

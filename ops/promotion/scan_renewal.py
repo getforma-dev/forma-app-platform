@@ -156,6 +156,7 @@ def check(delta_document, disposition_path=DISPOSITION):
     """The committed disposition is exactly what its delta generates, and the registry pin agrees."""
     from . import registry
     committed, sha = registry.scan_disposition() if disposition_path == DISPOSITION else (read(disposition_path), None)
+    require(committed is not None, 'no scan disposition is committed')
     generated, pin = generate(delta_document, committed['evidence'], committed['expires_at_utc'])
     require(generated == committed, 'committed disposition differs from what the delta generates')
     if disposition_path == DISPOSITION:

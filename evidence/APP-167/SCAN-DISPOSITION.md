@@ -4,7 +4,7 @@
 
 Reviewed scope: the first APP-167 operator-image promotion from the exact
 predecessor ARM64 manifest and deployment contract recorded in
-[`scan-disposition.json`](../../ops/promotion/scan-disposition.json). Expires
+[`scan-disposition.json`](https://github.com/getforma-dev/forma-app-platform/blob/fe03aa3ede683a8bd3872cb1c3c3c81296ba60f8/ops/promotion/scan-disposition.json). Expires
 **2026-11-09 00:00 UTC**, checked during preparation and again before execution.
 This is a temporary acceptance of the three specified medium findings, not a
 package fix, a scanner suppression, or a claim of zero vulnerabilities.

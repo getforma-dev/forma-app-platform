@@ -71,6 +71,7 @@ fn build_generation_system() -> String {
                 .map(records_example),
         )
         .chain(std::iter::once(simple_records_example()))
+        .chain(std::iter::once(private_entries_example()))
         .collect();
     let operators = QUALIFIED_OPERATORS.join(", ");
     format!(
@@ -96,16 +97,19 @@ RUNNABLE OPERATORS (use only these; the engine runs nothing else): {operators}.\
  {{type: time_bucket, field: field_ref (a timestamp), seconds: 60|300|3600|86400, timezone: \"UTC\", output_field: id}}\n\
 field_ref = {{input_id, field_id}} naming a field of the query's one input.\n\
 literal = {{type: text, value}} | {{type: boolean, value}} | {{type: integer, value: \"<digits>\", unit}} | {{type: decimal, coefficient: \"<digits>\", scale, unit}} | {{type: date, value: \"YYYY-MM-DD\"}} | {{type: timestamp, value}} | {{type: enum, value}} | {{type: money, minor_units: \"<digits>\", currency: \"USD\", minor_unit_exponent: 2}} | {{type: null}}; its type and unit must match the filtered field.\n\
-record_schemas: 0..8 of {{id, version: 1, fields}}. commands: 0..16 of {{id, record_schema_id, operation: create|update, writable_fields: [ids], transitions: [{{field_id, from, to}}] (enum fields only; each (field_id, from, to) once), initial?: [{{field_id, value}}]}}; `initial` belongs only to a create with no transitions and sets an enum field's starting value, and a create that writes an enum field another command of the same record schema moves by transitions MUST declare that field's `initial`. links: usually []. default_layout: one {{view_id, column 0..11, row 0..100, width 1..12}} per view, column + width <= 12, each view exactly once.\n\
+record_schemas: 0..8 of {{id, version: 1, fields, visibility?: \"own\"}}. commands: 0..16 of {{id, record_schema_id, operation: create|update, writable_fields: [ids], transitions: [{{field_id, from, to}}] (enum fields only; each (field_id, from, to) once), initial?: [{{field_id, value}}], reviewer_only?: true}}; `initial` belongs only to a create with no transitions and sets an enum field's starting value, and a create that writes an enum field another command of the same record schema moves by transitions MUST declare that field's `initial`. links: usually []. default_layout: one {{view_id, column 0..11, row 0..100, width 1..12}} per view, column + width <= 12, each view exactly once.\n\
 ids match [a-z][a-z0-9_]{{0,63}} and are unique within their list.\n\
+PRIVATE ENTRIES AND REVIEWER-ONLY COMMANDS: a record_schema may carry visibility: \"own\": each member then sees and changes only the entries they themselves created, while the app's reviewers (its owner and the members the owner names as reviewers) see and change them all, on every path. A command may carry reviewer_only: true: only the app's reviewers may run it, even on a member's own entry. Write visibility: \"own\" when the member says each person should see only their own entries (responses, submissions, claims, check-ins, answers) and reviewer_only: true when only reviewers may approve, grade, accept, mark or close. Otherwise omit both members. Never write visibility: \"shared\" or reviewer_only: false (absence already means shared and open to every contributor); these two members are the only way to say who sees or runs what.\n\
+WHICH-X FIELDS: when an entry must name one of a few known things (which assignment, which team, which item), use an enum of those values or a short text field, never a reference field: a form shows a reference as a raw identifier box members cannot use, so generated content with a reference field is refused.\n\
+OWNER-ADVANCED STATE: when the app keeps one shared current item that its owner advances, closes or reopens (\"advance\", \"close\", \"open the next item\"), make that command a reviewer_only update of an enum state field with transitions: [] (not a declared transition): the member who created a record can never fire a declared transition on it, so a transition would lock the owner out of their own item.\n\
 Every command MUST include `transitions`, including create commands and ordinary updates: use \"transitions\": [] when there is no workflow. Never omit an empty required array. The content always includes inputs, views, record_schemas, commands, links and default_layout; use [] for any unused list.\n\
 \n\
-FORBIDDEN: keys outside the grammar; markup, script, SQL, URLs or file paths anywhere; anything about permissions, roles, owners, tenants, members, grants or access; operators other than the runnable ones; a query over more than one input; renderer or operator versions other than 1.\n\
+FORBIDDEN: keys outside the grammar; markup, script, SQL, URLs or file paths anywhere; anything about permissions, roles, owners, tenants, members, grants or access beyond the two grammar members visibility and reviewer_only; operators other than the runnable ones; a query over more than one input; renderer or operator versions other than 1.\n\
 When `sources` is not empty: prefer 3 to 6 focused views that answer the intent from the provided sources; include a form plus a records input and record schema only when the member asks to record decisions or notes.\n\
 When `sources` is EMPTY (a new workspace with no data yet): build an app that keeps its own records, entered by members through its form. Declare 1 or 2 `records` inputs, each with a record_schema of identical fields; a create command writing them (with `initial` for a status enum another command moves); one `form` view per create command members file with; optionally a `note` saying how the app works. You may add focused data views over one declared records input using the qualified query operators. Keep the create form so members can enter data; do not invent source inputs.\n\
 For a simple list, reading list, inventory or tracker, use only the fields and entry form the request needs. Do not add submitted/approved/rejected states, approval commands, reviewers or a manager decision unless the member explicitly asks for an approval workflow. Do not promise editing or completion actions unless the app actually declares the corresponding command and form. The last example is a simple list with no approval or transition commands. The time-off example is only for requests that explicitly need a decision workflow.\n\
 \n\
-EXAMPLES (admitted definitions, their non-runnable views removed; the last two have no sources and keep their own records):\n{}",
+EXAMPLES (admitted definitions, their non-runnable views removed; the last three have no sources and keep their own records; the last keeps each member's entries private and limits one command to reviewers):\n{}",
         examples
             .iter()
             .filter_map(|example| serde_json::to_string(example).ok())
@@ -135,6 +139,37 @@ pub(crate) fn simple_records_example() -> Value {
         "commands": [{"id": "add", "record_schema_id": "book", "operation": "create", "writable_fields": ["title", "author", "notes"], "transitions": []}],
         "links": [],
         "default_layout": [{"view_id": "add", "column": 0, "row": 0, "width": 12}, {"view_id": "how", "column": 0, "row": 1, "width": 12}]
+    })
+}
+
+/// APP-191 (D7, D8): a records-only example whose collection is private to
+/// each member (`visibility: "own"`) and whose accept command is for the
+/// app's reviewers only (`reviewer_only: true`). Illustrative definition
+/// data judged by the same planner and admission as a model reply; general,
+/// with no domain-specific names.
+pub(crate) fn private_entries_example() -> Value {
+    let fields = json!([
+        {"id": "title", "value_type": {"type": "text"}, "nullable": false},
+        {"id": "details", "value_type": {"type": "text"}, "nullable": true},
+        {"id": "status", "value_type": {"type": "enum", "values": ["new", "accepted"]}, "nullable": false}
+    ]);
+    json!({
+        "title": "Suggestion box",
+        "description": "Collect suggestions: each person sees only the suggestions they sent in; the app's reviewers see them all and accept them.",
+        "inputs": [{"id": "suggestions", "contract_id": "suggestion_v1", "contract_version": 1, "kind": "records", "fields": fields}],
+        "views": [
+            {"id": "suggest", "kind": "form", "renderer_version": 1, "title": "Send a suggestion", "command_id": "suggest"},
+            {"id": "how", "kind": "note", "renderer_version": 1, "title": "How it works", "text": "Send a suggestion with a title and details. You see only your own suggestions; the app's reviewers see every suggestion and can accept one."}
+        ],
+        "record_schemas": [{"id": "suggestion", "version": 1, "visibility": "own", "fields": fields}],
+        "commands": [
+            {"id": "suggest", "record_schema_id": "suggestion", "operation": "create", "writable_fields": ["title", "details", "status"], "transitions": [],
+             "initial": [{"field_id": "status", "value": "new"}]},
+            {"id": "accept", "record_schema_id": "suggestion", "operation": "create", "writable_fields": ["status"],
+             "transitions": [{"field_id": "status", "from": "new", "to": "accepted"}], "reviewer_only": true}
+        ],
+        "links": [],
+        "default_layout": [{"view_id": "suggest", "column": 0, "row": 0, "width": 12}, {"view_id": "how", "column": 0, "row": 1, "width": 12}]
     })
 }
 
@@ -346,6 +381,7 @@ pub fn hint(code: &str) -> &'static str {
         "unknown_source_input" => "Every source input must be one of the provided sources, copied exactly; do not invent inputs.",
         "not_runnable" => "Every data view's query must read exactly one declared `source` or `records` input and use only the runnable operators. With no sources, use your declared records input and keep a create form for entering data.",
         "authoring_rule" => "Declare each (field_id, from, to) transition once, and give a create that writes an enum field another command moves by transitions an `initial` value for that field.",
+        "reference_field" => "Replace every field of value_type reference with an enum of the known values or a short text field; a form cannot offer a reference.",
         "no_create_form" => "An app with no data view needs a form view for a create command, so members can add records.",
         _ => "Produce a corrected, complete definition content object.",
     }
@@ -370,6 +406,31 @@ mod tests {
             let examples = system.split("EXAMPLES").nth(1).unwrap();
             assert!(!examples.contains(word), "{word}");
         }
+    }
+
+    /// APP-191 (D7, D8): the last example keeps each member's entries
+    /// private and limits one command to reviewers; the prompt says when to
+    /// write the two members and never to write their explicit alternatives.
+    #[test]
+    fn the_private_entries_example_and_its_guidance_are_in_the_prompt() {
+        let system = generation_system();
+        assert!(system.contains("PRIVATE ENTRIES AND REVIEWER-ONLY COMMANDS"));
+        assert!(system.contains("visibility?: \"own\""));
+        assert!(system.contains("reviewer_only?: true"));
+        assert!(system.contains("Never write visibility: \"shared\" or reviewer_only: false"));
+        assert!(system.contains("WHICH-X FIELDS"));
+        assert!(system.contains("OWNER-ADVANCED STATE"));
+        assert_ne!(hint("reference_field"), hint("unknown"));
+        assert!(system.contains("\"title\":\"Suggestion box\""));
+        let example = private_entries_example();
+        assert_eq!(example["record_schemas"][0]["visibility"], "own");
+        assert_eq!(example["commands"][1]["reviewer_only"], true);
+        assert!(example["commands"][0].get("reviewer_only").is_none());
+        assert!(example["views"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v.get("query").is_none()));
     }
 
     /// APP-132: the third example has no sources and keeps its own

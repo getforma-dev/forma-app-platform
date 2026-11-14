@@ -4,6 +4,7 @@ import { postCommand, type CommandOutcome } from './commands';
 import {mountAppDataCopy, type AppDataCopy} from './app-data-copy';
 import { isUuid } from './ids';
 import { el } from './render';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 type Field = {id: string; type: string};
 type Action = {id: string; operation: 'create' | 'update'; fields: string[]; collection: string; schema: string; schemaVersion: number; knownFields: Field[]};
@@ -311,6 +312,7 @@ export function mountAppDataActions(host: HTMLElement, options: AppDataActionsOp
         if (response.status === 409 || response.status === 412) {catalog = null; status.textContent = 'This app or record changed. Refresh actions, then review a new draft.';}
         else if (object(body) && body.code === 'app_data_limit') status.textContent = 'This change would exceed the app data limit of 100,000 rows or 64 MiB. Nothing was saved. Original files are unchanged.';
         else if (object(body) && body.code === 'composer_unavailable') status.textContent = 'The assistant cannot prepare changes right now. You can use the app’s forms.';
+        else if (object(body) && body.code === DAILY_LIMIT_CODE) status.textContent = DAILY_LIMIT_MESSAGE;
         else if (object(body) && Array.isArray(body.missing_fields) && body.missing_fields.every(field => text(field, 200))) status.textContent = `Add these details to your request: ${body.missing_fields.slice(0, 32).join(', ')}.`;
         else status.textContent = 'That request could not be prepared for this action. Check the details and try again.';
         return;

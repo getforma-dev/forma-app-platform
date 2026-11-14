@@ -13,11 +13,23 @@ ROOT = Path(__file__).resolve().parent
 RETAINED = ROOT / "fixtures" / "impl-2026-10-28.1"
 RETAINED_TWO = ROOT / "fixtures" / "impl-2026-10-29.2"
 RETAINED_THREE = ROOT / "fixtures" / "impl-2026-10-29.3"
+RETAINED_SIX = ROOT / "fixtures" / "impl-2026-11-01.2"
 LIBRARY = ROOT / "fixtures" / "library"
 # Stored-data vectors (edition impl-2026-10-31.4): documents admitted and stored before a later rule, which must keep
 # their stored-document verdict. Beta's Expense claims bundle as seeded at 0c3261b (APP-105), byte for byte.
 STORED_EXPENSE = ROOT / "fixtures" / "stored" / "expense-claims-d70710d3.json"
 STORED_EXPENSE_SHA256 = "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059"
+# The fixture identities edition impl-2026-11-01.2 locked; its copies are retained byte-identically under
+# fixtures/impl-2026-11-01.2/ (the five specimen and vector files, the shared receipt and the stored-data vector).
+EDITION_SIX_FIXTURES = {
+    "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
+    "command-recovery": "b2539b15b32c7086576bd42aed824d823e5fa4c8ed2f40ed57637cdf79d14ecf",
+    "negative-vectors": "315a9d32e91dbeaf21c0ad3ec6f8e882315e46ef23b7db4c3c47f4b161ae1cbc",
+    "northstar": "d9acfd8f399d20ea6dbcabc72dca1437c802a1565ca7119c6dd53587b14e1480",
+    "spend-review": "186162da87532f368ed3c74faafc46c04780cc7331c095dc92f729bead0f0851",
+    "shared-v1/query-receipt": "ccca53f58e24f5ce26e63bf057b58aea9292a8bc8c01d4f77877ead39510bc69",
+    "stored/expense-claims-d70710d3": "446e5485a97b1a261b4c5ca6ee6836aee99f43e14140e61f3b41a3dfc97bd059",
+}
 # The fixture identities edition impl-2026-10-29.3 locked; its copies are retained byte-identically.
 EDITION_THREE_FIXTURES = {
     "canonical-vectors": "eb9a4501813c8c90d8fbb756179a64074dd2df0a31883f39e995601afa9354f9",
@@ -52,6 +64,18 @@ def retained(name):
 
 def rehash_receipt(receipt):
     receipt["digest"] = digest("query-receipt", {k: v for k, v in receipt.items() if k != "digest"})
+
+
+def retained_unchanged_or_leading(case, folder, name):
+    """A retained specimen or vector file is the current one, byte for byte, except the negative vectors, which later
+    editions may only extend: the retained list then leads the current list unchanged (edition impl-2026-11-14.1)."""
+    retained = (folder / (name + ".json")).read_bytes()
+    current = (ROOT / "fixtures" / (name + ".json")).read_bytes()
+    if name == "negative-vectors" and retained != current:
+        old, new = json.loads(retained), json.loads(current)
+        case.assertEqual(new[:len(old)], old, name)
+    else:
+        case.assertEqual(retained, current, name)
 
 
 def run_negative_vectors(case, vectors, load):
@@ -375,7 +399,7 @@ class EditionThreeTests(unittest.TestCase):
             with self.subTest(fixture=name):
                 self.assertEqual(hashlib.sha256((RETAINED_TWO / (name + ".json")).read_bytes()).hexdigest(), identity)
                 # The current edition's bundles and vectors are edition two's, unchanged.
-                self.assertEqual((RETAINED_TWO / (name + ".json")).read_bytes(), (ROOT / "fixtures" / (name + ".json")).read_bytes())
+                retained_unchanged_or_leading(self, RETAINED_TWO, name)
         for name in ("northstar", "spend-review"):
             validate_bundle(loads((RETAINED_TWO / (name + ".json")).read_bytes()))
 
@@ -559,7 +583,7 @@ class EditionFourTests(unittest.TestCase):
             with self.subTest(fixture=name):
                 self.assertEqual(hashlib.sha256((RETAINED_THREE / (name + ".json")).read_bytes()).hexdigest(), identity)
                 # The current edition's specimens and vectors are edition three's, unchanged.
-                self.assertEqual((RETAINED_THREE / (name + ".json")).read_bytes(), (ROOT / "fixtures" / (name + ".json")).read_bytes())
+                retained_unchanged_or_leading(self, RETAINED_THREE, name)
         def kept(name):
             return loads((RETAINED_THREE / (name + ".json")).read_bytes())
         for name in ("northstar", "spend-review"):
@@ -604,3 +628,63 @@ class EditionFourTests(unittest.TestCase):
         current = loads((LIBRARY / "expense-claims.json").read_bytes())
         self.assertEqual(current["definition"]["app_id"], bundle["definition"]["app_id"])
         self.assertNotEqual(current["definition"]["digest"], bundle["definition"]["digest"])
+
+
+class PrivateEntriesEditionTests(unittest.TestCase):
+    """Edition impl-2026-11-14.1 (APP-191, D7 and D8; Victor's plan approval of 2026-11-14): optional
+    `visibility: "own"` on a record schema and optional `reviewer_only: true` on a command declaration, at definition
+    schema versions 1 and 2, over the retained edition impl-2026-11-01.2."""
+
+    def test_edition_retains_edition_six_byte_identically(self):
+        for name, identity in EDITION_SIX_FIXTURES.items():
+            with self.subTest(fixture=name):
+                self.assertEqual(hashlib.sha256((RETAINED_SIX / (name + ".json")).read_bytes()).hexdigest(), identity)
+        # The specimens are unchanged by this edition; only the negative vectors grew.
+        for name in ("canonical-vectors", "command-recovery", "northstar", "spend-review", "shared-v1/query-receipt",
+                     "stored/expense-claims-d70710d3"):
+            with self.subTest(unchanged=name):
+                self.assertEqual((RETAINED_SIX / (name + ".json")).read_bytes(), (ROOT / "fixtures" / (name + ".json")).read_bytes())
+        def kept(name):
+            return loads((RETAINED_SIX / (name + ".json")).read_bytes())
+        for name in ("northstar", "spend-review"):
+            with self.subTest(bundle=name):
+                bundle = kept(name)
+                validate_bundle(bundle)
+                self.assertEqual(bundle["definition"]["digest"], digest("app-definition", bundle["definition"]["content"]))
+        run_negative_vectors(self, json.loads((RETAINED_SIX / "negative-vectors.json").read_text()), kept)
+        current = json.loads((ROOT / "fixtures" / "negative-vectors.json").read_text())
+        retained = json.loads((RETAINED_SIX / "negative-vectors.json").read_text())
+        self.assertEqual(current[:len(retained)], retained, "the retained vectors lead the current list unchanged")
+        self.assertEqual(len(current), len(retained) + 8)
+
+    def test_own_collections_and_reviewer_only_commands_validate_at_both_versions(self):
+        for name, version in (("northstar", 2), (STORED_EXPENSE, 1)):
+            with self.subTest(version=version):
+                raw = (ROOT / "fixtures" / (name + ".json")).read_bytes() if isinstance(name, str) else name.read_bytes()
+                bundle = loads(raw)
+                definition = bundle["definition"]
+                self.assertEqual(definition["schema_version"], version)
+                definition["content"]["record_schemas"][0]["visibility"] = "own"
+                definition["content"]["commands"][0]["reviewer_only"] = True
+                definition["digest"] = digest("app-definition", definition["content"])
+                validate(definition)
+                if version == 2:
+                    validate(definition, new_content=True)
+                # The members travel in the canonical bytes storage keeps (owner_only is derived from them).
+                self.assertIn(b'"visibility":"own"', canonical(definition["content"]))
+                self.assertIn(b'"reviewer_only":true', canonical(definition["content"]))
+
+    def test_each_meaning_has_one_encoding(self):
+        bundle = fixture()
+        definition = bundle["definition"]
+        for pointer, value in ((("record_schemas", 0, "visibility"), "shared"), (("commands", 0, "reviewer_only"), False),
+                               (("record_schemas", 0, "visibility"), None), (("commands", 0, "reviewer_only"), None)):
+            with self.subTest(member=pointer, value=value):
+                broken = copy.deepcopy(definition)
+                target = broken["content"]
+                for key in pointer[:-1]:
+                    target = target[key]
+                target[pointer[-1]] = value
+                broken["digest"] = digest("app-definition", broken["content"])
+                with self.assertRaisesRegex(ContractError, "schema:"):
+                    validate(broken)

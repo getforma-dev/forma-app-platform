@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import subprocess
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -34,7 +35,8 @@ ADMIT_FUNCTIONS = {
     'expire_shared_identity': ('', 'TABLE(refresh_token_ref uuid)'),
     'resolve_code': ('p_code_digest text', 'uuid'),
     'resolve_handle': ('p_handle_digest text', 'uuid'),
-    'reserve_code': ('p_org uuid, p_code_digest text, p_context_digest text',
+    # Migration 0023 (trial plan D5): the notice version the invitation page showed.
+    'reserve_code': ('p_org uuid, p_code_digest text, p_context_digest text, p_notice_version integer',
                      'TABLE(reservation_id uuid, expires_at timestamp with time zone, outcome text)'),
     'record_pending_admission': ('p_org uuid, p_reservation uuid, p_issuer text, p_provider_tenant text, p_provider_subject text',
                                  'TABLE(pending_admission_id uuid, expires_at timestamp with time zone, outcome text)'),
@@ -43,8 +45,19 @@ ADMIT_FUNCTIONS = {
     'advance_member_epoch': ('p_org uuid, p_principal uuid, p_reason text', 'bigint'),
     # Migration 0008 (ADR-011 pitch, APP-095): the seventh definer; the sharer's
     # own permission subset onto a teammate (recorded ADR-007 debt).
-    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_record_write boolean',
+    # Migration 0024 (trial plan D9, APP-192) replaces it: a role (viewer,
+    # contributor, reviewer) instead of the boolean, each permission copied only
+    # when the sharer holds it and the reviewer role only from a reviewer.
+    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_role text, p_mode text',
                    'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
+    # Migration 0024 (D9): the organization-wide share, set, replaced or revoked
+    # ('none') as one unit; one live work_shares row with no grantee.
+    'set_work_everyone': ('p_org uuid, p_sharer uuid, p_app uuid, p_work uuid, p_role text',
+                          'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
+    # Migration 0024 (APP-191 review M1): the app owner's revocation of a member's
+    # personal share, every work row the grantee holds removed as one unit.
+    'revoke_work_share': ('p_org uuid, p_actor uuid, p_app uuid, p_work uuid, p_grantee uuid',
+                          'TABLE(permission text, removed boolean)'),
     # Migration 0011 (ADR-011 pitch, APP-108): the eighth definer; a member's
     # confirmed folder CSV/XLSX becomes a source, revision and source_read.
     'register_box_source': ('p_org uuid, p_principal uuid, p_box uuid, p_file uuid, p_source uuid, p_revision uuid, p_content_digest text, '
@@ -59,6 +72,14 @@ ADMIT_FUNCTIONS = {
     # Migration 0016 (APP-145): the tenth definer; one empty authoring shell
     # when the member owns no eligible app.
     'ensure_authoring_shell': ('p_org uuid, p_principal uuid', 'uuid'),
+    # Migration 0023 (trial plan D6, D4): the member's own display name, and
+    # the organization admin's overview and member removal under admin_policy.
+    'set_display_name': ('p_org uuid, p_principal uuid, p_name text', 'TABLE(changed boolean)'),
+    'org_admin_overview': ('p_org uuid, p_caller uuid',
+                           'TABLE(principal_id uuid, display_name text, status text, is_admin boolean, consent_version integer, '
+                           'consented_at timestamp with time zone, last_active timestamp with time zone, apps bigint, works bigint, '
+                           'records bigint, uploads bigint, code_status text, code_note text)'),
+    'admin_remove_member': ('p_org uuid, p_caller uuid, p_principal uuid', 'TABLE(outcome text, membership_epoch bigint)'),
 }
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
@@ -70,8 +91,13 @@ SHARING_TABLES = ('work_shares',)
 CHAIN_KINDS = {
     # 0008 widens the admission list in place (ALTER POLICY): share_work appends
     # permission.granted (ADR-011 pitch, APP-095; recorded ADR-007 D7.8 debt).
+    # 0023 widens it again: the consent, the member's own name change, and an
+    # admin's removal (the two operator kinds on a second chain, as 0008 did).
+    # 0024 widens it once more: set_work_everyone revokes an organization-wide
+    # share (permission.revoked, recorded ADR-007 amendment 2026-11-14).
     'genui_admit': ('admission', ('admission.pending','admission.redeemed','admission.denied_for_reconciliation',
-                                  'session.sign_out','session.sign_out_all','permission.granted')),
+                                  'session.sign_out','session.sign_out_all','permission.granted',
+                                  'admission.consented','member.named','membership.revoked','entitlement.revoked','permission.revoked')),
     # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
                                  'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
@@ -94,15 +120,15 @@ ADMIT_GRANTS = set().union(
     _columns('access_codes','UPDATE','redeemed_count','status'),
     _columns('code_grant_templates','SELECT','organization_id','code_id','permission','app_id','work_id','source_id'),
     _columns('code_reservations','SELECT','organization_id','reservation_id','code_id','kind','context_digest','issuer',
-             'provider_tenant_id','provider_subject','state','expires_at'),
+             'provider_tenant_id','provider_subject','state','expires_at','notice_version'),
     _columns('code_reservations','INSERT','organization_id','reservation_id','code_id','kind','context_digest','issuer',
-             'provider_tenant_id','provider_subject','state','expires_at'),
+             'provider_tenant_id','provider_subject','state','expires_at','notice_version'),
     _columns('code_reservations','UPDATE','state','consumed_at'),
     # Review m2: no function reads principals.principal_id.
     _columns('principals','SELECT','organization_id','issuer','provider_tenant_id','provider_subject'),
     _columns('principals','INSERT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
     # 0008 adds status (share_work judges the grantee's membership).
-    _columns('memberships','SELECT','organization_id','principal_id','status','membership_epoch'),
+    _columns('memberships','SELECT','organization_id','principal_id','status','membership_epoch','display_name'),
     # 0008 (APP-095): the reads share_work needs to copy the sharer's subset.
     _columns('saved_work','SELECT','organization_id','app_id','work_id','created_by','creator_revoked_at'),
     _columns('work_source_dependencies','SELECT','organization_id','app_id','work_id','source_id'),
@@ -110,13 +136,21 @@ ADMIT_GRANTS = set().union(
     _columns('work_permissions','SELECT','organization_id','principal_id','app_id','work_id','permission'),
     _columns('source_permissions','SELECT','organization_id','principal_id','source_id','permission'),
     _columns('memberships','INSERT','organization_id','principal_id','status','membership_epoch'),
-    _columns('memberships','UPDATE','membership_epoch'),
+    _columns('memberships','UPDATE','membership_epoch','display_name','status'),
     _columns('organization_permissions','INSERT','organization_id','principal_id','permission'),
     _columns('app_permissions','INSERT','organization_id','principal_id','app_id','permission'),
     _columns('work_permissions','INSERT','organization_id','principal_id','app_id','work_id','permission'),
     _columns('source_permissions','INSERT','organization_id','principal_id','source_id','permission'),
     # 0008 (APP-095 review M3): the share's record, exactly the inserted set.
-    _columns('work_shares','INSERT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','granted','audit_event_id','shared_at'),
+    _columns('work_shares','INSERT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','granted','audit_event_id','shared_at','role',
+             'removed','revoked_at','revoked_by','revoke_event_id'),
+    # 0024 (APP-192): the definers read the live organization-wide share and
+    # revoke it in place; nothing else on work_shares is writable.
+    _columns('work_shares','UPDATE','revoked_at','revoked_by','revoke_event_id','removed'),
+    _columns('work_shares','SELECT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','role','revoked_at','granted'),
+    # 0024 (APP-191 review M1): revoke_work_share deletes a grantee's work rows
+    # (a table-level DELETE; the only one any definer holds on a permission table).
+    {('genui_admit','work_permissions','DELETE',None)},
     _columns('entitlements','INSERT','organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at'),
     _columns('code_redemptions','SELECT','organization_id','redemption_id','principal_id','pending_admission_id','entitlement_id','payload_digest'),
     _columns('code_redemptions','INSERT','organization_id','redemption_id','code_id','principal_id','pending_admission_id',
@@ -159,6 +193,20 @@ ADMIT_GRANTS |= set().union(
     _columns('record_source_dependencies','INSERT','organization_id','app_id','work_id','collection_id','record_id','record_version','input_id','source_id','source_revision_id','source_digest'),
 )
 
+# Migration 0023 (trial plan D4/D5/D6): the consent row, the operator's code
+# note, and the reads and revocations the admin definers need.
+ADMIT_GRANTS |= set().union(
+    _columns('member_consents','SELECT','organization_id','principal_id','notice_version','consented_at'),
+    _columns('member_consents','INSERT','organization_id','principal_id','notice_version','consented_at','audit_event_id'),
+    _columns('access_codes','SELECT','note'),
+    _columns('audit_events','SELECT','organization_id','actor_principal_id','occurred_at'),
+    _columns('sessions','SELECT','organization_id','principal_id','last_seen_at'),
+    _columns('internal_record_revisions','SELECT','organization_id','creator_id','version'),
+    _columns('box_files','SELECT','uploaded_by'),
+    _columns('code_redemptions','SELECT','code_id','committed_at'),
+    _columns('entitlements','SELECT','organization_id','principal_id','entitlement_id','status'),
+    _columns('entitlements','UPDATE','status','revoked_at'),
+)
 # Migration 0004 (ADR-007 D7.3, APP-073 Task 5): the entitlement columns the
 # shared member precheck and fence read, for exactly these three roles.
 ENTITLEMENT_READS = {(role,'entitlements','SELECT',column) for role in ('genui_workspace','genui_control','genui_data')
@@ -168,6 +216,12 @@ ENTITLEMENT_READS = {(role,'entitlements','SELECT',column) for role in ('genui_w
 def _role_columns(role, relation, privilege, *columns):
     return {(role, relation, privilege, column) for column in columns}
 
+
+# 0024 (APP-192): every work-level clause consults the live organization-wide
+# share, so the three application roles read work_shares (no granted set).
+ORGANIZATION_SHARE_READS = set().union(*(_role_columns(role,'work_shares','SELECT','organization_id','share_id','sharer_id','grantee_id',
+                                                       'app_id','work_id','role','revoked_at','shared_at')
+                                         for role in ('genui_workspace','genui_control','genui_data')))
 
 AUDIT_EVENT_COLUMNS = ('organization_id','event_id','writer_role','chain_sequence','kind','actor_principal_id','app_id','work_id',
                        'record_id','code_id','outcome_digest','occurred_at','previous_hash','hash')
@@ -435,7 +489,7 @@ def admission_checks(pg, passed, denied):
             if member is None: org_scope(c,org)
             else: scope(c,org,member[0],member[1])
             return c.execute(statement,params).fetchall()
-    RESERVE='SELECT reservation_id::text,expires_at,outcome FROM genui_private.reserve_code(%s,%s,%s)'
+    RESERVE='SELECT reservation_id::text,expires_at,outcome FROM genui_private.reserve_code(%s,%s,%s,1)'
     PENDING='SELECT pending_admission_id::text,expires_at,outcome FROM genui_private.record_pending_admission(%s,%s,%s,%s,%s)'
     ADMIT='SELECT principal_id::text,membership_epoch,entitlement_id::text,redemption_id::text,outcome FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)'
     ADVANCE='SELECT genui_private.advance_member_epoch(%s,%s,%s)'
@@ -459,16 +513,21 @@ def admission_checks(pg, passed, denied):
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND policyname='tenant_scope' AND tablename = ANY(%s) ORDER BY tablename""",(list(ADMISSION_TABLES),)).fetchall()
         assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(ADMISSION_TABLES)],rows
-        # 0008 work_shares: owner-held, RLS, FORCE, the exact policy; only genui_admit's INSERT.
+        # 0008 work_shares: owner-held, RLS, FORCE, the exact policy. 0024 (APP-192):
+        # genui_admit inserts (with the role), reads and revokes the live
+        # organization-wide share; the application roles read it (never the granted set).
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",(list(SHARING_TABLES),)).fetchall()
         assert rows==[(t,True,True,'genui_owner') for t in SHARING_TABLES],rows
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
-          AND tablename = ANY(%s) ORDER BY tablename""",(list(SHARING_TABLES),)).fetchall()
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES],rows
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(SHARING_TABLES),)).fetchall()
+        # 0024 (review n2): the application roles read the organization-wide rows only.
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES]+[
+            ('work_shares','RESTRICTIVE',['genui_control','genui_data','genui_workspace'],'SELECT','(grantee_id IS NULL)',None)],rows
         shares=c.execute("""SELECT grantee,privilege_type,count(*) FROM information_schema.column_privileges
           WHERE table_schema='genui' AND table_name='work_shares' AND grantee<>'genui_owner' GROUP BY 1,2 ORDER BY 1,2""").fetchall()
-        assert shares==[('genui_admit','INSERT',9)],shares
+        assert shares==[('genui_admit','INSERT',14),('genui_admit','SELECT',9),('genui_admit','UPDATE',4),
+                        ('genui_control','SELECT',9),('genui_data','SELECT',9),('genui_workspace','SELECT',9)],shares
         assert c.execute("""SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='genui' AND table_name='work_shares'
           AND grantee<>'genui_owner'""").fetchone()==(0,)
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner),
@@ -476,7 +535,7 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname='genui_private' AND c.relkind='r' ORDER BY c.relname""").fetchall()
         assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0),
                       ('provider_tenant_index',False,False,'genui_owner',0)],rows
-    passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; only genui_admit holds a privilege on it (INSERT, nine columns), no application role any',
+    passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; genui_admit holds column INSERT (fourteen: 0024 adds role, removed and the revocation columns of a revocation record), SELECT (nine) and UPDATE (the three 0024 revocation columns and removed); the application roles hold column SELECT (nine, never granted) and nothing at table level',
            tables=list(SHARING_TABLES))
     with pg.connect('postgres') as c:
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
@@ -507,7 +566,7 @@ def admission_checks(pg, passed, denied):
         previous=json.loads((MIGRATIONS/'catalog-v2.json').read_text())
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
-        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS
+        expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS|ORGANIZATION_SHARE_READS
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -521,8 +580,12 @@ def admission_checks(pg, passed, denied):
         executes=set(c.execute("""SELECT p.proname,pg_get_userbyid(a.grantee) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
           CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
+        # 0024: genui.canonical_jsonb (the owner_only derivation) is executable by
+        # the writer of definition_record_schemas, genui_workspace, and no one else.
+        # Its IMMUTABLE declaration rests on a UTF-8 database (recheck N2).
+        assert c.execute("SHOW server_encoding").fetchone()==('UTF8',)
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
-            (name,'genui_workspace') for name in ADMIT_FUNCTIONS},executes
+            (name,'genui_workspace') for name in ADMIT_FUNCTIONS}|{('canonical_jsonb','genui_workspace')},executes
     passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the admit functions is genui_workspace only',
            admit_grant_count=len(ADMIT_GRANTS),definition_work_grant_count=len(DEFINITION_WORK_GRANTS),session_grant_count=len(SESSION_GRANTS),
            command_grant_count=len(COMMAND_GRANTS))
@@ -547,7 +610,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle','expire_shared_identity')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; ten exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work, the 0011 register_box_source, the 0015 steward_card and the 0016 ensure_authoring_shell) with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; fifteen exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work as 0024 replaced it, the 0011 register_box_source, the 0015 steward_card, the 0016 ensure_authoring_shell, the 0024 set_work_everyone and revoke_work_share and the three 0023 name and admin definers) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---
@@ -694,7 +757,7 @@ def admission_checks(pg, passed, denied):
         if role!='genui_workspace':
             for name,(arguments,_) in ADMIT_FUNCTIONS.items():
                 # Non-NULL arguments: a STRICT call on NULL constants folds away before the EXECUTE check.
-                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else '1' if kind=='bigint' else '[]' if kind=='jsonb' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ') if a))
+                values=','.join("'%s'::%s"%(str(uuid.uuid4()) if kind=='uuid' else 'true' if kind=='boolean' else '1' if kind in ('bigint','integer') else '[]' if kind=='jsonb' else 'x',kind) for kind in (a.split()[1] for a in arguments.split(', ') if a))
                 denied(role+' cannot execute '+name,role,'SELECT genui_private.%s(%s)'%(name,values))
 
     # --- resolve_code / resolve_handle before any scope ---
@@ -796,8 +859,16 @@ def admission_checks(pg, passed, denied):
     assert [r[1:2]+r[4:] for r in admitted]==[(1,'admitted')]
     principal_a,_,entitlement_a,redemption_a,_=admitted[0]
     after=row_counts(org0)
+    # 0023: the admission also records the consent (one row, one more event).
     assert {k:after[k]-before[k] for k in after}=={'principals':1,'memberships':1,'app_permissions':2,'work_permissions':1,'source_permissions':1,
-        'entitlements':1,'code_reservations':0,'code_redemptions':1,'audit_events':1}
+        'entitlements':1,'code_reservations':0,'code_redemptions':1,'audit_events':2}
+    with pg.connect('postgres') as c:
+        consent=c.execute("""SELECT c.notice_version,e.kind,e.actor_principal_id::text,e.chain_sequence-r.chain_sequence FROM genui.member_consents c
+          JOIN genui.audit_events e ON e.organization_id=c.organization_id AND e.event_id=c.audit_event_id
+          JOIN genui.code_redemptions d ON d.organization_id=c.organization_id AND d.principal_id=c.principal_id
+          JOIN genui.audit_events r ON r.organization_id=d.organization_id AND r.event_id=d.audit_event_id
+          WHERE c.organization_id=%s AND c.principal_id=%s""",(org0,principal_a)).fetchall()
+        assert consent==[(1,'admission.consented',principal_a,1)],consent
     # Single-use code with exactly one pending admission is admitted, then exhausted.
     assert code_state(org0,'main')==(1,'exhausted')
     with pg.connect('postgres') as c:
@@ -983,7 +1054,7 @@ def admission_checks(pg, passed, denied):
         except AssertionError: pass
         else: raise AssertionError('tampered audit chain verified')
         c.rollback()
-    assert chains[org1]==['admission.pending','admission.redeemed']
+    assert chains[org1]==['admission.pending','admission.redeemed','admission.consented']
     assert chains[org0].count('admission.redeemed')>=8 and chains[org0].count('session.sign_out')==1 and chains[org0].count('session.sign_out_all')==1
     assert chains[org0].count('admission.denied_for_reconciliation')==4
     # Review m5: code_redemptions.audit_event_id has no FK (D7.8), so the set
@@ -1397,6 +1468,118 @@ def command_checks(pg, passed, denied):
     passed('0007 role separation and bounds: only genui_data touches the command relations and only as the scoped principal, with no UPDATE or DELETE on claims, outcomes or revisions, no sequence creation and no other chain or kind; the key shape and the 24-hour retry horizon CHECKs hold')
 
 
+def migrations_at(directory, version):
+    """The reviewed migrations 1..version and their catalogs, as a migration directory."""
+    manifest=json.loads((MIGRATIONS/'manifest.json').read_text())
+    manifest.update(database_version=version, migrations=manifest['migrations'][:version], catalog=manifest['catalog'][:version+1])
+    for item in manifest['migrations']+manifest['catalog']: shutil.copyfile(MIGRATIONS/item['file'], directory/item['file'])
+    (directory/'manifest.json').write_text(json.dumps(manifest))
+    return directory
+
+
+# The real `runtime.py migrate`, in its own process, against the fixture: psycopg.connect
+# keeps the runtime's database, user and options and swaps only its TLS endpoint for the
+# fixture's loopback port (the fixture has no TLS or password; RDS does). Everything from
+# argument parsing to the exit code is the shipped module's.
+MIGRATE_PROCESS = r'''
+import runpy, sys
+import psycopg
+port, script = int(sys.argv[1]), sys.argv[2]
+connect = psycopg.connect
+def loopback(**options):
+    for key in ('host', 'port', 'sslmode', 'gssencmode', 'sslrootcert', 'password'): options.pop(key)
+    return connect(host='127.0.0.1', port=port, sslmode='disable', **options)
+psycopg.connect = loopback
+sys.argv = [script, 'migrate']
+runpy.run_path(script, run_name='__main__')
+'''
+
+
+def run_migrate(pg):
+    environment={'PATH':'/usr/bin:/bin','PGHOST':'127.0.0.1','PGDATABASE':'genui','PGUSER':'genui_migration',
+                 'PGPASSWORD':'fixture-trust','PGSSLROOTCERT':'/nonexistent'}
+    return subprocess.run([sys.executable,'-c',MIGRATE_PROCESS,str(pg.port),str(Path(runtime.__file__).resolve())],
+                          capture_output=True,text=True,timeout=120,env=environment)
+
+
+def release_b_upgrade_checks(passed, report, latest):
+    """APP-194 (release B, 22 -> 24): 0024's owner_only derivation over a populated version-22 database.
+
+    0024 adds definition_record_schemas.owner_only as a STORED generated column, so the
+    upgrade parses every stored canonical schema (genui.canonical_jsonb) while it rewrites
+    the table. A stored schema that is not UTF-8 JSON fails the whole 22 -> 24 transaction;
+    `runtime.py migrate` then exits 1 (no COMMIT was sent), the one exit code
+    restore-after-failed-migration accepts. The migration is therefore its own preflight
+    (evidence/APP-191/break-and-restore-2026-11-14.md, "Release B preflight").
+    """
+    assert latest>=24
+    org,principal,space,app,revision=('00000000-0000-4000-8000-0000000194%02d'%i for i in range(1,6))
+    good=[('note',canonical({'id':'note','version':1,'fields':[{'id':'body','type':'text','label':'Café ✓ – naïve'}]})),
+          ('quote',canonical({'id':'quote','version':1,'fields':[{'id':'q','type':'text','label':'a "quoted" \\ path'}]})),
+          ('task',canonical({'id':'task','version':1,'fields':[{'id':'title','type':'text'}]}))]
+    assert any(len(raw)!=len(raw.decode()) for _,raw in good) and any(b'\\' in raw for _,raw in good)
+    def seed22(pg, schemas):
+        with pg.connect('postgres') as c:
+            c.execute("INSERT INTO genui.organizations(organization_id,display_name,status) VALUES (%s,'Release B fixture','active')",(org,))
+            c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,'upgrade-iss','ten_b',true)",(org,))
+            c.execute("INSERT INTO genui.principals(organization_id,principal_id,issuer,provider_tenant_id,provider_subject) VALUES (%s,%s,'upgrade-iss','ten_b','owner')",(org,principal))
+            c.execute("INSERT INTO genui.spaces(organization_id,space_id,display_name) VALUES (%s,%s,'Space')",(org,space))
+            c.execute('INSERT INTO genui.apps(organization_id,app_id,space_id,owner_principal_id) VALUES (%s,%s,%s,%s)',(org,app,space,principal))
+            c.execute('INSERT INTO genui.definition_revisions(organization_id,app_id,revision_id,schema_version,digest,canonical_content) VALUES (%s,%s,%s,1,%s,%s)',
+                      (org,app,revision,'sha256:'+hashlib.sha256(b'{}').hexdigest(),b'{}'))
+            for schema_id,raw in schemas:
+                c.execute('INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES (%s,%s,%s,%s,1,%s,%s)',
+                          (org,app,revision,schema_id,'sha256:'+hashlib.sha256(raw).hexdigest(),raw))
+    def stored(pg, column='canonical_schema'):
+        with pg.connect('postgres') as c:
+            return c.execute('SELECT schema_id,'+column+' FROM genui.definition_record_schemas ORDER BY 1').fetchall()
+    def version(pg):
+        with pg.connect('postgres') as c: return c.execute('SELECT version FROM genui_meta.schema_version').fetchone()[0]
+    report['release_b_containers_removed']=[]
+    upgrade=LocalPostgres()
+    try:
+        with upgrade, tempfile.TemporaryDirectory() as tmp:
+            with upgrade.connect() as c: runtime.apply_migrations(c,migrations_at(Path(tmp),22))
+            seed22(upgrade,good)
+            before=stored(upgrade)
+            assert version(upgrade)==22
+            process=run_migrate(upgrade)
+            assert process.returncode==0 and process.stdout.strip()=='tenant_foundation_migration_complete',(process.returncode,process.stdout,process.stderr)
+            assert version(upgrade)==latest and stored(upgrade)==before
+            assert stored(upgrade,'owner_only')==[(schema_id,False) for schema_id,_ in good]
+            passed('0024 upgrade of a populated version-22 database by the real runtime.py migrate process (exit 0) derives owner_only false for every stored schema (ASCII, non-ASCII and a backslash escape) and rewrites no stored byte',
+                   schemas=len(good))
+    finally: report['release_b_containers_removed'].append(upgrade.removed)
+    unparsable=[('invalid JSON',b'{"id":"broken","fields":[',psycopg.errors.InvalidTextRepresentation),
+                ('invalid UTF-8',b'{"id":"broken","label":"\xff"}',psycopg.errors.CharacterNotInRepertoire)]
+    for label,raw,error in unparsable:
+        refused=LocalPostgres()
+        try:
+            with refused, tempfile.TemporaryDirectory() as tmp:
+                with refused.connect() as c: runtime.apply_migrations(c,migrations_at(Path(tmp),22))
+                seed22(refused,good+[('broken',raw)])
+                before=refused.digest()
+                try:
+                    with refused.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
+                except error: pass
+                else: raise AssertionError('0024 accepted a stored schema that is '+label)
+                assert refused.digest()==before and version(refused)==22
+                process=run_migrate(refused)
+                assert process.returncode==1 and 'tenant_foundation_migration_complete' not in process.stdout \
+                    and 'migration_commit_outcome_unknown' not in process.stderr,(process.returncode,process.stdout,process.stderr)
+                assert refused.digest()==before and version(refused)==22
+                # The control: the same database with that one row made parseable migrates.
+                with refused.connect('postgres') as c:
+                    c.execute("UPDATE genui.definition_record_schemas SET canonical_schema=%s WHERE schema_id='broken'",(b'{"id":"broken"}',))
+                process=run_migrate(refused)
+                assert process.returncode==0,(process.returncode,process.stdout,process.stderr)
+                assert version(refused)==latest
+                passed('0024 refuses whole when a stored record schema is '+label+': the transaction leaves version 22 and every byte unchanged, '
+                       'and the real runtime.py migrate process exits 1 (never 4), the code restore-after-failed-migration accepts; the same database migrates once that row parses',
+                       sqlstate=error.sqlstate)
+        finally: report['release_b_containers_removed'].append(refused.removed)
+
+
 def command(args, check=True):
     p = subprocess.run(args, capture_output=True, text=True, timeout=60)
     if check and p.returncode: raise RuntimeError('local Docker operation failed: '+p.stderr[-1200:])
@@ -1736,12 +1919,7 @@ def qualify():
     # index when it upgrades a populated version-20 database, and turns FORCE RLS back on.
     # Two organizations sharing one issuer and tenant fail the upgrade whole, which is
     # what the release preflight must look for before a schema release.
-    def version20(directory):
-        manifest=json.loads((MIGRATIONS/'manifest.json').read_text())
-        manifest.update(database_version=20, migrations=manifest['migrations'][:20], catalog=manifest['catalog'][:21])
-        for item in manifest['migrations']+manifest['catalog']: shutil.copyfile(MIGRATIONS/item['file'], directory/item['file'])
-        (directory/'manifest.json').write_text(json.dumps(manifest))
-        return directory
+    def version20(directory): return migrations_at(directory, 20)
     def seed20(pg, bindings):
         with pg.connect('postgres') as c:
             for org, tenant, active in bindings:
@@ -1782,6 +1960,7 @@ def qualify():
                 assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(20,)
             passed('0021 refuses whole, leaving version 20 and every byte unchanged, when two organizations share one active issuer and tenant (the release preflight condition)')
     finally: report['backfill_containers_removed'].append(shared.removed)
+    release_b_upgrade_checks(passed, report, latest)
     pg=LocalPostgres()
     try:
         with pg:
@@ -1934,6 +2113,15 @@ def qualify():
                   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                   WHERE n.nspname='genui_identity' AND c.relkind='r' ORDER BY c.relname""").fetchall()
                 assert {r[0] for r in identity}==set(identity_tables) and all(r[1:]==(True,True,'genui_owner') for r in identity)
+                # 0024 (the purge's recorded exception, W3 R1): share_events keeps only its
+                # account key, so an organization's live_work_shares can be deleted while
+                # every guest's share_events chain stays verifiable; linked_apps keeps both.
+                keys=c.execute("""SELECT n.nspname||'.'||t.relname,m.nspname||'.'||f.relname FROM pg_constraint k
+                  JOIN pg_class t ON t.oid=k.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+                  JOIN pg_class f ON f.oid=k.confrelid JOIN pg_namespace m ON m.oid=f.relnamespace
+                  WHERE k.contype='f' AND n.nspname='genui_identity' AND t.relname IN ('share_events','linked_apps')""").fetchall()
+                assert set(keys)=={('genui_identity.linked_apps','genui.live_work_shares'),('genui_identity.linked_apps','genui_identity.accounts'),
+                  ('genui_identity.share_events','genui_identity.accounts')},keys
                 policies=c.execute("""SELECT tablename,policyname,permissive,cmd,qual,with_check FROM pg_policies
                   WHERE schemaname='genui_identity' AND policyname='account_scope' ORDER BY tablename""").fetchall()
                 assert len(policies)==5 and all(r[1:4]==('account_scope','PERMISSIVE','ALL') and 'genui.account_id' in r[4] and r[4]==r[5] for r in policies)
@@ -1960,6 +2148,7 @@ def qualify():
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_labels' AND policyname='member_labels_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_cards' AND policyname='member_cards_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='work_artifact_kinds' AND policyname='work_artifact_kinds_principal')
+                  AND NOT (permissive='RESTRICTIVE' AND tablename='work_shares' AND policyname='work_shares_everyone')
                   AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'

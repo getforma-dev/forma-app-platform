@@ -1,0 +1,42 @@
+{
+  "kind": "shared_query_receipt",
+  "schema_version": 1,
+  "organization_id": "00000000-0000-4000-8000-000000000064",
+  "app_id": "00000000-0000-4000-8000-000000000065",
+  "work_id": "00000000-0000-4000-8000-000000000069",
+  "mode": "published",
+  "definition_digest": "sha256:89424c7129b6d43c70c2a72f8eaa680504fe6081cdf563cb7b01a33fbf2d59b2",
+  "publication_id": "00000000-0000-4000-8000-000000000068",
+  "view_id": "total",
+  "operator_version": 1,
+  "source_revisions": [
+    {
+      "input_id": "events",
+      "source_id": "00000000-0000-4000-8000-00000000006e",
+      "source_revision_id": "00000000-0000-4000-8000-00000000006f",
+      "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119"
+    },
+    {
+      "input_id": "inventory",
+      "source_id": "00000000-0000-4000-8000-000000000070",
+      "source_revision_id": "00000000-0000-4000-8000-000000000071",
+      "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4"
+    }
+  ],
+  "record_snapshot_sequence": 0,
+  "parameters": [],
+  "policy_epoch": 1,
+  "filter_epoch": 0,
+  "result_digest": "sha256:da077beebc790895620b9f090d5c808d1e013d48e4cda044643281061c7bd0c4",
+  "partial": false,
+  "truncated_page": false,
+  "total_scope": "full_authorized_filtered_input",
+  "provenance": {
+    "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66",
+    "predicate_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+  },
+  "account_id": "00000000-0000-4000-8000-000000000777",
+  "share_id": "00000000-0000-4000-8000-000000000778",
+  "share_version": 3,
+  "digest": "sha256:75aa9f95e0724ae855cf9c5c8b0bbfad47fff5e8866e002c3a79ee90d4deb16f"
+}

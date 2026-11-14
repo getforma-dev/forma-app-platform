@@ -6,7 +6,7 @@ use serde_json::Value;
 use tokio_postgres::Client;
 
 const QUERY: &str = include_str!("../../migrations/catalog-query.json");
-const EXPECTED: &str = include_str!("../../migrations/catalog-v22.json");
+const EXPECTED: &str = include_str!("../../migrations/catalog-v24.json");
 const BOUND: usize = 786_432;
 
 #[derive(Deserialize)]
@@ -44,6 +44,8 @@ impl Catalog {
         })
     }
     pub async fn verify(&self, client: &Client) -> Result<()> {
+        #[cfg(test)]
+        VERIFIED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         // A failed/cancelled check leaves the surrounding owned connection
         // dirty; its admission/recycle guard discards the transport.
         client
@@ -71,4 +73,13 @@ impl Catalog {
             .await
             .map_err(trace::unavailable)
     }
+}
+
+/// Test executable only (APP-195): catalog comparisons run so far, on any
+/// connection (role pools, readiness and the fixture's own checks).
+#[cfg(test)]
+static VERIFIED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[cfg(test)]
+pub(super) fn verifications() -> usize {
+    VERIFIED.load(std::sync::atomic::Ordering::SeqCst)
 }

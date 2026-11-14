@@ -189,6 +189,9 @@ pub enum FlowKind<'a> {
     SignUp {
         code_digest: &'a str,
         handoff: Option<&'a str>,
+        /// The beta notice version the invitation page showed and the
+        /// visitor consented to (0023 `code_reservations.notice_version`).
+        notice_version: i32,
     },
 }
 
@@ -484,9 +487,14 @@ impl Workspace {
             FlowKind::SignUp {
                 code_digest,
                 handoff,
+                notice_version,
             } => {
-                require(digest_shaped(code_digest) && handoff.is_none_or(valid_id))?;
-                (Some(code_digest), handoff)
+                require(
+                    digest_shaped(code_digest)
+                        && handoff.is_none_or(valid_id)
+                        && (1..=1_000_000).contains(&notice_version),
+                )?;
+                (Some((code_digest, notice_version)), handoff)
             }
         };
         let cookie = capability(organization)?;
@@ -503,9 +511,9 @@ impl Workspace {
                 return Ok(None);
             }
             let mut reservation: Option<String> = None;
-            if let Some(code_digest) = signup_code {
+            if let Some((code_digest, notice_version)) = signup_code {
                 let context = digest(CONTEXT_DOMAIN, &cookie);
-                let rows = transaction.query("SELECT reservation_id::text,outcome FROM genui_private.reserve_code($1::text::uuid,$2,$3)", &[&organization,&code_digest,&context]).await?;
+                let rows = transaction.query("SELECT reservation_id::text,outcome FROM genui_private.reserve_code($1::text::uuid,$2,$3,$4)", &[&organization,&code_digest,&context,&notice_version]).await?;
                 match rows.first() {
                     Some(row) if text(row, 1)? == "reserved" => reservation = optional(row, 0)?,
                     _ => return Ok(None),
@@ -745,6 +753,9 @@ impl Workspace {
                 .admit(&pre.nonmember(), organization, &pending, &payload)
                 .await?
             {
+                // 0023 (D6): the directory cache follows the membership row;
+                // a newly admitted member has no display name yet.
+                crate::directory::set_member_name(organization, &principal, None);
                 return Ok(Completion::Member(AdmittedMember {
                     principal,
                     entitlement,

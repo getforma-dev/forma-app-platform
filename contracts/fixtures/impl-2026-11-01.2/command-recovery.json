@@ -1,0 +1,243 @@
+{
+  "recovery_views": [
+    {
+      "kind": "recovery_view",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-0000000000c8",
+      "app_id": "00000000-0000-4000-8000-0000000000c9",
+      "work_id": "00000000-0000-4000-8000-0000000000cd",
+      "publication_id": "00000000-0000-4000-8000-0000000000cc",
+      "work_version": 1,
+      "record_id": "00000000-0000-4000-8000-0000000000f0",
+      "command_id": "record_decision",
+      "idempotency_key": "fedcba9876543210fedcba9876543210",
+      "reason": "expected_version",
+      "expected_record_version": 0,
+      "current_record_version": 1,
+      "current_values": [
+        {
+          "field_id": "status",
+          "value": {
+            "type": "enum",
+            "value": "needs_context"
+          }
+        },
+        {
+          "field_id": "note",
+          "value": {
+            "type": "text",
+            "value": "Review required — synthetic only"
+          }
+        }
+      ],
+      "stored_outcome": null
+    },
+    {
+      "kind": "recovery_view",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-0000000000c8",
+      "app_id": "00000000-0000-4000-8000-0000000000c9",
+      "work_id": "00000000-0000-4000-8000-0000000000cd",
+      "publication_id": "00000000-0000-4000-8000-0000000000cc",
+      "work_version": 1,
+      "record_id": "00000000-0000-4000-8000-0000000000f0",
+      "command_id": "record_decision",
+      "idempotency_key": "0123456789abcdef0123456789abcdef",
+      "reason": "payload_mismatch",
+      "expected_record_version": 0,
+      "current_record_version": 1,
+      "current_values": [
+        {
+          "field_id": "status",
+          "value": {
+            "type": "enum",
+            "value": "needs_context"
+          }
+        },
+        {
+          "field_id": "note",
+          "value": {
+            "type": "text",
+            "value": "Review required — synthetic only"
+          }
+        }
+      ],
+      "stored_outcome": {
+        "kind": "command_outcome",
+        "schema_version": 1,
+        "organization_id": "00000000-0000-4000-8000-0000000000c8",
+        "app_id": "00000000-0000-4000-8000-0000000000c9",
+        "work_id": "00000000-0000-4000-8000-0000000000cd",
+        "principal_id": "00000000-0000-4000-8000-0000000000ca",
+        "command_id": "record_decision",
+        "idempotency_key": "0123456789abcdef0123456789abcdef",
+        "payload_digest": "sha256:2dd0fe850705a9ec05617030dfe1a3131ff59891077a791383e1e520d9eff874",
+        "state": "committed",
+        "record_id": "00000000-0000-4000-8000-0000000000f0",
+        "record_version": 1,
+        "work_version": 1,
+        "commit_sequence": 1,
+        "audit_event_id": "00000000-0000-4000-8000-0000000000f1",
+        "committed_at": "2026-10-28T12:01:00Z",
+        "retry_expires_at": "2026-10-29T12:01:00Z"
+      }
+    },
+    {
+      "kind": "recovery_view",
+      "schema_version": 1,
+      "organization_id": "00000000-0000-4000-8000-0000000000c8",
+      "app_id": "00000000-0000-4000-8000-0000000000c9",
+      "work_id": "00000000-0000-4000-8000-0000000000cd",
+      "publication_id": "00000000-0000-4000-8000-0000000000cc",
+      "work_version": 1,
+      "record_id": "00000000-0000-4000-8000-0000000000f0",
+      "command_id": "record_decision",
+      "idempotency_key": "00000000000000000000000000000009",
+      "reason": "expected_version",
+      "expected_record_version": 3,
+      "current_record_version": 0,
+      "current_values": null,
+      "stored_outcome": null
+    }
+  ],
+  "claim": {
+    "kind": "command_claim",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-0000000000c8",
+    "app_id": "00000000-0000-4000-8000-0000000000c9",
+    "work_id": "00000000-0000-4000-8000-0000000000cd",
+    "principal_id": "00000000-0000-4000-8000-0000000000ca",
+    "command_id": "record_decision",
+    "idempotency_key": "0123456789abcdef0123456789abcdef",
+    "payload_digest": "sha256:2dd0fe850705a9ec05617030dfe1a3131ff59891077a791383e1e520d9eff874",
+    "claimed_at": "2026-10-28T12:01:00Z"
+  },
+  "problems": [
+    {
+      "status": 409,
+      "code": "conflict",
+      "recovery_view": {
+        "kind": "recovery_view",
+        "schema_version": 1,
+        "organization_id": "00000000-0000-4000-8000-0000000000c8",
+        "app_id": "00000000-0000-4000-8000-0000000000c9",
+        "work_id": "00000000-0000-4000-8000-0000000000cd",
+        "publication_id": "00000000-0000-4000-8000-0000000000cc",
+        "work_version": 1,
+        "record_id": "00000000-0000-4000-8000-0000000000f0",
+        "command_id": "record_decision",
+        "idempotency_key": "fedcba9876543210fedcba9876543210",
+        "reason": "expected_version",
+        "expected_record_version": 0,
+        "current_record_version": 1,
+        "current_values": [
+          {
+            "field_id": "status",
+            "value": {
+              "type": "enum",
+              "value": "needs_context"
+            }
+          },
+          {
+            "field_id": "note",
+            "value": {
+              "type": "text",
+              "value": "Review required — synthetic only"
+            }
+          }
+        ],
+        "stored_outcome": null
+      }
+    },
+    {
+      "status": 409,
+      "code": "conflict",
+      "recovery_view": {
+        "kind": "recovery_view",
+        "schema_version": 1,
+        "organization_id": "00000000-0000-4000-8000-0000000000c8",
+        "app_id": "00000000-0000-4000-8000-0000000000c9",
+        "work_id": "00000000-0000-4000-8000-0000000000cd",
+        "publication_id": "00000000-0000-4000-8000-0000000000cc",
+        "work_version": 1,
+        "record_id": "00000000-0000-4000-8000-0000000000f0",
+        "command_id": "record_decision",
+        "idempotency_key": "0123456789abcdef0123456789abcdef",
+        "reason": "payload_mismatch",
+        "expected_record_version": 0,
+        "current_record_version": 1,
+        "current_values": [
+          {
+            "field_id": "status",
+            "value": {
+              "type": "enum",
+              "value": "needs_context"
+            }
+          },
+          {
+            "field_id": "note",
+            "value": {
+              "type": "text",
+              "value": "Review required — synthetic only"
+            }
+          }
+        ],
+        "stored_outcome": {
+          "kind": "command_outcome",
+          "schema_version": 1,
+          "organization_id": "00000000-0000-4000-8000-0000000000c8",
+          "app_id": "00000000-0000-4000-8000-0000000000c9",
+          "work_id": "00000000-0000-4000-8000-0000000000cd",
+          "principal_id": "00000000-0000-4000-8000-0000000000ca",
+          "command_id": "record_decision",
+          "idempotency_key": "0123456789abcdef0123456789abcdef",
+          "payload_digest": "sha256:2dd0fe850705a9ec05617030dfe1a3131ff59891077a791383e1e520d9eff874",
+          "state": "committed",
+          "record_id": "00000000-0000-4000-8000-0000000000f0",
+          "record_version": 1,
+          "work_version": 1,
+          "commit_sequence": 1,
+          "audit_event_id": "00000000-0000-4000-8000-0000000000f1",
+          "committed_at": "2026-10-28T12:01:00Z",
+          "retry_expires_at": "2026-10-29T12:01:00Z"
+        }
+      }
+    },
+    {
+      "status": 412,
+      "code": "stale",
+      "current_revision": {
+        "publication_id": "00000000-0000-4000-8000-0000000000cc",
+        "definition_revision_id": "00000000-0000-4000-8000-0000000000cb",
+        "definition_digest": "sha256:7cc165a3717617a543073373f59453bb7d7bdefede40f30519a2701be993e6b8",
+        "work_version": 1
+      }
+    },
+    {
+      "status": 409,
+      "code": "in_flight",
+      "retry_after_seconds": 2
+    },
+    {
+      "status": 409,
+      "code": "busy",
+      "retry_after_seconds": 2
+    },
+    {
+      "status": 400,
+      "code": "missing_idempotency_key"
+    },
+    {
+      "status": 400,
+      "code": "malformed_idempotency_key"
+    },
+    {
+      "status": 400,
+      "code": "malformed_command"
+    },
+    {
+      "status": 503,
+      "code": "unknown_outcome"
+    }
+  ]
+}

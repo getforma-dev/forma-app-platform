@@ -86,6 +86,9 @@ impl crate::query::canvas::CanvasPages for NoCanvas {
 const EMPLOYEE: &str = "00000000-0000-4000-8000-00000000006f";
 /// A member of the canary organization only.
 const OUTSIDER: &str = "00000000-0000-4000-8000-000000000ab0";
+/// A member admitted for the forma_share success check (APP-192): no access,
+/// no app of their own.
+const NEWCOMER: &str = "00000000-0000-4000-8000-000000000b77";
 const EXPENSE_APP: &str = "00000000-0000-4000-8000-000000001681";
 const EXPENSE_SOURCE: &str = "00000000-0000-4000-8000-000000003000";
 /// The canary organization's seeded app (a foreign app id).
@@ -1120,6 +1123,54 @@ async fn campaign() {
         &mut checks,
         &format!("forma_compose_app runs the composer route's compose_for (demo organization, rehearsed routing, no model): the expense app retrieved as a new saved work in {} ms, app.placed live on Diego's stream, the work attributed to his token; an active canary member's first compose creates only their own unpublished shell with three grants and one audit; model absence returns could_not_compose, Northstar is unchanged and no source/work grant is added", timings["compose_ms"]),
     );
+
+    // --- D10: forma_compose_app at the daily model-call cap ---
+    // A composer whose real client is at a reached cap. Its endpoint is a
+    // loopback port nothing listens on: a request that left would fail as
+    // model_unavailable (could_not_compose), so daily_limit also shows that
+    // nothing was sent. An intent the matcher cannot pick needs the router.
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(0);
+    let capped = Composer::new(
+        Some(Arc::new(
+            crate::composer::model::Anthropic::new(
+                "sk-ant-synthetic-not-a-real-key",
+                "http://127.0.0.1:9/v1/messages",
+            )
+            .unwrap()
+            .with_daily_cap(&DAILY),
+        ) as Arc<dyn crate::composer::model::Model>),
+        "router",
+        "generator",
+    )
+    .with_demo_organizations([ORG.to_owned()]);
+    let capped_client = Client {
+        app: http::uniform_with_many(
+            Router::new(),
+            vec![(
+                mcp::PATH,
+                mcp::router(Arc::new(mcp::Mcp::new(work.clone(), capped))),
+            )],
+        ),
+        next: AtomicUsize::new(1),
+    };
+    let northstar_before = footprint_in(&fixture, Some(ORG)).await;
+    let capped_reply = capped_client
+        .call(
+            &claude,
+            mcp::tools::COMPOSE_APP,
+            json!({"description": "zqxv flurb gromp quarterly telemetry"}),
+        )
+        .await;
+    assert_eq!(error_code(&capped_reply), "daily_limit");
+    assert_eq!(
+        capped_reply["structuredContent"]["message"],
+        "Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working."
+    );
+    assert_eq!(footprint_in(&fixture, Some(ORG)).await, northstar_before);
+    check(
+        &mut checks,
+        "D10: forma_compose_app over a composer whose real client is at a reached daily cap answers the tool error daily_limit with the plain sentence (\"Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working.\"); nothing was sent (its endpoint has no listener) and Northstar is unchanged",
+    );
     drop(diego_stream);
 
     // --- APP-115: scoped agent tokens, the access log, the timeline ---
@@ -1479,6 +1530,48 @@ async fn campaign() {
     check(
         &mut checks,
         &format!("APP-115 access log: every tools/call is one row (token, label, member, tool, touched ids, outcome and reason, space, duration); GET /v1/governance/agents lists Diego's agents with scope, status and counts (Security bot: 9 calls, 7 refused); its timeline is newest first and shows \"Draft a record — refused: outside scope (People), Time off\" with the time-off app id, the view refusal with its work id, and the allowed access-request draft; Sarah reading Diego's agent and an anonymous read are the uniform 404; no token in the log; the {rows}-row organization chain verifies, editing row 3's duration as the owner breaks it at row 3 and restoring it verifies again; genui_workspace holds no UPDATE or DELETE; a token revoked through DELETE /v1/agent-tokens answers the uniform 404 on its next call and lists as revoked"),
+    );
+
+    // APP-192 review (MINOR-6): forma_share succeeds through the canvas
+    // route's own share path, and its published `record_write: true` maps to
+    // the contributor role: record_read and record_write are copied and the
+    // share row names the role. The grantee is a member admitted here, who
+    // holds nothing and owns no app (an app's owner is a reviewer by
+    // standing; W4 r1).
+    fixture.sql(&format!("BEGIN; SET LOCAL ROLE genui_owner; SELECT set_config('genui.organization_id','{ORG}',true); INSERT INTO genui.principals VALUES ('{ORG}','{NEWCOMER}','app008-fixture-only','ten_{ORG}','usr_{NEWCOMER}'); INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES ('{ORG}','{NEWCOMER}','active',1); INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES ('{ORG}','{NEWCOMER}','0000e000-0000-4000-8000-000000000b77','active','member_invite',now()-interval '1 day',now()+interval '30 days'); COMMIT;"), "genui");
+    directory::set_member_name(ORG, NEWCOMER, Some("Nadia Kim"));
+    let (sharer, _) = mint_token(&diego, "Share check").await;
+    let shared = client
+        .call(
+            &sharer,
+            mcp::tools::SHARE,
+            json!({"app_id": app_id, "work_id": work_id, "member_name": "Nadia", "record_write": true}),
+        )
+        .await;
+    let shared = ok(&shared).clone();
+    assert_eq!(shared["shared_with"], "Nadia Kim");
+    assert_eq!(shared["work_id"], work_id.as_str());
+    let operator = fixture.operator().await;
+    let held: Vec<String> = operator
+        .client
+        .query(&format!("SELECT permission FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{NEWCOMER}' AND work_id='{work_id}' ORDER BY permission"), &[])
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert_eq!(held, ["record_read", "record_write"]);
+    let role: String = operator
+        .client
+        .query_one(&format!("SELECT role FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{NEWCOMER}' AND work_id='{work_id}' AND revoked_at IS NULL ORDER BY shared_at DESC LIMIT 1"), &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(role, "contributor");
+    drop(operator);
+    check(
+        &mut checks,
+        "forma_share succeeds: Diego's agent shares his expense work by name with a member who holds nothing (Nadia Kim) with record_write: true; she now holds record_read and record_write on it and the share row names the contributor role (the canvas route's own path, Ensure)",
     );
 
     // --- The local stand for the browser and the real MCP clients ---

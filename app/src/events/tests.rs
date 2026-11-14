@@ -39,6 +39,8 @@ fn documents_carry_ids_and_kind_only() {
         app: APP.into(),
         work: OPEN.into(),
         from: None,
+        // APP-191: judged on, never on the wire.
+        sequence: Some(7),
         at: "2026-10-30T12:00:00Z".into(),
     };
     assert_eq!(
@@ -195,7 +197,13 @@ impl Scripted {
 }
 impl Gate for Scripted {
     type Judgment = String;
-    async fn judge(&self, _app: &str, work: &str, subscribers: &[String]) -> Option<String> {
+    async fn judge(
+        &self,
+        _app: &str,
+        work: &str,
+        _revision: Option<i64>,
+        subscribers: &[String],
+    ) -> Option<String> {
         self.judged.lock().unwrap().push(work.to_owned());
         self.populations.lock().unwrap().push(subscribers.to_vec());
         Some(work.to_owned())
@@ -233,7 +241,7 @@ async fn the_pump_delivers_only_openable_works_of_the_own_organization_and_close
         Duration::from_secs(3600),
         Duration::from_secs(3600),
     ));
-    hub.record_committed(ORG, APP, OPEN);
+    hub.record_committed(ORG, APP, OPEN, 1);
     let delivered = tokio::time::timeout(Duration::from_secs(2), rx.recv())
         .await
         .unwrap()
@@ -257,7 +265,7 @@ async fn the_pump_delivers_only_openable_works_of_the_own_organization_and_close
     // The member signs out: the next event closes the stream and releases
     // the slot; the body ends.
     current.store(false, Ordering::SeqCst);
-    hub.record_committed(ORG, APP, CLOSED_WORK);
+    hub.record_committed(ORG, APP, CLOSED_WORK, 1);
     tokio::time::timeout(Duration::from_secs(2), task)
         .await
         .expect("pump ends")
@@ -312,7 +320,7 @@ async fn one_event_with_n_subscribers_is_judged_once() {
         Duration::from_secs(3600),
         Duration::from_secs(3600),
     )));
-    hub.record_committed(ORG, APP, OPEN);
+    hub.record_committed(ORG, APP, OPEN, 1);
     for rx in &mut bodies {
         let delivered = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -432,7 +440,7 @@ async fn a_stalled_consumer_does_not_pin_the_pump() {
     ));
     // More deliverable events than the queue holds (SINK_CAPACITY = 32).
     for _ in 0..40 {
-        hub.record_committed(ORG, APP, OPEN);
+        hub.record_committed(ORG, APP, OPEN, 1);
     }
     tokio::time::sleep(Duration::from_millis(100)).await;
     // The member signs out: the re-check closes the stream...
@@ -469,7 +477,7 @@ async fn a_full_queue_drops_hints_and_marks_the_stream_lagged() {
         Duration::from_secs(3600),
     ));
     for _ in 0..(SINK_CAPACITY + 8) {
-        hub.record_committed(ORG, APP, OPEN);
+        hub.record_committed(ORG, APP, OPEN, 1);
     }
     // Every event was judged (the pump never parked); the queue holds its
     // capacity's worth, the rest were dropped.

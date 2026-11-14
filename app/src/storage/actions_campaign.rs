@@ -498,6 +498,7 @@ async fn campaign() {
     let (endpoint, stub) = stub_server().await;
     std::env::set_var(KEY_ENV, "sk-ant-synthetic-not-a-real-key");
     std::env::set_var(ENDPOINT_ENV, &endpoint);
+    let messages_endpoint = endpoint.clone();
     let parser = Parser::from_env();
     assert!(parser.enabled());
 
@@ -823,9 +824,9 @@ async fn campaign() {
     let shared = send(
         &app,
         "POST",
-        &format!("/v1/work/{app_id}/{work_id}/share"),
+        &format!("/v1/work/{app_id}/{work_id}/share/add"),
         Some(&diego),
-        &json!({"grantee_principal_id": REVIEWER, "record_write": true}).to_string(),
+        &json!({"grantee_principal_id": REVIEWER, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
     )
     .await;
@@ -1000,9 +1001,9 @@ async fn campaign() {
     let repeat = send(
         &app,
         "POST",
-        &format!("/v1/work/{app_id}/{work_id}/share"),
+        &format!("/v1/work/{app_id}/{work_id}/share/add"),
         Some(&diego),
-        &json!({"grantee_principal_id": REVIEWER, "record_write": true}).to_string(),
+        &json!({"grantee_principal_id": REVIEWER, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
     )
     .await;
@@ -1147,9 +1148,9 @@ async fn campaign() {
     let onward = send(
         &app,
         "POST",
-        &format!("/v1/work/{app_id}/{work_id}/share"),
+        &format!("/v1/work/{app_id}/{work_id}/share/add"),
         Some(&sarah),
-        &json!({"grantee_principal_id": PRINCIPAL, "record_write": true}).to_string(),
+        &json!({"grantee_principal_id": PRINCIPAL, "role": "contributor"}).to_string(),
         &SAME_ORIGIN,
     )
     .await;
@@ -1929,6 +1930,149 @@ async fn campaign() {
     assert_eq!(denied.status, StatusCode::NOT_FOUND, "{}", denied.body);
     assert_eq!(footprint(&fixture).await, frozen);
     check(&mut checks,"APP-168 app assistant: selected work/command/record only; anonymous, cross-organization, wrong-work, cross-site, unsupported commands, hostile model fields, read questions and stale premises refuse. Drafts write no records or authority. Explicit create/update confirmation is audited; duplicate confirmation replays; competing record versions conflict; grant revocation denies both fresh draft and previously prepared confirmation.");
+
+    // --- D10: the daily model-call cap on the act, receipt and assistant routes ---
+    // Two routers, each with its own real client over the same loopback stub,
+    // count against one cap of two calls (the app's cap is one static shared
+    // by every client): two model calls answer, then the act, receipt and
+    // assistant routes answer 429 daily_limit and nothing more reaches the
+    // endpoint or the database.
+    static DAILY: crate::composer::model::DailyCap = crate::composer::model::DailyCap::new(2);
+    auth.limits.clear();
+    grant(
+        &fixture,
+        REVIEWER,
+        "record_write",
+        &["--app", notes_app, "--work", notes_work],
+    );
+    let capped_parser = || {
+        Parser::new(
+            Some(Arc::new(
+                crate::composer::model::Anthropic::new(
+                    "sk-ant-synthetic-not-a-real-key",
+                    &messages_endpoint,
+                )
+                .unwrap()
+                .with_daily_cap(&DAILY),
+            ) as Arc<dyn crate::composer::model::Model>),
+            crate::composer::model::DEFAULT_ROUTER_MODEL,
+        )
+    };
+    let capped = http::uniform_with_many(
+        Router::new().merge(actions::assistant::router(Arc::new(Act::new(
+            auth.clone(),
+            capped_parser(),
+        )))),
+        vec![(
+            actions::PATH,
+            actions::routes::router(Arc::new(Act::new(auth.clone(), capped_parser()))),
+        )],
+    );
+    let listed = records(&sarah, notes_app, notes_work).await.json();
+    let create = json!({"command_id":"add","collection_id":listed["collections"][0]["collection_id"],"publication_id":listed["publication_id"],"expected_work_version":listed["work_version"],"utterance":"ASSISTANT add a note"});
+    let frozen = footprint(&fixture).await;
+    let sent = stub.calls.load(Ordering::SeqCst);
+    let drafted = send(
+        &capped,
+        "POST",
+        actions::PATH,
+        Some(&diego),
+        &utterance(MODEL_UTTERANCE),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(drafted.status, StatusCode::OK, "{}", drafted.body);
+    let proposed = send(
+        &capped,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    assert_eq!(proposed.status, StatusCode::OK, "{}", proposed.body);
+    assert_eq!(stub.calls.load(Ordering::SeqCst), sent + 2);
+    let daily_limit = |reply: &super::command_qualification::Reply, surface: &str| {
+        assert_eq!(
+            reply.status,
+            StatusCode::TOO_MANY_REQUESTS,
+            "{surface}: {}",
+            reply.body
+        );
+        assert_eq!(
+            reply.json(),
+            json!({"code": "daily_limit", "status": 429}),
+            "{surface}"
+        );
+        let wait: u64 = reply.headers[header::RETRY_AFTER]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((1..=86_400).contains(&wait), "{surface}: {wait}");
+    };
+    let act_capped = send(
+        &capped,
+        "POST",
+        actions::PATH,
+        Some(&diego),
+        &utterance(MODEL_UTTERANCE),
+        &SAME_ORIGIN,
+    )
+    .await;
+    daily_limit(&act_capped, "act");
+    let receipt_capped = {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri(actions::PATH)
+            .header("sec-fetch-site", "same-origin")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={BOUNDARY}"),
+            )
+            .header(header::COOKIE, format!("{}={diego}", cookies::SESSION))
+            .body(Body::from(receipt_body(
+                Some(RECEIPT_WORDS),
+                &receipt_png(b"daily-cap"),
+            )))
+            .unwrap();
+        request.extensions_mut().insert(ConnectInfo(
+            "192.0.2.40:4000".parse::<std::net::SocketAddr>().unwrap(),
+        ));
+        let response = capped.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        super::command_qualification::Reply {
+            status,
+            headers,
+            body: String::from_utf8(body.to_vec()).unwrap(),
+        }
+    };
+    daily_limit(&receipt_capped, "receipt");
+    let assistant_capped = send(
+        &capped,
+        "POST",
+        &endpoint,
+        Some(&sarah),
+        &create.to_string(),
+        &SAME_ORIGIN,
+    )
+    .await;
+    daily_limit(&assistant_capped, "assistant");
+    assert_eq!(
+        stub.calls.load(Ordering::SeqCst),
+        sent + 2,
+        "nothing reached the endpoint after the cap"
+    );
+    assert_eq!(footprint(&fixture).await, frozen);
+    check(
+        &mut checks,
+        "D10: two routers with their own real clients over the loopback stub share one daily cap of two calls; an utterance and an assistant proposal take the two calls, then POST /v1/act (words), a multipart receipt and an assistant proposal each answer 429 {\"code\":\"daily_limit\"} with a Retry-After of at most a day, nothing more reaches the endpoint, and no row is written",
+    );
 
     // --- The local stand for the two-window screenshots ---
     if let Some(seconds) = stand {

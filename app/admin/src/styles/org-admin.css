@@ -1,0 +1,14 @@
+/* D4 (trial plan): the organization's admin area, GET /admin. */
+.org-admin { max-width: 72rem; }
+.org-admin-nav { display: flex; gap: 1rem; margin: 0.5rem 0 1rem; }
+.org-admin-notice { padding: 0.6rem 0.8rem; border-radius: 6px; border: 1px solid currentColor; }
+.org-admin-notice[data-kind="refused"] { color: #9a3412; }
+.org-admin-notice[data-kind="done"] { color: #166534; }
+.org-admin-table-wrap { overflow-x: auto; }
+.org-admin-table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+.org-admin-table th, .org-admin-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid rgba(127, 127, 127, 0.3); vertical-align: top; }
+.org-admin-table thead th { font-weight: 600; white-space: nowrap; }
+.org-admin-count { text-align: right; font-variant-numeric: tabular-nums; }
+.org-admin-role { display: block; font-size: 0.8rem; font-weight: 400; opacity: 0.75; }
+.org-admin-remove { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.org-admin-remove label { display: flex; gap: 0.3rem; align-items: center; font-size: 0.85rem; }

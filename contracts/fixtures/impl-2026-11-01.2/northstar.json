@@ -1,0 +1,686 @@
+{
+  "context": {
+    "organization_id": "00000000-0000-4000-8000-000000000064",
+    "principal_id": "00000000-0000-4000-8000-000000000066"
+  },
+  "definition": {
+    "kind": "app_definition",
+    "schema_version": 2,
+    "organization_id": "00000000-0000-4000-8000-000000000064",
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "revision_id": "00000000-0000-4000-8000-000000000067",
+    "content": {
+      "title": "Northstar investigation",
+      "description": "Synthetic contract example; no runtime or query result is claimed.",
+      "inputs": [
+        {
+          "id": "events",
+          "contract_id": "events_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "time",
+              "value_type": {
+                "type": "timestamp"
+              },
+              "nullable": false
+            },
+            {
+              "id": "destination",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            },
+            {
+              "id": "bytes",
+              "value_type": {
+                "type": "integer",
+                "unit": "byte"
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        },
+        {
+          "id": "inventory",
+          "contract_id": "inventory_v1",
+          "contract_version": 1,
+          "kind": "source",
+          "fields": [
+            {
+              "id": "address",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        },
+        {
+          "id": "decisions",
+          "contract_id": "decisions_v1",
+          "contract_version": 1,
+          "kind": "records",
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ],
+          "coverage": "complete"
+        }
+      ],
+      "views": [
+        {
+          "id": "total",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "total",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "events"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "total_bytes",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "events",
+                      "field_id": "bytes"
+                    }
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "destinations",
+          "kind": "table",
+          "renderer_version": 1,
+          "title": "destinations",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "events",
+              "inventory"
+            ],
+            "operations": [
+              {
+                "type": "lookup",
+                "left": {
+                  "input_id": "events",
+                  "field_id": "destination"
+                },
+                "right": {
+                  "input_id": "inventory",
+                  "field_id": "address"
+                },
+                "rule": "cidr_exact_then_longest",
+                "cardinality": "at_most_one"
+              },
+              {
+                "type": "project",
+                "fields": [
+                  {
+                    "input_id": "events",
+                    "field_id": "destination"
+                  },
+                  {
+                    "input_id": "events",
+                    "field_id": "bytes"
+                  }
+                ]
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "timeline",
+          "kind": "timeline",
+          "renderer_version": 1,
+          "title": "timeline",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "events"
+            ],
+            "operations": [
+              {
+                "type": "time_bucket",
+                "field": {
+                  "input_id": "events",
+                  "field_id": "time"
+                },
+                "seconds": 60,
+                "timezone": "UTC",
+                "output_field": "minute"
+              }
+            ],
+            "null_policy": "unknown"
+          }
+        },
+        {
+          "id": "record_observation",
+          "kind": "form",
+          "renderer_version": 1,
+          "title": "record observation",
+          "command_id": "record_decision"
+        },
+        {
+          "id": "caution",
+          "kind": "note",
+          "renderer_version": 1,
+          "title": "caution",
+          "text": "An unmatched destination does not establish compromise."
+        },
+        {
+          "id": "rate",
+          "kind": "summary",
+          "renderer_version": 1,
+          "title": "rate",
+          "query": {
+            "operator_version": 1,
+            "inputs": [
+              "events"
+            ],
+            "operations": [
+              {
+                "type": "aggregate",
+                "group_by": [],
+                "measures": [
+                  {
+                    "id": "total_bytes",
+                    "operation": "sum",
+                    "field": {
+                      "input_id": "events",
+                      "field_id": "bytes"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "ratio",
+                "numerator": "total_bytes",
+                "denominator": {
+                  "type": "window_minutes"
+                },
+                "output_field": "bytes_per_minute",
+                "output_unit": "byte_per_minute",
+                "zero_denominator": "error",
+                "rounding": "exact_rational"
+              }
+            ],
+            "null_policy": "unknown",
+            "window": {
+              "start": "2026-10-22T10:00:00Z",
+              "end": "2026-10-22T10:10:00Z",
+              "bounds": "half_open"
+            }
+          }
+        }
+      ],
+      "record_schemas": [
+        {
+          "id": "decision",
+          "version": 1,
+          "fields": [
+            {
+              "id": "status",
+              "value_type": {
+                "type": "enum",
+                "values": [
+                  "needs_context",
+                  "reviewed"
+                ]
+              },
+              "nullable": false
+            },
+            {
+              "id": "note",
+              "value_type": {
+                "type": "text"
+              },
+              "nullable": false
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "id": "record_decision",
+          "record_schema_id": "decision",
+          "operation": "create",
+          "writable_fields": [
+            "status",
+            "note"
+          ],
+          "transitions": [
+            {
+              "field_id": "status",
+              "from": "needs_context",
+              "to": "reviewed"
+            }
+          ]
+        }
+      ],
+      "links": [],
+      "default_layout": [
+        {
+          "view_id": "total",
+          "column": 0,
+          "row": 0,
+          "width": 12
+        },
+        {
+          "view_id": "destinations",
+          "column": 0,
+          "row": 1,
+          "width": 12
+        },
+        {
+          "view_id": "timeline",
+          "column": 0,
+          "row": 2,
+          "width": 12
+        },
+        {
+          "view_id": "record_observation",
+          "column": 0,
+          "row": 3,
+          "width": 12
+        },
+        {
+          "view_id": "caution",
+          "column": 0,
+          "row": 4,
+          "width": 12
+        },
+        {
+          "view_id": "rate",
+          "column": 0,
+          "row": 5,
+          "width": 12
+        }
+      ]
+    },
+    "digest": "sha256:8ddb54f27a3c571c607bd3a49a4c9da8893350232fcf3830d6dfe5c71af8144b"
+  },
+  "publication": {
+    "kind": "publication",
+    "schema_version": 2,
+    "organization_id": "00000000-0000-4000-8000-000000000064",
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "publication_id": "00000000-0000-4000-8000-000000000068",
+    "definition_revision_id": "00000000-0000-4000-8000-000000000067",
+    "definition_digest": "sha256:8ddb54f27a3c571c607bd3a49a4c9da8893350232fcf3830d6dfe5c71af8144b",
+    "input_contract_digests": [
+      {
+        "input_id": "events",
+        "digest": "sha256:dc645731bf58dd9cbab8ec6f58fcc40c958f70c4c0ba1cd5724278e02d9e6fde"
+      },
+      {
+        "input_id": "inventory",
+        "digest": "sha256:f8898cfb27f37aed12cc3e23f7b52f1978bd44bb0ebc9c4079c5df4d770b9fa7"
+      },
+      {
+        "input_id": "decisions",
+        "digest": "sha256:31d540de02ec89911ff90269e98297dc0158c475c34f53306e7c090e56f32269"
+      }
+    ],
+    "record_schema_digests": [
+      {
+        "schema_id": "decision",
+        "digest": "sha256:3c075b4099b1f49f692e0ad0fb78f4f4a7888c008ff4fe852c48d9d7298251bf"
+      }
+    ],
+    "renderer_version": 1,
+    "operator_version": 1,
+    "operators": [
+      {
+        "id": "aggregate",
+        "version": 1
+      },
+      {
+        "id": "lookup",
+        "version": 1
+      },
+      {
+        "id": "project",
+        "version": 1
+      },
+      {
+        "id": "ratio",
+        "version": 1
+      },
+      {
+        "id": "time_bucket",
+        "version": 1
+      }
+    ],
+    "renderers": [
+      {
+        "kind": "form",
+        "version": 1
+      },
+      {
+        "kind": "note",
+        "version": 1
+      },
+      {
+        "kind": "summary",
+        "version": 1
+      },
+      {
+        "kind": "table",
+        "version": 1
+      },
+      {
+        "kind": "timeline",
+        "version": 1
+      }
+    ],
+    "admission_digest": "sha256:5cfcd8f03cb75371d08d27a1c60c53af892de1d1d4f477cceea6133fe68d247f",
+    "policy": {
+      "id": "00000000-0000-4000-8000-00000000006c",
+      "version": 1,
+      "kind": "independent_review"
+    },
+    "author_id": "00000000-0000-4000-8000-000000000066",
+    "approver_id": "00000000-0000-4000-8000-00000000006d",
+    "approver_epoch": 1,
+    "published_at": "2026-10-28T12:00:00Z"
+  },
+  "work": {
+    "kind": "saved_work",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000064",
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "work_id": "00000000-0000-4000-8000-000000000069",
+    "publication_id": "00000000-0000-4000-8000-000000000068",
+    "version": 1,
+    "context": "Contract-shape validation only",
+    "bindings": [
+      {
+        "input_id": "events",
+        "source_id": "00000000-0000-4000-8000-00000000006e",
+        "source_revision_id": "00000000-0000-4000-8000-00000000006f",
+        "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+        "kind": "source",
+        "contract_digest": "sha256:dc645731bf58dd9cbab8ec6f58fcc40c958f70c4c0ba1cd5724278e02d9e6fde"
+      },
+      {
+        "input_id": "inventory",
+        "source_id": "00000000-0000-4000-8000-000000000070",
+        "source_revision_id": "00000000-0000-4000-8000-000000000071",
+        "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+        "kind": "source",
+        "contract_digest": "sha256:f8898cfb27f37aed12cc3e23f7b52f1978bd44bb0ebc9c4079c5df4d770b9fa7"
+      },
+      {
+        "input_id": "decisions",
+        "kind": "records",
+        "contract_digest": "sha256:31d540de02ec89911ff90269e98297dc0158c475c34f53306e7c090e56f32269",
+        "collection_id": "00000000-0000-4000-8000-00000000006a",
+        "schema_id": "decision",
+        "schema_version": 1,
+        "revision_policy": "committed_snapshot"
+      }
+    ],
+    "record_collections": [
+      {
+        "id": "00000000-0000-4000-8000-00000000006a",
+        "schema_id": "decision",
+        "schema_version": 1
+      }
+    ],
+    "source_dependencies": [
+      {
+        "input_id": "events",
+        "source_id": "00000000-0000-4000-8000-00000000006e",
+        "source_revision_id": "00000000-0000-4000-8000-00000000006f",
+        "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119"
+      },
+      {
+        "input_id": "inventory",
+        "source_id": "00000000-0000-4000-8000-000000000070",
+        "source_revision_id": "00000000-0000-4000-8000-000000000071",
+        "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "kind": "source_revision",
+      "schema_version": 2,
+      "organization_id": "00000000-0000-4000-8000-000000000064",
+      "source_id": "00000000-0000-4000-8000-00000000006e",
+      "revision_id": "00000000-0000-4000-8000-00000000006f",
+      "content_digest": "sha256:f85bf298e932bbd0636a7f24b4c92a4cb1fa17e7402af5458b434e045fbe7371",
+      "normalized_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+      "rows_digest": "sha256:5472906608d9e3bf1f48bda2a1e09bd4b6b7b06887626760d55ec597c3a883c7",
+      "coverage": "complete",
+      "input_contract": {
+        "id": "events",
+        "contract_id": "events_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "time",
+            "value_type": {
+              "type": "timestamp"
+            },
+            "nullable": false
+          },
+          {
+            "id": "destination",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          },
+          {
+            "id": "bytes",
+            "value_type": {
+              "type": "integer",
+              "unit": "byte"
+            },
+            "nullable": false
+          }
+        ],
+        "coverage": "complete"
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 5,
+      "timezone": "UTC",
+      "time_semantics": "event",
+      "units_confirmed": true,
+      "created_at": "2026-10-28T11:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    },
+    {
+      "kind": "source_revision",
+      "schema_version": 2,
+      "organization_id": "00000000-0000-4000-8000-000000000064",
+      "source_id": "00000000-0000-4000-8000-000000000070",
+      "revision_id": "00000000-0000-4000-8000-000000000071",
+      "content_digest": "sha256:7b34d38d5be8165b9ad55bfed89ae8dfe7ed1611e8b010f9d657004855f103b3",
+      "normalized_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+      "rows_digest": "sha256:ced5f6f6385a4224495d35fee55db80920e1f6cc4497b9e90bb3754937c0069d",
+      "coverage": "complete",
+      "input_contract": {
+        "id": "inventory",
+        "contract_id": "inventory_v1",
+        "contract_version": 1,
+        "kind": "source",
+        "fields": [
+          {
+            "id": "address",
+            "value_type": {
+              "type": "text"
+            },
+            "nullable": false
+          }
+        ],
+        "coverage": "complete"
+      },
+      "parser_version": 1,
+      "mapping_version": 1,
+      "format": "csv",
+      "formula_policy": "reject",
+      "row_count": 5,
+      "timezone": "UTC",
+      "time_semantics": "none",
+      "units_confirmed": true,
+      "created_at": "2026-10-28T11:00:00Z",
+      "provenance_sample": [
+        {
+          "type": "csv",
+          "logical_record": 1,
+          "physical_line_start": 2,
+          "physical_line_end": 2
+        }
+      ]
+    }
+  ],
+  "receipt": {
+    "kind": "query_receipt",
+    "schema_version": 2,
+    "organization_id": "00000000-0000-4000-8000-000000000064",
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "work_id": "00000000-0000-4000-8000-000000000069",
+    "mode": "published",
+    "definition_digest": "sha256:8ddb54f27a3c571c607bd3a49a4c9da8893350232fcf3830d6dfe5c71af8144b",
+    "publication_id": "00000000-0000-4000-8000-000000000068",
+    "view_id": "total",
+    "operator_version": 1,
+    "operators": [
+      {
+        "id": "aggregate",
+        "version": 1
+      }
+    ],
+    "renderers": [
+      {
+        "kind": "summary",
+        "version": 1
+      }
+    ],
+    "source_revisions": [
+      {
+        "input_id": "events",
+        "source_id": "00000000-0000-4000-8000-00000000006e",
+        "source_revision_id": "00000000-0000-4000-8000-00000000006f",
+        "source_digest": "sha256:bb16c6e424ae249ed26e04d801d5c3c4efbf3852f969a02b4293ffb3a785c119",
+        "mapping_version": 1
+      },
+      {
+        "input_id": "inventory",
+        "source_id": "00000000-0000-4000-8000-000000000070",
+        "source_revision_id": "00000000-0000-4000-8000-000000000071",
+        "source_digest": "sha256:26089ee29df0dee6489e3c95392734bd39f276f864a2843d72603bde06cd2fd4",
+        "mapping_version": 1
+      }
+    ],
+    "record_snapshot_sequence": 0,
+    "parameters": [],
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "membership_epoch": 1,
+    "policy_epoch": 1,
+    "filter_epoch": 0,
+    "result_digest": "sha256:da077beebc790895620b9f090d5c808d1e013d48e4cda044643281061c7bd0c4",
+    "partial": false,
+    "truncated_page": false,
+    "total_scope": "full_authorized_filtered_input",
+    "provenance": {
+      "query_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66",
+      "predicate_digest": "sha256:29769c9cba1a1075289b98cbb0396b94b2a4704bc21e182ecb6cb4ee2eee3d66"
+    },
+    "digest": "sha256:c5add7f052dfab26d32658e4b8869725801914093ec1466919d10c74ccdeda12"
+  },
+  "command": {
+    "kind": "command_request",
+    "schema_version": 1,
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "work_id": "00000000-0000-4000-8000-000000000069",
+    "publication_id": "00000000-0000-4000-8000-000000000068",
+    "command_id": "record_decision",
+    "schema_id": "decision",
+    "schema_version_expected": 1,
+    "record_id": "00000000-0000-4000-8000-00000000008c",
+    "expected_record_version": 0,
+    "expected_work_version": 1,
+    "values": [
+      {
+        "field_id": "status",
+        "value": {
+          "type": "enum",
+          "value": "needs_context"
+        }
+      },
+      {
+        "field_id": "note",
+        "value": {
+          "type": "text",
+          "value": "Review required — synthetic only"
+        }
+      }
+    ],
+    "idempotency_key": "0123456789abcdef0123456789abcdef"
+  },
+  "outcome": {
+    "kind": "command_outcome",
+    "schema_version": 1,
+    "organization_id": "00000000-0000-4000-8000-000000000064",
+    "app_id": "00000000-0000-4000-8000-000000000065",
+    "work_id": "00000000-0000-4000-8000-000000000069",
+    "principal_id": "00000000-0000-4000-8000-000000000066",
+    "command_id": "record_decision",
+    "idempotency_key": "0123456789abcdef0123456789abcdef",
+    "payload_digest": "sha256:2eb623c7ce8f7ff9eadd43da526ad3b8dc21d407d1b91c2e58aaa1f917c20049",
+    "state": "committed",
+    "record_id": "00000000-0000-4000-8000-00000000008c",
+    "record_version": 1,
+    "work_version": 1,
+    "commit_sequence": 1,
+    "audit_event_id": "00000000-0000-4000-8000-00000000008d",
+    "committed_at": "2026-10-28T12:01:00Z",
+    "retry_expires_at": "2026-10-29T12:01:00Z"
+  }
+}

@@ -30,17 +30,21 @@ from .state import Refused, no_duplicates, require
 
 SPEC = Path(__file__).with_name('schema-release.json')
 # Changing any of these needs a reviewed source change, not a JSON edit. The
-# JSON must equal it exactly; see evidence/APP-175/SCHEMA-RELEASE.md for how
-# each digest was computed.
+# JSON must equal it exactly; see the evidence record for how each digest was
+# computed. Release B (APP-194): 22 -> 24, from release A's live baseline
+# (evidence/APP-175/release-2026-11-14.md). It replaces release A's spent
+# 20 -> 22 pin (evidence/APP-175/SCHEMA-RELEASE.md). The expiry falls after the
+# planned release (2026-11-23) and before the class (2026-11-29), so no schema
+# change can promote during it.
 REVIEWED_SCHEMA_RELEASE = {
-    'evidence': 'evidence/APP-175/SCHEMA-RELEASE.md',
-    'expires_at_utc': '2026-11-20T00:00:00Z',
-    'from': {'database_version': 20,
-             'schema_manifest_sha256': '08737320c891830a2a8c6deaec9111ca18afb9ae7927c172b44379506ac4e2cb',
-             'deployment_contract_sha256': '4a2cea855e962fda7f79a55f2b2754df9a056e4b3bab3fc4e5b4ee1a98fdd2a0'},
-    'to': {'database_version': 22,
-           'schema_manifest_sha256': '7ceb859d1794e79224ed609bfb557c21e79c23020894540b7b5114044ec68176',
-           'deployment_contract_sha256': '14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b'},
+    'evidence': 'evidence/APP-194/SCHEMA-RELEASE.md',
+    'expires_at_utc': '2026-11-26T00:00:00Z',
+    'from': {'database_version': 22,
+             'schema_manifest_sha256': '7ceb859d1794e79224ed609bfb557c21e79c23020894540b7b5114044ec68176',
+             'deployment_contract_sha256': '14a161a09cf93044cbf6d1281b02b56f954fa7f73ae3a17a8f54b07b7958d99b'},
+    'to': {'database_version': 24,
+           'schema_manifest_sha256': '176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1',
+           'deployment_contract_sha256': '88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356'},
     'infrastructure_sha256': 'e74b620e4d9749b5eb47819a1546be1adc00765008f042abbb0b747d9e549da1',
 }
 FIELDS = frozenset({'schema_version', 'evidence', 'from', 'to', 'infrastructure_sha256', 'expires_at_utc'})
@@ -53,6 +57,14 @@ STARTED_BY = 'forma-schema-release'
 # The snapshot runs before the outage, so its bound costs no downtime.
 SNAPSHOT_WAIT_SECONDS = 720
 MIGRATION_WAIT_SECONDS = 720
+# The migration's own exit codes (app/runtime/runtime.py module notes; APP-196).
+# 0: committed. MIGRATION_REFUSED: refused or failed before COMMIT was sent, so
+# the database is unchanged. MIGRATION_COMMIT_OUTCOME_UNKNOWN: COMMIT may have
+# reached the server, so the database may be at either version. Every other code
+# is not the program's own and proves nothing. test_schema_recovery reads the
+# reserved value from runtime.py.
+MIGRATION_REFUSED = 1
+MIGRATION_COMMIT_OUTCOME_UNKNOWN = 4
 
 
 def side(value, version):
@@ -216,5 +228,7 @@ def verify_migration(response, arn, request, container_name, image, digests):
     require(container.get('name') == container_name and container.get('image') == image
             and container.get('imageDigest') in digests,
             'migration ran another image; services remain stopped, reconcile')
+    require(container.get('exitCode') != MIGRATION_COMMIT_OUTCOME_UNKNOWN,
+            'migration commit outcome unknown; services remain stopped, read the schema version before any recovery')
     require(type(container.get('exitCode')) is int and container['exitCode'] == 0,
-            'migration failed; the database keeps its prior version and services remain stopped, reconcile')
+            'migration failed; services remain stopped, reconcile')

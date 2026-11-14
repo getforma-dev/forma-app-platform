@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 22,
+  "database_version": 24,
   "migrations": [
     {
       "version": 1,
@@ -111,6 +111,16 @@
       "version": 22,
       "file": "0022_work_artifact_kinds.sql",
       "sha256": "f5ef129039b20444bf9f62f9903e1635b3c413f9437f252334dd5a8f2164d5b9"
+    },
+    {
+      "version": 23,
+      "file": "0023_consent_names_org_admin.sql",
+      "sha256": "1c95963e3d75b93f896b7e20635cb196025559d5546e2ebf4c12228c2ef6c89b"
+    },
+    {
+      "version": 24,
+      "file": "0024_private_entries_and_roles.sql",
+      "sha256": "8ff14e6d86f41223abf8f2c626cc6211dcf4de33ad9576d6b9690044f893efa1"
     }
   ],
   "catalog": [
@@ -205,6 +215,14 @@
     {
       "file": "catalog-v22.json",
       "sha256": "3229553dc1069b7e84387bf393cc8037d211e8547ea815da950fbe8d7f43225f"
+    },
+    {
+      "file": "catalog-v23.json",
+      "sha256": "e179414c538070b0198cc358158263ad9ebb53aa3cc27702f7e5bf2a02405c21"
+    },
+    {
+      "file": "catalog-v24.json",
+      "sha256": "046d84e6a31a9b056d71d59a1473647086fd1d6a66f6ff3dd0382f2211486f82"
     }
   ]
 }
