@@ -1332,6 +1332,35 @@ async fn campaign() {
     let everyone_sql = |sharer: &str, role: &str| {
         format!("SELECT count(*) FROM genui_private.set_work_everyone('{ORG}','{sharer}','{PRIVATE_APP}','{work}','{role}')")
     };
+    // Recheck r1: never the app's owner (nor the sharer) as grantee, so no
+    // lower re-share can strip the owner's rows.
+    let owner_rows_before = scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{OWNER}' AND work_id='{work}'")).await;
+    assert_eq!(
+        definer_rows(&fixture, BEN, &share(BEN, OWNER, "viewer")).await,
+        0,
+        "the app owner is never a grantee"
+    );
+    assert_eq!(
+        definer_rows(&fixture, BEN, &share(BEN, BEN, "viewer")).await,
+        0,
+        "nor the sharer"
+    );
+    assert_eq!(
+        stores
+            .workspace
+            .share_work(
+                &ben,
+                PRIVATE_APP,
+                work,
+                Audience::Member(OWNER),
+                ShareRole::Viewer
+            )
+            .await
+            .err(),
+        Some(Error::Denied)
+    );
+    assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{OWNER}' AND work_id='{work}'")).await, owner_rows_before, "the owner's rows are untouched");
+    check(&mut checks, "recheck r1: share_work refuses the app owner and the sharer as grantee (the definer and storage alike), so no lower re-share strips the owner's rows");
     assert_eq!(
         definer_rows(&fixture, BEN, &share(BEN, FAY, "reviewer")).await,
         0,
@@ -1705,11 +1734,27 @@ async fn campaign() {
         .unwrap();
     assert!(!nothing.changed());
     let revoked_before = chain(&fixture, "permission.revoked").await;
-    let revoked = stores
+    // Recheck r3: the revocation takes the grantee's membership row FOR UPDATE
+    // (the fence's lock order), so it waits for the grantee's fenced
+    // transaction in flight (a session holding the row FOR SHARE, as
+    // lock_member_authority does) and lands after it.
+    let mut fenced = fixture.operator().await;
+    let t1 = fenced.client.transaction().await.unwrap();
+    t1.execute(&format!("SELECT 1 FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{REV}' FOR SHARE"), &[]).await.unwrap();
+    let waiter = stores
         .workspace
-        .revoke_work_share(&owner, PRIVATE_APP, work, REV)
-        .await
-        .unwrap();
+        .revoke_work_share(&owner, PRIVATE_APP, work, REV);
+    let committer = async {
+        let waited = lock_wait(&fixture, "revoke_work_share").await;
+        t1.commit().await.unwrap();
+        waited
+    };
+    let (revoked, waited) = tokio::join!(waiter, committer);
+    assert!(
+        waited,
+        "the owner's revocation waits behind the grantee's fenced transaction"
+    );
+    let revoked = revoked.unwrap();
     assert_eq!(
         revoked.removed,
         ["record_read", "record_review", "record_write"]
@@ -1729,8 +1774,9 @@ async fn campaign() {
             .err(),
         Some(Error::Denied)
     );
-    let digest_ok = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-revoke:v1','UTF8')||'\\x00'::bytea||convert_to('{REV}','UTF8')||'\\x00'::bytea||convert_to('work:{work}:record_read,work:{work}:record_review,work:{work}:record_write','UTF8')),'hex')")).await;
-    assert_eq!(digest_ok, 1);
+    let digest_ok = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e JOIN genui.work_shares s ON s.organization_id=e.organization_id AND (s.revoke_event_id=e.event_id OR s.audit_event_id=e.event_id) WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND e.work_id='{work}' AND s.grantee_id='{REV}' AND s.removed IS NOT NULL AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.removed,','),'UTF8')),'hex')")).await;
+    assert!(digest_ok >= 1, "the revocation's digest recomputes from stored rows (recheck r2: the grantee and the removed set on the marked record)");
+    check(&mut checks, "recheck r3: the owner's revocation takes the grantee's membership row FOR UPDATE before the work lock (the fence's order) and waits behind the grantee's fenced transaction in flight; r2: its permission.revoked digest (forma:share-member-revoke:v1) recomputes from the stored grantee and removed set");
     check(&mut checks, "review M1: the app owner revokes a member's personal share in one unit (record_read, record_review and record_write removed, the share record marked revoked, one permission.revoked whose digest recomputes); non-owners and the owner's own rows are refused; nothing held is an unchanged outcome");
     // The resurrection sequence: a later organization-wide viewer share must
     // not revive the revoked reviewer.
@@ -1791,6 +1837,17 @@ async fn campaign() {
         revoked_before + 1
     );
     assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{REV}' AND work_id='{work}' AND permission='record_review'")).await, 0);
+    // Recheck r4 and r2: the demotion (nothing new inserted) leaves exactly
+    // one live share record, the new role and the remaining access, carrying
+    // the removed set; its event's digest recomputes from that row.
+    let live_after_demotion = text(&fixture, &format!("SELECT role||'|'||array_to_string(granted,',')||'|'||coalesce(array_to_string(removed,','),'') FROM genui.work_shares WHERE organization_id='{ORG}' AND grantee_id='{REV}' AND work_id='{work}' AND revoked_at IS NULL")).await;
+    assert_eq!(
+        live_after_demotion,
+        format!("contributor|app:{PRIVATE_APP}:discover,app:{PRIVATE_APP}:run,work:{work}:record_read,work:{work}:record_write|work:{work}:record_review")
+    );
+    let demotion_digest = scalar(&fixture, &format!("SELECT count(*) FROM genui.audit_events e JOIN genui.work_shares s ON s.organization_id=e.organization_id AND s.audit_event_id=e.event_id WHERE e.organization_id='{ORG}' AND e.kind='permission.revoked' AND s.grantee_id='{REV}' AND s.revoked_at IS NULL AND e.outcome_digest='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\\x00'::bytea||convert_to(s.grantee_id::text,'UTF8')||'\\x00'::bytea||convert_to(array_to_string(s.removed,','),'UTF8')),'hex')")).await;
+    assert_eq!(demotion_digest, 1);
+    check(&mut checks, "recheck r4, r2: a demotion that inserts nothing leaves exactly one live share record (the new role, the remaining access, the removed set) and its permission.revoked digest recomputes from that stored row");
     judged!(&mut checks, "review f1: re-shared as contributor, a former reviewer has no reviewer standing left: their own rows only and no reviewer-only command", {
         let r = stores.data.list_records(&rev, PRIVATE_APP, work).await.unwrap();
         let approve = command(&w, "approve", "claim", OWNER_CLAIM, 1, json!([{"field_id": "status", "value": {"type": "enum", "value": "approved"}}]), &"d2".repeat(16));
@@ -2067,14 +2124,15 @@ async fn campaign() {
         let revision_id = revision.revision.as_str();
         let digest_ok = format!("sha256:{}", "1".repeat(64));
         let own_utf8 =
-            r#"{"fields":[],"id":"probe_utf8","title":"café über","version":1,"visibility":"own"}"#
-                .replace("\\u00e9", "é")
-                .replace("\\u00fc", "ü");
+            r#"{"fields":[],"id":"probe_utf8","title":"café über","version":1,"visibility":"own"}"#;
         op.client.execute(&format!("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES ('{ORG}','{PRIVATE_APP}','{revision_id}','probe_utf8',1,$1::text,convert_to($2,'UTF8'))"), &[&digest_ok, &own_utf8]).await.unwrap();
         let derived: bool = op.client.query_one(&format!("SELECT owner_only FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{PRIVATE_APP}' AND schema_id='probe_utf8'"), &[]).await.unwrap().get(0);
         assert!(derived, "non-ASCII bytes beside visibility own derive true");
-        let escaped = op.client.execute(&format!("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES ('{ORG}','{PRIVATE_APP}','{revision_id}','probe_escaped',1,$1::text,convert_to($2,'UTF8'))"), &[&digest_ok, &r#"{"fields":[],"id":"probe_escaped","version":1,"visibility":"own"}"#]).await;
+        let escaped = op.client.execute(&format!("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES ('{ORG}','{PRIVATE_APP}','{revision_id}','probe_escaped',1,$1::text,convert_to($2,'UTF8'))"), &[&digest_ok, &concat!(r#"{"fields":[],"id":"probe_escaped","version":1,"visibility":"\"#, r#"u006fwn"}"#)]).await;
         assert!(escaped.is_ok());
+        // The stored bytes carry the backslash escape (recheck N1), so the
+        // derivation below is a real decode, not a plain spelling.
+        assert_eq!(scalar(&fixture, &format!("SELECT count(*) FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{PRIVATE_APP}' AND schema_id='probe_escaped' AND position('\\u006f' in convert_from(canonical_schema,'UTF8'))>0")).await, 1);
         let derived: bool = op.client.query_one(&format!("SELECT owner_only FROM genui.definition_record_schemas WHERE organization_id='{ORG}' AND app_id='{PRIVATE_APP}' AND schema_id='probe_escaped'"), &[]).await.unwrap().get(0);
         assert!(
             derived,
