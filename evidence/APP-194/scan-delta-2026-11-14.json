@@ -1,0 +1,159 @@
+{
+  "deployment_contract_sha256": "88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356",
+  "method": "ECR describe-image-scan-findings of each candidate or live image, then the promotion guard fingerprint (name, severity, sorted attributes) against the canonical baseline findings",
+  "roles": {
+    "operator": {
+      "baseline_counts": {
+        "HIGH": 16,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "baseline_findings": 38,
+      "baseline_scan_completed_at": null,
+      "critical_count": 0,
+      "index_digest": "sha256:b6f961aef02015015205074d71d21372484bf34f6d31e4791cf4f135214593f4",
+      "introduced": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.5.2-6+deb12u2"
+            },
+            {
+              "key": "package_name",
+              "value": "pam"
+            }
+          ],
+          "description": "A flaw was found in linux-pam. The module pam_namespace may use access user-controlled paths without proper protection, allowing local users to elevate their privileges to root via multiple symlink attacks and race conditions.",
+          "name": "CVE-2025-6020",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2025-6020"
+        }
+      ],
+      "introduced_count": 1,
+      "manifest_digest": "sha256:b6f961aef02015015205074d71d21372484bf34f6d31e4791cf4f135214593f4",
+      "removed_count": 0,
+      "repository": "genui-operator",
+      "rescan_completed_at": "2026-11-14T11:02:25-05:00",
+      "rescan_counts": {
+        "HIGH": 17,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "rescan_findings": 39,
+      "vulnerability_source_updated_at": "2026-11-14T11:02:25-05:00"
+    },
+    "qualification": {
+      "baseline_counts": {
+        "HIGH": 16,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "baseline_findings": 38,
+      "baseline_scan_completed_at": null,
+      "critical_count": 0,
+      "index_digest": "sha256:0a5c0de768dcf026222414f6206b2dc2f4ed01ac22aeb5c400c714932889e97b",
+      "introduced": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.5.2-6+deb12u2"
+            },
+            {
+              "key": "package_name",
+              "value": "pam"
+            }
+          ],
+          "description": "A flaw was found in linux-pam. The module pam_namespace may use access user-controlled paths without proper protection, allowing local users to elevate their privileges to root via multiple symlink attacks and race conditions.",
+          "name": "CVE-2025-6020",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2025-6020"
+        }
+      ],
+      "introduced_count": 1,
+      "manifest_digest": "sha256:0a5c0de768dcf026222414f6206b2dc2f4ed01ac22aeb5c400c714932889e97b",
+      "removed_count": 0,
+      "repository": "genui-qualification",
+      "rescan_completed_at": "2026-11-14T11:04:47-05:00",
+      "rescan_counts": {
+        "HIGH": 17,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "rescan_findings": 39,
+      "vulnerability_source_updated_at": "2026-11-14T11:04:47-05:00"
+    },
+    "service": {
+      "baseline_counts": {
+        "HIGH": 16,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "baseline_findings": 38,
+      "baseline_scan_completed_at": null,
+      "critical_count": 0,
+      "index_digest": "sha256:d6ff41a5232203e8a89fa6de6201069efafb2735f352cc7fbca58694bdcb6708",
+      "introduced": [
+        {
+          "attributes": [
+            {
+              "key": "CVSS3_SCORE",
+              "value": "7.8"
+            },
+            {
+              "key": "CVSS3_VECTOR",
+              "value": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+            },
+            {
+              "key": "package_version",
+              "value": "1.5.2-6+deb12u2"
+            },
+            {
+              "key": "package_name",
+              "value": "pam"
+            }
+          ],
+          "description": "A flaw was found in linux-pam. The module pam_namespace may use access user-controlled paths without proper protection, allowing local users to elevate their privileges to root via multiple symlink attacks and race conditions.",
+          "name": "CVE-2025-6020",
+          "severity": "HIGH",
+          "uri": "https://nvd.nist.gov/vuln/detail/CVE-2025-6020"
+        }
+      ],
+      "introduced_count": 1,
+      "manifest_digest": "sha256:d6ff41a5232203e8a89fa6de6201069efafb2735f352cc7fbca58694bdcb6708",
+      "removed_count": 0,
+      "repository": "genui-synthetic",
+      "rescan_completed_at": "2026-11-14T11:07:51-05:00",
+      "rescan_counts": {
+        "HIGH": 17,
+        "LOW": 5,
+        "MEDIUM": 16,
+        "UNDEFINED": 1
+      },
+      "rescan_findings": 39,
+      "vulnerability_source_updated_at": "2026-11-14T11:07:51-05:00"
+    }
+  }
+}

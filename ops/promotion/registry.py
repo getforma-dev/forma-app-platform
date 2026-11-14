@@ -139,7 +139,14 @@ DISPOSITION = Path(__file__).with_name('scan-disposition.json')
 # ops.promotion.scan_renewal generates the next file and this pin against release B's
 # `to` contract (docs/operations/TRIAL-RUNBOOK.md section 8). Earlier records
 # (APP-173, APP-167) stay under evidence/.
-REVIEWED_DISPOSITION = None
+REVIEWED_DISPOSITION = {
+    'evidence': 'evidence/APP-194/SCAN-DISPOSITION.md',
+    'roles': frozenset(REPOS),
+    'expires_at_utc': '2026-11-26T00:00:00Z',
+    'findings': {
+        'CVE-2025-6020': ('HIGH', 'pam'),
+    },
+}
 
 
 def reviewed_finding(finding):
