@@ -2,7 +2,7 @@
 
 Branch `trial/w2b-share-dialog`: W4's `trial/w4-private-entries` (`64234d10`) with W2's `trial/w2-admin-cap` merged (`fd40a8c9`, then its fix round `e261ced1`). The guards below are the ones this branch adds on top of W4's storage API; W4's own proofs (the definers' reviewer rule, `owner_only`, the D8 gate) are in [evidence/APP-191/break-and-restore-2026-11-14.md](../APP-191/break-and-restore-2026-11-14.md).
 
-Each guard was broken with a one-occurrence text replacement (a scratch script that prints the file's SHA-256 before and after), the test that owns it was run and failed, and the file was restored with `git checkout -- <file>`. After each restore `git status --short` was empty and the file's SHA-256 matched the committed one again (`app/src/sharing/mod.rs` `36897e64a9cffcda…`, `app/src/storage/sharing.rs` `7f8427ffd0de3194…`, `app/admin/src/sharing/api.ts` `f97657395d4958b5…`). The breaks ran on commit `c94f6b67`; no migration or catalog is involved.
+Each guard was broken with a one-occurrence text replacement (a scratch script that prints the file's SHA-256 before and after), the test that owns it was run and failed, and the file was restored with `git checkout -- <file>`. After each restore `git status --short` was empty and the file's SHA-256 matched the committed one again (`app/src/sharing/mod.rs` `36897e64a9cffcda…`, `app/src/storage/sharing.rs` `7f8427ffd0de3194…`, `app/admin/src/sharing/api.ts` `f97657395d4958b5…`). B1 to B9 ran on commit `c94f6b67`; B10 ran on the uncommitted CSS fix before it was committed. No migration or catalog is involved.
 
 | # | Guard | Where | Break | What failed | Restored |
 | --- | --- | --- | --- | --- | --- |
@@ -15,6 +15,7 @@ Each guard was broken with a one-occurrence text replacement (a scratch script t
 | B7 | A work with source dependencies or folder files is shared person by person: 422 `organization_share_unavailable` | `sharing/mod.rs` `share_organization` | the availability test skipped for every role but reviewer | `just campaign sharing`: the S05 work's organization-wide viewer share answered `(404, "not_found")` instead of `(422, "organization_share_unavailable")` | campaign passes |
 | B8 | The dialog offers only the roles the server names | `admin/src/sharing/api.ts` `offeredRoles` | every role offered | `test/team-sharing.test.ts` 6, "reviewer is offered only when the server says this sharer may grant it", fails | 9 of 9 pass |
 | B9 | The dialog's person share sends the grantee and the role only | `admin/src/sharing/api.ts` `memberShareRequest` | `record_write` added beside the role | `test/team-sharing.test.ts` 2 and 8 fail (the body keys and the body sent) | 9 of 9 pass |
+| B10 | A hidden control in the section stays hidden (the smoke's first run found "Stop sharing with everyone" shown while nothing was shared) | `admin/src/styles/sharing.css` | `.share-team [hidden] { display: none; }` removed | `test/team-sharing.test.ts` 10 fails | 10 of 10 pass; restored from a copy before commit (SHA-256 `dce231434d7f…` again) |
 
 Unchanged and asserted as shipped, not broken separately here:
 
@@ -25,7 +26,7 @@ Unchanged and asserted as shipped, not broken separately here:
 
 - Unit: `cargo test --lib -p forma-app-platform -- sharing::tests::<name>`.
 - Campaigns: `just campaign share-routes` (B4–B6), `just campaign sharing` (B7).
-- Canvas: `npx tsx --test test/team-sharing.test.ts` from `app/admin` (B8, B9).
+- Canvas: `npx tsx --test test/team-sharing.test.ts` from `app/admin` (B8 to B10).
 
 ## Limits
 

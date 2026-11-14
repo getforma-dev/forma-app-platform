@@ -29,14 +29,13 @@
 .share-people { margin-bottom: 16px; }
 /* APP-192: people in the organization, and everyone in it. */
 .share-team { margin-top: 8px; }
-.share-team[hidden] { display: none; }
+.share-team[hidden],.share-team [hidden] { display: none; }
 .share-team-form { grid-template-columns: 1fr 1fr; }
 .share-team-form .share-primary { grid-column: 1 / -1; }
 .share-everyone { margin-top: 22px; padding: 15px 0; border-top: 1px solid #e8ebe5; }
 .share-everyone strong { font-size: 13px; }
 .share-everyone p { margin: 5px 0 12px; }
 .share-everyone-actions { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
-.share-everyone-actions[hidden] { display: none; }
 .share-everyone-actions label { display: grid; gap: 7px; color: #35443b; font-size: 12px; font-weight: 600; flex: 1 1 220px; }
 .share-everyone-actions select { width: 100%; box-sizing: border-box; border: 1px solid #cfd7ce; border-radius: 9px; padding: 10px; color: #293f34; background: #fff; font: inherit; font-size: 14px; }
 .share-team-list-title { font-size: 12px; margin: 18px 0 0; color: #35443b; }

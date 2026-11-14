@@ -152,3 +152,10 @@ test('the dialog offers the organization section in the existing style, with no 
   assert.doesNotMatch(source, /student|teacher|classroom|homework|\bgrades?\b|pupil/i);
   assert.doesNotMatch(source, /principal_id\b.*textContent|textContent.*principal_id/);
 });
+
+test('a hidden control in the section stays hidden whatever its button class', () => {
+  // The smoke's first run showed "Stop sharing with everyone" while nothing
+  // was shared: `.share-danger { display: inline-block }` outranked `hidden`.
+  const css = readFileSync(new URL('../src/styles/sharing.css', import.meta.url), 'utf8');
+  assert.match(css, /\.share-team \[hidden\][^{]*\{ display: none; \}/);
+});
