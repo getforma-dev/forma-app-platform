@@ -53,6 +53,14 @@ STARTED_BY = 'forma-schema-release'
 # The snapshot runs before the outage, so its bound costs no downtime.
 SNAPSHOT_WAIT_SECONDS = 720
 MIGRATION_WAIT_SECONDS = 720
+# The migration's own exit codes (app/runtime/runtime.py module notes; APP-196).
+# 0: committed. MIGRATION_REFUSED: refused or failed before COMMIT was sent, so
+# the database is unchanged. MIGRATION_COMMIT_OUTCOME_UNKNOWN: COMMIT may have
+# reached the server, so the database may be at either version. Every other code
+# is not the program's own and proves nothing. test_schema_recovery reads the
+# reserved value from runtime.py.
+MIGRATION_REFUSED = 1
+MIGRATION_COMMIT_OUTCOME_UNKNOWN = 4
 
 
 def side(value, version):
@@ -216,5 +224,7 @@ def verify_migration(response, arn, request, container_name, image, digests):
     require(container.get('name') == container_name and container.get('image') == image
             and container.get('imageDigest') in digests,
             'migration ran another image; services remain stopped, reconcile')
+    require(container.get('exitCode') != MIGRATION_COMMIT_OUTCOME_UNKNOWN,
+            'migration commit outcome unknown; services remain stopped, read the schema version before any recovery')
     require(type(container.get('exitCode')) is int and container['exitCode'] == 0,
-            'migration failed; the database keeps its prior version and services remain stopped, reconcile')
+            'migration failed; services remain stopped, reconcile')
