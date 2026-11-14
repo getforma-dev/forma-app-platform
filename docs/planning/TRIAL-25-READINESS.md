@@ -51,6 +51,8 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 
 ## Calendar
 
+**Every date below is a "no later than"** (Victor, 2026-11-14: "No arbitrary time limits... If things can move forward let's move forward"). Each step starts the moment its prerequisites are done; only the class weekend (Nov 29–30) is fixed. The only waits kept are technical guards the code enforces: the 65-minute credential fence before `maintenance abandon`, reconcile only while no release holds the lock, an approval within 24 hours of a fresh reconcile, and no approval in the 05:00–05:45 UTC backup window.
+
 | Date | What | Who |
 | --- | --- | --- |
 | Fri Nov 14 | Charter and notice v1 (cohort text), tickets revised. Promotions paused (done). Victor: APP-175 permission readback; reject or cancel run 43157872671. | agents, **Victor** |
