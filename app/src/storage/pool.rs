@@ -746,9 +746,10 @@ impl Lease {
 
 // The statements that can run on a session whose search path is not yet
 // verified (a new backend's identity check, a reuse's first baseline check)
-// name every relation and function in pg_catalog and write every operator as
-// OPERATOR(pg_catalog.…), so that nothing in them resolves through the search
-// path (APP-197 recheck R-M1; the test below holds them to it).
+// resolve nothing through the search path (APP-197 recheck R-M1, final
+// check F-m1). Every operator is OPERATOR(pg_catalog.…); every cast type,
+// function and FROM or JOIN relation is pg_catalog-qualified. The test below,
+// `search_path_names`, holds them to exactly that syntax rule.
 const IDENTITY: &str = "SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_database(),rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit,pg_catalog.pg_has_role(current_user,'rds_iam','MEMBER'),(SELECT ssl FROM pg_catalog.pg_stat_ssl WHERE pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid()),pg_catalog.current_setting('session_replication_role'),pg_catalog.current_setting('search_path'),v.relation,v.shape FROM pg_catalog.pg_roles LEFT JOIN LATERAL (SELECT c.oid::pg_catalog.int8 AS relation,c.relkind::pg_catalog.text OPERATOR(pg_catalog.||) ':' OPERATOR(pg_catalog.||) (c.relrowsecurity OR c.relforcerowsecurity)::pg_catalog.text OPERATOR(pg_catalog.||) ':' OPERATOR(pg_catalog.||) pg_catalog.array_to_string(ARRAY(SELECT a.atttypid::pg_catalog.int8 FROM pg_catalog.pg_attribute a WHERE a.attrelid OPERATOR(pg_catalog.=) c.oid AND a.attnum OPERATOR(pg_catalog.>) 0 AND NOT a.attisdropped ORDER BY a.attnum),',') AS shape FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace WHERE n.nspname OPERATOR(pg_catalog.=) 'genui_meta' AND c.relname OPERATOR(pg_catalog.=) 'schema_version') v ON true WHERE rolname OPERATOR(pg_catalog.=) current_user";
 const MEMBERSHIP: &str = "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.<>) current_user AND rolname OPERATOR(pg_catalog.<>) 'rds_iam' AND pg_catalog.pg_has_role(current_user,oid,'MEMBER') UNION ALL SELECT 'unsafe_membership' FROM pg_catalog.pg_auth_members WHERE member OPERATOR(pg_catalog.=) (SELECT oid FROM pg_catalog.pg_roles WHERE rolname OPERATOR(pg_catalog.=) current_user) AND (admin_option OR inherit_option)";
 const BASELINE_CHECK: &str = "SELECT session_user::pg_catalog.text,current_user::pg_catalog.text,pg_catalog.current_setting('role'),pg_catalog.current_setting('row_security'),pg_catalog.current_setting('search_path'),pg_catalog.current_setting('genui.organization_id',true),pg_catalog.current_setting('genui.principal_id',true),pg_catalog.current_setting('genui.membership_epoch',true),pg_catalog.current_setting('session_replication_role')";
@@ -1390,43 +1391,204 @@ mod lifecycle_tests {
 mod statement_tests {
     use super::{BASELINE_CHECK, IDENTITY, MEMBERSHIP};
 
-    /// APP-197 recheck R-M1: once string literals, casts and
-    /// `OPERATOR(pg_catalog.…)` are removed, no operator character and no
-    /// keyword that expands to a search-path-resolved operator is left.
+    /// Reserved words that may stand before `(` without being a function
+    /// call. A reserved word cannot name a function unless double-quoted,
+    /// and quoted identifiers are refused, so none of these can resolve
+    /// through the search path.
+    const BEFORE_PARENTHESIS: [&str; 4] = [
+        // `ARRAY(subquery)`: the array constructor.
+        "ARRAY",   // `AND (a OR b)`: boolean grouping.
+        "AND",     // `LATERAL (subquery)`: a subquery in FROM.
+        "LATERAL", // `CAST(x AS type)`: syntax; its target type is checked below.
+        "CAST",
+    ];
+
+    /// Every name in `statement` that would resolve through the search path
+    /// (APP-197 recheck R-M1, final check F-m1). After string literals and
+    /// `OPERATOR(pg_catalog.…)` are removed:
+    /// - no operator character, and no keyword that expands to a
+    ///   search-path-resolved operator, is left;
+    /// - every `::` type and `CAST(… AS` type is `pg_catalog.`-qualified, and
+    ///   none is a `reg…` type, which resolves the name it is given;
+    /// - every name before `(` is `pg_catalog.`-qualified, or one of
+    ///   [`BEFORE_PARENTHESIS`];
+    /// - every `FROM` and `JOIN` relation is `pg_catalog.`-qualified (or a
+    ///   subquery), and no comma join follows it;
+    /// - no quoted identifier and no `COLLATE` is used.
+    ///
+    /// Names that functions resolve from text arguments (`to_regclass`,
+    /// `has_table_privilege`) are not syntax, and are outside this check.
+    fn search_path_names(statement: &str) -> Vec<String> {
+        let mut found = Vec::new();
+        if statement.contains('"') {
+            found.push("a quoted identifier".to_owned());
+        }
+        let mut rest: String = statement
+            .split('\'')
+            .enumerate()
+            .map(|(index, part)| if index % 2 == 1 { " § " } else { part })
+            .collect();
+        while let Some(start) = rest.find("OPERATOR(pg_catalog.") {
+            let end = start + rest[start..].find(')').unwrap();
+            rest.replace_range(start..=end, " § ");
+        }
+        if rest
+            .replace("::", " ")
+            .contains(|c: char| "+-*/<>=~!@#%^&|`?".contains(c))
+        {
+            found.push("an unqualified operator".to_owned());
+        }
+        let mut tokens: Vec<String> = Vec::new();
+        let mut chars = rest.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c.is_whitespace() {
+                continue;
+            }
+            let mut token = c.to_string();
+            if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                while let Some(&next) = chars.peek() {
+                    if !(next.is_ascii_alphanumeric() || next == '_' || next == '.' || next == '$')
+                    {
+                        break;
+                    }
+                    token.push(next);
+                    chars.next();
+                }
+            } else if c == ':' && chars.peek() == Some(&':') {
+                token.push(chars.next().unwrap());
+            }
+            tokens.push(token);
+        }
+        let upper: Vec<String> = tokens.iter().map(|t| t.to_ascii_uppercase()).collect();
+        let at = |index: usize| tokens.get(index).map(String::as_str).unwrap_or("");
+        let qualified = |token: &str| token.starts_with("pg_catalog.");
+        let name = |token: &str| token.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_');
+        let closing = |open: usize| {
+            let mut depth = 0;
+            for (index, token) in tokens.iter().enumerate().skip(open) {
+                match token.as_str() {
+                    "(" => depth += 1,
+                    ")" if depth == 1 => return index,
+                    ")" => depth -= 1,
+                    _ => (),
+                }
+            }
+            tokens.len()
+        };
+        let cast_type = |token: &str, found: &mut Vec<String>| {
+            if !qualified(token) {
+                found.push(format!("an unqualified type: {token}"));
+            } else if token.starts_with("pg_catalog.reg") {
+                found.push(format!("a name-resolving type: {token}"));
+            }
+        };
+        for (index, keyword) in upper.iter().enumerate() {
+            match keyword.as_str() {
+                "IN" | "LIKE" | "ILIKE" | "SIMILAR" | "BETWEEN" | "ANY" | "SOME" | "DISTINCT"
+                | "CASE" | "NULLIF" | "GREATEST" | "LEAST" | "OVERLAPS" | "USING" => {
+                    found.push(format!("{keyword} resolves an operator"));
+                }
+                "ALL" if upper.get(index.wrapping_sub(1)).map(String::as_str) != Some("UNION") => {
+                    found.push("ALL resolves an operator".to_owned());
+                }
+                "COLLATE" => found.push("COLLATE resolves a collation".to_owned()),
+                "::" => cast_type(at(index + 1), &mut found),
+                "CAST" if at(index + 1) == "(" => {
+                    let end = closing(index + 1);
+                    let mut depth = 0;
+                    for (inner, word) in upper.iter().enumerate().take(end).skip(index + 1) {
+                        match word.as_str() {
+                            "(" => depth += 1,
+                            ")" => depth -= 1,
+                            "AS" if depth == 1 => cast_type(at(inner + 1), &mut found),
+                            _ => (),
+                        }
+                    }
+                }
+                "FROM" | "JOIN" => {
+                    let mut target = index + 1;
+                    while matches!(
+                        upper.get(target).map(String::as_str),
+                        Some("LATERAL" | "ONLY")
+                    ) {
+                        target += 1;
+                    }
+                    let mut after = if at(target) == "(" {
+                        closing(target) + 1
+                    } else if qualified(at(target)) {
+                        target + 1
+                    } else {
+                        found.push(format!(
+                            "an unqualified relation: {} {}",
+                            keyword,
+                            at(target)
+                        ));
+                        continue;
+                    };
+                    if upper.get(after).map(String::as_str) == Some("AS") {
+                        after += 1;
+                    }
+                    if name(at(after)) {
+                        after += 1;
+                    }
+                    if at(after) == "," {
+                        found.push(format!("a comma join after {keyword} {}", at(target)));
+                    }
+                }
+                _ => (),
+            }
+            if at(index + 1) == "("
+                && name(at(index))
+                && !qualified(at(index))
+                && !BEFORE_PARENTHESIS.contains(&keyword.as_str())
+            {
+                found.push(format!("an unqualified function: {}(", at(index)));
+            }
+        }
+        found
+    }
+
     #[test]
-    fn unverified_session_statements_resolve_no_operator_through_the_search_path() {
+    fn unverified_session_statements_resolve_nothing_through_the_search_path() {
         for statement in [IDENTITY, MEMBERSHIP, BASELINE_CHECK] {
-            let mut rest: String = statement
-                .split('\'')
-                .step_by(2)
-                .collect::<Vec<_>>()
-                .join(" ");
-            while let Some(start) = rest.find("OPERATOR(pg_catalog.") {
-                let end = start + rest[start..].find(')').unwrap();
-                rest.replace_range(start..=end, " ");
-            }
-            let rest = rest.replace("::", " ");
-            assert!(
-                !rest.contains(|c: char| "+-*/<>=~!@#%^&|`?".contains(c)),
-                "an unqualified operator in {statement}"
-            );
-            let words: Vec<&str> = rest
-                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                .collect();
-            for keyword in [
-                "IN", "LIKE", "ILIKE", "SIMILAR", "BETWEEN", "ANY", "SOME", "DISTINCT", "CASE",
-                "NULLIF", "GREATEST", "LEAST", "OVERLAPS", "USING",
-            ] {
-                assert!(
-                    !words.contains(&keyword),
-                    "{keyword} resolves an operator in {statement}"
-                );
-            }
             assert_eq!(
-                words.iter().filter(|word| **word == "ALL").count(),
-                rest.matches("UNION ALL").count(),
-                "ALL outside UNION ALL in {statement}"
+                search_path_names(statement),
+                Vec::<String>::new(),
+                "{statement}"
             );
+        }
+    }
+
+    /// The check itself: each form below resolves a name through the search
+    /// path and is refused; the qualified forms pass. U1 and U2 are the
+    /// final check's probes, which ran planted code on PostgreSQL 16.15.
+    #[test]
+    fn the_search_path_check_refuses_each_unqualified_form() {
+        for (refused, reason) in [
+            ("SELECT c.relkind::text FROM pg_catalog.pg_class c", "an unqualified type: text"),
+            ("SELECT pg_catalog.array_to_string(ARRAY(SELECT 1),','), array_to_string(ARRAY[1],',')", "an unqualified function: array_to_string("),
+            ("SELECT CAST(rolname AS text) FROM pg_catalog.pg_roles", "an unqualified type: text"),
+            ("SELECT 'genui.items'::pg_catalog.regclass", "a name-resolving type: pg_catalog.regclass"),
+            ("SELECT lower(rolname) FROM pg_catalog.pg_roles", "an unqualified function: lower("),
+            ("SELECT 1 FROM pg_roles", "an unqualified relation: FROM pg_roles"),
+            ("SELECT 1 FROM ONLY genui_meta.schema_version", "an unqualified relation: FROM genui_meta.schema_version"),
+            ("SELECT 1 FROM pg_catalog.pg_roles r JOIN pg_auth_members m ON true", "an unqualified relation: JOIN pg_auth_members"),
+            ("SELECT 1 FROM pg_catalog.pg_roles r, pg_catalog.pg_auth_members m", "a comma join after FROM pg_catalog.pg_roles"),
+            ("SELECT 1 FROM (SELECT 1) v, pg_catalog.pg_roles", "a comma join after FROM ("),
+            ("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=current_user", "an unqualified operator"),
+            ("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname IS NOT DISTINCT FROM current_user", "DISTINCT resolves an operator"),
+            ("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname NOT IN (current_user)", "IN resolves an operator"),
+            ("SELECT \"array_to_string\"(ARRAY[1],',')", "a quoted identifier"),
+            ("SELECT rolname COLLATE pg_catalog.\"C\" FROM pg_catalog.pg_roles", "COLLATE resolves a collation"),
+        ] {
+            let found = search_path_names(refused);
+            assert!(found.iter().any(|f| f == reason), "{refused}: {found:?}");
+        }
+        for accepted in [
+            "SELECT pg_catalog.lower(rolname)::pg_catalog.text FROM pg_catalog.pg_roles r JOIN pg_catalog.pg_auth_members m ON m.member OPERATOR(pg_catalog.=) r.oid WHERE rolname OPERATOR(pg_catalog.<>) 'it''s (x) FROM y'",
+            "SELECT CAST(rolname AS pg_catalog.text) FROM pg_catalog.pg_roles UNION ALL SELECT 'x'",
+        ] {
+            assert_eq!(search_path_names(accepted), Vec::<String>::new(), "{accepted}");
         }
     }
 }
