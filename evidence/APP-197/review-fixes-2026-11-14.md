@@ -63,7 +63,16 @@ The earlier seven A5 breaks are in [break-and-restore-2026-11-14.md](break-and-r
 | Local 3 (load 11) | `12a68ba0` | fail | 93.8%, 93.8%, 91.7% | **6.9**, 5.9, 4.8 s | 4, 3, 5 | 111 |
 | Local, snapshot cap 24 (experiment) | `12a68ba0` + cap 24 | **pass** | 100%, 100%, 97.9% | 5.0, 4.2, 4.4 s | 0, 0, 0 | 111 |
 
-In every run: 0 reads failed after the retry, 15/15 hints delivered, every command under 300 ms, 4 catalog checks, and no data or workspace admission refusals in gate A. Reports: [local 1](refresh-herd-gate-2026-11-14.json), [local 2](refresh-herd-gate-rerun-2026-11-14.json), [CI](refresh-herd-gate-ci-b4d51cea-2026-11-14.json), [cap 24](refresh-herd-gate-snapshot24-experiment-2026-11-14.json).
+In every run: 0 reads failed after the retry, 15/15 hints delivered, every command under 300 ms, and 4 catalog checks. At cap 4, gate A had no data or workspace admission refusals in the runs with a saved report (local 1, local 2 and CI).
+
+*Corrected after the recheck (R-m1).* This paragraph first said "no data or workspace admission refusals in gate A" for every run. The cap-24 run, which is the configuration that will ship, had one:
+
+- gate A's `admission_saturated` is `{"data": 1}`;
+- herd 2 had one first-attempt 503 (`reads_with_a_503` 0, 0, 1), which its retry recovered (`terminal_failures` 0);
+- with the cap raised, view reads no longer wait on 429s, so their load moves onto the data role's 32-caller queue, which overflowed once at 15 pages;
+- the gate asserts no refusal only for the command and the delivery read, so a read refusal does not fail it.
+
+Reports: [local 1](refresh-herd-gate-2026-11-14.json), [local 2](refresh-herd-gate-rerun-2026-11-14.json), [CI](refresh-herd-gate-ci-b4d51cea-2026-11-14.json), [cap 24](refresh-herd-gate-snapshot24-experiment-2026-11-14.json).
 
 Local 1 in detail ([report](refresh-herd-gate-2026-11-14.json)):
 
