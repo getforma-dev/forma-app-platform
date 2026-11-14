@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import subprocess
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -1467,6 +1468,118 @@ def command_checks(pg, passed, denied):
     passed('0007 role separation and bounds: only genui_data touches the command relations and only as the scoped principal, with no UPDATE or DELETE on claims, outcomes or revisions, no sequence creation and no other chain or kind; the key shape and the 24-hour retry horizon CHECKs hold')
 
 
+def migrations_at(directory, version):
+    """The reviewed migrations 1..version and their catalogs, as a migration directory."""
+    manifest=json.loads((MIGRATIONS/'manifest.json').read_text())
+    manifest.update(database_version=version, migrations=manifest['migrations'][:version], catalog=manifest['catalog'][:version+1])
+    for item in manifest['migrations']+manifest['catalog']: shutil.copyfile(MIGRATIONS/item['file'], directory/item['file'])
+    (directory/'manifest.json').write_text(json.dumps(manifest))
+    return directory
+
+
+# The real `runtime.py migrate`, in its own process, against the fixture: psycopg.connect
+# keeps the runtime's database, user and options and swaps only its TLS endpoint for the
+# fixture's loopback port (the fixture has no TLS or password; RDS does). Everything from
+# argument parsing to the exit code is the shipped module's.
+MIGRATE_PROCESS = r'''
+import runpy, sys
+import psycopg
+port, script = int(sys.argv[1]), sys.argv[2]
+connect = psycopg.connect
+def loopback(**options):
+    for key in ('host', 'port', 'sslmode', 'gssencmode', 'sslrootcert', 'password'): options.pop(key)
+    return connect(host='127.0.0.1', port=port, sslmode='disable', **options)
+psycopg.connect = loopback
+sys.argv = [script, 'migrate']
+runpy.run_path(script, run_name='__main__')
+'''
+
+
+def run_migrate(pg):
+    environment={'PATH':'/usr/bin:/bin','PGHOST':'127.0.0.1','PGDATABASE':'genui','PGUSER':'genui_migration',
+                 'PGPASSWORD':'fixture-trust','PGSSLROOTCERT':'/nonexistent'}
+    return subprocess.run([sys.executable,'-c',MIGRATE_PROCESS,str(pg.port),str(Path(runtime.__file__).resolve())],
+                          capture_output=True,text=True,timeout=120,env=environment)
+
+
+def release_b_upgrade_checks(passed, report, latest):
+    """APP-194 (release B, 22 -> 24): 0024's owner_only derivation over a populated version-22 database.
+
+    0024 adds definition_record_schemas.owner_only as a STORED generated column, so the
+    upgrade parses every stored canonical schema (genui.canonical_jsonb) while it rewrites
+    the table. A stored schema that is not UTF-8 JSON fails the whole 22 -> 24 transaction;
+    `runtime.py migrate` then exits 1 (no COMMIT was sent), the one exit code
+    restore-after-failed-migration accepts. The migration is therefore its own preflight
+    (evidence/APP-191/break-and-restore-2026-11-14.md, "Release B preflight").
+    """
+    assert latest>=24
+    org,principal,space,app,revision=('00000000-0000-4000-8000-0000000194%02d'%i for i in range(1,6))
+    good=[('note',canonical({'id':'note','version':1,'fields':[{'id':'body','type':'text','label':'Café ✓ – naïve'}]})),
+          ('quote',canonical({'id':'quote','version':1,'fields':[{'id':'q','type':'text','label':'a "quoted" \\ path'}]})),
+          ('task',canonical({'id':'task','version':1,'fields':[{'id':'title','type':'text'}]}))]
+    assert any(len(raw)!=len(raw.decode()) for _,raw in good) and any(b'\\' in raw for _,raw in good)
+    def seed22(pg, schemas):
+        with pg.connect('postgres') as c:
+            c.execute("INSERT INTO genui.organizations(organization_id,display_name,status) VALUES (%s,'Release B fixture','active')",(org,))
+            c.execute("INSERT INTO genui.provider_tenant_bindings(organization_id,issuer,provider_tenant_id,active) VALUES (%s,'upgrade-iss','ten_b',true)",(org,))
+            c.execute("INSERT INTO genui.principals(organization_id,principal_id,issuer,provider_tenant_id,provider_subject) VALUES (%s,%s,'upgrade-iss','ten_b','owner')",(org,principal))
+            c.execute("INSERT INTO genui.spaces(organization_id,space_id,display_name) VALUES (%s,%s,'Space')",(org,space))
+            c.execute('INSERT INTO genui.apps(organization_id,app_id,space_id,owner_principal_id) VALUES (%s,%s,%s,%s)',(org,app,space,principal))
+            c.execute('INSERT INTO genui.definition_revisions(organization_id,app_id,revision_id,schema_version,digest,canonical_content) VALUES (%s,%s,%s,1,%s,%s)',
+                      (org,app,revision,'sha256:'+hashlib.sha256(b'{}').hexdigest(),b'{}'))
+            for schema_id,raw in schemas:
+                c.execute('INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES (%s,%s,%s,%s,1,%s,%s)',
+                          (org,app,revision,schema_id,'sha256:'+hashlib.sha256(raw).hexdigest(),raw))
+    def stored(pg, column='canonical_schema'):
+        with pg.connect('postgres') as c:
+            return c.execute('SELECT schema_id,'+column+' FROM genui.definition_record_schemas ORDER BY 1').fetchall()
+    def version(pg):
+        with pg.connect('postgres') as c: return c.execute('SELECT version FROM genui_meta.schema_version').fetchone()[0]
+    report['release_b_containers_removed']=[]
+    upgrade=LocalPostgres()
+    try:
+        with upgrade, tempfile.TemporaryDirectory() as tmp:
+            with upgrade.connect() as c: runtime.apply_migrations(c,migrations_at(Path(tmp),22))
+            seed22(upgrade,good)
+            before=stored(upgrade)
+            assert version(upgrade)==22
+            process=run_migrate(upgrade)
+            assert process.returncode==0 and process.stdout.strip()=='tenant_foundation_migration_complete',(process.returncode,process.stdout,process.stderr)
+            assert version(upgrade)==latest and stored(upgrade)==before
+            assert stored(upgrade,'owner_only')==[(schema_id,False) for schema_id,_ in good]
+            passed('0024 upgrade of a populated version-22 database by the real runtime.py migrate process (exit 0) derives owner_only false for every stored schema (ASCII, non-ASCII and a backslash escape) and rewrites no stored byte',
+                   schemas=len(good))
+    finally: report['release_b_containers_removed'].append(upgrade.removed)
+    unparsable=[('invalid JSON',b'{"id":"broken","fields":[',psycopg.errors.InvalidTextRepresentation),
+                ('invalid UTF-8',b'{"id":"broken","label":"\xff"}',psycopg.errors.CharacterNotInRepertoire)]
+    for label,raw,error in unparsable:
+        refused=LocalPostgres()
+        try:
+            with refused, tempfile.TemporaryDirectory() as tmp:
+                with refused.connect() as c: runtime.apply_migrations(c,migrations_at(Path(tmp),22))
+                seed22(refused,good+[('broken',raw)])
+                before=refused.digest()
+                try:
+                    with refused.connect() as c: runtime.apply_migrations(c,MIGRATIONS)
+                except error: pass
+                else: raise AssertionError('0024 accepted a stored schema that is '+label)
+                assert refused.digest()==before and version(refused)==22
+                process=run_migrate(refused)
+                assert process.returncode==1 and 'tenant_foundation_migration_complete' not in process.stdout \
+                    and 'migration_commit_outcome_unknown' not in process.stderr,(process.returncode,process.stdout,process.stderr)
+                assert refused.digest()==before and version(refused)==22
+                # The control: the same database with that one row made parseable migrates.
+                with refused.connect('postgres') as c:
+                    c.execute("UPDATE genui.definition_record_schemas SET canonical_schema=%s WHERE schema_id='broken'",(b'{"id":"broken"}',))
+                process=run_migrate(refused)
+                assert process.returncode==0,(process.returncode,process.stdout,process.stderr)
+                assert version(refused)==latest
+                passed('0024 refuses whole when a stored record schema is '+label+': the transaction leaves version 22 and every byte unchanged, '
+                       'and the real runtime.py migrate process exits 1 (never 4), the code restore-after-failed-migration accepts; the same database migrates once that row parses',
+                       sqlstate=error.sqlstate)
+        finally: report['release_b_containers_removed'].append(refused.removed)
+
+
 def command(args, check=True):
     p = subprocess.run(args, capture_output=True, text=True, timeout=60)
     if check and p.returncode: raise RuntimeError('local Docker operation failed: '+p.stderr[-1200:])
@@ -1806,12 +1919,7 @@ def qualify():
     # index when it upgrades a populated version-20 database, and turns FORCE RLS back on.
     # Two organizations sharing one issuer and tenant fail the upgrade whole, which is
     # what the release preflight must look for before a schema release.
-    def version20(directory):
-        manifest=json.loads((MIGRATIONS/'manifest.json').read_text())
-        manifest.update(database_version=20, migrations=manifest['migrations'][:20], catalog=manifest['catalog'][:21])
-        for item in manifest['migrations']+manifest['catalog']: shutil.copyfile(MIGRATIONS/item['file'], directory/item['file'])
-        (directory/'manifest.json').write_text(json.dumps(manifest))
-        return directory
+    def version20(directory): return migrations_at(directory, 20)
     def seed20(pg, bindings):
         with pg.connect('postgres') as c:
             for org, tenant, active in bindings:
@@ -1852,6 +1960,7 @@ def qualify():
                 assert c.execute('SELECT version FROM genui_meta.schema_version').fetchone()==(20,)
             passed('0021 refuses whole, leaving version 20 and every byte unchanged, when two organizations share one active issuer and tenant (the release preflight condition)')
     finally: report['backfill_containers_removed'].append(shared.removed)
+    release_b_upgrade_checks(passed, report, latest)
     pg=LocalPostgres()
     try:
         with pg:
