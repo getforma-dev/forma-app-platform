@@ -18,3 +18,12 @@ Released framework qualification, typed contracts and reproducible application s
 | 129 | [APP-129: Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)](../0-backlog/APP-129.md) | [PH08](../phases/PH08.md) | S14 | FND | P1 | S | Backlog | APP-107, APP-113 |
 | 146 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](../0-backlog/APP-140.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
 | 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](../0-backlog/APP-180.md) | [PH07](../phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |
+| 182 | [APP-182: Require and record consent to the beta notice at invitation](../0-backlog/APP-182.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
+| 184 | [APP-184: An app-wide daily cap on model calls, with a plain message](../0-backlog/APP-184.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-181 |
+| 191 | [APP-191: Private entries and reviewer-only commands](../0-backlog/APP-191.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-181 |
+| 193 | [APP-193: Spike: live interaction from general primitives](../0-backlog/APP-193.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-191 |
+| 195 | [APP-195: Refresh herd: bounded waiting at the data pool and jittered live refreshes](../0-backlog/APP-195.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-181 |
+| 198 | [APP-197: Catalog verification at most every 30 s per connection](../0-backlog/APP-197.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-195 |
+| 199 | [APP-198: A stale record snapshot is never shown as "no access"](../0-backlog/APP-198.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-191 |
+| 201 | [APP-199: Fewer transactions per read, and a server-advised refresh spread](../0-backlog/APP-199.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | M | Backlog | APP-191, APP-197 |
+| 202 | [APP-200: Record snapshot capacity follows the query worker's admission](../0-backlog/APP-200.md) | [PH09](../phases/PH09.md) | S15 | FND | P1 | S | Backlog | APP-198 |

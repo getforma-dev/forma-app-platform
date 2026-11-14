@@ -11,7 +11,7 @@ from ops.promotion.guards import REPOS
 from ops.promotion.state import Refused
 
 ROOT = Path(__file__).resolve().parents[2]
-APP175_DELTA = ROOT / 'evidence/APP-175/scan-delta-2026-11-12.json'
+APP175_DELTA = ROOT / 'evidence/APP-175/scan-delta-2026-11-14.json'
 CONTRACT = 'c' * 64
 HEX = {'service': 'a', 'qualification': 'b', 'operator': 'd'}
 
@@ -123,7 +123,7 @@ class ScanRenewalTests(unittest.TestCase):
     def test_the_committed_app175_disposition_is_exactly_what_its_delta_generates(self):
         document = json.loads(APP175_DELTA.read_text())
         result = scan_renewal.check(document)
-        self.assertEqual((result['status'], result['findings'], result['expires_at_utc']), ('bound', 14, '2026-11-20T00:00:00Z'))
+        self.assertEqual((result['status'], result['findings'], result['expires_at_utc']), ('bound', 16, '2026-11-20T00:00:00Z'))
         disposition, pin = scan_renewal.generate(document, 'evidence/APP-175/SCAN-DISPOSITION.md', '2026-11-20T00:00:00Z')
         self.assertEqual(scan_renewal.encoded(disposition), registry.DISPOSITION.read_bytes())
         self.assertEqual(dict(registry.REVIEWED_DISPOSITION['findings']), pin['findings'])

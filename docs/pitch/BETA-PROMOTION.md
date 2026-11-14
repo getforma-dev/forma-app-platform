@@ -26,7 +26,7 @@ The existing budget limits and requirement for a reconciliation basis less than 
 
 ## Schema releases
 
-A schema release carries migrations through the normal packet and the one approval, on the same qualified images ([APP-175](../../Tickets/0-backlog/APP-175.md), [ADR-017 amendment](../architecture/ADR-017-BETA-PROMOTION.md#amendment-2026-11-06-reviewed-schema-releases)). It replaces the by-hand schema 20 crossing of November 4.
+A schema release carries migrations through the normal packet and the one approval, on the same qualified images ([APP-175](../../Tickets/4-done/APP-175.md), [ADR-017 amendment](../architecture/ADR-017-BETA-PROMOTION.md#amendment-2026-11-06-reviewed-schema-releases)). It replaces the by-hand schema 20 crossing of November 4.
 
 **When it applies.** Only when `ops/promotion/schema-release.json` exists and every one of these holds; otherwise preparation refuses before the lock exactly as before:
 
@@ -74,7 +74,7 @@ The snapshot and the task start are journaled mutations with immutable receipts;
 
 **Before the first schema release.** Victor applies the bootstrap update once. The execute role gains only `ecs:RunTask` on the migration task family with the `ecs:cluster` condition, `iam:PassRole` of that task definition's two roles to ECS tasks, `rds:CreateDBSnapshot` and `rds:DescribeDBSnapshots` on the database and `forma-schema-release-*` snapshots, and `rds:AddTagsToResource` on those snapshots alone, because the instance copies its tags to every snapshot. Regenerate the template from the reviewed private inventory with `python3 -m ops.promotion.bootstrap --inventory <private inventory> --output <private template>`, review the difference against the installed stack, apply it, and read the policy back, as for the APP-167 bootstrap fixes. Then merge the release change with `PROMOTION_ENABLED` set to `true`, outside the approval window above.
 
-**After the release.** Remove `schema-release.json` and its source pin in a follow-up pull request once the release succeeds, or once it expires. CI enforces this: the release test binds the file to `HEAD`, so any later change to the deployment contract fails CI until the file is removed.
+**After the release.** Remove `schema-release.json` in a follow-up pull request once the release succeeds, or once it expires. The source pin may stay as an inert record until the next release's values replace it: `test_scan.py` binds the committed disposition to it, and without the file it is never read (release A, 2026-11-14). CI enforces this: the release test binds the file to `HEAD`, so any later change to the deployment contract fails CI until the file is removed.
 
 ## Deployment state and failures
 
