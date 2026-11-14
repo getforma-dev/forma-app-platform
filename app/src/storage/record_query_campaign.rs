@@ -86,9 +86,10 @@ pub(super) async fn qualify(
         Err(Error::Denied)
     ));
     // Whole snapshots remain reserved through execution/release. Saturation
-    // refuses before materializing a fifth copy, and dropping one frees it.
+    // (APP-200: the worker's admission, 24) refuses before materializing the
+    // copy past the ceiling, and dropping one frees it.
     let mut capacity = Vec::new();
-    for _ in 0..2 {
+    for _ in 0..(super::record_query::SNAPSHOT_SLOTS - 2) {
         capacity.push(
             stores
                 .data

@@ -24,4 +24,6 @@ Viewing originals retains the [spreadsheet viewer limits](SPREADSHEET-VIEWING.md
 
 Full query snapshots are also bounded before record bytes leave storage. They use private per-run files, a concurrency ceiling and the existing confined engine deadline/memory controls. Source originals are never rewritten to make app updates visible. No model call or background migration is triggered just by opening an app.
 
+2026-11-14 (APP-200, Fable advisor in lieu of Victor, from the APP-197 measurement): the snapshot ceiling is **24** full snapshots per service process, `storage::record_query::SNAPSHOT_SLOTS`, derived from the query worker's running set plus one organization's admitted queue (`TASK_RUNNING` 4 + `QUEUE` 20), so one organization's views are refused first by the worker's frozen admission (D7.10), never by this cap; the slot past the ceiling answers 429 with `Retry-After` without waiting. Worst case: 24 × the 64 MiB per-snapshot bound, about 1.5 GiB in the 8 GiB task. The data pool still bounds database reads (one connection per capture, released with the transaction).
+
 Local qualification and remaining limits are recorded in the owning APP-168 evidence and ticket. Beta publication remains outside this iteration's authorization.
