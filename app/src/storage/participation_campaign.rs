@@ -289,12 +289,13 @@ async fn commit_until_settled(
 /// Admission refusals met by the concurrent sections (see [`admitted_commit`]).
 static ADMISSION_RETRIES: AtomicU32 = AtomicU32::new(0);
 
-/// A concurrent submission. The process admits at most eight data
-/// transactions at once (`pool::capacity`, ADR-004) and refuses the next with
-/// `Unavailable` before any statement runs, so nothing was written: like a
-/// client after a 503, the same request (same key) is sent again. InFlight
-/// and Busy are retried as D7.9 says. A store failure that persists exhausts
-/// the retries and fails the campaign.
+/// A concurrent submission. Each role admits at most `pool::ADMITTED`
+/// callers at once (two holding its connections, the rest waiting inside the
+/// 5 s `ACQUIRE` deadline; APP-195) and refuses the next with `Unavailable`
+/// before any statement runs, so nothing was written: like a client after a
+/// 503, the same request (same key) is sent again. InFlight and Busy are
+/// retried as D7.9 says. A waiter past the deadline (`Deadline`) or a store
+/// failure that persists fails the campaign.
 async fn admitted_commit(
     stores: &Stores,
     who: &TrustedRequest,
