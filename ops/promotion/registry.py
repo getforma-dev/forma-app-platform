@@ -150,6 +150,8 @@ REVIEWED_DISPOSITION = {
         'CVE-2026-115456': ('LOW', 'gcc-12'),
         'CVE-2026-115819': ('MEDIUM', 'glibc'),
         'CVE-2026-119079': ('HIGH', 'krb5'),
+        'CVE-2026-76844': ('HIGH', 'zlib'),
+        'CVE-2026-91094': ('UNDEFINED', 'dpkg'),
     },
 }
 
