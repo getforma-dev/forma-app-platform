@@ -35,11 +35,11 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 /// ADR-020 §9's cut rule: whether generated content may carry the
-/// `multi_enum` value type. APP-208 sets it when the forms, listings and
-/// rankings render a multi-select; until then the planner refuses it
-/// (`unusable_field`) and the prompt says not to write it, while admission
-/// accepts it in stored content.
-pub const MULTI_ENUM_GENERATED: bool = false;
+/// `multi_enum` value type. Set at Release C's integration, once APP-208's
+/// forms, listings and rankings render a multi-select; with it unset the
+/// planner refuses it (`unusable_field`) and the prompt says not to write it,
+/// while admission accepts it in stored content either way.
+pub const MULTI_ENUM_GENERATED: bool = true;
 
 /// Persisted by the server in the admitted definition, so a reload can
 /// recover a generated app's origin. Presentation metadata only; never

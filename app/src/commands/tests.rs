@@ -1224,6 +1224,7 @@ fn a_multi_select_row_offers_every_declared_value_with_the_held_ones_checked() {
         ],
         commands: vec![command],
         bindings: Vec::new(),
+        own: false,
     };
     let offered = |detail: &RecordDetail| {
         super::view_for_command(

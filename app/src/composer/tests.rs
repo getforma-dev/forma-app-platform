@@ -1307,21 +1307,26 @@ fn a_participation_refusal_retries_with_its_code_and_fix_and_no_value() {
     );
 }
 
-/// ADR-020 §9's cut rule and the binding rule: a multi_enum field is refused
-/// in generated content until APP-208 (admission accepts it); records inputs
-/// that would bind another list's schema are refused.
+/// ADR-020 §9's cut rule and the binding rule: a multi_enum field follows
+/// APP-208's switch in generated content (admission accepts it either way);
+/// records inputs that would bind another list's schema are refused.
 #[test]
-fn multi_enum_waits_for_app_208_and_ambiguous_records_inputs_are_refused() {
+fn multi_enum_follows_app_208s_switch_and_ambiguous_records_inputs_are_refused() {
     let picks = multi_select();
     assert!(
         plan::admit(&picks, ORG, APP).is_ok(),
         "stored content may carry it"
     );
-    let refusal = plan::plan_generated(&picks.to_string(), &[], ORG, APP).unwrap_err();
-    assert_eq!(refusal.code, "unusable_field");
+    let planned = plan::plan_generated(&picks.to_string(), &[], ORG, APP);
     assert!(
-        plan::require_usable_fields(&picks, true).is_ok(),
-        "APP-208's switch"
+        planned.is_ok(),
+        "generated content may carry it: {:?}",
+        planned.err().map(|refusal| refusal.code)
+    );
+    assert_eq!(
+        plan::require_usable_fields(&picks, false).unwrap_err().code,
+        "unusable_field",
+        "the switch still gates it"
     );
     // Two lists of one shape whose schemas carry neither input's id.
     let mut renamed = prompt::participation_example();
