@@ -18,3 +18,8 @@ Released framework qualification, typed contracts and reproducible application s
 | 129 | [APP-129: Contract edition impl-2026-10-31.4: lock what the pitch ships (APP-107 amendment, authoring rules for new content, library)](../0-backlog/APP-129.md) | [PH08](../phases/PH08.md) | S14 | FND | P1 | S | Backlog | APP-107, APP-113 |
 | 146 | [APP-140: Clean trial twin and panel accounts, with the sandbox kept off AWS](../0-backlog/APP-140.md) | [PH08](../phases/PH08.md) | S14 | FND | P0 | M | Backlog | APP-139 |
 | 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](../0-backlog/APP-180.md) | [PH07](../phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |
+| 204 | [APP-202: Contract edition impl-2026-11-14.2: the participation grammar in both validators](../0-backlog/APP-202.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | None |
+| 205 | [APP-203: One entry per person per key, and "open while" guards with server time](../0-backlog/APP-203.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-202 |
+| 206 | [APP-204: Countdown, and a ranking by person scored against a reviewer-only key list](../0-backlog/APP-204.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-202 |
+| 207 | [APP-205: The reference picker in forms, and read-only stamped fields](../0-backlog/APP-205.md) | [PH09](../phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-202 |
+| 210 | [APP-208: Multi-select fields (stretch): checkboxes with per-option counts](../0-backlog/APP-208.md) | [PH09](../phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-202, APP-203, APP-204, APP-205 |

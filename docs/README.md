@@ -29,6 +29,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [architecture/ADR-017-BETA-PROMOTION.md](architecture/ADR-017-BETA-PROMOTION.md) | Reference | One-approval promotion. ADR-019 moves the deploy branch to `main`. | |
 | [architecture/ADR-018-WHOLE-APP-VIEWS.md](architecture/ADR-018-WHOLE-APP-VIEWS.md) | Reference | An app is one object. Card, stack and open are views. | |
 | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) | Reference | `main` is the trunk, and the reservation ceiling is $180 / $218. | |
+| [architecture/ADR-020-PARTICIPATION-PRIMITIVES.md](architecture/ADR-020-PARTICIPATION-PRIMITIVES.md) | Reference | Release C: the participation primitives (countdown, one entry per person per key, open-while guards with server time, a reviewer-page leaderboard, approver routing, multi-select) in contract edition `impl-2026-11-14.2` with no migration; the build partition. | |
 | [architecture/CANVAS-WINDOWS.md](architecture/CANVAS-WINDOWS.md) | Reference | The app-window shell and file cards decided on 2026-11-02. | |
 | [architecture/CSV-APP-DATA.md](architecture/CSV-APP-DATA.md) | Reference | Editable data in an app built from a spreadsheet. | |
 | [architecture/DECISIONS.md](architecture/DECISIONS.md) | Reference | Implementation decisions from 2026-10-28. Product order is DIRECTION.md. | |
@@ -78,6 +79,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/ROADMAP.md](planning/ROADMAP.md) | Current | Phase map. Current work is DIRECTION.md, not the old first-ticket queue. | |
 | [planning/SOURCE-GUIDE.md](planning/SOURCE-GUIDE.md) | Current | Reading order for the frozen design and which later text outranks it. Some sentences describe the repository before the application existed. | |
 | [planning/START-HERE.md](planning/START-HERE.md) | Current | Pointer to AGENTS.md, the README, DEVELOPMENT.md and this index. | |
+| [planning/TRIAL-25-READINESS.md](planning/TRIAL-25-READINESS.md) | Current | Approved plan for the real live test with 25 real people (APP-181 to APP-201), with the Release C amendment (APP-202 to APP-209). | |
 | [planning/SYNTHETIC-ENVIRONMENT-COST.md](planning/SYNTHETIC-ENVIRONMENT-COST.md) | Historical | APP-007 cost estimate, including the retired $100 plan. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
 | [planning/SYNTHETIC-ENVIRONMENT.md](planning/SYNTHETIC-ENVIRONMENT.md) | Historical | APP-007 operating record. Its current-operator section is the 2026-10-28 $100 decision. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
 | [planning/app-model/app.md](planning/app-model/app.md) | Reference | What an app is. Sentences marked proposed are not in the code yet. | |

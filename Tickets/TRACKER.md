@@ -185,3 +185,11 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 178 | [APP-178: Prove shared-app access fails closed on organization shutdown, expired invitations and overlapping grants](4-done/APP-178.md) | [PH09](phases/PH09.md) | S15 | SHR | P1 | S | Done | APP-154 |
 | 179 | [APP-179: Correct the Shortcuts sheet and guides after whole-app views, and test note privacy](4-done/APP-179.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | S | Done | APP-112, APP-120 |
 | 180 | [APP-180: Separate the drafter from the reviewer of an independently reviewed publication](0-backlog/APP-180.md) | [PH07](phases/PH07.md) | S13 | FND | P2 | S | Backlog | APP-085 |
+| 204 | [APP-202: Contract edition impl-2026-11-14.2: the participation grammar in both validators](0-backlog/APP-202.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | M | Backlog | None |
+| 205 | [APP-203: One entry per person per key, and "open while" guards with server time](0-backlog/APP-203.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | L | Backlog | APP-202 |
+| 206 | [APP-204: Countdown, and a ranking by person scored against a reviewer-only key list](0-backlog/APP-204.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | M | Backlog | APP-202 |
+| 207 | [APP-205: The reference picker in forms, and read-only stamped fields](0-backlog/APP-205.md) | [PH09](phases/PH09.md) | S15 | FND | P0 | S | Backlog | APP-202 |
+| 208 | [APP-206: The approver step for a filer without share authority](0-backlog/APP-206.md) | [PH09](phases/PH09.md) | S15 | SHR | P0 | S | Backlog | None |
+| 209 | [APP-207: The composer generates the participation primitives from plain words](0-backlog/APP-207.md) | [PH09](phases/PH09.md) | S15 | AI | P0 | M | Backlog | APP-202 |
+| 210 | [APP-208: Multi-select fields (stretch): checkboxes with per-option counts](0-backlog/APP-208.md) | [PH09](phases/PH09.md) | S15 | FND | P2 | S | Backlog | APP-202, APP-203, APP-204, APP-205 |
+| 211 | [APP-209: Release C: the participation primitives as one normal promotion](0-backlog/APP-209.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-202, APP-203, APP-204, APP-205, APP-206, APP-207 |
