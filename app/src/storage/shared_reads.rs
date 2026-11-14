@@ -198,6 +198,14 @@ impl Data {
                 .await?;
                 require(&source == expected)?;
             }
+            require(
+                queries::dependencies(&tx, access.organization(), access.app(), access.work())
+                    .await?
+                    == plan.dependencies(),
+            )?;
+            check_guest(&tx, access).await?;
+            // APP-198 (recheck N3): the snapshot's sequence last, after the
+            // guest's final check, so `Stale` never precedes a `Denied`.
             if let Some(records) = plan.records() {
                 require(access.collections.contains(&records.collection))?;
                 super::record_query::release(
@@ -209,12 +217,7 @@ impl Data {
                 )
                 .await?;
             }
-            require(
-                queries::dependencies(&tx, access.organization(), access.app(), access.work())
-                    .await?
-                    == plan.dependencies(),
-            )?;
-            check_guest(&tx, access).await
+            Ok(())
         }
         .await;
         tx.finish(result.is_ok()).await?;

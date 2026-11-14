@@ -1185,6 +1185,7 @@ async fn commit(
                     &draft.work,
                     crate::storage::Audience::Member(&approver.principal),
                     crate::storage::ShareRole::Contributor,
+                    crate::storage::ShareMode::Ensure,
                 )
                 .await
             {
@@ -1377,7 +1378,8 @@ async fn share(
     let grantee = resolve::match_approver(&name, &members).ok_or_else(Output::not_found)?;
     // The canvas route's own path, the composition's adaptation included.
     // The agent tool keeps its `record_write` flag (its own published
-    // argument list); it maps to the viewer or contributor role.
+    // argument list); it maps to the viewer or contributor role, and an
+    // agent's share only adds (`Ensure`): it never lowers what a person holds.
     let shared = crate::sharing::share_with_lineage(
         stores,
         member,
@@ -1385,6 +1387,7 @@ async fn share(
         &work,
         &grantee.principal,
         crate::storage::ShareRole::from_record_write(record_write),
+        crate::storage::ShareMode::Ensure,
     )
     .await
     .map_err(storage_output)?;

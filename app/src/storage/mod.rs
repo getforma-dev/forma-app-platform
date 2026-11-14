@@ -108,7 +108,7 @@ pub use shared_access::{
 pub use shared_identity::*;
 pub use shared_reads::GuestQueryRun;
 pub use sharing::{
-    member_label, Audience, Granted, Member, Openable, Revoked, ShareEntry, ShareRole,
+    member_label, Audience, Granted, Member, Openable, Revoked, ShareEntry, ShareMode, ShareRole,
     ShareStanding, Shared, Standing, WorkSharing, JUDGMENT_LIMIT, SHARE_HANDLER_DEADLINE,
 };
 pub use work_labels::{WorkLabel, WorkLabelResult};
@@ -140,7 +140,9 @@ impl fmt::Display for Error {
             Self::Unavailable => "storage unavailable",
             Self::Deadline => "storage deadline exceeded",
             Self::ProjectionLimit => "record projection bound exceeded",
-            Self::Busy => "record snapshot capacity reached",
+            Self::Busy => {
+                "record snapshot capacity reached (the query worker's admission, 24 slots)"
+            }
             Self::UnknownOutcome => "transaction outcome unknown",
             Self::Stale => "record snapshot stale",
         })

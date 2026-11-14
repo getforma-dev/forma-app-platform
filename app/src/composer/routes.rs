@@ -1007,6 +1007,7 @@ impl Tailor {
                     &composed.work,
                     crate::storage::Audience::Member(&grantee),
                     role,
+                    crate::storage::ShareMode::Ensure,
                 )
                 .await;
             tracing::info!(

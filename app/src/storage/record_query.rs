@@ -20,7 +20,25 @@ pub const MAX_ROWS: i64 = 100_000;
 /// per-row cost, exceeded the statement budget (APP-191, the box campaign).
 pub(super) const CURRENT: &str = "CROSS JOIN LATERAL (SELECT v.* FROM genui.internal_record_revisions v WHERE v.organization_id=r.organization_id AND v.app_id=r.app_id AND v.work_id=r.work_id AND v.collection_id=r.collection_id AND v.record_id=r.record_id AND v.version=r.current_version LIMIT 1) v";
 pub const MAX_BYTES: i64 = 64 * 1024 * 1024;
+/// Full record snapshots held in application memory at one time (APP-200):
+/// the query worker's running set plus one organization's admitted queue
+/// (`TASK_RUNNING` + `QUEUE`, 24), so one organization's views are refused
+/// first by the worker's frozen admission (D7.10), never by this cap. Each
+/// snapshot is at most [`MAX_BYTES`]; the worst case is 24 × 64 MiB, about
+/// 1.5 GiB in the 8 GiB task. The data pool still bounds database reads.
+pub const SNAPSHOT_SLOTS: usize = crate::query::worker::TASK_RUNNING + crate::query::worker::QUEUE;
 static SNAPSHOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+
+/// One snapshot slot, or `Busy` (the route's 429 with `Retry-After`) when
+/// [`SNAPSHOT_SLOTS`] are held; never waits. The slot is released when the
+/// last clone of the snapshot drops.
+fn reserve_slot() -> Result<OwnedSemaphorePermit> {
+    SNAPSHOTS
+        .get_or_init(|| Arc::new(Semaphore::new(SNAPSHOT_SLOTS)))
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| Error::Busy)
+}
 
 #[derive(Clone, Debug)]
 pub struct RecordQuerySnapshot {
@@ -32,7 +50,7 @@ pub struct RecordQuerySnapshot {
     pub(super) sequence: i64,
     rows: Arc<Vec<u8>>,
     // Held through engine admission/execution/release, including clones. At
-    // most four full snapshots can occupy application memory at one time.
+    // most `SNAPSHOT_SLOTS` full snapshots occupy application memory at once.
     _slot: Arc<OwnedSemaphorePermit>,
 }
 impl PartialEq for RecordQuerySnapshot {
@@ -127,11 +145,7 @@ pub(super) async fn capture(
     input: &str,
     fields: &[Value],
 ) -> Result<RecordQuerySnapshot> {
-    let slot = SNAPSHOTS
-        .get_or_init(|| Arc::new(Semaphore::new(4)))
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| Error::Busy)?;
+    let slot = reserve_slot()?;
     let (collection, schema, schema_version) = binding(tx, org, app, work, input).await?;
     // Metadata, organization sequence, and row versions are from ONE SQL
     // statement snapshot, including under a READ COMMITTED member transaction.
@@ -218,6 +232,23 @@ pub(super) async fn release(
 mod tests {
     use super::*;
     use serde_json::json;
+    /// APP-200: the ceiling is the worker's admission; the slot past it is
+    /// `Busy` without waiting, and a released slot is admitted again.
+    #[test]
+    fn snapshot_slots_follow_the_query_workers_admission() {
+        let mut held: Vec<OwnedSemaphorePermit> = (0..24)
+            .map(|n| reserve_slot().unwrap_or_else(|e| panic!("slot {n} refused: {e}")))
+            .collect();
+        assert_eq!(reserve_slot().err(), Some(Error::Busy), "the 25th capture");
+        assert_eq!(
+            SNAPSHOT_SLOTS, 24,
+            "the worker's running set plus its queue"
+        );
+        drop(held.pop());
+        let again = reserve_slot().expect("admitted once one releases");
+        assert_eq!(reserve_slot().err(), Some(Error::Busy));
+        drop((again, held));
+    }
     #[test]
     fn scalar_snapshot_preserves_null_empty_exact_decimal_and_boolean() {
         let fields = json!([{"id":"a","value_type":{"type":"text"},"nullable":true},{"id":"b","value_type":{"type":"text"},"nullable":true},{"id":"n","value_type":{"type":"decimal","scale":2,"unit":"count"},"nullable":false},{"id":"flag","value_type":{"type":"boolean"},"nullable":false}]);

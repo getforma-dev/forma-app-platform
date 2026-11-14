@@ -22,6 +22,11 @@
 //!   before any standing is judged): 200 `{"app_id","work_id",
 //!   "grantee_principal_id","role":"none"}`, the same body whether anything
 //!   was held.
+//! - `POST /v1/work/{app}/{work}/share/add`: the automatic share (the canvas
+//!   approver step): the person share's body and answer, `none` refused, in
+//!   W4's `Ensure` mode: it adds what the grantee lacks and never takes
+//!   anything away, so a reviewer approver keeps their standing. The person
+//!   share above is the dialog's exact choice (`Set`).
 //! - `POST /v1/work/{app}/{work}/share/organization` (APP-192, D9): body
 //!   `{"role":"viewer"|"contributor"|"reviewer"|"none"}`: shares the work with
 //!   every current and future active member of the organization in that role
@@ -91,6 +96,7 @@ pub fn router(auth: Arc<Auth>) -> Router {
             "/v1/work/{app}/{work}/share/organization",
             post(share_organization),
         )
+        .route("/v1/work/{app}/{work}/share/add", post(share_add))
         .with_state(auth)
 }
 
@@ -333,7 +339,32 @@ async fn share(
     UniformPath((app, work)): UniformPath<(String, String)>,
     request: Request,
 ) -> Response {
-    let (trusted, bytes) = match share_request(&auth, &app, &work, request).await {
+    // The dialog's exact role choice: a lower role takes the surplus away.
+    share_person(&auth, app, work, request, storage::ShareMode::Set).await
+}
+
+/// `POST /v1/work/{app}/{work}/share/add`: the automatic share (the canvas
+/// approver step): the same closed body and refusals as the person share,
+/// but it only adds what the grantee lacks and never takes anything away
+/// (`Ensure`), so a reviewer approver keeps their standing; `none` is not a
+/// role here (400).
+async fn share_add(
+    State(auth): State<Arc<Auth>>,
+    UniformPath((app, work)): UniformPath<(String, String)>,
+    request: Request,
+) -> Response {
+    share_person(&auth, app, work, request, storage::ShareMode::Ensure).await
+}
+
+/// Both person shares, in the module's refusal order; `mode` is the route's.
+async fn share_person(
+    auth: &Auth,
+    app: String,
+    work: String,
+    request: Request,
+    mode: storage::ShareMode,
+) -> Response {
+    let (trusted, bytes) = match share_request(auth, &app, &work, request).await {
         Ok(admitted) => admitted,
         Err(refusal) => return refusal,
     };
@@ -344,6 +375,9 @@ async fn share(
         return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
     };
     let Some(role) = role else {
+        if mode == storage::ShareMode::Ensure {
+            return http::problem(StatusCode::BAD_REQUEST, "malformed_share");
+        }
         return remove_access(stores, &trusted, &app, &work, &grantee).await;
     };
     let standing = match standing(stores, &trusted, &app, &work).await {
@@ -354,7 +388,7 @@ async fn share(
         tracing::info!(outcome = code, role = role.name(), "share.submit");
         return http::problem(StatusCode::UNPROCESSABLE_ENTITY, code);
     }
-    let result = share_with_lineage(stores, &trusted, &app, &work, &grantee, role).await;
+    let result = share_with_lineage(stores, &trusted, &app, &work, &grantee, role, mode).await;
     tracing::info!(
         outcome = match &result {
             Ok(shared) if shared.changed() => "shared",
@@ -417,7 +451,14 @@ async fn share_organization(
     let result = match role {
         Some(role) => stores
             .workspace
-            .share_work(&trusted, &app, &work, storage::Audience::Organization, role)
+            .share_work(
+                &trusted,
+                &app,
+                &work,
+                storage::Audience::Organization,
+                role,
+                storage::ShareMode::Set,
+            )
             .await
             .map(|shared| shared.changed()),
         None => {
@@ -498,7 +539,9 @@ async fn remove_access(
 /// event, and (APP-101) a composition's standard work shared by the member
 /// who composed it carries its live adaptation through this same path
 /// (`composer::lineage`); the teammate's canvas reshapes. The one share path
-/// of the canvas route and MCP's `forma_share`.
+/// of the canvas routes and MCP's `forma_share`. `mode` is the caller's:
+/// `Set` for the dialog's exact role choice (a lower role takes the surplus
+/// away), `Ensure` for every automatic or approver share (it only adds).
 pub async fn share_with_lineage(
     stores: &storage::Stores,
     trusted: &TrustedRequest,
@@ -506,10 +549,18 @@ pub async fn share_with_lineage(
     work: &str,
     grantee: &str,
     role: ShareRole,
+    mode: storage::ShareMode,
 ) -> Result<storage::Shared, storage::Error> {
     let shared = stores
         .workspace
-        .share_work(trusted, app, work, storage::Audience::Member(grantee), role)
+        .share_work(
+            trusted,
+            app,
+            work,
+            storage::Audience::Member(grantee),
+            role,
+            mode,
+        )
         .await?;
     if announces_person(&shared) {
         events::hub().app_shared(trusted.organization(), app, work);
@@ -529,6 +580,9 @@ pub async fn share_with_lineage(
                 &adapted_work,
                 storage::Audience::Member(grantee),
                 role,
+                // An adaptation only ever adds (the person may hold more on
+                // a work of their own).
+                storage::ShareMode::Ensure,
             )
             .await;
         tracing::info!(
@@ -837,6 +891,7 @@ mod tests {
         assert_eq!(send("GET", &uri, &[]).await, not_found);
         assert_eq!(send("GET", "/v1/work/x/y/share", &[]).await, not_found);
         let everyone = format!("{uri}/organization");
+        let add = format!("{uri}/add");
         for refused in [
             vec![("sec-fetch-site", "cross-site")],
             vec![("sec-fetch-site", "same-site")],
@@ -850,7 +905,7 @@ mod tests {
                 ("sec-fetch-site", "cross-site"),
             ],
         ] {
-            for path in [&uri, &everyone] {
+            for path in [&uri, &everyone, &add] {
                 assert_eq!(
                     send("POST", path, &refused).await,
                     (
@@ -863,6 +918,10 @@ mod tests {
         }
         assert_eq!(
             send("POST", &everyone, &[("sec-fetch-site", "same-origin")]).await,
+            not_found
+        );
+        assert_eq!(
+            send("POST", &add, &[("sec-fetch-site", "same-origin")]).await,
             not_found
         );
         assert_eq!(

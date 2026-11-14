@@ -47,7 +47,7 @@ ADMIT_FUNCTIONS = {
     # Migration 0024 (trial plan D9, APP-192) replaces it: a role (viewer,
     # contributor, reviewer) instead of the boolean, each permission copied only
     # when the sharer holds it and the reviewer role only from a reviewer.
-    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_role text',
+    'share_work': ('p_org uuid, p_sharer uuid, p_grantee uuid, p_app uuid, p_work uuid, p_role text, p_mode text',
                    'TABLE(scope text, resource_id uuid, permission text, inserted boolean)'),
     # Migration 0024 (D9): the organization-wide share, set, replaced or revoked
     # ('none') as one unit; one live work_shares row with no grantee.
@@ -141,10 +141,11 @@ ADMIT_GRANTS = set().union(
     _columns('work_permissions','INSERT','organization_id','principal_id','app_id','work_id','permission'),
     _columns('source_permissions','INSERT','organization_id','principal_id','source_id','permission'),
     # 0008 (APP-095 review M3): the share's record, exactly the inserted set.
-    _columns('work_shares','INSERT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','granted','audit_event_id','shared_at','role'),
+    _columns('work_shares','INSERT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','granted','audit_event_id','shared_at','role',
+             'removed','revoked_at','revoked_by','revoke_event_id'),
     # 0024 (APP-192): the definers read the live organization-wide share and
     # revoke it in place; nothing else on work_shares is writable.
-    _columns('work_shares','UPDATE','revoked_at','revoked_by','revoke_event_id'),
+    _columns('work_shares','UPDATE','revoked_at','revoked_by','revoke_event_id','removed'),
     _columns('work_shares','SELECT','organization_id','share_id','sharer_id','grantee_id','app_id','work_id','role','revoked_at','granted'),
     # 0024 (APP-191 review M1): revoke_work_share deletes a grantee's work rows
     # (a table-level DELETE; the only one any definer holds on a permission table).
@@ -524,7 +525,7 @@ def admission_checks(pg, passed, denied):
             ('work_shares','RESTRICTIVE',['genui_control','genui_data','genui_workspace'],'SELECT','(grantee_id IS NULL)',None)],rows
         shares=c.execute("""SELECT grantee,privilege_type,count(*) FROM information_schema.column_privileges
           WHERE table_schema='genui' AND table_name='work_shares' AND grantee<>'genui_owner' GROUP BY 1,2 ORDER BY 1,2""").fetchall()
-        assert shares==[('genui_admit','INSERT',10),('genui_admit','SELECT',9),('genui_admit','UPDATE',3),
+        assert shares==[('genui_admit','INSERT',14),('genui_admit','SELECT',9),('genui_admit','UPDATE',4),
                         ('genui_control','SELECT',9),('genui_data','SELECT',9),('genui_workspace','SELECT',9)],shares
         assert c.execute("""SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema='genui' AND table_name='work_shares'
           AND grantee<>'genui_owner'""").fetchone()==(0,)
@@ -533,7 +534,7 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname='genui_private' AND c.relkind='r' ORDER BY c.relname""").fetchall()
         assert rows==[('code_index',False,False,'genui_owner',0),('handle_index',False,False,'genui_owner',0),
                       ('provider_tenant_index',False,False,'genui_owner',0)],rows
-    passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; genui_admit holds column INSERT (ten, 0024 adds role), SELECT (nine) and UPDATE (the three 0024 revocation columns); the application roles hold column SELECT (nine, never granted) and nothing at table level',
+    passed('0008 work_shares is owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; genui_admit holds column INSERT (fourteen: 0024 adds role, removed and the revocation columns of a revocation record), SELECT (nine) and UPDATE (the three 0024 revocation columns and removed); the application roles hold column SELECT (nine, never granted) and nothing at table level',
            tables=list(SHARING_TABLES))
     with pg.connect('postgres') as c:
         rows=c.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
@@ -580,6 +581,8 @@ def admission_checks(pg, passed, denied):
           WHERE n.nspname IN ('genui','genui_private','genui_meta') AND a.privilege_type='EXECUTE' AND a.grantee<>p.proowner""").fetchall())
         # 0024: genui.canonical_jsonb (the owner_only derivation) is executable by
         # the writer of definition_record_schemas, genui_workspace, and no one else.
+        # Its IMMUTABLE declaration rests on a UTF-8 database (recheck N2).
+        assert c.execute("SHOW server_encoding").fetchone()==('UTF8',)
         assert executes=={('lock_member_authority',r) for r in ('genui_workspace','genui_control','genui_data')}|{('lock_work_revision','genui_data')}|{
             (name,'genui_workspace') for name in ADMIT_FUNCTIONS}|{('canonical_jsonb','genui_workspace')},executes
     passed('catalog (role, relation, privilege, column) grant set equals 0002 reads plus D7.1 genui_admit grants plus 0004 entitlement column reads plus 0005 definition/work/audit columns plus 0006 session columns plus 0007 command columns (D7.3); EXECUTE on the admit functions is genui_workspace only',

@@ -127,6 +127,16 @@ ALTER TABLE genui.work_shares
  ADD CONSTRAINT work_shares_grantee_or_role CHECK (grantee_id IS NOT NULL OR role IS NOT NULL),
  ADD CONSTRAINT work_shares_revocation_whole CHECK ((revoked_at IS NULL)=(revoked_by IS NULL) AND (revoked_at IS NULL)=(revoke_event_id IS NULL)),
  ADD CONSTRAINT work_shares_organization_id_revoked_by_fkey FOREIGN KEY (organization_id,revoked_by) REFERENCES genui.memberships;
+-- (Recheck r2, r4) A personal revocation or demotion stores the set it removed
+-- on the share records it marks revoked, or on the record it writes (one live
+-- record for the remaining access after a demotion; a revoked record when no
+-- share record had granted the rows), so its `permission.revoked` digest
+-- (`forma:share-member-revoke:v1` over the grantee and the removed set)
+-- recomputes from stored rows. Such a record may carry an empty granted set.
+ALTER TABLE genui.work_shares
+ ADD COLUMN removed text[] CHECK (removed IS NULL OR cardinality(removed) BETWEEN 1 AND 64),
+ DROP CONSTRAINT work_shares_granted_check,
+ ADD CONSTRAINT work_shares_granted_check CHECK (cardinality(granted) BETWEEN 1 AND 64 OR (cardinality(granted)=0 AND removed IS NOT NULL));
 -- At most one live organization-wide share per work.
 CREATE UNIQUE INDEX work_shares_everyone_live ON genui.work_shares (organization_id,app_id,work_id)
  WHERE grantee_id IS NULL AND revoked_at IS NULL;
@@ -134,8 +144,8 @@ CREATE UNIQUE INDEX work_shares_everyone_live ON genui.work_shares (organization
 -- The definers' reads and writes on work_shares (0008 granted the INSERT
 -- columns of a personal share), and the application roles' read of the live
 -- organization-wide rows (every work-level clause consults them).
-GRANT INSERT(role) ON genui.work_shares TO genui_admit;
-GRANT UPDATE(revoked_at,revoked_by,revoke_event_id) ON genui.work_shares TO genui_admit;
+GRANT INSERT(role,removed,revoked_at,revoked_by,revoke_event_id) ON genui.work_shares TO genui_admit;
+GRANT UPDATE(revoked_at,revoked_by,revoke_event_id,removed) ON genui.work_shares TO genui_admit;
 GRANT SELECT(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,role,revoked_at,granted) ON genui.work_shares TO genui_admit;
 GRANT SELECT(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,role,revoked_at,shared_at) ON genui.work_shares
  TO genui_workspace,genui_control,genui_data;
@@ -162,16 +172,21 @@ SET LOCAL ROLE genui_admit;
 -- 0008's share_work with a role instead of a boolean. The old form is
 -- dropped: every share names its role.
 DROP FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,boolean);
-CREATE FUNCTION genui_private.share_work(p_org uuid,p_sharer uuid,p_grantee uuid,p_app uuid,p_work uuid,p_role text)
+-- Two explicit modes (recheck r5, W2b): 'set', the exact role, used only by
+-- the dialog's personal role choice, lowers a role by deleting the surplus
+-- rows (f1); 'ensure', used by every automatic or approver path, grants the
+-- missing rows and never deletes, so an automatic contributor share never
+-- demotes a reviewer approver. The mode is a parameter, never inferred.
+CREATE FUNCTION genui_private.share_work(p_org uuid,p_sharer uuid,p_grantee uuid,p_app uuid,p_work uuid,p_role text,p_mode text)
  RETURNS TABLE(scope text,resource_id uuid,permission text,inserted boolean)
  LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
  SET search_path=pg_catalog,pg_temp AS $$
 DECLARE o_status text; s_status text; s_epoch bigint; g_status text; v_creator boolean; v_share boolean;
  v_owner boolean; v_read boolean; v_write boolean; v_review boolean; v_count integer; v_any boolean:=false; v_inserted text[]:='{}'; r record;
- v_demote text[]:='{}'; v_removed text[]:='{}';
+ v_demote text[]:='{}'; v_removed text[]:='{}'; v_demoted boolean:=false; v_marked integer:=0; v_revoke_event uuid; v_remaining text[];
  v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text; v_digest text;
 BEGIN
- IF p_sharer=p_grantee OR p_role NOT IN ('viewer','contributor','reviewer')
+ IF p_sharer=p_grantee OR p_role NOT IN ('viewer','contributor','reviewer') OR p_mode NOT IN ('set','ensure')
   OR nullif(current_setting('genui.organization_id',true),'') IS DISTINCT FROM p_org::text
   OR nullif(current_setting('genui.principal_id',true),'') IS DISTINCT FROM p_sharer::text
   OR nullif(current_setting('genui.membership_epoch',true),'') IS NULL THEN RETURN; END IF;
@@ -180,7 +195,11 @@ BEGIN
  SELECT m.status,m.membership_epoch INTO s_status,s_epoch FROM genui.memberships m
   WHERE m.organization_id=p_org AND m.principal_id=p_sharer FOR SHARE;
  IF NOT FOUND OR s_status<>'active' OR s_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
- SELECT m.status INTO g_status FROM genui.memberships m WHERE m.organization_id=p_org AND m.principal_id=p_grantee FOR SHARE;
+ -- The grantee's membership row FOR UPDATE, before the work lock (recheck
+ -- r3: the fence's lock order, as the operator's revocation): the grantee's
+ -- fenced transactions in flight complete before a demotion strips a row,
+ -- and a fence taken after this call commits re-judges on the committed rows.
+ SELECT m.status INTO g_status FROM genui.memberships m WHERE m.organization_id=p_org AND m.principal_id=p_grantee FOR UPDATE;
  IF NOT FOUND OR g_status<>'active' THEN RETURN; END IF;
  -- One sharing call at a time per work (review m3; W2b review MAJOR-1): the
  -- lock comes BEFORE every read the decision rests on, so a call queued behind
@@ -198,6 +217,22 @@ BEGIN
  IF NOT (v_creator OR v_share) THEN RETURN; END IF;
  IF NOT EXISTS (SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=p_org AND a.principal_id=p_sharer
   AND a.app_id=p_app AND a.permission='run') THEN RETURN; END IF;
+ -- The app's owner as grantee (recheck r1; the sharer is refused above): the
+ -- owner is a reviewer by standing, so 'set' is refused (a lower re-share
+ -- must not strip the owner's rows) and 'ensure' has nothing to add and
+ -- answers the role's rows unwritten (an automatic flow naming the owner as
+ -- approver reads "held"). A lower re-share sets the role whatever earlier
+ -- source granted the rows (work_permissions carries no provenance).
+ IF EXISTS (SELECT 1 FROM genui.apps a WHERE a.organization_id=p_org AND a.app_id=p_app AND a.owner_principal_id=p_grantee) THEN
+  IF p_mode='set' THEN RETURN; END IF;
+  FOR r IN SELECT x.permission FROM (VALUES ('app','discover'),('app','run'),('work','record_read'),('work','record_write'),('work','record_review')) AS x(kind,permission)
+   WHERE x.kind='app' OR x.permission='record_read' OR (x.permission='record_write' AND p_role IN ('contributor','reviewer'))
+    OR (x.permission='record_review' AND p_role='reviewer') LOOP
+   scope:=CASE WHEN r.permission IN ('discover','run') THEN 'app' ELSE 'work' END;
+   resource_id:=CASE WHEN scope='app' THEN p_app ELSE p_work END; permission:=r.permission; inserted:=false; RETURN NEXT;
+  END LOOP;
+  RETURN;
+ END IF;
  -- The role is copied, never conferred, from the sharer's PERSONAL standing
  -- (the app's owner, the work's unrevoked creator or a work grant; a live
  -- organization-wide share confers nothing durable, Tier A review m2): the
@@ -220,15 +255,18 @@ BEGIN
  -- the whole call is refused before any write); the grantee's earlier personal
  -- share records are marked revoked and one permission.revoked names the
  -- removed set, appended before the grant below.
- IF p_role<>'reviewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
-  AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_review') THEN
-  IF NOT v_review THEN RETURN; END IF;
-  v_demote:=v_demote||'record_review'::text;
- END IF;
- IF p_role='viewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
-  AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_write') THEN
-  IF NOT v_write THEN RETURN; END IF;
-  v_demote:=v_demote||'record_write'::text;
+ -- Only the exact mode lowers a role (recheck r5); 'ensure' never deletes.
+ IF p_mode='set' THEN
+  IF p_role<>'reviewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
+   AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_review') THEN
+   IF NOT v_review THEN RETURN; END IF;
+   v_demote:=v_demote||'record_review'::text;
+  END IF;
+  IF p_role='viewer' AND EXISTS (SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
+   AND p.app_id=p_app AND p.work_id=p_work AND p.permission='record_write') THEN
+   IF NOT v_write THEN RETURN; END IF;
+   v_demote:=v_demote||'record_write'::text;
+  END IF;
  END IF;
  IF cardinality(v_demote)>0 THEN
   FOREACH permission IN ARRAY v_demote LOOP
@@ -236,7 +274,9 @@ BEGIN
    v_removed:=v_removed||('work:'||p_work::text||':'||permission);
    scope:='revoked'; resource_id:=p_work; inserted:=false; RETURN NEXT;
   END LOOP;
-  v_digest:='sha256:'||encode(sha256(convert_to('forma:share-revoke:v1','UTF8')||'\x00'::bytea||convert_to(p_grantee::text,'UTF8')
+  -- Its own digest domain (recheck r2): the grantee and the removed set,
+  -- both stored on the records this event marks or writes.
+  v_digest:='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\x00'::bytea||convert_to(p_grantee::text,'UTF8')
    ||'\x00'::bytea||convert_to(array_to_string(v_removed,','),'UTF8')),'hex');
   SELECT h.chain_sequence,h.head_hash INTO v_seq,v_prev FROM genui.audit_heads h
    WHERE h.organization_id=p_org AND h.writer_role='admission' FOR UPDATE;
@@ -251,8 +291,10 @@ BEGIN
   INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash)
    VALUES (p_org,v_event,'admission',v_seq,'permission.revoked',p_sharer,p_app,p_work,NULL,NULL,v_digest,v_at,v_prev,v_hash);
   UPDATE genui.audit_heads SET chain_sequence=v_seq,head_hash=v_hash WHERE organization_id=p_org AND writer_role='admission';
-  UPDATE genui.work_shares SET revoked_at=v_at,revoked_by=p_sharer,revoke_event_id=v_event
+  UPDATE genui.work_shares SET revoked_at=v_at,revoked_by=p_sharer,revoke_event_id=v_event,removed=v_removed
    WHERE organization_id=p_org AND app_id=p_app AND work_id=p_work AND grantee_id=p_grantee AND revoked_at IS NULL;
+  GET DIAGNOSTICS v_marked=ROW_COUNT;
+  v_demoted:=true; v_revoke_event:=v_event;
  END IF;
  -- Copy discover/run on the app that the sharer holds.
  FOR r IN SELECT a.permission FROM genui.app_permissions a WHERE a.organization_id=p_org AND a.principal_id=p_sharer
@@ -285,7 +327,25 @@ BEGIN
   scope:='source'; resource_id:=r.source_id; permission:='source_read'; inserted:=v_count=1; v_any:=v_any OR inserted;
   IF inserted THEN v_inserted:=v_inserted||('source:'||r.source_id::text||':source_read'); END IF; RETURN NEXT;
  END LOOP;
- IF NOT v_any THEN RETURN; END IF;
+ IF NOT v_any THEN
+  -- A demotion that inserted nothing leaves one live share record for the
+  -- remaining access (recheck r4), carrying the removed set (recheck r2).
+  IF v_demoted THEN
+   v_remaining:=ARRAY(SELECT 'app:'||p_app::text||':'||a.permission FROM genui.app_permissions a WHERE a.organization_id=p_org AND a.principal_id=p_grantee
+     AND a.app_id=p_app AND a.permission IN ('discover','run') ORDER BY 1)
+    ||ARRAY(SELECT 'work:'||p_work::text||':'||p.permission FROM genui.work_permissions p WHERE p.organization_id=p_org AND p.principal_id=p_grantee
+     AND p.app_id=p_app AND p.work_id=p_work AND p.permission IN ('record_read','record_write','record_review') ORDER BY 1);
+   INSERT INTO genui.work_shares(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at,role,removed)
+    VALUES (p_org,gen_random_uuid(),p_sharer,p_grantee,p_app,p_work,v_remaining,v_revoke_event,v_at,p_role,v_removed);
+  END IF;
+  RETURN;
+ END IF;
+ -- A demotion that marked no earlier record (no share had granted the rows)
+ -- leaves a revoked record carrying the removed set (recheck r2).
+ IF v_demoted AND v_marked=0 THEN
+  INSERT INTO genui.work_shares(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at,role,removed,revoked_at,revoked_by,revoke_event_id)
+   VALUES (p_org,gen_random_uuid(),p_sharer,p_grantee,p_app,p_work,'{}',v_revoke_event,v_at,NULL,v_removed,v_at,p_sharer,v_revoke_event);
+ END IF;
  -- D7.8 append on the admission chain (0008's digest: the grantee and
  -- exactly the inserted set, recomputable from the work_shares row).
  v_digest:='sha256:'||encode(sha256(convert_to('forma:share-grant:v1','UTF8')||'\x00'::bytea||convert_to(p_grantee::text,'UTF8')
@@ -307,7 +367,7 @@ BEGIN
   VALUES (p_org,gen_random_uuid(),p_sharer,p_grantee,p_app,p_work,v_inserted,v_event,v_at,p_role);
  RETURN;
 END $$;
-REVOKE ALL ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text,text) FROM PUBLIC;
 
 -- The organization-wide share: p_role 'viewer', 'contributor' or 'reviewer'
 -- sets it (replacing a live one of another role: one revocation, one grant,
@@ -460,7 +520,7 @@ CREATE FUNCTION genui_private.revoke_work_share(p_org uuid,p_actor uuid,p_app uu
  RETURNS TABLE(permission text,removed boolean)
  LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
  SET search_path=pg_catalog,pg_temp AS $$
-DECLARE o_status text; a_status text; a_epoch bigint; v_owner boolean; v_count integer; v_any boolean:=false; v_removed text[]:='{}'; r record;
+DECLARE o_status text; a_status text; a_epoch bigint; v_owner boolean; v_count integer; v_any boolean:=false; v_removed text[]:='{}'; v_marked integer:=0; r record;
  v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text; v_digest text;
 BEGIN
  IF p_actor=p_grantee
@@ -472,8 +532,13 @@ BEGIN
  SELECT m.status,m.membership_epoch INTO a_status,a_epoch FROM genui.memberships m
   WHERE m.organization_id=p_org AND m.principal_id=p_actor FOR SHARE;
  IF NOT FOUND OR a_status<>'active' OR a_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
- -- The per-work lock first (W2b review MAJOR-1): a revocation queued behind
- -- an uncommitted grant removes that grant once it commits.
+ -- The grantee's membership row FOR UPDATE before the work lock (recheck r3:
+ -- the fence's lock order, as the operator's revocation): the grantee's
+ -- fenced transactions in flight complete before the rows go, and a fence
+ -- taken after this call commits re-judges on the committed rows.
+ PERFORM 1 FROM genui.memberships m WHERE m.organization_id=p_org AND m.principal_id=p_grantee FOR UPDATE;
+ -- The per-work lock (W2b review MAJOR-1): a revocation queued behind an
+ -- uncommitted grant removes that grant once it commits.
  PERFORM pg_advisory_xact_lock(hashtextextended('forma:work-share:'||p_org::text||':'||p_work::text,0));
  -- The owner alone; the work must exist; never the owner's own rows.
  v_owner:=EXISTS (SELECT 1 FROM genui.apps a WHERE a.organization_id=p_org AND a.app_id=p_app AND a.owner_principal_id=p_actor);
@@ -487,9 +552,9 @@ BEGIN
   IF removed THEN v_removed:=v_removed||('work:'||p_work::text||':'||permission); END IF; RETURN NEXT;
  END LOOP;
  IF NOT v_any THEN RETURN; END IF;
- -- D7.8 append on the admission chain; the digest covers the grantee and
- -- exactly the removed set.
- v_digest:='sha256:'||encode(sha256(convert_to('forma:share-revoke:v1','UTF8')||'\x00'::bytea||convert_to(p_grantee::text,'UTF8')
+ -- D7.8 append on the admission chain; the digest (its own domain, recheck
+ -- r2) covers the grantee and exactly the removed set, both stored below.
+ v_digest:='sha256:'||encode(sha256(convert_to('forma:share-member-revoke:v1','UTF8')||'\x00'::bytea||convert_to(p_grantee::text,'UTF8')
   ||'\x00'::bytea||convert_to(array_to_string(v_removed,','),'UTF8')),'hex');
  SELECT h.chain_sequence,h.head_hash INTO v_seq,v_prev FROM genui.audit_heads h
   WHERE h.organization_id=p_org AND h.writer_role='admission' FOR UPDATE;
@@ -504,13 +569,19 @@ BEGIN
  INSERT INTO genui.audit_events(organization_id,event_id,writer_role,chain_sequence,kind,actor_principal_id,app_id,work_id,record_id,code_id,outcome_digest,occurred_at,previous_hash,hash)
   VALUES (p_org,v_event,'admission',v_seq,'permission.revoked',p_actor,p_app,p_work,NULL,NULL,v_digest,v_at,v_prev,v_hash);
  UPDATE genui.audit_heads SET chain_sequence=v_seq,head_hash=v_hash WHERE organization_id=p_org AND writer_role='admission';
- -- The grantee's personal share records of this work, revoked by the owner.
- UPDATE genui.work_shares SET revoked_at=v_at,revoked_by=p_actor,revoke_event_id=v_event
+ -- The grantee's personal share records of this work, revoked by the owner,
+ -- each carrying the removed set; a revoked record when none existed.
+ UPDATE genui.work_shares SET revoked_at=v_at,revoked_by=p_actor,revoke_event_id=v_event,removed=v_removed
   WHERE organization_id=p_org AND app_id=p_app AND work_id=p_work AND grantee_id=p_grantee AND revoked_at IS NULL;
+ GET DIAGNOSTICS v_marked=ROW_COUNT;
+ IF v_marked=0 THEN
+  INSERT INTO genui.work_shares(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at,role,removed,revoked_at,revoked_by,revoke_event_id)
+   VALUES (p_org,gen_random_uuid(),p_actor,p_grantee,p_app,p_work,'{}',v_event,v_at,NULL,v_removed,v_at,p_actor,v_event);
+ END IF;
  RETURN;
 END $$;
 REVOKE ALL ON FUNCTION genui_private.revoke_work_share(uuid,uuid,uuid,uuid,uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text),
+GRANT EXECUTE ON FUNCTION genui_private.share_work(uuid,uuid,uuid,uuid,uuid,text,text),
  genui_private.set_work_everyone(uuid,uuid,uuid,uuid,text),
  genui_private.revoke_work_share(uuid,uuid,uuid,uuid,uuid) TO genui_workspace;
 RESET ROLE;

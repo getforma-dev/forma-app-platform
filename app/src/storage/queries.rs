@@ -852,11 +852,14 @@ impl Data {
                     .also(Action::SourceRead, Resource::Source(&source.source))
                     .await?;
             }
+            require(dependencies(transaction, org, app, work).await? == run.dependencies)?;
+            permit.also(Action::Run, Resource::App(app)).await?;
+            // APP-198 (recheck N3): the snapshot's sequence last, after every
+            // binding and authority check, so `Stale` never precedes a `Denied`.
             if let Some(records) = &run.records {
                 super::record_query::release(transaction, org, app, work, records).await?;
             }
-            require(dependencies(transaction, org, app, work).await? == run.dependencies)?;
-            permit.also(Action::Run, Resource::App(app)).await
+            Ok(())
         }
         .await;
         transaction.finish(result.is_ok()).await?;
