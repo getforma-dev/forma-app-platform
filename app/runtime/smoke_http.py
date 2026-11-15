@@ -78,6 +78,16 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
             assert response.status==200 and 'no-store' in response.headers['Cache-Control']
             assert b'action="/invite/validate"' in body and b'name="code"' in body and b'<script src' not in body
         with urllib.request.urlopen(origin,timeout=3) as response: assert b'href="/invite"' in response.read()
+        # APP-223: the public beta notice page and the shared site footer, no
+        # cookie; any other method is the uniform 404, as for /about.
+        with urllib.request.urlopen(origin+'/notice',timeout=3) as response:
+            body=response.read()
+            assert response.status==200 and response.headers['Content-Type']=='text/html; charset=utf-8' and response.headers['Cache-Control']=='no-store'
+            assert "frame-ancestors 'none'" in response.headers['Content-Security-Policy'] and response.headers.get('Set-Cookie') is None
+            assert b'data-notice-version="1"' in body and b'<footer class="site-footer">' in body and b'<script' not in body
+        try: urllib.request.urlopen(urllib.request.Request(origin+'/notice',data=b'',method='POST'),timeout=3)
+        except urllib.error.HTTPError as error: assert error.code==404 and error.read()==b'{"code":"not_found","status":404}'
+        else: raise AssertionError('POST /notice answered')
         for route in ('/workspace','/auth/pending','/v1/unknown','/invite/validate'):
             try: urllib.request.urlopen(origin+route,timeout=3)
             except urllib.error.HTTPError as error:
@@ -98,7 +108,7 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
         else: raise AssertionError('protected route answered without a session')
         with urllib.request.urlopen(origin+'/_assets/forma-isotope.svg',timeout=3) as response:
             assert response.status==200 and response.headers.get_content_type()=='image/svg+xml' and response.read().startswith(b'<svg')
-        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True,'navigation_error_page':404}))
+        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'notice_page':200,'protected_uniform_404':True,'navigation_error_page':404}))
     finally:
         process.terminate()
         try: process.communicate(timeout=5)
