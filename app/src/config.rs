@@ -248,3 +248,253 @@ mod tests {
         assert!(Config::decode(&serde_json::to_vec(&value).unwrap(), 150).is_err());
     }
 }
+
+/// APP-219: the process's logs. Production writes one JSON object per line,
+/// `timestamp`, `level`, `target` and the event's own fields flattened beside
+/// them (`event` is the stable name of an app event, such as `model.call`),
+/// and never an ANSI escape. `GENUI_LOG_FORMAT=pretty` (the dev stand sets
+/// it) keeps the human text, also without colour. The filter is `RUST_LOG`
+/// when set (target directives, such as `info,genui=debug`), else
+/// [`logs::DEFAULT_FILTER`], which keeps tokio_postgres's per-connection
+/// notices out of the log. Both settings are read once, at startup, and a
+/// value they do not describe stops the process.
+///
+/// What a line may carry is unchanged: identities (principal and
+/// organization ids), codes, counts and durations; never a name, a note, a
+/// prompt, record content, an email address or a raw request path.
+pub mod logs {
+    use tracing_subscriber::{
+        filter::Targets, fmt::MakeWriter, layer::SubscriberExt, util::SubscriberInitExt,
+    };
+
+    pub const FORMAT_ENV: &str = "GENUI_LOG_FORMAT";
+    pub const FILTER_ENV: &str = "RUST_LOG";
+    pub const DEFAULT_FILTER: &str = "info,tokio_postgres=warn";
+
+    /// How each line is written.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum Format {
+        /// One JSON object per line (production, and the default).
+        Json,
+        /// The human text, for a developer's terminal or the dev stand's files.
+        Pretty,
+    }
+    impl Format {
+        /// The format [`FORMAT_ENV`]'s `value` names; unset or empty is `json`.
+        pub fn from_setting(value: Option<&str>) -> Result<Self, String> {
+            match value.map(str::trim) {
+                None | Some("" | "json") => Ok(Self::Json),
+                Some("pretty") => Ok(Self::Pretty),
+                Some(_) => Err(format!("{FORMAT_ENV} must be json or pretty")),
+            }
+        }
+    }
+
+    /// The filter [`FILTER_ENV`]'s `value` names; unset or empty is
+    /// [`DEFAULT_FILTER`].
+    pub fn filter(value: Option<&str>) -> Result<Targets, String> {
+        let value = value.map(str::trim).filter(|value| !value.is_empty());
+        value
+            .unwrap_or(DEFAULT_FILTER)
+            .parse()
+            .map_err(|_| format!("{FILTER_ENV} must be target directives such as {DEFAULT_FILTER}"))
+    }
+
+    /// The process's subscriber: `format` lines through `filter` to `writer`
+    /// (stdout in the binaries, a buffer in tests).
+    pub fn subscriber<W>(
+        format: Format,
+        filter: Targets,
+        writer: W,
+    ) -> Box<dyn tracing::Subscriber + Send + Sync>
+    where
+        W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
+    {
+        let registry = tracing_subscriber::registry().with(filter);
+        match format {
+            Format::Json => Box::new(
+                registry.with(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .flatten_event(true)
+                        .with_current_span(false)
+                        .with_span_list(false)
+                        .with_ansi(false)
+                        .with_writer(writer),
+                ),
+            ),
+            Format::Pretty => Box::new(
+                registry.with(
+                    tracing_subscriber::fmt::layer()
+                        .with_ansi(false)
+                        .with_writer(writer),
+                ),
+            ),
+        }
+    }
+
+    fn setting(name: &str) -> Result<Option<String>, String> {
+        match std::env::var(name) {
+            Ok(value) => Ok(Some(value)),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(std::env::VarError::NotUnicode(_)) => Err(format!("{name} must be text")),
+        }
+    }
+
+    /// Reads both settings and installs the subscriber for the process, with
+    /// `log` records (tokio_postgres's) routed through it. A subscriber
+    /// already installed (a test, the dev stand's second start) is kept.
+    pub fn init() -> Result<(), String> {
+        let format = Format::from_setting(setting(FORMAT_ENV)?.as_deref())?;
+        let filter = filter(setting(FILTER_ENV)?.as_deref())?;
+        let _ = subscriber(format, filter, std::io::stdout).try_init();
+        Ok(())
+    }
+
+    /// Tests: the production JSON subscriber writing into a buffer, and the
+    /// lines it wrote.
+    #[cfg(test)]
+    pub(crate) mod testing {
+        use std::sync::{Arc, Mutex, OnceLock};
+
+        /// Keeps a second, inert dispatcher registered for the whole test
+        /// process. With one dispatcher registered, tracing-core judges a new
+        /// callsite by the registering thread's own default alone, so a
+        /// callsite another test thread hits first would be cached as
+        /// "never" and a scoped capture here would miss its lines.
+        fn shared_interest() {
+            static KEEP: OnceLock<tracing::Dispatch> = OnceLock::new();
+            KEEP.get_or_init(|| {
+                tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default())
+            });
+        }
+
+        #[derive(Clone, Default)]
+        pub(crate) struct Lines(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Lines {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Lines {
+            type Writer = Lines;
+            fn make_writer(&'a self) -> Self::Writer {
+                self.clone()
+            }
+        }
+        impl Lines {
+            /// The production subscriber (JSON, the default filter) over this buffer.
+            pub(crate) fn subscriber(&self) -> Box<dyn tracing::Subscriber + Send + Sync> {
+                shared_interest();
+                super::subscriber(
+                    super::Format::Json,
+                    super::filter(None).unwrap(),
+                    self.clone(),
+                )
+            }
+            /// A dispatcher of [`Self::subscriber`], for threads.
+            pub(crate) fn dispatch(&self) -> tracing::Dispatch {
+                tracing::Dispatch::new(self.subscriber())
+            }
+            /// Everything written.
+            pub(crate) fn text(&self) -> String {
+                String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+            }
+            /// Every line, each parsed; a line that is not one JSON object fails.
+            pub(crate) fn parsed(&self) -> Vec<serde_json::Value> {
+                self.text()
+                    .lines()
+                    .map(|line| {
+                        let value: serde_json::Value = serde_json::from_str(line)
+                            .unwrap_or_else(|_| panic!("not one JSON object: {line}"));
+                        assert!(value.is_object(), "not one JSON object: {line}");
+                        value
+                    })
+                    .collect()
+            }
+            /// The lines whose `event` is `name`.
+            pub(crate) fn events(&self, name: &str) -> Vec<serde_json::Value> {
+                self.parsed()
+                    .into_iter()
+                    .filter(|line| line["event"] == name)
+                    .collect()
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{testing::Lines, *};
+
+        /// APP-219: every production line is one JSON object with the fixed
+        /// keys and no ANSI escape, even when a field's own text holds one
+        /// (it is escaped as `\u001b`); tokio_postgres's notices stay out
+        /// unless they warn.
+        #[test]
+        fn every_production_line_is_one_json_object_without_ansi() {
+            let lines = Lines::default();
+            tracing::subscriber::with_default(lines.subscriber(), || {
+                tracing::info!(event = "model.call", source = "canvas", "model replied");
+                tracing::warn!(
+                    event = "http.server_error",
+                    status = 503u16,
+                    route = "/v1/x/{id}"
+                );
+                tracing::error!(code = "\u{1b}[31mred\u{1b}[0m", "a field holding an escape");
+                tracing::info!(target: "tokio_postgres::connection", "NOTICE: per-connection noise");
+                tracing::warn!(target: "tokio_postgres::connection", "a warning that stays");
+            });
+            let text = lines.text();
+            assert!(
+                !text.as_bytes().contains(&0x1b),
+                "no ANSI escape byte: {text}"
+            );
+            let parsed = lines.parsed();
+            assert_eq!(
+                parsed.len(),
+                4,
+                "the tokio_postgres INFO line is filtered: {text}"
+            );
+            for line in &parsed {
+                for key in ["timestamp", "level", "target"] {
+                    assert!(
+                        line.get(key).is_some_and(|v| v.is_string()),
+                        "{key}: {line}"
+                    );
+                }
+            }
+            assert_eq!(parsed[0]["event"], "model.call");
+            assert_eq!(parsed[0]["source"], "canvas");
+            assert_eq!(parsed[0]["level"], "INFO");
+            assert_eq!(parsed[1]["event"], "http.server_error");
+            assert_eq!(parsed[1]["status"], 503);
+            assert_eq!(parsed[2]["code"], "\u{1b}[31mred\u{1b}[0m");
+            assert_eq!(parsed[3]["target"], "tokio_postgres::connection");
+            assert_eq!(parsed[3]["level"], "WARN");
+            assert!(
+                parsed.iter().all(|line| line.get("fields").is_none()),
+                "flattened"
+            );
+        }
+
+        #[test]
+        fn the_settings_are_json_by_default_and_refuse_what_they_do_not_name() {
+            assert_eq!(Format::from_setting(None), Ok(Format::Json));
+            assert_eq!(Format::from_setting(Some("")), Ok(Format::Json));
+            assert_eq!(Format::from_setting(Some("json")), Ok(Format::Json));
+            assert_eq!(Format::from_setting(Some("pretty")), Ok(Format::Pretty));
+            let refused = Format::from_setting(Some("text")).unwrap_err();
+            assert!(refused.contains(FORMAT_ENV), "{refused}");
+            assert!(filter(None).is_ok() && filter(Some("")).is_ok());
+            assert!(filter(Some("debug")).is_ok());
+            assert!(filter(Some("info,genui=debug,tokio_postgres=warn")).is_ok());
+            let refused = filter(Some("genui=loud")).unwrap_err();
+            assert!(refused.contains(FILTER_ENV), "{refused}");
+            assert_eq!(DEFAULT_FILTER, "info,tokio_postgres=warn");
+        }
+    }
+}

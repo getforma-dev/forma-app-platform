@@ -43,6 +43,9 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
             line=lines.get(timeout=max(0.01,deadline-time.monotonic()))
             assert line is not None, 'server exited before binding'
             if line.startswith('FORMA_LISTENING http://127.0.0.1:'): break
+            # APP-219: with GENUI_LOG_FORMAT unset every log line is one JSON object, no ANSI.
+            logged=json.loads(line); assert isinstance(logged,dict) and '\x1b' not in line
+            assert all(isinstance(logged.get(key),str) for key in ('timestamp','level','target')), line
             assert time.monotonic()<deadline, 'listener timeout'
         origin=line.split(' ',1)[1]
         with urllib.request.urlopen(origin+'/health/live',timeout=3) as response: assert response.status==200
