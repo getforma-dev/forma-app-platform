@@ -230,6 +230,9 @@ pub(crate) mod qualification_cases;
 mod query_qualification;
 #[cfg(test)]
 mod race_qualification;
+// APP-216 part 1: database bytes per readiness run (local evidence only).
+#[cfg(test)]
+mod readiness_traffic_campaign;
 #[cfg(test)]
 mod record_components_campaign;
 #[cfg(test)]

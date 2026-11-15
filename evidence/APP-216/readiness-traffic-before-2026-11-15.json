@@ -1,0 +1,22 @@
+{
+  "catalog_digest_octets": 32,
+  "catalog_document_octets": 612478,
+  "comparisons": 80,
+  "comparisons_pulling_the_document": 80,
+  "db_receive_bytes_per_run": 91814,
+  "db_receive_bytes_total": 1836281,
+  "db_transmit_bytes_per_day_at_15s": 14445889920,
+  "db_transmit_bytes_per_run": 2507967,
+  "db_transmit_bytes_per_second_at_15s": 167197,
+  "db_transmit_bytes_total": 50159349,
+  "elapsed_ms_per_run": 198,
+  "limits": [
+    "Bytes are the container interface's counters: TLS records and protocol framing included, four role pools per run.",
+    "A local Docker PostgreSQL on a shared macOS host, not the beta's RDS instance; the beta's figure is its NetworkTransmitThroughput metric."
+  ],
+  "postgres_image": "postgres@sha256:5db6dac2ef5dcff512f4f00a009c3c332b9f2f28f24277175bf3e4a3d02ef83a",
+  "runs": 20,
+  "schema_version": 1,
+  "scope": "APP-216 part 1: database bytes per readiness run on the local Docker fixture",
+  "server_version": "16.15 (Debian 16.15-1.pgdg13+2)"
+}

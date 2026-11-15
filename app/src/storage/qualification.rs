@@ -892,6 +892,18 @@ async fn campaign() {
     assert!(empty.readiness().await.is_err());
     fixture.sql("ALTER ROLE genui_worker NOCREATEDB", "genui");
     empty.readiness().await.unwrap();
+    // ADR-004 A6 (APP-216 part 1): readiness compares by digest, and a
+    // drift is refused through that path (a changed digest runs the full
+    // comparison, which names the refusal). The digest's own consistency
+    // with the service is checked after the drifts.
+    let pulled = super::catalog::compared_fully;
+    let before = pulled();
+    empty.readiness().await.unwrap();
+    assert_eq!(
+        pulled(),
+        before,
+        "a healthy readiness run pulls no document"
+    );
     for (mutate, restore) in [
         (
             "ALTER TABLE genui.internal_records DISABLE ROW LEVEL SECURITY",
@@ -910,11 +922,76 @@ async fn campaign() {
         ),
     ] {
         fixture.sql(mutate, "genui");
-        assert!(empty.readiness().await.is_err());
+        let before = pulled();
+        assert!(empty.readiness().await.is_err(), "{mutate}");
+        // A6: the drift changed the digest, so the full comparison ran and
+        // named the refusal; a digest that ignored the drift would have
+        // admitted it without pulling the document.
+        assert!(
+            pulled() > before,
+            "{mutate}: refused by the full comparison after a digest mismatch"
+        );
         fixture.sql(restore, "genui");
+        let before = pulled();
         empty.readiness().await.unwrap();
+        assert_eq!(
+            pulled(),
+            before,
+            "{restore}: the restored catalog matches by digest"
+        );
     }
-    check(&mut checks,"canonical catalog comparison rejects disabled RLS, extra UPDATE and missing named relation before reuse");
+    // A6: the digest the database computes is the SHA-256 of the document
+    // the full comparison would receive, and the service's expected digest,
+    // computed from the pinned document in the server's own jsonb text, is
+    // that same value on a healthy database; the text form the service
+    // writes is the server's, byte for byte, on the live document and on
+    // the characters `escape_json` treats specially. The two sides cannot
+    // diverge silently: a divergence fails here, not just in the traffic.
+    {
+        use sha2::{Digest, Sha256};
+        let embedded = super::catalog::Catalog::embedded().unwrap();
+        let (full_sql, digest_sql) = embedded.statements();
+        let operator = fixture.operator().await;
+        operator
+            .client
+            .batch_execute("BEGIN READ ONLY; SET LOCAL search_path=pg_catalog,pg_temp")
+            .await
+            .unwrap();
+        let body: String = operator
+            .client
+            .query_one(full_sql, &[])
+            .await
+            .unwrap()
+            .get(0);
+        let digest: Vec<u8> = operator
+            .client
+            .query_one(digest_sql, &[])
+            .await
+            .unwrap()
+            .get(0);
+        operator.client.batch_execute("ROLLBACK").await.unwrap();
+        assert_eq!(digest, Sha256::digest(body.as_bytes()).to_vec());
+        assert_eq!(digest, embedded.expected_digest().to_vec());
+        let parsed: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(super::catalog::canonical(&parsed), body);
+        let specimen = json!({
+            "b": {},
+            "aa": [[], {"k": "v"}, {"two": 2, "one": 1, "三": 3}],
+            "a": [1, -2, 0, 9007199254740993u64, true, false, null],
+            "Z": "q\"\\/\n\r\t\u{8}\u{c}\u{1}\u{1f}\u{7f}é\u{20ac}",
+        });
+        let server: String = operator
+            .client
+            .query_one(
+                "SELECT ($1::pg_catalog.text)::pg_catalog.jsonb::pg_catalog.text",
+                &[&specimen.to_string()],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(super::catalog::canonical(&specimen), server);
+    }
+    check(&mut checks,"canonical catalog comparison rejects disabled RLS, extra UPDATE and missing named relation before reuse; a healthy readiness run pulls no document, each drift is refused after a digest mismatch, and the database's digest equals the service's digest of the pinned document (ADR-004 A6)");
     readiness_hooks.arm("recycle");
     let started = WallInstant::now();
     assert_eq!(empty.readiness().await, Err(Error::Deadline));
