@@ -3248,7 +3248,7 @@ async fn campaign() {
         "{}",
         left_removed.text()
     );
-    c.fixture.sql(&format!("UPDATE genui.memberships SET status='active' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'; DELETE FROM genui.organization_permissions WHERE organization_id='{ORG}' AND principal_id='{mate_id}' AND permission='admin_policy'"), "genui");
+    c.fixture.sql(&format!("UPDATE genui.memberships SET status='active',role='member' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'"), "genui");
     assert_eq!(
         scalar(&c.fixture, &made_events("card.shared")).await,
         shared_before + 4

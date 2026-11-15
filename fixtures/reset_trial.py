@@ -183,8 +183,12 @@ def verify_seed_manifest(state, setup, bundles, seed_module, tables):
         exact_rows(tables["provider_tenant_bindings"], [{"organization_id": oid, **binding, "active": True}], "provider binding mismatch")
         exact_rows(tables["principals"], [{"organization_id": oid, **binding, "principal_id": p["principal_id"], "provider_subject": p["provider_subject"]} for p in org["principals"]], "principal inventory mismatch")
         # Migration 0023 (D6): each member sets their own display name; a seeded member has none.
-        exact_rows(tables["memberships"], [{"organization_id": oid, "principal_id": p["principal_id"], "status": p["status"], "membership_epoch": p["membership_epoch"], "display_name": None} for p in org["principals"]], "membership inventory mismatch")
-        exact_rows(tables["organization_permissions"], [{"organization_id": oid, "principal_id": ADMIN, "permission": "admin_policy"}], "organization grants mismatch")
+        # Migration 0025 (ADR-021): the seeded organization operator (the former admin_policy holder)
+        # is the organization's owner; every other seeded membership is a member. The governance
+        # table is gone: the role is the one source of admin standing.
+        exact_rows(tables["memberships"], [{"organization_id": oid, "principal_id": p["principal_id"], "status": p["status"], "membership_epoch": p["membership_epoch"], "display_name": None,
+                                            "role": "owner" if p["principal_id"] == ADMIN else "member"} for p in org["principals"]], "membership inventory mismatch")
+        require("organization_permissions" not in tables, "the governance table should be gone (migration 0025)")
         apps, work, records, app_grants, work_grants, source_grants = [], [], [], [], [], []
         for fixture in org["contract_shape_seeds"]:
             app = fixture["app_id"]

@@ -1201,7 +1201,7 @@ def definition_work_checks(pg, passed, denied):
         assert keys==[('genui.publications','u','UNIQUE (organization_id, app_id, publication_sequence)'),
                       ('genui.saved_work','f','FOREIGN KEY (organization_id, created_by) REFERENCES genui.memberships(organization_id, principal_id)')],keys
         creator=c.execute("""SELECT policyname::text,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
-          AND tablename='saved_work' AND policyname<>'tenant_scope'""").fetchall()
+          AND tablename='saved_work' AND policyname<>'tenant_scope' ORDER BY policyname""").fetchall()
         assert creator==[('saved_work_creator','RESTRICTIVE',['genui_workspace'],'INSERT',None,
                           "(created_by = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")]+[
                           r[1:] for r in viewer_policies('saved_work',named=True)],creator
