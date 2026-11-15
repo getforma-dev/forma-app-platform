@@ -22,3 +22,5 @@ Authenticated principals, tenant boundaries and service authority.
 | 164 | [APP-164: Authenticated workspace chooser and safe session switching](../0-backlog/APP-164.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | L | Backlog | APP-162, APP-163 |
 | 165 | [APP-165: Deliver workspace-aware membership and shared-app invitations](../0-backlog/APP-165.md) | [PH08](../phases/PH08.md) | S14 | IAM | P1 | M | Backlog | APP-162, APP-154 |
 | 174 | [APP-174: Detach the Northstar management secret, rotate its key and clean up the invitation input secret](../9-blocked/APP-174.md) | [PH07](../phases/PH07.md) | S13 | IAM | P1 | S | Blocked | APP-084 |
+| 227 | [APP-225: Organization roles, management and migration](../0-backlog/APP-225.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | L | Backlog | APP-188 |
+| 228 | [APP-226: Viewer read-only enforcement on every path](../0-backlog/APP-226.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | M | Backlog | APP-225 |

@@ -390,9 +390,11 @@
         "APP-221",
         "APP-222",
         "APP-223",
-        "APP-224"
+        "APP-224",
+        "APP-225",
+        "APP-226"
       ],
-      "ticket_count": 61,
+      "ticket_count": 63,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6943,6 +6945,62 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-223"
+      ]
+    },
+    {
+      "id": "APP-225",
+      "title": "Organization roles, management and migration",
+      "path": "0-backlog/APP-225.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "IAM",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "227",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: Owner/Admin/Manager/Member/Viewer; helpers are Members with app Reviewer; Viewer read-only; Owners manage owners and admins, Admins manage below admin.",
+      "Requirements": "C11, SR1",
+      "Depends on": "APP-188",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`feat/app-225-org-roles`, PR pending",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-188"
+      ]
+    },
+    {
+      "id": "APP-226",
+      "title": "Viewer read-only enforcement on every path",
+      "path": "0-backlog/APP-226.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "IAM",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "228",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: Owner/Admin/Manager/Member/Viewer; helpers are Members with app Reviewer; Viewer read-only; Owners manage owners and admins, Admins manage below admin.",
+      "Requirements": "C11, SR1",
+      "Depends on": "APP-225",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`feat/app-225-org-roles`, PR pending",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-225"
       ]
     }
   ]
