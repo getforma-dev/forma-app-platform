@@ -6861,7 +6861,7 @@
       "Depends on": "None",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`fix/app-221-sandbox-stub`, PR pending",
+      "Branch / PR": "`fix/app-221-sandbox-stub`, [PR #161](https://github.com/getforma-dev/forma-app-platform/pull/161)",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
