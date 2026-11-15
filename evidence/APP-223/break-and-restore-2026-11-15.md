@@ -1,15 +1,15 @@
 # APP-223: site footer and the Beta terms page (builder, 2026-11-15)
 
-Branch `feat/app-223-site-footer`, built on `origin/main` `b1c7fcd6` and rebased onto `18d67818` (release D close-out and the observability work; no app code). After the rebase:
+Branch `feat/app-223-site-footer`, built on `origin/main` `b1c7fcd6`, rebased onto `18d67818` (release D close-out and the observability work; no app code), and before the push onto `7c65bf57` (the APP-218 to APP-222 tickets and a probe-alarm fix; no app code). After the last rebase:
 
 | Commit | Content |
 | --- | --- |
-| `b3194676` | The footer, the notice page, the canvas links and their tests |
-| `ab6a7a92` | The HTTP smoke probe for `/notice` |
-| `7760cc03` | The service image allowlist |
-| `05ddad24` | The page-set test names the page whose footer is missing (found by B1) |
-| `742e592e` | The canvas's Feedback, Beta terms and About under one Help menu (found by the canvas measurement below) |
-| `3834ae11` | The coordinator's scope addition: Contact mails support@, a Security link, the privacy@ sentence on `/notice`, and `/.well-known/security.txt` |
+| `dc6642bf` | The footer, the notice page, the canvas links and their tests |
+| `a6028630` | The HTTP smoke probe for `/notice` |
+| `bac80c38` | The service image allowlist |
+| `9091b75a` | The page-set test names the page whose footer is missing (found by B1) |
+| `6056c14a` | The canvas's Feedback, Beta terms and About under one Help menu (found by the canvas measurement below) |
+| `44d63939` | The coordinator's scope addition: Contact mails support@, a Security link, the privacy@ sentence on `/notice`, and `/.well-known/security.txt` |
 
 The decisions are the coordinator's brief for [APP-223](../../Tickets/0-backlog/APP-223.md) and its scope addition the same day.
 
@@ -38,13 +38,13 @@ Each break was applied by a script that asserted the replaced span was unique. T
 
 | Break | File: change | Command | Caught | What failed | Restored |
 | --- | --- | --- | --- | --- | --- |
-| B1: no footer on `/signin` | `app/admin/src/signin/app.tsx`: the `<SiteFooter />` line removed | `cargo test -p forma-app-platform --bin forma-app-platform -- site_footer themed_404` | yes, 2 tests | `document_pages_carry_the_one_site_footer_and_the_canvas_none` (`main.rs:1219`: "/signin: one site footer", left 0, right 1); `browser_navigations_get_one_themed_404_whatever_the_path` (`main.rs:1024`, the reference footer it takes from the sign-in page is missing). The first run, before `05ddad24`, failed in the helper without naming the page; the test now names it. | yes, SHA-256 `33318e44…` before and after |
+| B1: no footer on `/signin` | `app/admin/src/signin/app.tsx`: the `<SiteFooter />` line removed | `cargo test -p forma-app-platform --bin forma-app-platform -- site_footer themed_404` | yes, 2 tests | `document_pages_carry_the_one_site_footer_and_the_canvas_none` (`main.rs:1219`: "/signin: one site footer", left 0, right 1); `browser_navigations_get_one_themed_404_whatever_the_path` (`main.rs:1024`, the reference footer it takes from the sign-in page is missing). The first run, before `9091b75a`, failed in the helper without naming the page; the test now names it. | yes, SHA-256 `33318e44…` before and after |
 | B2: an external link without `rel="noopener"` | `app/admin/src/site/footer.tsx`: the Blog link lost `rel="noopener"` | the same command | yes, 1 test | `the_site_footer_links_are_pinned` (`main.rs:1279`: the sixth link was `href="https://getforma.dev/blog">Blog`). The page-set test passed, as it should: the footer was still one and the same everywhere. | yes, SHA-256 `f9b6eb37…` before and after |
 | B3: `/notice` for any method | `app/src/main.rs`: `.route("/notice", get(notice))` became `any(notice)` | `cargo test -p forma-app-platform --bin forma-app-platform -- notice_page` | yes | `notice_page_is_public_and_shows_the_one_beta_notice` (`main.rs:1380`: `POST /notice` answered 200 with the page, expected 404 and the uniform JSON) | yes, SHA-256 `b281c54b…` matched |
 
 ## Screenshots
 
-Pinned Playwright 1.64.1 (`spikes/APP-003/admin`, `npm ci` in this worktree with no browser download), driving installed Chrome headless with `reducedMotion: 'reduce'`. The pages come from `target/debug/forma-app-platform` on `127.0.0.1` with an OS-chosen port and the HTTP smoke's synthetic configuration (no registry, no database, no provider), after `3834ae11`. The full pages are captured, so the footer shows.
+Pinned Playwright 1.64.1 (`spikes/APP-003/admin`, `npm ci` in this worktree with no browser download), driving installed Chrome headless with `reducedMotion: 'reduce'`. The pages come from `target/debug/forma-app-platform` on `127.0.0.1` with an OS-chosen port and the HTTP smoke's synthetic configuration (no registry, no database, no provider), after `44d63939`. The full pages are captured, so the footer shows.
 
 | File | What it shows |
 | --- | --- |
@@ -67,7 +67,7 @@ Measured in the same pass:
 
 The brief put "Beta terms" and "About" as two more links beside Feedback. The first pass measured the canvas top bar on this worktree's dev stand (`just dev clean -d`, Alex Rivera, an organization admin with no name yet) at 761, 900, 1024, 1280 and 1440 wide. Its row already overflows on `main`: at 1280 the avatar and Sign out are cut off, and only at 1440 does everything fit, with no spare width. The two links widened the bar by about 125 px. At 1280 the name menu was then cut off as well, and at 1440 Sign out was cut off where `main` fits.
 
-So `742e592e` puts Feedback, Beta terms and About under one "Help" `<details>` menu in place of the Feedback link. A short recheck on the same stand (canvas only, no page screenshots) compared the bar's `scrollWidth` with the Help menu against the same page with the menu swapped back to `main`'s single Feedback link:
+So `6056c14a` puts Feedback, Beta terms and About under one "Help" `<details>` menu in place of the Feedback link. A short recheck on the same stand (canvas only, no page screenshots) compared the bar's `scrollWidth` with the Help menu against the same page with the menu swapped back to `main`'s single Feedback link:
 
 | Width | Help menu | `main`'s Feedback link | Cut off with Help | Cut off on `main` |
 | --- | --- | --- | --- | --- |
@@ -87,9 +87,9 @@ The launcher, the two Playwright scripts and the dev stand were one-off; the scr
 
 Local macOS, toolchains from `just setup` in the worktree `forma-footer`, Docker Desktop up. CI was not observed by the builder.
 
-- `just check` at `7760cc03`'s pre-rebase twin (`107185d0`, on `b1c7fcd6`): 20 steps ok (fmt, admin, clippy, clippy-dev, test with the library at 514 passed and 40 ignored and the binary at 14 passed, http-smoke, msrv with Rust 1.85.0, catalog, infra, py-scripts, py-runtime, shared-broker, py-qualification, py-app-scripts, py-ops, py-infra, schema-pins, contracts, board, bash-n). One failed: `py-promotion`'s `test_committed_release_is_bound_to_this_tree`, because that base still held release D's committed record (`ops/promotion/schema-release.json`), which binds `main`'s contract digest and so refuses any change to it. `origin/main` `18d67818` closed release D and removed that record. After the rebase, `just check py-promotion` passed (281 tests, 5 skipped).
-- `just check` at the code head `3834ae11` (after the rebase and the scope addition): all 21 steps ok (fmt, admin, clippy, clippy-dev, test with the library at 514 passed and 40 ignored, the binary at 15 passed and doctests 3 passed, http-smoke, msrv, catalog, infra, py-scripts, py-runtime, shared-broker, py-qualification, py-app-scripts, py-ops, py-promotion, py-infra, schema-pins, contracts, board, bash-n).
+- `just check` at `bac80c38`'s pre-rebase twin (`107185d0`, on `b1c7fcd6`): 20 steps ok (fmt, admin, clippy, clippy-dev, test with the library at 514 passed and 40 ignored and the binary at 14 passed, http-smoke, msrv with Rust 1.85.0, catalog, infra, py-scripts, py-runtime, shared-broker, py-qualification, py-app-scripts, py-ops, py-infra, schema-pins, contracts, board, bash-n). One failed: `py-promotion`'s `test_committed_release_is_bound_to_this_tree`, because that base still held release D's committed record (`ops/promotion/schema-release.json`), which binds `main`'s contract digest and so refuses any change to it. `origin/main` `18d67818` closed release D and removed that record. After the rebase, `just check py-promotion` passed (281 tests, 5 skipped).
+- `just check` at the code head `3834ae11` (after the first rebase and the scope addition; `44d63939` after the last rebase, which changed no app code): all 21 steps ok (fmt, admin, clippy, clippy-dev, test with the library at 514 passed and 40 ignored, the binary at 15 passed and doctests 3 passed, http-smoke, msrv, catalog, infra, py-scripts, py-runtime, shared-broker, py-qualification, py-app-scripts, py-ops, py-promotion, py-infra, schema-pins, contracts, board, bash-n).
 - Campaigns after the rebase, each on its own Docker fixture, each exit 0: `just campaign session`; `just campaign invite` (15 checks); `just campaign org-admin-routes` (5 checks); `just campaign shared-identity`.
 - The break-and-restore commands are in the table above.
-- `python3 Tickets/_tools/board.py render` and `check`: OK, 217 tickets.
-- The **deployment contract digest** (`ops.promotion.candidate.deployment_contract_digest`) is `8578d6ac6fc95d40cda7055a3724b194a0a3314c7344bd295b8aeb2c324b6c48` at `origin/main` `18d67818` (and at `b1c7fcd6`). At the branch head it is `79263fbbdbf4c59ced39902f76b2a352f443c3a35dfad6a926b7e23912f081b1`. The only contract file changed is the root `.dockerignore` (+7 lines). Nothing changed under `app/migrations`, `infra/src`, the Dockerfiles, `app/qualification/Dockerfile.dockerignore`, the operator context or `runtime.py`. The branch therefore needs a reviewed contract-only release (APP-210) to promote. This builder did not create one.
+- `python3 Tickets/_tools/board.py render` and `check`: OK, 217 tickets before the last rebase. After it, the conflicting generated views were taken from `main` and rendered again: OK, 222 tickets. `just check py-promotion board` passed on the final base.
+- The **deployment contract digest** (`ops.promotion.candidate.deployment_contract_digest`) is `8578d6ac6fc95d40cda7055a3724b194a0a3314c7344bd295b8aeb2c324b6c48` at `origin/main` `7c65bf57` (and at `18d67818` and `b1c7fcd6`). At the branch head it is `79263fbbdbf4c59ced39902f76b2a352f443c3a35dfad6a926b7e23912f081b1`. The only contract file changed is the root `.dockerignore` (+7 lines). Nothing changed under `app/migrations`, `infra/src`, the Dockerfiles, `app/qualification/Dockerfile.dockerignore`, the operator context or `runtime.py`. The branch therefore needs a reviewed contract-only release (APP-210) to promote. This builder did not create one.
