@@ -2040,6 +2040,31 @@ pub(super) mod refresh_herd {
         (report, refused)
     }
 
+    /// The CI gate's verdict (Victor, 2026-11-15: "approve the 2-of-3 gate").
+    /// On GitHub's shared runners one herd of three can run slow. Release
+    /// C's PR and PR #130 measured herds at 6.9, 6.8 and 9.4-9.9 s p95 on
+    /// the same code that measured 4.4 s earlier the same day. So the gate
+    /// passes when every herd has no terminal failure and a 200 command, and
+    /// at least two of the three herds meet every run A criterion. Gate C
+    /// must still reproduce the APP-193 finding, and the 26-page
+    /// measurement keeps every herd (`measurement`).
+    fn gate_verdict(run: &Value) -> bool {
+        let herds = run["per_herd"].as_array().unwrap();
+        let safe = herds.iter().all(|herd| {
+            herd["criteria"]["no_terminal_failure"] == true
+                && herd["criteria"]["command_200"] == true
+        });
+        let full = herds
+            .iter()
+            .filter(|herd| {
+                herd["criteria"]
+                    .as_object()
+                    .is_some_and(|criteria| criteria.values().all(|met| *met == true))
+            })
+            .count();
+        safe && full + 1 >= herds.len()
+    }
+
     /// The 26-page measurement's own criteria (APP-197, Fable advisor in lieu
     /// of Victor): no terminal failure, every page current within 10 s, p95
     /// within 6 s and the owner's command under 1.5 s, in every herd; with
@@ -2931,7 +2956,9 @@ pub(super) mod refresh_herd {
             pages: GATE_PAGES,
             p95_within: GATE_P95_WITHIN,
         };
-        let (gate_a, passed_gate) = run(&bench, gate, &operator).await;
+        let (gate_a, every_herd) = run(&bench, gate, &operator).await;
+        let passed_gate = gate_verdict(&gate_a);
+        report.insert("gate_every_herd".into(), json!(every_herd));
         println!("APP195 gate A: {gate_a}");
         runs.push(gate_a);
         let gate_c = Plan {
@@ -3056,7 +3083,7 @@ pub(super) mod refresh_herd {
         );
         assert!(
             passed_gate,
-            "gate A meets every APP-195 run A criterion with {GATE_PAGES} pages"
+            "gate A: every herd safe and at least two of three meet every APP-195 run A criterion with {GATE_PAGES} pages"
         );
     }
 }
