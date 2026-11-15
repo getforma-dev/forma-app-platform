@@ -84,7 +84,21 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
                 assert error.code==404 and error.read()==b'{"code":"not_found","status":404}' and error.headers['Content-Type']=='application/problem+json'
                 assert error.headers['Strict-Transport-Security']=='max-age=31536000; includeSubDomains'
             else: raise AssertionError('protected route answered without a session')
-        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True}))
+        # APP-217: a browser navigation to the same protected path gets the
+        # themed 404 page instead, with its status, policy and headers; the
+        # page names nothing from the request, and its mascot is served.
+        navigation={'Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document','Accept':'text/html'}
+        try: urllib.request.urlopen(urllib.request.Request(origin+'/workspace?probe=zq7',headers=navigation),timeout=3)
+        except urllib.error.HTTPError as error:
+            body=error.read()
+            assert error.code==404 and error.headers['Content-Type']=='text/html; charset=utf-8' and error.headers['Cache-Control']=='no-store'
+            assert "frame-ancestors 'none'" in error.headers['Content-Security-Policy'] and error.headers.get('Set-Cookie') is None
+            assert error.headers['Strict-Transport-Security']=='max-age=31536000; includeSubDomains'
+            assert b'Specimen not found' in body and b'<script' not in body and b'/workspace' not in body and b'zq7' not in body
+        else: raise AssertionError('protected route answered without a session')
+        with urllib.request.urlopen(origin+'/_assets/forma-isotope.svg',timeout=3) as response:
+            assert response.status==200 and response.headers.get_content_type()=='image/svg+xml' and response.read().startswith(b'<svg')
+        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True,'navigation_error_page':404}))
     finally:
         process.terminate()
         try: process.communicate(timeout=5)
