@@ -15,7 +15,7 @@ Written 2026-11-15 after Release C went live on beta. It covers what remains for
 - **Beta runs releases A, B and C.**
   - Release C is candidate `ffba79bd` (tag `beta/20261114-ffba79b`; [record](../../evidence/APP-209/release-2026-11-14.md)).
   - Health is 200 and promotions are paused.
-- **The automatic stop is 2026-12-12T14:00Z** (since release E on 2026-11-15; release D set Dec 13 08:00Z; the security release set Dec 14 02:00Z, Release C Dec 14 20:00Z). Every release moves it 18 hours earlier.
+- **The automatic stop is 2026-12-11T20:00Z** (since release E on 2026-11-15; release D set Dec 13 08:00Z; the security release set Dec 14 02:00Z, Release C Dec 14 20:00Z). Every release moves it 18 hours earlier.
 - **Alarms** go to `victor@getforma.dev`, and their subscription is confirmed. That covers five alarms plus the $248 monthly budget.
 - **fAuth**, our own sign-in service (`gatewasm`, `auth-staging.getforma.dev`):
   - trial tenant user limit: 1000 by default;
