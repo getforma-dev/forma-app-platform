@@ -1,0 +1,543 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Forma security events (infra review 2026-11-14 H3, Victor's decision 2026-11-15: free observability only, no GuardDuty, Security Hub, Config or Inspector). A standalone stack beside GenuiSyntheticFoundation, deployed in us-east-1 where the global IAM and console sign-in events arrive: one multi-region CloudTrail trail of management events (the free copy) into a private SSE-S3 bucket, an SNS email topic, EventBridge rules that mail a one-line notice for root use, console sign-in failures and sign-ins without MFA, IAM changes, CloudTrail tampering, opened security groups, KMS key disabling, S3 exposure, RDS deletion or exposure and new IAM Access Analyzer findings, and the free account-level Access Analyzer. It creates no IAM resource and touches nothing of the beta, so promotion's infrastructure digest is untouched. No data events, Insights or CloudWatch Logs delivery: those cost money. Deploy and delete it by hand with the operator's own identity; confirm the subscription email before relying on it.",
+  "Parameters": {
+    "NotificationEmail": {
+      "Type": "String",
+      "AllowedPattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+      "ConstraintDescription": "One email address.",
+      "Description": "Victor's address: every security notice goes here. SNS sends a confirmation first."
+    }
+  },
+  "Resources": {
+    "TrailBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {"ServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}, "BucketKeyEnabled": true}
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {"Rules": [{"ObjectOwnership": "BucketOwnerEnforced"}]},
+        "VersioningConfiguration": {"Status": "Enabled"},
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "archive-after-30-days-expire-after-a-year",
+              "Status": "Enabled",
+              "Transitions": [{"StorageClass": "GLACIER_IR", "TransitionInDays": 30}],
+              "ExpirationInDays": 365,
+              "NoncurrentVersionExpiration": {"NoncurrentDays": 30},
+              "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}
+            }
+          ]
+        }
+      }
+    },
+    "TrailBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {"Ref": "TrailBucket"},
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AWSCloudTrailAclCheck",
+              "Effect": "Allow",
+              "Principal": {"Service": "cloudtrail.amazonaws.com"},
+              "Action": "s3:GetBucketAcl",
+              "Resource": {"Fn::GetAtt": ["TrailBucket", "Arn"]},
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": {"Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-management"}
+                }
+              }
+            },
+            {
+              "Sid": "AWSCloudTrailWrite",
+              "Effect": "Allow",
+              "Principal": {"Service": "cloudtrail.amazonaws.com"},
+              "Action": "s3:PutObject",
+              "Resource": {"Fn::Sub": "${TrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*"},
+              "Condition": {
+                "StringEquals": {
+                  "s3:x-amz-acl": "bucket-owner-full-control",
+                  "aws:SourceArn": {"Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-management"}
+                }
+              }
+            },
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {"Fn::GetAtt": ["TrailBucket", "Arn"]},
+                {"Fn::Sub": "${TrailBucket.Arn}/*"}
+              ],
+              "Condition": {"Bool": {"aws:SecureTransport": "false"}}
+            }
+          ]
+        }
+      }
+    },
+    "ManagementTrail": {
+      "Type": "AWS::CloudTrail::Trail",
+      "DependsOn": "TrailBucketPolicy",
+      "Properties": {
+        "TrailName": {"Fn::Sub": "${AWS::StackName}-management"},
+        "S3BucketName": {"Ref": "TrailBucket"},
+        "IsLogging": true,
+        "IsMultiRegionTrail": true,
+        "IncludeGlobalServiceEvents": true,
+        "EnableLogFileValidation": true,
+        "EventSelectors": [
+          {"ReadWriteType": "All", "IncludeManagementEvents": true}
+        ]
+      }
+    },
+    "SecurityTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "DisplayName": "Forma security events"
+      }
+    },
+    "SecurityTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "Topics": [{"Ref": "SecurityTopic"}],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "EventBridgePublish",
+              "Effect": "Allow",
+              "Principal": {"Service": "events.amazonaws.com"},
+              "Action": "sns:Publish",
+              "Resource": {"Ref": "SecurityTopic"},
+              "Condition": {"StringEquals": {"aws:SourceAccount": {"Ref": "AWS::AccountId"}}}
+            }
+          ]
+        }
+      }
+    },
+    "EmailSubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "Protocol": "email",
+        "Endpoint": {"Ref": "NotificationEmail"},
+        "TopicArn": {"Ref": "SecurityTopic"}
+      }
+    },
+    "RootSignInRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-root-sign-in"},
+        "Description": "The root account signed in to the console, or tried to. Root has MFA and is never used for daily work: any sign-in is worth a look.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.signin"],
+          "detail-type": ["AWS Console Sign In via CloudTrail"],
+          "detail": {
+            "eventName": ["ConsoleLogin"],
+            "userIdentity": {"type": ["Root"]}
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "who": "$.detail.userIdentity.arn",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "result": "$.detail.responseElements.ConsoleLogin",
+                "mfa": "$.detail.additionalEventData.MFAUsed"
+              },
+              "InputTemplate": "\"Root console sign-in <result> by <who> at <when> from <ip>; MFA used: <mfa>\""
+            }
+          }
+        ]
+      }
+    },
+    "RootApiCallRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-root-api-call"},
+        "Description": "The root account made a mutating API call itself (not an AWS service acting for it, and not a read). Read-only root calls are left out so a billing visit does not mail dozens of notices; the sign-in rule covers the visit itself.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "userIdentity": {"type": ["Root"], "invokedBy": [{"exists": false}]},
+            "readOnly": [false]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "service": "$.detail.eventSource",
+                "who": "$.detail.userIdentity.arn",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "region": "$.detail.awsRegion",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"Root API call: <name> on <service> by <who> at <when> from <ip> in <region>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "ConsoleSignInFailureRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-console-sign-in-failure"},
+        "Description": "A console sign-in failed. One is a typo; a run of them from one address is a password guess.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.signin"],
+          "detail-type": ["AWS Console Sign In via CloudTrail"],
+          "detail": {
+            "eventName": ["ConsoleLogin"],
+            "responseElements": {"ConsoleLogin": ["Failure"]}
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "who": "$.detail.userIdentity.userName",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "message": "$.detail.errorMessage"
+              },
+              "InputTemplate": "\"Console sign-in FAILED for <who> (<kind>) at <when> from <ip>: <message>\""
+            }
+          }
+        ]
+      }
+    },
+    "ConsoleSignInWithoutMfaRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-console-sign-in-without-mfa"},
+        "Description": "An IAM user or root signed in to the console without MFA (H4: every console identity should carry a device). Federated sign-ins are left out because their MFA happens at the identity provider.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.signin"],
+          "detail-type": ["AWS Console Sign In via CloudTrail"],
+          "detail": {
+            "eventName": ["ConsoleLogin"],
+            "userIdentity": {"type": ["IAMUser", "Root"]},
+            "responseElements": {"ConsoleLogin": ["Success"]},
+            "additionalEventData": {"MFAUsed": ["No"]}
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress"
+              },
+              "InputTemplate": "\"Console sign-in WITHOUT MFA by <who> (<kind>) at <when> from <ip>\""
+            }
+          }
+        ]
+      }
+    },
+    "IamChangeRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-iam-change"},
+        "Description": "A new user, access key or console password; a user, role or group policy attached, put or detached; a role's trust changed; an MFA device deactivated or deleted. The promotion pipeline never makes these calls; a release whose change set touches the stack's roles does, once, through CloudFormation.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.iam"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["iam.amazonaws.com"],
+            "eventName": [
+              "CreateUser", "CreateAccessKey", "CreateLoginProfile",
+              "AttachUserPolicy", "PutUserPolicy", "DetachUserPolicy",
+              "AttachRolePolicy", "PutRolePolicy", "DetachRolePolicy",
+              "AttachGroupPolicy", "PutGroupPolicy", "DetachGroupPolicy",
+              "UpdateAssumeRolePolicy", "DeactivateMFADevice", "DeleteVirtualMFADevice"
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "target": "$.detail.requestParameters",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"IAM change: <name> by <who> (<kind>) at <when> from <ip>; request: <target>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "CloudTrailTamperRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-cloudtrail-tamper"},
+        "Description": "A trail was stopped, deleted, updated or had its event selectors changed. This stack's own creation and updates make one PutEventSelectors or UpdateTrail call each; anything else is someone covering tracks.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.cloudtrail"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["cloudtrail.amazonaws.com"],
+            "eventName": ["StopLogging", "DeleteTrail", "UpdateTrail", "PutEventSelectors"]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "target": "$.detail.requestParameters",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"CloudTrail change: <name> by <who> (<kind>) at <when> from <ip>; request: <target>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "SecurityGroupIngressRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-security-group-ingress"},
+        "Description": "A security group admitted new inbound traffic. The beta's groups are created by its stack and change only in a release; the fAuth host's group changes only when its stack is recreated.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.ec2"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["ec2.amazonaws.com"],
+            "eventName": ["AuthorizeSecurityGroupIngress"]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "target": "$.detail.requestParameters",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"Security group opened: <name> by <who> (<kind>) at <when> from <ip>; request: <target>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "KmsKeyRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-kms-key"},
+        "Description": "A customer key was disabled or scheduled for deletion. Every beta secret and the evidence bucket depend on one; a disabled key stops the service at its next secret read.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.kms"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["kms.amazonaws.com"],
+            "eventName": ["DisableKey", "ScheduleKeyDeletion"]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "target": "$.detail.requestParameters",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"KMS key change: <name> by <who> (<kind>) at <when> from <ip>; request: <target>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "S3ExposureRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-s3-exposure"},
+        "Description": "A bucket policy or ACL was written, or a bucket's or the account's public access block was written or deleted. Bucket-level management events only: the promotion pipeline's object reads and writes are data events and never match. This stack's own bucket makes one PutBucketPolicy and one PutBucketPublicAccessBlock call at creation.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.s3"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["s3.amazonaws.com"],
+            "eventName": [
+              "PutBucketPolicy", "PutBucketAcl",
+              "PutBucketPublicAccessBlock", "DeleteBucketPublicAccessBlock",
+              "PutAccountPublicAccessBlock", "DeleteAccountPublicAccessBlock"
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "bucket": "$.detail.requestParameters.bucketName",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"S3 exposure change: <name> on bucket <bucket> by <who> (<kind>) at <when> from <ip>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "RdsExposureRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-rds-exposure"},
+        "Description": "A database instance or snapshot was deleted, or an instance was modified to be publicly accessible. The restore drill (runbook 11.2) deletes its scratch instance and the purge deletes the drill snapshot: one notice each, expected on those days.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.rds"],
+          "detail-type": ["AWS API Call via CloudTrail"],
+          "detail": {
+            "eventSource": ["rds.amazonaws.com"],
+            "$or": [
+              {"eventName": ["DeleteDBInstance", "DeleteDBSnapshot"]},
+              {"eventName": ["ModifyDBInstance"], "requestParameters": {"publiclyAccessible": [true]}}
+            ]
+          }
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "name": "$.detail.eventName",
+                "who": "$.detail.userIdentity.arn",
+                "kind": "$.detail.userIdentity.type",
+                "when": "$.detail.eventTime",
+                "ip": "$.detail.sourceIPAddress",
+                "target": "$.detail.requestParameters",
+                "error": "$.detail.errorCode"
+              },
+              "InputTemplate": "\"RDS change: <name> by <who> (<kind>) at <when> from <ip>; request: <target>. Error code, if any: <error>\""
+            }
+          }
+        ]
+      }
+    },
+    "AccessAnalyzerFindingRule": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-access-analyzer-finding"},
+        "Description": "IAM Access Analyzer found a resource reachable from outside the account (a new active finding, or a resolved one reopened). The two GitHub OIDC roles and the SES identity are expected findings at the first scan; archive them in the console.",
+        "State": "ENABLED",
+        "EventPattern": {
+          "source": ["aws.access-analyzer"],
+          "detail-type": ["Access Analyzer Finding"],
+          "detail": {"status": ["ACTIVE"]}
+        },
+        "Targets": [
+          {
+            "Id": "email-topic",
+            "Arn": {"Ref": "SecurityTopic"},
+            "InputTransformer": {
+              "InputPathsMap": {
+                "status": "$.detail.status",
+                "type": "$.detail.resourceType",
+                "resource": "$.detail.resource",
+                "principal": "$.detail.principal",
+                "public": "$.detail.isPublic",
+                "when": "$.time"
+              },
+              "InputTemplate": "\"IAM Access Analyzer finding (<status>): <type> <resource> reachable by <principal>; public: <public>; at <when>\""
+            }
+          }
+        ]
+      }
+    },
+    "AccountAnalyzer": {
+      "Type": "AWS::AccessAnalyzer::Analyzer",
+      "Properties": {
+        "AnalyzerName": {"Fn::Sub": "${AWS::StackName}-account"},
+        "Type": "ACCOUNT"
+      }
+    }
+  },
+  "Outputs": {
+    "TrailBucketName": {
+      "Description": "The private bucket the trail writes to (AWSLogs/<account>/CloudTrail/<region>/...). Retained when the stack is deleted.",
+      "Value": {"Ref": "TrailBucket"}
+    },
+    "TrailArn": {
+      "Description": "The multi-region management trail; `aws cloudtrail get-trail-status --name <this>` shows IsLogging true.",
+      "Value": {"Fn::GetAtt": ["ManagementTrail", "Arn"]}
+    },
+    "SecurityTopicArn": {
+      "Description": "The topic every rule publishes to; `aws sns publish --topic-arn <this> --message test` sends the test email.",
+      "Value": {"Ref": "SecurityTopic"}
+    },
+    "AnalyzerArn": {
+      "Description": "The account-level IAM Access Analyzer; `aws accessanalyzer list-findings --analyzer-arn <this>` lists what it found.",
+      "Value": {"Fn::GetAtt": ["AccountAnalyzer", "Arn"]}
+    }
+  }
+}

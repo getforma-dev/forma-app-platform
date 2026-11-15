@@ -46,3 +46,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 211 | [APP-209: Release C: the participation primitives as one normal promotion](../0-backlog/APP-209.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-202, APP-203, APP-204, APP-205, APP-206, APP-207 |
 | 212 | [APP-210: Reviewed contract-only release: image contexts may change without a migration](../0-backlog/APP-210.md) | [PH09](../phases/PH09.md) | S15 | OPS | P0 | S | Backlog | APP-175, APP-194 |
 | 215 | [APP-212: End-of-test purge deletes guest links at schema 24](../0-backlog/APP-212.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-188, APP-194 |
+| 216 | [APP-214: WAF and free security-event alerts (infra review H2/H3)](../0-backlog/APP-214.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-187 |

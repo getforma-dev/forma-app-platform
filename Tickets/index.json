@@ -379,9 +379,10 @@
         "APP-210",
         "APP-211",
         "APP-213",
-        "APP-212"
+        "APP-212",
+        "APP-214"
       ],
-      "ticket_count": 50,
+      "ticket_count": 51,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6623,6 +6624,34 @@
       "dependencies": [
         "APP-188",
         "APP-194"
+      ]
+    },
+    {
+      "id": "APP-214",
+      "title": "WAF and free security-event alerts (infra review H2/H3)",
+      "path": "0-backlog/APP-214.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "216",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15, on the infra review of 2026-11-14 (H2, H3, M1): no GuardDuty, Security Hub, Config or Inspector; observability free or nearly free; the WAF at about $7 a month; the M1 alarms at under $1; every alert by email to his address.",
+      "Requirements": "SR10, SR12",
+      "Depends on": "APP-187",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`ops/waf-and-security-events`, [PR #136](https://github.com/getforma-dev/forma-app-platform/pull/136) (open; not deployed, not merged)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-187"
       ]
     }
   ]
