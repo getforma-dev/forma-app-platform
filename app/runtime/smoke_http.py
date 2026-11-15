@@ -92,7 +92,7 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
         with urllib.request.urlopen(origin+'/.well-known/security.txt',timeout=3) as response:
             assert response.status==200 and response.headers['Content-Type']=='text/plain; charset=utf-8'
             assert response.headers['X-Content-Type-Options']=='nosniff' and response.headers['Referrer-Policy']=='no-referrer'
-            assert response.read()==b'Contact: mailto:security@getforma.dev\nExpires: 2027-11-15T00:00:00.000Z\nPreferred-Languages: en\nCanonical: https://beta.getforma.dev/.well-known/security.txt\n'
+            assert response.read()==b'Contact: mailto:security@getforma.dev\nExpires: 2027-11-01T00:00:00.000Z\nPreferred-Languages: en\nCanonical: https://beta.getforma.dev/.well-known/security.txt\n'
         try: urllib.request.urlopen(urllib.request.Request(origin+'/.well-known/security.txt',data=b'',method='POST'),timeout=3)
         except urllib.error.HTTPError as error: assert error.code==404 and error.read()==b'{"code":"not_found","status":404}'
         else: raise AssertionError('POST /.well-known/security.txt answered')

@@ -1390,7 +1390,7 @@ mod tests {
                 r#"href="/signin">Sign in"#,
                 r#"href="/invite">Have an invitation?"#,
                 r#"href="https://getforma.dev" rel="noopener">Forma Stack"#,
-                r#"href="https://getforma.dev/blog" rel="noopener">Blog"#,
+                r#"href="https://getforma.dev/blog/" rel="noopener">Blog"#,
                 r#"href="https://getforma.dev/labs/" rel="noopener">Server lab"#,
                 r#"href="mailto:support@getforma.dev">Contact"#,
                 r#"href="/notice">Beta terms &amp; privacy"#,
@@ -1440,6 +1440,13 @@ mod tests {
         }
         assert_eq!(head[header::CACHE_CONTROL], "no-store");
         assert_eq!(head[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        // The page contract every SSR page carries (refusals alone use `no-referrer`):
+        // `/notice` answers exactly as `/about` does.
+        let (_, about, _) = send(&all.site, "GET", "/about", &[]).await;
+        assert_eq!(
+            head[header::REFERRER_POLICY],
+            about[header::REFERRER_POLICY]
+        );
         assert_eq!(
             head[header::STRICT_TRANSPORT_SECURITY],
             genui::http::STRICT_TRANSPORT_SECURITY
@@ -1490,6 +1497,12 @@ mod tests {
                     "{method} {path}"
                 );
                 assert_eq!(head, unknown, "{method} {path}");
+                // Header order too (review of PR #149, MINOR 1): `HeaderMap` equality ignores it.
+                assert_eq!(
+                    head.keys().collect::<Vec<_>>(),
+                    unknown.keys().collect::<Vec<_>>(),
+                    "order"
+                );
                 assert!(head.get(header::ALLOW).is_none());
             }
         }
@@ -1509,7 +1522,7 @@ mod tests {
         let path = "/.well-known/security.txt";
         assert_eq!(path, genui::product::SECURITY_TXT_PATH);
         let expected = "Contact: mailto:security@getforma.dev\n\
-                        Expires: 2027-11-15T00:00:00.000Z\n\
+                        Expires: 2027-11-01T00:00:00.000Z\n\
                         Preferred-Languages: en\n\
                         Canonical: https://beta.getforma.dev/.well-known/security.txt\n";
         assert_eq!(genui::product::SECURITY_TXT, expected);
@@ -1541,6 +1554,12 @@ mod tests {
                 "{method}"
             );
             assert_eq!(head, unknown, "{method}");
+            // Header order too (review of PR #149, MINOR 1): `HeaderMap` equality ignores it.
+            assert_eq!(
+                head.keys().collect::<Vec<_>>(),
+                unknown.keys().collect::<Vec<_>>(),
+                "order"
+            );
             assert!(head.get(header::ALLOW).is_none());
         }
         // A browser that posts to it gets the themed 404 like any wrong method.

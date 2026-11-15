@@ -28,7 +28,7 @@ pub const SECURITY_TXT_PATH: &str = "/.well-known/security.txt";
 /// problem. Static; renew `Expires` before it passes.
 pub const SECURITY_TXT: &str = concat!(
     "Contact: mailto:security@getforma.dev\n",
-    "Expires: 2027-11-15T00:00:00.000Z\n",
+    "Expires: 2027-11-01T00:00:00.000Z\n",
     "Preferred-Languages: en\n",
     "Canonical: https://beta.getforma.dev/.well-known/security.txt\n",
 );

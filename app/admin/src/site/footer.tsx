@@ -22,7 +22,7 @@ export function SiteFooter() {
           <h2 class="site-footer-heading">Forma</h2>
           <ul>
             <li><a href="https://getforma.dev" rel="noopener">Forma Stack</a></li>
-            <li><a href="https://getforma.dev/blog" rel="noopener">Blog</a></li>
+            <li><a href="https://getforma.dev/blog/" rel="noopener">Blog</a></li>
             <li><a href="https://getforma.dev/labs/" rel="noopener">Server lab</a></li>
           </ul>
         </div>
