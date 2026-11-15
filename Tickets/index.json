@@ -388,9 +388,10 @@
         "APP-219",
         "APP-220",
         "APP-221",
-        "APP-222"
+        "APP-222",
+        "APP-223"
       ],
-      "ticket_count": 59,
+      "ticket_count": 60,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6885,6 +6886,34 @@
       "dependencies": [
         "APP-215",
         "APP-219"
+      ]
+    },
+    {
+      "id": "APP-223",
+      "title": "Site footer and a public Beta terms page",
+      "path": "0-backlog/APP-223.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "225",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: \"do we want to create a app wide footer? ... does the app need a like more SaaS like professional look with contact about blog pages? ... We don't have to go to crazy but we also don't have to have nothing.\" The coordinator fixed the design the same day: one static, server-rendered footer on the document-style pages, a public `/notice` page rendered from the one notice source, and two links in the full-screen canvas. After Victor created the support@, privacy@ and security@getforma.dev aliases, the coordinator added purpose-routed mail and RFC 9116's `security.txt` the same day.",
+      "Requirements": "C11, SR1",
+      "Depends on": "APP-217",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`feat/app-223-site-footer`, PR_LINK, open",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-217"
       ]
     }
   ]

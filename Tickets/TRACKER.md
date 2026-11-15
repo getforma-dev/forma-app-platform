@@ -227,3 +227,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 222 | [APP-220: Observability at scale: tracing, error tracking, per-route metrics, status page, paging, synthetic journeys, tenant metering](0-backlog/APP-220.md) | [PH09](phases/PH09.md) | S15 | OPS | P3 | L | Backlog | APP-219 |
 | 223 | [APP-221: Flaky test: imports::sandbox protocol_and_identity_violations_are_failures](0-backlog/APP-221.md) | [PH09](phases/PH09.md) | S15 | OPS | P2 | S | Backlog | None |
 | 224 | [APP-222: AI usage done the professional way: typed caller, durable usage ledger, warnings, and allowances as plan data](0-backlog/APP-222.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | L | Backlog | APP-215, APP-219 |
+| 225 | [APP-223: Site footer and a public Beta terms page](0-backlog/APP-223.md) | [PH09](phases/PH09.md) | S15 | UX | P2 | M | Backlog | APP-217 |
