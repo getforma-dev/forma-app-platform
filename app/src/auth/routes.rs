@@ -97,6 +97,29 @@ pub(crate) fn neutral_failure(auth: &Auth) -> Response {
     signin(auth, None, true)
 }
 
+/// APP-219: one refused sign-in, `auth.signin_refused`, decided at the start
+/// (`POST /signin`) or at the return (`GET /auth/callback`), by its kind only:
+/// never the handle, an address, a cookie or the provider's words.
+pub(crate) fn signin_refused(stage: &'static str, kind: &'static str) {
+    tracing::info!(
+        event = "auth.signin_refused",
+        stage,
+        kind,
+        "sign-in refused"
+    );
+}
+/// APP-219: one refused admission, `admission.refused`: an invitation code
+/// at entry (`invite`, `POST /invite/validate`) or a verified identity's
+/// workspace admission at the return (`callback`), by its code only.
+pub(crate) fn admission_refused(stage: &'static str, code: &'static str) {
+    tracing::info!(
+        event = "admission.refused",
+        stage,
+        code,
+        "admission refused"
+    );
+}
+
 /// The issuer whose closed-registry binding `registered` requires. A
 /// configured sign-in provider names its own. The dev binary has none
 /// (ADR-012): personas are minted locally, and the fixture issuer in that
@@ -201,33 +224,34 @@ async fn signin_handle_page(
 }
 
 /// The fresh server-side flow and the PAR hand-off (ADR-006 `POST
-/// /signin/{handle}`); `Err` is the uniform neutral failure.
-async fn start(auth: &Auth, handle: &str, class: &str) -> Result<(String, String), ()> {
-    let provider = auth.provider.as_ref().ok_or(())?;
-    let stores = auth.stores.as_ref().ok_or(())?;
-    let digest = handle_digest(&super::aliases::canonical(handle)).ok_or(())?;
+/// /signin/{handle}`); `Err` is the uniform neutral failure, with its kind
+/// for `auth.signin_refused` (APP-219).
+async fn start(auth: &Auth, handle: &str, class: &str) -> Result<(String, String), &'static str> {
+    let provider = auth.provider.as_ref().ok_or("unconfigured")?;
+    let stores = auth.stores.as_ref().ok_or("unconfigured")?;
+    let digest = handle_digest(&super::aliases::canonical(handle)).ok_or("malformed")?;
     let organization = stores
         .workspace
         .resolve_handle(&digest)
         .await
-        .map_err(|_| ())?
-        .ok_or(())?;
+        .map_err(|_| "unavailable")?
+        .ok_or("unknown_workspace")?;
     let Route {
         tenant_slug,
         client_id,
         ..
-    } = provider.config.route(&organization).ok_or(())?;
-    let pkce = Pkce::fresh().ok_or(())?;
+    } = provider.config.route(&organization).ok_or("unrouted")?;
+    let pkce = Pkce::fresh().ok_or("unavailable")?;
     let sealed = auth
         .sealer
         .seal(&verifier_context(&organization), pkce.verifier.as_bytes())
-        .ok_or(())?;
+        .ok_or("unavailable")?;
     let flow = stores
         .workspace
         .begin_flow(&organization, FlowKind::SignIn, &sealed, class)
         .await
-        .map_err(|_| ())?
-        .ok_or(())?;
+        .map_err(|_| "unavailable")?
+        .ok_or("flow_refused")?;
     match provider
         .client
         .par(
@@ -249,7 +273,7 @@ async fn start(auth: &Auth, handle: &str, class: &str) -> Result<(String, String
         Err(failure) => {
             tracing::info!(failure = ?failure, "auth.par");
             let _ = stores.workspace.discard_flow(&flow.cookie).await;
-            Err(())
+            Err("provider")
         }
     }
 }
@@ -272,6 +296,7 @@ async fn signin_workspace_start(State(auth): State<Arc<Auth>>, request: Request)
 async fn signin_attempt(auth: Arc<Auth>, handle: Option<String>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     if !csrf::same_origin(&parts.headers, auth.origin()) {
+        signin_refused("start", "cross_site");
         return http::cross_site();
     }
     let class = auth.address_class(&parts);
@@ -279,25 +304,31 @@ async fn signin_attempt(auth: Arc<Auth>, handle: Option<String>, request: Reques
         (&format!("signin:{class}"), limits::SIGNIN_ADDRESS),
         ("signin:global", limits::SIGNIN_GLOBAL),
     ]) {
+        signin_refused("start", "limited");
         return http::too_many_requests(retry);
     }
     let Some(fields) = http::form(body).await else {
+        signin_refused("start", "too_large");
         return http::payload_too_large();
+    };
+    let malformed = |auth: &Auth| {
+        signin_refused("start", "malformed");
+        neutral_failure(auth)
     };
     let handle = match handle {
         Some(handle) => handle,
         None => match fields.as_slice() {
             [(name, value)] if name == "workspace" => {
                 let Some(handle) = workspace_handle(value, auth.origin()) else {
-                    return neutral_failure(&auth);
+                    return malformed(&auth);
                 };
                 handle.to_owned()
             }
-            _ => return neutral_failure(&auth),
+            _ => return malformed(&auth),
         },
     };
     if handle_action(&handle).is_none() {
-        return neutral_failure(&auth);
+        return malformed(&auth);
     }
     match start(&auth, &handle, &class).await {
         Ok((cookie, location)) => {
@@ -309,7 +340,10 @@ async fn signin_attempt(auth: Arc<Auth>, handle: Option<String>, request: Reques
             );
             response
         }
-        Err(()) => neutral_failure(&auth),
+        Err(kind) => {
+            signin_refused("start", kind);
+            neutral_failure(&auth)
+        }
     }
 }
 
@@ -337,30 +371,37 @@ pub(crate) fn callback_query(query: Option<&str>) -> Option<(String, String)> {
 enum Arrival {
     Pending(String),
     Workspace(String),
-    Denied(String),
+    /// The pre-access cookie, and the `admission.refused` code (APP-219).
+    Denied(String, &'static str),
 }
 
 /// ADR-006 `GET /auth/callback`: consume the flow, exchange, verify, mint
-/// the pre-access session, then admit or mint the workspace session.
-async fn arrive(auth: &Auth, cookie: &str, code: &str, state: &str) -> Result<Arrival, ()> {
-    let provider = auth.provider.as_ref().ok_or(())?;
-    let stores = auth.stores.as_ref().ok_or(())?;
+/// the pre-access session, then admit or mint the workspace session. `Err`
+/// is the neutral failure, with its kind for `auth.signin_refused`.
+async fn arrive(
+    auth: &Auth,
+    cookie: &str,
+    code: &str,
+    state: &str,
+) -> Result<Arrival, &'static str> {
+    let provider = auth.provider.as_ref().ok_or("unconfigured")?;
+    let stores = auth.stores.as_ref().ok_or("unconfigured")?;
     let flow = stores
         .workspace
         .complete_flow(cookie, state)
         .await
-        .map_err(|_| ())?;
+        .map_err(|_| "flow")?;
     let organization = flow.organization().to_owned();
     let verifier = auth
         .sealer
         .open(&verifier_context(&organization), flow.sealed_verifier())
         .and_then(|v| String::from_utf8(v).ok())
-        .ok_or(())?;
-    let route = provider.config.route(&organization).ok_or(())?;
+        .ok_or("flow")?;
+    let route = provider.config.route(&organization).ok_or("unrouted")?;
     let expected_tenant = stores
         .workspace
         .provider_tenant(&organization, &provider.config.issuer)
-        .ok_or(())?;
+        .ok_or("unrouted")?;
     let token = provider
         .client
         .exchange(
@@ -371,7 +412,10 @@ async fn arrive(auth: &Auth, cookie: &str, code: &str, state: &str) -> Result<Ar
             &verifier,
         )
         .await
-        .map_err(|failure| tracing::info!(failure = ?failure, "auth.exchange"))?;
+        .map_err(|failure| {
+            tracing::info!(failure = ?failure, "auth.exchange");
+            "exchange"
+        })?;
     // From here a provider session exists: every refusal revokes it.
     let shaped = super::token_shaped(&token);
     let identity = if shaped {
@@ -397,14 +441,14 @@ async fn arrive(auth: &Auth, cookie: &str, code: &str, state: &str) -> Result<Ar
                 .logout(&route.tenant_slug, &token.refresh_token)
                 .await;
         }
-        return Err(());
+        return Err("identity");
     };
     let Some(reference) = auth.vault.insert(&route.tenant_slug, &token) else {
         let _ = provider
             .client
             .logout(&route.tenant_slug, &token.refresh_token)
             .await;
-        return Err(());
+        return Err("unavailable");
     };
     let email_verified = token.user.email_verified;
     drop(token);
@@ -418,20 +462,18 @@ async fn arrive(auth: &Auth, cookie: &str, code: &str, state: &str) -> Result<Ar
             if let Some((slug, refresh)) = auth.vault.take(&reference).await {
                 let _ = provider.client.logout(&slug, &refresh).await;
             }
-            return Err(());
+            return Err("unavailable");
         }
     };
-    let refused_signup = matches!(
-        started.signup,
-        Some(
-            PendingAdmission::ReservationExpired
-                | PendingAdmission::Expired
-                | PendingAdmission::Revoked
-                | PendingAdmission::Exhausted
-        )
-    );
-    if refused_signup {
-        return Ok(Arrival::Denied(started.cookie));
+    let refused_signup = match started.signup {
+        Some(PendingAdmission::ReservationExpired) => Some("reservation_expired"),
+        Some(PendingAdmission::Expired) => Some("expired"),
+        Some(PendingAdmission::Revoked) => Some("revoked"),
+        Some(PendingAdmission::Exhausted) => Some("exhausted"),
+        _ => None,
+    };
+    if let Some(code) = refused_signup {
+        return Ok(Arrival::Denied(started.cookie, code));
     }
     if !email_verified {
         return Ok(Arrival::Pending(started.cookie));
@@ -451,11 +493,11 @@ async fn arrive(auth: &Auth, cookie: &str, code: &str, state: &str) -> Result<Ar
         Ok(Some(session)) => Ok(Arrival::Workspace(session)),
         Ok(None) => {
             tracing::info!("auth.admission_denied");
-            Ok(Arrival::Denied(started.cookie))
+            Ok(Arrival::Denied(started.cookie, "denied"))
         }
         Err(error) => {
             tracing::info!(code = %error, "auth.mint_refused");
-            Ok(Arrival::Denied(started.cookie))
+            Ok(Arrival::Denied(started.cookie, "session_refused"))
         }
     }
 }
@@ -472,6 +514,7 @@ async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         ("callback:global", limits::CALLBACK_GLOBAL),
     ]) {
         tracing::info!(outcome = "limited", "auth.callback");
+        signin_refused("return", "limited");
         let mut response = with_status(
             auth.pages.signin(&SigninView {
                 action: None,
@@ -494,10 +537,12 @@ async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         callback_query(parts.uri.query()),
         cookies::read(&parts.headers, cookies::PRELOGIN),
     ) else {
+        signin_refused("return", "malformed");
         return failed(&auth);
     };
     // An organization the closed registry does not bind has no flow.
     if !registered(&auth, &cookie) {
+        signin_refused("return", "unregistered");
         return failed(&auth);
     }
     let arrival = arrive(&auth, &cookie, &code, &state).await;
@@ -537,14 +582,18 @@ async fn callback(State(auth): State<Arc<Auth>>, request: Request) -> Response {
             add_cookie(&mut response, cookies::set(cookies::SESSION, &session));
             response
         }
-        Ok(Arrival::Denied(pre)) => {
+        Ok(Arrival::Denied(pre, code)) => {
+            admission_refused("callback", code);
             let mut response = denied(&auth, &pre);
             add_cookie(&mut response, cookies::clear(cookies::PRELOGIN));
             add_cookie(&mut response, cookies::clear(cookies::SESSION));
             add_cookie(&mut response, cookies::set(cookies::PRE_ACCESS, &pre));
             response
         }
-        Err(()) => failed(&auth),
+        Err(kind) => {
+            signin_refused("return", kind);
+            failed(&auth)
+        }
     }
 }
 

@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     auth::{capability, csrf},
-    composer::model::{ModelError, ModelRequest},
+    composer::model::{Caller, ModelError, ModelRequest, Source},
     http::{self, UniformPath},
     storage::{
         self, CollectionSummary, CommandRequest, DryRun, RecordCommand, RecordRow, RecordsListing,
@@ -340,7 +340,7 @@ impl Parser {
     async fn assistant_values(
         &self,
         user: &Value,
-        member: &str,
+        caller: &Caller,
     ) -> Result<Map<String, Value>, &'static str> {
         let model = self.model.as_ref().ok_or("composer_unavailable")?;
         let reply = model
@@ -350,7 +350,8 @@ impl Parser {
                 user: user.to_string(),
                 max_tokens: 3000,
                 budget: PARSE_BUDGET,
-                member: Some(member.to_owned()),
+                caller: caller.clone(),
+                source: Source::Action,
             })
             .await
             .map_err(|error| {
@@ -378,9 +379,9 @@ impl Parser {
 
 /// `problem` for a refusal that may be the member's own daily allowance
 /// (APP-215): the `daily_limit` answer names whose it is.
-fn problem_for(code: &'static str, member: &str) -> Response {
+fn problem_for(code: &'static str, caller: &Caller) -> Response {
     match code {
-        "daily_limit" => crate::composer::model::daily_limit_for(Some(member)),
+        "daily_limit" => crate::composer::model::daily_limit_for(caller),
         code => problem(code),
     }
 }
@@ -460,14 +461,14 @@ async fn propose(
     if super::guard::reads(&body.utterance) {
         return problem("could_not_draft");
     }
-    let member_key = crate::composer::model::member_of(&member);
+    let caller = Caller::member(&member);
     let raw = match state
         .parser
-        .assistant_values(&user_document(&selected, &body.utterance), &member_key)
+        .assistant_values(&user_document(&selected, &body.utterance), &caller)
         .await
     {
         Ok(value) => value,
-        Err(code) => return problem_for(code, &member_key),
+        Err(code) => return problem_for(code, &caller),
     };
     let Some(values) = submitted_values(&selected, &raw, &body.utterance) else {
         tracing::info!(

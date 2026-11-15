@@ -103,6 +103,25 @@ pub struct ParseOutput {
     pub peak_rss_bytes: u64,
 }
 
+/// The refusal a parse kill is, after `parser.killed` (APP-219) for a kill
+/// the supervisor decided: its reason (`rss`, `deadline` or `output`) only,
+/// never the file, its name or its bytes.
+fn refusal_of(killed: Killed) -> ParseRefusal {
+    if let Some(reason) = killed.reason() {
+        tracing::warn!(
+            event = "parser.killed",
+            reason,
+            "the supervisor killed a parser"
+        );
+    }
+    match killed {
+        Killed::Deadline => ParseRefusal::Deadline,
+        Killed::ResourceLimit(_) => ParseRefusal::ResourceLimit,
+        Killed::Crashed => ParseRefusal::Crashed,
+        Killed::InputFailed => ParseRefusal::Failure("input_read"),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseRefusal {
     Refused {
@@ -363,12 +382,7 @@ async fn parse_framed(
         &confinement,
     )
     .await
-    .map_err(|killed| match killed {
-        Killed::Deadline => ParseRefusal::Deadline,
-        Killed::ResourceLimit => ParseRefusal::ResourceLimit,
-        Killed::Crashed => ParseRefusal::Crashed,
-        Killed::InputFailed => ParseRefusal::Failure("input_read"),
-    })?;
+    .map_err(refusal_of)?;
     let code = output.status.code();
     if code != Some(0) && code != Some(2) {
         return Err(ParseRefusal::Failure("parser_failure"));
@@ -432,6 +446,55 @@ mod tests {
     use serde_json::{json, Value};
     use sha2::{Digest, Sha256};
     use std::{os::unix::fs::PermissionsExt, path::Path};
+
+    /// APP-219: a supervisor kill of a parser is one `parser.killed` line
+    /// with its reason and nothing else; a crash or an input failure is not
+    /// a kill the supervisor decided and logs none.
+    #[test]
+    fn a_parser_kill_logs_its_reason_only() {
+        use crate::supervise::Bound;
+        let lines = crate::config::logs::testing::Lines::default();
+        let refusals = tracing::subscriber::with_default(lines.subscriber(), || {
+            [
+                Killed::ResourceLimit(Bound::Rss),
+                Killed::Deadline,
+                Killed::ResourceLimit(Bound::Output),
+                Killed::Crashed,
+                Killed::InputFailed,
+            ]
+            .map(refusal_of)
+        });
+        assert_eq!(
+            refusals,
+            [
+                ParseRefusal::ResourceLimit,
+                ParseRefusal::Deadline,
+                ParseRefusal::ResourceLimit,
+                ParseRefusal::Crashed,
+                ParseRefusal::Failure("input_read"),
+            ]
+        );
+        let killed = lines.events("parser.killed");
+        let reasons: Vec<&str> = killed
+            .iter()
+            .map(|e| e["reason"].as_str().unwrap())
+            .collect();
+        assert_eq!(reasons, ["rss", "deadline", "output"]);
+        assert_eq!(lines.parsed().len(), 3, "{}", lines.text());
+        for line in &killed {
+            let mut keys: Vec<&str> = line
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            keys.sort_unstable();
+            assert_eq!(
+                keys,
+                ["event", "level", "message", "reason", "target", "timestamp"]
+            );
+        }
+    }
 
     fn hex(bytes: &[u8]) -> String {
         Sha256::digest(bytes)

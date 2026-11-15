@@ -43,6 +43,9 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
             line=lines.get(timeout=max(0.01,deadline-time.monotonic()))
             assert line is not None, 'server exited before binding'
             if line.startswith('FORMA_LISTENING http://127.0.0.1:'): break
+            # APP-219: with GENUI_LOG_FORMAT unset every log line is one JSON object, no ANSI.
+            logged=json.loads(line); assert isinstance(logged,dict) and '\x1b' not in line
+            assert all(isinstance(logged.get(key),str) for key in ('timestamp','level','target')), line
             assert time.monotonic()<deadline, 'listener timeout'
         origin=line.split(' ',1)[1]
         with urllib.request.urlopen(origin+'/health/live',timeout=3) as response: assert response.status==200
@@ -126,6 +129,12 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
     assert refused.returncode!=0 and 'unit-only' not in refused.stdout+refused.stderr
     print(json.dumps({'scope':'startup credential permission failure','passed':True,'credential_values_disclosed':False}))
     path.chmod(0o600)
+    # APP-222 (A13): an out-of-range GENUI_LIMIT_* setting, and APP-219: an unknown log
+    # format, stop the process before it binds, naming the setting.
+    for name,value in (('GENUI_LIMIT_MCP_TOKEN_PER_HOUR','0'),('GENUI_LIMIT_MCP_MEMBER_PER_HOUR','100001'),('GENUI_LIMIT_AGENT_TOKEN_MINTS_PER_HOUR','many'),('GENUI_LOG_FORMAT','text')):
+        refused=subprocess.run([args.binary],env={**env,name:value},capture_output=True,text=True,timeout=5)
+        assert refused.returncode!=0 and 'FORMA_LISTENING' not in refused.stdout and name in refused.stderr, (name,refused.stderr)
+    print(json.dumps({'scope':'out-of-range limit and log settings refuse to start','passed':True}))
     # Reach the private registry loader: an invalid hostname would refuse in
     # Settings::new first and would not exercise this missing-file boundary.
     document['database']['host'] = 'synthetic-test.us-east-1.rds.amazonaws.com'

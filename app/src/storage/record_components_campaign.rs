@@ -119,11 +119,16 @@ async fn campaign() {
     let template = crate::composer::templates::find("dining-tracker").unwrap();
     let pin = Pin::Template(template.id.into());
     let no_model = Composer::new(None, "unused", "unused");
-    let First::Placed(placed, _) =
-        compose_instant(&stores, &no_model, &owner, template.description, &pin)
-            .await
-            .unwrap()
-    else {
+    let First::Placed(placed, _) = compose_instant(
+        &stores,
+        &no_model,
+        &owner,
+        template.description,
+        &pin,
+        crate::composer::model::Source::Canvas,
+    )
+    .await
+    .unwrap() else {
         panic!("template must place");
     };
     let (app, work) = (&placed.app, &placed.work);

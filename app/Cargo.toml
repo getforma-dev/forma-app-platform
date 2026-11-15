@@ -16,7 +16,8 @@ axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 rust-embed = "8"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+# APP-219: the JSON formatter for production logs (adds tracing-serde to the lock).
+tracing-subscriber = { version = "0.3", features = ["json"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 libc = "=0.2.190"

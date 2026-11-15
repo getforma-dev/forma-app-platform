@@ -40,4 +40,7 @@ if [[ -n "$file" ]]; then
 fi
 if [[ -n "$key" ]]; then export ANTHROPIC_API_KEY="$key"; fi
 unset key
+# APP-219: production logs are JSON lines; the dev stand's log files keep the
+# human text unless this shell already chose a format.
+export GENUI_LOG_FORMAT="${GENUI_LOG_FORMAT:-pretty}"
 exec "$target/debug/genui-dev" serve

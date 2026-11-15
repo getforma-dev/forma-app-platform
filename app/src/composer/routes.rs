@@ -32,8 +32,10 @@
 //! structured log records identities, origin, codes, confidence and
 //! per-step durations; never the intent text, a definition or the key.
 use super::{
-    lineage::lineage, plan::Decision, transform, Composer, GenerationFailure, Origin,
-    TransformFailure, COMPOSE_DEADLINE,
+    lineage::lineage,
+    model::{Caller, Source},
+    plan::Decision,
+    transform, Composer, GenerationFailure, Origin, TransformFailure, COMPOSE_DEADLINE,
 };
 use crate::{
     auth::{cookies, csrf, Auth},
@@ -166,15 +168,17 @@ pub enum Refused {
 /// tool, the campaigns): `(trusted request, intent)` in, the placed result
 /// out. The canvas route uses [`compose_instant`] and runs the [`Tailor`] in
 /// the background instead. Everything the model wrote reaches storage only
-/// as an [`crate::admission::AdmittedDefinition`].
+/// as an [`crate::admission::AdmittedDefinition`]. `source` (APP-222) is the
+/// product path every model call of the composition is logged under.
 pub async fn compose_for(
     stores: &Stores,
     composer: &Composer,
     member: &TrustedRequest,
     intent: &str,
+    source: Source,
 ) -> Result<Composed, Refused> {
     let (composed, tailor) =
-        match compose_instant(stores, composer, member, intent, &Pin::Free).await? {
+        match compose_instant(stores, composer, member, intent, &Pin::Free, source).await? {
             First::Placed(composed, tailor) => (composed, tailor),
             // `Pin::Free` never asks the member to choose.
             First::Choose(_) => return Err(Refused::CouldNotCompose("near_tie")),
@@ -227,6 +231,7 @@ pub(crate) async fn compose_instant(
     member: &TrustedRequest,
     intent: &str,
     pin: &Pin,
+    source: Source,
 ) -> Result<First, Refused> {
     let started = Instant::now();
     let deadline = tokio::time::Instant::now() + COMPOSE_DEADLINE;
@@ -234,8 +239,8 @@ pub(crate) async fn compose_instant(
         log_refused(member, code, origin, started);
         refusal
     };
-    // APP-215: every model call of this composition is the member's.
-    let member_key = super::model::member_of(member);
+    // APP-215, APP-222: every model call of this composition is the member's.
+    let caller = Caller::member(member);
     // DS-53, DS-03: the demo flag for the rehearsed transform and for the
     // matcher's nearest candidate when no model is configured.
     let demo = composer.demo_for(member.organization());
@@ -296,7 +301,8 @@ pub(crate) async fn compose_instant(
                     member.organization(),
                     &authoring.app,
                     deadline,
-                    Some(&member_key),
+                    &caller,
+                    source,
                 )
                 .await
                 .map_err(|error| match error {
@@ -372,7 +378,7 @@ pub(crate) async fn compose_instant(
         Pin::Template(_) => unreachable!("template composition is handled above"),
         Pin::Free | Pin::Chooser => {
             composer
-                .route_for(intent, &context.library, exclude, demo, Some(&member_key))
+                .route_for(intent, &context.library, exclude, demo, &caller, source)
                 .await
         }
     };
@@ -429,7 +435,7 @@ pub(crate) async fn compose_instant(
                 && context.authoring.is_some()
                 && context.owner_publish_policy.is_some()
                 && !(demo && transform::rehearsed(intent).is_some());
-            if tailors && composer.enabled() && composer.daily_cap_reached_for(&member_key) {
+            if tailors && composer.enabled() && composer.daily_cap_reached_for(&caller) {
                 return Err(refused(
                     "model_daily_cap",
                     Some(Origin::Adapted),
@@ -476,6 +482,7 @@ pub(crate) async fn compose_instant(
                 },
                 standard: standard.clone(),
                 demo,
+                source,
             };
             return Ok(First::Placed(
                 Composed {
@@ -526,7 +533,8 @@ pub(crate) async fn compose_instant(
                     member.organization(),
                     &authoring.app,
                     deadline,
-                    Some(&member_key),
+                    &caller,
+                    source,
                 )
                 .await
             {
@@ -902,6 +910,8 @@ pub struct Tailor {
     context: ComposerContext,
     standard: Composed,
     demo: bool,
+    /// The composition's product path (APP-222).
+    source: Source,
 }
 impl Tailor {
     /// Runs the transform under [`TAILOR_DEADLINE`]: the adapted work
@@ -965,7 +975,8 @@ impl Tailor {
                 &self.intent,
                 &self.library,
                 self.demo,
-                Some(&super::model::member_of(member)),
+                &Caller::member(member),
+                self.source,
             )
             .await
             .map_err(|failure| match failure {
@@ -1243,7 +1254,16 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
         return http::not_found();
     };
     // APP-101: the pick answers now; the transform follows on the stream.
-    match compose_instant(&stores, &state.composer, &member, &intent, &pin).await {
+    match compose_instant(
+        &stores,
+        &state.composer,
+        &member,
+        &intent,
+        &pin,
+        Source::Canvas,
+    )
+    .await
+    {
         Ok(First::Choose(choices)) => {
             let body = json!({
                 "choices": choices.iter().map(|choice| json!({
@@ -1287,8 +1307,6 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
         Err(Refused::CouldNotCompose(_)) => {
             problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_compose")
         }
-        Err(Refused::DailyLimit) => {
-            super::model::daily_limit_for(Some(&super::model::member_of(&member)))
-        }
+        Err(Refused::DailyLimit) => super::model::daily_limit_for(&Caller::member(&member)),
     }
 }

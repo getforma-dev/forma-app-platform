@@ -14,7 +14,8 @@
 //!   "label", "created_at", "expires_at", "scope", "token", "mcp_url"}`: the raw token, shown this
 //!   once and never again (only its digest is stored, never logged). 409
 //!   `too_many_agent_tokens` at `MAX_LIVE_AGENT_TOKENS` live tokens; 429 at
-//!   `MINT_MEMBER`.
+//!   ten mints an hour per member (APP-222: unless the deployment's
+//!   `GENUI_LIMIT_AGENT_TOKEN_MINTS_PER_HOUR` says otherwise).
 //! - `GET /v1/agent-tokens`: `{"tokens": [{"token_id", "label",
 //!   "created_at", "expires_at", "last_used_at"}], "mcp_url"}`, the
 //!   member's live tokens (APP-113: a token expires 30 days after minting).
@@ -26,7 +27,7 @@
 //! `malformed_label`), the limit, then storage (`Denied` → uniform 404).
 use crate::{
     auth::{csrf, Auth},
-    http::{self, limits, UniformPath},
+    http::{self, UniformPath},
     sharing,
     storage::{
         self, agent_label_shaped, AgentScope, AGENT_TOKEN_DAYS, MAX_LIVE_AGENT_TOKENS,
@@ -44,8 +45,6 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 pub const PATH: &str = "/v1/agent-tokens";
-/// Per member: ten mints an hour.
-pub const MINT_MEMBER: &[limits::Window] = &[limits::per(10, 3600)];
 
 pub fn router(auth: Arc<Auth>) -> Router {
     Router::new()
@@ -209,7 +208,9 @@ async fn mint(State(auth): State<Arc<Auth>>, request: Request) -> Response {
         member.organization(),
         member.principal()
     );
-    if let Err(retry_after) = auth.limits.admit(&[(&key, MINT_MEMBER)]) {
+    // APP-222: the deployment's `GENUI_LIMIT_AGENT_TOKEN_MINTS_PER_HOUR`, else 10.
+    let window = auth.limits.deployment().agent_token_mints();
+    if let Err(retry_after) = auth.limits.admit(&[(&key, window)]) {
         return http::too_many_requests(retry_after);
     }
     match stores

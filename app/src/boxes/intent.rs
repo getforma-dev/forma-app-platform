@@ -11,7 +11,9 @@
 //! none is not a folder request. Nothing is guessed.
 use super::routes::{numbered, Boxes};
 // DS-83: shares the rehearsed parser's matcher, in every organization.
-use crate::{actions::rehearsed::find_ignore_ascii_case, storage::TrustedRequest};
+use crate::{
+    actions::rehearsed::find_ignore_ascii_case, composer::model::Source, storage::TrustedRequest,
+};
 use std::sync::{Arc, OnceLock};
 
 static INSTALLED: OnceLock<Arc<Boxes>> = OnceLock::new();
@@ -368,8 +370,14 @@ pub enum Answer {
 
 /// Acts on a folder request: `box_id` (the canvas chip or mention) or a
 /// folder named in the words; `None` when the words neither carry nor name a
-/// folder (the caller's own path continues).
-pub async fn act(member: &TrustedRequest, utterance: &str, box_id: Option<&str>) -> Option<Answer> {
+/// folder (the caller's own path continues). `source` (APP-222) is the
+/// surface asking (the action path or Slack), logged with the model calls.
+pub async fn act(
+    member: &TrustedRequest,
+    utterance: &str,
+    box_id: Option<&str>,
+    source: Source,
+) -> Option<Answer> {
     use serde_json::json;
     let state = installed()?;
     let (reference, instruction) = match formation(utterance) {
@@ -412,7 +420,9 @@ pub async fn act(member: &TrustedRequest, utterance: &str, box_id: Option<&str>)
     Some(match wanted {
         Ask::Build(sentence) => {
             let purpose = purpose(&sentence);
-            match super::routes::build_from_box(&state, member, &box_id, &purpose, None).await {
+            match super::routes::build_from_box(&state, member, &box_id, &purpose, None, source)
+                .await
+            {
                 Ok(built) => {
                     let mut value = super::routes::built_json(&built);
                     value["via"] = json!("folder");
@@ -423,7 +433,7 @@ pub async fn act(member: &TrustedRequest, utterance: &str, box_id: Option<&str>)
                 Err(refused) => Answer::Refused(refused),
             }
         }
-        Ask::Brief => match super::brief::generate(&state, member, &box_id).await {
+        Ask::Brief => match super::brief::generate(&state, member, &box_id, source).await {
             Ok(brief) => Answer::Done(
                 json!({"via": "folder", "kind": "brief", "box_id": box_id, "brief": brief}),
             ),

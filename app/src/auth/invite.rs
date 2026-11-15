@@ -307,6 +307,21 @@ enum Refusal {
     NotReserved,
     Provider,
 }
+impl Refusal {
+    /// The `admission.refused` code (APP-219).
+    fn code(self) -> &'static str {
+        match self {
+            Self::Malformed => "malformed",
+            Self::Unconfigured => "unconfigured",
+            Self::Unavailable => "unavailable",
+            Self::Unknown => "unknown",
+            Self::Unrouted => "unrouted",
+            Self::NoCapability => "no_capability",
+            Self::NotReserved => "not_reserved",
+            Self::Provider => "provider",
+        }
+    }
+}
 
 fn page(auth: &Auth, view: InviteView, status: StatusCode) -> Response {
     routes::with_status(auth.pages.invite(&view), status)
@@ -455,6 +470,7 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
             window = window.as_str(),
             "invite.validate"
         );
+        routes::admission_refused("invite", "limited");
         let mut response = page(
             &auth,
             InviteView {
@@ -477,6 +493,7 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
     // so does a submission without the notice's consent (D5).
     let Some(code) = consented_code(&fields) else {
         tracing::info!(outcome = "refused", stage = ?Refusal::Malformed, "invite.validate");
+        routes::admission_refused("invite", Refusal::Malformed.code());
         return neutral(&auth);
     };
     let judged = tokio::time::timeout(ENTRY_DEADLINE, handoff(&auth, code, &class))
@@ -493,10 +510,12 @@ pub(crate) async fn validate(State(auth): State<Arc<Auth>>, request: Request) ->
         // would): the form's HTML page, status 503.
         Err(Refusal::Unavailable) => {
             tracing::info!(outcome = "unavailable", "invite.validate");
+            routes::admission_refused("invite", Refusal::Unavailable.code());
             unavailable(&auth)
         }
         Err(stage) => {
             tracing::info!(outcome = "refused", stage = ?stage, "invite.validate");
+            routes::admission_refused("invite", stage.code());
             neutral(&auth)
         }
     }

@@ -57,7 +57,7 @@ pub mod templates;
 pub mod transform;
 
 use crate::storage::{LibraryApp, ReadableSource};
-use model::{Model, ModelError, ModelRequest};
+use model::{Caller, Model, ModelError, ModelRequest, Source};
 use plan::{Decision, Planned, Refusal};
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::time::Instant;
@@ -231,16 +231,16 @@ impl Composer {
     }
     /// APP-108: one fast-model call (the router model) for a typed answer
     /// the caller judges (the box explanation); `Unavailable` without a model.
-    /// `member` (APP-215, `model::member_key`) is who the call is for: their
-    /// daily allowance is taken first; `None` counts against the process cap
-    /// only.
+    /// `caller` and `source` (APP-222) say who the call is for and which
+    /// product path makes it: a member's daily allowance is taken first.
     pub async fn complete_fast(
         &self,
         system: &str,
         user: String,
         max_tokens: u32,
         budget: Duration,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<model::ModelReply, ModelError> {
         let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
         model
@@ -250,11 +250,13 @@ impl Composer {
                 user,
                 max_tokens,
                 budget,
-                member: member.map(str::to_owned),
+                caller: caller.clone(),
+                source,
             })
             .await
     }
     /// APP-108: one fast-model call with PDF documents and citations.
+    #[allow(clippy::too_many_arguments)]
     pub async fn complete_documents(
         &self,
         system: &str,
@@ -262,7 +264,8 @@ impl Composer {
         documents: &[model::DocumentInput<'_>],
         max_tokens: u32,
         budget: Duration,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<model::CitedReply, ModelError> {
         let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
         let request = ModelRequest {
@@ -271,7 +274,8 @@ impl Composer {
             user,
             max_tokens,
             budget,
-            member: member.map(str::to_owned),
+            caller: caller.clone(),
+            source,
         };
         model.complete_with_documents(&request, documents).await
     }
@@ -284,14 +288,14 @@ impl Composer {
             .as_ref()
             .is_some_and(|model| model.daily_cap_reached())
     }
-    /// APP-215: whether the next model call for `member` would be refused,
-    /// by their own allowance or by the process cap.
-    pub fn daily_cap_reached_for(&self, member: &str) -> bool {
+    /// APP-215: whether the next model call for `caller` would be refused,
+    /// by a member's own allowance or by the process cap.
+    pub fn daily_cap_reached_for(&self, caller: &Caller) -> bool {
         self.daily_cap_reached()
             || self
                 .model
                 .as_ref()
-                .is_some_and(|model| model.member_daily_cap_reached(member))
+                .is_some_and(|model| model.member_daily_cap_reached(caller))
     }
     pub fn generation_model(&self) -> &str {
         &self.generation_model
@@ -309,9 +313,10 @@ impl Composer {
         intent: &str,
         library: &[LibraryApp],
         exclude: Option<&str>,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<(Decision, &'static str), ModelError> {
-        self.route_for(intent, library, exclude, false, member)
+        self.route_for(intent, library, exclude, false, caller, source)
             .await
     }
 
@@ -326,7 +331,8 @@ impl Composer {
         library: &[LibraryApp],
         exclude: Option<&str>,
         demo: bool,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<(Decision, &'static str), ModelError> {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
@@ -356,7 +362,8 @@ impl Composer {
             user: prompt::router_user(intent, library),
             max_tokens: ROUTER_MAX_TOKENS,
             budget: ROUTER_BUDGET,
-            member: member.map(str::to_owned),
+            caller: caller.clone(),
+            source,
         };
         let reply = model.complete(&request).await?;
         Ok(plan::decide(&reply.text, library))
@@ -372,7 +379,8 @@ impl Composer {
         intent: &str,
         library: &LibraryApp,
         demo: bool,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<(Transform, &'static str), TransformFailure> {
         if demo {
             // DS-53: the rehearsed transform, demo organization only.
@@ -390,7 +398,8 @@ impl Composer {
             user: transform::transform_user(intent, library),
             max_tokens: TRANSFORM_MAX_TOKENS,
             budget: TRANSFORM_BUDGET,
-            member: member.map(str::to_owned),
+            caller: caller.clone(),
+            source,
         };
         let reply = model
             .complete(&request)
@@ -408,6 +417,7 @@ impl Composer {
     /// at least `MIN_GENERATION_ATTEMPT` remains after `STORAGE_RESERVE`, with
     /// a budget cut to what remains, so the route deadline never falls
     /// between publish and save.
+    #[allow(clippy::too_many_arguments)]
     pub async fn generate(
         &self,
         intent: &str,
@@ -415,10 +425,20 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<Generated, GenerationFailure> {
-        self.generate_with(intent, None, sources, organization, app, deadline, member)
-            .await
+        self.generate_with(
+            intent,
+            None,
+            sources,
+            organization,
+            app,
+            deadline,
+            caller,
+            source,
+        )
+        .await
     }
 
     /// APP-108: generation with a box's capped context in the user message
@@ -433,7 +453,8 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<Generated, GenerationFailure> {
         self.generate_using(
             intent,
@@ -443,7 +464,8 @@ impl Composer {
             organization,
             app,
             deadline,
-            member,
+            caller,
+            source,
         )
         .await
     }
@@ -457,7 +479,8 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<Generated, GenerationFailure> {
         self.generate_using(
             intent,
@@ -467,7 +490,8 @@ impl Composer {
             organization,
             app,
             deadline,
-            member,
+            caller,
+            source,
         )
         .await
     }
@@ -482,7 +506,8 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<Generated, GenerationFailure> {
         let model = self
             .model
@@ -511,7 +536,8 @@ impl Composer {
                 user: prompt::generation_user_from(intent, &contracts, feedback, context, template),
                 max_tokens: GENERATION_MAX_TOKENS,
                 budget,
-                member: member.map(str::to_owned),
+                caller: caller.clone(),
+                source,
             };
             let reply = model
                 .complete(&request)

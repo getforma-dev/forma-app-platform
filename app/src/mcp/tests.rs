@@ -586,14 +586,12 @@ fn every_tool_maps_to_a_scope_action_and_scope_refusals_are_uniform() {
 #[test]
 fn the_rate_is_per_token_and_per_member() {
     let auth = Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap();
-    let admit = |caller: &AgentCaller| {
-        let (token, member) = keys(caller);
-        auth.limits
-            .admit(&[(&token, MCP_TOKEN), (&member, MCP_MEMBER)])
-            .is_ok()
-    };
+    let admit = |caller: &AgentCaller| super::admit(&auth, caller).is_ok();
     let (a, b) = (caller(DIEGO, TOKEN_A), caller(DIEGO, TOKEN_B));
-    for _ in 0..MCP_TOKEN[0].limit {
+    // APP-222: the defaults are today's numbers, 120 a token and 240 a member.
+    assert_eq!(auth.limits.deployment().mcp_token()[0].limit, 120);
+    assert_eq!(auth.limits.deployment().mcp_member()[0].limit, 240);
+    for _ in 0..auth.limits.deployment().mcp_token()[0].limit {
         assert!(admit(&a) && admit(&b));
     }
     assert!(!admit(&a), "the token's window");
@@ -603,6 +601,32 @@ fn the_rate_is_per_token_and_per_member() {
         SARAH,
         "00000000-0000-4000-8000-0000000000fe"
     )));
+}
+
+/// APP-222 (A13): a lowered `GENUI_LIMIT_MCP_MEMBER_PER_HOUR` refuses the
+/// member sooner, across all their tokens, while each token stays far under
+/// its own window; another member is unaffected. The same setting at its
+/// default admits the 240 of today.
+#[test]
+fn a_lowered_member_setting_refuses_the_member_sooner() {
+    use crate::http::limits::{Deployment, Limiter, MCP_MEMBER_ENV};
+    let lowered =
+        Deployment::from_lookup(|name| (name == MCP_MEMBER_ENV).then(|| "3".into())).unwrap();
+    let mut auth = Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap();
+    auth.limits = Limiter::with_deployment(lowered);
+    let admit = |caller: &AgentCaller| super::admit(&auth, caller);
+    let (a, b) = (caller(DIEGO, TOKEN_A), caller(DIEGO, TOKEN_B));
+    assert!(admit(&a).is_ok() && admit(&b).is_ok() && admit(&a).is_ok());
+    let refused = admit(&b).unwrap_err();
+    assert!(refused >= 1, "429 with Retry-After seconds");
+    assert!(admit(&a).is_err(), "the member's window spans both tokens");
+    let sarah = caller(SARAH, "00000000-0000-4000-8000-0000000000fe");
+    assert!(admit(&sarah).is_ok(), "another member has their own window");
+    // The default setting: the fourth message is admitted.
+    let defaults = Auth::new(None, None, Arc::new(crate::auth::tests::TestPages)).unwrap();
+    for _ in 0..4 {
+        assert!(super::admit(&defaults, &a).is_ok());
+    }
 }
 
 /// APP-206 (ADR-020 §8): a held draft names each approver's standing (by

@@ -46,7 +46,12 @@ use super::{
 };
 use crate::{
     auth::{csrf, Auth},
-    composer::{self, routes::Refused, Composer},
+    composer::{
+        self,
+        model::{Caller, Source},
+        routes::Refused,
+        Composer,
+    },
     http::{self, limits, UniformPath},
     imports::sandbox::ParserIdentity,
     query::Work,
@@ -1255,15 +1260,19 @@ pub enum BuildRefusal {
     DailyLimit,
 }
 impl BuildRefusal {
+    /// The answer, with the workspace's `daily_limit`.
     pub fn response(&self) -> Response {
-        self.response_for(None)
+        self.answer(composer::model::daily_limit)
     }
-    /// `response` for `member` (APP-215, `model::member_key`): the
-    /// `daily_limit` answer names whose allowance is reached.
-    pub fn response_for(&self, member: Option<&str>) -> Response {
+    /// `response` for `caller` (APP-215): the `daily_limit` answer names
+    /// whose allowance is reached.
+    pub fn response_for(&self, caller: &Caller) -> Response {
+        self.answer(|| composer::model::daily_limit_for(caller))
+    }
+    fn answer(&self, daily_limit: impl FnOnce() -> Response) -> Response {
         match self {
             Self::TooMany(retry_after) => http::too_many_requests(*retry_after),
-            Self::DailyLimit => composer::model::daily_limit_for(member),
+            Self::DailyLimit => daily_limit(),
             Self::NotFound => http::not_found(),
             Self::Unavailable => http::unavailable(),
             Self::ComposerUnavailable => {
@@ -1322,13 +1331,16 @@ fn ms(since: Instant) -> u64 {
 /// files registered (inferred defaults for any not yet confirmed), the capped
 /// context, the model's typed definition (or, in a demo organization, the
 /// rehearsed metrics definition, DS-73) admitted and published on the
-/// member's authoring app, saved, and its provenance recorded.
+/// member's authoring app, saved, and its provenance recorded. `source`
+/// (APP-222) is the surface asking (the folder route, the action path, MCP
+/// or Slack), logged with the model call.
 pub async fn build_from_box(
     state: &Boxes,
     member: &TrustedRequest,
     box_id: &str,
     purpose: &str,
     only: Option<&[String]>,
+    source: Source,
 ) -> Result<Built, BuildRefusal> {
     let started = Instant::now();
     let mut timings = Vec::new();
@@ -1348,7 +1360,10 @@ pub async fn build_from_box(
     if data.is_empty() {
         return Err(BuildRefusal::NoData);
     }
-    build_with(state, member, box_id, purpose, view, data, started, timings).await
+    build_with(
+        state, member, box_id, purpose, view, data, started, timings, source,
+    )
+    .await
 }
 
 /// The folder (its owner only, else the uniform 404) and up to `at_most`
@@ -1423,6 +1438,7 @@ async fn build_with(
     data: Vec<DataFile>,
     started: Instant,
     mut timings: Vec<(&'static str, u64)>,
+    source: Source,
 ) -> Result<Built, BuildRefusal> {
     let stores = state.auth.stores.as_ref().ok_or(BuildRefusal::NotFound)?;
     let _import_capacity = super::data_copy::acquire_import().ok_or(BuildRefusal::TooMany(2))?;
@@ -1510,7 +1526,8 @@ async fn build_with(
                 member.organization(),
                 &authoring.app,
                 deadline,
-                Some(&composer::model::member_of(member)),
+                &Caller::member(member),
+                source,
             )
             .await
             .map_err(|failure| match failure {
@@ -1800,7 +1817,7 @@ async fn apps(
         return http::not_found();
     };
     if let Err(refused) = admit_compose(&state, &member) {
-        return refused.response_for(Some(&composer::model::member_of(&member)));
+        return refused.response_for(&Caller::member(&member));
     }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
@@ -1856,7 +1873,15 @@ async fn apps(
         let built = match &purpose {
             None => card_from_box(&state, &member, &box_id, only.as_deref()).await,
             Some(purpose) => {
-                build_from_box(&state, &member, &box_id, purpose, only.as_deref()).await
+                build_from_box(
+                    &state,
+                    &member,
+                    &box_id,
+                    purpose,
+                    only.as_deref(),
+                    Source::Folder,
+                )
+                .await
             }
         };
         built.map(|built| built_json(&built))
@@ -1864,7 +1889,7 @@ async fn apps(
     let Some(key) = key else {
         return match run.await {
             Ok(built) => document(StatusCode::CREATED, &built),
-            Err(refused) => refused.response_for(Some(&composer::model::member_of(&member))),
+            Err(refused) => refused.response_for(&Caller::member(&member)),
         };
     };
     let scope = format!(
@@ -1899,7 +1924,7 @@ async fn apps(
             *first = Some(built);
             response
         }
-        Err(refused) => refused.response_for(Some(&composer::model::member_of(&member))),
+        Err(refused) => refused.response_for(&Caller::member(&member)),
     }
 }
 
@@ -2228,7 +2253,8 @@ pub async fn explain_now(
                 input,
                 800,
                 EXPLAIN_BUDGET,
-                Some(&composer::model::member_of(member)),
+                &Caller::member(member),
+                Source::Folder,
             )
             .await
         {
@@ -2311,10 +2337,10 @@ async fn explain_post(
         return http::not_found();
     };
     if let Err(refused) = admit_explain(&state, &member) {
-        return refused.response_for(Some(&composer::model::member_of(&member)));
+        return refused.response_for(&Caller::member(&member));
     }
     match explain_now(&state, &member, &app, &work).await {
         Ok(value) => document(StatusCode::OK, &value),
-        Err(refused) => refused.response_for(Some(&composer::model::member_of(&member))),
+        Err(refused) => refused.response_for(&Caller::member(&member)),
     }
 }

@@ -13,7 +13,7 @@
 //! sentences (`rehearsed`) map to fixed state changes with no model call.
 //! Outside a demo organization every sentence goes to the model.
 use super::state::{self, Widget, ACCENTS, FONTS, SKINS, UNITS, ZONES};
-use crate::composer::model::{self, Model, ModelError, ModelRequest};
+use crate::composer::model::{self, Caller, Model, ModelError, ModelRequest};
 use serde_json::{json, Map, Value};
 use std::{
     sync::Arc,
@@ -295,13 +295,16 @@ impl Customizer {
     }
 
     /// The new state for `sentence`. `current` must already be valid.
+    /// `caller` and `source` (APP-222): who the model call is for and the
+    /// product path it is logged under (the customizer route, or Shape).
     pub async fn customize(
         &self,
         widget: Widget,
         current: &Value,
         sentence: &str,
         demo: bool,
-        member: Option<&str>,
+        caller: &Caller,
+        source: model::Source,
     ) -> Result<Outcome, Failure> {
         let started = Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -325,7 +328,8 @@ impl Customizer {
             user: user(widget, current, sentence),
             max_tokens: MAX_TOKENS,
             budget: BUDGET,
-            member: member.map(str::to_owned),
+            caller: caller.clone(),
+            source,
         };
         let reply = model
             .complete(&request)

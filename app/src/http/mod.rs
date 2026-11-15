@@ -12,7 +12,7 @@ pub mod proxy;
 
 use axum::{
     body::{to_bytes, Body},
-    extract::{FromRequestParts, Path, Request},
+    extract::{FromRequestParts, MatchedPath, Path, Request},
     http::{header, request::Parts, HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -151,7 +151,8 @@ pub fn uniform(router: Router) -> Router {
     let inner = router
         .fallback(fallback)
         .method_not_allowed_fallback(fallback)
-        .layer(middleware::from_fn(deadline));
+        .layer(middleware::from_fn(deadline))
+        .layer(middleware::from_fn(server_errors));
     Router::new()
         .fallback_service(inner)
         .layer(middleware::from_fn(errors::error_pages))
@@ -184,14 +185,22 @@ pub fn uniform_with_many(router: Router, long: Vec<(&'static str, Router)>) -> R
     let inner = router
         .fallback(fallback)
         .method_not_allowed_fallback(fallback)
-        .layer(middleware::from_fn(deadline));
+        .layer(middleware::from_fn(deadline))
+        .layer(middleware::from_fn(server_errors));
     let mut outer = Router::new();
+    let any_long = !long.is_empty();
     for (path, long) in long {
         let long = long
             .fallback(fallback)
             .method_not_allowed_fallback(fallback)
             .layer(middleware::from_fn(long_deadline));
         outer = outer.route_service(path, long.into_service::<Body>());
+    }
+    // APP-219: a long path's server errors are logged here, under the path
+    // it is mounted at; inside, axum would append the inner router's own
+    // template to it (`MatchedPath` concatenates through `route_service`).
+    if any_long {
+        outer = outer.route_layer(middleware::from_fn(server_errors));
     }
     outer
         .fallback_service(inner)
@@ -250,6 +259,31 @@ pub async fn deadline(request: Request, next: Next) -> Response {
         .await
         .unwrap_or_else(|_| unavailable())
 }
+/// APP-219: every 5xx a route answers (the handler's own, or the deadline's
+/// 503 just inside this layer) is logged once as `http.server_error`, with
+/// the status and the route **template** axum matched (`MatchedPath`, such
+/// as `/w/{app}/{work}`), never the raw path, which can carry an identifier
+/// or a capability; a request no route matched logs `unmatched`. Logging
+/// only: the answer, its headers included, is passed on untouched (the
+/// uniform 404 compares headers, `errors.rs`).
+pub async fn server_errors(request: Request, next: Next) -> Response {
+    let route = request.extensions().get::<MatchedPath>().cloned();
+    let method = request.method().clone();
+    let response = next.run(request).await;
+    let status = response.status();
+    if status.is_server_error() {
+        tracing::error!(
+            event = "http.server_error",
+            status = status.as_u16(),
+            route = route.as_ref().map_or(UNMATCHED, MatchedPath::as_str),
+            method = method.as_str(),
+            "the service answered a server error"
+        );
+    }
+    response
+}
+/// The `route` of a server error no route matched.
+pub const UNMATCHED: &str = "unmatched";
 /// The composer's deadline (APP-093): the whole `POST /v1/compose`, model
 /// calls included.
 pub const COMPOSE_DEADLINE: Duration = crate::composer::COMPOSE_DEADLINE;
@@ -277,6 +311,89 @@ pub async fn bounded(body: Body, limit: usize) -> Option<axum::body::Bytes> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// APP-219: a 5xx is logged as `http.server_error` with the route
+    /// template, never the raw path (a marker in the path appears in no
+    /// line), on the short and the long-deadline routers alike; a request no
+    /// route matched logs `unmatched`; other statuses log nothing; and the
+    /// answer's headers are those of the same router without the layer.
+    #[tokio::test]
+    async fn a_server_error_logs_the_route_template_never_the_raw_path() {
+        use axum::routing::get;
+        use tower::ServiceExt;
+        const MARKER: &str = "zq7-path-marker-4417";
+        let lines = crate::config::logs::testing::Lines::default();
+        let _logs = tracing::subscriber::set_default(lines.subscriber());
+        let boom = || async { (StatusCode::INTERNAL_SERVER_ERROR, "boom").into_response() };
+        let app = uniform_with_many(
+            Router::new()
+                .route("/v1/boom/{id}", get(boom))
+                .route("/v1/fine/{id}", get(|| async { StatusCode::OK })),
+            vec![(
+                "/v1/long/{id}",
+                Router::new().route("/v1/long/{id}", get(|| async { unavailable() })),
+            )],
+        );
+        let request = |path: String| Request::builder().uri(path).body(Body::empty()).unwrap();
+        let boomed = app
+            .clone()
+            .oneshot(request(format!("/v1/boom/{MARKER}")))
+            .await
+            .unwrap();
+        assert_eq!(boomed.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let long = app
+            .clone()
+            .oneshot(request(format!("/v1/long/{MARKER}")))
+            .await
+            .unwrap();
+        assert_eq!(long.status(), StatusCode::SERVICE_UNAVAILABLE);
+        for path in [format!("/v1/fine/{MARKER}"), format!("/nowhere/{MARKER}")] {
+            let answer = app.clone().oneshot(request(path)).await.unwrap();
+            assert!(!answer.status().is_server_error());
+        }
+        // A 5xx no route matched (a fallback of its own here: the uniform
+        // fallback is a 404).
+        let unrouted = Router::new()
+            .fallback(|| async { StatusCode::BAD_GATEWAY })
+            .layer(middleware::from_fn(server_errors))
+            .oneshot(request(format!("/{MARKER}")))
+            .await
+            .unwrap();
+        assert_eq!(unrouted.status(), StatusCode::BAD_GATEWAY);
+        let text = lines.text();
+        assert!(!text.contains(MARKER), "no raw path is logged: {text}");
+        let events = lines.events("http.server_error");
+        let seen: Vec<(u64, &str)> = events
+            .iter()
+            .map(|e| (e["status"].as_u64().unwrap(), e["route"].as_str().unwrap()))
+            .collect();
+        assert_eq!(
+            seen,
+            [
+                (500, "/v1/boom/{id}"),
+                (503, "/v1/long/{id}"),
+                (502, UNMATCHED)
+            ],
+            "{text}"
+        );
+        assert!(events
+            .iter()
+            .all(|e| e["level"] == "ERROR" && e["method"] == "GET"));
+        // Logging only: the same answer, headers included, without the layer.
+        let bare = Router::new()
+            .route("/v1/boom/{id}", get(boom))
+            .oneshot(request(format!("/v1/boom/{MARKER}")))
+            .await
+            .unwrap();
+        let logged = Router::new()
+            .route("/v1/boom/{id}", get(boom))
+            .layer(middleware::from_fn(server_errors))
+            .oneshot(request(format!("/v1/boom/{MARKER}")))
+            .await
+            .unwrap();
+        assert_eq!(bare.status(), logged.status());
+        assert_eq!(bare.headers(), logged.headers());
+    }
 
     #[tokio::test]
     async fn refusals_are_problem_json_with_a_stable_code_and_no_store() {

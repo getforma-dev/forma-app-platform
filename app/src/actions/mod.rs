@@ -47,7 +47,7 @@ mod receipt_tests;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use crate::composer::model::{self, Model, ModelError, ModelRequest};
+use crate::composer::model::{self, Caller, Model, ModelError, ModelRequest, Source};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::{sync::Arc, time::Duration};
@@ -226,14 +226,17 @@ impl Parser {
     /// answered deterministically and at once; everything else, and every
     /// utterance outside a demo organization, goes to the model. Either
     /// answer passes the read-only guard (`guard`, APP-135): a sentence that
-    /// reads or asks never comes back as a create or decide.
+    /// reads or asks never comes back as a create or decide. `caller` and
+    /// `source` (APP-222): who a model call is for, and the product path it
+    /// is logged under (the action route or Slack).
     pub async fn parse(
         &self,
         utterance: &str,
         catalog: &[prompt::CatalogApp],
         demo: bool,
         today: &str,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<Parse, ParseFailure> {
         let started = std::time::Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -271,7 +274,8 @@ impl Parser {
             user: prompt::parse_user(utterance, catalog, today),
             max_tokens: PARSE_MAX_TOKENS,
             budget: PARSE_BUDGET,
-            member: member.map(str::to_owned),
+            caller: caller.clone(),
+            source,
         };
         let reply = model.complete(&request).await?;
         decode(&reply.text)

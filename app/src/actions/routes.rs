@@ -463,8 +463,13 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
     // window too); anything else continues below unchanged.
     if multipart.is_none() && parts.uri.query().is_none() {
         if let Some((utterance, box_id)) = folder_body(&bytes) {
-            if let Some(answer) =
-                crate::boxes::intent::act(&member, &utterance, box_id.as_deref()).await
+            if let Some(answer) = crate::boxes::intent::act(
+                &member,
+                &utterance,
+                box_id.as_deref(),
+                crate::composer::model::Source::Action,
+            )
+            .await
             {
                 return match answer {
                     crate::boxes::intent::Answer::Done(value) => document(StatusCode::OK, &value),
@@ -552,7 +557,8 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                     &catalog,
                     demo,
                     &today,
-                    Some(&crate::composer::model::member_of(&member)),
+                    &crate::composer::model::Caller::member(&member),
+                    crate::composer::model::Source::Action,
                 )
                 .await;
             // The image leaves memory here, before resolution (DS-56).
@@ -576,9 +582,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 }
                 Err(ParseFailure::DailyLimit) => {
                     log_refused(&member, "model_daily_cap", started);
-                    return crate::composer::model::daily_limit_for(Some(
-                        &crate::composer::model::member_of(&member),
-                    ));
+                    return crate::composer::model::daily_limit_for(
+                        &crate::composer::model::Caller::member(&member),
+                    );
                 }
             }
         }
@@ -594,7 +600,8 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                     &catalog,
                     demo,
                     &today,
-                    Some(&crate::composer::model::member_of(&member)),
+                    &crate::composer::model::Caller::member(&member),
+                    crate::composer::model::Source::Action,
                 )
                 .await
             {
@@ -612,9 +619,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 }
                 Err(ParseFailure::DailyLimit) => {
                     log_refused(&member, "model_daily_cap", started);
-                    return crate::composer::model::daily_limit_for(Some(
-                        &crate::composer::model::member_of(&member),
-                    ));
+                    return crate::composer::model::daily_limit_for(
+                        &crate::composer::model::Caller::member(&member),
+                    );
                 }
             }
         }
