@@ -220,3 +220,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 215 | [APP-212: End-of-test purge deletes guest links at schema 24](0-backlog/APP-212.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-188, APP-194 |
 | 216 | [APP-214: WAF and free security-event alerts (infra review H2/H3)](0-backlog/APP-214.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-187 |
 | 217 | [APP-215: Security release: limits, per-member AI allowance, guest names and links, HSTS (2026-11-15 reviews)](0-backlog/APP-215.md) | [PH09](phases/PH09.md) | S15 | OPS | P0 | M | Backlog | APP-154, APP-189 |
+| 218 | [APP-216: Reduce the beta's AWS cost: the readiness probe, the task size, and the after-class options](0-backlog/APP-216.md) | [PH09](phases/PH09.md) | S15 | OPS | P2 | M | Backlog | APP-188 |
