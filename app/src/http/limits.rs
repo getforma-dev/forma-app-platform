@@ -29,15 +29,22 @@ pub const fn per(limit: usize, seconds: u64) -> Window {
 /// (ADR-006 said 10 and 60; amendment of 2026-11-14). APP-189 classroom
 /// network risk: a class of 25 signs in at once from one address behind NAT.
 pub const SIGNIN_ADDRESS: &[Window] = &[per(40, 60), per(150, 3600)];
-/// ADR-006 `POST /signin/{handle}`: 600/hour across the service.
-pub const SIGNIN_GLOBAL: &[Window] = &[per(600, 3600)];
+/// ADR-006 `POST /signin/{handle}`: 6,000/hour across the service (ADR-006
+/// said 600; amendment of 2026-11-15, APP-215 identity H1). The limiter
+/// records every admitted attempt, judged or not, so a few addresses each
+/// under their own window could fill a 600 window and refuse the whole
+/// class's sign-in for an hour. The per-address windows are unchanged: they
+/// are what protects fAuth's bucket and SES.
+pub const SIGNIN_GLOBAL: &[Window] = &[per(6000, 3600)];
 /// ADR-006 `POST /invite/validate`: 5/minute per address class (under fAuth's
 /// registration burst of 5; codes are redeemed at home), and 100/day
 /// (ADR-006 said 20; amendment of 2026-11-14). APP-189 classroom network
 /// risk: 25 invitations may still come from one shared address.
 pub const INVITE_ADDRESS: &[Window] = &[per(5, 60), per(100, 86_400)];
-/// ADR-006 `POST /invite/validate`: 200/day across the service.
-pub const INVITE_GLOBAL: &[Window] = &[per(200, 86_400)];
+/// ADR-006 `POST /invite/validate`: 2,000/day across the service (ADR-006
+/// said 200; amendment of 2026-11-15, APP-215 identity H1: Nov 28 is signup
+/// day, and a filled day window would refuse every code until the next day).
+pub const INVITE_GLOBAL: &[Window] = &[per(2000, 86_400)];
 /// ADR-006 resend: a 60-second per-account cooldown mirrored ahead of fAuth's
 /// own, and at most 5 per pending identity per 24 hours (D7.17).
 pub const RESEND_ACCOUNT: &[Window] = &[per(1, 60), per(5, 86_400)];
@@ -46,8 +53,9 @@ pub const RESEND_ACCOUNT: &[Window] = &[per(1, 60), per(5, 86_400)];
 /// legitimate return (sign-in 40/minute + invitation 5/minute; sign-in
 /// 150/hour + invitation 100/day, APP-189), so no real return is refused.
 pub const CALLBACK_ADDRESS: &[Window] = &[per(45, 60), per(250, 3600)];
-/// The callback across the service: sign-in 600/hour + invitation 200/day.
-pub const CALLBACK_GLOBAL: &[Window] = &[per(800, 3600)];
+/// The callback across the service: sign-in 6,000/hour + invitation
+/// 2,000/day (the 2026-10-30 sum rule over the 2026-11-15 values).
+pub const CALLBACK_GLOBAL: &[Window] = &[per(8000, 3600)];
 /// Failed cookie lookups (no record, an unregistered organization) on
 /// `GET /workspace` and `GET /auth/pending` per address class, at the
 /// callback's ADR-006 size (15/minute, 80/hour): a legitimate browser fails a
@@ -320,9 +328,19 @@ mod tests {
             ),
             (40, 150, 5, 100)
         );
-        // The service window: 200 a day across classes.
+        // The service window: 2,000 a day across classes (APP-215 identity
+        // H1; ADR-006 said 200), filled here five at a time from distinct
+        // classes so no class window refuses first.
+        assert_eq!(
+            (
+                SIGNIN_GLOBAL[0].limit,
+                INVITE_GLOBAL[0].limit,
+                CALLBACK_GLOBAL[0].limit
+            ),
+            (6000, 2000, 8000)
+        );
         let global = Limiter::default();
-        for i in 0..200 {
+        for i in 0..INVITE_GLOBAL[0].limit {
             let class = format!("c{}", i / 5);
             assert!(global
                 .admit_blocked_at(

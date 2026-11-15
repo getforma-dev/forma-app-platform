@@ -166,6 +166,8 @@ export function fileReadRefusal(reason: string): string {
     return 'This file exceeds a viewing limit: 20 MB uploaded, 100 MB unpacked, 4 million cells, 16 sheets, or 64K characters per cell. A page must fit within 8 MB. The original is still available to download.';
   }
   if (['parse_deadline', 'parse_resource_limit', 'fuel_exhausted', 'memory_limit'].includes(reason)) return 'Reading this file exceeded the processing budget. Try a smaller sheet or split the file. The original is still available to download.';
+  // APP-215: both parser slots were busy for the whole wait; the file is stored and can be read again.
+  if (reason === 'parse_busy') return 'Other files are being read right now. Try again in a moment; the file is stored and the original is available to download.';
   if (reason.includes('macro')) return 'Macro-enabled workbooks cannot be viewed here. Save a copy as an ordinary XLSX file; the original remains available to download.';
   if (reason.includes('external_link')) return 'This workbook links to external content. Save a self-contained copy to view it here; the original remains available to download.';
   if (reason === 'csv_utf8_required') return 'This CSV uses an unsupported text encoding. Export it as UTF-8 CSV to view it here; the original remains available to download.';

@@ -909,6 +909,7 @@ async fn document(
             saved,
             &listing,
             member.principal(),
+            false,
         ),
     );
     let records_truncated = listing.truncated && !record_cards.is_empty();

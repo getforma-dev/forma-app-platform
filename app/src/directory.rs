@@ -374,6 +374,20 @@ pub fn neutral_label(principal: &str) -> String {
     format!("Member {}", &principal[..8.min(principal.len())])
 }
 
+/// ADR-020 §17.10 (C4): a creator's label as this viewer may see it. A
+/// member sees the organization's label (a display name, else the neutral
+/// handle); a guest is outside the organization, covered by no consent to
+/// see members' names, and sees the neutral handle only. Every surface a
+/// guest reads labels through this (the record components, APP-215: the
+/// records card of a shared page).
+pub fn creator_label(guest: bool, organization: &str, principal: &str) -> String {
+    if guest {
+        neutral_label(principal)
+    } else {
+        label(organization, principal)
+    }
+}
+
 /// Tests and campaigns: replace the directory without a file.
 #[cfg(test)]
 pub fn set_for_tests(entries: &[(&str, &str)]) {

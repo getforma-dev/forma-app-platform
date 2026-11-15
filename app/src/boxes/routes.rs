@@ -843,10 +843,18 @@ impl DataRefusal {
                 "data_refused",
                 json!({"column": column}),
             ),
+            // APP-215 (content M2): no parser slot within the bounded wait is
+            // the 429 the other busy paths answer, never a `data_refused`.
+            Self::Parse(code) if code == "parse_busy" => {
+                http::too_many_requests(PARSE_BUSY_RETRY_AFTER)
+            }
             Self::Parse(_) => http::problem(StatusCode::UNPROCESSABLE_ENTITY, "data_refused"),
         }
     }
 }
+/// `Retry-After` for a parse refused `parse_busy` (APP-215): a parser slot
+/// frees at the latest when the running child's deadline passes.
+const PARSE_BUSY_RETRY_AFTER: u64 = 5;
 
 /// Registers one data file of a box the member owns: `columns` as confirmed,
 /// or the inferred defaults (`None`). Returns the registration and the table.

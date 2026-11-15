@@ -669,6 +669,8 @@ async fn guest_document(
         let (i, card) = result.map_err(|_| http::unavailable())?;
         views[i] = Some(card?);
     }
+    // APP-215 (sharing M1, ADR-020 §17.10): the guest is outside the
+    // organization, so the cards label every creator with the neutral handle.
     let record_cards: Vec<SharedRecordsCardProps> = page::automatic_records(
         &outline,
         canvas::records_cards(
@@ -677,6 +679,7 @@ async fn guest_document(
             access.work(),
             &listing,
             access.account_id(),
+            true,
         ),
     )
     .into_iter()

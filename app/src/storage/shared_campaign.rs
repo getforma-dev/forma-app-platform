@@ -5,7 +5,7 @@ use super::{
     admission_qualification::operator,
     definition_qualification::request,
     qualification::Fixture,
-    qualification_cases::{check, APP, ORG, OTHER, PRINCIPAL, PUBLICATION, WORK},
+    qualification_cases::{check, APP, ORG, OTHER, PRINCIPAL, PUBLICATION, REVIEWER, WORK},
     *,
 };
 use genui_auth_verifier::VerifiedIdentity;
@@ -419,13 +419,65 @@ async fn campaign() {
         "paused"
     );
     fixture.sql(&format!("UPDATE genui.saved_work SET version=1 WHERE organization_id='{ORG}' AND app_id='{APP}' AND work_id='{WORK}'"),"genui");
-    fixture.sql(&format!("UPDATE genui.memberships SET membership_epoch=2 WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'"),"genui");
+    check(&mut checks,"source deletion during query and configuration version change deny release; management reports paused rather than active");
+    // APP-215 (sharing M3): the sponsor signs out everywhere, through the real
+    // sign-out, which advances their membership epoch. The guest still reads,
+    // runs and releases, and management still reports the share active.
+    let (epoch, _) = stores.workspace.sign_out_all(&owner).await.unwrap();
+    assert_eq!(epoch, 2);
+    stores.data.guest_work_reads(&view_only).await.unwrap();
+    stores.data.release_guest_access(&view_only).await.unwrap();
+    stores
+        .data
+        .guest_run_query(&view_only, "total", &json!({}))
+        .await
+        .unwrap();
+    let signed_out_owner = request(&stores, ORG, PRINCIPAL, 2);
+    assert_eq!(
+        stores
+            .workspace
+            .list_live_shares(&signed_out_owner, APP, WORK)
+            .await
+            .unwrap()[0]
+            .status,
+        "active"
+    );
+    // Removing the sponsor from the organization (the real `/admin` path,
+    // `admin_remove_member`: membership and entitlement revoked, epoch
+    // advanced) still ends every guest read of their shares.
+    fixture.sql(&format!("INSERT INTO genui.organization_permissions VALUES('{ORG}','{REVIEWER}','admin_policy') ON CONFLICT DO NOTHING"),"genui");
+    let admin = request(&stores, ORG, REVIEWER, 1);
+    assert_eq!(
+        stores
+            .workspace
+            .admin_remove_member(&admin, PRINCIPAL)
+            .await
+            .unwrap(),
+        RemoveOutcome::Removed
+    );
+    assert!(matches!(
+        stores.data.guest_work_reads(&view_only).await,
+        Err(Error::Denied)
+    ));
     assert!(matches!(
         stores.data.release_guest_access(&view_only).await,
         Err(Error::Denied)
     ));
-    fixture.sql(&format!("UPDATE genui.memberships SET membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'"),"genui");
-    check(&mut checks,"source deletion during query, configuration version change, and sponsor epoch change deny release; management reports paused rather than active");
+    assert!(matches!(
+        stores
+            .data
+            .guest_run_query(&view_only, "total", &json!({}))
+            .await,
+        Err(Error::Denied)
+    ));
+    assert!(stores
+        .workspace
+        .resolve_guest_access(&guest, &share.key)
+        .await
+        .is_err());
+    fixture.sql(&format!("UPDATE genui.memberships SET status='active',membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'; UPDATE genui.entitlements SET status='active',revoked_at=NULL WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'; DELETE FROM genui.organization_permissions WHERE organization_id='{ORG}' AND principal_id='{REVIEWER}' AND permission='admin_policy'"),"genui");
+    stores.data.guest_work_reads(&view_only).await.unwrap();
+    check(&mut checks,"APP-215: the sponsor's sign-out everywhere advances their epoch and the guest still reads, queries and releases while management reports the share active; removing the sponsor through admin_remove_member denies every guest read, release, query and resolution");
     let flow = stores
         .workspace
         .begin_shared_flow(&share.key, OTHER, b"synthetic sealed verifier")

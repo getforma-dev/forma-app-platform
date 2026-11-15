@@ -799,7 +799,9 @@ async function makeFileApp(boxId: string, file: BoxFile): Promise<void> {
     const preview = await fetchPreview(boxId, file.file_id);
     if (!preview || 'refused' in preview) {
       const reason = preview && 'refused' in preview ? preview.refused : '';
-      announce(reason === 'column_limit' || reason === 'dimension_limit'
+      announce(reason === 'parse_busy'
+        ? 'Other files are being read right now. Try again in a moment.'
+        : reason === 'column_limit' || reason === 'dimension_limit'
         ? 'This file can be viewed with row and column paging. App creation currently needs a table with at most 32 columns; export the columns you want in the app as a separate file.'
         : 'The original viewer supports more spreadsheet formats than app creation currently does. Double-click to view this file. To build an app, use a table of up to 32 columns with values instead of formulas.');
       return;
