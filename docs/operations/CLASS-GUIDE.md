@@ -1,5 +1,7 @@
 # Class guide: build day, rehearsal, known issues, code email
 
+**The class is remote** (Victor, 2026-11-15): students join from home, school, a library or anywhere else. Where this guide says "on my screen" or "the projector", share your screen in the call; where it says "pin it in the room", send it to the students. What is left, with dates: [POST-CLASS-FOLLOW-UPS.md](../planning/POST-CLASS-FOLLOW-UPS.md).
+
 Victor's class-prep pack for the Nov 29–30 class (25 adult students, his organization on `beta.getforma.dev`). It follows the [plan](../planning/TRIAL-25-READINESS.md) and the [runbook](TRIAL-RUNBOOK.md); it adds nothing to either. Every quoted message is the text the code shows, read on 2026-11-14 from `main` (release B, schema 24, [live on beta since Nov 14](../../evidence/APP-194/release-2026-11-14.md)) and from the Release C branch (`release/c-participation`, with the composer step from `release/c-b5-composer`). Where this guide says **Release C**, the words work only after Release C is live on beta; each one has a fallback that works on release B.
 
 What the two releases give you, in plain words:
