@@ -298,8 +298,16 @@ class WafTemplateTests(NoPrivateIdentifierMixin, unittest.TestCase):
         self.assertEqual(self.acl['VisibilityConfig'], {'SampledRequestsEnabled': True, 'CloudWatchMetricsEnabled': True, 'MetricName': {'Fn::Sub': '${AWS::StackName}-web-acl'}})
         bodies = self.acl['CustomResponseBodies']
         self.assertEqual(list(bodies), ['too-many-requests'])
-        self.assertEqual(bodies['too-many-requests']['ContentType'], 'TEXT_PLAIN')
-        self.assertLess(len(bodies['too-many-requests']['Content']), 120)
+        self.assertEqual(bodies['too-many-requests']['ContentType'], 'TEXT_HTML')
+        # The themed page (APP-217's look, Victor 2026-11-15) is self-contained: a blocked
+        # address cannot fetch an asset, so no script, no external resource, and small.
+        page = bodies['too-many-requests']['Content']
+        self.assertLessEqual(len(page.encode()), 4096)
+        self.assertIn('ERROR 429', page)
+        self.assertIn('five minutes', page)
+        self.assertNotIn('<script', page.lower())
+        self.assertNotRegex(page, r'(src|href)="(?!mailto:)')
+        self.assertNotIn('url(', page)
         self.assertEqual([(r['Name'], r['Priority']) for r in self.acl['Rules']], [('per-address-flood', 10), ('per-address-model-routes', 20)])
         for name, rule in self.rules.items():
             with self.subTest(rule=name):
