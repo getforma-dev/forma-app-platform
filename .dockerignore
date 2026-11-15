@@ -197,6 +197,13 @@ app/admin/src/home/**
 !app/admin/src/about/
 app/admin/src/about/**
 !app/admin/src/about/app.tsx
+# APP-223: the public beta notice page and the shared site footer.
+!app/admin/src/notice/
+app/admin/src/notice/**
+!app/admin/src/notice/app.tsx
+!app/admin/src/site/
+app/admin/src/site/**
+!app/admin/src/site/footer.tsx
 !app/admin/src/invite/
 app/admin/src/invite/**
 !app/admin/src/invite/app.tsx
