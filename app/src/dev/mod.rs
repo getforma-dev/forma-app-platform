@@ -374,10 +374,15 @@ fn parser_identity() -> Option<ParserIdentity> {
 }
 
 /// The served router: the binary's product routes plus its assets, the
-/// retiring service worker and liveness, and `/` opening the canvas.
-fn served(product_routes: Router, long: Vec<(&'static str, Router)>) -> Router {
+/// retiring service worker and liveness, and `/` opening the canvas, with
+/// APP-217's error page for browser navigations, as the binary serves it.
+fn served(
+    product_routes: Router,
+    long: Vec<(&'static str, Router)>,
+    error_pages: Arc<crate::pages::SsrErrorPages>,
+) -> Router {
     use axum::routing::get;
-    crate::http::uniform_with_many(
+    let router = crate::http::uniform_with_many(
         Router::new()
             .route(
                 "/",
@@ -392,7 +397,9 @@ fn served(product_routes: Router, long: Vec<(&'static str, Router)>) -> Router {
             )
             .merge(product_routes),
         long,
-    )
+    );
+    crate::http::errors::ErrorPageLayer::new(error_pages, crate::auth::cookies::viewer)
+        .serve(router)
 }
 
 fn private_dir(path: &Path) -> Result<(), String> {
@@ -454,6 +461,11 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
     let org_admin_pages = Arc::new(crate::org_admin::SsrAdminPages {
         page: modules
             .bind::<crate::org_admin::AdminProps>("orgAdmin")
+            .map_err(bind_error)?,
+    });
+    let error_pages = Arc::new(crate::pages::SsrErrorPages {
+        page: modules
+            .bind::<crate::pages::ErrorProps>("error")
             .map_err(bind_error)?,
     });
     let shared_pages = Arc::new(crate::sharing::live::SsrSharedPages {
@@ -545,7 +557,7 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
         boxes: box_state,
         org_admin_pages,
     });
-    let app = served(product_routes, long);
+    let app = served(product_routes, long, error_pages);
 
     // --- Sessions, and the example data once per database ---
     let minter = personas::Minter {

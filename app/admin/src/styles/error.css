@@ -1,0 +1,374 @@
+/* APP-217: the themed error page (src/error/app.tsx), in the getforma.dev
+   labs containment style: the isotope mascot, the green capsule glow, the
+   ☢ readout and the hazard stripes. Linked after app.css, on this page only.
+   CSS only: the surge plays from a visually hidden checkbox (`:checked ~`),
+   and every animation sits inside prefers-reduced-motion: no-preference. */
+
+:root {
+  --lab-paper: #f4f4ed;
+  --lab-surface: #ffffff;
+  --lab-ink: #1a1d18;
+  --lab-muted: #555d4e;
+  --lab-edge: #858c7c;
+  --lab-line: #daddd0;
+  --lab-accent: #416609;
+  --lab-lime: #c5f953;
+  --lab-on-lime: #1a1d18;
+  --lab-lime-edge: #6d8a32;
+  --lab-hazard: #fcd116;
+  --lab-hazard-ink: #1a1d18;
+  --lab-readout: #182117;
+  --lab-readout-ink: #dcff9b;
+  --lab-readout-edge: #c9ff6b;
+  --lab-glow: #b7ff39;
+  --lab-glow-core: #eaff95;
+  --lab-grid: rgb(26 29 24 / 5%);
+  --lab-shadow: 0 1px 1px rgb(26 29 24 / 4%), 0 2px 6px rgb(26 29 24 / 4%), 0 24px 48px -16px rgb(26 29 24 / 18%);
+  --lab-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --lab-paper: #141914;
+    --lab-surface: #1c231c;
+    --lab-ink: #edf0e4;
+    --lab-muted: #b3bea9;
+    --lab-edge: #75836d;
+    --lab-line: #354134;
+    --lab-accent: #c5f953;
+    --lab-grid: rgb(255 255 255 / 4%);
+    --lab-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 24px 56px -16px rgb(0 0 0 / 65%);
+  }
+}
+
+body {
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+}
+
+.lab {
+  box-sizing: border-box;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 20px;
+  min-height: 100vh;
+  padding: 32px 20px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 31px, var(--lab-grid) 31px 32px),
+    repeating-linear-gradient(90deg, transparent 0 31px, var(--lab-grid) 31px 32px),
+    var(--lab-paper);
+}
+
+.lab *,
+.lab *::before,
+.lab *::after {
+  box-sizing: border-box;
+}
+
+/* Visually hidden but focusable: Space toggles the surge from the keyboard. */
+.lab-surge-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+}
+
+.lab-card {
+  position: relative;
+  width: 100%;
+  max-width: 52rem;
+  overflow: hidden;
+  border: 1px solid var(--lab-line);
+  border-radius: 8px;
+  background: var(--lab-surface);
+  box-shadow: var(--lab-shadow);
+}
+
+.lab-stripes {
+  height: 10px;
+  background: repeating-linear-gradient(-45deg, var(--lab-hazard) 0 12px, var(--lab-hazard-ink) 12px 24px);
+}
+
+.lab-card .forma-brand {
+  margin: 28px 32px 0;
+  color: var(--lab-ink);
+}
+
+.lab-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 32px;
+  padding: 28px 32px 36px;
+}
+
+.lab-mascot {
+  position: relative;
+  display: block;
+  width: calc(260px * 800 / 1090);
+  height: 260px;
+  border-radius: 24px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lab-mascot-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The capsule in the tongs: ellipse (245, 240) of the 800 × 1090 view box at 120, 85. */
+.lab-capsule-glow {
+  position: absolute;
+  left: 5%;
+  top: 3.6%;
+  width: 21.3%;
+  height: 21.1%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--lab-glow-core), rgb(183 255 57 / 45%) 45%, rgb(169 255 63 / 0%));
+  opacity: 0.45;
+  transform: rotate(-30deg);
+  pointer-events: none;
+}
+
+.lab-surge-toggle:focus-visible ~ .lab-card .lab-mascot {
+  outline: 2px solid var(--lab-accent);
+  outline-offset: 6px;
+}
+
+.lab-copy {
+  min-width: 0;
+}
+
+.lab-eyebrow {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 18px;
+  padding: 6px 12px 5px;
+  border: 1px solid var(--lab-readout-edge);
+  border-radius: 6px;
+  background: var(--lab-readout);
+  box-shadow: 0 0 24px rgb(183 255 57 / 20%);
+  color: var(--lab-readout-ink);
+  font: 12px/1.6 var(--lab-mono);
+  letter-spacing: 2px;
+}
+
+.lab-hazard {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.lab-copy h1 {
+  margin: 0 0 12px;
+  font-size: clamp(30px, 6vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  overflow-wrap: break-word;
+}
+
+.lab-text {
+  max-width: 34rem;
+  margin: 0 0 24px;
+  color: var(--lab-muted);
+  font-size: 17px;
+}
+
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0;
+}
+
+.lab-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--lab-edge);
+  border-radius: 6px;
+  color: var(--lab-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.lab-button:hover {
+  border-color: var(--lab-accent);
+}
+
+.lab-primary {
+  border-color: var(--lab-lime-edge);
+  background: var(--lab-lime);
+  color: var(--lab-on-lime);
+}
+
+.lab-primary:hover {
+  border-color: var(--lab-ink);
+}
+
+.lab-note {
+  color: var(--lab-muted);
+  font-size: 14px;
+}
+
+.lab-footer {
+  color: var(--lab-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.lab-footer a {
+  color: var(--lab-accent);
+}
+
+/* The surge: shown while the box is checked; static unless motion is welcome. */
+.lab-surge {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgb(204 255 80 / 29%), rgb(107 169 34 / 16%) 48%, rgb(56 97 36 / 22%)),
+    repeating-linear-gradient(0deg, transparent 0 5px, rgb(155 215 69 / 4%) 5px 6px);
+  box-shadow: inset 0 0 100px rgb(183 255 57 / 30%);
+}
+
+.lab-surge-toggle:checked ~ .lab-surge {
+  display: block;
+}
+
+.lab-surge-ring {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 100px;
+  height: 100px;
+  margin: -50px;
+  border: 2px solid #dfff8f;
+  border-radius: 50%;
+  box-shadow: 0 0 28px rgb(201 255 107 / 53%), inset 0 0 22px rgb(201 255 107 / 40%);
+  opacity: 0.5;
+  transform: scale(3);
+}
+
+.lab-surge-readout {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 14px;
+  width: max-content;
+  max-width: calc(100% - 36px);
+  margin: 0;
+  padding: 12px 18px 10px;
+  border: 1px solid var(--lab-readout-edge);
+  border-radius: 6px;
+  background: rgb(24 33 23 / 93%);
+  box-shadow: 0 0 45px rgb(183 255 57 / 20%);
+  color: var(--lab-readout-ink);
+  font: 11px/1.6 var(--lab-mono);
+  letter-spacing: 2px;
+  transform: translateX(-50%);
+}
+
+.lab-surge-symbol {
+  grid-row: span 2;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.lab-surge-toggle:checked ~ .lab-card {
+  border-color: var(--lab-lime-edge);
+  box-shadow: inset 0 0 32px rgb(183 255 57 / 7%), 0 0 24px rgb(183 255 57 / 18%), var(--lab-shadow);
+}
+
+.lab-surge-toggle:checked ~ .lab-card .lab-mascot-image {
+  filter: drop-shadow(0 0 16px rgb(183 255 57 / 55%));
+}
+
+.lab-surge-toggle:checked ~ .lab-card .lab-capsule-glow {
+  opacity: 0.95;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lab-capsule-glow {
+    animation: lab-breathe 3.6s ease-in-out infinite alternate;
+  }
+  .lab-surge-toggle:checked ~ .lab-card .lab-capsule-glow {
+    animation-duration: 0.6s;
+  }
+  .lab-surge-toggle:checked ~ .lab-surge {
+    animation: lab-surge-envelope 0.4s ease-out both;
+  }
+  .lab-surge-toggle:checked ~ .lab-surge .lab-surge-ring {
+    animation: lab-shockwave 2.5s cubic-bezier(0.1, 0.5, 0.2, 1) both;
+  }
+  .lab-surge-toggle:checked ~ .lab-surge .lab-surge-readout {
+    animation: lab-pulse 1.2s ease-in-out infinite alternate;
+  }
+  .lab-button {
+    transition: border-color 0.15s ease;
+  }
+}
+
+@keyframes lab-breathe {
+  from { opacity: 0.3; }
+  to { opacity: 0.85; }
+}
+
+@keyframes lab-surge-envelope {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lab-shockwave {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { opacity: 0.65; }
+  100% { transform: scale(24); opacity: 0; }
+}
+
+@keyframes lab-pulse {
+  from { box-shadow: 0 0 18px rgb(183 255 57 / 15%); color: var(--lab-readout-ink); }
+  to { box-shadow: 0 0 54px rgb(183 255 57 / 45%); color: #f2ffd0; }
+}
+
+@media (max-width: 640px) {
+  .lab {
+    align-content: start;
+    padding: 16px 12px 28px;
+  }
+  .lab-card .forma-brand {
+    margin: 22px 20px 0;
+  }
+  .lab-body {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 20px;
+    padding: 20px 20px 28px;
+  }
+  .lab-mascot {
+    width: calc(150px * 800 / 1090);
+    height: 150px;
+  }
+  .lab-eyebrow {
+    letter-spacing: 1px;
+  }
+  .lab-text {
+    font-size: 16px;
+  }
+}

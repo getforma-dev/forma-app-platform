@@ -1,3 +1,4 @@
+import { copyFileSync } from 'node:fs';
 import { build } from '@getforma/build';
 
 const isSsr = process.argv.includes('--ssr');
@@ -11,6 +12,8 @@ await build({
     { entry: 'src/signin/app.tsx', outfile: 'signin.js' },
     { entry: 'src/pending/app.tsx', outfile: 'pending.js' },
     { entry: 'src/denied/app.tsx', outfile: 'denied.js' },
+    // APP-217: the themed error page for browser navigations.
+    { entry: 'src/error/app.tsx', outfile: 'error.js' },
     { entry: 'src/workspace/app.tsx', outfile: 'workspace.js' },
     { entry: 'src/record/app.tsx', outfile: 'record.js' },
     { entry: 'src/work/app.tsx', outfile: 'work.js' },
@@ -36,6 +39,8 @@ await build({
     { input: 'src/styles/governance.css', outfile: 'governance.css' },
     // Trial plan D4: the organization admin table.
     { input: 'src/styles/org-admin.css', outfile: 'org-admin.css' },
+    // APP-217: the error page's containment-lab look.
+    { input: 'src/styles/error.css', outfile: 'error.css' },
   ],
   // APP-009 (ADR-006): the sign-in page also serves /signin/{handle}; the
   // denial page is rendered by the callback and the pending route. APP-074:
@@ -47,6 +52,9 @@ await build({
     '/signin': { js: ['signin'], css: ['app'] },
     '/auth/pending': { js: ['pending'], css: ['app'] },
     '/auth/callback': { js: ['denied'], css: ['app'] },
+    // APP-217: no route serves /error itself; the uniform layer renders this
+    // page in place of a refusal on any path a browser navigates to.
+    '/error': { js: ['error'], css: ['app', 'error'] },
     '/workspace': { js: ['workspace'], css: ['app'] },
     // APP-013: the record page serves /work/{app}/{work}/records/{collection}/{record}.
     '/record': { js: ['record'], css: ['app'] },
@@ -74,6 +82,7 @@ await build({
     signin: 'src/signin/app.tsx',
     pending: 'src/pending/app.tsx',
     denied: 'src/denied/app.tsx',
+    error: 'src/error/app.tsx',
     workspace: 'src/workspace/app.tsx',
     record: 'src/record/app.tsx',
     work: 'src/work/app.tsx',
@@ -87,3 +96,9 @@ await build({
   ...(process.argv.includes('--strict') ? { strict: true } : {}),
   ...(process.argv.includes('--watch') ? { watch: true } : {}),
 });
+
+// APP-217: the error page's mascot (Victor's getforma.dev brand asset, byte
+// for byte), served from /_assets beside the font. The build copies only
+// .woff2 from fontDir and replaces dist/ whole, so it is copied after each
+// build; like the font it is unhashed and revalidated by its ETag.
+copyFileSync('src/brand/forma-isotope.svg', 'dist/forma-isotope.svg');

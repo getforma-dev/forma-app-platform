@@ -5,8 +5,8 @@ use forma_server::{
 };
 use genui::auth::{self, Auth, AuthConfig};
 use genui::pages::{
-    respond, DeniedProps, InviteProps, PendingProps, RecordProps, SigninProps, SsrPages,
-    WorkspaceProps,
+    respond, DeniedProps, ErrorProps, InviteProps, PendingProps, RecordProps, SigninProps,
+    SsrErrorPages, SsrPages, WorkspaceProps,
 };
 use rust_embed::Embed;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -160,6 +160,7 @@ async fn main() {
         "/signin",
         "/auth/pending",
         "/auth/callback",
+        "/error",
         "/workspace",
         "/record",
         "/w/{app}/{work}",
@@ -230,6 +231,12 @@ async fn main() {
     let org_admin_pages = Arc::new(genui::org_admin::SsrAdminPages {
         page: pages
             .bind::<genui::org_admin::AdminProps>("orgAdmin")
+            .unwrap_or_else(bind_errors),
+    });
+    // APP-217: the themed error page for browser navigations.
+    let error_pages = Arc::new(SsrErrorPages {
+        page: pages
+            .bind::<ErrorProps>("error")
             .unwrap_or_else(bind_errors),
     });
     let shared_pages = Arc::new(genui::sharing::live::SsrSharedPages {
@@ -373,6 +380,10 @@ async fn main() {
         Some(harness) => genui::http::uniform(app.merge(harness)),
         None => genui::http::uniform_with_many(app.merge(product_routes), long_routes),
     };
+    // APP-217: a browser navigation that meets a covered refusal gets the
+    // themed page in its place; every other caller keeps the JSON.
+    let app =
+        genui::http::errors::ErrorPageLayer::new(error_pages, auth::cookies::viewer).serve(app);
 
     // ADR-006 expiry sweep: idle and expired records are destroyed and their
     // provider refresh tokens revoked.
@@ -537,6 +548,7 @@ mod tests {
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
         let _ = modules.bind::<genui::org_admin::AdminProps>("orgAdmin");
+        let _ = modules.bind::<ErrorProps>("error");
         modules.finalize().unwrap();
         let ctx = RenderCtx::new().with_title("Forma Canvas");
         let (status, headers, body) = html(respond("/", home.render(&HomeProps {}, &ctx))).await;
@@ -581,6 +593,7 @@ mod tests {
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
         let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
+        let _ = pages.bind::<ErrorProps>("error");
         pages.finalize().unwrap();
         ssr
     }
@@ -589,6 +602,317 @@ mod tests {
         let headers = response.headers().clone();
         let body = to_bytes(response.into_body(), 1 << 20).await.unwrap();
         (status, headers, String::from_utf8(body.to_vec()).unwrap())
+    }
+
+    /// APP-217: the complete page set, finalized, with the error page and the
+    /// organization admin page beside the APP-009 pages.
+    fn lab_pages() -> (SsrPages, SsrErrorPages, genui::org_admin::SsrAdminPages) {
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        require_ssr(manifest.route("/error").map(|entry| entry.mode)).unwrap();
+        // The page links its CSS and fetches no script.
+        assert!(manifest.route("/error").unwrap().js.is_empty());
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        let ssr = SsrPages {
+            auth_origin: Some(AUTH_ORIGIN.into()),
+            invite: pages.bind::<InviteProps>("invite").unwrap(),
+            signin: pages.bind::<SigninProps>("signin").unwrap(),
+            pending: pages.bind::<PendingProps>("pending").unwrap(),
+            denied: pages.bind::<DeniedProps>("denied").unwrap(),
+            workspace: pages.bind::<WorkspaceProps>("workspace").unwrap(),
+            record: pages.bind::<RecordProps>("record").unwrap(),
+        };
+        let errors = SsrErrorPages {
+            page: pages.bind::<ErrorProps>("error").unwrap(),
+        };
+        let admin = genui::org_admin::SsrAdminPages {
+            page: pages
+                .bind::<genui::org_admin::AdminProps>("orgAdmin")
+                .unwrap(),
+        };
+        let _ = pages.bind::<HomeProps>("home");
+        let _ = pages.bind::<AboutProps>("about");
+        let _ = pages.bind::<genui::query::page::WorkProps>("work");
+        let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
+        let _ = pages.bind::<genui::sharing::live::SharedPageProps>("shared");
+        let _ = pages.bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas");
+        pages.finalize().unwrap();
+        (ssr, errors, admin)
+    }
+
+    const NAVIGATE: &[(&str, &str)] = &[
+        ("sec-fetch-mode", "navigate"),
+        ("sec-fetch-dest", "document"),
+        ("sec-fetch-site", "same-origin"),
+        ("accept", "text/html,application/xhtml+xml,*/*;q=0.8"),
+    ];
+    type Answer = (StatusCode, axum::http::HeaderMap, String);
+    async fn send(app: &Router, method: &str, uri: &str, headers: &[(&str, &str)]) -> Answer {
+        use tower::ServiceExt as _;
+        let mut request = axum::http::Request::builder().method(method).uri(uri);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        let request = request.body(axum::body::Body::empty()).unwrap();
+        let (status, mut headers, body) = html(app.clone().oneshot(request).await.unwrap()).await;
+        headers.remove(header::DATE);
+        (status, headers, body)
+    }
+    /// The answer with its one per-response nonce replaced, so two answers
+    /// compare byte for byte apart from that fresh value.
+    fn without_nonce(answer: &Answer) -> Answer {
+        let (status, mut headers, body) = answer.clone();
+        let csp = policy(&headers);
+        let nonce = csp
+            .split('\'')
+            .find_map(|source| source.strip_prefix("nonce-"))
+            .expect("a nonce source")
+            .to_owned();
+        assert!(nonce.len() >= 16);
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            csp.replace(&nonce, "NONCE").parse().unwrap(),
+        );
+        (status, headers, body.replace(&nonce, "NONCE"))
+    }
+    /// The production composition: the uniform layer over the organization
+    /// admin routes (a protected route with a `UniformPath` segment) and
+    /// four refusals, with the error page and the binary's cookie test.
+    fn lab_app(errors: SsrErrorPages) -> Router {
+        use axum::routing::post;
+        let (ssr, _, admin) = lab_pages();
+        let auth = Arc::new(Auth::new(None, None, Arc::new(ssr)).unwrap());
+        let router = genui::http::uniform(
+            Router::new()
+                .route("/health/live", get(|| async { StatusCode::OK }))
+                .route("/forbidden", post(|| async { genui::http::cross_site() }))
+                .route(
+                    "/large",
+                    post(|| async { genui::http::payload_too_large() }),
+                )
+                .route(
+                    "/busy",
+                    get(|| async { genui::http::too_many_requests(300) }),
+                )
+                .route("/down", get(|| async { genui::http::unavailable() }))
+                .merge(genui::org_admin::router(Arc::new(
+                    genui::org_admin::OrgAdmin {
+                        auth,
+                        pages: Arc::new(admin),
+                    },
+                ))),
+        );
+        genui::http::errors::ErrorPageLayer::new(Arc::new(errors), auth::cookies::viewer)
+            .serve(router)
+    }
+
+    /// APP-217 (ADR-006): for the same request headers, an unknown path, the
+    /// protected `/admin` without access, a wrong method on it and an
+    /// undecodable segment of its remove route are one themed 404 per viewer
+    /// variant, byte for byte apart from the fresh nonce, with the complete
+    /// page policy, no cookie and nothing from the request. Without
+    /// navigation headers they stay the exact JSON refusal.
+    #[tokio::test]
+    async fn browser_navigations_get_one_themed_404_whatever_the_path() {
+        let (_, errors, _) = lab_pages();
+        let app = lab_app(errors);
+        const MARKER: &str = "zq7MARKERx9";
+        let json = r#"{"code":"not_found","status":404}"#;
+        let requests = [
+            ("GET", format!("/specimen-{MARKER}/{MARKER}?q={MARKER}")),
+            ("GET", "/admin".to_owned()),
+            ("GET", format!("/admin?notice={MARKER}")),
+            ("DELETE", "/admin".to_owned()),
+            ("POST", "/admin/members/%FF/remove".to_owned()),
+            ("POST", format!("/admin/members/{MARKER}/remove")),
+        ];
+        let signed_out: &[&str] = &[
+            "href=\"/signin\"",
+            ">Sign in<",
+            "href=\"/invite\"",
+            ">I have an invitation code<",
+        ];
+        let member: &[&str] = &[
+            "href=\"/\">Back to your workspace<",
+            ">Sign in again<",
+            "if your session ended",
+        ];
+        for (cookie, words, buttons, count) in [
+            (
+                None,
+                "If someone sent you this link, sign in first, then open the link again.",
+                signed_out,
+                2,
+            ),
+            (
+                Some("__Host-genui_session=abc"),
+                "Check the link, or ask the person who sent it.",
+                member,
+                2,
+            ),
+            (
+                Some("__Host-genui_shared=abc"),
+                "Ask the person who shared it for a new link.",
+                &[][..],
+                0,
+            ),
+        ] {
+            let mut headers = NAVIGATE.to_vec();
+            headers.extend(cookie.map(|cookie| ("cookie", cookie)));
+            let first = send(&app, "GET", &requests[0].1, &headers).await;
+            let (status, head, body) = &first;
+            assert_eq!(*status, StatusCode::NOT_FOUND);
+            assert_eq!(head[header::CONTENT_TYPE], "text/html; charset=utf-8");
+            let csp = policy(head);
+            for directive in [
+                "default-src 'none'",
+                "frame-ancestors 'none'",
+                "img-src 'self' data:",
+                "form-action 'self'",
+            ] {
+                assert!(csp.contains(directive), "{directive} in {csp}");
+            }
+            assert_eq!(head[header::CACHE_CONTROL], "no-store");
+            assert_eq!(head[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+            assert_eq!(head[header::REFERRER_POLICY], "no-referrer");
+            assert_eq!(
+                head[header::STRICT_TRANSPORT_SECURITY],
+                genui::http::STRICT_TRANSPORT_SECURITY
+            );
+            assert!(head.get(header::SET_COOKIE).is_none());
+            assert!(head.get(header::ALLOW).is_none());
+            assert!(body.starts_with("<!DOCTYPE html>\n<html lang=\"en\">"));
+            assert!(body.contains("<title>Specimen not found · Forma</title>"));
+            assert_eq!(body.matches("<h1").count(), 1);
+            assert!(body.contains(">Specimen not found</h1>"));
+            assert!(body.contains("CONTAINMENT BREACH · ERROR <span>404</span>"));
+            assert!(body.contains(words), "{cookie:?}: {body}");
+            for button in buttons {
+                assert!(body.contains(button), "{button} for {cookie:?}");
+            }
+            assert_eq!(body.matches("class=\"lab-button").count(), count);
+            assert!(body.contains("src=\"/_assets/forma-isotope.svg\""));
+            assert!(body.contains("holding a glowing green capsule\""));
+            assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
+            assert!(body.contains("type=\"checkbox\"") && body.contains("for=\"lab-surge\""));
+            assert!(!body.contains("<script") && !body.contains("data-forma-island"));
+            assert!(!body.contains("<form") && !body.contains("://"));
+            assert!(!body.contains(MARKER) && !format!("{head:?}").contains(MARKER));
+            let expected = without_nonce(&first);
+            for (method, uri) in &requests[1..] {
+                let answer = send(&app, method, uri, &headers).await;
+                assert!(!answer.2.contains(MARKER), "{method} {uri}");
+                assert_eq!(
+                    without_nonce(&answer),
+                    expected,
+                    "{method} {uri} {cookie:?}"
+                );
+            }
+            // Not navigations: the exact refusal, whichever way the path missed.
+            for mut fetch in [
+                vec![("sec-fetch-mode", "cors"), ("sec-fetch-dest", "empty")],
+                vec![
+                    ("sec-fetch-mode", "no-cors"),
+                    ("sec-fetch-dest", "image"),
+                    ("accept", "image/*"),
+                ],
+                vec![
+                    ("sec-fetch-mode", "navigate"),
+                    ("sec-fetch-dest", "iframe"),
+                    ("accept", "text/html"),
+                ],
+                vec![("accept", "*/*")],
+            ] {
+                // Same-origin, as a page's own fetch is: the remove route
+                // judges fetch metadata before its session (403 otherwise).
+                fetch.push(("sec-fetch-site", "same-origin"));
+                fetch.extend(cookie.map(|cookie| ("cookie", cookie)));
+                for (method, uri) in &requests {
+                    let (status, head, body) = send(&app, method, uri, &fetch).await;
+                    assert_eq!(
+                        (status, body.as_str()),
+                        (StatusCode::NOT_FOUND, json),
+                        "{method} {uri} {fetch:?}"
+                    );
+                    assert_eq!(head[header::CONTENT_TYPE], "application/problem+json");
+                    assert!(head.get(header::CONTENT_SECURITY_POLICY).is_none());
+                }
+            }
+        }
+        // An older browser with no fetch metadata asking for HTML gets the
+        // page; one asking for anything gets the JSON.
+        let old = send(&app, "GET", "/admin", &[("accept", "text/html")]).await;
+        assert_eq!(old.0, StatusCode::NOT_FOUND);
+        assert!(old.2.contains(">Specimen not found</h1>") && old.2.contains(">Sign in<"));
+        let any = send(&app, "GET", "/admin", &[("accept", "*/*")]).await;
+        assert_eq!(any.2, json);
+        // A served answer is untouched.
+        let live = send(&app, "GET", "/health/live", NAVIGATE).await;
+        assert_eq!((live.0, live.2.as_str()), (StatusCode::OK, ""));
+    }
+
+    /// APP-217: 403, 413, 429 and 503 keep their status and headers, show
+    /// their own words, and are the same page for every viewer.
+    #[tokio::test]
+    async fn the_other_refusals_are_their_own_page_for_everyone() {
+        let (_, errors, _) = lab_pages();
+        let app = lab_app(errors);
+        let member = [NAVIGATE, &[("cookie", "__Host-genui_session=abc")]].concat();
+        let guest = [NAVIGATE, &[("cookie", "__Host-genui_shared=abc")]].concat();
+        for (method, uri, status, title, words) in [
+            (
+                "POST",
+                "/forbidden",
+                403,
+                "Safety interlock tripped",
+                "or it came from another site, so nothing was changed. Go back, refresh the page, and try again.",
+            ),
+            (
+                "POST",
+                "/large",
+                413,
+                "Sample too large",
+                "That upload is over the size limit, so nothing was saved. Try a smaller file.",
+            ),
+            (
+                "GET",
+                "/busy",
+                429,
+                "Reactor cooling down",
+                "Too many requests in a short time. Wait about 5 minutes, then refresh this page.",
+            ),
+            (
+                "GET",
+                "/down",
+                503,
+                "Containment field offline",
+                "Something on our side is down for a moment. Your data is safe. Try again in a minute.",
+            ),
+        ] {
+            let answer = send(&app, method, uri, NAVIGATE).await;
+            let (code, head, body) = &answer;
+            assert_eq!(code.as_u16(), status, "{uri}");
+            assert_eq!(head[header::CONTENT_TYPE], "text/html; charset=utf-8");
+            assert!(policy(head).contains("frame-ancestors 'none'"));
+            assert_eq!(head[header::CACHE_CONTROL], "no-store");
+            assert!(body.contains(&format!("<title>{title} · Forma</title>")), "{uri}");
+            assert!(body.contains(&format!(">{title}</h1>")), "{uri}");
+            assert!(body.contains(words), "{uri}: {body}");
+            assert!(body.contains(&format!("ERROR <span>{status}</span>")));
+            assert!(!body.contains("class=\"lab-button") && !body.contains("<script"));
+            for other in [&member, &guest] {
+                let theirs = send(&app, method, uri, other).await;
+                assert_eq!(without_nonce(&theirs), without_nonce(&answer), "{uri}");
+            }
+        }
+        assert_eq!(
+            send(&app, "GET", "/busy", NAVIGATE).await.1[header::RETRY_AFTER],
+            "300"
+        );
+        // The JSON callers of the same routes are unchanged.
+        let fetch = [("sec-fetch-mode", "cors"), ("sec-fetch-dest", "empty")];
+        let busy = send(&app, "GET", "/busy", &fetch).await;
+        assert_eq!(busy.2, r#"{"code":"too_many_requests","status":429}"#);
+        assert_eq!(busy.1[header::RETRY_AFTER], "300");
     }
 
     /// The shared entry submits locally, then redirects to the configured
@@ -621,6 +945,7 @@ mod tests {
             canvas: modules.bind::<SharedCanvasProps>("sharedCanvas").unwrap(),
         };
         let _ = modules.bind::<genui::org_admin::AdminProps>("orgAdmin");
+        let _ = modules.bind::<ErrorProps>("error");
         modules.finalize().unwrap();
         let key = "11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222";
         let mut entry = SharedPageProps {
@@ -1136,6 +1461,7 @@ mod tests {
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
         let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
+        let _ = pages.bind::<ErrorProps>("error");
         pages.finalize().unwrap();
         let view = |id: &str, kind: &str| genui::storage::WorkView {
             id: id.into(),
@@ -1838,6 +2164,7 @@ mod tests {
             .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
             .unwrap();
         let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
+        let _ = pages.bind::<ErrorProps>("error");
         pages.finalize().unwrap();
         let (app, northstar, spend) = (
             "00000000-0000-4000-8000-000000000065",
@@ -2365,6 +2692,7 @@ mod tests {
         let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
         let _ = pages.bind::<genui::sharing::live::SharedPageProps>("shared");
         let _ = pages.bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas");
+        let _ = pages.bind::<ErrorProps>("error");
         pages.finalize().unwrap();
         let student = "00000000-0000-4000-8000-0000000000b2";
         let member = |id: &str, label: &str, removable: bool| AdminMemberProps {
