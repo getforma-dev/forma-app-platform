@@ -151,14 +151,15 @@ class ObservabilityTemplateTests(unittest.TestCase):
         # The paths the probes ask are the ones the app and fAuth serve (the app's route; fAuth answered 200 at /health on 2026-11-15).
         self.assertIn('"/health/ready"', (ROOT / 'app' / 'src' / 'main.rs').read_text())
 
-    def test_the_unreachable_alarms_fire_after_three_failed_minutes_and_on_missing_data(self):
+    def test_the_unreachable_alarms_fire_after_three_failed_minutes_and_keep_state_on_gaps(self):
         expected = {'AppUnreachableAlarm': ('AppHealthCheck', 'app-unreachable'), 'FauthUnreachableAlarm': ('FauthHealthCheck', 'fauth-unreachable')}
         for name, (health_check, suffix) in expected.items():
             with self.subTest(alarm=name):
                 alarm = self.alarms[name]
                 self.assertEqual((alarm['Namespace'], alarm['MetricName'], alarm['Statistic'], alarm['Period'], alarm['EvaluationPeriods'],
                                   alarm['DatapointsToAlarm'], alarm['Threshold'], alarm['ComparisonOperator'], alarm['TreatMissingData']),
-                                 ('AWS/Route53', 'HealthCheckStatus', 'Minimum', 60, 3, 3, 1, 'LessThanThreshold', 'breaching'))
+                                 ('AWS/Route53', 'HealthCheckStatus', 'Minimum', 60, 3, 3, 1, 'LessThanThreshold', 'missing'))
+            # A real outage still publishes status 0; a gap is metric delivery (seen 2026-11-15 at creation), so it keeps the last state.
                 self.assertEqual(alarm['Dimensions'], [{'Name': 'HealthCheckId', 'Value': {'Ref': health_check}}])
                 self.assertEqual(alarm['AlarmName'], {'Fn::Sub': '${AWS::StackName}-' + suffix})
 
