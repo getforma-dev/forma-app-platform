@@ -17,7 +17,8 @@ ADR-006 makes the uniform 404 indistinguishable whether a path is unknown, prote
 
 - The layer passes the renderer an `ErrorView` and nothing else. That view holds the refusal (from status and code), the viewer variant (from cookie presence, 404 only) and the 429 wait (from the refusal's own `Retry-After`). The path, query, method, ids and names never reach it.
 - The status never changes. The refusal's headers stay, and `finish` still runs last, so HSTS is present and `Allow` is absent. The page adds its type, its nonce CSP, its `Permissions-Policy` and its opener policy. `Cache-Control`, `nosniff` and `Referrer-Policy` keep the refusal's values.
-- Anything the layer does not recognize, and any failed render, is the original answer byte for byte.
+- Anything the layer does not recognize, and any failed render, is the original answer byte for byte. The one exception is unreachable for the buffered problem bodies: a body of known length that fails to read has lost its bytes, so it answers a fresh 503 `unavailable`, never a partial body.
+- The page's headers keep one wire order for the same request headers. Since the review fix (below), `merge` builds a fresh map and never removes in place.
 
 ## Tests (written with the code, run before the proofs)
 
@@ -81,3 +82,32 @@ Local macOS. The toolchains came from `just setup` in the worktree `forma-errors
   These compose `uniform` without the extension, so they prove that the routes and their refusals are unchanged.
 - `python3 Tickets/_tools/board.py render` and `check`: OK, 215 tickets.
 - The Playwright pass is under **Screenshots** above.
+
+## Review fixes (2026-11-15)
+
+The independent review of PR #143 returned GO after fixes. These fixes are on the same branch, after `f8b183e5`.
+
+**MAJOR: the header order leaked the route shape.** `HeaderMap::remove` in http 1.5.0 is a swap-remove. `merge` removed `Content-Type` and `Content-Length` in place. For a wrong method, axum's top-level `RouteFuture` had already appended `Allow` and then `Content-Length` before the pass ran. So `Allow` moved into the first slot, and when `finish` removed it, the opener policy took that slot. hyper writes headers in map order. `DELETE /admin` therefore went out as `cross-origin-opener-policy, cache-control, …`, while an unknown path went out as `referrer-policy, cache-control, …`. That told the route apart from an unknown path. The fix: `merge` builds a fresh map. It takes the refusal's headers in order, skipping `content-type`, `content-length` and `allow`, then appends the page headers the refusal does not set, in the page's order. `finish` then finds no `Allow` to remove and appends HSTS, so nothing moves. The JSON path never passes through `merge`. `finish` removes `Allow` there as on `main`, and the new tests compare it with the old composition.
+
+**MINOR: the tests now compare order.** In `http::errors` the tests compare a `wire()` form (status, `(name, value)` in map order, body) instead of `HeaderMap ==`, which ignores order. `before()` reproduces `main`'s `uniform` (the fallbacks, the deadline and `finish`, without the pass) as the reference for every JSON answer. `without_the_extension_every_answer_is_as_before` is new. In `main.rs`, `without_nonce` returns the ordered form, and the 404 test pins the exact order: `cache-control, x-content-type-options, referrer-policy, content-type, content-security-policy, permissions-policy, cross-origin-opener-policy, strict-transport-security` (a debug build adds `content-security-policy-report-only`, which is filtered out).
+
+| Break | File: change | Command | Caught | What failed | Restored |
+| --- | --- | --- | --- | --- | --- |
+| B5: header order | `app/src/http/errors.rs`: the old `merge` (in-place `remove` of `Content-Type` and `Content-Length`), run against the new ordered tests before the fix | `cargo test -p forma-app-platform --lib http::errors`; `cargo test -p forma-app-platform --bin forma-app-platform -- themed_404 their_own_page` | yes, 2 tests | `navigations_get_the_page_and_everyone_else_the_exact_refusal` failed at `DELETE /x/1`: the order began `cross-origin-opener-policy, cache-control, …` where the unknown path's began `referrer-policy, cache-control, …`. `browser_navigations_get_one_themed_404_whatever_the_path` failed at `DELETE /admin None` with the same reordering on the real page. | The fix is the restore: with the fresh-map `merge` both pass (library 6 of 6, binary 2 of 2). |
+
+**NITs.**
+1. The old-browser fallback counts a request as HTML only when the first media range of the first `Accept` value, without parameters, is `text/html`. The unit test adds `application/json, text/html`, `*/*, text/html`, `application/xhtml+xml, text/html` and `text/htmlx` (all false) and a full old-Firefox value (true). The layer test checks that `Accept: application/json, text/html` gets the exact JSON.
+2. The surge checkbox now sits after the buttons, inside the copy, and the CSS reaches it through `.lab:has(.lab-surge-toggle:checked)` and `:focus-visible`. It keeps its `aria-label` and the reduced-motion rules. The real-render test asserts the markup order. One Playwright smoke (the same loopback binary and pinned Playwright, nothing saved here) confirmed:
+   - The Tab stops are `/`, `/signin`, `/invite`, the toggle, then the mailto link.
+   - With the toggle focused, the mascot shows its outline.
+   - Space checks it, shows the surge (`display: block`) and the mascot's drop-shadow.
+   - A fresh 1280 render of the signed-out 404 is pixel-identical (decompressed image data equal) to `404-signed-out-1280.png`, so the screenshots were not re-shot.
+3. The ticket and the PR now word the read-failure exception exactly.
+
+**Commands after the fixes:**
+
+- `just check fmt clippy test`: all ok. The library has 514 passed and 40 ignored (one more test: `without_the_extension_every_answer_is_as_before`), the binary 11 passed and doctests 3 passed.
+- `cargo test -p forma-app-platform --lib http::errors`: 6 passed.
+- `cargo test -p forma-app-platform --bin forma-app-platform -- themed_404 their_own_page`: 2 passed.
+- `just check admin http-smoke board`: all ok. This covers the moved checkbox and the `:has()` styles (admin typecheck, tests and strict build), the release binary's navigation probe, and the regenerated board.
+- One Playwright smoke for the Tab order (NIT 2 above). The screenshots are unchanged.
