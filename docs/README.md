@@ -61,6 +61,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/APP-135-CLEAN-CUSTOMER-AUDIT.md](planning/APP-135-CLEAN-CUSTOMER-AUDIT.md) | Historical | Dated clean-customer audit. | |
 | [planning/APP-135-FILES-FOLDERS-AUDIT.md](planning/APP-135-FILES-FOLDERS-AUDIT.md) | Historical | Dated files-and-folders audit. | |
 | [planning/CANVAS-PRODUCT-SHOWCASE.md](planning/CANVAS-PRODUCT-SHOWCASE.md) | Historical | How to replay the local Spend and Jacket showcase branch. | |
+| [planning/CLASS-CONTINUATION-PLAN.md](planning/CLASS-CONTINUATION-PLAN.md) | Current | Victor's 2026-11-15 continuation decisions: members stay on a free plan after the class (deletion on request replaces the Dec 14 purge), the beta renews to Jan 15, 2027, the free-plan AI allowance; the findings in code, the notice v2 draft, the work before Nov 28, by Dec 12 and by Jan 15, the release order (G, H) and the open policy questions. Tickets APP-227 to APP-232. | |
 | [planning/COMPOSED-APP-IMPLEMENTATION-2026-11-01.md](planning/COMPOSED-APP-IMPLEMENTATION-2026-11-01.md) | Historical | Implementation record for the composed-app release `9ee4a01`. | |
 | [planning/CONTINUATION-2026-10-31.md](planning/CONTINUATION-2026-10-31.md) | Historical | October 31 continuation. It still calls `pivot/pitch-mvp` the trunk. | [architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md](architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) |
 | [planning/CROSS-TEAM-HANDOFF.md](planning/CROSS-TEAM-HANDOFF.md) | Current | Which team owns framework and fAuth gates. Statuses inside the table are not the live board. | |
@@ -78,7 +79,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/PHASE-2-EXECUTION-PLAN.md](planning/PHASE-2-EXECUTION-PLAN.md) | Historical | Phase 2 task plan. Phases 2–6 are not the current queue. | [planning/DIRECTION.md](planning/DIRECTION.md) |
 | [planning/PHASE-2-HANDOFF.md](planning/PHASE-2-HANDOFF.md) | Historical | Transfer note from 2026-10-29. The ticket statuses in it are stale. | |
 | [planning/PIVOT-REVIEW-2026-11-01.md](planning/PIVOT-REVIEW-2026-11-01.md) | Historical | Review snapshot from 2026-11-01. | [planning/DIRECTION.md](planning/DIRECTION.md) |
-| [planning/POST-CLASS-FOLLOW-UPS.md](planning/POST-CLASS-FOLLOW-UPS.md) | Current | What is left for Victor's class and what we return to after it, with dates, owners, costs and the Dec 14 purge deadline (2026-11-15). | |
+| [planning/POST-CLASS-FOLLOW-UPS.md](planning/POST-CLASS-FOLLOW-UPS.md) | Current | What is left for Victor's class and what we return to after it, with dates, owners and costs (2026-11-15). Its P1 purge is replaced by deletion on request; see the continuation plan. | |
 | [planning/SAAS-PATTERNS-2026-11-15.md](planning/SAAS-PATTERNS-2026-11-15.md) | Current | Research: how mature workspace SaaS structures domains, landing, workspaces, invites and outside pages, compared with Forma Canvas, with a timed priority table and five open questions for Victor. | |
 | [planning/QUALITY-GATES.md](planning/QUALITY-GATES.md) | Current | Phase checks, trials and what counts as evidence. | |
 | [planning/ROADMAP.md](planning/ROADMAP.md) | Current | Phase map. Current work is DIRECTION.md, not the old first-ticket queue. | |
