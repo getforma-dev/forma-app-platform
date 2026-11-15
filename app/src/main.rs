@@ -653,26 +653,38 @@ mod tests {
             request = request.header(*name, *value);
         }
         let request = request.body(axum::body::Body::empty()).unwrap();
-        let (status, mut headers, body) = html(app.clone().oneshot(request).await.unwrap()).await;
-        headers.remove(header::DATE);
+        let (status, all, body) = html(app.clone().oneshot(request).await.unwrap()).await;
+        // Rebuilt in order: `HeaderMap::remove` would move the last header.
+        let mut headers = axum::http::HeaderMap::new();
+        for (name, value) in &all {
+            if name != header::DATE {
+                headers.append(name.clone(), value.clone());
+            }
+        }
         (status, headers, body)
     }
-    /// The answer with its one per-response nonce replaced, so two answers
-    /// compare byte for byte apart from that fresh value.
-    fn without_nonce(answer: &Answer) -> Answer {
-        let (status, mut headers, body) = answer.clone();
-        let csp = policy(&headers);
-        let nonce = csp
+    /// The answer as hyper writes it (status, every header in map order,
+    /// body) with its one per-response nonce replaced, so two answers compare
+    /// byte for byte and header for header, in order, apart from that fresh
+    /// value. A `HeaderMap`'s own equality ignores order, and the order is on
+    /// the wire.
+    type Wire = (StatusCode, Vec<(String, String)>, String);
+    fn without_nonce(answer: &Answer) -> Wire {
+        let (status, headers, body) = answer;
+        let nonce = policy(headers)
             .split('\'')
             .find_map(|source| source.strip_prefix("nonce-"))
             .expect("a nonce source")
             .to_owned();
         assert!(nonce.len() >= 16);
-        headers.insert(
-            header::CONTENT_SECURITY_POLICY,
-            csp.replace(&nonce, "NONCE").parse().unwrap(),
-        );
-        (status, headers, body.replace(&nonce, "NONCE"))
+        let headers = headers
+            .iter()
+            .map(|(name, value)| {
+                let value = value.to_str().unwrap().replace(&nonce, "NONCE");
+                (name.as_str().to_owned(), value)
+            })
+            .collect();
+        (*status, headers, body.replace(&nonce, "NONCE"))
     }
     /// The production composition: the uniform layer over the organization
     /// admin routes (a protected route with a `UniformPath` segment) and
@@ -780,6 +792,26 @@ mod tests {
             );
             assert!(head.get(header::SET_COOKIE).is_none());
             assert!(head.get(header::ALLOW).is_none());
+            // The wire order: the refusal's headers, then the page's, then
+            // HSTS from `finish` (the Report-Only policy is a debug build's).
+            let order: Vec<&str> = head
+                .keys()
+                .map(|name| name.as_str())
+                .filter(|name| *name != "content-security-policy-report-only")
+                .collect();
+            assert_eq!(
+                order,
+                [
+                    "cache-control",
+                    "x-content-type-options",
+                    "referrer-policy",
+                    "content-type",
+                    "content-security-policy",
+                    "permissions-policy",
+                    "cross-origin-opener-policy",
+                    "strict-transport-security",
+                ]
+            );
             assert!(body.starts_with("<!DOCTYPE html>\n<html lang=\"en\">"));
             assert!(body.contains("<title>Specimen not found · Forma</title>"));
             assert_eq!(body.matches("<h1").count(), 1);
@@ -794,6 +826,14 @@ mod tests {
             assert!(body.contains("holding a glowing green capsule\""));
             assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
             assert!(body.contains("type=\"checkbox\"") && body.contains("for=\"lab-surge\""));
+            // Tab order: the brand link, the buttons, the mascot toggle, then
+            // the footer's mail link.
+            let at = |needle: &str| body.find(needle).unwrap();
+            let toggle = at("id=\"lab-surge\"");
+            assert!(at("class=\"forma-brand\"") < toggle && toggle < at("href=\"mailto:"));
+            if let Some(last) = body.rfind("class=\"lab-button") {
+                assert!(last < toggle);
+            }
             assert!(!body.contains("<script") && !body.contains("data-forma-island"));
             assert!(!body.contains("<form") && !body.contains("://"));
             assert!(!body.contains(MARKER) && !format!("{head:?}").contains(MARKER));

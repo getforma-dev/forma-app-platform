@@ -145,8 +145,9 @@ pub(crate) async fn error_pages(mut request: Request, next: Next) -> Response {
 
 /// A top-level browser navigation. With fetch metadata, `Sec-Fetch-Mode:
 /// navigate` and `Sec-Fetch-Dest: document`, each sent exactly once. Without
-/// `Sec-Fetch-Mode` (an older browser), a `GET` or `HEAD` that accepts
-/// `text/html` and names no destination other than `document`. A fetch, a
+/// `Sec-Fetch-Mode` (an older browser), a `GET` or `HEAD` whose first
+/// `Accept` media range is `text/html` and that names no destination other
+/// than `document`. A fetch, a
 /// frame, an image or a duplicated header is not a navigation.
 pub fn navigation(method: &Method, headers: &HeaderMap) -> bool {
     let dest = single(headers, "sec-fetch-dest");
@@ -175,12 +176,17 @@ fn single<'a>(headers: &'a HeaderMap, name: &str) -> Field<'a> {
         _ => Field::Many,
     }
 }
+/// The first media range of `Accept` (the first value, before any `,`),
+/// without its parameters, is `text/html`, as an older browser's document
+/// request starts. A client that lists HTML after something else is not
+/// asking for a page.
 fn accepts_html(headers: &HeaderMap) -> bool {
-    headers.get_all(header::ACCEPT).iter().any(|value| {
-        value
-            .to_str()
-            .is_ok_and(|value| value.to_ascii_lowercase().contains("text/html"))
-    })
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .and_then(|range| range.split(';').next())
+        .is_some_and(|media| media.trim().eq_ignore_ascii_case("text/html"))
 }
 
 /// The 429 wait in plain words, from the refusal's `Retry-After` seconds.
@@ -270,20 +276,35 @@ fn is_page(page: &Response) -> bool {
         && page.headers().contains_key(header::CONTENT_SECURITY_POLICY)
 }
 
-/// The refusal's status and headers, with the page's body, type and the page
-/// headers the refusal does not already set (its CSP, `Permissions-Policy`
-/// and opener policy). Where both set one (`Cache-Control`, `nosniff`,
+/// The refusal's status and a fresh header map. First come the refusal's
+/// headers in their order, without its `Content-Type`, its `Content-Length`
+/// and the `Allow` axum adds to a wrong method (which `finish` would remove
+/// anyway). Then come the page headers the refusal does not set, in the
+/// page's own fixed order: its type, its policy, `Permissions-Policy` and the
+/// opener policy. Where both set one (`Cache-Control`, `nosniff`,
 /// `Referrer-Policy`), the refusal's stricter value stays.
+///
+/// Nothing is removed in place. `HeaderMap::remove` moves the last header
+/// into the removed one's slot, and hyper writes headers in map order. The
+/// order would then tell a wrong method on an existing route (which carries
+/// `Allow` here) from an unknown path, the disclosure `uniform` closes
+/// (ADR-006; APP-076 G8).
 fn merge(mut parts: Parts, page: Response) -> Response {
     let (page_parts, body) = page.into_parts();
-    parts.headers.remove(header::CONTENT_TYPE);
-    parts.headers.remove(header::CONTENT_LENGTH);
-    let kept: HashSet<HeaderName> = parts.headers.keys().cloned().collect();
-    for (name, value) in &page_parts.headers {
-        if !kept.contains(name) {
-            parts.headers.append(name.clone(), value.clone());
+    let dropped = [header::CONTENT_TYPE, header::CONTENT_LENGTH, header::ALLOW];
+    let mut headers = HeaderMap::with_capacity(parts.headers.len() + page_parts.headers.len());
+    for (name, value) in &parts.headers {
+        if !dropped.contains(name) {
+            headers.append(name.clone(), value.clone());
         }
     }
+    let kept: HashSet<HeaderName> = headers.keys().cloned().collect();
+    for (name, value) in &page_parts.headers {
+        if !kept.contains(name) {
+            headers.append(name.clone(), value.clone());
+        }
+    }
+    parts.headers = headers;
     Response::from_parts(parts, body)
 }
 
@@ -370,64 +391,80 @@ mod tests {
         }
     }
 
-    fn app(pages: Option<Arc<dyn ErrorPages>>) -> Router {
+    /// The routes, before any composition.
+    fn routes() -> Router {
         async fn segment(UniformPath(id): UniformPath<u32>) -> String {
             id.to_string()
         }
-        let router = uniform(
-            Router::new()
-                .route("/x/{id}", post(segment))
-                .route("/forbidden", post(|| async { http::cross_site() }))
-                .route("/large", post(|| async { http::payload_too_large() }))
-                .route("/busy", get(|| async { http::too_many_requests(300) }))
-                .route("/soon", get(|| async { http::too_many_requests(2) }))
-                .route("/down", get(|| async { http::unavailable() }))
-                .route(
-                    "/conflict",
-                    get(|| async { http::problem(StatusCode::CONFLICT, "conflict") }),
-                )
-                .route(
-                    "/other-code",
-                    get(|| async { http::problem(StatusCode::NOT_FOUND, "missing") }),
-                )
-                .route(
-                    "/extra",
-                    get(|| async {
-                        http::problem_with(
-                            StatusCode::SERVICE_UNAVAILABLE,
-                            "unavailable",
-                            serde_json::json!({"retry": true}),
-                        )
-                    }),
-                )
-                .route("/plain-404", get(|| async { StatusCode::NOT_FOUND }))
-                .route(
-                    "/json",
-                    get(|| async { axum::Json(serde_json::json!({"ok": true})) }),
-                )
-                .route(
-                    "/large-body",
-                    get(|| async {
-                        let mut response = http::not_found();
-                        *response.body_mut() = Body::from(vec![b' '; PROBLEM_READ_LIMIT + 1]);
-                        response
-                    }),
-                )
-                .route(
-                    "/streamed",
-                    get(|| async {
-                        let mut response = http::not_found();
-                        *response.body_mut() = Body::from_stream(Once(Some(
-                            axum::body::Bytes::from_static(br#"{"code":"not_found","status":404}"#),
-                        )));
-                        response
-                    }),
-                ),
-        );
+        Router::new()
+            .route("/x/{id}", post(segment))
+            .route("/forbidden", post(|| async { http::cross_site() }))
+            .route("/large", post(|| async { http::payload_too_large() }))
+            .route("/busy", get(|| async { http::too_many_requests(300) }))
+            .route("/soon", get(|| async { http::too_many_requests(2) }))
+            .route("/down", get(|| async { http::unavailable() }))
+            .route(
+                "/conflict",
+                get(|| async { http::problem(StatusCode::CONFLICT, "conflict") }),
+            )
+            .route(
+                "/other-code",
+                get(|| async { http::problem(StatusCode::NOT_FOUND, "missing") }),
+            )
+            .route(
+                "/extra",
+                get(|| async {
+                    http::problem_with(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "unavailable",
+                        serde_json::json!({"retry": true}),
+                    )
+                }),
+            )
+            .route("/plain-404", get(|| async { StatusCode::NOT_FOUND }))
+            .route(
+                "/json",
+                get(|| async { axum::Json(serde_json::json!({"ok": true})) }),
+            )
+            .route(
+                "/large-body",
+                get(|| async {
+                    let mut response = http::not_found();
+                    *response.body_mut() = Body::from(vec![b' '; PROBLEM_READ_LIMIT + 1]);
+                    response
+                }),
+            )
+            .route(
+                "/streamed",
+                get(|| async {
+                    let mut response = http::not_found();
+                    *response.body_mut() = Body::from_stream(Once(Some(
+                        axum::body::Bytes::from_static(br#"{"code":"not_found","status":404}"#),
+                    )));
+                    response
+                }),
+            )
+    }
+    /// `uniform` over the routes, with the pages when given.
+    fn app(pages: Option<Arc<dyn ErrorPages>>) -> Router {
+        let router = uniform(routes());
         match pages {
             Some(pages) => ErrorPageLayer::new(pages, crate::auth::cookies::viewer).serve(router),
             None => router,
         }
+    }
+    /// `uniform` exactly as it was before APP-217 (the fallbacks, the
+    /// deadline and `finish`, without this pass). Every answer the pass does
+    /// not replace must leave the new composition byte for byte and in the
+    /// same header order, which is the order on the wire.
+    fn before() -> Router {
+        let inner = routes()
+            .fallback(http::fallback)
+            .method_not_allowed_fallback(http::fallback)
+            .layer(axum::middleware::from_fn(http::deadline));
+        Router::new()
+            .fallback_service(inner)
+            .layer(axum::middleware::map_response(http::finish))
     }
 
     type Answer = (StatusCode, HeaderMap, axum::body::Bytes);
@@ -442,10 +479,26 @@ mod tests {
             .await
             .unwrap();
         let status = response.status();
-        let mut headers = response.headers().clone();
-        headers.remove(header::DATE);
+        // Rebuilt in order: `HeaderMap::remove` would move the last header.
+        let mut headers = HeaderMap::new();
+        for (name, value) in response.headers() {
+            if name != header::DATE {
+                headers.append(name.clone(), value.clone());
+            }
+        }
         let body = to_bytes(response.into_body(), 1 << 20).await.unwrap();
         (status, headers, body)
+    }
+    /// An answer as hyper writes it: status, every header in map order (a
+    /// `HeaderMap`'s own equality ignores order), and the body.
+    type Wire = (StatusCode, Vec<(String, Vec<u8>)>, axum::body::Bytes);
+    fn wire(answer: &Answer) -> Wire {
+        let headers = answer
+            .1
+            .iter()
+            .map(|(name, value)| (name.as_str().to_owned(), value.as_bytes().to_vec()))
+            .collect();
+        (answer.0, headers, answer.2.clone())
     }
     fn text(answer: &Answer) -> &str {
         std::str::from_utf8(&answer.2).unwrap()
@@ -548,6 +601,28 @@ mod tests {
             ("GET", vec![html], true),
             ("HEAD", vec![html], true),
             ("GET", vec![("accept", "TEXT/HTML;q=0.9, */*")], true),
+            (
+                "GET",
+                vec![(
+                    "accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                )],
+                true,
+            ),
+            ("GET", vec![("accept", " text/html ; level=1")], true),
+            // HTML anywhere but first is not a document request.
+            (
+                "GET",
+                vec![("accept", "application/json, text/html")],
+                false,
+            ),
+            ("GET", vec![("accept", "*/*, text/html")], false),
+            (
+                "GET",
+                vec![("accept", "application/xhtml+xml, text/html")],
+                false,
+            ),
+            ("GET", vec![("accept", "text/htmlx")], false),
             ("GET", vec![("accept", "*/*")], false),
             ("GET", vec![], false),
             ("POST", vec![html], false),
@@ -597,7 +672,7 @@ mod tests {
     async fn navigations_get_the_page_and_everyone_else_the_exact_refusal() {
         let echo = Arc::new(Echo::default());
         let app = app(Some(echo.clone()));
-        let plain = self::app(None);
+        let plain = before();
         let json = br#"{"code":"not_found","status":404}"#;
         for (cookie, viewer) in [
             (None, "Some(SignedOut)"),
@@ -644,8 +719,8 @@ mod tests {
                 ("PUT", "/down"),
             ] {
                 assert_eq!(
-                    send(&app, method, uri, &navigate).await,
-                    unknown,
+                    wire(&send(&app, method, uri, &navigate).await),
+                    wire(&unknown),
                     "{method} {uri}"
                 );
             }
@@ -665,7 +740,10 @@ mod tests {
                     ("POST", "/x/%FF"),
                 ] {
                     let answer = send(&app, method, uri, headers).await;
-                    assert_eq!(answer, send(&plain, method, uri, headers).await);
+                    assert_eq!(
+                        wire(&answer),
+                        wire(&send(&plain, method, uri, headers).await)
+                    );
                     assert_eq!(&answer.2[..], json, "{method} {uri} {headers:?}");
                     assert_eq!(answer.1[header::CONTENT_TYPE], "application/problem+json");
                 }
@@ -679,10 +757,52 @@ mod tests {
         );
         let any = send(&app, "GET", "/elsewhere", &[("accept", "*/*")]).await;
         assert_eq!(&any.2[..], json);
+        let accept = [("accept", "application/json, text/html")];
+        let json_first = send(&app, "GET", "/elsewhere", &accept).await;
+        assert_eq!(
+            wire(&json_first),
+            wire(&send(&plain, "GET", "/elsewhere", &accept).await)
+        );
+        assert_eq!(&json_first.2[..], json);
         // The served routes are untouched by the layer.
         let served = send(&app, "POST", "/x/7", NAVIGATE).await;
         assert_eq!((served.0, &served.2[..]), (StatusCode::OK, &b"7"[..]));
-        assert_eq!(served, send(&plain, "POST", "/x/7", NAVIGATE).await);
+        assert_eq!(
+            wire(&served),
+            wire(&send(&plain, "POST", "/x/7", NAVIGATE).await)
+        );
+    }
+
+    /// A router without the extension (every test composition) answers
+    /// exactly as before APP-217, navigations included.
+    #[tokio::test]
+    async fn without_the_extension_every_answer_is_as_before() {
+        let (app, before) = (app(None), before());
+        for headers in [
+            NAVIGATE,
+            &[("sec-fetch-mode", "cors"), ("sec-fetch-dest", "empty")],
+            &[],
+        ] {
+            for (method, uri) in [
+                ("GET", "/elsewhere"),
+                ("DELETE", "/x/1"),
+                ("GET", "/x/1"),
+                ("POST", "/x/%FF"),
+                ("POST", "/x/7"),
+                ("POST", "/forbidden"),
+                ("POST", "/large"),
+                ("GET", "/busy"),
+                ("GET", "/down"),
+                ("GET", "/extra"),
+                ("GET", "/json"),
+            ] {
+                assert_eq!(
+                    wire(&send(&app, method, uri, headers).await),
+                    wire(&send(&before, method, uri, headers).await),
+                    "{method} {uri} {headers:?}"
+                );
+            }
+        }
     }
 
     #[tokio::test]
@@ -735,7 +855,7 @@ mod tests {
     async fn unrecognized_answers_and_failed_renders_are_the_original_refusal() {
         let echo = Arc::new(Echo::default());
         let app = app(Some(echo.clone()));
-        let plain = self::app(None);
+        let plain = before();
         for uri in [
             "/conflict",
             "/other-code",
@@ -746,8 +866,8 @@ mod tests {
             "/streamed",
         ] {
             assert_eq!(
-                send(&app, "GET", uri, NAVIGATE).await,
-                send(&plain, "GET", uri, NAVIGATE).await,
+                wire(&send(&app, "GET", uri, NAVIGATE).await),
+                wire(&send(&plain, "GET", uri, NAVIGATE).await),
                 "{uri}"
             );
         }
@@ -763,7 +883,11 @@ mod tests {
                 ("GET", "/down"),
             ] {
                 let answer = send(&failing, method, uri, NAVIGATE).await;
-                assert_eq!(answer, send(&plain, method, uri, NAVIGATE).await, "{uri}");
+                assert_eq!(
+                    wire(&answer),
+                    wire(&send(&plain, method, uri, NAVIGATE).await),
+                    "{uri}"
+                );
                 assert_eq!(answer.1[header::CONTENT_TYPE], "application/problem+json");
                 assert!(answer.2.starts_with(b"{\"code\":"), "{uri}");
             }
