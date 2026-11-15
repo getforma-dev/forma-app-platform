@@ -47,8 +47,8 @@ Computed at `4203bb0f` (main after PR #153) with `ops.promotion.candidate`. The 
 
 ## What the approval must show
 
-- `schema_release: {from_version: 24, to_version: 25, spec_sha256: 02a3353bd1d17892…}` and `schema_version: 25`;
-- the sequence: snapshot, stop both services, run the reviewed migration, execute the reviewed change set, verify the stopped boundary, activate, verify health and images;
+- `schema_release: {from_version: 24, to_version: 25, spec_sha256: 02a3353bd1d17892…}` and `schema_version: 24` (the live policy version at preparation, as release B showed 22; corrected after the packet review);
+- the sequence: snapshot database, stop both services, execute reviewed change set, verify stopped boundaries, run reviewed migration, activate both services, verify health and images (the change set comes first, so the migration task runs on its replaced definition; corrected after the packet review);
 - `deployment_contract_sha256: bd3c6437682bcc29…`;
 - the stop: 18 hours before the live 2026-12-12T14:00:00Z, so **2026-12-11T20:00:00Z** (no expiry renewal applied; see Limits).
 
