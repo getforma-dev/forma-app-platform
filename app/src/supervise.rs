@@ -39,8 +39,9 @@ pub struct ConfinedOutput {
 pub enum Killed {
     /// The deadline passed; the child was killed.
     Deadline,
-    /// The RSS line or an output bound was crossed; the child was killed.
-    ResourceLimit,
+    /// The RSS line or an output bound was crossed (which one, APP-219); the
+    /// child was killed.
+    ResourceLimit(Bound),
     /// The child could not start, or ended on a signal that was not ours.
     Crashed,
     /// Reading the caller's input failed; the child was killed so an input
@@ -48,6 +49,28 @@ pub enum Killed {
     /// an error looks complete here: callers bind the result to the expected
     /// digest and length (`imports::sandbox::ExpectedInput`).
     InputFailed,
+}
+
+/// The bound a [`Killed::ResourceLimit`] crossed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bound {
+    /// The resident set passed the confinement's RSS line.
+    Rss,
+    /// stdout or stderr passed its byte bound.
+    Output,
+}
+impl Killed {
+    /// APP-219: the `reason` of a kill the supervisor decided (`rss`,
+    /// `deadline` or `output`); `None` when the child crashed or the
+    /// caller's input failed.
+    pub fn reason(self) -> Option<&'static str> {
+        match self {
+            Self::Deadline => Some("deadline"),
+            Self::ResourceLimit(Bound::Rss) => Some("rss"),
+            Self::ResourceLimit(Bound::Output) => Some("output"),
+            Self::Crashed | Self::InputFailed => None,
+        }
+    }
 }
 
 enum Input {
@@ -232,7 +255,7 @@ pub async fn run_confined(
                     peak_rss_bytes = peak_rss_bytes.max(rss);
                     if rss > confinement.rss_limit_bytes {
                         kill(&mut child).await;
-                        return Err(Killed::ResourceLimit);
+                        return Err(Killed::ResourceLimit(Bound::Rss));
                     }
                 }
             }
@@ -252,14 +275,14 @@ pub async fn run_confined(
                 Some(bytes) => out = Some(bytes),
                 None => {
                     kill(&mut child).await;
-                    return Err(Killed::ResourceLimit);
+                    return Err(Killed::ResourceLimit(Bound::Output));
                 }
             },
             result = &mut stderr, if err.is_none() => match result.ok().flatten() {
                 Some(bytes) => err = Some(bytes),
                 None => {
                     kill(&mut child).await;
-                    return Err(Killed::ResourceLimit);
+                    return Err(Killed::ResourceLimit(Bound::Output));
                 }
             },
         }
@@ -292,7 +315,7 @@ pub async fn run_confined(
         .await
         .map_err(|_| Killed::Deadline)?;
     let (Some(stdout), Some(stderr)) = (out, err) else {
-        return Err(Killed::ResourceLimit);
+        return Err(Killed::ResourceLimit(Bound::Output));
     };
     if status.code().is_none() {
         return Err(Killed::Crashed);
@@ -337,7 +360,9 @@ mod tests {
             &confinement(64 * MIB, Duration::from_secs(20)),
         )
         .await;
-        assert_eq!(outcome.unwrap_err(), Killed::ResourceLimit);
+        let killed = outcome.unwrap_err();
+        assert_eq!(killed, Killed::ResourceLimit(Bound::Rss));
+        assert_eq!(killed.reason(), Some("rss"));
         assert!(started.elapsed() < Duration::from_secs(10));
     }
 
@@ -515,6 +540,11 @@ mod tests {
             &confinement(512 * MIB, Duration::from_secs(20)),
         )
         .await;
-        assert_eq!(outcome.unwrap_err(), Killed::ResourceLimit);
+        let killed = outcome.unwrap_err();
+        assert_eq!(killed, Killed::ResourceLimit(Bound::Output));
+        assert_eq!(killed.reason(), Some("output"));
+        assert_eq!(Killed::Deadline.reason(), Some("deadline"));
+        assert_eq!(Killed::Crashed.reason(), None);
+        assert_eq!(Killed::InputFailed.reason(), None);
     }
 }
