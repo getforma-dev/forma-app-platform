@@ -671,6 +671,8 @@ Expected: `{"versions": 0, "markers": 0}`. Then the manual snapshot list empty, 
 
 ### 11.5 Victor's `admin_policy` row (the operator may run it; Victor signs in and opens `/admin`)
 
+**Granted 2026-11-15, about 09:40 UTC (the operator)** to the organization's only member, Victor's Nov 1 account (his Gmail; fAuth user created 20:15:19, code redeemed 20:15:58): `{"status": "granted", "permission": "admin_policy", "changed": true, "membership_epoch": 14}`. Victor still has to sign in and open `/admin` to verify. **That account's entitlement ends 2026-12-01 20:15 UTC** (30 days from redemption, and nothing renews it; follow-up A19). Build the class apps from an account redeemed on or after Nov 15, and grant it admin with step 3.
+
 Section 3 step 7. The Admin page needs the row; the grant needs Victor's principal id, which `admission list` shows as the redemption of his code.
 
 1. **List** (operator):
