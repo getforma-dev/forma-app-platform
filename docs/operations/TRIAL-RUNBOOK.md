@@ -797,3 +797,61 @@ The infra review of 2026-11-14 (H2, no WAF; H3, no CloudTrail trail or detector)
 **Roll back.** WAF, in an emergency (students answered `429` wrongly): `aws wafv2 disassociate-web-acl --resource-arn "$ALB_ARN"` takes effect within a minute and leaves the stack in place; then `aws cloudformation delete-stack --stack-name forma-beta-waf && aws cloudformation wait stack-delete-complete --stack-name forma-beta-waf` removes the web ACL and the two alarms (a `deploy` of the stack after a bare disassociation re-associates it). Security events: `aws cloudformation delete-stack --stack-name forma-security-events && aws cloudformation wait stack-delete-complete --stack-name forma-security-events` removes the trail, the rules, the topic and the analyzer; the bucket is retained with its logs (`DeletionPolicy: Retain`) and is emptied and deleted by hand when the record is no longer wanted. The trail's deletion mails one last `DeleteTrail` notice if its rule outlives it. Neither roll-back changes anything of the beta.
 
 **Cost.** Security events about $0 (S3, cents). WAF about $7.20. The M1 alarms of 11.1 and these two make 18 alarms in the account, 10 free, so $0.80. About $8 a month in all, inside the ADR-019 ceilings; the budget parameter needs no change.
+
+### 11.8 Uptime probes, SLO alarms and the golden-signals dashboard (about $3.60 a month)
+
+The outside-in layer. The alarms of 11.1 watch the beta from inside AWS (the balancer's own counts, the task, the database); these ask what a student sees: can the app and sign-in be reached from outside, what share of answers fail, and how long an ordinary page takes. One standalone template, `ops/monitoring/observability.json` (stack `forma-beta-observability`), pinned by `ops/promotion/test_monitoring_observability.py`: two Route 53 HTTPS health checks that probe `https://beta.getforma.dev/health/ready` and `https://auth-staging.getforma.dev/health` every 30 s from us-east-1, us-west-2 and eu-west-1; an alarm on each; two SLO alarms on the load balancer; and the CloudWatch dashboard `forma-beta-golden-signals` with a row each for traffic, errors, latency, saturation, health and email under a one-line legend per row. It needs no app release, creates no IAM resource (`validate-template` reports no capability), names no account id or ARN and changes nothing of `GenuiSyntheticFoundation`: the beta is reached only through parameters, so promotion's infrastructure digest is unchanged. It publishes to the alarm topic of 11.1, so every notice reaches the same address. No string matching, fast interval or latency measurement on the probes, no CloudWatch Logs and no Synthetics canaries: those cost money. **Not deployed** (2026-11-15); Victor deploys it, agents prepare. Deploy it in **us-east-1**: Route 53 publishes health-check metrics only there, and the beta runs there.
+
+**What each alarm means and the first thing to check.** Each one mails on `ALARM` and again on `OK`.
+
+- `forma-beta-observability-app-unreachable`: Route 53's checkers got no healthy answer from `/health/ready` for three minutes in a row; missing data counts as down. First: `curl -sS -o /dev/null -w '%{http_code}\n' https://beta.getforma.dev/health/ready` from your machine. `503` means the service runs but is not ready (read the service log group); `502`, `504` or no answer means no healthy target, and `-unhealthy-targets` or `-no-running-task` of 11.1 says which (then the ECS service events). If `curl` answers `200` while the alarm holds, ask Route 53 what its checkers saw: `aws route53 get-health-check-status --health-check-id "$APP_HC"` (step 3) names each checker's last answer, such as a TLS or DNS failure seen only from outside. It fires by design at the 2026-12-14 02:00 UTC stop and during a promotion outage, like `-unhealthy-targets`.
+- `forma-beta-observability-fauth-unreachable`: the same for fAuth's `/health`; nobody can sign in while it lasts. First: `curl` that address; then `-fauth-status-check` of 11.1. In `ALARM` too, the host itself is down (that alarm's description names the recreate procedure); `OK`, the host runs but fAuth or the proxy in front of it does not answer.
+- `forma-beta-observability-error-rate`: more than 2% of the load balancer's requests were answered 5xx, by the service or by the balancer, in two of three five-minute periods; a period with fewer than 100 requests counts as 0%. First: the dashboard's Errors row says which count rose. Target 5xx: read the service log group for the failing route before anyone restarts anything. Balancer 5xx: no healthy target or a refused connection; read the Health row and the ECS service events.
+- `forma-beta-observability-slow-median`: the median response time stayed above 2 s for fifteen minutes. It watches the median because model calls make p95 legitimately slow (tens of seconds); the dashboard's p99 line sitting there is normal. First: the Saturation row (service CPU and memory, database CPU and connections; 11.1's `-service-cpu`, `-service-memory`, `-database-cpu` and `-database-connections` alarm on the same metrics), then the Traffic row for a flood and the web ACL's blocked count.
+
+**The probes' own requests count.** Each Route 53 checker asks every 30 s, and AWS's own figure is a request about every two seconds when all eight checker regions are used; three regions send fewer, roughly 50 to 60 in five minutes to `/health/ready` (an estimate: AWS publishes no per-region count). They pass the web ACL at about ten per checker address per five minutes, far under the 2000 flood limit of 11.7 (that limit's sizing note is about the balancer's own checks, which never pass the web ACL), and they show in the Traffic row. They also count in `RequestCount` and `TargetResponseTime`: so the error-rate gate is 100 requests, about twice what the probes alone send, and it measures real traffic: quiet hours stay silent, and a class working clears it easily. Their quick `200`s still pull the median down at quiet hours. With the class working, students' requests outnumber them. When the app is down the probes are answered 5xx by the balancer, so `-error-rate` fires together with `-app-unreachable`.
+
+1. **Derive the parameters and look at them** (after the header's block and section 11's setup, which set `out`, `$OUT`, `$CLUSTER`, `$SERVICE` and `$DB`). The first six are 11.1 step 1's derivations; the topic is the alarms stack's output, as in 11.7 step 2. `WebAclName` is the `forma-beta-waf` stack's `WebAclName` output, `forma-beta-waf-web-acl`, passed as written.
+
+   ```sh
+   ALB_DNS=$(out LoadBalancerDnsName)
+   ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$ALB_DNS'].LoadBalancerArn" --output text)
+   TG_ARN=$(aws elbv2 describe-target-groups --load-balancer-arn "$ALB_ARN" --query "TargetGroups[?Port!=\`3001\`].TargetGroupArn" --output text)
+   FAUTH_ID=$(aws cloudformation describe-stack-resources --stack-name FauthBetaHost --query "StackResources[?ResourceType=='AWS::EC2::Instance'].PhysicalResourceId" --output text)
+   TOPIC=$(aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query "$(printf "$OUT" AlarmTopicArn)" --output text)
+   printf '%s\n' "${ALB_ARN#*loadbalancer/}" "${TG_ARN##*:}" "$CLUSTER" "$SERVICE" "$DB" "$FAUTH_ID" "$TOPIC"
+   ```
+
+   Expected: seven lines: `app/<name>/<16 hex>`, `targetgroup/<name>/<16 hex>`, the cluster name, the service name, the instance identifier, `i-<17 hex>`, `arn:aws:sns:us-east-1:<account>:forma-beta-trial-alarms-AlarmTopic-<suffix>`. The stops of 11.1 step 1 apply: two target groups on one line, or an empty sixth line.
+
+2. **Deploy** (a new stack; `AppHostname` and `FauthHostname` keep their defaults, `beta.getforma.dev` and `auth-staging.getforma.dev`):
+
+   ```sh
+   aws cloudformation deploy --region us-east-1 --stack-name forma-beta-observability --template-file ops/monitoring/observability.json \
+     --no-fail-on-empty-changeset --parameter-overrides AlarmTopicArn="$TOPIC" LoadBalancerFullName="${ALB_ARN#*loadbalancer/}" \
+     TargetGroupFullName="${TG_ARN##*:}" ClusterName="$CLUSTER" ServiceName="$SERVICE" DBInstanceIdentifier="$DB" FauthInstanceId="$FAUTH_ID" \
+     WebAclName=forma-beta-waf-web-acl
+   aws cloudformation describe-stacks --region us-east-1 --stack-name forma-beta-observability --query 'Stacks[0].StackStatus' --output text
+   ```
+
+   Expected: `Waiting for changeset to be created..`, `Waiting for stack create/update to complete`, `Successfully created/updated stack - forma-beta-observability`; then `CREATE_COMPLETE`.
+
+3. **Read back**:
+
+   ```sh
+   obs() { aws cloudformation describe-stacks --region us-east-1 --stack-name forma-beta-observability --query "$(printf "$OUT" "$1")" --output text; }
+   APP_HC=$(obs AppHealthCheckId) FAUTH_HC=$(obs FauthHealthCheckId)
+   for hc in "$APP_HC" "$FAUTH_HC"; do
+     aws route53 get-health-check-status --health-check-id "$hc" --query 'HealthCheckObservations[].{region:Region,status:StatusReport.Status}' --output table
+   done
+   aws cloudwatch describe-alarms --region us-east-1 --alarm-name-prefix forma-beta-observability --query "MetricAlarms[].{n:AlarmName,s:StateValue}"
+   obs DashboardUrl
+   ```
+
+   Expected: for each probe, observations only from `us-east-1`, `us-west-2` and `eu-west-1` (several checkers each), every status beginning `Success: HTTP Status Code 200`. Four alarms, `forma-beta-observability-app-unreachable`, `-fauth-unreachable`, `-error-rate` and `-slow-median`: the two `-unreachable` read `OK` within about five minutes (Route 53 takes a minute or two to start publishing, and missing data counts as down, so each may mail one `ALARM` and its `OK` at creation); the two SLO alarms read `OK` within fifteen minutes. Then a console URL; open it: the legend, then the six rows. The Traffic row's web ACL lines are empty until `forma-beta-waf` (11.7) is deployed, and the Email row until SES sends.
+
+**Verify.** Every probe observation `Success`, four alarms `OK`, and every row of the dashboard drawing data (but the two just named). Nothing in `GenuiSyntheticFoundation` changed: its `LastUpdatedTime` is unchanged and the next `maintenance inspect` shows the same infrastructure digest.
+
+**Roll back.** `aws cloudformation delete-stack --region us-east-1 --stack-name forma-beta-observability && aws cloudformation wait stack-delete-complete --region us-east-1 --stack-name forma-beta-observability` removes the two health checks, the four alarms and the dashboard. The topic and its subscription belong to the alarms stack and stay; nothing of the beta changes. To quiet one alarm through a planned outage without removing anything: `aws cloudwatch disable-alarm-actions --region us-east-1 --alarm-names forma-beta-observability-error-rate`, and `enable-alarm-actions` afterwards.
+
+**Cost.** Route 53 lists each HTTPS health check on an AWS endpoint at $0.50 basic plus $1.00 for HTTPS, so $3.00 for the two. The same pricing page lets an account create up to 50 health checks on its own AWS endpoints free, which would leave only the HTTPS feature, $2.00; the first bill shows which applies (a non-AWS endpoint would be $0.75 plus $2.00 each). The alarms are six alarm metrics at $0.10: the two probe alarms and the median alarm one each, the error-rate alarm three, because CloudWatch bills every metric in a math expression. The account is already past its 10 free alarm metrics (11.7), so $0.60. The dashboard is free as one of the account's first three custom dashboards (up to 50 metrics each; this one uses about twenty), $3 a month otherwise. About $3.60 a month at list price, $2.60 with the free health-check allowance; with 11.1 and 11.7, about $12 a month in all, inside the ADR-019 ceilings; the budget parameter needs no change.
