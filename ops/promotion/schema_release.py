@@ -46,6 +46,9 @@ SPEC = Path(__file__).with_name('schema-release.json')
 # source are unchanged, so `from` and `to` share one schema digest. It replaces
 # release D's spent pin. The expiry falls before the codes (2026-11-28) and the
 # class (2026-11-29), so no contract change can promote during the class.
+# Release E went live on 2026-11-15 (evidence/APP-223/release-2026-11-15.md)
+# and its file was removed: this pin is now an inert record, read only together
+# with a committed file, until the next release's values replace it.
 REVIEWED_SCHEMA_RELEASE = {
     'evidence': 'evidence/APP-223/CONTRACT-RELEASE.md',
     'expires_at_utc': '2026-11-27T00:00:00Z',
