@@ -6496,7 +6496,7 @@
       "Depends on": "APP-202, APP-203, APP-204, APP-205, APP-206, APP-207",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI (builder B7); the approval is Victor's",
-      "Branch / PR": "`release/c-participation`; [PR #131](https://github.com/getforma-dev/forma-app-platform/pull/131), open; merges with `PROMOTION_ENABLED` true, the push to `main` is the trigger",
+      "Branch / PR": "`release/c-participation`; [PR #131](https://github.com/getforma-dev/forma-app-platform/pull/131), merged as `ffba79bd` and live ([record](../../evidence/APP-209/release-2026-11-14.md))",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection. Release B (schema 24) must be live and read back first; APP-208 is included only if merged by its cut rule.",

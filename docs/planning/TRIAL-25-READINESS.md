@@ -68,7 +68,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Fri Nov 28 | Issue 25 codes, then one restart in the evening. Victor emails the codes. No deploys after this. | **Victor** |
 | Nov 29–30 | Class. | Victor + students |
 | Dec 1–12 | Real use continues. Watch and learn. Fixes only in announced windows. | |
-| by Dec 14 | Purge the organization's data per the charter; the beta stops Dec 15 unless renewed. | **Victor** |
+| by Dec 14 | Purge the organization's data per the charter, before the beta stops at 2026-12-14 20:00 UTC (Release C's stop) unless a later release renews it. | **Victor** |
 
 ## Workstreams
 
@@ -224,7 +224,7 @@ All yes, or no codes go out.
 - **Release B (Nov 23):**
   - `/health/ready`;
   - the schema version reads 24;
-  - the expiry reads Dec 15;
+  - the expiry reads 2026-12-14T20:00Z (Release C's stop);
   - alarms OK;
   - a test alarm email arrives;
   - the restore drill matches.

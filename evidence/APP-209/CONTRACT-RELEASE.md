@@ -53,7 +53,7 @@ Failures: a prepared release that is not approved is abandoned as any prepared r
 
 ## Expiry
 
-**2026-11-27 00:00 UTC.** It falls after the planned release (Tuesday Nov 25 at the latest) and after the rehearsal (Wednesday Nov 26, which runs one of Release C's polls), which leaves Nov 26 for a second attempt; and before the codes (Friday Nov 28) and the class (Nov 29–30), so no contract change can promote in the class weekend even if the follow-up that removes the file is late. `applicable()` requires the clock to be before it at preparation and at both execution rechecks. A release-C scan disposition, if one is needed, must expire at the same instant. The deployment's stop time is separate: `DeploymentExpiresAtUtc` is 2026-12-15 14:00 UTC after release B's renewal.
+**2026-11-27 00:00 UTC.** It falls after the planned release (Tuesday Nov 25 at the latest) and after the rehearsal (Wednesday Nov 26, which runs one of Release C's polls), which leaves Nov 26 for a second attempt; and before the codes (Friday Nov 28) and the class (Nov 29–30), so no contract change can promote in the class weekend even if the follow-up that removes the file is late. `applicable()` requires the clock to be before it at preparation and at both execution rechecks. A release-C scan disposition, if one is needed, must expire at the same instant. The deployment's stop time is separate: `DeploymentExpiresAtUtc` was 2026-12-15 14:00 UTC after release B's renewal; this release subtracted another 18 hours, so the live stop is 2026-12-14T20:00Z ([record](release-2026-11-14.md)).
 
 ## Everything else in this release
 
