@@ -223,14 +223,12 @@ body {
   font-size: 14px;
 }
 
-.lab-footer {
-  color: var(--lab-muted);
-  font-size: 14px;
-  text-align: center;
-}
-
-.lab-footer a {
-  color: var(--lab-accent);
+/* APP-223: the shared site footer (app.css) under the card, at the card's
+   width, its text in line with the card's 32px inset. */
+.lab > .site-footer {
+  width: 100%;
+  max-width: 52rem;
+  padding: 4px 32px 0;
 }
 
 /* The surge: shown while the box is checked; static unless motion is welcome. */
@@ -352,6 +350,9 @@ body {
   .lab {
     align-content: start;
     padding: 16px 12px 28px;
+  }
+  .lab > .site-footer {
+    padding-inline: 20px;
   }
   .lab-card .forma-brand {
     margin: 22px 20px 0;

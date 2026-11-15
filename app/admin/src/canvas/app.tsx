@@ -364,6 +364,9 @@ function Canvas(props: CanvasProps) {
             <a class="cv-link" href="/admin">Admin</a>
           ))}
           <a class="cv-link" href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
+          {/* APP-223: the full-screen canvas has no site footer; these open a new tab so the canvas keeps its state. */}
+          <a class="cv-link" href="/notice" target="_blank" rel="noopener">Beta terms</a>
+          <a class="cv-link" href="/about" target="_blank" rel="noopener">About</a>
           <details class="cv-name-menu">
             <summary class="cv-link" title="The name others see">Your name</summary>
             <form method="post" action="/me/name" class="cv-name-form">

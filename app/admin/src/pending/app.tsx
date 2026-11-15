@@ -1,4 +1,5 @@
 import { h, mount } from '@getforma/core';
+import { SiteFooter } from '../site/footer';
 
 // ADR-006 restricted pending page: the identity is verified, the mailbox is
 // not. It reads nothing from the workspace; a resend result is shown as a
@@ -16,43 +17,46 @@ type PendingProps = {
 
 function Pending(props: PendingProps) {
   return (
-    <main class="page">
-      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
-      <h1>Confirm your email address</h1>
-      <p class="lede">
-        Your sign-in worked, but your email address is not confirmed yet. Open the
-        confirmation link your sign-in provider sent, then sign in again.
-      </p>
-      {props.held ? (
-        <p>
-          Your invitation is held for <span>{props.hoursRemaining}</span> more hours.
+    <div class="site">
+      <main class="page">
+        <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
+        <h1>Confirm your email address</h1>
+        <p class="lede">
+          Your sign-in worked, but your email address is not confirmed yet. Open the
+          confirmation link your sign-in provider sent, then sign in again.
         </p>
-      ) : null}
-      {props.requested ? (
-        <p class="notice" role="status">
-          A new confirmation message was requested. The previous link no longer works.
-        </p>
-      ) : null}
-      {props.unavailable ? (
-        <p class="notice" role="status">
-          A new message could not be requested right now. Try again later.
-        </p>
-      ) : null}
-      {props.resendAvailable ? (
-        <form method="post" action="/auth/pending/resend">
-          <input type="hidden" name="csrf" value={props.csrfResend} />
-          <button type="submit">Request a new confirmation message</button>
+        {props.held ? (
+          <p>
+            Your invitation is held for <span>{props.hoursRemaining}</span> more hours.
+          </p>
+        ) : null}
+        {props.requested ? (
+          <p class="notice" role="status">
+            A new confirmation message was requested. The previous link no longer works.
+          </p>
+        ) : null}
+        {props.unavailable ? (
+          <p class="notice" role="status">
+            A new message could not be requested right now. Try again later.
+          </p>
+        ) : null}
+        {props.resendAvailable ? (
+          <form method="post" action="/auth/pending/resend">
+            <input type="hidden" name="csrf" value={props.csrfResend} />
+            <button type="submit">Request a new confirmation message</button>
+          </form>
+        ) : (
+          <p>
+            You can request another message in <span>{props.cooldownSeconds}</span> seconds.
+          </p>
+        )}
+        <form method="post" action="/auth/signout">
+          <input type="hidden" name="csrf" value={props.csrfSignout} />
+          <button type="submit">Sign out</button>
         </form>
-      ) : (
-        <p>
-          You can request another message in <span>{props.cooldownSeconds}</span> seconds.
-        </p>
-      )}
-      <form method="post" action="/auth/signout">
-        <input type="hidden" name="csrf" value={props.csrfSignout} />
-        <button type="submit">Sign out</button>
-      </form>
-    </main>
+      </main>
+      <SiteFooter />
+    </div>
   );
 }
 
