@@ -98,8 +98,9 @@ class TrialAWS(FakeAWS):
                 self.objects[a['Bucket'], item['Key']].remove(item['VersionId'])
             return {'Deleted': [{'Key': i['Key'], 'VersionId': i['VersionId']} for i in a['Delete']['Objects']]}
         if s == 's3' and o == 'delete_object':
-            # m1: the intent receipt names every key and version before the first deletion.
-            intents = [k for k in self.s3.objects if k.endswith('/delete-uploads-intent.json')]
+            # m1: the intent receipt names every key and version before the first deletion (delete-uploads'
+            # intent, or erase-member's second sweep after it; the latest one written governs).
+            intents = [k for k in self.s3.objects if k.endswith(('/delete-uploads-intent.json', '/erase-objects-intent.json'))]
             assert intents, 'delete_object before the intent receipt'
             intent = json.loads(self.s3.objects[intents[-1]])
             assert any(f['key'] == a['Key'] and any(v['VersionId'] == a['VersionId'] for v in f['versions']) for f in intent['files']), 'deletion outside the intent'
@@ -474,6 +475,94 @@ class AdmissionTests(unittest.TestCase):
                 with self.assertRaises(Refused): trial.purge(ORG)
                 self.assertEqual(self.aws.deleted, [])
                 self.assertFalse(any(k.endswith('purge-objects-intent.json') for k in self.receipts()))
+
+    def test_extend_entitlement_runs_the_documented_override_for_one_member_or_everyone(self):
+        """APP-229 (migration 0026): --principal and --all-active each compose their documented override with the
+        same --until; the task's answer must name the organization and the date asked for; refusals write nothing."""
+        trial = self.trial()
+        until = '2027-02-15T00:00:00Z'
+        one = {'organization_id': ORG, 'until': until, 'members': 1, 'changed': 1, 'unchanged': 0,
+               'entries': [{'principal_id': PRINCIPAL, 'changed': True, 'expires_at': until, 'expires_before': '2026-12-28T20:15:00Z'}]}
+        everyone = dict(one, members=3, changed=2, unchanged=1, entries=one['entries'] + [
+            {'principal_id': '00000000-0000-4000-8000-000000000067', 'changed': True, 'expires_at': until, 'expires_before': '2026-12-01T20:15:00Z'},
+            {'principal_id': '00000000-0000-4000-8000-000000000068', 'changed': False, 'expires_at': None, 'expires_before': None}])
+        self.aws.results = [(0, one), (0, everyone)]
+        extended = trial.extend_entitlement(until, principal=PRINCIPAL)
+        self.assertEqual((extended['status'], extended['changed'], extended['entries'][0]['expires_at']), ('extended', 1, until))
+        self.assertEqual(self.aws.run_requests[0]['overrides']['containerOverrides'][0]['command'],
+                         ['admission', 'extend-entitlement', '--organization', ORG, '--principal', PRINCIPAL, '--until', until])
+        bulk = trial.extend_entitlement(until, all_active=True)
+        self.assertEqual((bulk['status'], bulk['members'], bulk['changed'], bulk['unchanged']), ('extended', 3, 2, 1))
+        self.assertEqual(self.aws.run_requests[1]['overrides']['containerOverrides'][0]['command'],
+                         ['admission', 'extend-entitlement', '--organization', ORG, '--all-active', '--until', until])
+        self.assertEqual(self.aws.puts, [])
+        self.assertEqual(len({r['clientToken'] for r in self.aws.run_requests}), 2)
+        # Refusals: a failed task, a task answering another date, a malformed date, both or neither target, a malformed id.
+        self.aws.results = [(1, {'refused': 'until_too_far'}), (0, dict(one, until='2027-02-16T00:00:00Z'))]
+        with self.assertRaises(Refused): trial.extend_entitlement(until, principal=PRINCIPAL)
+        with self.assertRaises(Refused): trial.extend_entitlement(until, principal=PRINCIPAL)
+        for bad in [dict(until='2027-02-15 00:00:00', principal=PRINCIPAL), dict(until=until, principal=PRINCIPAL, all_active=True), dict(until=until),
+                    dict(until=until, principal='x'), dict(until='2027-02-15T00:00:00+00:00', all_active=True)]:
+            with self.assertRaises(Refused): trial.extend_entitlement(**bad)
+        self.assertEqual(len(self.aws.run_requests), 4)
+
+    def test_erase_member_sweeps_uploads_runs_the_task_then_sweeps_what_the_task_names_with_intents(self):
+        """APP-230 (migration 0026): delete-uploads first (the member's own uploads), the erase-member task behind
+        --confirm, then every remaining object the result names (a file that was in the member's folder but not
+        their upload, the deleted source's normalized objects), with an intent receipt; the result carries the
+        fAuth follow-up for the subject the task printed; refusals delete nothing beyond the uploads step they reached."""
+        trial = self.trial()
+        box, mine, theirs = '33333333-4444-4555-8666-777777777777', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee1', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee2'
+        source, revision = 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeee3', 'cccccccc-bbbb-4ccc-8ddd-eeeeeeeeeee4'
+        my_key, their_key = 'o/%s/b/%s/f/%s' % (ORG, box, mine), 'o/%s/b/%s/f/%s' % (ORG, box, theirs)
+        prefix = 'o/%s/s/%s/r/%s/' % (ORG, source, revision)
+        foreign = 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, mine)
+        self.aws.objects = {(BUCKET, my_key): ['v1', 'dm-1'], (BUCKET, their_key): ['v2'], (BUCKET, prefix + 'original'): ['v3'], (BUCKET, prefix + 'part.parquet'): ['v4'],
+                            (BUCKET, foreign): ['v9']}
+        listing = {'organization_id': ORG, 'principal_id': PRINCIPAL, 'count': 1, 'truncated': False, 'files': [
+            {'box_id': box, 'file_id': mine, 'object_key': my_key, 'byte_length': 10, 'content_digest': 'sha256:' + 'a' * 64, 'kind': 'csv'}]}
+        erased = {'principal_id': PRINCIPAL, 'status': 'erased', 'changed': True, 'membership_epoch': 3, 'audit_event': '00000000-0000-4000-8000-0000000000ee',
+                  'rows_deleted': 12, 'deleted': {'apps': 1}, 'apps': 1, 'boxes': 1, 'sources': 1, 'sources_kept': 0, 'live_shares': 0,
+                  'object_keys': [my_key, their_key], 'source_revisions': [[source, revision]], 'agent_tokens_revoked': 0, 'agent_tokens_kept': 0,
+                  'entitlements_revoked': 1, 'provider_subject': 'usr_abc', 'kept': ['principals'], 'audit_events_kept': 5}
+        with self.assertRaises(Refused): trial.erase_member(PRINCIPAL, OTHER_ORG)
+        self.assertEqual(self.aws.run_requests, [])
+        self.aws.results = [(0, listing), (0, erased)]
+        result = trial.erase_member(PRINCIPAL, PRINCIPAL)
+        self.assertEqual((result['status'], result['changed'], result['rows_deleted'], result['objects_deleted'], result['provider_subject']), ('erased', True, 12, 3, 'usr_abc'))
+        self.assertEqual((result['uploads']['files'], result['uploads']['versions'], result['uploads']['keys']), (1, 2, [my_key]))
+        self.assertIn('POST /manage/users/usr_abc/revoke-sessions', result['next'])
+        self.assertEqual([r['overrides']['containerOverrides'][0]['command'] for r in self.aws.run_requests],
+                         [['admission', 'list-box-files', '--organization', ORG, '--principal', PRINCIPAL],
+                          ['admission', 'erase-member', '--organization', ORG, '--principal', PRINCIPAL, '--confirm', PRINCIPAL]])
+        self.assertEqual(sorted(self.aws.deleted), sorted([(BUCKET, my_key, 'v1'), (BUCKET, my_key, 'dm-1'), (BUCKET, their_key, 'v2'),
+                                                           (BUCKET, prefix + 'original', 'v3'), (BUCKET, prefix + 'part.parquet', 'v4')]))
+        self.assertEqual(self.aws.objects[BUCKET, foreign], ['v9'])
+        receipts = self.receipts()
+        intent = next(v for k, v in receipts.items() if k.endswith('erase-objects-intent.json'))
+        self.assertEqual((intent['principal_id'], intent['versions'], sorted(f['key'] for f in intent['files']), intent['source_prefixes'], intent['audit_event']),
+                         (PRINCIPAL, 3, sorted([their_key, prefix + 'original', prefix + 'part.parquet']), [prefix], erased['audit_event']))
+        done = next(v for k, v in receipts.items() if k.endswith('erase-objects-done.json'))
+        self.assertEqual((done['deleted'], done['remaining']), (3, []))
+        self.assertTrue(any(k.endswith('delete-uploads-intent.json') for k in receipts))
+        # A repeat on an already erased member: the task answers changed false with nothing to sweep, no subject.
+        self.setUp(); trial = self.trial()
+        self.aws.results = [(0, dict(listing, count=0, files=[])), (0, dict(erased, changed=False, rows_deleted=0, object_keys=[], source_revisions=[], provider_subject=None, audit_event=None))]
+        again = trial.erase_member(PRINCIPAL, PRINCIPAL)
+        self.assertEqual((again['changed'], again['objects_deleted'], again['provider_subject']), (False, 0, None))
+        self.assertIn('Already erased', again['next'])
+        # Refusals after the uploads step: a refused task, a foreign key or a malformed revision in the result, more than 100 objects.
+        for name, task in [('member active', (1, {'refused': 'member_active'})),
+                           ('foreign key', (0, dict(erased, object_keys=[foreign]))),
+                           ('source key as file', (0, dict(erased, object_keys=[prefix + 'original']))),
+                           ('malformed revision', (0, dict(erased, source_revisions=[[source, '../x']]))),
+                           ('too many', (0, dict(erased, object_keys=['o/%s/b/%s/f/%s' % (ORG, box, 'aaaaaaaa-bbbb-4ccc-8ddd-%012x' % n) for n in range(101)])))]:
+            with self.subTest(case=name):
+                self.setUp(); trial = self.trial(); self.aws.objects = {(BUCKET, their_key): ['v2']}
+                self.aws.results = [(0, dict(listing, count=0, files=[])), task]
+                with self.assertRaises(Refused): trial.erase_member(PRINCIPAL, PRINCIPAL)
+                self.assertEqual(self.aws.deleted, [])
+                self.assertFalse(any(k.endswith('erase-objects-intent.json') for k in self.receipts()))
 
     def test_suspend_runs_its_override(self):
         trial = self.trial()

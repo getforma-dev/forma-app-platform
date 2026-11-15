@@ -290,7 +290,19 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
      --principal "<principal id>" --output "$TRIAL/delete-uploads-<principal>.json"
    ```
 
-   Expected: `{"status": "deleted", "files": F, "versions": V, "keys": ["o/<org>/b/<box>/f/<file>", ...], ...}`. It refuses a key outside `o/<org>/b/`, a truncated listing (more than 100 files: inspect first) and leaves the `box_files` rows for the purge.
+   Expected: `{"status": "deleted", "files": F, "versions": V, "keys": ["o/<org>/b/<box>/f/<file>", ...], ...}`. It refuses a key outside `o/<org>/b/`, a truncated listing (more than 100 files: inspect first) and leaves the `box_files` rows for the purge, or for section 10a's erasure.
+
+## 5a. Extending entitlements (migration 0026, APP-229)
+
+Every redemption's entitlement is 30 days (`docs/planning/CLASS-CONTINUATION-PLAN.md` §2.2, with PR #156); nothing renews it, and a lapse (an `active` entitlement whose `expires_at` has passed) ends sign-in and every guest share the member sponsors. From release H the operator moves entitlements later, never earlier, for one member or the whole organization; the date is RFC 3339 UTC to the second, after now and at most 400 days ahead:
+
+```sh
+$PY -m ops.promotion.admission extend-entitlement --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+  --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --all-active --until 2027-02-15T00:00:00Z --output "$TRIAL/extend-all.json"
+# one member: --principal "<principal id>" instead of --all-active
+```
+
+Expected: `{"status": "extended", "organization_id": ..., "until": "2027-02-15T00:00:00Z", "members": N, "changed": M, "unchanged": N-M, "entries": [{"principal_id": ..., "changed": true, "expires_at": "2027-02-15T00:00:00Z", "expires_before": ...}, ...], ...}`. Every active membership is a target, a lapsed one included (it comes back: the same `expires_at>clock_timestamp()` that refused it now admits it, and its sponsored guest shares answer again); a member already past the date is `changed: false`; a member whose only entitlement is revoked is `changed: false` with no date; revoked memberships and revoked entitlements are never touched; no epoch advances. One `entitlement.extended` event per changed member on the **operator** chain, the actor the member and the outcome the digest of the new `expires_at` under `forma:entitlement-extended:v1`. The task refuses, writing nothing: `until_in_past`, `until_too_far`, `member_unknown`, `member_inactive`, `no_active_entitlement` (one named member), `organization_inactive`, and `kind_refused` below schema 26. Right after release H: `--all-active --until 2027-02-15T00:00:00Z` (the stop plus the 30 days the original entitlement had); it revives the Nov 1 account.
 
 ## 6. Alarms, the deny-all switch and rollback
 
@@ -470,6 +482,22 @@ The charter promises the organization's data is deleted by Dec 14; the beta stop
 
    Expected: the task's log line names the capabilities it ended, and the second command prints `0 for the trial organization`.
 8. **After the stop** (2026-12-12 14:00 UTC): both services at count 0 (`aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount}"` → 0 / 0); the alarms stack deleted (section 6); the retained database, keys and load balancer still cost money until a separate decision.
+
+## 10a. Deletion on request (migration 0026, APP-230)
+
+The standing procedure once accounts continue after the class (`docs/planning/CLASS-CONTINUATION-PLAN.md` §2.3, with PR #156; notice v2's "Your data"): a member writes to privacy@getforma.dev; we confirm within 7 days and complete within 30. Section 10's purge stays the organization-wide tool. The deletion removes the sign-in account, the name, the member's own apps, uploads and what they entered in their own apps. **What stays, and why** (the reply names it): the principal row (its provider subject replaced by `erased:<id>`; `internal_record_revisions.creator_id` and `updater_id`, `publications.author_id` and `approver_id`, `saved_work.created_by` and `work_data_copies.actor_principal_id` reference it, so deleting it would delete other owners' records), the membership row (revoked, no name, role member), the consent, redemption and reservation rows (identifiers and times: the legal record), the revoked entitlement, the hash-chained audit events and the agent access log (identifiers, kinds, hashes), the member's agent tokens (revoked, relabelled `erased`: the access log keys them), and **every entry the member made in an app someone else owns, attributed to a principal with no name** (Victor, Q3). A source registered from the member's upload stays only when another owner's saved work binds it (counted as `sources_kept`); otherwise it goes with its objects.
+
+1. **Remove** the member (section 5, `/admin` Remove or `revoke-membership`): the erasure refuses `member_active`. A removed owner with no other active owner refuses `last_owner` until `set-role owner` names a successor (a suspended organization, section 10's path, is exempt).
+2. **Erase**, typing the principal id a second time:
+
+   ```sh
+   $PY -m ops.promotion.admission erase-member --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --organization "$TRIAL_ORG" --principal "<principal id>" --confirm "<principal id>" --output "$TRIAL/erase-<principal>.json"
+   ```
+
+   It runs section 5's `delete-uploads` first (the member's own S3 uploads, with its intent receipt; more than 100 files refuses: inspect first), then the `erase-member` task (one transaction in migration 0026's `genui_private.erase_member`, as `genui_owner` under FORCE row-level security: the member's apps and everything under them, their folders and files, the unbound sources from those files, sessions, pre-access sessions, Slack links, agent attributions, cards, labels, artifact kinds, grants and shares, the guests' links to their live shares; entitlements and tokens revoked; name and role cleared; subject tombstoned; then the task proves from `pg_catalog` that no row of any table with an `app_id`, `box_id` or `source_id` names the former resources and that no key column outside the kept set names the member, refusing `erase_incomplete` and rolling back otherwise; the five chains must not have moved, `erase_audit_changed`; then one `member.erased` operator event whose digest is the principal id under `forma:member-erased:v1`), then every remaining object version the task's result names (files that were in the member's folders, the deleted sources' `o/<org>/s/<source>/r/<revision>/` objects) with an intent receipt. Expected: `{"status": "erased", "changed": true, "rows_deleted": R, "deleted": {table: n, ...}, "kept": [...], "apps": A, "boxes": B, "sources": S, "sources_kept": K, "uploads": {...}, "objects_deleted": O, "provider_subject": "usr_...", "audit_event": ..., "next": "Delete the sign-in account in fAuth ..."}`. A repeat is `changed: false` with nothing swept and no subject.
+3. **The sign-in account**, with your own identity, as section 10 step 6 does for every user, for this one `usr_` id (the task prints it once, in the first run's result; it is the fAuth user id, an identifier): `/manage/stats`, `POST /manage/users/<id>/revoke-sessions`, `DELETE /manage/users/<id>` (a hard delete; sessions, refresh tokens, credentials and codes go with it), `/manage/stats` again; record the four results beside the erase receipt. The task does not call fAuth itself: the hard delete crosses a second trust boundary and is recorded with stats by the operator's own identity, as the purge does. Optionally the two address rows (`tenant_user_invites`, `login_attempts`) by SQL on the fAuth database, as in step 6.
+4. **Reply** to the requester with the date, and what stayed: "Your sign-in account, your name, your apps, your uploads and what you entered in your own apps are deleted. Entries you made in apps that other people own stay with those apps, without your name. A minimal security log of account events (identifiers and times, no content) is kept. Backup copies expire about a week later."
 
 ## 11. Nov 23 operator checklist
 

@@ -23,6 +23,24 @@ epoch and appends `membership.role_changed`; it refuses to demote the last
 active owner. `issue --role` names the role a code admits with (member or
 viewer). `list` shows each redeemer's role.
 
+Membership lifecycle (CLASS-CONTINUATION-PLAN §2.2 and §2.3, migration 0026;
+APP-229, APP-230): `extend-entitlement --until <RFC 3339 UTC> (--principal <id>
+| --all-active)` moves one active member's, or every active member's, active
+entitlements later, never earlier (a lapsed entitlement, active with a past
+expires_at, comes back; a revoked one is untouched; no epoch advances), one
+`entitlement.extended` event per changed member. `erase-member --principal <id>
+--confirm <id>` is deletion on request for an already revoked member: the
+genui_owner definer walks the member's own apps, folders, files, sources,
+sessions, tokens, links, cards, labels, grants and shares (children before
+parents), revokes the entitlements, clears the name and role and tombstones the
+provider subject; the command then proves against pg_catalog that no content
+row names the member, their former apps, folders or sources, that the chains
+did not move, and appends one `member.erased` event; a repeat changes nothing.
+Both do their database work in migration 0026's SECURITY DEFINER functions,
+owned by genui_owner under FORCE row-level security, and refuse kind_refused
+below schema 26. The S3 objects of the deleted files and sources are
+ops/promotion/admission.py's, from the keys the result names.
+
 Source revisions and their saved work (APP-012; ADR-007 D7.10, ADR-009 D9.3;
 APP-077 review M2): `register-source-revision --record` inserts one NEW
 `source_revisions` row from `upload-sources`' printed record, with the real
@@ -167,7 +185,32 @@ OPERATOR_KINDS = ("organization.provisioned", "handle.rotated", "code.issued", "
                   "membership.revoked", "entitlement.revoked", "permission.granted", "permission.revoked",
                   "creator_authority.revoked", "provider.invitation.created", "provider.invitation.reconciled",
                   "provider.invitation.revoked", "source_revision.registered", "work.seeded", "provider_tenant.bound",
-                  "app.seeded", "membership.role_changed")
+                  "app.seeded", "membership.role_changed", "entitlement.extended", "member.erased")
+# Membership lifecycle (CLASS-CONTINUATION-PLAN §2.2/§2.3, migration 0026; APP-229, APP-230): the two
+# operator kinds above arrive with 0026, as do the genui_owner definers extend_entitlement and
+# erase_member that do the database work. Below that version both commands refuse kind_refused and
+# write nothing. `--until` is RFC 3339 UTC to the second, after now and at most 400 days ahead.
+LIFECYCLE_SCHEMA_VERSION = 26
+EXTEND_MAX_DAYS = 400
+EXTEND_DOMAIN = b"forma:entitlement-extended:v1"
+ERASE_DOMAIN = b"forma:member-erased:v1"
+UNTIL = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+# Columns that may still name an erased member afterwards (every one a foreign key to principals or
+# memberships, read from pg_catalog by erase_proofs): the identity and legal rows, and the authorship
+# of entries, publications, works, copies, labels, folder work and shares in resources someone else
+# owns, which stay with their owner and are attributed to the nameless principal (Victor, Q3). Any
+# other key column still naming the member refuses erase_incomplete and rolls the erasure back.
+ERASE_KEEPS = frozenset({("principals", "principal_id"), ("memberships", "principal_id"), ("member_consents", "principal_id"),
+                         ("code_redemptions", "principal_id"), ("entitlements", "principal_id"), ("agent_tokens", "principal_id"),
+                         ("internal_record_revisions", "creator_id"), ("internal_record_revisions", "updater_id"),
+                         ("publications", "author_id"), ("publications", "approver_id"), ("saved_work", "created_by"),
+                         ("work_data_copies", "actor_principal_id"), ("app_labels", "updated_by"),
+                         ("box_file_sources", "registered_by"), ("box_derivations", "created_by"), ("box_explanations", "created_by"),
+                         ("box_briefs", "created_by"), ("box_shares", "granted_by"), ("box_file_grants", "granted_by"),
+                         ("work_shares", "revoked_by"), ("command_claims", "principal_id"), ("command_outcomes", "principal_id")})
+# Tables with an app_id, box_id or source_id column that keep rows naming an erased member's former
+# resources: the audit chain (identifiers and hashes) and the agent access log's array columns.
+ERASE_RESOURCE_KEEPS = frozenset({"audit_events", "agent_access_log"})
 # ADR-007 amendment (APP-010 review M2, m7): what grant-permission/revoke-permission
 # may write, and the resource each permission names. A closed subset of what the
 # 0002 permission tables allow: never share_work or export (no Phase 1 path uses
@@ -387,6 +430,18 @@ def parser():
     q = sub.add_parser("set-role")
     for arg in ("--organization", "--principal", "--role"):
         q.add_argument(arg, required=True)
+    # Membership lifecycle (0026; APP-229): one member's, or every active member's, entitlement
+    # moved later (never earlier) to --until; one entitlement.extended event per changed member.
+    q = sub.add_parser("extend-entitlement")
+    for arg in ("--organization", "--until"):
+        q.add_argument(arg, required=True)
+    q.add_argument("--principal")
+    q.add_argument("--all-active", action="store_true")
+    # Membership lifecycle (0026; APP-230): deletion on request, for one already revoked member;
+    # the principal id typed a second time, as the purge's --confirm.
+    q = sub.add_parser("erase-member")
+    for arg in ("--organization", "--principal", "--confirm"):
+        q.add_argument(arg, required=True)
     # ADR-007 amendment 2026-10-29 (APP-010 review M2, m7): app shells, their
     # grants and creator-authority revocation are operator actions in Phase 1.
     for name in ("grant-permission", "revoke-permission"):
@@ -496,6 +551,18 @@ def validate(args):
         require(args.role in CODE_ROLES, "role_refused")
     if args.command == "set-role":
         require(args.role in ROLES, "role_refused")
+    if args.command == "extend-entitlement":
+        require((args.principal is not None) != args.all_active, "target_refused")
+        require(isinstance(args.until, str) and UNTIL.fullmatch(args.until) is not None, "malformed_until")
+        try:
+            args.until_at = datetime.datetime.strptime(args.until, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+        except ValueError:
+            raise Refused("malformed_until")
+        now = datetime.datetime.now(datetime.timezone.utc)
+        require(args.until_at > now, "until_in_past")
+        require(args.until_at <= now + datetime.timedelta(days=EXTEND_MAX_DAYS), "until_too_far")
+    if args.command == "erase-member":
+        require(args.confirm == args.principal, "confirm_mismatch")
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
     if args.command in ("issue-handle", "rotate-handle", "retire-handle"):
@@ -1398,6 +1465,150 @@ def set_role(c, args):
     append(c, org, "membership.role_changed", actor=principal, outcome=outcome)
     c.commit()
     return {"principal_id": principal, "role": role, "role_before": before, "changed": True, "membership_epoch": epoch}
+
+
+def extend_entitlement(c, args):
+    """Membership lifecycle (0026; APP-229): a never-lowering, audited entitlement extension.
+
+    Organization (active) FOR SHARE, then each target membership FOR UPDATE inside the
+    genui_owner definer `genui_private.extend_entitlement`, which moves the member's active
+    entitlements to greatest(expires_at, until): a date only ever moves later, a member already
+    past `until` is `changed: false`, a revoked entitlement is untouched and a lapsed one (active,
+    expires_at in the past) comes back. One `entitlement.extended` event per changed member on the
+    operator chain, the actor the member and the outcome the digest of the new expires_at under
+    EXTEND_DOMAIN. No epoch advances: an extension revokes nothing. Refusals (`kind_refused`
+    below schema 26, `organization_inactive`, `member_unknown`, `member_inactive`,
+    `no_active_entitlement` for one named member, `until_refused` by the database clock) roll the
+    whole run back; with --all-active, every active membership in principal order in one transaction,
+    a member without an active entitlement reported `changed: false`.
+    """
+    org = args.organization
+    begin(c, org)
+    require(schema_version(c) >= LIFECYCLE_SCHEMA_VERSION, "kind_refused")
+    lock_organization(c, org, active=True)
+    if args.all_active:
+        targets = [r[0] for r in c.execute("SELECT principal_id::text FROM genui.memberships WHERE organization_id=%s AND status='active' ORDER BY principal_id",
+                                           (org,)).fetchall()]
+    else:
+        targets = [args.principal]
+    members, changed = [], 0
+    for principal in targets:
+        row = c.execute("SELECT outcome,changed,expires_at,expires_before FROM genui_private.extend_entitlement(%s,%s,%s)",
+                        (org, principal, args.until_at)).fetchone()
+        require(row is not None, "scope_refused")
+        outcome, did, expires, before = row
+        require(outcome in ("changed", "unchanged") or (args.all_active and outcome == "no_active_entitlement"), outcome)
+        if did:
+            digest = "sha256:" + hashlib.sha256(EXTEND_DOMAIN + b"\x00" + principal.encode() + b"\x00" + timestamp(expires).encode()).hexdigest()
+            append(c, org, "entitlement.extended", actor=principal, outcome=digest)
+            changed += 1
+        members.append({"principal_id": principal, "changed": bool(did), "expires_at": None if expires is None else timestamp(expires),
+                        "expires_before": None if before is None else timestamp(before)})
+    c.commit()
+    return {"organization_id": org, "until": args.until, "members": len(members), "changed": changed, "unchanged": len(members) - changed,
+            "entries": members}
+
+
+def principal_columns(c):
+    """(table, column) for every genui foreign key whose parent is principals or memberships: the columns
+    that can name a member. From pg_catalog, so a later migration's table is judged too."""
+    rows = c.execute("""SELECT child.relname,a.attname FROM pg_catalog.pg_constraint k
+          JOIN pg_catalog.pg_class child ON child.oid=k.conrelid JOIN pg_catalog.pg_namespace n ON n.oid=child.relnamespace
+          JOIN pg_catalog.pg_class parent ON parent.oid=k.confrelid JOIN pg_catalog.pg_namespace pn ON pn.oid=parent.relnamespace
+          JOIN pg_catalog.pg_attribute a ON a.attrelid=child.oid AND a.attnum=ANY(k.conkey)
+          WHERE k.contype='f' AND n.nspname='genui' AND pn.nspname='genui' AND parent.relname IN ('principals','memberships')
+          AND a.attname<>'organization_id' ORDER BY 1,2""").fetchall()
+    require(all(RELNAME.fullmatch(t) and RELNAME.fullmatch(col) for t, col in rows), "erase_catalog_refused")
+    return [(t, col) for t, col in rows]
+
+
+def columned_tables(c, column):
+    """Every genui table carrying `column`, by catalog name."""
+    rows = c.execute("""SELECT t.relname FROM pg_catalog.pg_class t JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                        JOIN pg_catalog.pg_attribute a ON a.attrelid=t.oid
+                        WHERE n.nspname='genui' AND t.relkind='r' AND a.attname=%s AND NOT a.attisdropped ORDER BY t.relname""", (column,)).fetchall()
+    tables = [r[0] for r in rows]
+    require(all(RELNAME.fullmatch(t) for t in tables), "erase_catalog_refused")
+    return tables
+
+
+def erase_proofs(c, org, principal, report):
+    """After the definer: no row of any genui table still names the member's former apps, folders or
+    sources (pg_catalog, minus the audit chain and the agent log), no key column names the member
+    outside ERASE_KEEPS, no active entitlement, no name, no role, a tombstoned subject. Any remainder
+    refuses erase_incomplete and rolls everything back."""
+    remaining = {}
+    for column, key in (("app_id", "app_ids"), ("box_id", "box_ids"), ("source_id", "source_ids")):
+        ids = report.get(key) or []
+        require(all(isinstance(i, str) and UUID.fullmatch(i) for i in ids), "erase_catalog_refused")
+        for table in columned_tables(c, column):
+            if table in ERASE_RESOURCE_KEEPS or not ids:
+                continue
+            count = c.execute("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s AND " + column + "=ANY(%s::uuid[])",
+                              (org, ids)).fetchone()[0]
+            if count:
+                remaining[table + "." + column] = count
+    for table, column in principal_columns(c):
+        if (table, column) in ERASE_KEEPS:
+            continue
+        count = c.execute("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s AND " + column + "=%s", (org, principal)).fetchone()[0]
+        if count:
+            remaining[table + "." + column] = count
+    member = c.execute("""SELECT m.status,m.display_name,m.role,p.provider_subject,
+          (SELECT count(*) FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active'),
+          (SELECT count(*) FROM genui.agent_tokens t WHERE t.organization_id=m.organization_id AND t.principal_id=m.principal_id AND (t.revoked_at IS NULL OR t.label<>'erased')),
+          (SELECT count(*) FROM genui.code_reservations r WHERE r.organization_id=m.organization_id AND r.kind='pending' AND r.provider_subject=p.provider_subject AND r.provider_subject NOT LIKE 'erased:%%')
+          FROM genui.memberships m JOIN genui.principals p ON p.organization_id=m.organization_id AND p.principal_id=m.principal_id
+          WHERE m.organization_id=%s AND m.principal_id=%s""", (org, principal)).fetchone()
+    require(member is not None and member[0] == "revoked" and member[1] is None and member[2] == "member" and member[3] == "erased:" + principal
+            and member[4] == 0 and member[5] == 0 and member[6] == 0 and not remaining, "erase_incomplete")
+
+
+def erase_member(c, args):
+    """Membership lifecycle (0026; APP-230): deletion on request for one already revoked member.
+
+    The genui_owner definer `genui_private.erase_member` does the table walk in this transaction
+    (children before parents; see migration 0026's header for what goes and what stays and why);
+    then erase_proofs reads pg_catalog and refuses erase_incomplete if any content row still names
+    the member, their former apps, folders or sources; the five audit chains must not have moved
+    (erase_audit_changed); then one `member.erased` event on the operator chain (actor the member,
+    outcome the digest of the principal id under ERASE_DOMAIN). A repeat finds nothing to do and
+    writes no event (`changed: false`). The S3 objects of the deleted files and sources are the
+    caller's (ops/promotion/admission.py erase-member): the report names every key.
+    """
+    org, principal = args.organization, args.principal
+    begin(c, org)
+    require(schema_version(c) >= LIFECYCLE_SCHEMA_VERSION, "kind_refused")
+    lock_organization(c, org)
+    events = c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0]
+    heads = c.execute("SELECT writer_role,chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s ORDER BY 1", (org,)).fetchall()
+    row = c.execute("SELECT outcome,changed,report FROM genui_private.erase_member(%s,%s)", (org, principal)).fetchone()
+    require(row is not None, "scope_refused")
+    outcome, changed, report = row
+    require(outcome in ("erased", "unchanged"), outcome)
+    require(isinstance(report, dict) and isinstance(report.get("deleted"), dict), "erase_report_refused")
+    erase_proofs(c, org, principal, report)
+    require(c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0] == events
+            and c.execute("SELECT writer_role,chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s ORDER BY 1", (org,)).fetchall() == heads,
+            "erase_audit_changed")
+    event = None
+    if changed:
+        digest = "sha256:" + hashlib.sha256(ERASE_DOMAIN + b"\x00" + principal.encode()).hexdigest()
+        event = append(c, org, "member.erased", actor=principal, outcome=digest)
+    epoch = c.execute("SELECT membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (org, principal)).fetchone()[0]
+    c.commit()
+    deleted = report["deleted"]
+    return {"principal_id": principal, "status": "erased", "changed": bool(changed), "membership_epoch": epoch, "audit_event": event,
+            "rows_deleted": sum(int(v) for v in deleted.values()), "deleted": deleted,
+            "apps": len(report.get("app_ids") or []), "boxes": len(report.get("box_ids") or []), "sources": len(report.get("source_ids") or []),
+            "sources_kept": report.get("sources_kept"), "live_shares": len(report.get("share_ids") or []),
+            "object_keys": report.get("object_keys") or [], "source_revisions": report.get("source_revisions") or [],
+            "agent_tokens_revoked": report.get("agent_tokens_revoked"), "agent_tokens_kept": report.get("agent_tokens_kept"),
+            "entitlements_revoked": report.get("entitlements_revoked"), "provider_subject": report.get("provider_subject"),
+            "kept": ["principals (provider_subject erased:<id>)", "memberships (revoked, no name, role member)", "member_consents", "code_redemptions",
+                     "code_reservations (subject erased)", "entitlements (revoked)", "audit_events", "agent_access_log", "agent_tokens (revoked, label erased)",
+                     "entries, publications, works, copies, labels, folder work and shares in resources someone else owns (authored by the nameless principal)"],
+            "audit_events_kept": events}
 
 
 def permission_statements(args):
@@ -2483,6 +2694,7 @@ def retire_handle(c, args):
 
 COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
             "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "set-role": set_role, "verify": verify,
+            "extend-entitlement": extend_entitlement, "erase-member": erase_member,
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,

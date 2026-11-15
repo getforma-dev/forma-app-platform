@@ -12,7 +12,7 @@ use genui_auth_verifier::VerifiedIdentity;
 use serde_json::json;
 
 const REFRESH: &str = "00000000-0000-4000-8000-00000000c001";
-fn proof(subject: &str, email: &str) -> ShareIdentityProof {
+pub(super) fn proof(subject: &str, email: &str) -> ShareIdentityProof {
     ShareIdentityProof::verified(
         &VerifiedIdentity {
             key_id: "synthetic-key".into(),
@@ -27,7 +27,7 @@ fn proof(subject: &str, email: &str) -> ShareIdentityProof {
     )
     .unwrap()
 }
-async fn account(stores: &Stores, subject: &str, email: &str) -> (String, ShareAccount) {
+pub(super) async fn account(stores: &Stores, subject: &str, email: &str) -> (String, ShareAccount) {
     let cookie = stores
         .workspace
         .mint_shared_session(&proof(subject, email), REFRESH)

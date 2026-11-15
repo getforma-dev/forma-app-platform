@@ -71,6 +71,8 @@ jobs:
         run: GENUI_ORG_ADMIN_ROUTES_REPORT="$RUNNER_TEMP/tenant-foundation/org-admin-routes.json" cargo test --locked -p forma-app-platform --lib storage::org_admin_routes_campaign::native_org_admin_routes_campaign -- --ignored --exact --nocapture
       - name: Qualify organization roles, the viewer ceiling and /admin over real rows (ADR-021, APP-225/226)
         run: GENUI_ORG_ROLES_REPORT="$RUNNER_TEMP/tenant-foundation/org-roles.json" cargo test --locked -p forma-app-platform --lib storage::org_roles_campaign::native_org_roles_campaign -- --ignored --exact --nocapture
+      - name: Qualify the entitlement extension and the member erasure over real rows (APP-229/230, migration 0026)
+        run: GENUI_MEMBER_LIFECYCLE_REPORT="$RUNNER_TEMP/tenant-foundation/member-lifecycle.json" cargo test --locked -p forma-app-platform --lib storage::member_lifecycle_campaign::native_member_lifecycle_campaign -- --ignored --exact --nocapture
       - name: Qualify the share routes with roles and with everyone (APP-192)
         run: GENUI_SHARE_ROUTES_REPORT="$RUNNER_TEMP/tenant-foundation/share-routes.json" cargo test --locked -p forma-app-platform --lib storage::share_routes_campaign::native_share_routes_campaign -- --ignored --exact --nocapture
       - name: Qualify explicit record commands, outcomes and audit (APP-013)

@@ -7,6 +7,7 @@ verify-full TLS, exactly as an operator would; they are skipped when Docker or
 OpenSSL is absent. Every container they start is removed in tearDownClass.
 """
 import base64
+import datetime
 import hashlib
 import json
 import os
@@ -102,7 +103,8 @@ class PureTests(unittest.TestCase):
                                                   "permission.granted", "permission.revoked", "creator_authority.revoked"))
         self.assertEqual(op.OPERATOR_KINDS[10:], ("provider.invitation.created", "provider.invitation.reconciled",
                                                   "provider.invitation.revoked", "source_revision.registered", "work.seeded",
-                                                  "provider_tenant.bound", "app.seeded", "membership.role_changed"))
+                                                  "provider_tenant.bound", "app.seeded", "membership.role_changed",
+                                                  "entitlement.extended", "member.erased"))
         for command in ("grant-permission", "revoke-permission"):
             for good in (["--permission", "run", "--app", app], ["--permission", "review_publish", "--app", app],
                          ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source],
@@ -1850,7 +1852,10 @@ class RoleMigrationTests(OperatorDatabase, unittest.TestCase):
             runtime.apply_migrations(c, runtime.migration_directory())
             c.commit()
         with self.connect("postgres") as c:
-            self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(), (25,))
+            # The runner applies every landed migration, not only 0025 (0026 followed on 2026-11-15).
+            self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(),
+                             (runtime.migration_manifest(runtime.migration_directory())["database_version"],))
+            self.assertGreaterEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone()[0], 25)
             self.assertEqual(c.execute("SELECT to_regclass('genui.organization_permissions')").fetchone(), (None,))
             roles = {name: dict(c.execute("SELECT principal_id::text,role FROM genui.memberships WHERE organization_id=%s", (org,)).fetchall())
                      for name, org in orgs.items()}
@@ -1874,3 +1879,389 @@ class RoleMigrationTests(OperatorDatabase, unittest.TestCase):
             self.assertEqual(c.execute("SELECT count(*) FROM genui.memberships WHERE role NOT IN ('owner','admin','manager','member','viewer')").fetchone(), (0,))
             self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui.memberships'::regclass").fetchone(), (True,))
             self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui.code_redemptions'::regclass").fetchone(), (True,))
+
+
+class LifecycleFixture:
+    """Rows a member accumulates (APP-230's acceptance fixture), inserted as the superuser the way the
+    seed and the other tests do; every id is returned so the test can prove what stayed and what went."""
+
+    def member(self, status="active"):
+        principal = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (ORG, principal, ISSUER, TENANT, "usr_" + principal))
+            c.execute("INSERT INTO genui.memberships VALUES (%s,%s,%s,1)", (ORG, principal, status))
+        return principal
+
+    def space(self):
+        space = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.spaces VALUES (%s,%s,'Lifecycle test space')", (ORG, space))
+        return space
+
+    def last_operator_event(self):
+        return self.query("""SELECT kind,actor_principal_id::text,app_id::text,work_id::text FROM genui.audit_events
+                             WHERE organization_id=%s AND writer_role='operator' ORDER BY chain_sequence DESC LIMIT 1""", (ORG,))[0]
+
+    def epoch(self, principal):
+        return self.query("SELECT membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, principal))[0][0]
+
+    def entitle(self, principal, org=ORG, expires="now()+interval '30 days'", status="active"):
+        entitlement = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at,revoked_at) "
+                      "VALUES (%s,%s,%s,%s,'member_invite',now()-interval '40 days'," + expires + ",CASE WHEN %s='revoked' THEN now() END)",
+                      (org, principal, entitlement, status, status))
+        return entitlement
+
+    def expires(self, principal, org=ORG):
+        return self.query("SELECT status,expires_at FROM genui.entitlements WHERE organization_id=%s AND principal_id=%s ORDER BY expires_at", (org, principal))
+
+    def until(self, days):
+        return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def operator_kind_count(self, kind, org=ORG):
+        return self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator' AND kind=%s", (org, kind))[0][0]
+
+
+@unittest.skipUnless(shutil.which("docker") and shutil.which("openssl"), "requires local Docker and OpenSSL")
+class LifecycleTests(OperatorDatabase, LifecycleFixture, unittest.TestCase):
+    """Migration 0026 (CLASS-CONTINUATION-PLAN §2.2/§2.3; APP-229, APP-230) on the latest schema."""
+
+    def test_extend_entitlement_moves_dates_later_never_earlier_revives_a_lapse_and_is_audited(self):
+        """APP-229: --principal moves one active member's entitlement to --until and appends one entitlement.extended
+        event with a recomputable digest; an earlier --until changes nothing and appends nothing; --all-active reaches
+        every active membership in one transaction, a lapsed-but-not-revoked member included, never a revoked membership
+        or a revoked entitlement; every refusal writes nothing."""
+        self.ensure_backfill()
+        current, lapsed, revoked_member, revoked_entitlement, bare = (self.member() for _ in range(5))
+        self.entitle(current, expires="now()+interval '10 days'")
+        self.entitle(lapsed, expires="now()-interval '1 day'")
+        with self.connect("postgres") as c:
+            c.execute("UPDATE genui.memberships SET status='revoked' WHERE organization_id=%s AND principal_id=%s", (ORG, revoked_member))
+        self.entitle(revoked_member)
+        self.entitle(revoked_entitlement, status="revoked")
+        events = len(self.operator_events())
+        first = self.until(60)
+        out = self.cli("extend-entitlement", "--organization", ORG, "--principal", current, "--until", first)
+        self.assertEqual((out["organization_id"], out["until"], out["members"], out["changed"], out["unchanged"]), (ORG, first, 1, 1, 0))
+        entry = out["entries"][0]
+        self.assertEqual((entry["principal_id"], entry["changed"], entry["expires_at"]), (current, True, first))
+        self.assertEqual(self.expires(current)[0][1].strftime("%Y-%m-%dT%H:%M:%SZ"), first)
+        self.assertEqual(self.last_operator_event(), ("entitlement.extended", current, None, None))
+        digest = "sha256:" + hashlib.sha256(b"forma:entitlement-extended:v1\x00" + current.encode() + b"\x00" + first.encode()).hexdigest()
+        self.assertEqual(self.query("""SELECT outcome_digest::text FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator'
+                                       ORDER BY chain_sequence DESC LIMIT 1""", (ORG,)), [(digest,)])
+        self.assertEqual(len(self.operator_events()), events + 1)
+        # Never lowered: an earlier date changes nothing and is not audited; the epoch never moves.
+        epoch = self.epoch(current)
+        again = self.cli("extend-entitlement", "--organization", ORG, "--principal", current, "--until", self.until(30))
+        self.assertEqual((again["changed"], again["unchanged"], again["entries"][0]["changed"], again["entries"][0]["expires_at"]), (0, 1, False, first))
+        self.assertEqual((len(self.operator_events()), self.epoch(current)), (events + 1, epoch))
+        # The whole organization: the current and the lapsed member move, the member without an entitlement is
+        # reported unchanged, the revoked membership is not a target, the revoked entitlement is untouched.
+        lapsed_before = self.expires(lapsed)
+        self.assertLess(lapsed_before[0][1], datetime.datetime.now(datetime.timezone.utc))
+        second = self.until(90)
+        everyone = self.cli("extend-entitlement", "--organization", ORG, "--all-active", "--until", second)
+        by_principal = {e["principal_id"]: e for e in everyone["entries"]}
+        self.assertNotIn(revoked_member, by_principal)
+        self.assertEqual((by_principal[current]["changed"], by_principal[current]["expires_at"], by_principal[current]["expires_before"]), (True, second, first))
+        self.assertEqual((by_principal[lapsed]["changed"], by_principal[lapsed]["expires_at"]), (True, second))
+        self.assertEqual((by_principal[bare]["changed"], by_principal[bare]["expires_at"]), (False, None))
+        self.assertEqual((by_principal[revoked_entitlement]["changed"], by_principal[revoked_entitlement]["expires_at"]), (False, None))
+        self.assertEqual((everyone["changed"], everyone["members"] - everyone["unchanged"]), (2, 2))
+        self.assertEqual(self.expires(lapsed)[0][1].strftime("%Y-%m-%dT%H:%M:%SZ"), second)
+        self.assertEqual(self.expires(revoked_member)[0][1].strftime("%Y-%m-%dT%H:%M:%SZ") < second, True)
+        self.assertEqual(self.expires(revoked_entitlement)[0][0], "revoked")
+        self.assertEqual(self.operator_events()[-2:], [("entitlement.extended",)] * 2)
+        self.assertEqual(self.operator_kind_count("entitlement.extended"), 3)
+        # Refusals, each before any write: the clock bounds, the target shape, an unknown or revoked member,
+        # a member with no active entitlement named alone, and a suspended organization.
+        other = str(uuid.uuid4())
+        self.cli("provision", "--organization", other, "--display-name", "Suspended", "--issuer", ISSUER, "--provider-tenant", "ten_" + other[-12:])
+        with self.connect("postgres") as c:
+            principal = str(uuid.uuid4())
+            c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (other, principal, ISSUER, "ten_" + other[-12:], "usr_" + principal))
+            c.execute("INSERT INTO genui.memberships VALUES (%s,%s,'active',1)", (other, principal))
+        self.entitle(principal, org=other)
+        self.cli("suspend-organization", "--organization", other)
+        before = self.dump()
+        for args, reason in [(["--principal", current, "--until", self.until(-1)], "until_in_past"),
+                             (["--principal", current, "--until", self.until(401)], "until_too_far"),
+                             (["--principal", current, "--until", "2027-02-15 00:00:00"], "malformed_until"),
+                             (["--principal", current, "--until", "2027-02-30T00:00:00Z"], "malformed_until"),
+                             (["--principal", current, "--all-active", "--until", second], "target_refused"),
+                             (["--until", second], "target_refused"),
+                             (["--principal", str(uuid.uuid4()), "--until", second], "member_unknown"),
+                             (["--principal", revoked_member, "--until", second], "member_inactive"),
+                             (["--principal", bare, "--until", second], "no_active_entitlement")]:
+            p = self.cli("extend-entitlement", "--organization", ORG, *args, expect=1)
+            self.assertEqual(json.loads(p.stderr), {"refused": reason}, args)
+        p = self.cli("extend-entitlement", "--organization", other, "--principal", principal, "--until", second, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "organization_inactive"})
+        p = self.cli("extend-entitlement", "--organization", other, "--all-active", "--until", second, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "organization_inactive"})
+        self.assertEqual(self.dump(), before)
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def member_world(self, erased, other, owner_app=True):
+        """What `erased` leaves behind: an app of their own with a work, records, a share, a live share accepted by a
+        guest, a folder with two uploads, two sources from them (one bound by `other`'s work, one not), records
+        they entered in `other`'s app, a session, an agent token with an attribution and a log row, a Slack link,
+        a card, a label, an artifact kind, grants and a name. Returns the ids the assertions need."""
+        ids = {"space": self.space()}
+        with self.connect("postgres") as c:
+            def put(table, values):
+                c.execute("INSERT INTO genui." + table + " VALUES (" + ",".join(["%s"] * len(values)) + ")", values)
+            digest = "sha256:" + "e" * 64
+            for name, person in (("mine", erased), ("theirs", other)):
+                app, revision, policy, publication, work, collection, record = (str(uuid.uuid4()) for _ in range(7))
+                ids[name] = {"app": app, "revision": revision, "publication": publication, "work": work, "collection": collection, "record": record}
+                put("apps", (ORG, app, ids["space"], person))
+                put("definition_revisions", (ORG, app, revision, 1, digest, b"{}"))
+                c.execute("INSERT INTO genui.definition_inputs VALUES (%s,%s,%s,'data','source',%s,%s)", (ORG, app, revision, digest, b"{}"))
+                c.execute("INSERT INTO genui.definition_record_schemas(organization_id,app_id,revision_id,schema_id,schema_version,digest,canonical_schema) VALUES (%s,%s,%s,'entries',1,%s,%s)",
+                          (ORG, app, revision, digest, b"{}"))
+                put("publication_policies", (ORG, policy, 1, "owner_publish"))
+                c.execute("""INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,
+                             author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope,publication_sequence)
+                             VALUES (%s,%s,%s,%s,%s,%s,1,'owner_publish',%s,%s,1,1,1,%s,now(),'\\x7b7d',%s)""",
+                          (ORG, app, publication, revision, digest, policy, person, person, digest, 1 if name == "mine" else 2))
+                c.execute("INSERT INTO genui.publication_inputs VALUES (%s,%s,%s,%s,'data','source',%s)", (ORG, app, publication, revision, digest))
+                c.execute("INSERT INTO genui.publication_record_schemas VALUES (%s,%s,%s,%s,'entries',1,%s)", (ORG, app, publication, revision, digest))
+                c.execute("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,'',%s)",
+                          (ORG, app, work, publication, person))
+                put("record_collections", (ORG, app, work, publication, collection, "entries", 1))
+                put("internal_records", (ORG, app, work, collection, record, 1))
+                # The erased member authored the first version of every record, in their own app and in the other's.
+                c.execute("""INSERT INTO genui.internal_record_revisions(organization_id,app_id,work_id,collection_id,record_id,version,creator_id,updater_id,commit_sequence,committed_at,canonical_values)
+                             VALUES (%s,%s,%s,%s,%s,1,%s,%s,%s,now(),'\\x7b7d')""", (ORG, app, work, collection, record, erased, erased, 100 if name == "mine" else 200))
+                put("app_permissions", (ORG, person, app, "edit_definition"))
+                put("work_permissions", (ORG, person, app, work, "record_write"))
+            # Grants to the erased member on the other's app, and a share each way.
+            put("app_permissions", (ORG, erased, ids["theirs"]["app"], "discover"))
+            put("work_permissions", (ORG, erased, ids["theirs"]["app"], ids["theirs"]["work"], "record_read"))
+            ids["share_out"], ids["share_in"] = str(uuid.uuid4()), str(uuid.uuid4())
+            c.execute("INSERT INTO genui.work_shares(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at,role) VALUES (%s,%s,%s,%s,%s,%s,'{record_read}',%s,now(),'viewer')",
+                      (ORG, ids["share_out"], erased, other, ids["mine"]["app"], ids["mine"]["work"], str(uuid.uuid4())))
+            c.execute("INSERT INTO genui.work_shares(organization_id,share_id,sharer_id,grantee_id,app_id,work_id,granted,audit_event_id,shared_at,role) VALUES (%s,%s,%s,%s,%s,%s,'{record_read}',%s,now(),'viewer')",
+                      (ORG, ids["share_in"], other, erased, ids["theirs"]["app"], ids["theirs"]["work"], str(uuid.uuid4())))
+            # A live share the erased member sponsors, accepted and linked by a guest.
+            ids["guest"], ids["live"] = str(uuid.uuid4()), str(uuid.uuid4())
+            c.execute("INSERT INTO genui_identity.accounts(account_id,issuer,provider_tenant_id,provider_subject,verified_email) VALUES (%s,'guest-issuer','ten_guest',%s,'guest@example.test')",
+                      (ids["guest"], "usr_guest_" + ids["guest"][-12:]))
+            c.execute("""INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,accepted_account_id,accepted_at,
+                         publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,version,idempotency_key,request_digest,created_at,expires_at)
+                         VALUES (%s,%s,%s,%s,%s,1,'guest@example.test',%s,now(),%s,%s,1,'{}','{}','Shared',false,1,%s,%s,now(),now()+interval '7 days')""",
+                      (ORG, ids["live"], ids["mine"]["app"], ids["mine"]["work"], erased, ids["guest"], ids["mine"]["publication"], digest, "idem-" + ids["live"][:24], digest))
+            c.execute("INSERT INTO genui_identity.linked_apps(account_id,organization_id,share_id,created_at,grant_version) VALUES (%s,%s,%s,now(),1)", (ids["guest"], ORG, ids["live"]))
+            c.execute("""INSERT INTO genui_identity.share_events(account_id,event_id,sequence,organization_id,share_id,kind,share_version,canonical,previous_hash,hash,occurred_at)
+                         VALUES (%s,%s,1,%s,%s,'share.accepted',1,'\\x7b7d',%s,%s,now())""", (ids["guest"], str(uuid.uuid4()), ORG, ids["live"], "sha256:" + "0" * 64, "sha256:" + "1" * 64))
+            # The folder, two uploads, and the sources registered from them: one bound by the other's work.
+            ids["box"], ids["files"], ids["sources"] = str(uuid.uuid4()), [str(uuid.uuid4()) for _ in range(2)], [str(uuid.uuid4()) for _ in range(2)]
+            ids["revisions"] = [str(uuid.uuid4()) for _ in range(2)]
+            put("boxes", (ORG, ids["box"], erased, "Uploads", "uploads", None, datetime.datetime.now(datetime.timezone.utc)))
+            for n in range(2):
+                normalized = "sha256:" + ("%02x" % (0xa0 + n)) * 32
+                c.execute("INSERT INTO genui.box_files VALUES (%s,%s,%s,%s,'csv','text/csv',12,%s,%s,%s,now())",
+                          (ORG, ids["box"], ids["files"][n], "data%d.csv" % n, "sha256:" + ("%02x" % (0xc0 + n)) * 32, "o/%s/b/%s/f/%s" % (ORG, ids["box"], ids["files"][n]), erased))
+                put("sources", (ORG, ids["sources"][n]))
+                c.execute("INSERT INTO genui.source_revisions(organization_id,source_id,revision_id,content_digest,normalized_digest,contract_digest,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,'\\x7b7d')",
+                          (ORG, ids["sources"][n], ids["revisions"][n], "sha256:" + ("%02x" % (0xc0 + n)) * 32, normalized, digest))
+                c.execute("INSERT INTO genui.box_file_sources VALUES (%s,%s,%s,%s,%s,%s,%s,3,%s,now())",
+                          (ORG, ids["box"], ids["files"][n], "sha256:" + ("%02x" % (0xc0 + n)) * 32, ids["sources"][n], ids["revisions"][n], normalized, erased))
+                put("source_permissions", (ORG, erased, ids["sources"][n], "source_read"))
+            c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,source_id,source_revision_id,source_digest)
+                         VALUES (%s,%s,%s,%s,'data','source',%s,%s,%s,%s)""", (ORG, ids["theirs"]["app"], ids["theirs"]["work"], ids["theirs"]["publication"], digest,
+                                                                           ids["sources"][1], ids["revisions"][1], "sha256:" + "a1" * 32))
+            put("source_permissions", (ORG, other, ids["sources"][1], "source_read"))
+            # Sessions, tokens, links, cards, labels, kinds, a name, a role, a consent.
+            ids["entitlement"] = self_entitlement = str(uuid.uuid4())
+            c.execute("INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES (%s,%s,%s,'active','member_invite',now()-interval '1 day',now()+interval '30 days')",
+                      (ORG, erased, self_entitlement))
+            c.execute("""INSERT INTO genui.sessions(organization_id,session_id,cookie_digest,principal_id,membership_epoch_at_mint,entitlement_id,registry_sha256,refresh_token_ref,created_at,last_seen_at,absolute_expires_at)
+                         VALUES (%s,%s,%s,%s,1,%s,%s,%s,now(),now(),now()+interval '1 hour')""", (ORG, str(uuid.uuid4()), "sha256:" + uuid.uuid4().hex * 2, erased, self_entitlement, "0" * 64, str(uuid.uuid4())))
+            c.execute("""INSERT INTO genui.pre_access_sessions(organization_id,session_id,cookie_digest,issuer,provider_tenant_id,provider_subject,email_verified,flow_kind,refresh_token_ref,created_at,last_seen_at,expires_at)
+                         VALUES (%s,%s,%s,%s,%s,%s,true,'signin',%s,now(),now(),now()+interval '10 minutes')""", (ORG, str(uuid.uuid4()), "sha256:" + uuid.uuid4().hex * 2, ISSUER, TENANT, "usr_" + erased, str(uuid.uuid4())))
+            ids["token"] = str(uuid.uuid4())
+            c.execute("INSERT INTO genui.agent_tokens(organization_id,token_id,token_digest,principal_id,label,membership_epoch_at_mint,registry_sha256,created_at,expires_at) VALUES (%s,%s,%s,%s,'my laptop',1,%s,now(),now()+interval '30 days')",
+                      (ORG, ids["token"], "sha256:" + uuid.uuid4().hex * 2, erased, "0" * 64))
+            c.execute("INSERT INTO genui.agent_attributions(organization_id,attribution_id,token_id,app_id,work_id,created_at) VALUES (%s,%s,%s,%s,%s,now())",
+                      (ORG, str(uuid.uuid4()), ids["token"], ids["theirs"]["app"], ids["theirs"]["work"]))
+            c.execute("""INSERT INTO genui.agent_access_log(organization_id,entry_id,chain_sequence,token_id,principal_id,agent_label,tool,touched_apps,touched_works,touched_records,
+                         touched_folders,touched_files,outcome,reason,space,resource_label,duration_ms,occurred_at,previous_hash,hash)
+                         VALUES (%s,%s,1,%s,%s,'my laptop','forma_list_apps','{}','{}','{}','{}','{}','allowed',NULL,NULL,NULL,1,now(),%s,%s)""",
+                      (ORG, str(uuid.uuid4()), ids["token"], erased, "sha256:" + "0" * 64, "sha256:" + "2" * 64))
+            c.execute("INSERT INTO genui.slack_links(organization_id,link_id,principal_id,team_id,slack_user_id,membership_epoch_at_link,linked_at) VALUES (%s,%s,%s,'T1','U1',1,now())",
+                      (ORG, str(uuid.uuid4()), erased))
+            c.execute("""INSERT INTO genui.member_cards(organization_id,card_id,principal_id,kind,app_id,work_id,source,address,title,spec,everyone,created_at,updated_at)
+                         VALUES (%s,%s,%s,'card',%s,%s,'cards','','A card','\\x7b7d',true,now(),now())""", (ORG, str(uuid.uuid4()), erased, ids["theirs"]["app"], ids["theirs"]["work"]))
+            c.execute("INSERT INTO genui.member_labels(organization_id,principal_id,app_id,card,name,updated_at) VALUES (%s,%s,%s,'','Their app',now())", (ORG, erased, ids["theirs"]["app"]))
+            c.execute("INSERT INTO genui.app_labels(organization_id,app_id,card,name,updated_by,updated_at) VALUES (%s,%s,'','Our app',%s,now())", (ORG, ids["theirs"]["app"], erased))
+            c.execute("INSERT INTO genui.work_artifact_kinds(organization_id,principal_id,app_id,work_id,kind) VALUES (%s,%s,%s,%s,'card')", (ORG, erased, ids["theirs"]["app"], ids["theirs"]["work"]))
+            c.execute("UPDATE genui.memberships SET display_name='Alice',role='admin' WHERE organization_id=%s AND principal_id=%s", (ORG, erased))
+            # D7.7: the organization's sequence stays ahead of every committed revision (verify checks it).
+            c.execute("INSERT INTO genui.organization_sequences VALUES (%s,1000) ON CONFLICT (organization_id) DO UPDATE SET next_commit_sequence=greatest(genui.organization_sequences.next_commit_sequence,1000)", (ORG,))
+            c.execute("INSERT INTO genui.member_consents VALUES (%s,%s,1,now(),%s)", (ORG, erased, str(uuid.uuid4())))
+        return ids
+
+    def naming(self, principal, org=ORG):
+        """Every genui row still naming the principal through a key column, by table.column (the proof's own query)."""
+        found = {}
+        with self.connect("postgres") as c:
+            for table, column in op.principal_columns(c):
+                n = c.execute("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s AND " + column + "=%s", (org, principal)).fetchone()[0]
+                if n:
+                    found[table + "." + column] = n
+        return found
+
+    def test_erase_member_removes_their_own_world_keeps_their_entries_elsewhere_nameless_and_is_audited_once(self):
+        """APP-230: after revoke-membership and erase-member, no content row names the member except the principal
+        (subject tombstoned), the revoked nameless membership, the consent, the revoked entitlement, the revoked agent
+        token and its log, and the entries they made in someone else's app; their own app, folder, uploads, unbound
+        source, sessions, token attributions, Slack link, cards, labels, grants and shares are gone; the guest's chain
+        row stays; the other member's app, records and bound source still read; one member.erased event; a repeat is
+        harmless; the refusals write nothing."""
+        self.ensure_backfill()
+        erased, other = self.member(), self.member()
+        ids = self.member_world(erased, other)
+        before_naming = self.naming(erased)
+        self.assertGreaterEqual(len(before_naming), 15, before_naming)
+        theirs_before = self.query("SELECT count(*) FROM genui.internal_record_revisions WHERE organization_id=%s AND app_id=%s", (ORG, ids["theirs"]["app"]))
+        guest_chain = self.query("SELECT count(*) FROM genui_identity.share_events WHERE account_id=%s", (ids["guest"],))
+        # Refusals before any write: an active membership, a wrong confirmation, an unknown principal.
+        before = self.dump()
+        p = self.cli("erase-member", "--organization", ORG, "--principal", erased, "--confirm", erased, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "member_active"})
+        p = self.cli("erase-member", "--organization", ORG, "--principal", erased, "--confirm", other, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "confirm_mismatch"})
+        unknown = str(uuid.uuid4())
+        p = self.cli("erase-member", "--organization", ORG, "--principal", unknown, "--confirm", unknown, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "member_unknown"})
+        self.assertEqual(self.dump(), before)
+        # The procedure: remove, then erase.
+        self.assertTrue(self.cli("revoke-membership", "--organization", ORG, "--principal", erased)["changed"])
+        epoch = self.epoch(erased)
+        events = self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,))[0][0]
+        out = self.cli("erase-member", "--organization", ORG, "--principal", erased, "--confirm", erased)
+        self.assertEqual((out["status"], out["changed"], out["principal_id"], out["membership_epoch"]), ("erased", True, erased, epoch + 1))
+        self.assertEqual((out["apps"], out["boxes"], out["sources"], out["sources_kept"], out["live_shares"]), (1, 1, 1, 1, 1))
+        self.assertEqual(sorted(out["object_keys"]), sorted("o/%s/b/%s/f/%s" % (ORG, ids["box"], f) for f in ids["files"]))
+        self.assertEqual(out["source_revisions"], [[ids["sources"][0], ids["revisions"][0]]])
+        self.assertEqual((out["agent_tokens_revoked"], out["agent_tokens_kept"], out["entitlements_revoked"], out["provider_subject"]), (1, 1, 1, "usr_" + erased))
+        self.assertEqual((out["audit_events_kept"], out["deleted"]["apps"], out["deleted"]["boxes"], out["deleted"]["box_files"], out["deleted"]["sources"]), (events, 1, 1, 2, 1))
+        self.assertEqual((out["deleted"]["genui_identity.linked_apps"], out["deleted"]["live_work_shares"], out["deleted"]["work_shares"], out["deleted"]["sessions"],
+                          out["deleted"]["pre_access_sessions"], out["deleted"]["slack_links"], out["deleted"]["agent_attributions"], out["deleted"]["internal_record_revisions"]),
+                         (1, 1, 2, 1, 1, 1, 1, 1))
+        # What names the member now: exactly the kept set.
+        self.assertEqual(self.naming(erased), {"memberships.principal_id": 1, "member_consents.principal_id": 1,
+                                               "entitlements.principal_id": 1, "agent_tokens.principal_id": 1, "internal_record_revisions.creator_id": 1,
+                                               "internal_record_revisions.updater_id": 1, "app_labels.updated_by": 1})
+        self.assertEqual(self.query("SELECT status,display_name,role,membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, erased)),
+                         [("revoked", None, "member", epoch + 1)])
+        self.assertEqual(self.query("SELECT provider_subject FROM genui.principals WHERE organization_id=%s AND principal_id=%s", (ORG, erased)), [("erased:" + erased,)])
+        self.assertEqual(self.query("SELECT status FROM genui.entitlements WHERE organization_id=%s AND principal_id=%s", (ORG, erased)), [("revoked",)])
+        self.assertEqual(self.query("SELECT label,revoked_at IS NOT NULL FROM genui.agent_tokens WHERE organization_id=%s AND token_id=%s", (ORG, ids["token"])), [("erased", True)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.agent_access_log WHERE organization_id=%s AND token_id=%s", (ORG, ids["token"])), [(1,)])
+        # Their own world is gone; the other member's app, records (authored by the nameless principal) and bound source stay.
+        for table, column, value in (("apps", "app_id", ids["mine"]["app"]), ("saved_work", "app_id", ids["mine"]["app"]), ("internal_record_revisions", "app_id", ids["mine"]["app"]),
+                                     ("boxes", "box_id", ids["box"]), ("box_files", "box_id", ids["box"]), ("sources", "source_id", ids["sources"][0]),
+                                     ("source_revisions", "source_id", ids["sources"][0]), ("live_work_shares", "share_id", ids["live"]), ("work_shares", "share_id", ids["share_out"]),
+                                     ("work_shares", "share_id", ids["share_in"])):
+            self.assertEqual(self.query("SELECT count(*) FROM genui." + table + " WHERE organization_id=%s AND " + column + "=%s", (ORG, value)), [(0,)], table)
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.linked_apps WHERE organization_id=%s AND share_id=%s", (ORG, ids["live"])), [(0,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.share_events WHERE account_id=%s", (ids["guest"],)), guest_chain)
+        self.assertEqual(self.query("SELECT count(*) FROM genui.apps WHERE organization_id=%s AND app_id=%s AND owner_principal_id=%s", (ORG, ids["theirs"]["app"], other)), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.internal_record_revisions WHERE organization_id=%s AND app_id=%s", (ORG, ids["theirs"]["app"])), theirs_before)
+        self.assertEqual(self.query("""SELECT r.creator_id::text,m.display_name FROM genui.internal_record_revisions r JOIN genui.memberships m
+                                       ON m.organization_id=r.organization_id AND m.principal_id=r.creator_id WHERE r.organization_id=%s AND r.app_id=%s""", (ORG, ids["theirs"]["app"])),
+                         [(erased, None)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.sources WHERE organization_id=%s AND source_id=%s", (ORG, ids["sources"][1])), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.work_bindings WHERE organization_id=%s AND source_id=%s", (ORG, ids["sources"][1])), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.box_file_sources WHERE organization_id=%s AND source_id=%s", (ORG, ids["sources"][1])), [(0,)])
+        # Audited once, on the operator chain, with a recomputable digest; the chains verify.
+        self.assertEqual(self.last_operator_event(), ("member.erased", erased, None, None))
+        self.assertEqual(self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,)), [(events + 1,)])
+        digest = "sha256:" + hashlib.sha256(b"forma:member-erased:v1\x00" + erased.encode()).hexdigest()
+        self.assertEqual(self.query("SELECT outcome_digest::text FROM genui.audit_events WHERE organization_id=%s AND event_id=%s", (ORG, out["audit_event"])), [(digest,)])
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+        # A repeat is harmless: nothing to do, nothing written.
+        before = self.dump()
+        again = self.cli("erase-member", "--organization", ORG, "--principal", erased, "--confirm", erased)
+        self.assertEqual((again["changed"], again["rows_deleted"], again["audit_event"], again["provider_subject"], again["membership_epoch"]), (False, 0, None, None, epoch + 1))
+        self.assertEqual(self.dump(), before)
+
+    def test_erase_member_refuses_the_last_owner_unless_the_organization_is_being_purged(self):
+        """APP-230: a revoked owner with no other active owner refuses last_owner while the organization is active;
+        once another owner exists it goes; in a suspended organization (the purge path) the last owner is erased."""
+        self.ensure_backfill()
+        owner = self.member()
+        self.cli("set-role", "--organization", ORG, "--principal", owner, "--role", "owner")
+        self.assertEqual(self.query("SELECT count(*) FROM genui.memberships WHERE organization_id=%s AND role='owner' AND status='active' AND principal_id<>%s", (ORG, owner)), [(0,)])
+        self.cli("revoke-membership", "--organization", ORG, "--principal", owner)
+        before = self.dump()
+        p = self.cli("erase-member", "--organization", ORG, "--principal", owner, "--confirm", owner, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "last_owner"})
+        self.assertEqual(self.dump(), before)
+        successor = self.member()
+        self.cli("set-role", "--organization", ORG, "--principal", successor, "--role", "owner")
+        out = self.cli("erase-member", "--organization", ORG, "--principal", owner, "--confirm", owner)
+        self.assertEqual((out["changed"], out["rows_deleted"]), (True, 0))
+        self.assertEqual(self.query("SELECT role,display_name FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, owner)), [("member", None)])
+        self.assertEqual(self.last_operator_event(), ("member.erased", owner, None, None))
+        # The purge path: a suspended organization's sole owner.
+        org = str(uuid.uuid4()); tenant = "ten_" + org[-12:]
+        self.cli("provision", "--organization", org, "--display-name", "Purging", "--issuer", ISSUER, "--provider-tenant", tenant)
+        sole = str(uuid.uuid4())
+        with self.connect("postgres") as c:
+            c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (org, sole, ISSUER, tenant, "usr_" + sole))
+            c.execute("INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch,role) VALUES (%s,%s,'revoked',2,'owner')", (org, sole))
+        p = self.cli("erase-member", "--organization", org, "--principal", sole, "--confirm", sole, expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "last_owner"})
+        self.cli("suspend-organization", "--organization", org)
+        purged = self.cli("erase-member", "--organization", org, "--principal", sole, "--confirm", sole)
+        self.assertEqual((purged["changed"], purged["provider_subject"]), (True, "usr_" + sole))
+        self.assertEqual(self.query("SELECT provider_subject FROM genui.principals WHERE organization_id=%s AND principal_id=%s", (org, sole)), [("erased:" + sole,)])
+        self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
+        # The purge still works afterwards.
+        self.assertEqual(self.cli("purge-organization", "--organization", org)["status"], "purged")
+
+
+@unittest.skipUnless(shutil.which("docker") and shutil.which("openssl"), "requires local Docker and OpenSSL")
+class LifecycleMigrationTests(OperatorDatabase, LifecycleFixture, unittest.TestCase):
+    """Migration 0026 on a database stopped at schema 25 and then migrated by the runner: below it both commands
+    refuse (the catalog is not the manifest's) and write nothing; after it the kinds, the policy and the two
+    genui_owner definers exist and extend-entitlement works."""
+    migrate_through = 25
+
+    def test_the_runner_takes_25_to_26_and_the_commands_refuse_before_it(self):
+        member = self.member()
+        self.entitle(member, expires="now()-interval '1 day'")
+        with self.connect("postgres") as c:
+            self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(), (25,))
+            self.assertEqual(c.execute("SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='genui_private' AND p.proname IN ('extend_entitlement','erase_member')").fetchone(), (0,))
+            self.assertNotIn("entitlement.extended", c.execute("SELECT pg_get_expr(polwithcheck,polrelid) FROM pg_policy WHERE polname='operator_chain' AND polrelid='genui.audit_events'::regclass").fetchone()[0])
+        before = self.dump()
+        until = self.until(60)
+        self.cli("extend-entitlement", "--organization", ORG, "--principal", member, "--until", until, expect=1)
+        self.cli("erase-member", "--organization", ORG, "--principal", member, "--confirm", member, expect=1)
+        self.assertEqual(self.dump(), before)
+        with self.connect() as c:
+            runtime.apply_migrations(c, runtime.migration_directory())
+            c.commit()
+        self.ensure_backfill()
+        with self.connect("postgres") as c:
+            self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(), (26,))
+            functions = c.execute("""SELECT p.proname,pg_get_userbyid(p.proowner),p.prosecdef,p.proisstrict FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                                     WHERE n.nspname='genui_private' AND p.proname IN ('extend_entitlement','erase_member') ORDER BY 1""").fetchall()
+            self.assertEqual(functions, [("erase_member", "genui_owner", True, True), ("extend_entitlement", "genui_owner", True, True)])
+            check = c.execute("SELECT pg_get_expr(polwithcheck,polrelid) FROM pg_policy WHERE polname='operator_chain' AND polrelid='genui.audit_events'::regclass").fetchone()[0]
+            self.assertIn("entitlement.extended", check); self.assertIn("member.erased", check)
+            self.assertEqual(c.execute("SELECT polroles::regrole[]::text[] FROM pg_policy WHERE polname='operator_scope' AND polrelid='genui_identity.linked_apps'::regclass").fetchone(), (["genui_owner"],))
+            self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui_identity.linked_apps'::regclass").fetchone(), (True,))
+            # EXECUTE is the owner's alone: no application role may call the operator definers.
+            self.assertEqual(c.execute("SELECT bool_or(has_function_privilege(r.rolname,'genui_private.erase_member(uuid,uuid)','EXECUTE')) FROM pg_roles r WHERE r.rolname IN ('genui_workspace','genui_control','genui_data','genui_worker','genui_admit')").fetchone(), (False,))
+        revived = self.cli("extend-entitlement", "--organization", ORG, "--principal", member, "--until", until)
+        self.assertEqual((revived["changed"], revived["entries"][0]["expires_at"]), (1, until))
+        self.assertEqual(self.expires(member)[0][0], "active")
+        self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
