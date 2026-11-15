@@ -530,6 +530,30 @@ mod tests {
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
+    /// Writes `bytes` to `path` as an executable through a child process, so
+    /// that this process never holds the file open for writing (APP-221).
+    /// The test executable is multi-threaded and its other tests spawn
+    /// children; a child forked while this thread held the script open for
+    /// writing inherits that descriptor until its own exec, and executing
+    /// the script meanwhile fails with `ETXTBSY` on Linux. The supervisor
+    /// reports a spawn failure as `Crashed`, which was the flake on CI. The
+    /// descriptor that writes here belongs to the child, which has exited
+    /// (and closed it) before this returns.
+    fn write_executable(path: &Path, bytes: &[u8]) {
+        use std::io::Write;
+        let mut writer = std::process::Command::new("/bin/sh")
+            .args(["-c", "umask 077 && cat > \"$1\" && chmod 0755 \"$1\"", "sh"])
+            .arg(path)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        writer.stdin.take().unwrap().write_all(bytes).unwrap();
+        assert!(
+            writer.wait().unwrap().success(),
+            "writing {}",
+            path.display()
+        );
+    }
     /// A stand-in `parser-host`; `$INPUT_HEX` is the digest it reports for
     /// `seen`, the input an honest host would have read.
     fn stub_seeing(body: &str, seen: &[u8]) -> Fixture {
@@ -542,8 +566,7 @@ mod tests {
             "#!/bin/sh\nWASM_HEX={wasm_sha256}\nINPUT_HEX={}\n{body}\n",
             hex(seen)
         );
-        std::fs::write(&host, &script).unwrap();
-        std::fs::set_permissions(&host, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_executable(&host, script.as_bytes());
         let identity = ParserIdentity {
             host_sha256: hex(script.as_bytes()),
             host,

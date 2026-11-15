@@ -422,8 +422,7 @@
     "APP-170",
     "APP-171",
     "APP-176",
-    "APP-201",
-    "APP-221"
+    "APP-201"
   ],
   "tickets": [
     {
@@ -6845,11 +6844,11 @@
     {
       "id": "APP-221",
       "title": "Flaky test: imports::sandbox protocol_and_identity_violations_are_failures",
-      "path": "0-backlog/APP-221.md",
+      "path": "3-in-review/APP-221.md",
       "Field": "Value",
       "---": "---",
       "Epic": "OPS",
-      "Status": "Backlog",
+      "Status": "In review",
       "Priority": "P2",
       "Type": "Task",
       "Sprint": "S15",
@@ -6862,7 +6861,7 @@
       "Depends on": "None",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "Not started",
+      "Branch / PR": "`fix/app-221-sandbox-stub`, PR pending",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
