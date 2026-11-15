@@ -1215,6 +1215,8 @@ mod tests {
         assert_eq!(pages.len(), 3 + 9 + 7);
         let footer = site_footer(&pages[0].1).to_owned();
         for (name, body) in &pages {
+            let count = body.matches("<footer class=\"site-footer\">").count();
+            assert_eq!(count, 1, "{name}: one site footer");
             assert_eq!(site_footer(body), footer, "{name}");
             let at = body.find("<footer class=\"site-footer\">").unwrap();
             let main = body.rfind("</main>").expect("a main landmark");
