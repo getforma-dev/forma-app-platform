@@ -162,7 +162,7 @@ class ObservabilityTemplateTests(unittest.TestCase):
                 self.assertEqual(alarm['Dimensions'], [{'Name': 'HealthCheckId', 'Value': {'Ref': health_check}}])
                 self.assertEqual(alarm['AlarmName'], {'Fn::Sub': '${AWS::StackName}-' + suffix})
 
-    def test_the_error_rate_alarm_divides_both_5xx_counts_by_requests_only_from_50_requests(self):
+    def test_the_error_rate_alarm_divides_both_5xx_counts_by_requests_only_from_100_requests(self):
         alarm = self.alarms['ErrorRateAlarm']
         for single in ('Namespace', 'MetricName', 'Statistic', 'ExtendedStatistic', 'Period', 'Dimensions'):
             self.assertNotIn(single, alarm)
@@ -173,18 +173,18 @@ class ObservabilityTemplateTests(unittest.TestCase):
                 'Metric': {'Namespace': 'AWS/ApplicationELB', 'MetricName': metric_name, 'Dimensions': LOAD_BALANCER}, 'Period': 300, 'Stat': 'Sum'}})
         # The 5xx counts are published only when non-zero: FILL makes a quiet period 0 rather than a gap that drops the sum.
         self.assertEqual(metrics['errors']['Expression'], 'FILL(target5xx, 0) + FILL(elb5xx, 0)')
-        self.assertEqual(metrics['rate']['Expression'], 'IF(requests >= 50, errors/requests*100, 0)')
+        self.assertEqual(metrics['rate']['Expression'], 'IF(requests >= 100, errors/requests*100, 0)')
         self.assertEqual([m['Id'] for m in alarm['Metrics'] if m['ReturnData']], ['rate'])
         self.assertEqual((alarm['EvaluationPeriods'], alarm['DatapointsToAlarm'], alarm['Threshold'], alarm['ComparisonOperator'], alarm['TreatMissingData']),
                          (3, 2, 2, 'GreaterThanThreshold', 'notBreaching'))
         self.assertEqual(alarm['AlarmName'], {'Fn::Sub': '${AWS::StackName}-error-rate'})
 
-        # The expression, evaluated the way CloudWatch does for one period: gated on 50 requests, a percentage above 2 breaches.
+        # The expression, evaluated the way CloudWatch does for one period: gated on 100 requests, a percentage above 2 breaches.
         def rate(target5xx, elb5xx, requests):
             errors = (target5xx or 0) + (elb5xx or 0)
-            return errors / requests * 100 if requests >= 50 else 0
-        self.assertEqual(rate(3, None, 49), 0)          # 6% of 49 requests: below the gate, never alarms.
-        self.assertGreater(rate(1, 1, 50), 2)           # 4% of 50.
+            return errors / requests * 100 if requests >= 100 else 0
+        self.assertEqual(rate(3, None, 99), 0)          # 3% of 99 requests: below the gate (the probes alone send about 55), never alarms.
+        self.assertGreater(rate(2, 1, 100), 2)          # 3% of 100.
         self.assertEqual(rate(1, 1, 100), 2)            # exactly 2% does not breach GreaterThanThreshold.
         self.assertLessEqual(rate(None, None, 5000), 2)
 
