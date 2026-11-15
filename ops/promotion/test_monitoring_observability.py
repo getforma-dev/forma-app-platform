@@ -1,5 +1,6 @@
 """Pins the standalone observability template (ops/monitoring/observability.json): the two uptime probes and their alarms,
-the two SLO alarms, the golden-signals dashboard, the free resource set, and that it touches nothing of the beta's stack."""
+the two SLO alarms, the five metric filters on the app log's named events and their alarms (APP-219), the golden-signals
+dashboard, the resource set, and that it touches nothing of the beta's stack and hard-codes no log group or account."""
 import json
 from pathlib import Path
 import re
@@ -14,6 +15,25 @@ TOPIC = {'Ref': 'AlarmTopicArn'}
 LOAD_BALANCER = [{'Name': 'LoadBalancer', 'Value': {'Ref': 'LoadBalancerFullName'}}]
 PROBE_REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1']
 RUNBOOK_SECTION = 'docs/operations/TRIAL-RUNBOOK.md §11.8'
+LOG_GROUP = {'Ref': 'AppLogGroupName'}
+EVENT_NAMESPACE = 'Forma/Beta'
+# The metric filters (APP-219): resource -> (filter name suffix, the exact pattern, the metric it counts). The events and their
+# fields are the service's (app/src/composer/model.rs, app/src/http/mod.rs, app/src/imports/sandbox.rs); percent is a number.
+FILTERS = {
+    'ModelUsageWarningFilter': ('model-usage-warning', '{ $.event = "model.usage_threshold" && $.percent = 80 }', 'ModelUsageWarning'),
+    'ModelUsageReachedFilter': ('model-usage-reached', '{ $.event = "model.usage_threshold" && $.percent = 100 }', 'ModelUsageReached'),
+    'ModelCallFailedFilter': ('model-call-failed', '{ $.event = "model.call_failed" }', 'ModelCallFailed'),
+    'ServerErrorFilter': ('server-error', '{ $.event = "http.server_error" }', 'ServerError'),
+    'ParserKilledFilter': ('parser-killed', '{ $.event = "parser.killed" }', 'ParserKilled'),
+}
+# The alarms on them: resource -> (alarm name suffix, metric, threshold, operator, evaluation periods, datapoints to alarm).
+EVENT_ALARMS = {
+    'AiUsageWarningAlarm': ('ai-usage-80', 'ModelUsageWarning', 1, 'GreaterThanOrEqualToThreshold', 1, 1),
+    'AiUsageReachedAlarm': ('ai-usage-100', 'ModelUsageReached', 1, 'GreaterThanOrEqualToThreshold', 1, 1),
+    'ModelFailuresAlarm': ('model-failures', 'ModelCallFailed', 5, 'GreaterThanThreshold', 1, 1),
+    'ServerErrorsAlarm': ('server-errors', 'ServerError', 5, 'GreaterThanThreshold', 3, 2),
+    'ParserKillsAlarm': ('parser-kills', 'ParserKilled', 3, 'GreaterThanThreshold', 1, 1),
+}
 # Sample values for the dashboard's Fn::Sub: parameters, the two health checks' ids (their Ref) and the region.
 SAMPLES = {
     'AlarmTopicArn': 'arn:aws:sns:us-east-1:123456789012:forma-beta-trial-alarms-AlarmTopic-ABCDEF123456',
@@ -26,6 +46,7 @@ SAMPLES = {
     'WebAclName': 'forma-beta-waf-web-acl',
     'AppHostname': 'beta.getforma.dev',
     'FauthHostname': 'auth-staging.getforma.dev',
+    'AppLogGroupName': 'GenuiSyntheticFoundation-LogsABCDEF12-abcdefABCDEF',
     'AppHealthCheck': '11111111-2222-3333-4444-555555555555',
     'FauthHealthCheck': '66666666-7777-8888-9999-000000000000',
     'AWS::Region': 'us-east-1',
@@ -77,10 +98,11 @@ class ObservabilityTemplateTests(unittest.TestCase):
         self.assertNotIn('${', substituted)
         return json.loads(substituted)
 
-    def test_parameters_are_the_ten_identifiers_with_the_patterns_of_the_alarm_and_waf_stacks(self):
+    def test_parameters_are_the_eleven_identifiers_with_the_patterns_of_the_alarm_and_waf_stacks(self):
         self.assertEqual(self.template['AWSTemplateFormatVersion'], '2010-09-09')
         self.assertEqual(set(self.parameters), {'AlarmTopicArn', 'LoadBalancerFullName', 'TargetGroupFullName', 'ClusterName', 'ServiceName',
-                                                'DBInstanceIdentifier', 'FauthInstanceId', 'WebAclName', 'AppHostname', 'FauthHostname'})
+                                                'DBInstanceIdentifier', 'FauthInstanceId', 'WebAclName', 'AppHostname', 'FauthHostname',
+                                                'AppLogGroupName'})
         for name, parameter in self.parameters.items():
             with self.subTest(parameter=name):
                 self.assertEqual(parameter['Type'], 'String')
@@ -106,19 +128,37 @@ class ObservabilityTemplateTests(unittest.TestCase):
             for bad in ('Beta.getforma.dev', 'https://beta.getforma.dev', 'beta.getforma.dev/', 'beta.getforma.dev:443', 'beta.getforma.dev.',
                         '-beta.getforma.dev', 'beta-.getforma.dev', 'beta..getforma.dev', 'localhost', '10.0.0.1', 'beta getforma.dev', ''):
                 self.assertFalse(re.fullmatch(pattern, bad), bad)
+        # The app log group: CloudWatch Logs' own name alphabet, a name and never an ARN, derived at deploy time (runbook 11's LOG_GROUP).
+        log_group = self.parameters['AppLogGroupName']
+        self.assertEqual(log_group['AllowedPattern'], '^[A-Za-z0-9_/.#-]{1,512}$')
+        self.assertNotIn('Default', log_group)
+        for good in (SAMPLES['AppLogGroupName'], '/ecs/forma-beta', 'a', 'x' * 512):
+            self.assertTrue(re.fullmatch(log_group['AllowedPattern'], good), good)
+        for bad in ('', 'x' * 513, 'arn:aws:logs:us-east-1:123456789012:log-group:/ecs/forma-beta', 'a log group', 'group:*', 'génui'):
+            self.assertFalse(re.fullmatch(log_group['AllowedPattern'], bad), bad)
 
-    def test_resources_are_two_health_checks_four_alarms_and_one_dashboard(self):
+    def test_resources_are_two_health_checks_five_metric_filters_nine_alarms_and_one_dashboard(self):
         types = {name: r['Type'] for name, r in self.resources.items()}
         self.assertEqual(types, {'AppHealthCheck': 'AWS::Route53::HealthCheck', 'FauthHealthCheck': 'AWS::Route53::HealthCheck',
                                  'AppUnreachableAlarm': 'AWS::CloudWatch::Alarm', 'FauthUnreachableAlarm': 'AWS::CloudWatch::Alarm',
                                  'ErrorRateAlarm': 'AWS::CloudWatch::Alarm', 'SlowMedianAlarm': 'AWS::CloudWatch::Alarm',
+                                 'ModelUsageWarningFilter': 'AWS::Logs::MetricFilter', 'ModelUsageReachedFilter': 'AWS::Logs::MetricFilter',
+                                 'ModelCallFailedFilter': 'AWS::Logs::MetricFilter', 'ServerErrorFilter': 'AWS::Logs::MetricFilter',
+                                 'ParserKilledFilter': 'AWS::Logs::MetricFilter',
+                                 'AiUsageWarningAlarm': 'AWS::CloudWatch::Alarm', 'AiUsageReachedAlarm': 'AWS::CloudWatch::Alarm',
+                                 'ModelFailuresAlarm': 'AWS::CloudWatch::Alarm', 'ServerErrorsAlarm': 'AWS::CloudWatch::Alarm',
+                                 'ParserKillsAlarm': 'AWS::CloudWatch::Alarm',
                                  'GoldenSignalsDashboard': 'AWS::CloudWatch::Dashboard'})
-        # Standalone and free of the paid or privileged services: no IAM, no CloudWatch Logs, no Synthetics canaries, nothing of the beta.
+        # Standalone and free of the paid or privileged services: no IAM, no Synthetics canaries, nothing of the beta. Of CloudWatch Logs
+        # only metric filters on the app's existing log group (a custom metric each, $0.30): no log group of its own, no subscription
+        # filter or destination (a Lambda or Kinesis consumer), no saved Logs Insights query.
         text = TEMPLATE.read_text()
-        for forbidden in ('AWS::IAM::', 'AWS::Logs::', 'AWS::Synthetics::', 'AWS::RDS::', 'AWS::ElasticLoadBalancingV2::', 'AWS::ECS::', 'AWS::EC2::',
-                          'AWS::WAFv2::', 'AWS::SNS::', 'AWS::Lambda::'):
+        for forbidden in ('AWS::IAM::', 'AWS::Synthetics::', 'AWS::RDS::', 'AWS::ElasticLoadBalancingV2::', 'AWS::ECS::', 'AWS::EC2::',
+                          'AWS::WAFv2::', 'AWS::SNS::', 'AWS::Lambda::', 'AWS::Kinesis'):
             self.assertFalse(any(t.startswith(forbidden) for t in types.values()), forbidden)
-        for forbidden in ('AWS::IAM', 'AWS::Logs', 'AWS::Synthetics', 'aws-synthetics', 'Fn::ImportValue'):
+        self.assertEqual({t for t in types.values() if t.startswith('AWS::Logs::')}, {'AWS::Logs::MetricFilter'})
+        for forbidden in ('AWS::IAM', 'AWS::Synthetics', 'aws-synthetics', 'Fn::ImportValue', 'AWS::Logs::LogGroup', 'AWS::Logs::SubscriptionFilter',
+                          'AWS::Logs::Destination', 'AWS::Logs::QueryDefinition', 'AWS::Logs::Delivery'):
             self.assertNotIn(forbidden, text)
         self.assertEqual(self.template['Outputs']['AppHealthCheckId']['Value'], {'Ref': 'AppHealthCheck'})
         self.assertEqual(self.template['Outputs']['FauthHealthCheckId']['Value'], {'Ref': 'FauthHealthCheck'})
@@ -200,8 +240,76 @@ class ObservabilityTemplateTests(unittest.TestCase):
         self.assertIn('p95', alarm['AlarmDescription'])
         self.assertIn('tens of seconds', alarm['AlarmDescription'])
 
+    def test_each_metric_filter_counts_one_named_event_of_the_app_log_group_passed_by_parameter(self):
+        filters = {name: r for name, r in self.resources.items() if r['Type'] == 'AWS::Logs::MetricFilter'}
+        self.assertEqual(set(filters), set(FILTERS))
+        for name, (suffix, pattern, metric) in FILTERS.items():
+            with self.subTest(filter=name):
+                # Exact equality: the log group is the parameter, never a name; the pattern is the one named event (and, for the usage
+                # thresholds, the numeric percent); one count of 1 per matching line, 0 for a period whose lines all miss (so the
+                # metric exists and the alarm evaluates); no dimension (DefaultValue is refused with one) and no unit.
+                self.assertEqual(filters[name]['Properties'], {
+                    'FilterName': {'Fn::Sub': '${AWS::StackName}-' + suffix},
+                    'LogGroupName': LOG_GROUP,
+                    'FilterPattern': pattern,
+                    'MetricTransformations': [{'MetricNamespace': EVENT_NAMESPACE, 'MetricName': metric, 'MetricValue': '1', 'DefaultValue': 0}]})
+                self.assertEqual(set(filters[name]), {'Type', 'Properties'})
+        self.assertEqual(len({metric for _, _, metric in FILTERS.values()}), len(FILTERS), 'one metric per filter')
+        self.assertEqual(len({pattern for _, pattern, _ in FILTERS.values()}), len(FILTERS), 'one pattern per filter')
+
+    def test_the_filter_patterns_name_the_events_the_service_logs_and_compare_percent_as_a_number(self):
+        # The service writes one flat JSON object per line (tracing_subscriber's json layer with flatten_event, so `event` and the
+        # event's fields are top-level keys); each pattern is the JSON metric-filter syntax on that `event` key.
+        logs = (ROOT / 'app' / 'src' / 'config.rs').read_text()
+        self.assertIn('.json()', logs)
+        self.assertIn('.flatten_event(true)', logs)
+        sources = {'model.usage_threshold': 'composer/model.rs', 'model.call_failed': 'composer/model.rs',
+                   'http.server_error': 'http/mod.rs', 'parser.killed': 'imports/sandbox.rs'}
+        for event, source in sources.items():
+            self.assertIn(f'event = "{event}"', (ROOT / 'app' / 'src' / source).read_text(), event)
+        patterns = [r['Properties']['FilterPattern'] for r in self.resources.values() if r['Type'] == 'AWS::Logs::MetricFilter']
+        self.assertEqual(len(patterns), 5)
+        for pattern in patterns:
+            self.assertRegex(pattern, r'^\{ \$\.event = "[a-z_.]+"( && \$\.[a-z_]+ = [0-9]+)? \}$')
+        self.assertEqual({re.search(r'\$\.event = "([^"]+)"', p).group(1) for p in patterns}, set(sources))
+        # `percent` is a u32 (a JSON number), so the usage patterns compare a number, never a quoted string, and they name exactly
+        # the service's thresholds (USAGE_THRESHOLDS: once per UTC day per scope at each).
+        model = (ROOT / 'app' / 'src' / 'composer' / 'model.rs').read_text()
+        self.assertIn('pub percent: u32', model)
+        thresholds = re.search(r'pub const USAGE_THRESHOLDS: \[u32; 2\] = \[(\d+), (\d+)\];', model)
+        self.assertIsNotNone(thresholds)
+        usage = {int(re.search(r'\$\.percent = (\d+)', p).group(1)) for p in patterns if 'model.usage_threshold' in p}
+        self.assertEqual(usage, {int(thresholds.group(1)), int(thresholds.group(2))})
+        for pattern in patterns:
+            self.assertNotRegex(pattern, r'\$\.percent = "')
+        # The 80 % description's words are the ones asked for, and the cap it names is the service's own setting.
+        self.assertIn('pub const DAILY_CALLS_ENV: &str = "GENUI_MODEL_DAILY_CALLS";', model)
+        self.assertIn("Today's AI allowance for the organization or a member reached 80 %; building and Ask pause at 100 % until 00:00 UTC. "
+                      'Check /admin and the canvas; raise GENUI_MODEL_DAILY_CALLS only with a release.',
+                      self.alarms['AiUsageWarningAlarm']['AlarmDescription'])
+        self.assertIn('00:00 UTC', self.alarms['AiUsageReachedAlarm']['AlarmDescription'])
+
+    def test_the_event_alarms_sum_five_minutes_and_stay_quiet_when_nothing_is_logged(self):
+        metrics = {metric for _, _, metric in FILTERS.values()}
+        for name, (suffix, metric, threshold, operator, evaluation_periods, datapoints) in EVENT_ALARMS.items():
+            with self.subTest(alarm=name):
+                alarm = self.alarms[name]
+                self.assertIn(metric, metrics, 'the alarm watches a metric a filter publishes')
+                self.assertEqual((alarm['Namespace'], alarm['MetricName'], alarm['Statistic'], alarm['Period'], alarm['EvaluationPeriods'],
+                                  alarm['DatapointsToAlarm'], alarm['Threshold'], alarm['ComparisonOperator'], alarm['TreatMissingData']),
+                                 (EVENT_NAMESPACE, metric, 'Sum', 300, evaluation_periods, datapoints, threshold, operator, 'notBreaching'))
+                # No events in a period means nothing happened, not that the alarm cannot tell; the filters publish no dimension.
+                for absent in ('Dimensions', 'ExtendedStatistic', 'Metrics', 'Unit'):
+                    self.assertNotIn(absent, alarm)
+                self.assertEqual((alarm['AlarmActions'], alarm['OKActions']), ([TOPIC], [TOPIC]))
+                self.assertEqual(alarm['AlarmName'], {'Fn::Sub': '${AWS::StackName}-' + suffix})
+        # "At least one" for the once-a-day thresholds, "more than N" for the counts.
+        self.assertEqual({a['Threshold'] for n, a in self.alarms.items() if n in EVENT_ALARMS and a['ComparisonOperator'] == 'GreaterThanOrEqualToThreshold'}, {1})
+        self.assertEqual({(a['EvaluationPeriods'], a['DatapointsToAlarm']) for n, a in self.alarms.items() if n in EVENT_ALARMS}, {(1, 1), (3, 2)})
+        self.assertEqual({n for n, a in self.alarms.items() if n in EVENT_ALARMS and a['EvaluationPeriods'] == 3}, {'ServerErrorsAlarm'})
+
     def test_every_alarm_notifies_the_trial_topic_and_names_the_runbook_section(self):
-        self.assertEqual(set(self.alarms), {'AppUnreachableAlarm', 'FauthUnreachableAlarm', 'ErrorRateAlarm', 'SlowMedianAlarm'})
+        self.assertEqual(set(self.alarms), {'AppUnreachableAlarm', 'FauthUnreachableAlarm', 'ErrorRateAlarm', 'SlowMedianAlarm', *EVENT_ALARMS})
         names = set()
         for name, alarm in self.alarms.items():
             with self.subTest(alarm=name):
@@ -212,7 +320,10 @@ class ObservabilityTemplateTests(unittest.TestCase):
                 self.assertLessEqual(len(alarm['AlarmDescription']), 1024)
                 names.add(alarm['AlarmName']['Fn::Sub'].replace('${AWS::StackName}', STACK_NAME))
         self.assertEqual(names, {'forma-beta-observability-app-unreachable', 'forma-beta-observability-fauth-unreachable',
-                                 'forma-beta-observability-error-rate', 'forma-beta-observability-slow-median'})
+                                 'forma-beta-observability-error-rate', 'forma-beta-observability-slow-median',
+                                 'forma-beta-observability-ai-usage-80', 'forma-beta-observability-ai-usage-100',
+                                 'forma-beta-observability-model-failures', 'forma-beta-observability-server-errors',
+                                 'forma-beta-observability-parser-kills'})
         headings = [line for line in RUNBOOK.read_text().splitlines() if line.startswith('### 11.8 ')]
         self.assertEqual(len(headings), 1)
 
@@ -235,7 +346,7 @@ class ObservabilityTemplateTests(unittest.TestCase):
             row = widget['properties']['title'].split(':')[0]
             if row not in rows:
                 rows.append(row)
-        self.assertEqual(rows, ['Traffic', 'Errors', 'Latency', 'Saturation', 'Health', 'Email'])
+        self.assertEqual(rows, ['Traffic', 'Errors', 'Latency', 'Saturation', 'Health', 'Email', 'Events'])
 
         found = {(ns, name, tuple(sorted(dims.items())), options.get('stat', '')) for w in metric_widgets for ns, name, dims, options in metric_rows(w)}
         alb = ('LoadBalancer', SAMPLES['LoadBalancerFullName'])
@@ -261,8 +372,14 @@ class ObservabilityTemplateTests(unittest.TestCase):
             ('AWS/ApplicationELB', 'HealthyHostCount', (alb, ('TargetGroup', SAMPLES['TargetGroupFullName']))),
             # Email (account-wide, no dimension)
             ('AWS/SES', 'Send', ()), ('AWS/SES', 'Bounce', ()), ('AWS/SES', 'Complaint', ()),
+            # Events: the five metrics the filters publish, no dimension
+            *((EVENT_NAMESPACE, metric, ()) for _, _, metric in FILTERS.values()),
         }
         self.assertEqual({(ns, name, dims) for ns, name, dims, _ in found if ns != 'expression'}, expected)
+        events_row = [w for w in metric_widgets if w['properties']['title'].startswith('Events: ')]
+        self.assertEqual({name for w in events_row for ns, name, *_ in metric_rows(w)}, {metric for _, _, metric in FILTERS.values()})
+        for widget in events_row:
+            self.assertEqual((widget['properties']['stat'], widget['properties']['period']), ('Sum', 300))
         latency = {stat for ns, name, _, stat in found if name == 'TargetResponseTime'}
         self.assertEqual(latency, {'p50', 'p90', 'p99'})
         # The error-rate expression is the alarm's, over the same three metrics.
@@ -282,7 +399,7 @@ class ObservabilityTemplateTests(unittest.TestCase):
         self.assertEqual((text['type'], text['x'], text['y'], text['width']), ('text', 0, 0, 24))
         self.assertEqual(sum(w['type'] == 'text' for w in widgets), 1)
         lines = text['properties']['markdown'].splitlines()
-        for row in ('Traffic', 'Errors', 'Latency', 'Saturation', 'Health', 'Email'):
+        for row in ('Traffic', 'Errors', 'Latency', 'Saturation', 'Health', 'Email', 'Events'):
             self.assertEqual(sum(line.startswith(f'* **{row}**: ') for line in lines), 1, row)
         heading = next(line for line in RUNBOOK.read_text().splitlines() if line.startswith('### 11.8 '))
         link = 'https://github.com/getforma-dev/forma-app-platform/blob/main/docs/operations/TRIAL-RUNBOOK.md#' + github_anchor(heading.removeprefix('### '))
@@ -299,9 +416,12 @@ class ObservabilityTemplateTests(unittest.TestCase):
 
     def test_no_private_identifier_is_embedded(self):
         text = TEMPLATE.read_text()
-        for private in ('877573132739', 'dkr.ecr', '/Users/', 'amazonaws.com/', 'Fn::ImportValue'):
+        for private in ('877573132739', 'dkr.ecr', '/Users/', 'amazonaws.com/', 'Fn::ImportValue', 'AWS::AccountId',
+                        # The app log group's generated name (GenuiSyntheticFoundation-Logs<hash>-<suffix>) is passed as AppLogGroupName.
+                        'GenuiSyntheticFoundation-Logs', 'Logs6819BB44'):
             self.assertFalse(private in text, private)
         self.assertIsNone(re.search(r'(?<![0-9])[0-9]{12}(?![0-9])', text))
+        self.assertEqual([r['Properties']['LogGroupName'] for r in self.resources.values() if r['Type'] == 'AWS::Logs::MetricFilter'], [LOG_GROUP] * 5)
         patterns = {p['AllowedPattern'] for p in self.parameters.values()}
         for value in strings(self.template):
             if value in patterns:
@@ -310,11 +430,12 @@ class ObservabilityTemplateTests(unittest.TestCase):
             self.assertNotRegex(value, r'^subnet-|^sg-|^vpc-|^i-')
 
     def test_infra_src_owns_none_of_these_resources(self):
-        # The template stands beside GenuiSyntheticFoundation: the CDK stack has no health check or dashboard to conflict with,
-        # and this template reaches the beta only through parameters.
+        # The template stands beside GenuiSyntheticFoundation: the CDK stack has no health check, metric filter or dashboard to conflict
+        # with (nor a metric in Forma/Beta), and this template reaches the beta only through parameters. The service's log filter is
+        # RUST_LOG when set, and a malformed one refuses to start (release E): nothing in infra/src sets it.
         for source in (ROOT / 'infra' / 'src').glob('*.ts'):
             text = source.read_text()
-            for owned in ('aws-route53', 'AWS::Route53', 'CfnHealthCheck', 'Dashboard'):
+            for owned in ('aws-route53', 'AWS::Route53', 'CfnHealthCheck', 'Dashboard', 'MetricFilter', 'Forma/Beta', 'RUST_LOG'):
                 self.assertFalse(owned in text, f'{source.name}: {owned}')
 
 
