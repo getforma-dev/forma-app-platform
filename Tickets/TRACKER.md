@@ -231,3 +231,9 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 226 | [APP-224: Canvas top bar fits at every width](0-backlog/APP-224.md) | [PH09](phases/PH09.md) | S15 | UX | P1 | S | Backlog | APP-223 |
 | 227 | [APP-225: Organization roles, management and migration](0-backlog/APP-225.md) | [PH09](phases/PH09.md) | S15 | IAM | P1 | L | Backlog | APP-188 |
 | 228 | [APP-226: Viewer read-only enforcement on every path](0-backlog/APP-226.md) | [PH09](phases/PH09.md) | S15 | IAM | P1 | M | Backlog | APP-225 |
+| 229 | [APP-227: Beta notice v2 and the charter amendment: keep everyone by default](0-backlog/APP-227.md) | [PH09](phases/PH09.md) | S15 | IAM | P1 | S | Backlog | APP-223 |
+| 230 | [APP-228: Renew the beta to Jan 15, 2027 and reserve January](0-backlog/APP-228.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-194, APP-227 |
+| 231 | [APP-229: `extend-entitlement`: an audited, bulk, never-lowering operator extension](0-backlog/APP-229.md) | [PH09](phases/PH09.md) | S15 | IAM | P1 | M | Backlog | APP-225 |
+| 232 | [APP-230: Per-member deletion on request (`erase-member`)](0-backlog/APP-230.md) | [PH09](phases/PH09.md) | S15 | IAM | P1 | L | Backlog | APP-212, APP-229 |
+| 233 | [APP-231: The free-plan AI switch at class end (allowances as data)](0-backlog/APP-231.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-222, APP-227 |
+| 234 | [APP-232: The production-move decision by Jan 1 (park, renew or production)](0-backlog/APP-232.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-216, APP-228 |

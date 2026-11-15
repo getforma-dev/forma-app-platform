@@ -24,3 +24,6 @@ Authenticated principals, tenant boundaries and service authority.
 | 174 | [APP-174: Detach the Northstar management secret, rotate its key and clean up the invitation input secret](../9-blocked/APP-174.md) | [PH07](../phases/PH07.md) | S13 | IAM | P1 | S | Blocked | APP-084 |
 | 227 | [APP-225: Organization roles, management and migration](../0-backlog/APP-225.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | L | Backlog | APP-188 |
 | 228 | [APP-226: Viewer read-only enforcement on every path](../0-backlog/APP-226.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | M | Backlog | APP-225 |
+| 229 | [APP-227: Beta notice v2 and the charter amendment: keep everyone by default](../0-backlog/APP-227.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | S | Backlog | APP-223 |
+| 231 | [APP-229: `extend-entitlement`: an audited, bulk, never-lowering operator extension](../0-backlog/APP-229.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | M | Backlog | APP-225 |
+| 232 | [APP-230: Per-member deletion on request (`erase-member`)](../0-backlog/APP-230.md) | [PH09](../phases/PH09.md) | S15 | IAM | P1 | L | Backlog | APP-212, APP-229 |

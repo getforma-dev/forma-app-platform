@@ -55,3 +55,6 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 222 | [APP-220: Observability at scale: tracing, error tracking, per-route metrics, status page, paging, synthetic journeys, tenant metering](../0-backlog/APP-220.md) | [PH09](../phases/PH09.md) | S15 | OPS | P3 | L | Backlog | APP-219 |
 | 223 | [APP-221: Flaky test: imports::sandbox protocol_and_identity_violations_are_failures](../0-backlog/APP-221.md) | [PH09](../phases/PH09.md) | S15 | OPS | P2 | S | Backlog | None |
 | 224 | [APP-222: AI usage done the professional way: typed caller, durable usage ledger, warnings, and allowances as plan data](../0-backlog/APP-222.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | L | Backlog | APP-215, APP-219 |
+| 230 | [APP-228: Renew the beta to Jan 15, 2027 and reserve January](../0-backlog/APP-228.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-194, APP-227 |
+| 233 | [APP-231: The free-plan AI switch at class end (allowances as data)](../0-backlog/APP-231.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-222, APP-227 |
+| 234 | [APP-232: The production-move decision by Jan 1 (park, renew or production)](../0-backlog/APP-232.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-216, APP-228 |
