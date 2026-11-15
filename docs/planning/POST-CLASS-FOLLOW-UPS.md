@@ -35,6 +35,18 @@ Written 2026-11-15 after Release C went live on beta. It covers what remains for
 | Nov 28 | Email the codes (the draft is in [guide §4](../operations/CLASS-GUIDE.md)). | Victor |
 | Nov 29–30 | Class. Watch the alarm email, `/admin` and the feedback mail. No deploys. | Victor; Claude fixes forward in announced windows |
 
+## Observability: now, before the class, next release, later (2026-11-15)
+
+Victor asked for the professional, mature-SaaS way, split by timing. Each row is a ticket.
+
+| When | Ticket | What |
+| --- | --- | --- |
+| **Now** (no release) | [APP-218](../../Tickets/0-backlog/APP-218.md) | Uptime probes from three regions for beta and fAuth, error-rate and median-latency alarms, the golden-signals dashboard, and free cost-anomaly alerts. About $3.20 a month. |
+| **Before the class** (by Nov 26) | FORMA-370 (Forma board) | fAuth's logs to CloudWatch, with sign-in-refusal, mail and database alarms. |
+| **Next release that happens anyway** | [APP-219](../../Tickets/0-backlog/APP-219.md) | JSON logs, the database-driver chatter quieted, key events (model failures, the AI cap at 80 %, 5xx with a request id, parser kills), and log-based alarms. It ships with APP-216 part 1. |
+| **Next code change** | [APP-221](../../Tickets/0-backlog/APP-221.md) | The flaky sandbox test seen on 2026-11-15 (a flake on `main` blocks promotion). |
+| **At scale** (after the class, with ADR-013 and the tiers) | [APP-220](../../Tickets/0-backlog/APP-220.md) | Per-route metrics, tracing, error tracking, a status page, paging, burn-rate SLOs, synthetic journeys, real-user monitoring and tenant metering, each with the trigger that makes it worth doing. |
+
 ## After the class
 
 | # | By | What | Why | Cost and how |

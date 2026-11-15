@@ -383,9 +383,13 @@
         "APP-214",
         "APP-215",
         "APP-216",
-        "APP-217"
+        "APP-217",
+        "APP-218",
+        "APP-219",
+        "APP-220",
+        "APP-221"
       ],
-      "ticket_count": 54,
+      "ticket_count": 58,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -407,7 +411,8 @@
     "APP-170",
     "APP-171",
     "APP-176",
-    "APP-201"
+    "APP-201",
+    "APP-221"
   ],
   "tickets": [
     {
@@ -6741,6 +6746,116 @@
       "dependencies": [
         "APP-215"
       ]
+    },
+    {
+      "id": "APP-218",
+      "title": "Outside-in observability now: uptime probes, SLO alarms, golden-signals dashboard, cost anomaly alerts",
+      "path": "0-backlog/APP-218.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "220",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: \"is there more dev observability we can do? prod? the professional way? the way mature SaaS products do it?\" and \"log in tickets what we can do now and what we can defer and scale with and what needs to be done now as opposed to later.\" **When: now** (2026-11-15): infrastructure only, no app release, about $3.20 a month.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-188",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`ops/observability` (template; deploy after review)",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-188"
+      ]
+    },
+    {
+      "id": "APP-219",
+      "title": "Structured app logs and key events, with log-based alarms (AI cap, model errors, 5xx)",
+      "path": "0-backlog/APP-219.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "221",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: \"is there more dev observability we can do? prod? the professional way? the way mature SaaS products do it?\" and \"log in tickets what we can do now and what we can defer and scale with and what needs to be done now as opposed to later.\" **When: with the next release that happens anyway**, before the class if one is planned (the release must also clear the scan and contract checks), otherwise right after the class. Each release costs 18 hours of beta (the shorten-expiry policy).",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-218",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-218"
+      ]
+    },
+    {
+      "id": "APP-220",
+      "title": "Observability at scale: tracing, error tracking, per-route metrics, status page, paging, synthetic journeys, tenant metering",
+      "path": "0-backlog/APP-220.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P3",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "222",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: \"is there more dev observability we can do? prod? the professional way? the way mature SaaS products do it?\" and \"log in tickets what we can do now and what we can defer and scale with and what needs to be done now as opposed to later.\" **When: deferred.** After the class, with the production environment (ADR-013) and the tiers work (follow-up A13). Each item names the trigger that makes it worth doing.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-219",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-219"
+      ]
+    },
+    {
+      "id": "APP-221",
+      "title": "Flaky test: imports::sandbox protocol_and_identity_violations_are_failures",
+      "path": "0-backlog/APP-221.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "223",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Coordinator (Claude), 2026-11-15: a flake on `main` blocks promotion (`wait-ci` refuses at the first failed run, and only a run's first attempt promotes), so a known flake is fixed, not retried. **When: with the next code change that touches tests anyway, before the class if possible.**",
+      "Requirements": "SR1, SR8",
+      "Depends on": "None",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": []
     }
   ]
 }
