@@ -442,14 +442,39 @@ class AlwaysOnPlan(unittest.TestCase):
                 preflight.reserve(dict(config, operating_plan=plan), ledger, WINDOW)
 
     def test_always_on_expiry_is_a_bounded_backstop(self):
+        """ADR-019 amendment 2 (2026-11-15): 45 days, so Dec 16 17:00 from the Nov 1 17:00 window (it was 32)."""
         config, ledger = always_on()
-        preflight.reserve(dict(config, deployment_expires_at_utc='2026-12-03T16:59:59Z'), copy.deepcopy(ledger) | {'months': ledger['months'] | {'2026-12': ledger['months']['2026-11']}}, WINDOW)
-        for expiry in ['2026-12-03T17:00:01Z', '2026-11-01T17:09:59Z']:
-            with self.assertRaisesRegex(ValueError, '32 days'):
-                preflight.reserve(dict(config, deployment_expires_at_utc=expiry), ledger, WINDOW)
+        both = copy.deepcopy(ledger) | {'months': ledger['months'] | {'2026-12': ledger['months']['2026-11']}}
+        for expiry in ['2026-12-16T16:59:59Z', '2026-12-16T17:00:00Z']:
+            preflight.reserve(dict(config, deployment_expires_at_utc=expiry), both, WINDOW)
+        for expiry in ['2026-12-16T17:00:01Z', '2026-12-17T17:00:00Z', '2026-11-01T17:09:59Z']:
+            with self.assertRaisesRegex(ValueError, '45 days'):
+                preflight.reserve(dict(config, deployment_expires_at_utc=expiry), both, WINDOW)
         bounded, book = inputs(WINDOW)
         with self.assertRaisesRegex(ValueError, '48 hours'):
             preflight.reserve(dict(bounded, deployment_expires_at_utc='2026-11-03T17:00:01Z'), book, WINDOW)
+
+    def test_the_45_day_backstop_reaches_jan_15_from_the_release_h_window(self):
+        """ADR-019 amendment 2: one renewal release executed from Dec 1 14:00 UTC reaches the 2027-01-15 14:00 UTC
+        stop (45 days; Dec 2 is the earliest planned release-H date), reserving December and January within the
+        unchanged caps; a second earlier it is beyond the bound and a day earlier is 46 days, refused, as every
+        stop after Jan 11 was under the 32-day bound."""
+        stop = '2027-01-15T14:00:00Z'
+        for now, admitted in [(datetime(2026, 12, 2, tzinfo=timezone.utc), True), (datetime(2026, 12, 1, 14, tzinfo=timezone.utc), True),
+                              (datetime(2026, 12, 1, 13, 59, 59, tzinfo=timezone.utc), False), (datetime(2026, 11, 30, 14, tzinfo=timezone.utc), False)]:
+            with self.subTest(now=now.strftime('%Y-%m-%dT%H:%M:%SZ'), admitted=admitted):
+                config, ledger = always_on(now)
+                config['deployment_expires_at_utc'] = stop
+                for month in ('2026-12', '2027-01'):
+                    ledger['months'][month] = dict(ledger['months']['2026-11'])
+                if admitted:
+                    _, report = preflight.reserve(config, ledger, now)
+                    self.assertEqual(set(report['cost_by_month']), {'2026-12', '2027-01'})
+                    self.assertTrue(all(c['genui_total_cents'] <= 21000 and c['project_total_cents'] <= 24800 for c in report['cost_by_month'].values()))
+                    self.assertEqual(report['cloudformation_parameters']['DeploymentExpiresAtUtc'], stop)
+                else:
+                    with self.assertRaisesRegex(ValueError, '45 days'):
+                        preflight.reserve(config, ledger, now)
 
     def test_always_on_auth_reservation_and_genui_cap(self):
         for auth in [3299, 3801]:

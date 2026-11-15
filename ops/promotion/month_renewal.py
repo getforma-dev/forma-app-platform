@@ -1,17 +1,19 @@
-"""Add (or re-assess) the reviewed December ledger month for the real-user trial, idle, plan/apply.
+"""Add (or re-assess) the reviewed ledger month the next renewal reaches into, idle, plan/apply.
 
 `reconcile` refuses to create a month (reconcile.py: only an existing current month may be
-reconciled), and a release whose window reaches into December needs `ledger.months['2026-12']`
+reconciled), and a release whose window reaches into January needs `ledger.months['2027-01']`
 reconciled within 24 hours (infra/scripts/preflight.py reserve). No Cost Explorer data exists
 for a month that has not begun, so the entry is an explicit operator forward reservation:
 the pinned MONTH, a substantive rationale and four nonnegative amounts, bound to the
 reviewed ledger hash. A later run may re-assess it (the timestamp moves with a new
-rationale) but never lowers an amount. Once December begins, `reconcile observe/apply`
-owns the month and this command refuses.
+rationale) but never lowers an amount. Once the month begins, `reconcile observe/apply`
+owns it and this command refuses.
 
-It changes no window, cap, expiry or AWS resource. The live window must still validate
-against the updated ledger (as reconcile.apply checks), so November must be fresh first.
-Apply records an immutable intent before one conditional write (expiry_policy pattern).
+MONTH is a pin, not an argument: one reviewed value per renewal, the pattern of the
+December month that release B consumed on 2026-11-14. It changes no window, cap, expiry
+or AWS resource. The live window must still validate against the updated ledger (as
+reconcile.apply checks), so the current month must be fresh first. Apply records an
+immutable intent before one conditional write (expiry_policy pattern).
 """
 import argparse
 import copy
@@ -26,21 +28,25 @@ from .expiry_policy import operator_identity, reviewed_state
 from .runner import ROOT, preflight
 from .state import Refused, Store, closed, digest, encoded, no_duplicates, require
 
-MONTH = '2026-12'
+# ADR-019 amendment 2 (2026-11-15, the class continuation): January 2027, the month the
+# Jan 15 renewal reaches into. The December pin ('2026-12') was consumed on 2026-11-14.
+MONTH = '2027-01'
 AMOUNTS = ('prior_extra_spend_cents', 'variable_reserve_cents', 'auth_spent_or_reserved_cents', 'unallocated_cents')
-# ADR-019 amendment (2026-11-14): the trial ceilings Victor confirms at apply, as expected
-# spend from Dec 1 to the Dec 16 stop. Informational beside the code caps, which stay the
-# reservation check; printed in the plan so the operator compares them with the assessment.
-TRIAL_CEILING_CENTS = {'genui': 8000, 'project': 11800}
+# ADR-019 amendment 2: the ceilings Victor confirms at apply, as expected spend from Jan 1
+# to the Jan 15 14:00 UTC stop (retained core for the whole month 5589, release compute
+# 4903, reserves 1500 and fAuth 3800 cents: 11992 / 15792). Informational beside the
+# code caps, which stay the reservation check; printed in the plan so the operator
+# compares them with the assessment.
+TRIAL_CEILING_CENTS = {'genui': 12000, 'project': 15800}
 SOURCE_FILES = ['ops/promotion/month_renewal.py', 'ops/promotion/reconcile.py', 'ops/promotion/expiry_policy.py',
                 'ops/promotion/state.py', 'infra/scripts/preflight.py']
 
 
-def december_projection(budget, ledger, amounts, shorten_hours):
-    """What preflight will compute for the month once release B is reserved: the retained core for
-    the full month (plus the clean-trial retained figure while any window names the trial), release
-    B's December compute from Dec 1 to its stop (the renewed expiry minus the shortening default,
-    plus preflight's one-hour margin and two extra task-hours) and the assessed reserves."""
+def month_projection(budget, ledger, amounts, shorten_hours):
+    """What preflight will compute for MONTH once the renewal release is reserved: the retained core
+    for the full month (plus the clean-trial retained figure while any window names the trial), the
+    release's compute in MONTH from its first day to the stop (the renewed expiry minus the shortening
+    default, plus preflight's one-hour margin and two extra task-hours) and the assessed reserves."""
     import calendar
     from datetime import datetime, timedelta, timezone
     from .expiry_renewal import RENEWED_EXPIRY
@@ -84,11 +90,11 @@ def plan(runner, expected_state_sha256, assessment):
     if existing is not None:
         for key in AMOUNTS:
             require(amounts[key] >= existing[key], 'cannot lower recorded money: ' + key)
-    projection = december_projection(budget, ledger, amounts, state['policy']['shorten_expiry_hours'])
+    projection = month_projection(budget, ledger, amounts, state['policy']['shorten_expiry_hours'])
     require(projection['genui_total_cents'] <= plans['genui_cap_cents'] and projection['project_total_cents'] <= plans['project_cap_cents'],
-            'December reservation exceeds the %d/%d cent caps' % (plans['genui_cap_cents'], plans['project_cap_cents']))
+            MONTH + ' reservation exceeds the %d/%d cent caps' % (plans['genui_cap_cents'], plans['project_cap_cents']))
     ledger['months'][MONTH] = dict(amounts, reconciled_at_utc=clock.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                                   basis='Operator forward reservation (ADR-019 amendment 2026-11-14; no billing data for a month not begun): ' + rationale.strip())
+                                   basis='Operator forward reservation (ADR-019 amendment 2, 2026-11-15; no billing data for a month not begun): ' + rationale.strip())
     # The live window still validates against the updated ledger, exactly as reconcile.apply requires.
     try:
         checked, _ = budget.reserve(state['live']['config'], ledger, clock)
@@ -109,7 +115,7 @@ def plan(runner, expected_state_sha256, assessment):
                'limits': 'One ledger month only. No window, cap, expiry, schedule or billing change.'}
     public = {'status': 'planned', 'month': MONTH, 'created': existing is None, 'before_revision': state['revision'],
               'before_state_sha256': expected_state_sha256, 'expected_after_state_sha256': digest(expected_after),
-              'amounts': dict(amounts), 'december_projection': projection, 'trial_ceiling_cents': TRIAL_CEILING_CENTS,
+              'amounts': dict(amounts), 'month_projection': projection, 'trial_ceiling_cents': TRIAL_CEILING_CENTS,
               'genui_cap_cents': plans['genui_cap_cents'], 'project_cap_cents': plans['project_cap_cents'],
               'windows_preserved': len(ledger['windows']), 'windows_changed': False}
     return {'receipt_key': receipt_key, 'receipt': receipt, 'public': public}, expected_after
@@ -141,7 +147,7 @@ def main(argv=None):
     parser.add_argument('--state-prefix', required=True)
     parser.add_argument('--expected-state-sha256', required=True)
     parser.add_argument('--assessment', required=True, type=Path,
-                        help='JSON {"month": "2026-12", "ledger_sha256": ..., "rationale": ..., "amounts": {the four cent fields}}')
+                        help='JSON {"month": "' + MONTH + '", "ledger_sha256": ..., "rationale": ..., "amounts": {the four cent fields}}')
     parser.add_argument('--output', required=True, type=Path, help='new private plan/result file; never overwritten')
     parser.add_argument('--apply', action='store_true', help='perform the reviewed ledger-month CAS; without it, plan only')
     args = parser.parse_args(argv)

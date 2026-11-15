@@ -99,7 +99,7 @@ Run 43157872671 was stuck on a stale ledger basis, and its packet was never appr
 
 ## 2. The expiry and month renewal (Sunday Nov 23, before release B)
 
-**Done on 2026-11-14; do not re-run.** Read back on 2026-11-14: the stack parameter `DeploymentExpiresAtUtc` and the expiry schedule both say `2026-12-15T14:00:00Z`, which is the renewed canonical expiry (`2026-12-16T08:00:00Z`) less release B's 18 hours, so the renewal below was applied before release B. Release C executed later on Nov 14 and subtracted another 18 hours: **the live stop is now `2026-12-14T20:00:00Z`** ([record](../../evidence/APP-209/release-2026-11-14.md)); `expiry_renewal` changes only the canonical input, so a later release is the only way to move it. The steps are kept as written, for reference.
+**Done on 2026-11-14; do not re-run.** Read back on 2026-11-14: the stack parameter `DeploymentExpiresAtUtc` and the expiry schedule both say `2026-12-15T14:00:00Z`, which is the renewed canonical expiry (`2026-12-16T08:00:00Z`) less release B's 18 hours, so the renewal below was applied before release B. Release C executed later on Nov 14 and subtracted another 18 hours: **the live stop is now `2026-12-14T20:00:00Z`** ([record](../../evidence/APP-209/release-2026-11-14.md)); `expiry_renewal` changes only the canonical input, so a later release is the only way to move it. The steps are kept as written, for reference. **The next renewal, to Jan 15 before release H, is [section 2.1](#21-renewal-to-jan-15-before-release-h-dec-29).**
 
 After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packet took the canonical Nov 25 08:00 expiry minus 18 hours (`runner.py:222`), and on success that config became the live one, so the stack parameter, the schedule and the ledger window all read `2026-11-24T14:00:00Z`. Release B must **execute** (not merely merge) before that time; otherwise the schedule scales both services to zero and only the next successful release restarts them. Release B again subtracts 18 hours from the canonical expiry and refuses a stop within 24 hours, so the renewal below must precede it. Order matters and everything happens within 24 hours of the merge: November reconciled, December added, expiry renewed, then the merge.
 
@@ -147,6 +147,47 @@ After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packe
    Expected plan: `"before_expiry": "2026-11-24T14:00:00Z"`, `"after_expiry": "2026-12-16T08:00:00Z"`, `"live_stop_unchanged": "2026-11-24T14:00:00Z"`, `"next_release_expiry": "2026-12-15T14:00:00Z"`, `"genui_cap_cents": 21000`, `"project_cap_cents": 24800`, and `cost_by_month` for `2026-11` and `2026-12` each under those caps. The plan is release B's reservation projected: **if it still refuses with `budget exceeded for 2026-11`**, stop; the November reservation does not fit even the raised caps and a new decision is needed, not a different number here. The apply prints `"status": "applied"`.
 
    If release B then does not merge within 24 hours, either repeat steps 1, 3 and 4 the next day (the cap raise is done once), or `--revert` (same arguments plus `--revert`) to put the config back to the window's recorded expiry; `reconcile apply` refuses while the config is renewed and no release has consumed it.
+
+### 2.1 Renewal to Jan 15 (before release H, Dec 2–9)
+
+Victor, 2026-11-15: "Renew to Jan 15" ([plan](../planning/CLASS-CONTINUATION-PLAN.md) §2.5, [APP-228](../../Tickets/0-backlog/APP-228.md), [ADR-019 amendment 2](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md)). The pins are `RENEWED_EXPIRY = 2027-01-16T08:00:00Z` (`ops/promotion/expiry_renewal.py`) and `MONTH = 2027-01` (`ops/promotion/month_renewal.py`), and the always-on backstop may now be 45 days away (`infra/scripts/preflight.py`). The steps are the four above in the order the code enforces, run once from a `main` checkout that carries the pins (the commands read the checkout: on an older one `month_renewal` refuses "only the pinned month 2026-12" and `expiry_renewal` would plan the spent December value). The caps are already 21000 / 24800, so there is no cap step.
+
+**Timing.** Steps 1–4 all within **24 hours of the December reconcile** (step 1; preflight's ledger rule, and `reconcile apply` refuses between step 3 and the merge). Release H must **execute** (not merely merge) at least 24 hours before the live stop, **2026-12-11T20:00:00Z** after release F (**02:00:00Z** if release G executes first; `prepare` refuses a stop within 24 hours): Dec 2–9 as planned, Dec 10 at the very latest. The earliest the renewal fits the 45-day bound is **Dec 1 14:00Z** (Jan 15 14:00Z is exactly 45 days later; before that step 3 refuses "45 days"). Approve the run **outside 05:00–05:45 UTC** (the RDS backup window; release H carries a migration and takes a snapshot). If the live stop passes first, the schedule scales both services to zero and only the next successful release restarts them.
+
+1. **Reconcile December** exactly as in release A step 4 (`observe-h.json`, `assessment-h.json`, `reconcile-h.json`). December has begun, so `reconcile` owns it; `month_renewal` refuses it ("the month has begun"), as intended. Confirm the observed total against amendment 2's December ceiling, about $175 GenUI / $213 project. If `reconcile` reports December's GenUI reservation above 21000 cents, stop: a cap raise is ADR-019's `reservation_cap` pattern after a code constant merge, not a different number here.
+2. **Add January.** Write `$TRIAL/january.json`:
+
+   ```json
+   {"month": "2027-01", "ledger_sha256": "<the ledger_sha256 field of $TRIAL/reconcile-h.json>",
+    "rationale": "January forward reservation for the class continuation through the Jan 15 stop: no billing data yet; reserves cover probes, logs, secrets and billing lag.",
+    "amounts": {"prior_extra_spend_cents": 0, "variable_reserve_cents": 1500, "auth_spent_or_reserved_cents": 3800, "unallocated_cents": 0}}
+   ```
+
+   The `ledger_sha256` is the digest of the ledger **after** `reconcile apply` rewrote it (`reconcile-h.json`, field `ledger_sha256`); with the pre-apply digest `month_renewal` refuses "assessment is bound to another ledger". Plan, read, then apply against the same inspected state hash:
+
+   ```sh
+   $PY -m ops.promotion.maintenance inspect --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX"
+   $PY -m ops.promotion.month_renewal --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<hash>" --assessment "$TRIAL/january.json" --output "$TRIAL/month-plan-h.json"
+   $PY -m ops.promotion.month_renewal --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<same hash>" --assessment "$TRIAL/january.json" --output "$TRIAL/month-result-h.json" --apply
+   ```
+
+   Expected plan: `"status": "planned", "month": "2027-01", "created": true`, a `month_projection` with `retained_core_full_month_cents` 5589, `release_compute_cents` 4903 (release H from Jan 1 to its Jan 15 14:00 stop, service and broker), `"release_stop_utc": "2027-01-15T14:00:00Z"`, `genui_total_cents` 11992 and `project_total_cents` 15792, beside `trial_ceiling_cents: {"genui": 12000, "project": 15800}` and the caps 21000 / 24800; the apply prints `"status": "applied"` with the new `revision` and `state_sha256`. Running it again later re-assesses (new timestamp, never a lower amount); after Jan 1 it refuses and `reconcile` owns the month.
+3. **Renew the expiry** against the state hash the month apply printed:
+
+   ```sh
+   $PY -m ops.promotion.expiry_renewal --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<state_sha256 from the month apply>" --output "$TRIAL/expiry-plan-h.json"
+   $PY -m ops.promotion.expiry_renewal --state-bucket "$PROMOTION_STATE_BUCKET" --state-prefix "$PROMOTION_STATE_PREFIX" \
+     --expected-state-sha256 "<same hash>" --output "$TRIAL/expiry-result-h.json" --apply
+   ```
+
+   Expected plan: `"before_expiry": "2026-12-11T20:00:00Z"` (the live stop; `02:00:00Z` after release G), `"after_expiry": "2027-01-16T08:00:00Z"`, `"live_stop_unchanged"` equal to `before_expiry`, **`"next_release_expiry": "2027-01-15T14:00:00Z"`**, `"shortening_hours": 18`, `"genui_cap_cents": 21000`, `"project_cap_cents": 24800`, and `cost_by_month` for `2026-12` and `2027-01` each under those caps (December about 17450 / 21250 by the model plus the extra spend the reconcile recorded; January 11992 / 15792). The plan is release H's reservation projected: **if it refuses with `budget exceeded for 2026-12`**, stop, as in step 1; if with `45 days`, it is before Dec 1 14:00Z. The apply prints `"status": "applied"`.
+4. **Enable promotion and merge release H** within the same 24 hours: `gh variable set PROMOTION_ENABLED --body true --repo $REPO`, merge the reviewed release-H pull request, read the summary: `schema_release` from 25 to the release file's `to_version`, and the stop time **2027-01-15T14:00:00Z**; approve only if it reads that, outside 05:00–05:45 UTC. Then `/health/ready` → 200, the run's conclusion `"success"`, `PROMOTION_ENABLED` back to false, and the readback: `aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "Stacks[0].Parameters[?ParameterKey=='DeploymentExpiresAtUtc'].ParameterValue" --output text` prints `2027-01-15T14:00:00Z` and `aws scheduler get-schedule` shows `at(2027-01-15T14:00:00)`. Record both in the release record.
+
+   If release H does not merge in time, either repeat steps 1–3 the next day (the January month then re-assesses) or `--revert` (step 3's arguments plus `--revert`) to put the config back to the window's recorded expiry; `reconcile apply` refuses while the config is renewed and no release has consumed it.
+5. **On Jan 1:** the AWS Budget amount becomes about 160 (amount only, A7: section 11.1's deploy command with `MonthlyBudgetUsd=160`, never the email), and the January `reconcile` on Jan 1–2 shows December's observed total under the caps, or the cap raise is recorded (ADR-019). The stop is a backstop: past Jan 15 14:00 UTC the beta stops unless APP-232's decision renews it once more, by Jan 14 14:00Z.
 
 ## 3. Release B: migrations 0023 and 0024 and the trial capabilities (Sunday Nov 23)
 

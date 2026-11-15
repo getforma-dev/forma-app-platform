@@ -1,15 +1,15 @@
-"""Renew the canonical shutdown expiry for the real-user trial: one pinned value, idle, plan/apply.
+"""Renew the canonical shutdown expiry of the always-on beta: one pinned value, idle, plan/apply.
 
 The promotion derives each release's stop time from `live.config.deployment_expires_at_utc`
 minus the shortening default (runner.prepare). This operator command moves that one
-canonical input to the pinned RENEWED_EXPIRY so the next release (release B, about
-2026-11-23) stops around 2026-12-15 14:00 UTC after its 18-hour subtraction, instead of
-refusing because the live Nov 25 backstop minus 18 hours is within 24 hours.
+canonical input to the pinned RENEWED_EXPIRY so the next release (release H, Dec 2-9,
+the class continuation) stops at 2027-01-15 14:00 UTC after its 18-hour subtraction,
+instead of taking the live December stop minus 18 hours.
 
 It changes no AWS schedule, parameter, reservation or cap: the live window keeps its
-recorded Nov 25 stop until a release supersedes it. Because the ledger window's input hash
-binds the expiry, `reconcile apply` refuses between this renewal and the release that
-consumes it; run reconcile and month_renewal first, then this, then merge, within 24 hours.
+recorded stop until a release supersedes it. Because the ledger window's input hash binds
+the expiry, `reconcile apply` refuses between this renewal and the release that consumes
+it; run reconcile and month_renewal first, then this, then merge, within 24 hours.
 `--revert` puts the config back to exactly the live window's recorded expiry if the
 release does not happen in time. Both directions are hash-bound with an immutable intent
 before one conditional write, following expiry_policy.
@@ -30,9 +30,10 @@ from .maintenance import no_pending_changesets
 from .runner import ROOT, Runner, preflight
 from .state import Refused, Store, digest, encoded, require
 
-# The one reviewed target (the 2026-11-14 decisions, W3): a release that subtracts the
-# 18-hour default stops at 2026-12-15 14:00 UTC, after the class and the Dec 14 purge.
-RENEWED_EXPIRY = '2026-12-16T08:00:00Z'
+# The one reviewed target (Victor, 2026-11-15: "Renew to Jan 15"; ADR-019 amendment 2): a
+# release that subtracts the 18-hour default stops at 2027-01-15 14:00 UTC. The earlier
+# pin, 2026-12-16T08:00:00Z, was consumed by release B on 2026-11-14.
+RENEWED_EXPIRY = '2027-01-16T08:00:00Z'
 SOURCE_FILES = ['ops/promotion/expiry_renewal.py', 'ops/promotion/expiry_policy.py', 'ops/promotion/runner.py',
                 'ops/promotion/guards.py', 'ops/promotion/state.py', 'ops/promotion/maintenance.py', 'ops/promotion/aws.py',
                 'infra/scripts/preflight.py']
@@ -79,7 +80,7 @@ def plan(runner, expected_state_sha256, revert=False):
     shorten = state['policy']['shorten_expiry_hours']
     prospective = None; projection = None
     if not revert:
-        # preflight's reserve bounds the renewed expiry to the 32-day window itself (projected_reservation).
+        # preflight's reserve bounds the renewed expiry to the 45-day window itself (projected_reservation).
         next_expiry = budget.timestamp(target) - timedelta(hours=shorten)
         require(next_expiry > clock + timedelta(hours=24), 'the next release would still refuse; renew later or shorten less')
         # The next release's own reservation, projected and discarded: it proves the

@@ -9,18 +9,20 @@ import unittest
 from unittest.mock import patch
 
 from ops.promotion import expiry_renewal, month_renewal
-from ops.promotion.runner import Runner
+from ops.promotion.runner import Runner, preflight
 from ops.promotion.state import Refused, Store, digest, encoded
-from ops.promotion.test_runner import FakeAWS, fixture
+from ops.promotion.test_runner import FakeAWS, RESERVES, fixture, live_window, reconciled
 from ops.promotion.test_state import MemoryS3
 
-CLOCK = datetime(2026, 11, 21, 12, tzinfo=timezone.utc)
-RENEWED = '2026-12-16T08:00:00Z'
-
-
-def december(ledger, when):
-    ledger['months']['2026-12'] = {'reconciled_at_utc': when.strftime('%Y-%m-%dT%H:%M:%SZ'), 'basis': 'Synthetic December fixture',
-                                   'prior_extra_spend_cents': 0, 'variable_reserve_cents': 1500, 'auth_spent_or_reserved_cents': 3800, 'unallocated_cents': 0}
+# Inside the release-H window (Dec 2-9, 2026; the class continuation plan). The live stop is
+# release F's, 2026-12-11 20:00 UTC, reserved on Nov 15; December has begun, so reconcile owns
+# it, and January is the forward reservation month_renewal adds.
+CLOCK = datetime(2026, 12, 2, 12, tzinfo=timezone.utc)
+LIVE_STOP = '2026-12-11T20:00:00Z'
+LIVE_RESERVED_AT = datetime(2026, 11, 15, 20, tzinfo=timezone.utc)
+RENEWED = '2027-01-16T08:00:00Z'
+NEXT_RELEASE = '2027-01-15T14:00:00Z'
+RATIONALE = 'January forward reservation for the class continuation through the Jan 15 stop; covers probes, logs and lag.'
 
 
 class ExpiryRenewalTests(unittest.TestCase):
@@ -30,9 +32,9 @@ class ExpiryRenewalTests(unittest.TestCase):
         manifest = {'source': {'schema_manifest_sha256': 'a' * 64, 'deployment_contract_sha256': 'b' * 64}}
         self.state = fixture(manifest)
         self.state['policy'].update(budget_genui_cents=21000, budget_total_cents=24800, shorten_expiry_hours=18)
-        # The fixture's live window stops 2026-11-30 23:00; the trial's clock is Nov 21 and both months are fresh.
-        self.state['ledger']['months']['2026-11']['reconciled_at_utc'] = (CLOCK - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
-        december(self.state['ledger'], CLOCK - timedelta(hours=1))
+        live_window(self.state, LIVE_STOP, LIVE_RESERVED_AT)
+        for name in ('2026-12', '2027-01'):
+            reconciled(self.state['ledger'], name, CLOCK)
         self.s3 = MemoryS3(self.state)
         self.store = Store(self.s3, 'bucket', 'beta')
         self.aws = FakeAWS(self.state, self.s3, manifest)
@@ -51,20 +53,47 @@ class ExpiryRenewalTests(unittest.TestCase):
     def assert_unchanged(self):
         self.assertEqual(self.s3.objects['beta/state.json'], encoded(self.state))
 
+    def test_the_renewed_expiry_less_one_release_is_jan_15_14_00(self):
+        """The pin: Victor's "Renew to Jan 15" (2026-11-15, ADR-019 amendment 2). One release subtracts
+        the 18-hour default, so the stop it reserves is 2027-01-15 14:00 UTC, and the plan says exactly that."""
+        self.assertEqual(expiry_renewal.RENEWED_EXPIRY, '2027-01-16T08:00:00Z')
+        self.assertEqual(self.state['policy']['shorten_expiry_hours'], 18)
+        self.assertEqual(preflight().timestamp(expiry_renewal.RENEWED_EXPIRY) - timedelta(hours=18), datetime(2027, 1, 15, 14, tzinfo=timezone.utc))
+        self.assertEqual(self.run_renewal()['public']['next_release_expiry'], '2027-01-15T14:00:00Z')
+
+    def test_the_45_day_bound_admits_the_release_h_window_and_refuses_46_days(self):
+        """Jan 15 14:00 is 45 days after Dec 1 14:00: from then on (Dec 2 is the earliest planned release-H
+        date) one renewal reaches it; a second earlier it is beyond the bound and a day earlier is 46 days,
+        and preflight's projection refuses, as the 32-day bound refused every stop after Jan 11."""
+        for clock, admitted in [(datetime(2026, 12, 2, tzinfo=timezone.utc), True), (datetime(2026, 12, 1, 14, tzinfo=timezone.utc), True),
+                                (datetime(2026, 12, 1, 13, 59, 59, tzinfo=timezone.utc), False), (datetime(2026, 11, 30, 14, tzinfo=timezone.utc), False)]:
+            with self.subTest(clock=clock.strftime('%Y-%m-%dT%H:%M:%SZ'), admitted=admitted):
+                self.setUp()
+                for name in ('2026-12', '2027-01'):
+                    reconciled(self.state['ledger'], name, clock)
+                self.replace_state()
+                self.runner = Runner(self.aws, self.store, clock=lambda now=clock: now)
+                if admitted:
+                    self.assertEqual(self.run_renewal()['public']['next_release_expiry'], NEXT_RELEASE)
+                else:
+                    with self.assertRaisesRegex(Refused, '45 days'):
+                        self.run_renewal()
+                self.assert_unchanged()
+
     def test_plan_is_read_only_and_projects_the_next_release_into_both_months(self):
         result = self.run_renewal()
         self.assert_unchanged()
         self.assertFalse(any(k.startswith('beta/promotions/') for k in self.s3.objects))
         public = result['public']
-        self.assertEqual((public['status'], public['before_expiry'], public['after_expiry']), ('planned', '2026-11-30T23:00:00Z', RENEWED))
-        self.assertEqual(public['live_stop_unchanged'], '2026-11-30T23:00:00Z')
-        self.assertEqual(public['next_release_expiry'], '2026-12-15T14:00:00Z')
-        self.assertEqual(set(public['cost_by_month']), {'2026-11', '2026-12'})
+        self.assertEqual((public['status'], public['before_expiry'], public['after_expiry']), ('planned', LIVE_STOP, RENEWED))
+        self.assertEqual(public['live_stop_unchanged'], LIVE_STOP)
+        self.assertEqual(public['next_release_expiry'], NEXT_RELEASE)
+        self.assertEqual(set(public['cost_by_month']), {'2026-12', '2027-01'})
         self.assertTrue(all(c['genui_total_cents'] <= 21000 and c['project_total_cents'] <= 24800 for c in public['cost_by_month'].values()))
         self.assertEqual((public['genui_cap_cents'], public['project_cap_cents']), (21000, 24800))
         self.assertFalse(public['ledger_changed']); self.assertFalse(public['live_parameters_changed'])
         self.assertEqual(result['receipt']['projection_config']['supersedes_window_id'], self.state['live']['window_id'])
-        self.assertEqual(result['receipt']['window_recorded_expiry'], '2026-11-30T23:00:00Z')
+        self.assertEqual(result['receipt']['window_recorded_expiry'], LIVE_STOP)
         text = json.dumps(public)
         for private in ['arn:', '877573132739', 'beta.getforma.dev', self.state['live']['window_id']]:
             self.assertNotIn(private, text)
@@ -77,12 +106,12 @@ class ExpiryRenewalTests(unittest.TestCase):
         expected['revision'] += 1
         actual = self.store.load()
         self.assertEqual(actual, expected)
-        self.assertEqual(actual['live']['parameters']['DeploymentExpiresAtUtc'], '2026-11-30T23:00:00Z')
+        self.assertEqual(actual['live']['parameters']['DeploymentExpiresAtUtc'], LIVE_STOP)
         self.assertEqual(actual['ledger'], self.state['ledger'])
         receipts = [k for k in self.s3.objects if k.startswith('beta/promotions/expiry-renewal-')]
         self.assertEqual(len(receipts), 1)
         receipt = json.loads(self.s3.objects[receipts[0]])
-        self.assertEqual((receipt['before_expiry'], receipt['after_expiry'], receipt['expected_after_state_sha256']), ('2026-11-30T23:00:00Z', RENEWED, digest(expected)))
+        self.assertEqual((receipt['before_expiry'], receipt['after_expiry'], receipt['expected_after_state_sha256']), (LIVE_STOP, RENEWED, digest(expected)))
         self.assertEqual((result['public']['status'], result['public']['state_sha256']), ('applied', digest(expected)))
         self.assertTrue(all(op not in ['update_service', 'execute_change_set', 'create_change_set', 'put_image'] for _, op, _ in self.aws.calls))
         # A second renewal of the same state refuses: the config no longer equals its window.
@@ -97,9 +126,9 @@ class ExpiryRenewalTests(unittest.TestCase):
             expiry_renewal.run(self.runner, digest(renewed), False, False)
         result = expiry_renewal.run(self.runner, digest(renewed), True, True)
         reverted = self.store.load()
-        self.assertEqual(reverted['live']['config']['deployment_expires_at_utc'], '2026-11-30T23:00:00Z')
+        self.assertEqual(reverted['live']['config']['deployment_expires_at_utc'], LIVE_STOP)
         self.assertEqual(reverted['revision'], self.state['revision'] + 2)
-        self.assertEqual((result['public']['operation'], result['public']['after_expiry']), ('revert-expiry-renewal', '2026-11-30T23:00:00Z'))
+        self.assertEqual((result['public']['operation'], result['public']['after_expiry']), ('revert-expiry-renewal', LIVE_STOP))
         self.assertIsNone(result['public']['next_release_expiry'])
         with self.assertRaises(Refused):  # nothing left to revert
             expiry_renewal.run(self.runner, digest(reverted), False, True)
@@ -108,10 +137,10 @@ class ExpiryRenewalTests(unittest.TestCase):
         def held(): self.state['active'] = {'owner': 'x'}; self.replace_state()
         def stale(): self.before = '0' * 64
         def workflow(): self.aws.phase = 'execute'
-        def parameters_disagree(): self.state['live']['parameters']['DeploymentExpiresAtUtc'] = '2026-11-29T23:00:00Z'; self.replace_state()
-        def no_december(): del self.state['ledger']['months']['2026-12']; self.replace_state()
-        def stale_december(): self.state['ledger']['months']['2026-12']['reconciled_at_utc'] = '2026-11-19T00:00:00Z'; self.replace_state()
-        def stale_november(): self.state['ledger']['months']['2026-11']['reconciled_at_utc'] = '2026-11-19T00:00:00Z'; self.replace_state()
+        def parameters_disagree(): self.state['live']['parameters']['DeploymentExpiresAtUtc'] = '2026-12-10T20:00:00Z'; self.replace_state()
+        def no_january(): del self.state['ledger']['months']['2027-01']; self.replace_state()
+        def stale_january(): self.state['ledger']['months']['2027-01']['reconciled_at_utc'] = '2026-11-30T00:00:00Z'; self.replace_state()
+        def stale_december(): self.state['ledger']['months']['2026-12']['reconciled_at_utc'] = '2026-11-30T00:00:00Z'; self.replace_state()
         def caps_differ(): self.state['policy']['budget_genui_cents'] = 18000; self.replace_state()  # the pair before the trial raise
         def pending_change_set():
             original = self.aws._call
@@ -120,13 +149,13 @@ class ExpiryRenewalTests(unittest.TestCase):
                 return original(s, o, a)
             self.aws._call = call
         def unhealthy(): self.aws.running_health = 'UNHEALTHY'
-        def too_far(): self.runner = Runner(self.aws, self.store, clock=lambda: datetime(2026, 11, 10, tzinfo=timezone.utc))
-        def budget_exceeded(): self.state['ledger']['months']['2026-12']['unallocated_cents'] = 13000; self.replace_state()
-        def already_renewed(): self.state['live']['config']['deployment_expires_at_utc'] = '2026-12-10T00:00:00Z'; self.replace_state()
+        def too_far(): self.runner = Runner(self.aws, self.store, clock=lambda: datetime(2026, 11, 30, 14, tzinfo=timezone.utc))  # 46 days
+        def budget_exceeded(): self.state['ledger']['months']['2027-01']['unallocated_cents'] = 13000; self.replace_state()
+        def already_renewed(): self.state['live']['config']['deployment_expires_at_utc'] = '2027-01-10T00:00:00Z'; self.replace_state()
         for name, prepare in [('held lock', held), ('stale hash', stale), ('workflow identity', workflow), ('parameters disagree', parameters_disagree),
-                              ('no december month', no_december), ('stale december', stale_december), ('stale november', stale_november),
+                              ('no january month', no_january), ('stale january', stale_january), ('stale december', stale_december),
                               ('caps differ', caps_differ), ('pending change set', pending_change_set), ('unhealthy runtime', unhealthy),
-                              ('renewal beyond 32 days', too_far), ('budget exceeded', budget_exceeded), ('config already differs', already_renewed)]:
+                              ('renewal beyond 45 days', too_far), ('budget exceeded', budget_exceeded), ('config already differs', already_renewed)]:
             with self.subTest(case=name):
                 self.setUp(); prepare()
                 with self.assertRaises(Refused):
@@ -134,11 +163,13 @@ class ExpiryRenewalTests(unittest.TestCase):
                 self.assert_unchanged()
                 self.assertFalse(any(k.startswith('beta/promotions/') for k in self.s3.objects))
 
-    def test_a_next_release_within_24_hours_refuses_even_with_a_fresh_december(self):
-        """Dec 14 20:00: the renewed expiry minus 18 hours is Dec 15 14:00, under a day away; only this
-        command's own check refuses (preflight accepts a window ten minutes ahead)."""
-        clock = datetime(2026, 12, 14, 20, tzinfo=timezone.utc)
-        self.state['ledger']['months']['2026-12']['reconciled_at_utc'] = (clock - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    def test_a_next_release_within_24_hours_refuses_even_with_both_months_fresh(self):
+        """Jan 14 20:00, after release H: the renewed expiry minus 18 hours is Jan 15 14:00, under a day
+        away; only this command's own check refuses (preflight accepts a window ten minutes ahead)."""
+        clock = datetime(2027, 1, 14, 20, tzinfo=timezone.utc)
+        live_window(self.state, NEXT_RELEASE, datetime(2026, 12, 5, 12, tzinfo=timezone.utc))  # release H executed on Dec 5
+        for name in ('2026-12', '2027-01'):
+            reconciled(self.state['ledger'], name, clock)
         self.replace_state()
         self.runner = Runner(self.aws, self.store, clock=lambda: clock)
         with self.assertRaisesRegex(Refused, 'next release would still refuse'):
@@ -157,13 +188,11 @@ class ExpiryRenewalTests(unittest.TestCase):
             self.assertEqual(code, 1)
 
     def test_month_renewal_then_expiry_renewal_is_the_documented_order(self):
-        """Without December the renewal refuses; after month_renewal applies, it plans and applies."""
-        del self.state['ledger']['months']['2026-12']; self.replace_state()
-        with self.assertRaises(Refused):
+        """Without January the renewal refuses; after month_renewal applies, it plans and applies."""
+        del self.state['ledger']['months']['2027-01']; self.replace_state()
+        with self.assertRaisesRegex(Refused, 'missing reconciled ledger month 2027-01'):
             self.run_renewal()
-        assessment = {'month': '2026-12', 'ledger_sha256': digest(self.state['ledger']),
-                      'rationale': 'December forward reservation for the real-user trial through the Dec 16 stop; covers probes, logs and lag.',
-                      'amounts': {'prior_extra_spend_cents': 0, 'variable_reserve_cents': 1500, 'auth_spent_or_reserved_cents': 3800, 'unallocated_cents': 0}}
+        assessment = {'month': '2027-01', 'ledger_sha256': digest(self.state['ledger']), 'rationale': RATIONALE, 'amounts': dict(RESERVES)}
         month_renewal.run(self.runner, self.before, assessment, apply=True)
         after_month = self.store.load()
         result = expiry_renewal.run(self.runner, digest(after_month), apply=True)

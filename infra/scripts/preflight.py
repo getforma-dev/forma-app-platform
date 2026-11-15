@@ -12,7 +12,8 @@ ADR-003's $100/month 48-hour qualification window. `always-on-beta` (ledger
 schema 2) is Victor's approval of 2026-10-29 recorded in ADR-008: GenUI's
 always-on synthetic beta at about $150-170/month, with FormaStack's lean fAuth
 (about $33, up to $38) reserved separately. The always-on stop schedule is a
-backstop at most 32 days away, renewed with a fresh reconciled reservation.
+backstop at most 45 days away (ADR-019 amendment 2, 2026-11-15; it was 32),
+renewed with a fresh reconciled reservation.
 
 A redeploy of the same service (new image digests) is a new window, because a
 window's inputs are immutable. It may declare `supersedes_window_id`: the
@@ -83,8 +84,12 @@ PLANS = {
     # ADR-019 amendment (2026-11-14, the real-user trial): $210 GenUI and $248
     # with fAuth, the charter's November ceiling, applied to the canonical
     # policy by `python -m ops.promotion.reservation_cap` while idle.
+    # ADR-019 amendment 2 (2026-11-15, the class continuation): the backstop may
+    # be 45 days away instead of 32, so one release executed from Dec 1 14:00 UTC
+    # reaches the Jan 15 14:00 UTC stop; every window still reserves each month it
+    # touches within the unchanged caps, reconciled within 24 hours.
     ALWAYS_ON: {'ledger_schema': 2, 'monthly_budget_usd': '170', 'genui_cap_cents': 21000, 'project_cap_cents': 21000 + 3800,
-                'max_expiry': timedelta(days=32), 'auth_min_cents': 3300, 'auth_max_cents': 3800,
+                'max_expiry': timedelta(days=45), 'auth_min_cents': 3300, 'auth_max_cents': 3800,
                 'decision': 'ADR-008 always-on beta: GenUI about $150-170/month plus FormaStack lean fAuth about $33 (up to $38)'},
 }
 DIGEST_RE = _ACCOUNT_RE + r'\.dkr\.ecr\.' + _REGION_RE + r'\.amazonaws\.com/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}'
@@ -360,7 +365,7 @@ def reserve(config, ledger, now, activating=False):
     address = ipaddress.ip_network(config['operator_ipv4_cidr'], strict=True)
     require(address.version == 4 and address.prefixlen == 32 and address.network_address.is_global, 'operator address must be a real public IPv4 /32')
     expires = timestamp(config['deployment_expires_at_utc'])
-    require(now + timedelta(minutes=10) <= expires <= now + rules['max_expiry'], 'expiry must be 10 minutes to %s in the future' % ('48 hours' if plan == BOUNDED else '32 days'))
+    require(now + timedelta(minutes=10) <= expires <= now + rules['max_expiry'], 'expiry must be 10 minutes to %s in the future' % ('48 hours' if plan == BOUNDED else '45 days'))
     require(re.fullmatch(r'arn:aws:acm:' + _REGION_RE + ':' + _ACCOUNT_RE + r':certificate/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', config['tls_certificate_arn']), 'certificate must belong to the selected account/region')
     require(config['image_architecture'] in ('ARM64', 'X86_64'), 'invalid image architecture')
     require(type(config['service_desired_count']) is int and config['service_desired_count'] in (0, 1), 'desired count must be zero or one')
