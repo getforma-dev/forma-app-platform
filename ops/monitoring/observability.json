@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Forma beta observability, the outside-in golden signals (2026-11-15). A standalone stack beside GenuiSyntheticFoundation, deployed in us-east-1, where Route 53 publishes health-check metrics: two Route 53 HTTPS health checks probing the app and fAuth from three regions, an alarm on each, two SLO alarms on the beta's load balancer (5xx rate, median response time) and one CloudWatch dashboard. The alarms publish to the topic of stack forma-beta-trial-alarms by parameter. It creates no IAM resource and references the beta only by identifier, so it needs no app release and promotion's infrastructure digest is untouched. No string matching, fast interval or latency measurement, no CloudWatch Logs and no canaries: those cost money. Deploy and delete it by hand (docs/operations/TRIAL-RUNBOOK.md 11.8).",
+  "Description": "Forma beta observability, the outside-in golden signals and the service's own log events (2026-11-15). A standalone stack beside GenuiSyntheticFoundation, deployed in us-east-1, where Route 53 publishes health-check metrics: two Route 53 HTTPS health checks probing the app and fAuth from three regions, an alarm on each, two SLO alarms on the beta's load balancer (5xx rate, median response time), five metric filters counting the app log group's named JSON events (AI usage at 80 and 100 percent, failed model attempts, 5xx answers, parser kills), an alarm on each, and one CloudWatch dashboard. The log group and the alarm topic (stack forma-beta-trial-alarms) are parameters. It creates no IAM resource and references the beta only by identifier, so it needs no app release and promotion's infrastructure digest is untouched. No string matching, fast interval or latency measurement, no Logs Insights query and no canaries: those cost money. Deploy and delete it by hand (docs/operations/TRIAL-RUNBOOK.md 11.8).",
   "Parameters": {
     "AlarmTopicArn": {
       "Type": "String",
@@ -62,6 +62,12 @@
       "AllowedPattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$",
       "ConstraintDescription": "A lowercase DNS hostname, no scheme, port or path.",
       "Description": "fAuth's public hostname; the probe asks https://<this>/health."
+    },
+    "AppLogGroupName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_/.#-]{1,512}$",
+      "ConstraintDescription": "A CloudWatch Logs log group name, not its ARN.",
+      "Description": "The app log group every container of GenuiSyntheticFoundation writes to, the service's genui/workspace/ streams included (the awslogs-group of the operator task definition, runbook 11 setup's LOG_GROUP). The five metric filters count its named JSON events."
     }
   },
   "Resources": {
@@ -199,11 +205,146 @@
         "OKActions": [{"Ref": "AlarmTopicArn"}]
       }
     },
+    "ModelUsageWarningFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterName": {"Fn::Sub": "${AWS::StackName}-model-usage-warning"},
+        "LogGroupName": {"Ref": "AppLogGroupName"},
+        "FilterPattern": "{ $.event = \"model.usage_threshold\" && $.percent = 80 }",
+        "MetricTransformations": [{"MetricNamespace": "Forma/Beta", "MetricName": "ModelUsageWarning", "MetricValue": "1", "DefaultValue": 0}]
+      }
+    },
+    "ModelUsageReachedFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterName": {"Fn::Sub": "${AWS::StackName}-model-usage-reached"},
+        "LogGroupName": {"Ref": "AppLogGroupName"},
+        "FilterPattern": "{ $.event = \"model.usage_threshold\" && $.percent = 100 }",
+        "MetricTransformations": [{"MetricNamespace": "Forma/Beta", "MetricName": "ModelUsageReached", "MetricValue": "1", "DefaultValue": 0}]
+      }
+    },
+    "ModelCallFailedFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterName": {"Fn::Sub": "${AWS::StackName}-model-call-failed"},
+        "LogGroupName": {"Ref": "AppLogGroupName"},
+        "FilterPattern": "{ $.event = \"model.call_failed\" }",
+        "MetricTransformations": [{"MetricNamespace": "Forma/Beta", "MetricName": "ModelCallFailed", "MetricValue": "1", "DefaultValue": 0}]
+      }
+    },
+    "ServerErrorFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterName": {"Fn::Sub": "${AWS::StackName}-server-error"},
+        "LogGroupName": {"Ref": "AppLogGroupName"},
+        "FilterPattern": "{ $.event = \"http.server_error\" }",
+        "MetricTransformations": [{"MetricNamespace": "Forma/Beta", "MetricName": "ServerError", "MetricValue": "1", "DefaultValue": 0}]
+      }
+    },
+    "ParserKilledFilter": {
+      "Type": "AWS::Logs::MetricFilter",
+      "Properties": {
+        "FilterName": {"Fn::Sub": "${AWS::StackName}-parser-killed"},
+        "LogGroupName": {"Ref": "AppLogGroupName"},
+        "FilterPattern": "{ $.event = \"parser.killed\" }",
+        "MetricTransformations": [{"MetricNamespace": "Forma/Beta", "MetricName": "ParserKilled", "MetricValue": "1", "DefaultValue": 0}]
+      }
+    },
+    "AiUsageWarningAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-ai-usage-80"},
+        "AlarmDescription": "Today's AI allowance for the organization or a member reached 80 %; building and Ask pause at 100 % until 00:00 UTC. Check /admin and the canvas; raise GENUI_MODEL_DAILY_CALLS only with a release. The service logs model.usage_threshold once per UTC day per scope, so this fires once and reads OK again five minutes later; the allowance itself returns at 00:00 UTC (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "Forma/Beta",
+        "MetricName": "ModelUsageWarning",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "AiUsageReachedAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-ai-usage-100"},
+        "AlarmDescription": "Today's AI allowance for the organization or a member is used up: building and Ask answer 429 daily_limit until 00:00 UTC, when the count starts again. Check /admin for which scope reached it (the whole organization, or one member) and the canvas; raise GENUI_MODEL_DAILY_CALLS or GENUI_MODEL_DAILY_CALLS_PER_MEMBER only with a release. Fires once per UTC day per scope and reads OK again five minutes later; the OK does not mean the allowance is back (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "Forma/Beta",
+        "MetricName": "ModelUsageReached",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "ModelFailuresAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-model-failures"},
+        "AlarmDescription": "More than 5 model attempts failed in five minutes (model.call_failed, one line per failed attempt): the provider is failing or rate-limiting. Its class and status fields say which; a refused call at the daily cap is not counted here, it logs model.call refused_cap and raises -ai-usage-100 (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "Forma/Beta",
+        "MetricName": "ModelCallFailed",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "ServerErrorsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-server-errors"},
+        "AlarmDescription": "The service itself answered more than 5 requests with a 5xx in two of three five-minute periods (http.server_error, with the status, method and route template, never the raw path). Unlike -error-rate it counts the service's own answers, whatever the traffic, and not the balancer's (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "Forma/Beta",
+        "MetricName": "ServerError",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 3,
+        "DatapointsToAlarm": 2,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "ParserKillsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-parser-kills"},
+        "AlarmDescription": "The supervisor killed more than 3 import parsers in five minutes (parser.killed, reason rss, deadline or output): either one member is feeding files that hit the limits, or a release made ordinary files hit them. A parser crash is not a kill and is not counted (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "Forma/Beta",
+        "MetricName": "ParserKilled",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "DatapointsToAlarm": 1,
+        "Threshold": 3,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
     "GoldenSignalsDashboard": {
       "Type": "AWS::CloudWatch::Dashboard",
       "Properties": {
         "DashboardName": "forma-beta-golden-signals",
-        "DashboardBody": {"Fn::Sub": "{\"start\":\"-PT6H\",\"periodOverride\":\"inherit\",\"widgets\":[{\"type\":\"text\",\"x\":0,\"y\":0,\"width\":24,\"height\":7,\"properties\":{\"markdown\":\"## Forma beta golden signals\\nEach row answers one question about the beta, from the outside in.\\n* **Traffic**: how many requests reach the load balancer, and how many the web ACL allowed or blocked.\\n* **Errors**: 4xx and 5xx answers from the service and the balancer, and the 5xx share the error-rate alarm watches (over 2% of at least 100 requests).\\n* **Latency**: how long the service takes to answer; the alarm watches the median, because model calls make the slowest few percent take tens of seconds.\\n* **Saturation**: how busy the service task, the database and the fAuth host are.\\n* **Health**: whether Route 53 reaches the app and fAuth from three regions (1 up, 0 down), and how many targets the balancer sees healthy.\\n* **Email**: what SES sent, and what bounced or was marked as spam.\\n\\nWhat each alarm means and what to check first: [runbook 11.8](https://github.com/getforma-dev/forma-app-platform/blob/main/docs/operations/TRIAL-RUNBOOK.md#118-uptime-probes-slo-alarms-and-the-golden-signals-dashboard-about-360-a-month).\"}},{\"type\":\"metric\",\"x\":0,\"y\":7,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Traffic: load balancer requests\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":12,\"y\":7,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Traffic: web ACL allowed and blocked\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/WAFV2\",\"AllowedRequests\",\"WebACL\",\"${WebAclName}\",\"Region\",\"us-east-1\",\"Rule\",\"ALL\"],[\"AWS/WAFV2\",\"BlockedRequests\",\"WebACL\",\"${WebAclName}\",\"Region\",\"us-east-1\",\"Rule\",\"ALL\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":13,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Errors: 4xx and 5xx answers\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"HTTPCode_Target_4XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_4XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":12,\"y\":13,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Errors: 5xx percent of requests (alarm above 2)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"target5xx\",\"visible\":false}],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"elb5xx\",\"visible\":false}],[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"requests\",\"visible\":false}],[{\"expression\":\"FILL(target5xx, 0) + FILL(elb5xx, 0)\",\"id\":\"errors\",\"label\":\"5xx answers\",\"visible\":false}],[{\"expression\":\"IF(requests >= 100, errors/requests*100, 0)\",\"id\":\"rate\",\"label\":\"5xx percent of requests\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"error-rate alarm\",\"value\":2}]}}},{\"type\":\"metric\",\"x\":0,\"y\":19,\"width\":24,\"height\":6,\"properties\":{\"title\":\"Latency: target response time (seconds)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"p50\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p50\",\"label\":\"p50\"}],[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p90\",\"label\":\"p90\"}],[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p99\",\"label\":\"p99\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"slow-median alarm (p50)\",\"value\":2}]}}},{\"type\":\"metric\",\"x\":0,\"y\":25,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: service task CPU and memory (%)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/ECS\",\"CPUUtilization\",\"ClusterName\",\"${ClusterName}\",\"ServiceName\",\"${ServiceName}\"],[\"AWS/ECS\",\"MemoryUtilization\",\"ClusterName\",\"${ClusterName}\",\"ServiceName\",\"${ServiceName}\"]]}},{\"type\":\"metric\",\"x\":8,\"y\":25,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: database CPU, connections and freeable memory\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/RDS\",\"CPUUtilization\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Average\"}],[\"AWS/RDS\",\"DatabaseConnections\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Maximum\"}],[\"AWS/RDS\",\"FreeableMemory\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Minimum\",\"yAxis\":\"right\"}]]}},{\"type\":\"metric\",\"x\":16,\"y\":25,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: fAuth host CPU (%)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/EC2\",\"CPUUtilization\",\"InstanceId\",\"${FauthInstanceId}\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":31,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Health: uptime probes (1 up, 0 down)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Minimum\",\"period\":60,\"metrics\":[[\"AWS/Route53\",\"HealthCheckStatus\",\"HealthCheckId\",\"${AppHealthCheck}\",{\"label\":\"app /health/ready\"}],[\"AWS/Route53\",\"HealthCheckStatus\",\"HealthCheckId\",\"${FauthHealthCheck}\",{\"label\":\"fAuth /health\"}]],\"yAxis\":{\"left\":{\"min\":0,\"max\":1}}}},{\"type\":\"metric\",\"x\":12,\"y\":31,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Health: healthy targets of the main service\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Minimum\",\"period\":60,\"metrics\":[[\"AWS/ApplicationELB\",\"HealthyHostCount\",\"TargetGroup\",\"${TargetGroupFullName}\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":37,\"width\":24,\"height\":6,\"properties\":{\"title\":\"Email: SES sent, bounced and complained\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/SES\",\"Send\"],[\"AWS/SES\",\"Bounce\"],[\"AWS/SES\",\"Complaint\"]]}}]}"}
+        "DashboardBody": {"Fn::Sub": "{\"start\":\"-PT6H\",\"periodOverride\":\"inherit\",\"widgets\":[{\"type\":\"text\",\"x\":0,\"y\":0,\"width\":24,\"height\":8,\"properties\":{\"markdown\":\"## Forma beta golden signals\\nEach row answers one question about the beta, from the outside in, then from the service's own log.\\n* **Traffic**: how many requests reach the load balancer, and how many the web ACL allowed or blocked.\\n* **Errors**: 4xx and 5xx answers from the service and the balancer, and the 5xx share the error-rate alarm watches (over 2% of at least 100 requests).\\n* **Latency**: how long the service takes to answer; the alarm watches the median, because model calls make the slowest few percent take tens of seconds.\\n* **Saturation**: how busy the service task, the database and the fAuth host are.\\n* **Health**: whether Route 53 reaches the app and fAuth from three regions (1 up, 0 down), and how many targets the balancer sees healthy.\\n* **Email**: what SES sent, and what bounced or was marked as spam.\\n* **Events**: what the service itself reported in its JSON log: the day's AI allowance reaching 80 % and 100 % (building and Ask pause at 100 % until 00:00 UTC), failed model attempts, 5xx answers by the service, and parsers the supervisor killed.\\n\\nWhat each alarm means and what to check first: [runbook 11.8](https://github.com/getforma-dev/forma-app-platform/blob/main/docs/operations/TRIAL-RUNBOOK.md#118-uptime-probes-slo-alarms-log-event-alarms-and-the-golden-signals-dashboard-about-560-a-month).\"}},{\"type\":\"metric\",\"x\":0,\"y\":8,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Traffic: load balancer requests\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":12,\"y\":8,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Traffic: web ACL allowed and blocked\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/WAFV2\",\"AllowedRequests\",\"WebACL\",\"${WebAclName}\",\"Region\",\"us-east-1\",\"Rule\",\"ALL\"],[\"AWS/WAFV2\",\"BlockedRequests\",\"WebACL\",\"${WebAclName}\",\"Region\",\"us-east-1\",\"Rule\",\"ALL\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":14,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Errors: 4xx and 5xx answers\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"HTTPCode_Target_4XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_4XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":12,\"y\":14,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Errors: 5xx percent of requests (alarm above 2)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"target5xx\",\"visible\":false}],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"elb5xx\",\"visible\":false}],[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"requests\",\"visible\":false}],[{\"expression\":\"FILL(target5xx, 0) + FILL(elb5xx, 0)\",\"id\":\"errors\",\"label\":\"5xx answers\",\"visible\":false}],[{\"expression\":\"IF(requests >= 100, errors/requests*100, 0)\",\"id\":\"rate\",\"label\":\"5xx percent of requests\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"error-rate alarm\",\"value\":2}]}}},{\"type\":\"metric\",\"x\":0,\"y\":20,\"width\":24,\"height\":6,\"properties\":{\"title\":\"Latency: target response time (seconds)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"p50\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p50\",\"label\":\"p50\"}],[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p90\",\"label\":\"p90\"}],[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p99\",\"label\":\"p99\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"slow-median alarm (p50)\",\"value\":2}]}}},{\"type\":\"metric\",\"x\":0,\"y\":26,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: service task CPU and memory (%)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/ECS\",\"CPUUtilization\",\"ClusterName\",\"${ClusterName}\",\"ServiceName\",\"${ServiceName}\"],[\"AWS/ECS\",\"MemoryUtilization\",\"ClusterName\",\"${ClusterName}\",\"ServiceName\",\"${ServiceName}\"]]}},{\"type\":\"metric\",\"x\":8,\"y\":26,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: database CPU, connections and freeable memory\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/RDS\",\"CPUUtilization\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Average\"}],[\"AWS/RDS\",\"DatabaseConnections\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Maximum\"}],[\"AWS/RDS\",\"FreeableMemory\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Minimum\",\"yAxis\":\"right\"}]]}},{\"type\":\"metric\",\"x\":16,\"y\":26,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: fAuth host CPU (%)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/EC2\",\"CPUUtilization\",\"InstanceId\",\"${FauthInstanceId}\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":32,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Health: uptime probes (1 up, 0 down)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Minimum\",\"period\":60,\"metrics\":[[\"AWS/Route53\",\"HealthCheckStatus\",\"HealthCheckId\",\"${AppHealthCheck}\",{\"label\":\"app /health/ready\"}],[\"AWS/Route53\",\"HealthCheckStatus\",\"HealthCheckId\",\"${FauthHealthCheck}\",{\"label\":\"fAuth /health\"}]],\"yAxis\":{\"left\":{\"min\":0,\"max\":1}}}},{\"type\":\"metric\",\"x\":12,\"y\":32,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Health: healthy targets of the main service\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Minimum\",\"period\":60,\"metrics\":[[\"AWS/ApplicationELB\",\"HealthyHostCount\",\"TargetGroup\",\"${TargetGroupFullName}\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":38,\"width\":24,\"height\":6,\"properties\":{\"title\":\"Email: SES sent, bounced and complained\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/SES\",\"Send\"],[\"AWS/SES\",\"Bounce\"],[\"AWS/SES\",\"Complaint\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":44,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Events: AI allowance reached 80 % and 100 % (alarm at 1)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"Forma/Beta\",\"ModelUsageWarning\",{\"label\":\"80 % (ai-usage-80)\"}],[\"Forma/Beta\",\"ModelUsageReached\",{\"label\":\"100 % (ai-usage-100)\"}]],\"yAxis\":{\"left\":{\"min\":0}}}},{\"type\":\"metric\",\"x\":12,\"y\":44,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Events: failed model attempts, 5xx answers and parser kills\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"Forma/Beta\",\"ModelCallFailed\",{\"label\":\"model attempts failed (alarm above 5)\"}],[\"Forma/Beta\",\"ServerError\",{\"label\":\"5xx answers by the service (alarm above 5)\"}],[\"Forma/Beta\",\"ParserKilled\",{\"label\":\"parser kills (alarm above 3)\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"model-failures and server-errors alarms\",\"value\":5},{\"label\":\"parser-kills alarm\",\"value\":3}]}}}]}"}
       }
     }
   },
