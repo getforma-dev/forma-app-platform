@@ -82,10 +82,11 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
             assert b'action="/invite/validate"' in body and b'name="code"' in body and b'<script src' not in body
         with urllib.request.urlopen(origin,timeout=3) as response: assert b'href="/invite"' in response.read()
         # APP-223: the public beta notice page and the shared site footer, no
-        # cookie; any other method is the uniform 404, as for /about. The
-        # version shown is the one source's `NOTICE_VERSION` (APP-227), never
-        # a number pasted here.
-        notice_version = re.search(r'^pub const NOTICE_VERSION: i32 = (\d+);$', (Path(__file__).resolve().parents[1] / 'src' / 'auth' / 'notice.rs').read_text(), re.M).group(1)
+        # cookie; any other method is the uniform 404, as for /about. The smoke
+        # also runs inside the built image, which carries no Rust source, so the
+        # version is stated here; `auth::notice::tests::the_notice_is_version_two_and_general`
+        # pins the one source (`NOTICE_VERSION`, APP-227) and fails first on a bump.
+        notice_version = '2'
         with urllib.request.urlopen(origin+'/notice',timeout=3) as response:
             body=response.read()
             assert response.status==200 and response.headers['Content-Type']=='text/html; charset=utf-8' and response.headers['Cache-Control']=='no-store'
