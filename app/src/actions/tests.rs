@@ -525,7 +525,16 @@ async fn real_haiku_parse_smoke() {
         "Yesterday I paid 42.50 for a Figma seat for the design team; Sarah signs off",
     ] {
         let started = std::time::Instant::now();
-        let parse = parser.parse(utterance, &catalog, false, today, None).await;
+        let parse = parser
+            .parse(
+                utterance,
+                &catalog,
+                false,
+                today,
+                &crate::composer::model::test_caller(),
+                crate::composer::model::Source::Action,
+            )
+            .await;
         let ms = started.elapsed().as_millis();
         match parse {
             Ok(parse) => {
@@ -706,7 +715,14 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
             "can you show the claims over 50 dollars",
         ] {
             let parse = parser
-                .parse(utterance, &catalog, demo, today, None)
+                .parse(
+                    utterance,
+                    &catalog,
+                    demo,
+                    today,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Action,
+                )
                 .await
                 .unwrap();
             assert_eq!(parse.parsed.kind, Kind::Place, "{utterance} (demo {demo})");
@@ -716,7 +732,14 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
     // A read sentence with a threshold spends no model call at all.
     let before = model.calls.load(Ordering::SeqCst);
     parser
-        .parse("Review expenses over $200", &catalog, false, today, None)
+        .parse(
+            "Review expenses over $200",
+            &catalog,
+            false,
+            today,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
+        )
         .await
         .unwrap();
     assert_eq!(model.calls.load(Ordering::SeqCst), before);
@@ -727,7 +750,14 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
         "I spent over $200 at Nobu last night",
     ] {
         let parse = parser
-            .parse(utterance, &catalog, false, today, None)
+            .parse(
+                utterance,
+                &catalog,
+                false,
+                today,
+                &crate::composer::model::test_caller(),
+                crate::composer::model::Source::Action,
+            )
             .await
             .unwrap();
         assert_eq!(parse.parsed.kind, Kind::Create, "{utterance}");
@@ -740,7 +770,8 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
             &catalog,
             true,
             today,
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
         )
         .await
         .unwrap();
@@ -755,7 +786,8 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
             &catalog,
             true,
             today,
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
         )
         .await
         .unwrap();
@@ -763,7 +795,14 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
     assert_eq!(sweetgreen.parsed.kind, Kind::Create);
     assert_eq!(sweetgreen.parsed.values["merchant"], "Sweetgreen");
     let decide = parser
-        .parse("approve the Nobu dinner", &catalog, true, today, None)
+        .parse(
+            "approve the Nobu dinner",
+            &catalog,
+            true,
+            today,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
+        )
         .await
         .unwrap();
     assert_eq!(decide.parsed.kind, Kind::Decide);
@@ -773,13 +812,21 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
             &catalog,
             true,
             today,
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
         )
         .await
         .unwrap();
     assert_eq!(open.parsed.kind, Kind::Open);
     let show = parser
-        .parse("show my expenses", &catalog, true, today, None)
+        .parse(
+            "show my expenses",
+            &catalog,
+            true,
+            today,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
+        )
         .await
         .unwrap();
     assert_eq!(show.parsed.kind, Kind::Open);
@@ -789,7 +836,8 @@ async fn a_sentence_that_reads_or_asks_is_never_a_command_draft() {
             &catalog,
             true,
             today,
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Action,
         )
         .await
         .unwrap();

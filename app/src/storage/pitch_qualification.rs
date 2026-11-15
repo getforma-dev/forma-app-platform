@@ -1312,9 +1312,15 @@ async fn campaign() {
 
     // --- APP-101: with no model, the instant pick works and the transform is kept ---
     let keyless = composer::Composer::new(None, "r", "g");
-    let kept = composer::routes::compose_for(&stores, &keyless, &maya_request, INTENT)
-        .await
-        .unwrap();
+    let kept = composer::routes::compose_for(
+        &stores,
+        &keyless,
+        &maya_request,
+        INTENT,
+        crate::composer::model::Source::Canvas,
+    )
+    .await
+    .unwrap();
     assert_eq!(kept.origin, composer::Origin::Retrieved);
     assert_eq!(kept.app, EXPENSE_APP);
     assert_eq!(kept.tailoring, composer::routes::Tailoring::Kept);

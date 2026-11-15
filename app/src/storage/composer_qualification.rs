@@ -320,11 +320,25 @@ async fn campaign() {
     );
     let (script, composer) = Script::composer(vec![Ok(router_reply(APP, "high", "x"))]);
     assert_eq!(
-        compose_for(&stores, &composer, &revoked, intent).await,
+        compose_for(
+            &stores,
+            &composer,
+            &revoked,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::NotFound)
     );
     assert_eq!(
-        compose_for(&stores, &composer, &nobody, intent).await,
+        compose_for(
+            &stores,
+            &composer,
+            &nobody,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::NotFound)
     );
     assert_eq!(
@@ -344,7 +358,14 @@ async fn campaign() {
     let disabled = Composer::new(None, "r", "g");
     let prepared = footprint(&fixture).await;
     assert_eq!(
-        compose_for(&stores, &disabled, &member, intent).await,
+        compose_for(
+            &stores,
+            &disabled,
+            &member,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::ComposerUnavailable)
     );
     // APP-085: the member's only owned app is under review, so this explicit
@@ -364,9 +385,15 @@ async fn campaign() {
 
     // --- Retrieved: a confident router choice instantiates the library app ---
     let (script, composer) = Script::composer(vec![Ok(router_reply(APP, "high", "ignored"))]);
-    let retrieved = compose_for(&stores, &composer, &member, intent)
-        .await
-        .unwrap();
+    let retrieved = compose_for(
+        &stores,
+        &composer,
+        &member,
+        intent,
+        crate::composer::model::Source::Canvas,
+    )
+    .await
+    .unwrap();
     assert_eq!(script.calls(), 1, "the router alone; no generation call");
     assert_eq!(retrieved.origin, Origin::Retrieved);
     assert_eq!(retrieved.app, APP);
@@ -425,9 +452,15 @@ async fn campaign() {
         Ok(router_reply("none", "low", "")),
         Ok(serde_json::to_string(&runnable_northstar()).unwrap()),
     ]);
-    let generated = compose_for(&stores, &composer, &member, intent)
-        .await
-        .unwrap();
+    let generated = compose_for(
+        &stores,
+        &composer,
+        &member,
+        intent,
+        crate::composer::model::Source::Canvas,
+    )
+    .await
+    .unwrap();
     assert_eq!(script.calls(), 2);
     assert_eq!(generated.origin, Origin::Generated);
     assert_eq!(
@@ -526,7 +559,14 @@ async fn campaign() {
         .to_string()),
     ]);
     assert_eq!(
-        compose_for(&stores, &composer, &member, intent).await,
+        compose_for(
+            &stores,
+            &composer,
+            &member,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::CouldNotCompose("admission_refused"))
     );
     assert_eq!(
@@ -561,9 +601,15 @@ async fn campaign() {
     // --- Adapted: a typed patch of the library match, re-admitted whole ---
     let (script, composer) =
         Script::composer(vec![Ok(router_reply(APP, "medium", "Traffic review"))]);
-    let adapted = compose_for(&stores, &composer, &member, intent)
-        .await
-        .unwrap();
+    let adapted = compose_for(
+        &stores,
+        &composer,
+        &member,
+        intent,
+        crate::composer::model::Source::Canvas,
+    )
+    .await
+    .unwrap();
     assert_eq!(script.calls(), 1, "no generation call");
     assert_eq!(adapted.origin, Origin::Adapted);
     assert_eq!(adapted.title, "Traffic review");
@@ -617,6 +663,7 @@ async fn campaign() {
         &composer,
         &member,
         "Track the team's time-off requests",
+        crate::composer::model::Source::Canvas,
     )
     .await
     .unwrap();
@@ -677,7 +724,7 @@ async fn campaign() {
         &stores,
         &composer,
         &member,
-        "Collect suggestions from everyone; each person sees only the suggestions they sent in, and only reviewers can accept one",
+        "Collect suggestions from everyone; each person sees only the suggestions they sent in, and only reviewers can accept one", crate::composer::model::Source::Canvas,
     )
     .await
     .unwrap();
@@ -797,6 +844,7 @@ async fn campaign() {
         &composer,
         &member,
         "One shared current item that I advance and close",
+        crate::composer::model::Source::Canvas,
     )
     .await
     .unwrap();
@@ -853,7 +901,14 @@ async fn campaign() {
         Err(ModelError::Unavailable),
     ]);
     assert_eq!(
-        compose_for(&stores, &composer, &member, intent).await,
+        compose_for(
+            &stores,
+            &composer,
+            &member,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::CouldNotCompose("model_unavailable"))
     );
     assert_eq!(footprint(&fixture).await, before);
@@ -862,7 +917,14 @@ async fn campaign() {
     // is written. The ungranted teammate's read denial is the earlier check.
     let (script, composer) = Script::composer(vec![Ok(router_reply(APP, "high", ""))]);
     assert_eq!(
-        compose_for(&stores, &composer, &revoked, intent).await,
+        compose_for(
+            &stores,
+            &composer,
+            &revoked,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::NotFound)
     );
     assert_eq!(script.calls(), 0);
@@ -889,7 +951,14 @@ async fn campaign() {
         "generation-model",
     );
     assert_eq!(
-        compose_for(&stores, &capped, &member, intent).await,
+        compose_for(
+            &stores,
+            &capped,
+            &member,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::DailyLimit)
     );
     assert_eq!(
@@ -898,7 +967,14 @@ async fn campaign() {
         "the router call only"
     );
     assert_eq!(
-        compose_for(&stores, &capped, &member, intent).await,
+        compose_for(
+            &stores,
+            &capped,
+            &member,
+            intent,
+            crate::composer::model::Source::Canvas
+        )
+        .await,
         Err(Refused::DailyLimit)
     );
     assert_eq!(
@@ -933,6 +1009,7 @@ async fn campaign() {
         &member,
         "Northstar investigation for the last 7 days",
         &crate::composer::routes::Pin::App(APP.into()),
+        crate::composer::model::Source::Canvas,
     )
     .await;
     assert!(
@@ -1156,6 +1233,7 @@ async fn campaign() {
             &composer,
             &bare,
             "Track the team's time-off requests",
+            crate::composer::model::Source::Canvas,
         )
         .await,
         Err(Refused::CouldNotCompose("admission_refused"))
@@ -1181,6 +1259,7 @@ async fn campaign() {
         &composer,
         &bare,
         "Track the team's time-off requests",
+        crate::composer::model::Source::Canvas,
     )
     .await
     .unwrap();
@@ -1412,6 +1491,7 @@ async fn campaign() {
             &composer,
             &empty_member,
             "Track the team's time-off requests",
+            crate::composer::model::Source::Canvas,
         )
         .await,
         Err(Refused::CouldNotCompose("no_owner_publish_policy"))
@@ -1462,6 +1542,7 @@ async fn campaign() {
             &template_member,
             template.description,
             &pin,
+            crate::composer::model::Source::Canvas,
         )
         .await
         .unwrap()
@@ -1475,6 +1556,7 @@ async fn campaign() {
             &template_member,
             template.description,
             &pin,
+            crate::composer::model::Source::Canvas,
         )
         .await
         .unwrap()
@@ -1882,9 +1964,15 @@ async fn participation_phase(
     );
     let mut works = Vec::new();
     for (sentence, _) in &sentences {
-        let work = compose_for(stores, &composer, owner, sentence)
-            .await
-            .unwrap_or_else(|refused| panic!("{sentence}: {refused:?}"));
+        let work = compose_for(
+            stores,
+            &composer,
+            owner,
+            sentence,
+            crate::composer::model::Source::Canvas,
+        )
+        .await
+        .unwrap_or_else(|refused| panic!("{sentence}: {refused:?}"));
         assert_eq!(work.origin, Origin::Generated, "{sentence}");
         assert_eq!(work.app, shell, "on the member's authoring shell");
         works.push(work);

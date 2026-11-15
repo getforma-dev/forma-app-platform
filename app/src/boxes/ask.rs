@@ -47,7 +47,7 @@ use crate::{
     auth::csrf,
     composer::{
         ask::{self as talk, Answer},
-        model::{self, ModelError},
+        model::{self, Caller, ModelError, Source},
     },
     demo,
     http::{self, UniformPath},
@@ -737,17 +737,24 @@ pub async fn ask_post(
         return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
     }
     let (user, known) = user(&question, &tables);
-    let member_key = model::member_of(&member);
+    let caller = Caller::member(&member);
     let reply = match state
         .composer
-        .complete_fast(SYSTEM, user, ASK_MAX_TOKENS, ASK_BUDGET, Some(&member_key))
+        .complete_fast(
+            SYSTEM,
+            user,
+            ASK_MAX_TOKENS,
+            ASK_BUDGET,
+            &caller,
+            Source::Folder,
+        )
         .await
     {
         Ok(reply) => reply,
         Err(error) => {
             log("model", error.code(), 0);
             if error == ModelError::DailyCap {
-                return model::daily_limit_for(Some(&member_key));
+                return model::daily_limit_for(&caller);
             }
             return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_answer");
         }

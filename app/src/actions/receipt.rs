@@ -25,7 +25,7 @@ use super::{
     prompt::{self, CatalogApp},
     rehearsed, Kind, Parse, ParseFailure, Parsed, Parser,
 };
-use crate::composer::model::{ImageInput, ModelRequest};
+use crate::composer::model::{Caller, ImageInput, ModelRequest, Source};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::{fmt, time::Duration};
@@ -430,6 +430,7 @@ pub fn merge(
 impl Parser {
     /// Parses a receipt (and the member's optional words) into a `create`
     /// over the expense app of `catalog` (module notes).
+    #[allow(clippy::too_many_arguments)]
     pub async fn parse_receipt(
         &self,
         utterance: &str,
@@ -437,7 +438,8 @@ impl Parser {
         catalog: &[CatalogApp],
         demo: bool,
         today: &str,
-        member: Option<&str>,
+        caller: &Caller,
+        source: Source,
     ) -> Result<Parse, ParseFailure> {
         let started = std::time::Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -475,7 +477,8 @@ impl Parser {
             user: prompt::parse_user(utterance, catalog, today),
             max_tokens: RECEIPT_MAX_TOKENS,
             budget: RECEIPT_BUDGET,
-            member: member.map(str::to_owned),
+            caller: caller.clone(),
+            source,
         };
         let image = ImageInput {
             media_type: receipt.media_type,

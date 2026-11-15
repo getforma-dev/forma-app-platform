@@ -41,7 +41,7 @@
 //! value or a spec.
 use super::{
     ask,
-    model::{self, ModelError},
+    model::{self, Caller, ModelError, Source},
     shape, Composer,
 };
 use crate::{
@@ -353,7 +353,7 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
         if !state.composer.enabled() {
             return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
         }
-        let member_key = model::member_of(&member);
+        let caller = Caller::member(&member);
         let reply = state
             .composer
             .complete_fast(
@@ -362,11 +362,12 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
                     .to_string(),
                 ASK_MAX_TOKENS,
                 ASK_BUDGET,
-                Some(&member_key),
+                &caller,
+                Source::Ask,
             )
             .await;
         if matches!(reply, Err(ModelError::DailyCap)) {
-            return model::daily_limit_for(Some(&member_key));
+            return model::daily_limit_for(&caller);
         }
         let answer = match reply
             .ok()
@@ -456,7 +457,8 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
                     ),
                     ASK_MAX_TOKENS,
                     ASK_BUDGET,
-                    Some(&model::member_of(&member)),
+                    &Caller::member(&member),
+                    Source::Ask,
                 )
                 .await
             {
@@ -464,7 +466,7 @@ async fn ask_route(State(state): State<Arc<Talk>>, request: Request) -> Response
                 Err(error) => {
                     log_refused(error.code());
                     if error == ModelError::DailyCap {
-                        return model::daily_limit_for(Some(&model::member_of(&member)));
+                        return model::daily_limit_for(&Caller::member(&member));
                     }
                     return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_answer");
                 }
@@ -821,17 +823,17 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
     };
     let unavailable = || http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
     let refused = || http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_shape");
-    // APP-215: every model call of this shape is the member's.
-    let member_key = model::member_of(&member);
+    // APP-215, APP-222: every model call of this shape is the member's.
+    let caller = Caller::member(&member);
     // D10: a model failure is `could_not_shape`, the daily cap `daily_limit`.
     let model_refused = |error: ModelError| match error {
-        ModelError::DailyCap => model::daily_limit_for(Some(&member_key)),
+        ModelError::DailyCap => model::daily_limit_for(&caller),
         _ => refused(),
     };
     let model = |system: String| {
         let composer = state.composer.clone();
         let user = shape::user(&address, &words);
-        let member_key = member_key.clone();
+        let caller = caller.clone();
         async move {
             composer
                 .complete_fast(
@@ -839,7 +841,8 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
                     user,
                     SHAPE_MAX_TOKENS,
                     SHAPE_BUDGET,
-                    Some(&member_key),
+                    &caller,
+                    Source::Shape,
                 )
                 .await
         }
@@ -897,7 +900,7 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
         } => {
             match state
                 .customizer
-                .customize(*widget, current, &words, demo, Some(&member_key))
+                .customize(*widget, current, &words, demo, &caller, Source::Shape)
                 .await
             {
                 Ok(outcome) => (Ok(outcome.state), outcome.source.as_str()),
@@ -911,7 +914,7 @@ async fn shape_route(State(state): State<Arc<Talk>>, request: Request) -> Respon
                 }
                 Err(Failure::DailyLimit) => {
                     log_refused("model_daily_cap");
-                    return model::daily_limit_for(Some(&member_key));
+                    return model::daily_limit_for(&caller);
                 }
             }
         }

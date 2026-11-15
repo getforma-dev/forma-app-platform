@@ -24,6 +24,7 @@ use super::{
     explain::{self, Part, ViewResult},
     routes::{self, Boxes},
 };
+use crate::composer::model::{Caller, Source};
 use crate::{
     auth::csrf,
     composer::model::{CitedReply, DocumentInput},
@@ -157,10 +158,12 @@ fn ms(since: Instant) -> u64 {
 }
 
 /// Generates the folder's brief (owner only) and returns it filled.
+/// `source` (APP-222) is the surface asking, logged with its model calls.
 pub async fn generate(
     state: &Boxes,
     member: &TrustedRequest,
     box_id: &str,
+    source: Source,
 ) -> Result<Value, routes::BuildRefusal> {
     use routes::BuildRefusal;
     let started = Instant::now();
@@ -257,7 +260,8 @@ pub async fn generate(
                     &documents,
                     700,
                     PDF_BUDGET,
-                    Some(&crate::composer::model::member_of(member)),
+                    &Caller::member(member),
+                    source,
                 )
                 .await
             {
@@ -313,7 +317,8 @@ pub async fn generate(
                 input,
                 1200,
                 SUMMARY_BUDGET,
-                Some(&crate::composer::model::member_of(member)),
+                &Caller::member(member),
+                source,
             )
             .await;
         tracing::info!(
@@ -588,11 +593,11 @@ pub async fn brief_post(
         return http::not_found();
     };
     if let Err(refused) = routes::admit_explain(&state, &member) {
-        return refused.response_for(Some(&crate::composer::model::member_of(&member)));
+        return refused.response_for(&Caller::member(&member));
     }
-    match generate(&state, &member, &box_id).await {
+    match generate(&state, &member, &box_id, Source::Folder).await {
         Ok(value) => routes::document(StatusCode::OK, &value),
-        Err(refused) => refused.response_for(Some(&crate::composer::model::member_of(&member))),
+        Err(refused) => refused.response_for(&Caller::member(&member)),
     }
 }
 

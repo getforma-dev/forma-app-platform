@@ -22,13 +22,27 @@
 //! member first takes one slot of that member's own daily allowance
 //! ([`MemberDailyCap`], [`member_daily_cap`], 80 a day by default), so one or
 //! two people cannot spend the whole class's 1,000. The member travels in
-//! [`ModelRequest::member`], set by every route that calls a model for a
-//! signed-in member (the composer, Ask, Shape, the folders, the action path,
-//! the widget customizer, MCP and Slack, which act as the member). A request
-//! without a member (none in product code: the demo rehearsals call no model,
-//! and the stubs in tests do) counts against the process cap only. A member
+//! [`ModelRequest::caller`] as a [`Caller::Member`], named by every route that
+//! calls a model for a signed-in member (the composer, Ask, Shape, the
+//! folders, the action path, the widget customizer, MCP and Slack, which act
+//! as the member). A [`Caller::System`] call (none in product code: the demo
+//! rehearsals call no model) counts against the process cap only. A member
 //! whose allowance is reached gets the same 429 `daily_limit`, with
 //! `"scope":"member"` so the canvas says it is theirs ([`daily_limit_for`]).
+//!
+//! APP-222 part A: the caller is required and typed. [`ModelRequest::caller`]
+//! is a [`Caller`] and [`ModelRequest::source`] a [`Source`], with no default,
+//! so a route that forgets who or what a call is for does not compile. Every
+//! product call is a [`Caller::Member`] (a test keeps the list of
+//! [`Caller::System`] reasons in product code, empty today). The usage is
+//! logged here, at the one chokepoint, never in the routes: one `model.call`
+//! line per call (source, outcome, latency, the reply's `usage` tokens, the
+//! member's ids), one `model.call_failed` line per failed attempt (provider
+//! status and error class), and `model.usage_threshold` once per UTC day per
+//! scope when a count first reaches 80 % and 100 % of its limit
+//! ([`USAGE_THRESHOLDS`]). No line carries a prompt, a reply, a name or a
+//! note.
+use crate::storage::TrustedRequest;
 use axum::{
     http::{header, HeaderValue, StatusCode},
     response::Response,
@@ -86,19 +100,66 @@ pub const MEMBER_DAILY_CALLS_ENV: &str = "GENUI_MODEL_DAILY_CALLS_PER_MEMBER";
 pub const MAX_MEMBERS: usize = 20_000;
 const DAY_SECONDS: u64 = 86_400;
 
+/// APP-222: the percents of a limit at which `model.usage_threshold` fires,
+/// each at most once per UTC day per scope (the process cap, each member).
+pub const USAGE_THRESHOLDS: [u32; 2] = [80, 100];
+
+/// A usage threshold one day's count has just reached: its percent and the
+/// count that reached it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Threshold {
+    pub percent: u32,
+    pub count: u32,
+}
+
+/// The once-guard of [`USAGE_THRESHOLDS`] for one day's count: one bit per
+/// threshold already reported. A new day starts with none.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Marks(u8);
+impl Marks {
+    const NONE: Self = Self(0);
+    /// The thresholds `count` of `limit` has reached and that were not yet
+    /// reported, now marked as reported: each is returned once.
+    fn pass(&mut self, count: u32, limit: u32) -> Vec<Threshold> {
+        let mut passed = Vec::new();
+        for (bit, percent) in USAGE_THRESHOLDS.into_iter().enumerate() {
+            let flag = 1u8 << bit;
+            let reached =
+                limit > 0 && u64::from(count) * 100 >= u64::from(limit) * u64::from(percent);
+            if reached && self.0 & flag == 0 {
+                self.0 |= flag;
+                passed.push(Threshold { percent, count });
+            }
+        }
+        passed
+    }
+}
+
+/// One UTC day's calls (the day number is days since the UNIX epoch) and
+/// the thresholds they have reported.
+#[derive(Debug)]
+struct Day {
+    day: u64,
+    calls: u32,
+    marks: Marks,
+}
+
 /// Model calls taken per UTC day, against a limit. A call is one request to
 /// the client (its retries included), counted before anything is sent.
 #[derive(Debug)]
 pub struct DailyCap {
     limit: u32,
-    /// The UTC day number (days since the UNIX epoch) and the calls taken in it.
-    used: Mutex<(u64, u32)>,
+    used: Mutex<Day>,
 }
 impl DailyCap {
     pub const fn new(limit: u32) -> Self {
         Self {
             limit,
-            used: Mutex::new((0, 0)),
+            used: Mutex::new(Day {
+                day: 0,
+                calls: 0,
+                marks: Marks::NONE,
+            }),
         }
     }
     pub fn limit(&self) -> u32 {
@@ -112,13 +173,17 @@ impl DailyCap {
     pub fn take(&self, now: u64) -> bool {
         let day = now / DAY_SECONDS;
         let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
-        if day > used.0 {
-            *used = (day, 0);
+        if day > used.day {
+            *used = Day {
+                day,
+                calls: 0,
+                marks: Marks::NONE,
+            };
         }
-        if used.1 >= self.limit {
+        if used.calls >= self.limit {
             return false;
         }
-        used.1 += 1;
+        used.calls += 1;
         true
     }
     /// Whether a call at `now` would be refused (the day's count is at the
@@ -126,11 +191,24 @@ impl DailyCap {
     pub fn reached(&self, now: u64) -> bool {
         let day = now / DAY_SECONDS;
         let used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
-        if day > used.0 {
+        if day > used.day {
             self.limit == 0
         } else {
-            used.1 >= self.limit
+            used.calls >= self.limit
         }
+    }
+    /// APP-222: the [`USAGE_THRESHOLDS`] the day's count at `now` has reached
+    /// and not yet reported, now reported. Judged and marked under the lock,
+    /// so of any number of concurrent calls exactly one reports each
+    /// threshold, once per UTC day. A day with no count yet reports nothing.
+    pub fn passed(&self, now: u64) -> Vec<Threshold> {
+        let day = now / DAY_SECONDS;
+        let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if day > used.day {
+            return Vec::new();
+        }
+        let calls = used.calls;
+        used.marks.pass(calls, self.limit)
     }
 }
 
@@ -141,9 +219,12 @@ impl DailyCap {
 #[derive(Debug)]
 pub struct MemberDailyCap {
     limit: u32,
-    /// The UTC day number and, for that day only, each member's calls.
-    used: Mutex<(u64, BTreeMap<String, u32>)>,
+    /// The UTC day number and, for that day only, each member's calls and
+    /// the thresholds they have reported (APP-222).
+    used: Mutex<(u64, Members)>,
 }
+/// One day's members: each member's calls and reported thresholds.
+type Members = BTreeMap<String, (u32, Marks)>;
 impl MemberDailyCap {
     pub const fn new(limit: u32) -> Self {
         Self {
@@ -165,7 +246,7 @@ impl MemberDailyCap {
             *used = (day, BTreeMap::new());
         }
         match used.1.get_mut(member) {
-            Some(count) => {
+            Some((count, _)) => {
                 if *count >= self.limit {
                     return false;
                 }
@@ -176,7 +257,7 @@ impl MemberDailyCap {
                 if self.limit == 0 || used.1.len() >= MAX_MEMBERS {
                     return false;
                 }
-                used.1.insert(member.to_owned(), 1);
+                used.1.insert(member.to_owned(), (1, Marks::NONE));
                 true
             }
         }
@@ -190,8 +271,25 @@ impl MemberDailyCap {
         if day != used.0 {
             return;
         }
-        if let Some(count) = used.1.get_mut(member) {
+        if let Some((count, _)) = used.1.get_mut(member) {
             *count = count.saturating_sub(1);
+        }
+    }
+    /// APP-222: [`DailyCap::passed`] for `member`'s count, with its own
+    /// once-guard. The client asks only after both caps admitted the call,
+    /// so a slot given back never reports.
+    pub fn passed(&self, member: &str, now: u64) -> Vec<Threshold> {
+        let day = now / DAY_SECONDS;
+        let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if day != used.0 {
+            return Vec::new();
+        }
+        match used.1.get_mut(member) {
+            Some((count, marks)) => {
+                let count = *count;
+                marks.pass(count, self.limit)
+            }
+            None => Vec::new(),
         }
     }
     /// Whether a call of `member` at `now` would be refused by their
@@ -205,7 +303,9 @@ impl MemberDailyCap {
         if day > used.0 {
             return false;
         }
-        used.1.get(member).is_some_and(|count| *count >= self.limit)
+        used.1
+            .get(member)
+            .is_some_and(|(count, _)| *count >= self.limit)
     }
     /// Members with a count today.
     pub fn members(&self) -> usize {
@@ -222,9 +322,119 @@ impl MemberDailyCap {
 pub fn member_key(organization: &str, principal: &str) -> String {
     format!("{organization}:{principal}")
 }
-/// [`member_key`] of a workspace request.
-pub fn member_of(request: &crate::storage::TrustedRequest) -> String {
-    member_key(request.organization(), request.principal())
+
+/// APP-222: who a model call is for. Every [`ModelRequest`] names one; there
+/// is no default. A member's call takes a slot of their own allowance
+/// ([`MemberDailyCap`]) before the process cap's; a system call takes the
+/// process cap's only. Only identities travel here (organization and
+/// principal ids), never a name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Caller {
+    /// A signed-in member, acting on any surface (the canvas, MCP, Slack).
+    Member {
+        organization: String,
+        principal: String,
+    },
+    /// The service itself, for a fixed reason. None in product code today:
+    /// the composer test `no_product_model_call_is_a_system_call` keeps the
+    /// closed list of reasons, and it is empty.
+    System { reason: &'static str },
+}
+impl Caller {
+    /// The member a workspace request is.
+    pub fn member(request: &TrustedRequest) -> Self {
+        Self::Member {
+            organization: request.organization().to_owned(),
+            principal: request.principal().to_owned(),
+        }
+    }
+    /// Their allowance key ([`member_key`]); `None` for a system call.
+    pub fn allowance_key(&self) -> Option<String> {
+        match self {
+            Self::Member {
+                organization,
+                principal,
+            } => Some(member_key(organization, principal)),
+            Self::System { .. } => None,
+        }
+    }
+    pub fn organization(&self) -> Option<&str> {
+        match self {
+            Self::Member { organization, .. } => Some(organization),
+            Self::System { .. } => None,
+        }
+    }
+    pub fn principal(&self) -> Option<&str> {
+        match self {
+            Self::Member { principal, .. } => Some(principal),
+            Self::System { .. } => None,
+        }
+    }
+    pub fn reason(&self) -> Option<&'static str> {
+        match self {
+            Self::Member { .. } => None,
+            Self::System { reason } => Some(reason),
+        }
+    }
+}
+
+/// Tests: a synthetic member to make calls for (a test never names a
+/// [`Caller::System`] outside this module; see the composer test
+/// `no_product_model_call_is_a_system_call`).
+#[cfg(test)]
+pub(crate) fn test_caller() -> Caller {
+    Caller::Member {
+        organization: "00000000-0000-4000-8000-00000000a222".into(),
+        principal: "00000000-0000-4000-8000-00000000b222".into(),
+    }
+}
+
+/// APP-222: the product path a model call is made for, logged with every
+/// call, so a spike says whether it is building in the canvas, an agent
+/// looping through MCP, or Slack.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Source {
+    /// The canvas composer (`/v1/compose`) and its live transform.
+    Canvas,
+    /// Ask over records and widgets (`/v1/ask`).
+    Ask,
+    /// Shape (`/v1/shape`), the widget restyle it reaches included.
+    Shape,
+    /// The folder routes: build, brief, explain and the folder's Ask.
+    Folder,
+    /// The action path (`/v1/act`, the receipt, the assistant), and a folder
+    /// request made through it.
+    Action,
+    /// The widget customizer route.
+    Customizer,
+    /// An agent over MCP (`forma_compose_app` and the folder tools).
+    Mcp,
+    /// Slack's slash command, and a folder request made through it.
+    Slack,
+}
+impl Source {
+    pub const ALL: [Self; 8] = [
+        Self::Canvas,
+        Self::Ask,
+        Self::Shape,
+        Self::Folder,
+        Self::Action,
+        Self::Customizer,
+        Self::Mcp,
+        Self::Slack,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Canvas => "canvas",
+            Self::Ask => "ask",
+            Self::Shape => "shape",
+            Self::Folder => "folder",
+            Self::Action => "action",
+            Self::Customizer => "customizer",
+            Self::Mcp => "mcp",
+            Self::Slack => "slack",
+        }
+    }
 }
 
 /// The daily limit `value` names: a decimal count, else the default.
@@ -286,41 +496,48 @@ pub const DAILY_LIMIT_TEXT: &str = "Today's AI limit for this workspace is reach
 /// canvas has its own copy in `daily-limit.ts`).
 pub const MEMBER_DAILY_LIMIT_TEXT: &str = "You've used your AI allowance for today. Building apps and Ask resume for you at 00:00 UTC; your apps and entries keep working.";
 
-/// The text for a `daily_limit` refusal of `member` (MCP and Slack): the
+/// The text for a `daily_limit` refusal of `caller` (MCP and Slack): the
 /// member's own words when their allowance is what is reached, else the
 /// workspace's.
-pub fn daily_limit_text_for(member: Option<&str>) -> &'static str {
-    if member_limit_reached(member) {
+pub fn daily_limit_text_for(caller: &Caller) -> &'static str {
+    if member_limit_reached(caller) {
         MEMBER_DAILY_LIMIT_TEXT
     } else {
         DAILY_LIMIT_TEXT
     }
 }
-fn member_limit_reached(member: Option<&str>) -> bool {
-    member.is_some_and(|member| member_daily_cap().reached(member, unix_now()))
+fn member_limit_reached(caller: &Caller) -> bool {
+    caller
+        .allowance_key()
+        .is_some_and(|key| member_daily_cap().reached(&key, unix_now()))
 }
 
 /// The answer of every model route to [`ModelError::DailyCap`]: 429
 /// `daily_limit`, `Retry-After` the seconds until the count starts again.
 pub fn daily_limit() -> Response {
-    daily_limit_for(None)
+    with_retry_after(crate::http::problem(
+        StatusCode::TOO_MANY_REQUESTS,
+        "daily_limit",
+    ))
 }
-/// [`daily_limit`] for `member` (APP-215): when their own allowance is what
-/// is reached, the body carries `"scope":"member"` so the canvas says so
-/// (`daily-limit.ts`); otherwise, or with no member, the body is the
-/// workspace's unchanged `{"code":"daily_limit","status":429}`. Both are
-/// judged on the live counts: a member whose allowance is reached is told so
-/// whatever the process cap says, since nothing of theirs is sent today.
-pub fn daily_limit_for(member: Option<&str>) -> Response {
-    let mut response = if member_limit_reached(member) {
-        crate::http::problem_with(
+/// [`daily_limit`] for `caller` (APP-215): when a member's own allowance is
+/// what is reached, the body carries `"scope":"member"` so the canvas says
+/// so (`daily-limit.ts`); otherwise the body is the workspace's unchanged
+/// `{"code":"daily_limit","status":429}`. Both are judged on the live
+/// counts: a member whose allowance is reached is told so whatever the
+/// process cap says, since nothing of theirs is sent today.
+pub fn daily_limit_for(caller: &Caller) -> Response {
+    if member_limit_reached(caller) {
+        with_retry_after(crate::http::problem_with(
             StatusCode::TOO_MANY_REQUESTS,
             "daily_limit",
             json!({"scope": "member"}),
-        )
+        ))
     } else {
-        crate::http::problem(StatusCode::TOO_MANY_REQUESTS, "daily_limit")
-    };
+        daily_limit()
+    }
+}
+fn with_retry_after(mut response: Response) -> Response {
     response.headers_mut().insert(
         header::RETRY_AFTER,
         HeaderValue::from(seconds_to_reset(unix_now())),
@@ -346,10 +563,11 @@ pub struct ModelRequest {
     pub max_tokens: u32,
     /// The whole call, every attempt included.
     pub budget: Duration,
-    /// APP-215: the member this call is made for ([`member_key`]), who takes
-    /// one slot of their daily allowance before the process cap; `None`
-    /// counts against the process cap only.
-    pub member: Option<String>,
+    /// APP-222 (was APP-215's optional member): who the call is for. A
+    /// member takes one slot of their daily allowance before the process cap.
+    pub caller: Caller,
+    /// APP-222: the product path the call is made for, logged with it.
+    pub source: Source,
 }
 
 /// The text of a reply and its usage counts (counts only are logged).
@@ -456,10 +674,10 @@ pub trait Model: Send + Sync {
     fn daily_cap_reached(&self) -> bool {
         false
     }
-    /// APP-215: whether the next call of `member` would be refused by their
-    /// own allowance (a stub has none).
-    fn member_daily_cap_reached(&self, member: &str) -> bool {
-        let _ = member;
+    /// APP-215: whether the next call of `caller` would be refused by their
+    /// own allowance (a stub has none; a system call has none).
+    fn member_daily_cap_reached(&self, caller: &Caller) -> bool {
+        let _ = caller;
         false
     }
     /// `request` with `image` before the user text (one Messages image
@@ -535,37 +753,49 @@ impl Anthropic {
         self
     }
     /// One slot of the member's allowance, then one of the daily cap, for
-    /// `request`, before anything is sent (APP-215). A refusal takes nothing:
-    /// a member slot the process cap then refuses is given back.
-    fn admit(&self, request: &ModelRequest) -> Result<(), ModelError> {
-        let now = unix_now();
-        if let Some(member) = &request.member {
-            if !self.member_cap.take(member, now) {
-                tracing::warn!(
-                    event = "composer.model_member_daily_cap",
-                    code = ModelError::DailyCap.code(),
-                    limit = self.member_cap.limit(),
-                    member,
-                    requested_model = request.model,
-                    "member's daily model-call allowance reached; nothing sent"
-                );
+    /// `request` at `now`, before anything is sent (APP-215). A refusal takes
+    /// nothing: a member slot the process cap then refuses is given back, and
+    /// the refusal is the call's `model.call` line (`refused_cap`). An
+    /// admitted call reports the usage thresholds it reached (APP-222).
+    fn admit(&self, request: &ModelRequest, now: u64) -> Result<(), ModelError> {
+        let key = request.caller.allowance_key();
+        if let Some(key) = &key {
+            if !self.member_cap.take(key, now) {
+                log_refused(request, Scope::Member, self.member_cap.limit());
                 return Err(ModelError::DailyCap);
             }
         }
-        if self.cap.take(now) {
-            return Ok(());
+        if !self.cap.take(now) {
+            if let Some(key) = &key {
+                self.member_cap.release(key, now);
+            }
+            log_refused(request, Scope::Organization, self.cap.limit());
+            return Err(ModelError::DailyCap);
         }
-        if let Some(member) = &request.member {
-            self.member_cap.release(member, now);
+        for threshold in self.cap.passed(now) {
+            log_threshold(
+                Scope::Organization,
+                threshold,
+                self.cap.limit(),
+                &request.caller,
+            );
         }
-        tracing::warn!(
-            event = "composer.model_daily_cap",
-            code = ModelError::DailyCap.code(),
-            limit = self.cap.limit(),
-            requested_model = request.model,
-            "daily model-call cap reached; nothing sent"
-        );
-        Err(ModelError::DailyCap)
+        if let Some(key) = &key {
+            for threshold in self.member_cap.passed(key, now) {
+                log_threshold(
+                    Scope::Member,
+                    threshold,
+                    self.member_cap.limit(),
+                    &request.caller,
+                );
+            }
+        }
+        Ok(())
+    }
+    /// Tests: [`Self::admit`] at an injected clock.
+    #[cfg(test)]
+    pub(crate) fn admit_at(&self, request: &ModelRequest, now: u64) -> Result<(), ModelError> {
+        self.admit(request, now)
     }
     /// The client the environment configures: `KEY_ENV` (the only source of
     /// the key) and the optional endpoint override. `None`: disabled.
@@ -575,14 +805,13 @@ impl Anthropic {
         Self::new(&key, &endpoint)
     }
 
-    async fn attempt(
-        &self,
-        body: &Value,
-        deadline: Instant,
-    ) -> Result<ModelReply, (ModelError, bool)> {
+    /// One POST of `body` within `deadline`: the reply's bytes, or why not
+    /// (the error, whether a retry may help, its class and the provider
+    /// status for `model.call_failed`).
+    async fn post(&self, body: &Value, deadline: Instant) -> Result<Vec<u8>, Failure> {
         let remaining = deadline
             .checked_duration_since(Instant::now())
-            .ok_or((ModelError::Timeout, false))?;
+            .ok_or(Failure::TIMEOUT)?;
         let response = self
             .http
             .post(&self.endpoint)
@@ -595,23 +824,177 @@ impl Anthropic {
             .await
             .map_err(|error| {
                 if error.is_timeout() {
-                    (ModelError::Timeout, false)
+                    Failure::TIMEOUT
                 } else {
-                    (ModelError::Unavailable, true)
+                    Failure::TRANSPORT
                 }
             })?;
         let status = response.status();
         if status.as_u16() == 429 || status.is_server_error() {
-            return Err((ModelError::Unavailable, true));
+            return Err(Failure::status(
+                ModelError::Unavailable,
+                true,
+                status.as_u16(),
+            ));
         }
         if !status.is_success() {
-            return Err((ModelError::Refused, false));
+            return Err(Failure::status(ModelError::Refused, false, status.as_u16()));
         }
-        let bytes = capped_body(response, MAX_REPLY_BYTES)
+        capped_body(response, MAX_REPLY_BYTES)
             .await
-            .map_err(|error| (error, error == ModelError::Unavailable))?;
-        parse_reply(&bytes).ok_or((ModelError::Malformed, false))
+            .map_err(|error| match error {
+                ModelError::Unavailable => Failure::TRANSPORT,
+                _ => Failure::DECODE,
+            })
     }
+}
+
+/// Why one attempt produced no reply (APP-222 `model.call_failed`): the
+/// error the caller sees, whether it is retried, the error class (`timeout`,
+/// `status`, `transport` or `decode`) and the provider's HTTP status.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Failure {
+    error: ModelError,
+    retryable: bool,
+    class: &'static str,
+    status: Option<u16>,
+}
+impl Failure {
+    /// The budget ran out, before sending or while waiting.
+    const TIMEOUT: Self = Self {
+        error: ModelError::Timeout,
+        retryable: false,
+        class: "timeout",
+        status: None,
+    };
+    /// The connection or the body read failed.
+    const TRANSPORT: Self = Self {
+        error: ModelError::Unavailable,
+        retryable: true,
+        class: "transport",
+        status: None,
+    };
+    /// A reply the protocol does not describe, or one over the size bound.
+    const DECODE: Self = Self {
+        error: ModelError::Malformed,
+        retryable: false,
+        class: "decode",
+        status: None,
+    };
+    fn status(error: ModelError, retryable: bool, status: u16) -> Self {
+        Self {
+            error,
+            retryable,
+            class: "status",
+            status: Some(status),
+        }
+    }
+}
+
+/// Which allowance a usage line is about: the process cap (`organization`,
+/// the whole app's, which the trial's one organization holds) or one
+/// member's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Scope {
+    Organization,
+    Member,
+}
+impl Scope {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Organization => "organization",
+            Self::Member => "member",
+        }
+    }
+}
+
+/// `model.call`, outcome `ok`: the reply's usage, never its text.
+fn log_ok(
+    request: &ModelRequest,
+    model: Option<&str>,
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+    latency_ms: u64,
+    attempts: u32,
+) {
+    tracing::info!(
+        event = "model.call",
+        source = request.source.as_str(),
+        outcome = "ok",
+        latency_ms,
+        input_tokens,
+        output_tokens,
+        attempts,
+        requested_model = request.model,
+        model,
+        organization = request.caller.organization(),
+        principal = request.caller.principal(),
+        reason = request.caller.reason(),
+        "model replied"
+    );
+}
+/// `model.call`, outcome `refused_cap`: nothing was sent.
+fn log_refused(request: &ModelRequest, scope: Scope, limit: u32) {
+    tracing::warn!(
+        event = "model.call",
+        source = request.source.as_str(),
+        outcome = "refused_cap",
+        code = ModelError::DailyCap.code(),
+        scope = scope.as_str(),
+        limit,
+        latency_ms = 0u64,
+        requested_model = request.model,
+        organization = request.caller.organization(),
+        principal = request.caller.principal(),
+        reason = request.caller.reason(),
+        "daily model-call limit reached; nothing sent"
+    );
+}
+/// `model.call`, outcome `failed`: every attempt failed or the budget ran out.
+fn log_failed(request: &ModelRequest, error: ModelError, latency_ms: u64, attempts: u32) {
+    tracing::warn!(
+        event = "model.call",
+        source = request.source.as_str(),
+        outcome = "failed",
+        code = error.code(),
+        latency_ms,
+        attempts,
+        requested_model = request.model,
+        organization = request.caller.organization(),
+        principal = request.caller.principal(),
+        reason = request.caller.reason(),
+        "model call failed"
+    );
+}
+/// `model.call_failed`: one failed attempt, its class and provider status.
+fn log_attempt(request: &ModelRequest, failure: &Failure, attempt: u32, latency_ms: u64) {
+    tracing::warn!(
+        event = "model.call_failed",
+        source = request.source.as_str(),
+        class = failure.class,
+        status = failure.status,
+        code = failure.error.code(),
+        attempt,
+        retryable = failure.retryable,
+        latency_ms,
+        requested_model = request.model,
+        "model attempt failed"
+    );
+}
+/// `model.usage_threshold`: a scope's count first reached `threshold`
+/// today (once per UTC day per scope and threshold).
+fn log_threshold(scope: Scope, threshold: Threshold, limit: u32, caller: &Caller) {
+    let member = scope == Scope::Member;
+    tracing::warn!(
+        event = "model.usage_threshold",
+        scope = scope.as_str(),
+        percent = threshold.percent,
+        limit,
+        count = threshold.count,
+        organization = caller.organization().filter(|_| member),
+        principal = caller.principal().filter(|_| member),
+        "daily model-call usage threshold reached"
+    );
 }
 
 fn loopback(endpoint: &str) -> bool {
@@ -707,8 +1090,10 @@ impl Model for Anthropic {
     fn daily_cap_reached(&self) -> bool {
         self.cap.reached(unix_now())
     }
-    fn member_daily_cap_reached(&self, member: &str) -> bool {
-        self.member_cap.reached(member, unix_now())
+    fn member_daily_cap_reached(&self, caller: &Caller) -> bool {
+        caller
+            .allowance_key()
+            .is_some_and(|key| self.member_cap.reached(&key, unix_now()))
     }
     fn complete_with_documents<'a>(
         &'a self,
@@ -717,7 +1102,7 @@ impl Model for Anthropic {
     ) -> CitedCompletion<'a> {
         use base64::Engine as _;
         Box::pin(async move {
-            self.admit(request)?;
+            self.admit(request, unix_now())?;
             let started = Instant::now();
             let mut content: Vec<Value> = documents
                 .iter()
@@ -736,46 +1121,29 @@ impl Model for Anthropic {
                 "system": request.system,
                 "messages": [{"role": "user", "content": content}],
             });
-            let deadline = started + request.budget;
-            let remaining = deadline
-                .checked_duration_since(Instant::now())
-                .ok_or(ModelError::Timeout)?;
-            let response = self
-                .http
-                .post(&self.endpoint)
-                .header("x-api-key", self.key.0.as_str())
-                .header("anthropic-version", "2023-06-01")
-                .header("content-type", "application/json")
-                .timeout(remaining)
-                .json(&body)
-                .send()
+            // One attempt: a document call is not retried.
+            let outcome = self
+                .post(&body, started + request.budget)
                 .await
-                .map_err(|error| {
-                    if error.is_timeout() {
-                        ModelError::Timeout
-                    } else {
-                        ModelError::Unavailable
-                    }
-                })?;
-            let status = response.status();
-            if status.as_u16() == 429 || status.is_server_error() {
-                return Err(ModelError::Unavailable);
+                .and_then(|bytes| parse_cited(&bytes).ok_or(Failure::DECODE));
+            match outcome {
+                Ok(reply) => {
+                    log_ok(
+                        request,
+                        None,
+                        reply.input_tokens,
+                        reply.output_tokens,
+                        elapsed_ms(started),
+                        1,
+                    );
+                    Ok(reply)
+                }
+                Err(failure) => {
+                    log_attempt(request, &failure, 0, elapsed_ms(started));
+                    log_failed(request, failure.error, elapsed_ms(started), 1);
+                    Err(failure.error)
+                }
             }
-            if !status.is_success() {
-                return Err(ModelError::Refused);
-            }
-            let bytes = capped_body(response, MAX_REPLY_BYTES).await?;
-            let reply = parse_cited(&bytes).ok_or(ModelError::Malformed)?;
-            tracing::info!(
-                event = "composer.model_documents",
-                requested_model = request.model,
-                documents = documents.len(),
-                input_tokens = reply.input_tokens,
-                output_tokens = reply.output_tokens,
-                duration_ms = elapsed_ms(started),
-                "model replied with citations"
-            );
-            Ok(reply)
         })
     }
     fn complete<'a>(&'a self, request: &'a ModelRequest) -> Completion<'a> {
@@ -803,7 +1171,7 @@ impl Anthropic {
     /// image block and text); the body is never logged.
     fn send<'a>(&'a self, request: &'a ModelRequest, content: Value) -> Completion<'a> {
         Box::pin(async move {
-            self.admit(request)?;
+            self.admit(request, unix_now())?;
             let started = Instant::now();
             let deadline = started + request.budget;
             let body = json!({
@@ -814,6 +1182,7 @@ impl Anthropic {
                 "messages": [{"role": "user", "content": content}],
             });
             let mut outcome = Err(ModelError::Unavailable);
+            let mut attempts = 0;
             for attempt in 0..MAX_ATTEMPTS {
                 if attempt > 0 {
                     let pause = BACKOFF[usize::from(attempt as u16 - 1).min(BACKOFF.len() - 1)];
@@ -823,36 +1192,34 @@ impl Anthropic {
                     }
                     tokio::time::sleep(pause).await;
                 }
-                match self.attempt(&body, deadline).await {
+                attempts = attempt + 1;
+                let reply = self
+                    .post(&body, deadline)
+                    .await
+                    .and_then(|bytes| parse_reply(&bytes).ok_or(Failure::DECODE));
+                match reply {
                     Ok(reply) => {
-                        tracing::info!(
-                            event = "composer.model",
-                            model = reply.model,
-                            requested_model = request.model,
-                            attempt,
-                            input_tokens = reply.input_tokens,
-                            output_tokens = reply.output_tokens,
-                            duration_ms = elapsed_ms(started),
-                            "model replied"
+                        log_ok(
+                            request,
+                            Some(&reply.model),
+                            reply.input_tokens,
+                            reply.output_tokens,
+                            elapsed_ms(started),
+                            attempts,
                         );
                         return Ok(reply);
                     }
-                    Err((error, retryable)) => {
-                        tracing::warn!(
-                            event = "composer.model_failed",
-                            code = error.code(),
-                            requested_model = request.model,
-                            attempt,
-                            retryable,
-                            duration_ms = elapsed_ms(started),
-                            "model call failed"
-                        );
-                        outcome = Err(error);
-                        if !retryable {
+                    Err(failure) => {
+                        log_attempt(request, &failure, attempt, elapsed_ms(started));
+                        outcome = Err(failure.error);
+                        if !failure.retryable {
                             break;
                         }
                     }
                 }
+            }
+            if let Err(error) = outcome {
+                log_failed(request, error, elapsed_ms(started), attempts);
             }
             outcome
         })
@@ -1016,13 +1383,18 @@ mod tests {
             .unwrap()
             .with_daily_cap(&PROCESS)
             .with_member_daily_cap(&MEMBERS);
-        let request = |member: Option<&str>| ModelRequest {
+        let request = |caller: Caller| ModelRequest {
             model: "m".into(),
             system: String::new(),
             user: String::new(),
             max_tokens: 1,
             budget: Duration::from_millis(200),
-            member: member.map(str::to_owned),
+            caller,
+            source: Source::Canvas,
+        };
+        let member = |principal: &str| Caller::Member {
+            organization: "org".into(),
+            principal: principal.into(),
         };
         let now = unix_now();
         let ana = member_key("org", "ana");
@@ -1031,28 +1403,154 @@ mod tests {
         let sent = |outcome: Result<ModelReply, ModelError>| {
             matches!(outcome, Err(ModelError::Unavailable | ModelError::Timeout))
         };
-        assert!(sent(client.complete(&request(Some(&ana))).await));
+        assert!(sent(client.complete(&request(member("ana"))).await));
         assert!(MEMBERS.reached(&ana, now));
         assert!(!PROCESS.reached(now));
         assert_eq!(
-            client.complete(&request(Some(&ana))).await,
+            client.complete(&request(member("ana"))).await,
             Err(ModelError::DailyCap),
             "the member's allowance refuses first"
         );
         assert!(!PROCESS.reached(now), "and the process cap was not spent");
-        assert!(client.member_daily_cap_reached(&ana));
-        // A call for nobody takes the process cap's last slot and no member's.
-        assert!(sent(client.complete(&request(None)).await));
+        assert!(client.member_daily_cap_reached(&member("ana")));
+        // A system call takes the process cap's last slot and no member's.
+        let system = Caller::System { reason: "test" };
+        assert!(!client.member_daily_cap_reached(&system));
+        assert!(sent(client.complete(&request(system)).await));
         assert_eq!(MEMBERS.members(), 1);
         assert!(PROCESS.reached(now) && client.daily_cap_reached());
         // Bo has allowance but the process cap is full: refused, and Bo's slot
         // goes back.
         let bo = member_key("org", "bo");
         assert_eq!(
-            client.complete(&request(Some(&bo))).await,
+            client.complete(&request(member("bo"))).await,
             Err(ModelError::DailyCap)
         );
         assert!(!MEMBERS.reached(&bo, now));
+    }
+
+    /// APP-222: with a process limit of 10 and a member allowance of 5, 30
+    /// concurrent calls by two members admit exactly 10, and the usage
+    /// thresholds fire exactly once per scope per UTC day: the process cap's
+    /// 80 % and 100 %, and each member's. The 20 refusals are each one
+    /// `model.call` line, `refused_cap`, scope `member`. A new UTC day (the
+    /// clock is injected) fires them all again, once.
+    #[test]
+    fn usage_thresholds_fire_once_per_scope_per_day_under_concurrency() {
+        static PROCESS: DailyCap = DailyCap::new(10);
+        static MEMBERS: MemberDailyCap = MemberDailyCap::new(5);
+        let client = Anthropic::new("sk-ant-synthetic", "http://127.0.0.1:9/v1/messages")
+            .unwrap()
+            .with_daily_cap(&PROCESS)
+            .with_member_daily_cap(&MEMBERS);
+        let request = |principal: &str| ModelRequest {
+            model: "m".into(),
+            system: String::new(),
+            user: String::new(),
+            max_tokens: 1,
+            budget: Duration::from_millis(200),
+            caller: Caller::Member {
+                organization: "org".into(),
+                principal: principal.into(),
+            },
+            source: Source::Canvas,
+        };
+        let requests = [request("ana"), request("bo")];
+        let lines = crate::config::logs::testing::Lines::default();
+        let dispatch = lines.dispatch();
+        for day in 0..2u64 {
+            let now = MIDNIGHT + day * DAY_SECONDS + 3600;
+            let barrier = std::sync::Barrier::new(30);
+            let admitted: usize = std::thread::scope(|scope| {
+                let calls: Vec<_> = (0..30)
+                    .map(|n| {
+                        let (client, barrier, dispatch) = (&client, &barrier, &dispatch);
+                        let request = &requests[n % 2];
+                        scope.spawn(move || {
+                            tracing::dispatcher::with_default(dispatch, || {
+                                barrier.wait();
+                                client.admit_at(request, now).is_ok()
+                            })
+                        })
+                    })
+                    .collect();
+                calls
+                    .into_iter()
+                    .map(|call| usize::from(call.join().unwrap()))
+                    .sum()
+            });
+            assert_eq!(admitted, 10, "day {day}: the process limit, 5 each");
+            assert!(PROCESS.reached(now));
+        }
+        let thresholds = lines.events("model.usage_threshold");
+        let mut seen: Vec<(u64, String, String, u64)> = thresholds
+            .iter()
+            .map(|line| {
+                let count = line["count"].as_u64().unwrap();
+                let percent = line["percent"].as_u64().unwrap();
+                let limit = line["limit"].as_u64().unwrap();
+                assert!(count * 100 >= limit * percent && count <= limit, "{line}");
+                (
+                    percent,
+                    line["scope"].as_str().unwrap().to_owned(),
+                    line["principal"].as_str().unwrap_or("-").to_owned(),
+                    limit,
+                )
+            })
+            .collect();
+        seen.sort();
+        let once = |percent: u64, scope: &str, principal: &str, limit: u64| {
+            (percent, scope.to_owned(), principal.to_owned(), limit)
+        };
+        let mut day = [
+            once(80, "member", "ana", 5),
+            once(80, "member", "bo", 5),
+            once(80, "organization", "-", 10),
+            once(100, "member", "ana", 5),
+            once(100, "member", "bo", 5),
+            once(100, "organization", "-", 10),
+        ];
+        day.sort();
+        let both_days: Vec<_> = day.iter().flat_map(|t| [t.clone(), t.clone()]).collect();
+        assert_eq!(seen, both_days, "once per scope per threshold per day");
+        for line in &thresholds {
+            assert_eq!(line["level"], "WARN");
+            let member = line["scope"] == "member";
+            assert_eq!(line.get("organization").is_some(), member, "{line}");
+        }
+        let refused: Vec<_> = lines
+            .events("model.call")
+            .into_iter()
+            .filter(|line| line["outcome"] == "refused_cap")
+            .collect();
+        assert_eq!(refused.len(), 40, "20 refusals a day");
+        assert!(refused
+            .iter()
+            .all(|line| line["scope"] == "member" && line["source"] == "canvas"));
+        // The once-guard itself: a count past a threshold reports nothing new.
+        let mut marks = Marks::NONE;
+        assert_eq!(marks.pass(7, 10), []);
+        assert_eq!(
+            marks.pass(8, 10),
+            [Threshold {
+                percent: 80,
+                count: 8
+            }]
+        );
+        assert_eq!(marks.pass(9, 10), []);
+        assert_eq!(
+            marks.pass(10, 10),
+            [Threshold {
+                percent: 100,
+                count: 10
+            }]
+        );
+        assert_eq!(marks.pass(10, 10), []);
+        let mut one = Marks::NONE;
+        assert_eq!(one.pass(1, 1).len(), 2, "a limit of 1 reaches both at once");
+        let mut zero = Marks::NONE;
+        assert_eq!(zero.pass(0, 0), [], "a zero limit never fires");
+        assert_eq!(USAGE_THRESHOLDS, [80, 100]);
     }
 
     #[test]
@@ -1092,16 +1590,20 @@ mod tests {
         // APP-215: a member whose own allowance is not reached reads the
         // workspace's refusal, unchanged; one whose allowance is reached reads
         // their own, same code and status, `scope` added.
-        let fresh = member_key("org", "fresh");
-        let body = axum::body::to_bytes(daily_limit_for(Some(&fresh)).into_body(), 1024)
+        let of = |principal: &str| Caller::Member {
+            organization: "org".into(),
+            principal: principal.into(),
+        };
+        let fresh = of("fresh");
+        let body = axum::body::to_bytes(daily_limit_for(&fresh).into_body(), 1024)
             .await
             .unwrap();
         assert_eq!(&body[..], br#"{"code":"daily_limit","status":429}"#);
-        assert_eq!(daily_limit_text_for(Some(&fresh)), DAILY_LIMIT_TEXT);
-        let spent = member_key("org", "spent");
+        assert_eq!(daily_limit_text_for(&fresh), DAILY_LIMIT_TEXT);
+        let spent = of("spent");
         let table = member_daily_cap();
-        while table.take(&spent, unix_now()) {}
-        let response = daily_limit_for(Some(&spent));
+        while table.take(&member_key("org", "spent"), unix_now()) {}
+        let response = daily_limit_for(&spent);
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         assert!(response.headers().contains_key(header::RETRY_AFTER));
         let body = axum::body::to_bytes(response.into_body(), 1024)
@@ -1111,7 +1613,7 @@ mod tests {
             &body[..],
             br#"{"code":"daily_limit","scope":"member","status":429}"#
         );
-        assert_eq!(daily_limit_text_for(Some(&spent)), MEMBER_DAILY_LIMIT_TEXT);
+        assert_eq!(daily_limit_text_for(&spent), MEMBER_DAILY_LIMIT_TEXT);
         assert!(MEMBER_DAILY_LIMIT_TEXT.contains("your AI allowance"));
         assert!(MEMBER_DAILY_LIMIT_TEXT.contains("00:00 UTC"));
         assert!(MEMBER_DAILY_LIMIT_TEXT.contains("apps and entries keep working"));

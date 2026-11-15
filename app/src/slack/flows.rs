@@ -434,12 +434,16 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
     // APP-108: a folder named in the words ("build a metrics app from the
     // Q3 metrics folder", `/forma folder 1 formation brief me`); Slack has no
     // selected folder, so the name or number is required.
-    if let Some(answer) = crate::boxes::intent::act(&member, utterance, None).await {
-        return folder_message(
-            state,
-            answer,
-            Some(&crate::composer::model::member_of(&member)),
-        );
+    let caller = crate::composer::model::Caller::member(&member);
+    if let Some(answer) = crate::boxes::intent::act(
+        &member,
+        utterance,
+        None,
+        crate::composer::model::Source::Slack,
+    )
+    .await
+    {
+        return folder_message(state, answer, &caller);
     }
     let context = match stores.workspace.composer_context(&member).await {
         Ok(context) => context,
@@ -453,10 +457,16 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
     // DS-43, DS-69: the rehearsed parse in Slack, demo organization only.
     let demo = demo::is_demo_org(member.organization());
     let today = crate::events::today();
-    let member_key = crate::composer::model::member_of(&member);
     let parse = match state
         .parser
-        .parse(utterance, &catalog, demo, &today, Some(&member_key))
+        .parse(
+            utterance,
+            &catalog,
+            demo,
+            &today,
+            &caller,
+            crate::composer::model::Source::Slack,
+        )
         .await
     {
         Ok(parse) => parse,
@@ -465,7 +475,7 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
         }
         Err(ParseFailure::DailyLimit) => {
             return text::ephemeral(
-                crate::composer::model::daily_limit_text_for(Some(&member_key)),
+                crate::composer::model::daily_limit_text_for(&caller),
                 None,
                 false,
             )
@@ -1143,7 +1153,7 @@ pub(crate) fn approval_request(
 pub(super) fn folder_message(
     state: &Slack,
     answer: crate::boxes::intent::Answer,
-    member: Option<&str>,
+    caller: &crate::composer::model::Caller,
 ) -> Value {
     use crate::boxes::intent::Answer;
     let noun = crate::boxes::NOUN_LOWER;
@@ -1155,7 +1165,7 @@ pub(super) fn folder_message(
                 crate::boxes::routes::BuildRefusal::NoData => format!("That {noun} has no CSV or XLSX data to build from yet."),
                 crate::boxes::routes::BuildRefusal::ComposerUnavailable => UNAVAILABLE.to_owned(),
                 crate::boxes::routes::BuildRefusal::TooMany(_) => "You're going fast. Try again in a few minutes.".to_owned(),
-                crate::boxes::routes::BuildRefusal::DailyLimit => crate::composer::model::daily_limit_text_for(member).to_owned(),
+                crate::boxes::routes::BuildRefusal::DailyLimit => crate::composer::model::daily_limit_text_for(caller).to_owned(),
                 crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => format!("Forma could not build an app from that {noun}. Try saying what it should show."),
                 _ => REFUSED.to_owned(),
             };

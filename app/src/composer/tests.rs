@@ -192,7 +192,8 @@ fn a_valid_generated_definition_is_admitted_and_labeled_generated() {
             ORG,
             APP,
             far(),
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
         ))
         .unwrap();
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -258,7 +259,8 @@ fn a_simple_list_retry_names_the_required_empty_transition_array() {
             ORG,
             APP,
             far(),
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
         ))
         .unwrap();
     assert_eq!(generated.refused, ["encoding"]);
@@ -304,7 +306,8 @@ fn hostile_outputs_are_refused_by_admission_and_retries_carry_codes_only() {
             ORG,
             APP,
             far(),
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
         ))
         .unwrap_err();
     assert_eq!(
@@ -477,7 +480,8 @@ fn template_customization_passes_the_actual_admitted_starting_definition() {
             ORG,
             APP,
             far(),
-            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
         ))
         .unwrap();
     let requests = script.requests();
@@ -513,7 +517,15 @@ fn a_clean_workspace_generates_a_records_app_from_a_sentence() {
     let script = Script::new(vec![Ok(first.to_string())]);
     let intent = "Track my team's book club reading list: title, author, who suggested it and whether we've read it";
     let generated = runtime()
-        .block_on(composer(&script).generate(intent, &[], ORG, APP, far(), None))
+        .block_on(composer(&script).generate(
+            intent,
+            &[],
+            ORG,
+            APP,
+            far(),
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
+        ))
         .unwrap();
     assert!(generated.refused.is_empty());
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -555,7 +567,15 @@ fn private_entries_and_reviewer_only_commands_are_generated_from_plain_words() {
     let script = Script::new(vec![Ok(prompt::private_entries_example().to_string())]);
     let intent = "Collect suggestions from everyone; each person sees only the suggestions they sent in, and only reviewers can accept one";
     let generated = runtime()
-        .block_on(composer(&script).generate(intent, &[], ORG, APP, far(), None))
+        .block_on(composer(&script).generate(
+            intent,
+            &[],
+            ORG,
+            APP,
+            far(),
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
+        ))
         .unwrap();
     assert!(generated.refused.is_empty());
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -826,7 +846,15 @@ fn plain_words_compose_participation_apps_through_admission() {
     ] {
         let script = Script::new(vec![Ok(reply.to_string())]);
         let generated = runtime()
-            .block_on(composer(&script).generate(sentence, &[], ORG, APP, far(), None))
+            .block_on(composer(&script).generate(
+                sentence,
+                &[],
+                ORG,
+                APP,
+                far(),
+                &crate::composer::model::test_caller(),
+                crate::composer::model::Source::Canvas,
+            ))
             .unwrap();
         assert!(generated.refused.is_empty(), "{sentence}");
         assert_eq!(generated.planned.origin, Origin::Generated);
@@ -1293,7 +1321,15 @@ fn a_participation_refusal_retries_with_its_code_and_fix_and_no_value() {
         Ok(prompt::plain_words::quiz().to_string()),
     ]);
     let generated = runtime()
-        .block_on(composer(&script).generate(prompt::plain_words::QUIZ, &[], ORG, APP, far(), None))
+        .block_on(composer(&script).generate(
+            prompt::plain_words::QUIZ,
+            &[],
+            ORG,
+            APP,
+            far(),
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
+        ))
         .unwrap();
     let rule = "participation_rule: set_now field cannot be writable";
     assert_eq!(generated.refused, vec![rule]);
@@ -1403,26 +1439,54 @@ fn multi_enum_follows_app_208s_switch_and_ambiguous_records_inputs_are_refused()
 fn a_model_failure_ends_generation_and_an_absent_key_disables_it() {
     let script = Script::new(vec![Err(ModelError::Timeout)]);
     let failure = runtime()
-        .block_on(composer(&script).generate("abc", &sources(SPEND), ORG, APP, far(), None))
+        .block_on(composer(&script).generate(
+            "abc",
+            &sources(SPEND),
+            ORG,
+            APP,
+            far(),
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
+        ))
         .unwrap_err();
     assert_eq!(failure, GenerationFailure::Model(ModelError::Timeout));
     assert_eq!(script.requests().len(), 1);
     let disabled = Composer::new(None, "r", "g");
     assert!(!disabled.enabled());
     let failure = runtime()
-        .block_on(disabled.generate("abc", &sources(SPEND), ORG, APP, far(), None))
+        .block_on(disabled.generate(
+            "abc",
+            &sources(SPEND),
+            ORG,
+            APP,
+            far(),
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
+        ))
         .unwrap_err();
     assert_eq!(failure, GenerationFailure::Model(ModelError::Unavailable));
     let library = [library_app(SPEND, APP)];
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &library, None, None))
+            .block_on(disabled.route(
+                "abc",
+                &library,
+                None,
+                &crate::composer::model::test_caller(),
+                crate::composer::model::Source::Canvas
+            ))
             .unwrap_err(),
         ModelError::Unavailable
     );
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &[], None, None))
+            .block_on(disabled.route(
+                "abc",
+                &[],
+                None,
+                &crate::composer::model::test_caller(),
+                crate::composer::model::Source::Canvas
+            ))
             .unwrap(),
         (Decision::Generate, "empty_library")
     );
@@ -1500,11 +1564,13 @@ fn the_router_decides_only_within_the_catalog() {
         r#"{"choice":"00000000-0000-4000-8000-0000000000c9","confidence":"high","reason":"fits","title":"Spend"}"#.into(),
     )]);
     let routed = runtime()
-        .block_on(
-            composer(&script)
-                .with_matcher(false)
-                .route("review spend", &library, None, None),
-        )
+        .block_on(composer(&script).with_matcher(false).route(
+            "review spend",
+            &library,
+            None,
+            &crate::composer::model::test_caller(),
+            crate::composer::model::Source::Canvas,
+        ))
         .unwrap();
     assert_eq!(routed, (Decision::Retrieve { index: 1 }, "high"));
     assert_eq!(script.requests()[0].model, "router-model");
@@ -1606,7 +1672,8 @@ fn the_client_retries_server_failures_once_each_and_never_a_client_refusal() {
             user: "u".into(),
             max_tokens: 10,
             budget: std::time::Duration::from_secs(20),
-            member: None,
+            caller: crate::composer::model::test_caller(),
+            source: crate::composer::model::Source::Canvas,
         };
         let reply = client.complete(&request).await.unwrap();
         assert_eq!(reply.text, "{\"choice\":\"none\",\"confidence\":\"low\"}");
@@ -1663,7 +1730,8 @@ fn the_client_sends_nothing_once_its_daily_cap_is_reached() {
             user: "u".into(),
             max_tokens: 10,
             budget: std::time::Duration::from_secs(20),
-            member: None,
+            caller: crate::composer::model::test_caller(),
+            source: crate::composer::model::Source::Canvas,
         };
         // One call is one slot, its retry included (503 then 200).
         client.complete(&request).await.unwrap();
@@ -1702,6 +1770,195 @@ fn the_client_sends_nothing_once_its_daily_cap_is_reached() {
             "nothing reached the endpoint after the cap"
         );
     });
+}
+
+/// APP-222: every source, driven through the real client against the stub,
+/// is exactly one `model.call` line with its source, outcome `ok`, the
+/// reply's tokens and the member's ids, and no line carries the prompt (a
+/// unique marker in the system and user text appears nowhere).
+#[test]
+fn each_source_logs_one_model_call_with_its_tokens_and_never_the_prompt() {
+    static CAP: model::DailyCap = model::DailyCap::new(100);
+    static MEMBERS: model::MemberDailyCap = model::MemberDailyCap::new(100);
+    const MARKER: &str = "prompt-marker-7c41";
+    let lines = crate::config::logs::testing::Lines::default();
+    let caller = model::test_caller();
+    tracing::subscriber::with_default(lines.subscriber(), || {
+        runtime().block_on(async {
+            let (endpoint, stub) = stub_server(Vec::new()).await;
+            let client = Anthropic::new("sk-ant-synthetic-test-key", &endpoint)
+                .unwrap()
+                .with_daily_cap(&CAP)
+                .with_member_daily_cap(&MEMBERS);
+            for source in model::Source::ALL {
+                let request = ModelRequest {
+                    model: "stub-model".into(),
+                    system: format!("system {MARKER}"),
+                    user: format!("a member asks {MARKER} about {}", source.as_str()),
+                    max_tokens: 10,
+                    budget: std::time::Duration::from_secs(20),
+                    caller: caller.clone(),
+                    source,
+                };
+                client.complete(&request).await.unwrap();
+            }
+            assert_eq!(stub.calls.load(Ordering::SeqCst), model::Source::ALL.len());
+        });
+    });
+    let text = lines.text();
+    assert!(!text.contains(MARKER), "no prompt text is logged: {text}");
+    let calls = lines.events("model.call");
+    let sources: Vec<&str> = calls
+        .iter()
+        .map(|l| l["source"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        sources,
+        [
+            "canvas",
+            "ask",
+            "shape",
+            "folder",
+            "action",
+            "customizer",
+            "mcp",
+            "slack"
+        ]
+    );
+    for line in &calls {
+        assert_eq!(line["outcome"], "ok", "{line}");
+        assert_eq!(line["input_tokens"], 5, "{line}");
+        assert_eq!(line["output_tokens"], 7, "{line}");
+        assert_eq!(line["model"], "stub-model");
+        assert_eq!(line["principal"].as_str(), caller.principal());
+        assert_eq!(line["organization"].as_str(), caller.organization());
+        assert!(line["latency_ms"].is_u64());
+        assert!(line.get("reason").is_none());
+    }
+    assert!(lines.events("model.call_failed").is_empty());
+}
+
+/// APP-222: a failed attempt is one `model.call_failed` line with the
+/// provider status and the error class, and a call whose attempts all fail
+/// ends in one `model.call` line, outcome `failed`.
+#[test]
+fn a_failed_attempt_logs_the_provider_status_and_its_class() {
+    let lines = crate::config::logs::testing::Lines::default();
+    let request = |budget_ms: u64| ModelRequest {
+        model: "stub-model".into(),
+        system: "s".into(),
+        user: "u".into(),
+        max_tokens: 10,
+        budget: std::time::Duration::from_millis(budget_ms),
+        caller: model::test_caller(),
+        source: model::Source::Ask,
+    };
+    tracing::subscriber::with_default(lines.subscriber(), || {
+        runtime().block_on(async {
+            // A 503, then the retry answers.
+            let (endpoint, _) = stub_server(vec![503, 200]).await;
+            let client = Anthropic::new("sk-ant-synthetic-test-key", &endpoint).unwrap();
+            client.complete(&request(20_000)).await.unwrap();
+            // A 400 is not retried: the call fails.
+            let (endpoint, _) = stub_server(vec![400]).await;
+            let client = Anthropic::new("sk-ant-synthetic-test-key", &endpoint).unwrap();
+            assert_eq!(
+                client.complete(&request(20_000)).await.unwrap_err(),
+                ModelError::Refused
+            );
+            // Nothing listens: a transport failure, then no time to retry.
+            let client = Anthropic::new(
+                "sk-ant-synthetic-test-key",
+                "http://127.0.0.1:9/v1/messages",
+            )
+            .unwrap();
+            assert!(client.complete(&request(200)).await.is_err());
+        });
+    });
+    let failed = lines.events("model.call_failed");
+    let seen: Vec<(Option<u64>, &str)> = failed
+        .iter()
+        .map(|l| (l["status"].as_u64(), l["class"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            (Some(503), "status"),
+            (Some(400), "status"),
+            (None, "transport")
+        ],
+        "{}",
+        lines.text()
+    );
+    assert!(failed
+        .iter()
+        .all(|l| l["source"] == "ask" && l["level"] == "WARN"));
+    let outcomes: Vec<String> = lines
+        .events("model.call")
+        .iter()
+        .map(|l| l["outcome"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(outcomes, ["ok", "failed", "failed"]);
+}
+
+/// APP-222: every product model call names a member. The closed list of
+/// [`model::Caller::System`] reasons in product code is empty: any
+/// `Caller::System` outside `composer/model.rs` (where it is defined and
+/// unit-tested) must add its reason here, in review.
+#[test]
+fn no_product_model_call_is_a_system_call() {
+    const PRODUCT_SYSTEM_REASONS: [&str; 0] = [];
+    fn walk(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, files);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                files.push(path);
+            }
+        }
+    }
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    walk(&src, &mut files);
+    assert!(files.len() > 100, "the whole source tree is read");
+    let named = system_reasons(&files, &src.join("composer/model.rs"));
+    assert_eq!(
+        named, PRODUCT_SYSTEM_REASONS,
+        "system callers in product code"
+    );
+    // The scan sees what it looks for: model.rs's own unit test names one.
+    assert_eq!(system_reasons(&files, &src.join("none.rs")), ["test"]);
+}
+/// Every system caller's reason written in the code (comment lines aside)
+/// of `files` but `except`; a spelling other than `{ reason: "…" }` on the
+/// same line fails the scan rather than hide.
+fn system_reasons(files: &[std::path::PathBuf], except: &std::path::Path) -> Vec<String> {
+    let needle = ["Caller", "::System"].concat();
+    let mut reasons = Vec::new();
+    for file in files.iter().filter(|f| f.as_path() != except) {
+        let text = std::fs::read_to_string(file).unwrap();
+        for line in text.lines().filter(|l| !l.trim_start().starts_with("//")) {
+            let mut rest = line;
+            while let Some(at) = rest.find(&needle) {
+                rest = &rest[at + needle.len()..];
+                let reason = rest
+                    .trim_start()
+                    .strip_prefix('{')
+                    .map(str::trim_start)
+                    .and_then(|a| a.strip_prefix("reason:"))
+                    .map(str::trim_start)
+                    .and_then(|a| a.strip_prefix('"'))
+                    .and_then(|a| a.split_once('"'))
+                    .map(|(reason, _)| reason.to_owned())
+                    .unwrap_or_else(|| {
+                        panic!("{}: a system caller the scan cannot read", file.display())
+                    });
+                reasons.push(reason);
+            }
+        }
+    }
+    reasons
 }
 
 // --- The route without a store: the refusal order and the composition ---
@@ -1942,7 +2199,8 @@ fn the_budgets_fit_the_route_deadline_and_an_attempt_needs_room() {
         ORG,
         APP,
         tokio::time::Instant::now() + std::time::Duration::from_secs(12),
-        None,
+        &crate::composer::model::test_caller(),
+        crate::composer::model::Source::Canvas,
     ));
     assert_eq!(outcome.unwrap_err(), GenerationFailure::OutOfTime);
     assert!(script.requests().is_empty());
@@ -1972,7 +2230,15 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
     runtime().block_on(async {
         // A title match is a confident pick with no model at all...
         assert_eq!(
-            disabled.route("spend review", &library, None, None).await,
+            disabled
+                .route(
+                    "spend review",
+                    &library,
+                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
+                .await,
             Ok((Decision::Retrieve { index: 1 }, "matched"))
         );
         // ...never the excluded authoring app...
@@ -1982,14 +2248,23 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
                     "spend review",
                     &library,
                     Some("00000000-0000-4000-8000-0000000000c9"),
-                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas,
                 )
                 .await,
             Err(ModelError::Unavailable)
         );
         // ...and no hit needs the model.
         assert_eq!(
-            disabled.route("zzz qqq", &library, None, None).await,
+            disabled
+                .route(
+                    "zzz qqq",
+                    &library,
+                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
+                .await,
             Err(ModelError::Unavailable)
         );
         let reply =
@@ -1997,12 +2272,28 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
         let script = Script::new(vec![Ok(reply.into()), Ok(reply.into())]);
         let with_model = composer(&script);
         assert_eq!(
-            with_model.route("spend review", &library, None, None).await,
+            with_model
+                .route(
+                    "spend review",
+                    &library,
+                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
+                .await,
             Ok((Decision::Retrieve { index: 1 }, "matched"))
         );
         assert!(script.requests().is_empty(), "no model call for a pick");
         assert_eq!(
-            with_model.route("zzz qqq", &library, None, None).await,
+            with_model
+                .route(
+                    "zzz qqq",
+                    &library,
+                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
+                .await,
             Ok((Decision::Retrieve { index: 0 }, "high"))
         );
         assert_eq!(script.requests().len(), 1);
@@ -2011,7 +2302,13 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
             with_model
                 .clone()
                 .with_matcher(false)
-                .route("spend review", &library, None, None)
+                .route(
+                    "spend review",
+                    &library,
+                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
                 .await,
             Ok((Decision::Retrieve { index: 0 }, "high"))
         );
@@ -2102,7 +2399,7 @@ fn real_model_smoke() {
         // is recorded whatever the later steps do; judged at the end.
         let started = std::time::Instant::now();
         let participation = composer
-            .generate(prompt::plain_words::QUIZ, &[], ORG, APP, far(), None)
+            .generate(prompt::plain_words::QUIZ, &[], ORG, APP, far(), &crate::composer::model::test_caller(), crate::composer::model::Source::Canvas)
             .await;
         let features = match &participation {
             Ok(generated) => {
@@ -2140,7 +2437,7 @@ fn real_model_smoke() {
                 "Review expenses over $200 and record a decision on each",
                 &library,
                 None,
-                None,
+                &crate::composer::model::test_caller(), crate::composer::model::Source::Canvas,
             )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());
@@ -2150,7 +2447,7 @@ fn real_model_smoke() {
                 "Which destinations receive the most bytes each minute?",
                 &library,
                 None,
-                None,
+                &crate::composer::model::test_caller(), crate::composer::model::Source::Canvas,
             )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());
@@ -2162,7 +2459,7 @@ fn real_model_smoke() {
                 ORG,
                 APP,
                 far(),
-                None,
+                &crate::composer::model::test_caller(), crate::composer::model::Source::Canvas,
             )
             .await;
         match &generated {
@@ -2187,7 +2484,7 @@ fn real_model_smoke() {
         // No persistence: only the admitted definition and counts are read.
         let started = std::time::Instant::now();
         let generated = composer.generate(
-            "Create a book club reading list", &[], ORG, APP, far(), None,
+            "Create a book club reading list", &[], ORG, APP, far(), &crate::composer::model::test_caller(), crate::composer::model::Source::Canvas,
         ).await.expect("a clean workspace reading list must be admitted");
         let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
         let inputs = content["inputs"].as_array().unwrap();
@@ -2233,19 +2530,41 @@ fn ds03_nearest_without_a_model_needs_the_demo_switch() {
         // Two identical titles: a near tie the matcher cannot settle.
         assert_eq!(
             disabled
-                .route_for("spend review", &library, None, false, None)
+                .route_for(
+                    "spend review",
+                    &library,
+                    None,
+                    false,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
                 .await,
             Err(ModelError::Unavailable),
             "switch off: no nearest answer"
         );
         assert_eq!(
-            disabled.route("spend review", &library, None, None).await,
+            disabled
+                .route(
+                    "spend review",
+                    &library,
+                    None,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
+                .await,
             Err(ModelError::Unavailable),
             "route is the switch-off case"
         );
         assert_eq!(
             disabled
-                .route_for("spend review", &library, None, true, None)
+                .route_for(
+                    "spend review",
+                    &library,
+                    None,
+                    true,
+                    &crate::composer::model::test_caller(),
+                    crate::composer::model::Source::Canvas
+                )
                 .await,
             Ok((Decision::Retrieve { index: 0 }, "nearest")),
             "switch on: the nearest candidate, labeled retrieved"
