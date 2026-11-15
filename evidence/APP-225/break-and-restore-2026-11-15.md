@@ -65,6 +65,27 @@ admins and could set admin).
 Restored: the edit reversed (`grep -c "BREAK (c)"` is 0); both tests pass
 (`test result: ok. 2 passed`).
 
+## (d) The serialized last-owner check in `set_member_role` (`app/migrations/0025_organization_roles.sql`; review MAJOR-1)
+
+Break: the advisory lock `forma:owner-change:<org>` and the `EXISTS` check are replaced by the
+first draft's plain unlocked count (`IF (SELECT count(*) … )=0 THEN … 'last_owner'`); the manifest
+is repinned and `catalog-v25.json` regenerated from the broken SQL in the disposable PostgreSQL, so
+the break reaches the campaign instead of the catalog pin (`check-schema-pins.py`: `"agree": true`).
+
+- `just campaign org-roles` fails at the concurrency check (`org_roles_campaign.rs:661`): two owners
+  step down on two connections with interleaved transactions. With the plain count the second call
+  reads the first owner's uncommitted row as still an owner and goes on to its own UPDATE; it then
+  waits only on the admission chain's head row (the audit append, after the decision), so the 400 ms
+  serialization assertion still holds, and once the first commits the second answers
+  `assertion left == right failed: the second owner sees the first one's commit  left: "changed"  right: "last_owner"`:
+  both owners demoted, the organization left without one. With the lock, the second call queues
+  before its check and answers `last_owner`.
+
+Restored: the edit reversed (`grep -c "BREAK (d)"` is 0), the catalog regenerated and the manifest
+repinned from the restored SQL; `catalog-v25.json` and `0025_organization_roles.sql` are byte-identical
+to before the break (`c06d8b74…b59c` and `612dcc7e…8ac5`); `just campaign org-roles` passes
+(`org-roles campaign: 10 checks passed`).
+
 ## Screenshots
 
 Pinned Playwright 1.64.1 (`spikes/APP-003/admin`, `npm ci` in this worktree with no browser download),

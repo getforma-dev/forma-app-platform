@@ -40,7 +40,7 @@ A helper (an assistant, a shift lead, a reviewer of other people's entries) is a
 
 ## 5. The last owner
 
-An organization never loses its last owner. Demoting or removing the last active owner is refused (`last_owner`), by the owner themselves and, trivially, by anyone else (an admin cannot touch an owner at all: `not_allowed`). An owner may demote or remove themselves only while another active owner remains. Organizations with no owner today (the operator-managed synthetic organizations) stay valid: the rule governs transitions, never the current state. The operator's `set-role` honors it too.
+An organization never loses its last owner. Demoting or removing the last active owner is refused (`last_owner`), by the owner themselves and, trivially, by anyone else (an admin cannot touch an owner at all: `not_allowed`). An owner may demote or remove themselves only while another active owner remains. Organizations with no owner today (the operator-managed synthetic organizations) stay valid: the rule governs transitions, never the current state. The operator's `set-role` honors it too. The check is serialized: every owner transition of an organization (in `set_member_role`, `admin_remove_member` and the operator's `set-role`) first takes the transaction advisory lock `forma:owner-change:<org>`, so under READ COMMITTED two owners stepping down at once queue, and the second one sees the first one's commit and is refused; the organization is never left without an owner.
 
 ## 6. Who changes roles, and how
 
@@ -50,13 +50,13 @@ An organization never loses its last owner. Demoting or removing the last active
 
 ## 7. The audit
 
-Every real role change advances the target's `membership_epoch` (their open sessions re-read authority at their next request, as removal does) and appends `membership.role_changed` on the admission chain (an admin's action) or the operator chain (the operator's), with the caller as actor and an outcome digest recomputable from the target id, the role before and the role after under `forma:member-role:v1`. The same role again is a no-op: no write, no event. Names never enter the chain.
+Every real role change advances the target's `membership_epoch` (their open sessions re-read authority at their next request, as removal does) and appends `membership.role_changed`: on the admission chain for an admin's action, with the caller as actor; on the operator chain for the operator's `set-role`, with the target as actor (as the operator's revocations record it). Each carries an outcome digest recomputable from the target id, the role before and the role after under `forma:member-role:v1`. The same role again is a no-op: no write, no event. Names never enter the chain.
 
 ## 8. Migration 0025 and the data mapping
 
 Additive but for one drop and one recreation, both recorded: `organization_permissions` is dropped (it never held another permission, and a second source of admin standing would drift from the role), and `org_admin_overview` is dropped and recreated because its `is_admin` column becomes `role` (a return type cannot change in place; the 0023 precedent). `admin_remove_member` is replaced in place under the ladder with `last_owner` for `last_admin`; `steward_card` and `admit_redemption` are replaced in place (the steward is an organization owner or admin; an admission takes the code's role).
 
-Data, deterministic: in each organization the active `admin_policy` holder admitted earliest becomes `owner`, by the earliest `code_redemptions.committed_at` of the principal, NULLS LAST (a seeded or operator-admitted member has no redemption), then the smallest principal id; every other active holder becomes `admin`; everyone else, revoked memberships included, keeps the default `member`. FORCE RLS is lifted for that one statement and restored right after.
+Data, deterministic: in each organization the active `admin_policy` holder admitted earliest becomes `owner`, by the earliest `code_redemptions.committed_at` of the principal, NULLS LAST (a seeded or operator-admitted member has no redemption), then the smallest principal id; every other active holder becomes `admin`; everyone else, revoked memberships included, keeps the default `member`. FORCE RLS is lifted for that one statement and restored right after. One consequence to check after release: an operator-admitted admin has no redemption and so ranks after any code-redeemed admin; if the mapped owner is not the intended one, correct it with `set-role owner`.
 
 ## 9. Tiers and seats (later)
 
