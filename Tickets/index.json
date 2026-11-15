@@ -387,9 +387,10 @@
         "APP-218",
         "APP-219",
         "APP-220",
-        "APP-221"
+        "APP-221",
+        "APP-222"
       ],
-      "ticket_count": 58,
+      "ticket_count": 59,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6856,6 +6857,35 @@
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": []
+    },
+    {
+      "id": "APP-222",
+      "title": "AI usage done the professional way: typed caller, durable usage ledger, warnings, and allowances as plan data",
+      "path": "0-backlog/APP-222.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "224",
+      "Size": "L",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: \"AI cap comes next after this\", and \"lets create a ticket to also do this next with the AI warning slice. Also the limit to fix later include it. and make sure we are doing the professional pattern.\" **When: next, right after release D (APP-217).** Part A is a normal release before the class. Part B is a schema release (24 \u2192 25) by Nov 24 if it is ready and reviewed; otherwise it ships right after the class, and Part A stands alone.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-215, APP-219",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-215",
+        "APP-219"
+      ]
     }
   ]
 }
