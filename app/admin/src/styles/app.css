@@ -423,3 +423,26 @@ button, input, select, textarea { font: inherit; }
 .document-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .document-records table { display: block; max-width: 100%; overflow-x: auto; }
 .document-part { scroll-margin-top: 20px; }
+
+/* APP-223: the one site footer of the document pages (src/site/footer.tsx),
+   placed after each page's <main>. Quiet chrome: muted small type under a
+   hairline, three columns, the groups stacked at phone width. It keeps the
+   column of the page above it, so its edges line up with the page's. */
+.site-footer { max-width: 48rem; margin: 0 auto; padding: 0 32px 48px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.home-page + .site-footer { max-width: 64rem; }
+.page.work + .site-footer, .org-admin + .site-footer { max-width: 72rem; }
+.signin-page + .site-footer { max-width: 32rem; }
+.site-footer-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 32px; padding-top: 28px; border-top: 1px solid var(--forma-line); }
+.site-footer-heading { margin: 0 0 8px; color: var(--muted); font: 500 10px/1.6 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .12em; }
+.site-footer ul { margin: 0; padding: 0; list-style: none; }
+.site-footer a { display: inline-block; padding-block: 3px; color: var(--muted); text-decoration: none; overflow-wrap: anywhere; }
+.site-footer a:hover { color: var(--fg); text-decoration: underline; }
+.site-footer-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 28px 0 0; font-size: 12px; }
+.site-footer-brand { display: inline-flex; align-items: center; gap: 7px; color: var(--fg); font-size: 16px; font-weight: 700; letter-spacing: -.8px; line-height: 1; }
+.site-footer-brand .forma-mark-tile { width: 22px; height: 22px; border-radius: 3px; }
+.site-footer-brand .forma-mark { width: 13px; height: 14px; }
+@media (max-width: 600px) {
+  .site-footer { padding: 0 22px 40px; }
+  .site-footer-nav { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .site-footer ul { display: flex; flex-wrap: wrap; gap: 0 18px; }
+}

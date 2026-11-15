@@ -5,8 +5,8 @@ use forma_server::{
 };
 use genui::auth::{self, Auth, AuthConfig};
 use genui::pages::{
-    respond, DeniedProps, ErrorProps, InviteProps, PendingProps, RecordProps, SigninProps,
-    SsrErrorPages, SsrPages, WorkspaceProps,
+    respond, DeniedProps, ErrorProps, InviteProps, NoticeProps, PendingProps, RecordProps,
+    SigninProps, SsrErrorPages, SsrPages, WorkspaceProps,
 };
 use rust_embed::Embed;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -25,6 +25,8 @@ struct AppState {
     readiness: Arc<genui::readiness::Readiness>,
     home: Option<PageHandle<HomeProps>>,
     about: Option<PageHandle<AboutProps>>,
+    /// APP-223: the public beta notice page, served like `/about`.
+    notice: Option<PageHandle<NoticeProps>>,
 }
 
 fn refuse(message: impl std::fmt::Display) -> ! {
@@ -156,6 +158,7 @@ async fn main() {
     for route in [
         "/",
         "/about",
+        "/notice",
         "/invite",
         "/signin",
         "/auth/pending",
@@ -193,6 +196,15 @@ async fn main() {
         ),
         Some(RouteMode::Browser) => None,
         None => refuse("missing declared route /about"),
+    };
+    let notice_page = match manifest.route("/notice").map(|route| route.mode) {
+        Some(RouteMode::Ssr) => Some(
+            pages
+                .bind::<NoticeProps>("notice")
+                .unwrap_or_else(bind_errors),
+        ),
+        Some(RouteMode::Browser) => None,
+        None => refuse("missing declared route /notice"),
     };
     let auth_pages = Arc::new(SsrPages {
         auth_origin: auth_config.as_ref().map(|c| c.auth_origin.clone()),
@@ -351,26 +363,10 @@ async fn main() {
         readiness,
         home: home_page,
         about: about_page,
+        notice: notice_page,
     });
 
-    let app = Router::new()
-        .route("/", get(home))
-        .route("/health/live", get(|| async { StatusCode::OK }))
-        .route(
-            "/health/ready",
-            get(|State(state): State<Arc<AppState>>| async move {
-                if state.readiness.ready() {
-                    StatusCode::OK
-                } else {
-                    StatusCode::SERVICE_UNAVAILABLE
-                }
-            }),
-        )
-        .route("/about", get(about))
-        .route("/favicon.ico", get(favicon))
-        .route("/sw.js", get(sw::serve_sw::<Assets>))
-        .route("/_assets/{*filename}", get(assets::serve_asset::<Assets>))
-        .with_state(state);
+    let app = site(state);
     // The operator harness (feature builds only) replaces the product routes
     // for its isolated run; the two never share a router.
     // APP-076 G8: the uniform 404 for unknown paths and method mismatches
@@ -428,6 +424,32 @@ async fn main() {
     .unwrap();
 }
 
+/// The binary's own routes beside the product's: the public pages, health,
+/// the favicon, the retiring worker and the assets. `main` merges the product
+/// routes and wraps the uniform layer around both.
+fn site(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/", get(home))
+        .route("/health/live", get(|| async { StatusCode::OK }))
+        .route(
+            "/health/ready",
+            get(|State(state): State<Arc<AppState>>| async move {
+                if state.readiness.ready() {
+                    StatusCode::OK
+                } else {
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+            }),
+        )
+        .route("/about", get(about))
+        // APP-223: the public beta notice; any other method is the uniform 404.
+        .route("/notice", get(notice))
+        .route("/favicon.ico", get(favicon))
+        .route("/sw.js", get(sw::serve_sw::<Assets>))
+        .route("/_assets/{*filename}", get(assets::serve_asset::<Assets>))
+        .with_state(state)
+}
+
 async fn home(State(state): State<Arc<AppState>>) -> Response {
     let route = "/";
     // Route mode is fixed at startup; an SSR failure never selects a shell.
@@ -459,6 +481,31 @@ async fn about(State(state): State<Arc<AppState>>) -> Response {
         None => render_browser_shell(
             &PageConfig {
                 title: "About",
+                route_pattern: route,
+                manifest: &state.manifest,
+                config_json: None,
+                body_class: None,
+                personality_css: None,
+                body_prefix: None,
+            },
+            &ctx,
+        ),
+    };
+    respond(route, rendered)
+}
+
+/// APP-223: "Beta terms & privacy", the beta notice every member accepts on
+/// the invitation page, from the one source (`NoticeProps::current`). No
+/// session is read and no cookie is set.
+async fn notice(State(state): State<Arc<AppState>>) -> Response {
+    let route = "/notice";
+    // Route mode is fixed at startup; an SSR failure never selects a shell.
+    let ctx = RenderCtx::new().with_title("Beta terms & privacy");
+    let rendered = match &state.notice {
+        Some(notice) => notice.render(&NoticeProps::current(), &ctx),
+        None => render_browser_shell(
+            &PageConfig {
+                title: "Beta terms & privacy",
                 route_pattern: route,
                 manifest: &state.manifest,
                 config_json: None,
@@ -549,6 +596,7 @@ mod tests {
             .unwrap();
         let _ = modules.bind::<genui::org_admin::AdminProps>("orgAdmin");
         let _ = modules.bind::<ErrorProps>("error");
+        let _ = modules.bind::<NoticeProps>("notice");
         modules.finalize().unwrap();
         let ctx = RenderCtx::new().with_title("Forma Canvas");
         let (status, headers, body) = html(respond("/", home.render(&HomeProps {}, &ctx))).await;
@@ -594,6 +642,7 @@ mod tests {
             .unwrap();
         let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
         let _ = pages.bind::<ErrorProps>("error");
+        let _ = pages.bind::<NoticeProps>("notice");
         pages.finalize().unwrap();
         ssr
     }
@@ -635,6 +684,7 @@ mod tests {
         let _ = pages.bind::<genui::query::canvas::CanvasProps>("canvas");
         let _ = pages.bind::<genui::sharing::live::SharedPageProps>("shared");
         let _ = pages.bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas");
+        let _ = pages.bind::<NoticeProps>("notice");
         pages.finalize().unwrap();
         (ssr, errors, admin)
     }
@@ -725,8 +775,16 @@ mod tests {
     /// navigation headers they stay the exact JSON refusal.
     #[tokio::test]
     async fn browser_navigations_get_one_themed_404_whatever_the_path() {
-        let (_, errors, _) = lab_pages();
+        let (ssr, errors, _) = lab_pages();
         let app = lab_app(errors);
+        // APP-223: the shared site footer, as the renderer puts it on another
+        // page; the page's own copy is judged without it.
+        let (_, _, signin) = html(ssr.signin(&SigninView {
+            action: None,
+            failed: false,
+        }))
+        .await;
+        let shared_footer = site_footer(&signin).to_owned();
         const MARKER: &str = "zq7MARKERx9";
         let json = r#"{"code":"not_found","status":404}"#;
         let requests = [
@@ -818,16 +876,18 @@ mod tests {
             assert!(body.contains(">Specimen not found</h1>"));
             assert!(body.contains("CONTAINMENT BREACH · ERROR <span>404</span>"));
             assert!(body.contains(words), "{cookie:?}: {body}");
+            assert_eq!(site_footer(body), shared_footer, "{cookie:?}");
+            let page = without_site_footer(body);
             for button in buttons {
-                assert!(body.contains(button), "{button} for {cookie:?}");
+                assert!(page.contains(button), "{button} for {cookie:?}");
             }
             assert_eq!(body.matches("class=\"lab-button").count(), count);
             assert!(body.contains("src=\"/_assets/forma-isotope.svg\""));
             assert!(body.contains("holding a glowing green capsule\""));
-            assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
+            assert!(body.contains("href=\"mailto:support@getforma.dev\""));
             assert!(body.contains("type=\"checkbox\"") && body.contains("for=\"lab-surge\""));
             // Tab order: the brand link, the buttons, the mascot toggle, then
-            // the footer's mail link.
+            // the site footer's links (its mail link is the first on the page).
             let at = |needle: &str| body.find(needle).unwrap();
             let toggle = at("id=\"lab-surge\"");
             assert!(at("class=\"forma-brand\"") < toggle && toggle < at("href=\"mailto:"));
@@ -835,7 +895,8 @@ mod tests {
                 assert!(last < toggle);
             }
             assert!(!body.contains("<script") && !body.contains("data-forma-island"));
-            assert!(!body.contains("<form") && !body.contains("://"));
+            // The only absolute links are the shared footer's own.
+            assert!(!body.contains("<form") && !page.contains("://"));
             assert!(!body.contains(MARKER) && !format!("{head:?}").contains(MARKER));
             let expected = without_nonce(&first);
             for (method, uri) in &requests[1..] {
@@ -882,7 +943,8 @@ mod tests {
         // page; one asking for anything gets the JSON.
         let old = send(&app, "GET", "/admin", &[("accept", "text/html")]).await;
         assert_eq!(old.0, StatusCode::NOT_FOUND);
-        assert!(old.2.contains(">Specimen not found</h1>") && old.2.contains(">Sign in<"));
+        assert!(old.2.contains(">Specimen not found</h1>"));
+        assert!(without_site_footer(&old.2).contains(">Sign in<"));
         let any = send(&app, "GET", "/admin", &[("accept", "*/*")]).await;
         assert_eq!(any.2, json);
         // A served answer is untouched.
@@ -955,6 +1017,558 @@ mod tests {
         assert_eq!(busy.1[header::RETRY_AFTER], "300");
     }
 
+    /// APP-223: the one site footer in a rendered page: exactly one, from its
+    /// opening tag to its own `</footer>` (it holds no other footer).
+    fn site_footer(body: &str) -> &str {
+        const OPEN: &str = "<footer class=\"site-footer\">";
+        assert_eq!(body.matches(OPEN).count(), 1, "exactly one site footer");
+        let start = body.find(OPEN).unwrap();
+        let end = start + body[start..].find("</footer>").unwrap() + "</footer>".len();
+        &body[start..end]
+    }
+    /// The page with its site footer taken out, to judge the page's own copy.
+    fn without_site_footer(body: &str) -> String {
+        body.replacen(site_footer(body), "", 1)
+    }
+
+    /// APP-223: every page the binary binds, finalized together, and the
+    /// binary's own routes (`site`, as `main` composes them) under `uniform`.
+    struct AllPages {
+        site: Router,
+        auth: SsrPages,
+        errors: SsrErrorPages,
+        admin: genui::org_admin::SsrAdminPages,
+        work: genui::query::page::SsrWorkPages,
+        canvas: genui::query::canvas::SsrCanvasPages,
+        shared: genui::sharing::live::SsrSharedPages,
+    }
+    fn all_pages() -> AllPages {
+        let manifest = assets::try_load_manifest::<Assets>().expect("admin/dist built");
+        require_ssr(manifest.route("/notice").map(|entry| entry.mode)).unwrap();
+        // The notice page links its CSS and fetches no script.
+        assert!(manifest.route("/notice").unwrap().js.is_empty());
+        let pages = load_ir_modules::<Assets>(&manifest).unwrap();
+        // No stores: readiness never probes, and `/health/ready` stays 503.
+        let readiness = genui::readiness::Readiness::start(
+            Default::default(),
+            Default::default(),
+            String::new(),
+            None,
+        );
+        let state = AppState {
+            manifest: assets::try_load_manifest::<Assets>().unwrap(),
+            readiness,
+            home: Some(pages.bind::<HomeProps>("home").unwrap()),
+            about: Some(pages.bind::<AboutProps>("about").unwrap()),
+            notice: Some(pages.bind::<NoticeProps>("notice").unwrap()),
+        };
+        let all = AllPages {
+            site: genui::http::uniform(site(Arc::new(state))),
+            auth: SsrPages {
+                auth_origin: Some(AUTH_ORIGIN.into()),
+                invite: pages.bind::<InviteProps>("invite").unwrap(),
+                signin: pages.bind::<SigninProps>("signin").unwrap(),
+                pending: pages.bind::<PendingProps>("pending").unwrap(),
+                denied: pages.bind::<DeniedProps>("denied").unwrap(),
+                workspace: pages.bind::<WorkspaceProps>("workspace").unwrap(),
+                record: pages.bind::<RecordProps>("record").unwrap(),
+            },
+            errors: SsrErrorPages {
+                page: pages.bind::<ErrorProps>("error").unwrap(),
+            },
+            admin: genui::org_admin::SsrAdminPages {
+                page: pages
+                    .bind::<genui::org_admin::AdminProps>("orgAdmin")
+                    .unwrap(),
+            },
+            work: genui::query::page::SsrWorkPages {
+                page: pages.bind::<genui::query::page::WorkProps>("work").unwrap(),
+            },
+            canvas: genui::query::canvas::SsrCanvasPages {
+                page: pages
+                    .bind::<genui::query::canvas::CanvasProps>("canvas")
+                    .unwrap(),
+            },
+            shared: genui::sharing::live::SsrSharedPages {
+                auth_origin: None,
+                app: pages
+                    .bind::<genui::sharing::live::SharedPageProps>("shared")
+                    .unwrap(),
+                canvas: pages
+                    .bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas")
+                    .unwrap(),
+            },
+        };
+        pages.finalize().unwrap();
+        all
+    }
+
+    /// APP-223: every document-style page carries the one site footer, once,
+    /// byte for byte the same, after its `<main>` (so it is the page's
+    /// contentinfo landmark); every error page and viewer gets the same one.
+    /// The full-screen canvas pages and the workspace entry carry none, and
+    /// the canvas links the notice and About in a new tab instead.
+    #[tokio::test]
+    async fn document_pages_carry_the_one_site_footer_and_the_canvas_none() {
+        use genui::http::errors::{ErrorPages as _, ErrorView, Refusal, Viewer};
+        use genui::org_admin::AdminPages as _;
+        use genui::query::canvas::CanvasPages as _;
+        use genui::query::page::WorkPages as _;
+        use genui::sharing::live::SharedPages as _;
+        let all = all_pages();
+        let mut pages: Vec<(String, String)> = Vec::new();
+        for path in ["/", "/about", "/notice"] {
+            let (status, _, body) = send(&all.site, "GET", path, &[]).await;
+            assert_eq!(status, StatusCode::OK, "{path}");
+            pages.push((path.into(), body));
+        }
+        let record = RecordView {
+            app: "00000000-0000-4000-8000-0000000000c9".into(),
+            work: "00000000-0000-4000-8000-0000000000cd".into(),
+            collection: "00000000-0000-4000-8000-0000000000ce".into(),
+            record_id: "00000000-0000-4000-8000-0000000000f0".into(),
+            schema: "decision".into(),
+            schema_version: "1".into(),
+            publication: "00000000-0000-4000-8000-0000000000cc".into(),
+            work_version: "1".into(),
+            version: "1".into(),
+            exists: true,
+            fields: Vec::new(),
+            command: "record_decision".into(),
+            action: "/v1/work/00000000-0000-4000-8000-0000000000c9/work/commands/record_decision"
+                .into(),
+            can_write: true,
+            csrf: "C".repeat(43),
+            idempotency_key: "0123456789abcdef0123456789abcdef".into(),
+            notice: None,
+        };
+        let auth = &all.auth;
+        for (name, response) in [
+            (
+                "/signin",
+                auth.signin(&SigninView {
+                    action: None,
+                    failed: false,
+                }),
+            ),
+            (
+                "/signin/{handle}",
+                auth.signin(&SigninView {
+                    action: Some("/signin/mrswmz3infvgw3dnnzxxa4lsom".into()),
+                    failed: true,
+                }),
+            ),
+            ("/invite", auth.invite(&InviteView::default())),
+            (
+                "/auth/pending",
+                auth.pending(&PendingView {
+                    csrf_resend: "R".repeat(43),
+                    csrf_signout: "S".repeat(43),
+                    resend_available: true,
+                    cooldown_seconds: 0,
+                    hours_remaining: 0,
+                    result: None,
+                }),
+            ),
+            (
+                "/auth/callback",
+                auth.denied(&DeniedView {
+                    csrf_signout: "D".repeat(43),
+                }),
+            ),
+            ("/record", auth.record(&record)),
+            (
+                "/admin",
+                all.admin.page(&genui::org_admin::AdminProps::default()),
+            ),
+            (
+                "/w/{app}/{work}",
+                all.work.work(&genui::query::page::WorkProps::default()),
+            ),
+            (
+                "/s/{share}",
+                all.shared
+                    .app(&genui::sharing::live::SharedPageProps::default()),
+            ),
+        ] {
+            let (status, _, body) = html(response).await;
+            assert_eq!(status, StatusCode::OK, "{name}");
+            pages.push((name.into(), body));
+        }
+        for (refusal, viewer) in [
+            (Refusal::NotFound, Some(Viewer::SignedOut)),
+            (Refusal::NotFound, Some(Viewer::Member)),
+            (Refusal::NotFound, Some(Viewer::Guest)),
+            (Refusal::CrossSite, None),
+            (Refusal::PayloadTooLarge, None),
+            (Refusal::TooManyRequests, None),
+            (Refusal::Unavailable, None),
+        ] {
+            let view = ErrorView {
+                refusal,
+                viewer,
+                wait: "about 5 minutes".into(),
+            };
+            let page = all.errors.render(&view).expect("the error page renders");
+            pages.push((format!("/error {refusal:?} {viewer:?}"), html(page).await.2));
+        }
+        assert_eq!(pages.len(), 3 + 9 + 7);
+        let footer = site_footer(&pages[0].1).to_owned();
+        for (name, body) in &pages {
+            let count = body.matches("<footer class=\"site-footer\">").count();
+            assert_eq!(count, 1, "{name}: one site footer");
+            assert_eq!(site_footer(body), footer, "{name}");
+            let at = body.find("<footer class=\"site-footer\">").unwrap();
+            let main = body.rfind("</main>").expect("a main landmark");
+            assert!(main < at, "{name}: the footer follows the page's main");
+            assert_eq!(body.matches("aria-label=\"Footer\"").count(), 1, "{name}");
+        }
+        // The full-screen canvas pages and the workspace entry: no footer.
+        let canvas = html(
+            all.canvas
+                .canvas(&genui::query::canvas::CanvasProps::default()),
+        )
+        .await;
+        assert_eq!(canvas.0, StatusCode::OK);
+        let shared_canvas = html(
+            all.shared
+                .canvas(&genui::sharing::live::SharedCanvasProps::default()),
+        )
+        .await;
+        assert_eq!(shared_canvas.0, StatusCode::OK);
+        let workspace = html(auth.workspace(&WorkspaceView {
+            csrf_signout: "W".repeat(43),
+            csrf_signout_all: "A".repeat(43),
+            items: Vec::new(),
+        }))
+        .await;
+        for (name, body) in [
+            ("/canvas", &canvas.2),
+            ("/shared", &shared_canvas.2),
+            ("/workspace", &workspace.2),
+        ] {
+            assert!(
+                !body.contains("site-footer") && !body.contains("aria-label=\"Footer\""),
+                "{name}"
+            );
+        }
+        // The canvas's Help menu: Feedback, then the notice and About in a
+        // new tab, so the canvas keeps its state. One menu in place of the
+        // Feedback link keeps the top bar no wider than before.
+        let help = canvas
+            .2
+            .split("<details class=\"cv-help-menu\">")
+            .nth(1)
+            .expect("the Help menu");
+        let help = &help[..help.find("</details>").unwrap()];
+        assert_eq!(
+            help,
+            concat!(
+                r#"<summary class="cv-link" title="Feedback, the beta terms and About">Help</summary>"#,
+                r#"<div class="cv-help-list">"#,
+                r#"<a href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>"#,
+                r#"<a href="/notice" target="_blank" rel="noopener">Beta terms</a>"#,
+                r#"<a href="/about" target="_blank" rel="noopener">About</a>"#,
+                "</div>",
+            )
+        );
+        assert_eq!(
+            canvas
+                .2
+                .matches("href=\"mailto:feedback@getforma.dev\"")
+                .count(),
+            1
+        );
+    }
+
+    /// APP-224: which items the canvas top bar keeps, in order, and where the
+    /// collapsible ones go. Create app, Library, Help, the name menu and Sign
+    /// out are always in the bar (`canvas.css` never hides them above phone
+    /// width). Connected apps, Workspace and, for an admin, Admin are in the
+    /// bar and again in the name menu's panel, after its form, for the widths
+    /// where the bar's copy is hidden (`data-nav`); a non-admin gets no Admin
+    /// link in either place. The organization label carries its full name as
+    /// its title, so the ellipsis loses nothing.
+    #[tokio::test]
+    async fn canvas_top_bar_keeps_its_controls_and_its_menus_take_the_rest() {
+        use genui::query::canvas::{CanvasPages as _, CanvasProps};
+        let all = all_pages();
+        const ORG: &str = "Northwind Regional Community Health Cooperative of the Greater Valley";
+        for admin in [false, true] {
+            let props = CanvasProps {
+                csrf_signout: "S".repeat(43),
+                csrf_display_name: "N".repeat(43),
+                has_live: true,
+                live_events: "/v1/events".into(),
+                has_organization: true,
+                organization: ORG.into(),
+                member_label: "Maximiliana Konstantinopoulou-Villanueva".into(),
+                member_initials: "MK".into(),
+                is_org_admin: admin,
+                ..CanvasProps::default()
+            };
+            let (status, _, body) = html(all.canvas.canvas(&props)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                body.matches(&format!("<span class=\"cv-org\" title=\"{ORG}\">"))
+                    .count(),
+                1
+            );
+            let bar = &body[body.find("<div class=\"cv-top-status\">").expect("the bar")..];
+            let bar = &bar[..bar.find("</header>").unwrap()];
+            let admin_link = r#"<a class="cv-link" href="/admin" data-nav="admin">Admin</a>"#;
+            let menu_admin = r#"<a href="/admin" data-nav="admin">Admin</a>"#;
+            let mut order = vec![
+                "data-create-app>Create app</button>",
+                "id=\"cv-summary\"",
+                "id=\"cv-live\"",
+                "id=\"cv-library-toggle\"",
+                r#"<a class="cv-link" href="/shared" data-nav="shared">Connected apps</a>"#,
+                "role=\"status\" data-connected-status>",
+                r#"<a class="cv-link" href="/workspace" data-nav="workspace">Workspace</a>"#,
+            ];
+            if admin {
+                order.push(admin_link);
+            }
+            order.extend([
+                "<details class=\"cv-help-menu\">",
+                "<details class=\"cv-name-menu\">",
+                "<div class=\"cv-name-panel\">",
+                "action=\"/me/name\" class=\"cv-name-form\"",
+                "<div class=\"cv-name-nav\">",
+                r#"<a href="/shared" data-nav="shared">Connected apps</a>"#,
+                r#"<a href="/workspace" data-nav="workspace">Workspace</a>"#,
+            ]);
+            if admin {
+                order.push(menu_admin);
+            }
+            order.extend([
+                "class=\"cv-avatar\"",
+                "action=\"/auth/signout\" class=\"cv-signout\"",
+            ]);
+            let mut after = 0;
+            for marker in &order {
+                assert_eq!(
+                    bar.matches(marker).count(),
+                    1,
+                    "admin {admin}: once: {marker}"
+                );
+                let at = bar.find(marker).unwrap();
+                assert!(at >= after, "admin {admin}: in order: {marker}");
+                after = at;
+            }
+            assert_eq!(bar.matches("data-nav=").count(), if admin { 6 } else { 4 });
+            assert_eq!(
+                body.matches("href=\"/admin\"").count(),
+                if admin { 2 } else { 0 }
+            );
+            // The live chip keeps its words, for the dot's accessible label.
+            assert!(bar.contains("role=\"status\"") && bar.contains("data-live-text"));
+        }
+    }
+
+    /// APP-223: the footer's links are exactly these, in this order: plain
+    /// links, the three external ones with `rel="noopener"`, none opening a
+    /// new tab, and nothing else in the footer is a link. Three labeled
+    /// groups in one "Footer" navigation, then the brand mark (not a link,
+    /// hidden from assistive technology) and the line.
+    #[tokio::test]
+    async fn the_site_footer_links_are_pinned() {
+        let all = all_pages();
+        let (_, _, body) = send(&all.site, "GET", "/about", &[]).await;
+        let footer = site_footer(&body);
+        let links: Vec<&str> = footer
+            .split("<a ")
+            .skip(1)
+            .map(|rest| &rest[..rest.find("</a>").expect("a closed link")])
+            .collect();
+        assert_eq!(
+            links,
+            [
+                r#"href="/">Home"#,
+                r#"href="/about">About"#,
+                r#"href="/signin">Sign in"#,
+                r#"href="/invite">Have an invitation?"#,
+                r#"href="https://getforma.dev" rel="noopener">Forma Stack"#,
+                r#"href="https://getforma.dev/blog/" rel="noopener">Blog"#,
+                r#"href="https://getforma.dev/labs/" rel="noopener">Server lab"#,
+                r#"href="mailto:support@getforma.dev">Contact"#,
+                r#"href="/notice">Beta terms &amp; privacy"#,
+                r#"href="/.well-known/security.txt">Security"#,
+            ]
+        );
+        assert_eq!(footer.matches("href=").count(), links.len());
+        for absent in [
+            "target=", "<form", "<script", "<img", "<input", "<button", " id=",
+        ] {
+            assert!(!footer.contains(absent), "{absent}");
+        }
+        assert!(footer.starts_with(
+            r#"<footer class="site-footer"><nav class="site-footer-nav" aria-label="Footer">"#
+        ));
+        let headings: Vec<&str> = footer
+            .split("<h2 class=\"site-footer-heading\">")
+            .skip(1)
+            .map(|rest| &rest[..rest.find("</h2>").unwrap()])
+            .collect();
+        assert_eq!(headings, ["Forma Canvas", "Forma", "Help &amp; legal"]);
+        assert!(footer.contains(r#"<span class="site-footer-brand" aria-hidden="true"><span class="forma-mark-tile"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span></span>"#));
+        assert!(footer.ends_with(
+            "<span>© 2026 Forma · Forma Canvas is in private beta.</span></p></footer>"
+        ));
+    }
+
+    /// APP-223: `GET /notice` is public: the complete page policy, no cookie,
+    /// and the notice members accept, its version and every paragraph in
+    /// order from the one source, the same rows the invitation page shows.
+    /// `HEAD` answers with no body; any other method is the uniform 404, as
+    /// for `/about` and an unknown path.
+    #[tokio::test]
+    async fn notice_page_is_public_and_shows_the_one_beta_notice() {
+        let all = all_pages();
+        let (status, head, body) = send(&all.site, "GET", "/notice", &[]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(head[header::CONTENT_TYPE], "text/html; charset=utf-8");
+        let csp = policy(&head);
+        for directive in [
+            "default-src 'none'",
+            "frame-ancestors 'none'",
+            "form-action 'self'",
+            "'nonce-",
+        ] {
+            assert!(csp.contains(directive), "{directive} in {csp}");
+        }
+        assert_eq!(head[header::CACHE_CONTROL], "no-store");
+        assert_eq!(head[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        // The page contract every SSR page carries (refusals alone use `no-referrer`):
+        // `/notice` answers exactly as `/about` does.
+        let (_, about, _) = send(&all.site, "GET", "/about", &[]).await;
+        assert_eq!(
+            head[header::REFERRER_POLICY],
+            about[header::REFERRER_POLICY]
+        );
+        assert_eq!(
+            head[header::STRICT_TRANSPORT_SECURITY],
+            genui::http::STRICT_TRANSPORT_SECURITY
+        );
+        assert!(head.get(header::SET_COOKIE).is_none());
+        assert!(body.contains("<title>Beta terms &amp; privacy</title>"));
+        assert_eq!(body.matches("<h1").count(), 1);
+        assert!(body.contains(">Beta terms &amp; privacy</h1>"));
+        assert!(body.contains("<p class=\"lede\">This is the notice every member accepts when joining. Questions or data requests: <a href=\"mailto:privacy@getforma.dev\">privacy@getforma.dev</a>.</p>"));
+        let version = auth::notice::NOTICE_VERSION;
+        assert!(body.contains(&format!("data-notice-version=\"{version}\"")));
+        assert!(body.contains(&format!("Beta notice, version <span>{version}</span>")));
+        assert!(body.contains(&format!(
+            "<h2 id=\"notice-title\">{}</h2>",
+            auth::notice::NOTICE_TITLE
+        )));
+        let (_, _, invite) = html(all.auth.invite(&InviteView::default())).await;
+        let mut after = 0;
+        for paragraph in auth::notice::NOTICE_PARAGRAPHS {
+            let shown = match auth::notice::lead_in(paragraph) {
+                (Some(lead), text) => format!("<p><strong>{lead}</strong> {text}</p>"),
+                (None, text) => format!("<p>{text}</p>"),
+            };
+            let at = body[after..]
+                .find(&shown)
+                .unwrap_or_else(|| panic!("in order: {shown:.60}"));
+            after += at + shown.len();
+            assert!(
+                invite.contains(&shown),
+                "as the invitation shows it: {shown:.60}"
+            );
+        }
+        let page = without_site_footer(&body);
+        assert!(!page.contains("<script") && !page.contains("<form"));
+        assert!(!page.contains("data-forma-island"));
+        let (status, head_only, empty) = send(&all.site, "HEAD", "/notice", &[]).await;
+        assert_eq!((status, empty.as_str()), (StatusCode::OK, ""));
+        assert_eq!(head_only[header::CONTENT_TYPE], "text/html; charset=utf-8");
+        assert!(head_only.get(header::SET_COOKIE).is_none());
+        let json = r#"{"code":"not_found","status":404}"#;
+        let (_, unknown, _) = send(&all.site, "GET", "/no-such-page", &[]).await;
+        for method in ["POST", "PUT", "PATCH", "DELETE"] {
+            for path in ["/notice", "/about"] {
+                let (status, head, body) = send(&all.site, method, path, &[]).await;
+                assert_eq!(
+                    (status, body.as_str()),
+                    (StatusCode::NOT_FOUND, json),
+                    "{method} {path}"
+                );
+                assert_eq!(head, unknown, "{method} {path}");
+                // Header order too (review of PR #149, MINOR 1): `HeaderMap` equality ignores it.
+                assert_eq!(
+                    head.keys().collect::<Vec<_>>(),
+                    unknown.keys().collect::<Vec<_>>(),
+                    "order"
+                );
+                assert!(head.get(header::ALLOW).is_none());
+            }
+        }
+    }
+
+    /// APP-223: RFC 9116's `GET /.well-known/security.txt`, as the product
+    /// router merges it under the uniform layer and the error-page layer: the
+    /// exact bytes as `text/plain` with the non-page headers and HSTS, no
+    /// cookie and no page policy. A browser navigation gets the same text
+    /// (it is not a refusal). `HEAD` has no body; any other method is the
+    /// uniform 404.
+    #[tokio::test]
+    async fn security_txt_is_the_exact_static_file() {
+        let (_, errors, _) = lab_pages();
+        let app = genui::http::errors::ErrorPageLayer::new(Arc::new(errors), auth::cookies::viewer)
+            .serve(genui::http::uniform(genui::product::security_txt()));
+        let path = "/.well-known/security.txt";
+        assert_eq!(path, genui::product::SECURITY_TXT_PATH);
+        let expected = "Contact: mailto:security@getforma.dev\n\
+                        Expires: 2027-11-01T00:00:00.000Z\n\
+                        Preferred-Languages: en\n\
+                        Canonical: https://beta.getforma.dev/.well-known/security.txt\n";
+        assert_eq!(genui::product::SECURITY_TXT, expected);
+        let plain = send(&app, "GET", path, &[]).await;
+        let navigation = send(&app, "GET", path, NAVIGATE).await;
+        for (status, head, body) in [&plain, &navigation] {
+            assert_eq!((*status, body.as_str()), (StatusCode::OK, expected));
+            assert_eq!(head[header::CONTENT_TYPE], "text/plain; charset=utf-8");
+            assert_eq!(head[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+            assert_eq!(head[header::REFERRER_POLICY], "no-referrer");
+            assert_eq!(head[header::CACHE_CONTROL], "no-store");
+            assert_eq!(
+                head[header::STRICT_TRANSPORT_SECURITY],
+                genui::http::STRICT_TRANSPORT_SECURITY
+            );
+            assert!(head.get(header::SET_COOKIE).is_none());
+            assert!(head.get(header::CONTENT_SECURITY_POLICY).is_none());
+        }
+        let (status, head, body) = send(&app, "HEAD", path, &[]).await;
+        assert_eq!((status, body.as_str()), (StatusCode::OK, ""));
+        assert_eq!(head[header::CONTENT_TYPE], "text/plain; charset=utf-8");
+        let json = r#"{"code":"not_found","status":404}"#;
+        let (_, unknown, _) = send(&app, "GET", "/.well-known/other.txt", &[]).await;
+        for method in ["POST", "PUT", "PATCH", "DELETE"] {
+            let (status, head, body) = send(&app, method, path, &[]).await;
+            assert_eq!(
+                (status, body.as_str()),
+                (StatusCode::NOT_FOUND, json),
+                "{method}"
+            );
+            assert_eq!(head, unknown, "{method}");
+            // Header order too (review of PR #149, MINOR 1): `HeaderMap` equality ignores it.
+            assert_eq!(
+                head.keys().collect::<Vec<_>>(),
+                unknown.keys().collect::<Vec<_>>(),
+                "order"
+            );
+            assert!(head.get(header::ALLOW).is_none());
+        }
+        // A browser that posts to it gets the themed 404 like any wrong method.
+        let (status, head, body) = send(&app, "POST", path, NAVIGATE).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(head[header::CONTENT_TYPE], "text/html; charset=utf-8");
+        assert!(body.contains(">Specimen not found</h1>"));
+    }
+
     /// The shared entry submits locally, then redirects to the configured
     /// provider. The originating document must permit that exact second hop.
     #[tokio::test]
@@ -986,6 +1600,7 @@ mod tests {
         };
         let _ = modules.bind::<genui::org_admin::AdminProps>("orgAdmin");
         let _ = modules.bind::<ErrorProps>("error");
+        let _ = modules.bind::<NoticeProps>("notice");
         modules.finalize().unwrap();
         let key = "11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222";
         let mut entry = SharedPageProps {
@@ -1502,6 +2117,7 @@ mod tests {
             .unwrap();
         let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
         let _ = pages.bind::<ErrorProps>("error");
+        let _ = pages.bind::<NoticeProps>("notice");
         pages.finalize().unwrap();
         let view = |id: &str, kind: &str| genui::storage::WorkView {
             id: id.into(),
@@ -2205,6 +2821,7 @@ mod tests {
             .unwrap();
         let _ = pages.bind::<genui::org_admin::AdminProps>("orgAdmin");
         let _ = pages.bind::<ErrorProps>("error");
+        let _ = pages.bind::<NoticeProps>("notice");
         pages.finalize().unwrap();
         let (app, northstar, spend) = (
             "00000000-0000-4000-8000-000000000065",
@@ -2733,6 +3350,7 @@ mod tests {
         let _ = pages.bind::<genui::sharing::live::SharedPageProps>("shared");
         let _ = pages.bind::<genui::sharing::live::SharedCanvasProps>("sharedCanvas");
         let _ = pages.bind::<ErrorProps>("error");
+        let _ = pages.bind::<NoticeProps>("notice");
         pages.finalize().unwrap();
         let student = "00000000-0000-4000-8000-0000000000b2";
         let member = |id: &str, label: &str, removable: bool| AdminMemberProps {

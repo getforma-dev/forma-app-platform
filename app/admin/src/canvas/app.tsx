@@ -326,7 +326,7 @@ function Canvas(props: CanvasProps) {
             <span class="cv-product">canvas</span>
           </a>
           {createShow(() => props.hasOrganization, () => (
-            <span class="cv-org" title="Your organization">{props.organization}</span>
+            <span class="cv-org" title={props.organization}>{props.organization}</span>
           ))}
           {createShow(() => props.demo, () => (
             <span class="cv-demo-note" title="The organizations, people and records here are synthetic">Synthetic data</span>
@@ -358,19 +358,39 @@ function Canvas(props: CanvasProps) {
             <span class="cv-lib-open-text">Library</span>
             <span class="cv-kbd" aria-hidden="true">L</span>
           </button>
-          <a class="cv-link" href="/shared">Connected apps</a><span class="cv-connected-status" role="status" data-connected-status=""></span>
-          <a class="cv-link" href="/workspace">Workspace</a>
+          {/* APP-224: as the bar narrows, these three move into the name menu (data-nav; canvas.css). */}
+          <a class="cv-link" href="/shared" data-nav="shared">Connected apps</a><span class="cv-connected-status" role="status" data-connected-status=""></span>
+          <a class="cv-link" href="/workspace" data-nav="workspace">Workspace</a>
           {createShow(() => props.isOrgAdmin, () => (
-            <a class="cv-link" href="/admin">Admin</a>
+            <a class="cv-link" href="/admin" data-nav="admin">Admin</a>
           ))}
-          <a class="cv-link" href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
+          {/* APP-223: the full-screen canvas has no site footer. Feedback, the beta terms and About share one menu so the
+              top bar is no wider than before; the two pages open a new tab so the canvas keeps its state. */}
+          <details class="cv-help-menu">
+            <summary class="cv-link" title="Feedback, the beta terms and About">Help</summary>
+            <div class="cv-help-list">
+              <a href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
+              <a href="/notice" target="_blank" rel="noopener">Beta terms</a>
+              <a href="/about" target="_blank" rel="noopener">About</a>
+            </div>
+          </details>
           <details class="cv-name-menu">
             <summary class="cv-link" title="The name others see">Your name</summary>
-            <form method="post" action="/me/name" class="cv-name-form">
-              <input type="hidden" name="csrf" value={props.csrfDisplayName} />
-              <label>The name others see <input name="name" value={props.displayName} required maxLength={80} pattern=".*\S.*" title="1 to 80 characters, not only spaces" autocomplete="name" /></label>
-              <button type="submit">Save</button>
-            </form>
+            <div class="cv-name-panel">
+              <form method="post" action="/me/name" class="cv-name-form">
+                <input type="hidden" name="csrf" value={props.csrfDisplayName} />
+                <label>The name others see <input name="name" value={props.displayName} required maxLength={80} pattern=".*\S.*" title="1 to 80 characters, not only spaces" autocomplete="name" /></label>
+                <button type="submit">Save</button>
+              </form>
+              {/* APP-224: the bar's links that no longer fit; each shows only while its bar copy is hidden. */}
+              <div class="cv-name-nav">
+                <a href="/shared" data-nav="shared">Connected apps</a>
+                <a href="/workspace" data-nav="workspace">Workspace</a>
+                {createShow(() => props.isOrgAdmin, () => (
+                  <a href="/admin" data-nav="admin">Admin</a>
+                ))}
+              </div>
+            </div>
           </details>
           <span class="cv-avatar" title={props.memberLabel} aria-label={props.memberLabel} role="img">
             {props.memberInitials}

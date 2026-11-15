@@ -1,4 +1,5 @@
 import { h, mount, createList, createShow } from '@getforma/core';
+import { SiteFooter } from '../site/footer';
 
 // APP-013 record page (design §9 record commands, ADR-007 D7.16): the record
 // as the member may currently see it and one declared command's form. The
@@ -58,128 +59,131 @@ type RecordProps = {
 
 function Record(props: RecordProps) {
   return (
-    <main class="page">
-      <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
-      <h1>Record</h1>
-      <p class="lede">
-        Saved app. Schema <span>{props.schema}</span> version{' '}
-        <span>{props.schemaVersion}</span>; record <span>{props.recordId}</span>.
-      </p>
-      {props.committed ? (
-        <p class="notice" role="status">The command was committed. The record is shown at its new version.</p>
-      ) : null}
-      {props.replayed ? (
-        <p class="notice" role="status">This command had already been committed; its stored outcome was returned.</p>
-      ) : null}
-      {props.conflict ? (
-        <p class="notice" role="alert">
-          The record changed before your command: it is shown as it is now. Review it and submit again.
+    <div class="site">
+      <main class="page">
+        <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
+        <h1>Record</h1>
+        <p class="lede">
+          Saved app. Schema <span>{props.schema}</span> version{' '}
+          <span>{props.schemaVersion}</span>; record <span>{props.recordId}</span>.
         </p>
-      ) : null}
-      {props.stale ? (
-        <p class="notice" role="alert">The saved work moved to a newer revision. The record is shown under it.</p>
-      ) : null}
-      {props.inFlight ? (
-        <p class="notice" role="alert">The same command is still being committed. Reload in a moment.</p>
-      ) : null}
-      {props.busy ? (
-        <p class="notice" role="alert">The record was busy. Reload in a moment and submit again.</p>
-      ) : null}
-      {props.refused ? (
-        <p class="notice" role="alert">
-          The command was refused: a value is not one this command accepts. Nothing was changed.
-        </p>
-      ) : null}
-      {props.unknown ? (
-        <p class="notice" role="alert">
-          The result of your last command could not be confirmed. The record is shown as it is now.
-        </p>
-      ) : null}
-      {props.exists ? (
-        <p>
-          Record version <span>{props.version}</span>; work version <span>{props.workVersion}</span>.
-        </p>
-      ) : (
-        <p>
-          No record committed yet (version <span>{props.version}</span>); work version{' '}
-          <span>{props.workVersion}</span>.
-        </p>
-      )}
-      <table class="record">
-        <tbody>
-          {createList(
-            () => props.fields,
-            (row) => row.id,
-            (row) =>
-              h(
-                'tr',
-                null,
-                h('th', { scope: 'row' }, row.label),
-                h('td', null, row.value),
-                h('td', { class: 'muted' }, row.kind),
+        {props.committed ? (
+          <p class="notice" role="status">The command was committed. The record is shown at its new version.</p>
+        ) : null}
+        {props.replayed ? (
+          <p class="notice" role="status">This command had already been committed; its stored outcome was returned.</p>
+        ) : null}
+        {props.conflict ? (
+          <p class="notice" role="alert">
+            The record changed before your command: it is shown as it is now. Review it and submit again.
+          </p>
+        ) : null}
+        {props.stale ? (
+          <p class="notice" role="alert">The saved work moved to a newer revision. The record is shown under it.</p>
+        ) : null}
+        {props.inFlight ? (
+          <p class="notice" role="alert">The same command is still being committed. Reload in a moment.</p>
+        ) : null}
+        {props.busy ? (
+          <p class="notice" role="alert">The record was busy. Reload in a moment and submit again.</p>
+        ) : null}
+        {props.refused ? (
+          <p class="notice" role="alert">
+            The command was refused: a value is not one this command accepts. Nothing was changed.
+          </p>
+        ) : null}
+        {props.unknown ? (
+          <p class="notice" role="alert">
+            The result of your last command could not be confirmed. The record is shown as it is now.
+          </p>
+        ) : null}
+        {props.exists ? (
+          <p>
+            Record version <span>{props.version}</span>; work version <span>{props.workVersion}</span>.
+          </p>
+        ) : (
+          <p>
+            No record committed yet (version <span>{props.version}</span>); work version{' '}
+            <span>{props.workVersion}</span>.
+          </p>
+        )}
+        <table class="record">
+          <tbody>
+            {createList(
+              () => props.fields,
+              (row) => row.id,
+              (row) =>
+                h(
+                  'tr',
+                  null,
+                  h('th', { scope: 'row' }, row.label),
+                  h('td', null, row.value),
+                  h('td', { class: 'muted' }, row.kind),
+                ),
+            )}
+          </tbody>
+        </table>
+        {props.canWrite ? (
+          <form method="post" action={props.action} class="command">
+            <input type="hidden" name="csrf" value={props.csrf} />
+            <input type="hidden" name="idempotency_key" value={props.idempotencyKey} />
+            <input type="hidden" name="collection_id" value={props.collection} />
+            <input type="hidden" name="publication_id" value={props.publication} />
+            <input type="hidden" name="schema_id" value={props.schema} />
+            <input type="hidden" name="schema_version_expected" value={props.schemaVersion} />
+            <input type="hidden" name="record_id" value={props.recordId} />
+            <input type="hidden" name="expected_record_version" value={props.version} />
+            <input type="hidden" name="expected_work_version" value={props.workVersion} />
+            {createList(
+              () => props.fields,
+              (row) => row.id,
+              // Only the offered command's writable fields are inputs; storage
+              // refuses a value for any other field (APP-013 review m3). A
+              // reference is a picker of the records the member may read
+              // (APP-205); storage still judges the submitted reference.
+              (row) => (
+                <p class="field">
+                  {h('label', { for: row.input }, row.label, ' ', h('span', { class: 'muted' }, row.options))}
+                  {createShow(() => row.hasChoices, () => (
+                    <select id={row.input} name={row.input}>
+                      {createList(() => row.choices, (choice) => choice.id, (choice) => (
+                        <option value={choice.value} selected={choice.selected}>{choice.label}</option>
+                      ))}
+                    </select>
+                  ))}
+                  {createShow(() => row.noChoices, () => (
+                    <select id={row.input} name={row.input} disabled>
+                      <option value="">Nothing to choose yet</option>
+                    </select>
+                  ))}
+                  {createShow(() => row.hasCheckboxes, () => (
+                    <span class="choices" role="group" aria-label={row.label}>
+                      <input type="hidden" name={row.input} value="" />
+                      {createList(() => row.choices, (choice) => choice.id, (choice) => (
+                        <label class="choice">
+                          <input type="checkbox" name={row.input} value={choice.value} checked={choice.selected} />
+                          {' '}{choice.label}
+                        </label>
+                      ))}
+                    </span>
+                  ))}
+                  {createShow(() => row.hasText, () => (
+                    h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })
+                  ))}
+                  {createShow(() => row.readOnly, () => <span class="muted">not changed by this command</span>)}
+                  {createShow(() => row.writable, () => <input type="hidden" name={row.specInput} value={row.spec} />)}
+                </p>
               ),
-          )}
-        </tbody>
-      </table>
-      {props.canWrite ? (
-        <form method="post" action={props.action} class="command">
-          <input type="hidden" name="csrf" value={props.csrf} />
-          <input type="hidden" name="idempotency_key" value={props.idempotencyKey} />
-          <input type="hidden" name="collection_id" value={props.collection} />
-          <input type="hidden" name="publication_id" value={props.publication} />
-          <input type="hidden" name="schema_id" value={props.schema} />
-          <input type="hidden" name="schema_version_expected" value={props.schemaVersion} />
-          <input type="hidden" name="record_id" value={props.recordId} />
-          <input type="hidden" name="expected_record_version" value={props.version} />
-          <input type="hidden" name="expected_work_version" value={props.workVersion} />
-          {createList(
-            () => props.fields,
-            (row) => row.id,
-            // Only the offered command's writable fields are inputs; storage
-            // refuses a value for any other field (APP-013 review m3). A
-            // reference is a picker of the records the member may read
-            // (APP-205); storage still judges the submitted reference.
-            (row) => (
-              <p class="field">
-                {h('label', { for: row.input }, row.label, ' ', h('span', { class: 'muted' }, row.options))}
-                {createShow(() => row.hasChoices, () => (
-                  <select id={row.input} name={row.input}>
-                    {createList(() => row.choices, (choice) => choice.id, (choice) => (
-                      <option value={choice.value} selected={choice.selected}>{choice.label}</option>
-                    ))}
-                  </select>
-                ))}
-                {createShow(() => row.noChoices, () => (
-                  <select id={row.input} name={row.input} disabled>
-                    <option value="">Nothing to choose yet</option>
-                  </select>
-                ))}
-                {createShow(() => row.hasCheckboxes, () => (
-                  <span class="choices" role="group" aria-label={row.label}>
-                    <input type="hidden" name={row.input} value="" />
-                    {createList(() => row.choices, (choice) => choice.id, (choice) => (
-                      <label class="choice">
-                        <input type="checkbox" name={row.input} value={choice.value} checked={choice.selected} />
-                        {' '}{choice.label}
-                      </label>
-                    ))}
-                  </span>
-                ))}
-                {createShow(() => row.hasText, () => (
-                  h('input', { type: 'text', id: row.input, inputmode: row.inputMode, name: row.input, value: row.value })
-                ))}
-                {createShow(() => row.readOnly, () => <span class="muted">not changed by this command</span>)}
-                {createShow(() => row.writable, () => <input type="hidden" name={row.specInput} value={row.spec} />)}
-              </p>
-            ),
-          )}
-          <button type="submit">Submit {props.command}</button>
-        </form>
-      ) : (
-        <p class="muted">You can read this record but not change it.</p>
-      )}
-      <p><a href="/workspace">Back to the workspace</a></p>
-    </main>
+            )}
+            <button type="submit">Submit {props.command}</button>
+          </form>
+        ) : (
+          <p class="muted">You can read this record but not change it.</p>
+        )}
+        <p><a href="/workspace">Back to the workspace</a></p>
+      </main>
+      <SiteFooter />
+    </div>
   );
 }
 

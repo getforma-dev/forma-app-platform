@@ -3009,8 +3009,48 @@ button.cv-addr-chip:hover, button.cv-addr-chip:focus-visible { border-color: var
 .cv-name-prompt label { font-weight: 600; }
 .cv-name-notice { flex-basis: 100%; margin: 0; color: #9a3412; }
 .cv-name-prompt input { min-width: 14rem; padding: 4px 8px; }
-.cv-name-menu { position: relative; }
-.cv-name-menu > summary { list-style: none; cursor: pointer; }
-.cv-name-menu > summary::-webkit-details-marker { display: none; }
-.cv-name-form { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: flex; gap: 6px; align-items: flex-end; padding: 10px; border: 1px solid var(--cv-line); border-radius: 6px; background: var(--cv-surface); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); font-size: 12px; white-space: nowrap; }
+.cv-name-menu, .cv-help-menu { position: relative; }
+.cv-name-menu > summary, .cv-help-menu > summary { list-style: none; cursor: pointer; }
+.cv-name-menu > summary::-webkit-details-marker, .cv-help-menu > summary::-webkit-details-marker { display: none; }
+/* APP-223: Help holds Feedback, the beta terms and About, like the name menu. */
+.cv-help-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; min-width: 9rem; padding: 6px; border: 1px solid var(--cv-line); border-radius: 6px; background: var(--cv-surface); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); font-size: 12px; }
+.cv-help-list a { padding: 6px 8px; border-radius: 4px; color: var(--cv-text); text-decoration: none; white-space: nowrap; }
+.cv-help-list a:hover { background: var(--cv-accent-soft); }
+/* APP-224: the name menu's panel holds its form and the bar links that moved in. */
+.cv-name-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 8px; padding: 10px; border: 1px solid var(--cv-line); border-radius: 6px; background: var(--cv-surface); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); font-size: 12px; white-space: nowrap; }
+.cv-name-form { display: flex; gap: 6px; align-items: flex-end; }
 .cv-name-form label { display: flex; flex-direction: column; gap: 4px; }
+.cv-name-nav { display: none; padding-top: 6px; border-top: 1px solid var(--cv-line); }
+.cv-name-nav a { display: none; padding: 6px 8px; border-radius: 4px; color: var(--cv-text); text-decoration: none; }
+.cv-name-nav a:hover { background: var(--cv-accent-soft); }
+/* The phone header row scrolls sideways, which would clip an absolute panel. */
+@media (max-width: 760px) { .cv-help-list, .cv-name-panel { position: fixed; top: calc(var(--cv-header-height) + 4px); right: 12px; max-width: calc(100vw - 24px); } }
+/* The first-run name prompt sits above the top bar; while a menu is open, below it. */
+:root:has(:is(.cv-help-menu, .cv-name-menu)[open]) .cv-name-prompt { z-index: 10; }
+
+/* APP-224: the top bar fits its row at every width from 761 px. The
+   organization label gives way first (ellipsis, its name in the title);
+   then, as the width drops, the low-priority items shrink or move into the
+   name menu. Each step keeps the label at about 90 px or more in the worst
+   case measured (a long name, an admin, a demo note). Create app, Library,
+   Help, the name menu and Sign out always stay in the bar. Phones keep
+   their scrolling second row. */
+@media (min-width: 761px) {
+  .cv-top-status { flex-shrink: 0; }
+}
+@media (min-width: 761px) and (max-width: 1800px) {
+  /* The connection state shows as its dot, and the connected-apps status
+     line hides; both stay role="status" words for assistive technology. */
+  .cv-live [data-live-text], .cv-connected-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+}
+@media (min-width: 761px) and (max-width: 1536px) { .cv-demo-note { display: none; } }
+@media (min-width: 761px) and (max-width: 1440px) { .cv-avatar { display: none; } }
+@media (min-width: 761px) and (max-width: 1366px) {
+  .cv-top-status > [data-nav="workspace"], .cv-top-status > [data-nav="admin"] { display: none; }
+  .cv-name-nav, .cv-name-nav [data-nav="workspace"], .cv-name-nav [data-nav="admin"] { display: block; }
+}
+@media (min-width: 761px) and (max-width: 1152px) {
+  .cv-top-status > [data-nav="shared"] { display: none; }
+  .cv-name-nav [data-nav="shared"] { display: block; }
+}
+@media (min-width: 761px) and (max-width: 900px) { .cv-product { display: none; } }

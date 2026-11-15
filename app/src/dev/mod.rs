@@ -427,9 +427,11 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
     // --- The binary's pages ---
     let mut manifest = forma_server::assets::try_load_manifest::<Assets>()
         .map_err(|e| format!("app/admin/dist/manifest.json: {e} (the admin watcher builds it)"))?;
+    // The binary serves `/`, `/about` and APP-223's `/notice` (`main.rs`);
+    // this stand redirects `/` to the canvas and serves none of them.
     manifest
         .routes
-        .retain(|route, _| route != "/" && route != "/about");
+        .retain(|route, _| !matches!(route.as_str(), "/" | "/about" | "/notice"));
     let modules = forma_server::load_ir_modules::<Assets>(&manifest)
         .map_err(|errors| format!("FMIR modules: {} errors", errors.len()))?;
     let bind_error = |errors: Vec<forma_server::PropsError>| {

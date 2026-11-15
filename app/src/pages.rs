@@ -1,7 +1,8 @@
 //! The binary's server-rendered APP-009/APP-013 pages (sign-in, invitation,
 //! pending, denied, workspace and record) and APP-217's error page, shared by
 //! `main.rs` and the local dev binary (`genui::dev`, feature `dev-stand`) so
-//! both render the same pages.
+//! both render the same pages. APP-223's beta notice page props live here too,
+//! beside the invitation page's notice rows they reuse; `main.rs` serves it.
 use crate::auth::{
     self, DeniedView, InviteView, PendingView, ResendResult, SigninView, WorkspaceView,
 };
@@ -57,6 +58,26 @@ impl InviteProps {
                 }
             })
             .collect()
+    }
+}
+/// APP-223: the public "Beta terms & privacy" page (`GET /notice`,
+/// `admin/src/notice/app.tsx`). The title, version and paragraphs come from
+/// the one source in `auth::notice`, as the same rows the invitation page
+/// shows (`InviteProps::notice`), so the two pages cannot disagree.
+#[derive(PageProps)]
+pub struct NoticeProps {
+    pub notice_title: String,
+    pub notice_version: String,
+    pub notice: Vec<NoticeParagraphProps>,
+}
+impl NoticeProps {
+    /// The notice members consent to now (`NOTICE_VERSION`).
+    pub fn current() -> Self {
+        Self {
+            notice_title: auth::notice::NOTICE_TITLE.into(),
+            notice_version: auth::notice::NOTICE_VERSION.to_string(),
+            notice: InviteProps::notice(),
+        }
     }
 }
 #[derive(PageProps)]

@@ -1,4 +1,5 @@
 import { h, mount } from '@getforma/core';
+import { SiteFooter } from '../site/footer';
 
 // APP-217: the themed page a browser navigation gets in place of a shared
 // problem+json refusal (http::errors). No page reads a request value: the
@@ -9,6 +10,8 @@ import { h, mount } from '@getforma/core';
 // a visually hidden checkbox, and a label around the mascot. The checkbox
 // sits after the buttons, so the Tab order is the brand link, the buttons,
 // then the mascot toggle; the styles reach it with `.lab:has(...)`.
+// APP-223: the shared site footer (`../site/footer`) closes the page; it is
+// static, so every refusal and viewer keeps one footer.
 type ErrorProps = {
   status: number;
   title: string;
@@ -54,7 +57,7 @@ function ErrorPage(props: ErrorProps) {
         <div class="lab-surge-ring"></div>
         <p class="lab-surge-readout"><span class="lab-surge-symbol">☢</span><span>CONTAINMENT BREACH</span><span>REACTOR SURGE · CONTAINED</span></p>
       </div>
-      <footer class="lab-footer">Forma beta · Questions? <a href="mailto:feedback@getforma.dev">feedback@getforma.dev</a></footer>
+      <SiteFooter />
     </div>
   );
 }

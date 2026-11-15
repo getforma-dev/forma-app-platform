@@ -1,5 +1,6 @@
 import { PresentationHeader } from '../presentation/header';
 import { h, mount, createShow, activateIslands } from '@getforma/core';
+import { SiteFooter } from '../site/footer';
 import type { SharedPageProps } from './types';
 import { SharedParts } from './parts';
 import { startSharedPage } from './document';
@@ -14,7 +15,7 @@ function SharedControls(props: { canAccept: boolean; canAddToCanvas: boolean; ad
   </div>;
 }
 function SharedPage(props: SharedPageProps) {
-  return <main class="page work shared-page composed-app" data-shared-page="" data-presentation={props.presentation.json} data-app-mode={props.presentation.mode} data-app-accent={props.presentation.accent} data-app-density={props.presentation.density} data-app-font={props.presentation.font} data-share={props.shareId}>
+  return <div class="site"><main class="page work shared-page composed-app" data-shared-page="" data-presentation={props.presentation.json} data-app-mode={props.presentation.mode} data-app-accent={props.presentation.accent} data-app-density={props.presentation.density} data-app-font={props.presentation.font} data-share={props.shareId}>
     <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span></a>
     <header class="shared-page-head"><p class="share-policy">Private · Live · View only</p><h1>{props.title}</h1>
       {createShow(() => props.available, () => <p class="shared-by">Shared by {props.ownerLabel} · Access expires {props.expiresAt}</p>)}
@@ -30,7 +31,9 @@ function SharedPage(props: SharedPageProps) {
     <div data-shared-content="">{createShow(() => props.available, () => <SharedParts parts={props.parts} views={props.views} recordCards={props.recordCards} recordsTruncated={props.recordsTruncated} />)}</div>
     <footer class="shared-footnote">A connected view of the original app. Changes and access remain with its owner.</footer>
     {createShow(() => props.canSignOut, () => <form method="post" action="/auth/shared/signout"><input type="hidden" name="csrf" value={props.csrfSignout} /><button type="submit" class="share-secondary">Sign out of shared apps</button></form>)}
-  </main>;
+  </main>
+  <SiteFooter />
+  </div>;
 }
 await activateIslands({ SharedControls });
 startSharedPage();

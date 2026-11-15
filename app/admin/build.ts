@@ -8,6 +8,8 @@ await build({
   entryPoints: [
     { entry: 'src/home/app.tsx', outfile: 'home.js' },
     { entry: 'src/about/app.tsx', outfile: 'about.js' },
+    // APP-223: the public beta notice, "Beta terms & privacy".
+    { entry: 'src/notice/app.tsx', outfile: 'notice.js' },
     { entry: 'src/invite/app.tsx', outfile: 'invite.js' },
     { entry: 'src/signin/app.tsx', outfile: 'signin.js' },
     { entry: 'src/pending/app.tsx', outfile: 'pending.js' },
@@ -48,6 +50,8 @@ await build({
   routes: {
     '/': { js: ['home'], css: ['app'] },
     '/about': { js: ['about'], css: ['app'] },
+    // APP-223: the beta notice every member accepts, public, served like /about.
+    '/notice': { js: ['notice'], css: ['app'] },
     '/invite': { js: ['invite'], css: ['app'] },
     '/signin': { js: ['signin'], css: ['app'] },
     '/auth/pending': { js: ['pending'], css: ['app'] },
@@ -78,6 +82,7 @@ await build({
   ...(isSsr ? { ssrEntryPoints: {
     home: 'src/home/app.tsx',
     about: 'src/about/app.tsx',
+    notice: 'src/notice/app.tsx',
     invite: 'src/invite/app.tsx',
     signin: 'src/signin/app.tsx',
     pending: 'src/pending/app.tsx',
