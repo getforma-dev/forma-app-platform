@@ -43,7 +43,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [design-brief/README.md](design-brief/README.md) | Reference | Designer brief dated 2026-10-30 for the invite-first beta screens. | |
 | [operations/CLASS-GUIDE.md](operations/CLASS-GUIDE.md) | Current | Victor's class-prep pack for the Nov 29–30 class: the composer words for each class app and their helper checks, the rehearsal script, the students' known-issues list, the code email and what to watch during the class. | |
 | [operations/LIVE-SHARING.md](operations/LIVE-SHARING.md) | Current | Private live sharing and the separate invitation broker. | |
-| [operations/TRIAL-RUNBOOK.md](operations/TRIAL-RUNBOOK.md) | Current | The real-user trial (Nov 29–30 class): releases A and B, renewals, codes and restarts, member removal, deny-all, feedback, the restore drill and the purge. | |
+| [operations/TRIAL-RUNBOOK.md](operations/TRIAL-RUNBOOK.md) | Current | The real-user trial (Nov 29–30 class): releases A and B, renewals, codes and restarts, member removal, deny-all, feedback, the restore drill, and deletion on request (the organization purge is documented but no longer planned). | |
 | [pitch/README.md](pitch/README.md) | Current | Why `docs/pitch/` still holds live procedures, and which file is which. | |
 | [pitch/BETA-PROMOTION.md](pitch/BETA-PROMOTION.md) | Current | The one-approval path from a merge on `main` to beta. | |
 | [pitch/CANVAS-RULES.md](pitch/CANVAS-RULES.md) | Reference | Canvas grammar. ADR-018 and CANVAS-WINDOWS override the older component-placement rules. | |

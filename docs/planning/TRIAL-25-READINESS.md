@@ -69,7 +69,7 @@ Out of scope: anything classroom-specific in the platform; public sign-up; organ
 | Fri Nov 28 | Issue 25 codes, then one restart in the evening. Victor emails the codes. No deploys after this. | **Victor** |
 | Nov 29–30 | Class. | Victor + students |
 | Dec 1–12 | Real use continues. Watch and learn. Fixes only in announced windows. | |
-| by Dec 14 | Purge the organization's data per the charter, before the beta stops at 2026-12-14 20:00 UTC (Release C's stop) unless a later release renews it. | **Victor** |
+| ~~by Dec 14~~ **Replaced 2026-11-15** | ~~Purge the organization's data per the charter, before the beta stops at 2026-12-14 20:00 UTC (Release C's stop) unless a later release renews it.~~ No purge: members stay on the free plan and deletion is on request (notice v2, APP-227); the beta is planned to run to Jan 15, 2027. See `docs/planning/CLASS-CONTINUATION-PLAN.md` (PR #156). | **Victor** |
 
 ## Workstreams
 

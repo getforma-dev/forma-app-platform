@@ -243,19 +243,19 @@ What a rehearsal cannot show: the 25-page herd. That is proved by the load evide
 >
 > **This is a beta.** Forma is early software: it may change, break or go offline without notice, and there is no service guarantee. If something fails during class, we switch to paper and carry on; nothing about your grade depends on the software working.
 >
-> **What is collected, and when it is deleted.** The notice on the invitation page says it in full; the short version:
+> **What is collected, and what happens to it.** The notice on the invitation page says it in full; the short version:
 > - Kept: your email address for sign-in, the name you choose, what you create and enter, any files you upload, and basic activity logs. Data is stored in the United States. Forma's operators can access stored data to run and support the service.
-> - I'm the admin of this workspace, so I can see who has joined, your agreement to the notice, when you were last active and how much you've created. In the class apps, I (and anyone I name as a reviewer) can see what you enter; the apps keep your entries private from other students. Anything you build is private unless you share it.
-> - AI: to build apps and answer questions, your prompts, and the files and entries you ask it to work with, are sent to Anthropic, the AI provider. Please don't upload sensitive personal, health or payment information.
-> - This workspace's data is deleted after the test, **by December 14, 2026**; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. The sign-in account itself is held by the identity provider, and we ask it to delete the account after the test. Copy out anything you want to keep before then.
-> - You must be 18 or older to take part. You can ask at any time (feedback@getforma.dev) to have your access removed and your uploads deleted; entries you made in shared apps stay until the end of the test.
+> - I'm the owner of this workspace, so I (and any admin I name) can see who has joined, your agreement to the notice, your role, when you were last active and how much you've created. In the class apps, I (and anyone I name as a reviewer) can see what you enter; the apps keep your entries private from other students. Anything you build is private unless you share it.
+> - AI: Forma includes a small daily allowance of AI use per member, to build apps and answer questions; when it is used up, building and Ask pause until the next day (UTC). Your prompts, and the files and entries you ask the AI to work with, are sent to Anthropic, the AI provider. If you connect your own AI agent through MCP, it runs on your own AI account and at your own cost. Please don't upload sensitive personal, health or payment information.
+> - **After the class, nothing is deleted.** Your account, your place in this workspace, your apps and your data continue on Forma's free plan (the small daily AI allowance, plus your own AI through MCP if you connect one). Paid plans may be offered later; nobody is moved to one without asking.
+> - You must be 18 or older to take part. You can ask at any time (privacy@getforma.dev) to delete your account and your data: we confirm within 7 days and finish within 30 days, and backup copies expire about a week later. Deletion removes your sign-in account, your name, your apps, your uploads and what you entered in your own apps; entries you made in apps that other people own stay with those apps, without your name. A minimal security log of account events (identifiers and times, no content) is kept.
 >
 > **Questions, problems, ideas:** write to **feedback@getforma.dev**, or use the Feedback link inside the app. If a code doesn't work, reply to this email and I'll send a new one.
 >
 > See you Saturday,
 > Victor
 
-Before sending, check the go/no-go list: the mail says "redeem at home" (item 7) and "bring a laptop", the beta statement and the fallback (item 8). Every fact in the data paragraph is from notice v1 (`app/src/auth/notice.rs`); if the notice version changes, rewrite that paragraph from the new text.
+Before sending, check the go/no-go list: the mail says "redeem at home" (item 7) and "bring a laptop", the beta statement and the fallback (item 8). Every fact in the data paragraph is from notice v2 (`app/src/auth/notice.rs`, `NOTICE_VERSION = 2`, rewritten 2026-11-15 for APP-227); if the notice version changes, rewrite that paragraph from the new text.
 
 ## 5. During the class: what to watch, and what to do
 
@@ -263,7 +263,7 @@ Before sending, check the go/no-go list: the mail says "redeem at home" (item 7)
 
 **Three things open on your laptop, besides the projector page:**
 
-1. **`/admin`.** Who has joined and consented (`Notice v1, <date>`), who is active, and **Remove** if someone must leave the workspace. A removal ends their session at their next click. Don't remove in anger; it also removes their access to their own entries.
+1. **`/admin`.** Who has joined and consented (`Notice v2, <date>`; only your own pre-v2 accounts show `Notice v1`), who is active, and **Remove** if someone must leave the workspace. A removal ends their session at their next click. Don't remove in anger; it also removes their access to their own entries.
 2. **The feedback inbox** (`feedback@getforma.dev`). The runbook keeps three piles: *bug* (steps and the student's words, no address), *wish*, and *security or data*. One report of "I can see someone else's entry" is the security pile: stop using that app for the day and write to the agents with the exact steps.
 3. **Your alarm email.** The alarms (runbook section 6) go to your address: `UnhealthyTargets`, `NoRunningTask`, `LoadBalancer5xx`, low database storage and the budget. On a class day there is no deploy, so **any alarm is real**: switch to paper, check `https://beta.getforma.dev/health/ready` in a tab, and write to the agents. The scheduled stop is Dec 12 14:00 UTC after release E (the footer, JSON logs and AI usage) of Nov 15, so the service will not stop by itself this weekend.
 
@@ -279,7 +279,7 @@ Before sending, check the go/no-go list: the mail says "redeem at home" (item 7)
 
 **If the model misbehaves** (a student's sentence keeps saying `That request could not be composed into an app. Nothing was placed.`): shorter words, one list, no roles or people in the sentence. The composer refuses anything that names permissions or approvers.
 
-**After the weekend.** Real use continues Dec 1–12 with fixes only in announced windows (your own email the day before, and a note in the app's feedback link text). The purge by Dec 14 is runbook section 10.
+**After the weekend.** Real use continues Dec 1–12 with fixes only in announced windows (your own email the day before, and a note in the app's feedback link text). Nothing is purged when the class ends: accounts, apps and data continue on the free plan, and the beta is planned to run to Jan 15, 2027; the plan is `docs/planning/CLASS-CONTINUATION-PLAN.md` (PR #156). A student who wants out writes to privacy@getforma.dev; runbook section 10 is the deletion-on-request procedure.
 
 ---
 

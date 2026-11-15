@@ -82,12 +82,15 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
             assert b'action="/invite/validate"' in body and b'name="code"' in body and b'<script src' not in body
         with urllib.request.urlopen(origin,timeout=3) as response: assert b'href="/invite"' in response.read()
         # APP-223: the public beta notice page and the shared site footer, no
-        # cookie; any other method is the uniform 404, as for /about.
+        # cookie; any other method is the uniform 404, as for /about. The
+        # version shown is the one source's `NOTICE_VERSION` (APP-227), never
+        # a number pasted here.
+        notice_version = re.search(r'^pub const NOTICE_VERSION: i32 = (\d+);$', (Path(__file__).resolve().parents[1] / 'src' / 'auth' / 'notice.rs').read_text(), re.M).group(1)
         with urllib.request.urlopen(origin+'/notice',timeout=3) as response:
             body=response.read()
             assert response.status==200 and response.headers['Content-Type']=='text/html; charset=utf-8' and response.headers['Cache-Control']=='no-store'
             assert "frame-ancestors 'none'" in response.headers['Content-Security-Policy'] and response.headers.get('Set-Cookie') is None
-            assert b'data-notice-version="1"' in body and b'<footer class="site-footer">' in body and b'<script' not in body
+            assert f'data-notice-version="{notice_version}"'.encode() in body and b'<footer class="site-footer">' in body and b'<script' not in body
         try: urllib.request.urlopen(urllib.request.Request(origin+'/notice',data=b'',method='POST'),timeout=3)
         except urllib.error.HTTPError as error: assert error.code==404 and error.read()==b'{"code":"not_found","status":404}'
         else: raise AssertionError('POST /notice answered')

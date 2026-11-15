@@ -98,3 +98,38 @@ The notice's "Your data" paragraph was revised later on 2026-11-14 from the W3 p
 > **Your data:** you can ask at any time, at feedback@getforma.dev, to remove your access and delete the files you uploaded; entries you made in shared apps stay until the end of the test. This workspace's data is deleted after the test, by December 14, 2026; backup copies expire about a week later. A minimal security log of account events (identifiers and times, no content) is kept. Your sign-in account (email and password) is held by our identity provider; we ask it to delete the account after the test. Copy out anything you want to keep before then.
 >
 > By checking the box you agree to take part on these terms.
+
+## Amendment 2026-11-15: continuation after the class
+
+Victor decided on 2026-11-15 ("Keep everyone by default", "Renew to Jan 15", "Small daily allowance + own AI via MCP"; the plan is `docs/planning/CLASS-CONTINUATION-PLAN.md`, PR #156, and the ticket APP-227) that the test does not end with a purge. The amendment of 2026-11-14 above stays as written: it is what notice v1 promised, and the one member who consented to v1 is Victor himself. For everyone who consents under **notice v2**, the following **supersedes** the "End of the test" item and its "deleted by 2026-12-14" promise.
+
+- **Keep by default.** A member's account, organization membership, apps and data continue after the class, on Forma's free plan, unless the member asks for deletion. The organization is not purged at the end of the class; runbook §10's commands remain the operator's tools and are not scheduled.
+- **The free plan.** A small in-house AI allowance per member per day (about 10 model calls after the class; the allowance is per-organization plan data, never a class constant, [POST-CLASS-FOLLOW-UPS.md](../planning/POST-CLASS-FOLLOW-UPS.md) A13 and APP-231), plus unlimited use of the member's own AI through MCP agent tokens, which costs Forma nothing. Paid plans come later with billing; no member is moved to one without asking. Allowance changes are announced in the app.
+- **Deletion on request.** A member writes to **privacy@getforma.dev**. Forma confirms within **7 days** and completes the deletion within **30 days**; backups expire about a week later. Deletion removes the sign-in account (in our own fAuth), the name, the member's apps, uploads and the entries in their own apps. Entries the member made in apps that other people own stay with those apps, without the member's name (the principal row stays as an identifier, because the record revisions of other owners' apps key to it; deleting them would punch holes in other members' apps). The hash-chained audit log keeps identifiers, kinds and times, as the notice's "minimal security log". The per-member procedure (`erase-member`) is APP-230, release H; until it ships, a request is honoured by runbook §5 (remove, delete uploads) plus the fAuth deletion, with the full erase within the 30 days.
+- **The beta runs to 2027-01-15.** The expiry renewal to Jan 15 and the January budget are APP-228, executed with release H (the schema release of early December). Entitlements, which end 30 days after redemption, are extended by the operator after release H (APP-229). The production-move decision by Jan 1 is APP-232.
+- **Existing members are not re-asked.** Consent is recorded once, per version, by `admit_redemption`; sign-in never reads `genui.member_consents`, and no route compares a member's version with the current one. Notice v2 ships (release G) before the Nov 26 rehearsal codes and the Nov 28 student codes, so every student and helper consents to v2 at the invitation page. The only pre-v2 members are Victor's own accounts; his written acceptance of v2 for them is an operator note in the private trial folder (runbook §11.5). A consent prompt at sign-in for a later notice change is the general primitive, listed in the plan's §4.3, not built here.
+- **Accepted-risk items above that this changes:** "Deletion during the test is limited to removing access and deleting uploaded files" and "students are told their apps are deleted by 2026-12-14" describe v1; under v2 deletion is the full erase on request, and nothing is deleted at the end of the class. "Victor copies them out before 2026-12-12" stays good practice but is no longer required by a purge.
+
+### Beta notice, version 2
+
+Shown on the invitation page and at `/notice` from the one source (`app/src/auth/notice.rs`, `NOTICE_VERSION = 2`); the required checkbox records consent to this version. The text is general platform text, as version 1 was. Approved by Victor on 2026-11-15 as written in the plan's "Notice v2 draft", with the keep-and-anonymize deletion sentence (the plan's Q3). The title and the checkbox label are version 1's, unchanged.
+
+> **Before you join this Forma workspace**
+>
+> Forma (getforma.dev) is in early beta. It may change, break or go offline without notice, and there is no service guarantee or support commitment. You must be 18 or older to take part.
+>
+> You are joining an organization's workspace. Its owner and admins can see who has joined, your agreement to this notice, your role, when you were last active, and how much you have created. Apps shared with you may collect what you enter. The app's owner and its reviewers can see what you enter; unless the app keeps entries private, so can the other people it is shared with. Anything you build is private unless you share it. Forma's operators can access stored data to run and support the service.
+>
+> **What we keep:** your email address for sign-in, the name you choose, what you create and enter, the files you upload, and basic activity logs. Data is stored in the United States.
+>
+> **AI:** Forma includes a small daily allowance of AI use per member, to build apps and answer questions; when it is used up, building and Ask pause until the next day (UTC). Your prompts, and the files and entries you ask the AI to work with, are sent to Anthropic, our AI provider. If you connect your own AI agent through MCP, it runs on your own AI account and at your own cost, and Forma receives only what the agent sends it. Please don't upload sensitive personal, health or payment information.
+>
+> **After a trial period:** your account, your place in this workspace, your apps and your data continue on Forma's free plan; nothing is deleted when a course or test ends. Paid plans may be offered later, and we will not move you to one without asking. Allowances may change; we announce changes in the app.
+>
+> **Your data:** you can ask at any time, at privacy@getforma.dev, to delete your account and your data. We confirm within 7 days and complete the deletion within 30 days; backup copies expire about a week later. Deletion removes your sign-in account, your name, your apps, your uploads and what you entered in your own apps. Entries you made in apps that other people own stay with those apps, without your name. A minimal security log of account events (identifiers and times, no content) is kept. Your sign-in account (email and password) is held by our identity provider and is deleted with the rest.
+>
+> By checking the box you agree to take part on these terms.
+>
+> ☐ I have read the notice and agree to take part on these terms.
+
+What changed from version 1, paragraph by paragraph: "or support commitment" (no SLA); "owner and admins" and "your role" (ADR-021's roles); the AI paragraph gains the allowance and the MCP sentences; the "After a trial period" paragraph is the keep-by-default decision; "Your data" moves to privacy@, drops the Dec 14 purge and the "copy out" sentence, and states the two deadlines and what stays.
