@@ -690,7 +690,7 @@ class ProviderDatabaseTests(OperatorDatabase, unittest.TestCase):
         p = self.managed_issue(digest, self.managed_env([entry]))
         self.assertEqual((p.returncode, p.stderr), (0, ""), p.stderr[-300:])
         out = json.loads(p.stdout)
-        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at", "provider_invitation"})
+        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at", "provider_invitation", "role"})
         self.assertEqual(out["code_digest"], digest)
         invitation = out["provider_invitation"]
         self.assertEqual((invitation["operation"], invitation["state"], invitation["capability_stored"], invitation["detail"]),
