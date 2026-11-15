@@ -27,7 +27,7 @@ class AlarmTemplateTests(unittest.TestCase):
     def test_parameters_are_exactly_the_identifiers_and_the_address(self):
         self.assertEqual(self.template['AWSTemplateFormatVersion'], '2010-09-09')
         self.assertEqual(set(self.template['Parameters']), {'NotificationEmail', 'LoadBalancerFullName', 'TargetGroupFullName', 'ClusterName',
-                                                            'ServiceName', 'DBInstanceIdentifier', 'MonthlyBudgetUsd'})
+                                                            'ServiceName', 'DBInstanceIdentifier', 'FauthInstanceId', 'MonthlyBudgetUsd'})
         for name, parameter in self.template['Parameters'].items():
             with self.subTest(parameter=name):
                 self.assertEqual(parameter['Type'], 'Number' if name == 'MonthlyBudgetUsd' else 'String')
@@ -39,13 +39,25 @@ class AlarmTemplateTests(unittest.TestCase):
         self.assertFalse(re.fullmatch(self.template['Parameters']['LoadBalancerFullName']['AllowedPattern'], 'arn:aws:elasticloadbalancing:us-east-1:1:loadbalancer/app/x/0123456789abcdef'))
         self.assertTrue(re.fullmatch(self.template['Parameters']['NotificationEmail']['AllowedPattern'], 'victor@example.test'))
         self.assertFalse(re.fullmatch(self.template['Parameters']['NotificationEmail']['AllowedPattern'], 'not an address'))
+        self.assertTrue(re.fullmatch(self.template['Parameters']['FauthInstanceId']['AllowedPattern'], 'i-0123456789abcdef0'))
+        self.assertTrue(re.fullmatch(self.template['Parameters']['FauthInstanceId']['AllowedPattern'], 'i-01234567'))
+        self.assertFalse(re.fullmatch(self.template['Parameters']['FauthInstanceId']['AllowedPattern'], 'FauthBetaHost'))
 
-    def test_resources_are_the_topic_its_subscription_five_alarms_and_one_budget(self):
+    def test_resources_are_the_topic_its_subscription_sixteen_alarms_and_one_budget(self):
         types = {name: r['Type'] for name, r in self.resources.items()}
         self.assertEqual(types, {'AlarmTopic': 'AWS::SNS::Topic', 'AlarmTopicPolicy': 'AWS::SNS::TopicPolicy', 'EmailSubscription': 'AWS::SNS::Subscription',
                                  'LoadBalancer5xxAlarm': 'AWS::CloudWatch::Alarm', 'Target5xxAlarm': 'AWS::CloudWatch::Alarm',
                                  'UnhealthyTargetsAlarm': 'AWS::CloudWatch::Alarm', 'NoRunningTaskAlarm': 'AWS::CloudWatch::Alarm',
-                                 'DatabaseFreeStorageAlarm': 'AWS::CloudWatch::Alarm', 'MonthlyBudget': 'AWS::Budgets::Budget'})
+                                 'DatabaseFreeStorageAlarm': 'AWS::CloudWatch::Alarm',
+                                 # Infra review M1 (2026-11-15): the attack-facing alarms.
+                                 'LoadBalancer4xxAlarm': 'AWS::CloudWatch::Alarm', 'Target4xxAlarm': 'AWS::CloudWatch::Alarm',
+                                 'ServiceCpuAlarm': 'AWS::CloudWatch::Alarm', 'ServiceMemoryAlarm': 'AWS::CloudWatch::Alarm',
+                                 'DatabaseCpuAlarm': 'AWS::CloudWatch::Alarm', 'DatabaseConnectionsAlarm': 'AWS::CloudWatch::Alarm',
+                                 'DatabaseFreeableMemoryAlarm': 'AWS::CloudWatch::Alarm',
+                                 'EmailBounceRateAlarm': 'AWS::CloudWatch::Alarm', 'EmailComplaintRateAlarm': 'AWS::CloudWatch::Alarm',
+                                 'FauthStatusCheckAlarm': 'AWS::CloudWatch::Alarm', 'FauthCpuAlarm': 'AWS::CloudWatch::Alarm',
+                                 'MonthlyBudget': 'AWS::Budgets::Budget'})
+        self.assertEqual(sum(t == 'AWS::CloudWatch::Alarm' for t in types.values()), 16)
         # Standalone: nothing here is a resource promotion protects or the stack owns.
         for forbidden in ('AWS::RDS::', 'AWS::ElasticLoadBalancingV2::', 'AWS::ECS::', 'AWS::KMS::', 'AWS::S3::', 'AWS::SecretsManager::', 'AWS::IAM::'):
             self.assertFalse(any(t.startswith(forbidden) for t in types.values()), forbidden)
@@ -68,6 +80,33 @@ class AlarmTemplateTests(unittest.TestCase):
                                    [('ClusterName', 'ClusterName'), ('ServiceName', 'ServiceName')]),
             'DatabaseFreeStorageAlarm': ('AWS/RDS', 'FreeStorageSpace', 'Minimum', 300, 1, 2 * 1024 ** 3, 'LessThanThreshold', 'breaching',
                                          [('DBInstanceIdentifier', 'DBInstanceIdentifier')]),
+            # Infra review M1 (2026-11-15). Each is notBreaching on missing data except the status check, whose
+            # missing data is the host being gone. The 4xx thresholds clear a class of 25: the load balancer's
+            # own 4xx are never produced by browsers (0 normally); target 4xx reach a few hundred only in the
+            # minute after an announced restart or from revoked guest tabs polling access every 2 s.
+            'LoadBalancer4xxAlarm': ('AWS/ApplicationELB', 'HTTPCode_ELB_4XX_Count', 'Sum', 300, 1, 100, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                                     [('LoadBalancer', 'LoadBalancerFullName')]),
+            'Target4xxAlarm': ('AWS/ApplicationELB', 'HTTPCode_Target_4XX_Count', 'Sum', 300, 1, 600, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                               [('LoadBalancer', 'LoadBalancerFullName')]),
+            'ServiceCpuAlarm': ('AWS/ECS', 'CPUUtilization', 'Average', 300, 2, 80, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                                [('ClusterName', 'ClusterName'), ('ServiceName', 'ServiceName')]),
+            'ServiceMemoryAlarm': ('AWS/ECS', 'MemoryUtilization', 'Average', 300, 2, 85, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                                   [('ClusterName', 'ClusterName'), ('ServiceName', 'ServiceName')]),
+            'DatabaseCpuAlarm': ('AWS/RDS', 'CPUUtilization', 'Average', 300, 2, 80, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                                 [('DBInstanceIdentifier', 'DBInstanceIdentifier')]),
+            # The service's pools hold 2 connections per role, 4 roles (storage/pool.rs max_size(2), ADR-007 D7.18): 8,
+            # plus an operator or migration task's one or two. 12 sustained is someone else's connection.
+            'DatabaseConnectionsAlarm': ('AWS/RDS', 'DatabaseConnections', 'Maximum', 300, 2, 12, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                                         [('DBInstanceIdentifier', 'DBInstanceIdentifier')]),
+            'DatabaseFreeableMemoryAlarm': ('AWS/RDS', 'FreeableMemory', 'Minimum', 300, 2, 256 * 1024 ** 2, 'LessThanThreshold', 'notBreaching',
+                                            [('DBInstanceIdentifier', 'DBInstanceIdentifier')]),
+            # SES reviews an account at 5% bounces / 0.1% complaints and pauses at 10% / 0.5%; the metrics are account-wide, no dimension.
+            'EmailBounceRateAlarm': ('AWS/SES', 'Reputation.BounceRate', 'Maximum', 3600, 1, 0.05, 'GreaterThanOrEqualToThreshold', 'notBreaching', []),
+            'EmailComplaintRateAlarm': ('AWS/SES', 'Reputation.ComplaintRate', 'Maximum', 3600, 1, 0.001, 'GreaterThanOrEqualToThreshold', 'notBreaching', []),
+            'FauthStatusCheckAlarm': ('AWS/EC2', 'StatusCheckFailed', 'Maximum', 60, 2, 1, 'GreaterThanOrEqualToThreshold', 'breaching',
+                                      [('InstanceId', 'FauthInstanceId')]),
+            'FauthCpuAlarm': ('AWS/EC2', 'CPUUtilization', 'Average', 300, 2, 80, 'GreaterThanOrEqualToThreshold', 'notBreaching',
+                              [('InstanceId', 'FauthInstanceId')]),
         }
         alarms = {name: r['Properties'] for name, r in self.resources.items() if r['Type'] == 'AWS::CloudWatch::Alarm'}
         self.assertEqual(set(alarms), set(expected))
@@ -77,10 +116,21 @@ class AlarmTemplateTests(unittest.TestCase):
                 self.assertEqual((alarm['Namespace'], alarm['MetricName'], alarm['Statistic'], alarm['Period'], alarm['EvaluationPeriods'],
                                   alarm['Threshold'], alarm['ComparisonOperator'], alarm['TreatMissingData']),
                                  (namespace, metric, statistic, period, evaluations, threshold, operator, missing))
-                self.assertEqual([(d['Name'], d['Value']) for d in alarm['Dimensions']], [(n, {'Ref': p}) for n, p in dimensions])
+                self.assertEqual([(d['Name'], d['Value']) for d in alarm.get('Dimensions', [])], [(n, {'Ref': p}) for n, p in dimensions])
                 self.assertEqual((alarm['AlarmActions'], alarm['OKActions']), ([TOPIC], [TOPIC]))
                 self.assertEqual(alarm['AlarmName'], {'Fn::Sub': '${AWS::StackName}-' + re.sub(r'(?<!^)(?=[A-Z0-9])', '-', name.removesuffix('Alarm')).lower().replace('-5-xx', '-5xx')})
                 self.assertGreater(len(alarm['AlarmDescription']), 60)
+        # The pool size the connections threshold rests on.
+        self.assertIn('.max_size(2)', (TEMPLATE.parents[2] / 'app' / 'src' / 'storage' / 'pool.rs').read_text())
+        # Ten minutes for every utilization alarm: two five-minute periods.
+        for name in ('ServiceCpuAlarm', 'ServiceMemoryAlarm', 'DatabaseCpuAlarm', 'FauthCpuAlarm'):
+            self.assertEqual(alarms[name]['Period'] * alarms[name]['EvaluationPeriods'], 600, name)
+
+    def test_the_budget_and_its_subscribers_are_untouched_by_the_m1_alarms(self):
+        # Changing the budget's subscribers forces a replacement AWS refuses (runbook 11.1); the budget is one
+        # resource with the one NotificationEmail subscriber, and no new resource references NotificationEmail.
+        references = [name for name, r in self.resources.items() if 'NotificationEmail' in json.dumps(r)]
+        self.assertEqual(sorted(references), ['EmailSubscription', 'MonthlyBudget'])
 
     def test_budget_notifies_at_80_and_100_actual_and_100_forecast_by_email(self):
         budget = self.resources['MonthlyBudget']['Properties']

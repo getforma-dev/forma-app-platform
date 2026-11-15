@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Forma beta trial alarms (real-user trial, 2026-11-14 decision D13). A standalone stack beside GenuiSyntheticFoundation: it creates only an SNS topic, its email subscription, CloudWatch alarms and one AWS Budget, and references the beta's load balancer, target group, cluster, service and database by identifier. It never changes them, so promotion's infrastructure digest is untouched. Deploy and delete it by hand with the operator's own identity; confirm the subscription email before relying on it.",
+  "Description": "Forma beta trial alarms (real-user trial, 2026-11-14 decision D13; the attack-facing alarms of infra review M1 added 2026-11-15 by Victor's decision). A standalone stack beside GenuiSyntheticFoundation: it creates only an SNS topic, its email subscription, CloudWatch alarms and one AWS Budget, and references the beta's load balancer, target group, cluster, service, database and the fAuth host by identifier. It never changes them, so promotion's infrastructure digest is untouched. Deploy and delete it by hand with the operator's own identity; confirm the subscription email before relying on it.",
   "Parameters": {
     "NotificationEmail": {
       "Type": "String",
@@ -34,6 +34,12 @@
       "Type": "String",
       "AllowedPattern": "^[a-z][a-z0-9-]{0,62}$",
       "Description": "The RDS instance identifier (the host part of stack output DatabaseEndpoint before the first dot)."
+    },
+    "FauthInstanceId": {
+      "Type": "String",
+      "AllowedPattern": "^i-[0-9a-f]{8,17}$",
+      "ConstraintDescription": "An EC2 instance id.",
+      "Description": "The fAuth host's EC2 instance id (stack FauthBetaHost, its AWS::EC2::Instance resource). It changes when that stack is recreated: redeploy this one with the new id."
     },
     "MonthlyBudgetUsd": {
       "Type": "Number",
@@ -169,6 +175,208 @@
         "Threshold": 2147483648,
         "ComparisonOperator": "LessThanThreshold",
         "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "LoadBalancer4xxAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-load-balancer-4xx"},
+        "AlarmDescription": "The load balancer itself answered 4xx 100 or more times in five minutes: malformed requests, dropped invalid headers, or a scanner. Browsers and the app's own clients never produce these (the app answers its own 401, 404 and 429), so a class of 25 sits at zero.",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "HTTPCode_ELB_4XX_Count",
+        "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 100,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "Target4xxAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-target-4xx"},
+        "AlarmDescription": "The service answered 4xx 600 or more times in five minutes (two a second, sustained): credential stuffing against sign-in (the app's 429s count here), a scraper walking 404s, or many pages left open after their access ended. Normal use is tens: a guest page whose share was revoked keeps polling access every 2 s (150 per five minutes per tab), and the minute after an announced restart every open page answers 404 until its member signs in again (a few hundred at most), so 600 clears both.",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "HTTPCode_Target_4XX_Count",
+        "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 600,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "ServiceCpuAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-service-cpu"},
+        "AlarmDescription": "The main service's task (2 vCPU) averaged 80% CPU or more for ten minutes. A flood or a runaway composition; the task answers slowly before it answers 5xx. Read the request rate and the web ACL's blocked counts.",
+        "Namespace": "AWS/ECS",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [
+          {"Name": "ClusterName", "Value": {"Ref": "ClusterName"}},
+          {"Name": "ServiceName", "Value": {"Ref": "ServiceName"}}
+        ],
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "ServiceMemoryAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-service-memory"},
+        "AlarmDescription": "The main service's task (8 GiB) averaged 85% memory or more for ten minutes. Sessions, limiter keys and live streams live in process; past the task's limit ECS kills it and every member is signed out.",
+        "Namespace": "AWS/ECS",
+        "MetricName": "MemoryUtilization",
+        "Dimensions": [
+          {"Name": "ClusterName", "Value": {"Ref": "ClusterName"}},
+          {"Name": "ServiceName", "Value": {"Ref": "ServiceName"}}
+        ],
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 85,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "DatabaseCpuAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-database-cpu"},
+        "AlarmDescription": "The database (db.t4g.small) averaged 80% CPU or more for ten minutes: a hot query, a refresh herd, or someone else's connections. The pool's queries are bounded by deadlines, so sustained CPU is unusual.",
+        "Namespace": "AWS/RDS",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [{"Name": "DBInstanceIdentifier", "Value": {"Ref": "DBInstanceIdentifier"}}],
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "DatabaseConnectionsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-database-connections"},
+        "AlarmDescription": "Twelve or more connections at once for ten minutes. The service holds at most eight (two per role, four roles, storage/pool.rs max_size 2, ADR-007 D7.18) and an operator or migration task adds one or two for minutes; more means connections from outside the app's pools, a leaked credential or a task that did not exit.",
+        "Namespace": "AWS/RDS",
+        "MetricName": "DatabaseConnections",
+        "Dimensions": [{"Name": "DBInstanceIdentifier", "Value": {"Ref": "DBInstanceIdentifier"}}],
+        "Statistic": "Maximum",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 12,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "DatabaseFreeableMemoryAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-database-freeable-memory"},
+        "AlarmDescription": "The database (2 GiB) had less than 256 MiB freeable memory for ten minutes; below that it swaps and every query slows. Idle it shows about half its memory free.",
+        "Namespace": "AWS/RDS",
+        "MetricName": "FreeableMemory",
+        "Dimensions": [{"Name": "DBInstanceIdentifier", "Value": {"Ref": "DBInstanceIdentifier"}}],
+        "Statistic": "Minimum",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 268435456,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "EmailBounceRateAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-email-bounce-rate"},
+        "AlarmDescription": "The account's SES bounce rate reached 5%: SES reviews an account at 5% and pauses sending at 10%, and then no student receives a verification mail. The metric is account-wide and has no dimension; it updates as SES records bounces.",
+        "Namespace": "AWS/SES",
+        "MetricName": "Reputation.BounceRate",
+        "Statistic": "Maximum",
+        "Period": 3600,
+        "EvaluationPeriods": 1,
+        "Threshold": 0.05,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "EmailComplaintRateAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-email-complaint-rate"},
+        "AlarmDescription": "The account's SES complaint rate reached 0.1%: SES reviews at 0.1% and pauses at 0.5%. One complaint in a thousand mails; at the class's volume a single complaint trips it, which is right: find who marked a verification mail as spam.",
+        "Namespace": "AWS/SES",
+        "MetricName": "Reputation.ComplaintRate",
+        "Statistic": "Maximum",
+        "Period": 3600,
+        "EvaluationPeriods": 1,
+        "Threshold": 0.001,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "FauthStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-fauth-status-check"},
+        "AlarmDescription": "The fAuth host failed an EC2 status check for two consecutive minutes, or reported no data (stopped, terminated, or the instance id changed because stack FauthBetaHost was recreated: redeploy this stack with the new FauthInstanceId). Sign-in is down while it lasts; the recreate runbook is the flood runbook.",
+        "Namespace": "AWS/EC2",
+        "MetricName": "StatusCheckFailed",
+        "Dimensions": [{"Name": "InstanceId", "Value": {"Ref": "FauthInstanceId"}}],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopic"}],
+        "OKActions": [{"Ref": "AlarmTopic"}]
+      }
+    },
+    "FauthCpuAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-fauth-cpu"},
+        "AlarmDescription": "The fAuth host (t3a.small) averaged 80% CPU or more for ten minutes: a sign-in flood against Caddy and fAuth (infra review H1: one shared rate bucket), or a stuck container. Sign-in slows before it fails.",
+        "Namespace": "AWS/EC2",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [{"Name": "InstanceId", "Value": {"Ref": "FauthInstanceId"}}],
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
         "AlarmActions": [{"Ref": "AlarmTopic"}],
         "OKActions": [{"Ref": "AlarmTopic"}]
       }
