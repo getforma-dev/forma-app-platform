@@ -884,7 +884,7 @@ mod tests {
             assert_eq!(body.matches("class=\"lab-button").count(), count);
             assert!(body.contains("src=\"/_assets/forma-isotope.svg\""));
             assert!(body.contains("holding a glowing green capsule\""));
-            assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
+            assert!(body.contains("href=\"mailto:support@getforma.dev\""));
             assert!(body.contains("type=\"checkbox\"") && body.contains("for=\"lab-surge\""));
             // Tab order: the brand link, the buttons, the mascot toggle, then
             // the site footer's links (its mail link is the first on the page).
@@ -1306,8 +1306,9 @@ mod tests {
                 r#"href="https://getforma.dev" rel="noopener">Forma Stack"#,
                 r#"href="https://getforma.dev/blog" rel="noopener">Blog"#,
                 r#"href="https://getforma.dev/labs/" rel="noopener">Server lab"#,
-                r#"href="mailto:feedback@getforma.dev">Contact"#,
+                r#"href="mailto:support@getforma.dev">Contact"#,
                 r#"href="/notice">Beta terms &amp; privacy"#,
+                r#"href="/.well-known/security.txt">Security"#,
             ]
         );
         assert_eq!(footer.matches("href=").count(), links.len());
@@ -1361,7 +1362,7 @@ mod tests {
         assert!(body.contains("<title>Beta terms &amp; privacy</title>"));
         assert_eq!(body.matches("<h1").count(), 1);
         assert!(body.contains(">Beta terms &amp; privacy</h1>"));
-        assert!(body.contains("<p class=\"lede\">This is the notice every member accepts when joining. Questions: <a href=\"mailto:feedback@getforma.dev\">feedback@getforma.dev</a>.</p>"));
+        assert!(body.contains("<p class=\"lede\">This is the notice every member accepts when joining. Questions or data requests: <a href=\"mailto:privacy@getforma.dev\">privacy@getforma.dev</a>.</p>"));
         let version = auth::notice::NOTICE_VERSION;
         assert!(body.contains(&format!("data-notice-version=\"{version}\"")));
         assert!(body.contains(&format!("Beta notice, version <span>{version}</span>")));
@@ -1406,6 +1407,61 @@ mod tests {
                 assert!(head.get(header::ALLOW).is_none());
             }
         }
+    }
+
+    /// APP-223: RFC 9116's `GET /.well-known/security.txt`, as the product
+    /// router merges it under the uniform layer and the error-page layer: the
+    /// exact bytes as `text/plain` with the non-page headers and HSTS, no
+    /// cookie and no page policy. A browser navigation gets the same text
+    /// (it is not a refusal). `HEAD` has no body; any other method is the
+    /// uniform 404.
+    #[tokio::test]
+    async fn security_txt_is_the_exact_static_file() {
+        let (_, errors, _) = lab_pages();
+        let app = genui::http::errors::ErrorPageLayer::new(Arc::new(errors), auth::cookies::viewer)
+            .serve(genui::http::uniform(genui::product::security_txt()));
+        let path = "/.well-known/security.txt";
+        assert_eq!(path, genui::product::SECURITY_TXT_PATH);
+        let expected = "Contact: mailto:security@getforma.dev\n\
+                        Expires: 2027-11-15T00:00:00.000Z\n\
+                        Preferred-Languages: en\n\
+                        Canonical: https://beta.getforma.dev/.well-known/security.txt\n";
+        assert_eq!(genui::product::SECURITY_TXT, expected);
+        let plain = send(&app, "GET", path, &[]).await;
+        let navigation = send(&app, "GET", path, NAVIGATE).await;
+        for (status, head, body) in [&plain, &navigation] {
+            assert_eq!((*status, body.as_str()), (StatusCode::OK, expected));
+            assert_eq!(head[header::CONTENT_TYPE], "text/plain; charset=utf-8");
+            assert_eq!(head[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+            assert_eq!(head[header::REFERRER_POLICY], "no-referrer");
+            assert_eq!(head[header::CACHE_CONTROL], "no-store");
+            assert_eq!(
+                head[header::STRICT_TRANSPORT_SECURITY],
+                genui::http::STRICT_TRANSPORT_SECURITY
+            );
+            assert!(head.get(header::SET_COOKIE).is_none());
+            assert!(head.get(header::CONTENT_SECURITY_POLICY).is_none());
+        }
+        let (status, head, body) = send(&app, "HEAD", path, &[]).await;
+        assert_eq!((status, body.as_str()), (StatusCode::OK, ""));
+        assert_eq!(head[header::CONTENT_TYPE], "text/plain; charset=utf-8");
+        let json = r#"{"code":"not_found","status":404}"#;
+        let (_, unknown, _) = send(&app, "GET", "/.well-known/other.txt", &[]).await;
+        for method in ["POST", "PUT", "PATCH", "DELETE"] {
+            let (status, head, body) = send(&app, method, path, &[]).await;
+            assert_eq!(
+                (status, body.as_str()),
+                (StatusCode::NOT_FOUND, json),
+                "{method}"
+            );
+            assert_eq!(head, unknown, "{method}");
+            assert!(head.get(header::ALLOW).is_none());
+        }
+        // A browser that posts to it gets the themed 404 like any wrong method.
+        let (status, head, body) = send(&app, "POST", path, NAVIGATE).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(head[header::CONTENT_TYPE], "text/html; charset=utf-8");
+        assert!(body.contains(">Specimen not found</h1>"));
     }
 
     /// The shared entry submits locally, then redirects to the configured

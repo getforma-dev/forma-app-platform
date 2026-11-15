@@ -2,7 +2,8 @@
 //! (`main.rs`) and the local dev binary (`genui::dev`, feature `dev-stand`),
 //! so the dev binary serves exactly the routers the deployment serves. The
 //! caller builds the states (from the environment in the binary, from the
-//! dev configuration in `genui-dev`); this module only composes them.
+//! dev configuration in `genui-dev`); this module only composes them, apart
+//! from APP-223's static RFC 9116 `security.txt`, which needs no state.
 use crate::{
     actions,
     auth::Auth,
@@ -13,8 +14,40 @@ use crate::{
     query::{canvas, Work},
     sharing, slack, widgets,
 };
-use axum::Router;
+use axum::{
+    http::header,
+    response::{IntoResponse, Response},
+    routing::get,
+    Router,
+};
 use std::{collections::BTreeSet, sync::Arc};
+
+/// APP-223: where RFC 9116's file lives.
+pub const SECURITY_TXT_PATH: &str = "/.well-known/security.txt";
+/// APP-223: the RFC 9116 file, byte for byte: where to report a security
+/// problem. Static; renew `Expires` before it passes.
+pub const SECURITY_TXT: &str = concat!(
+    "Contact: mailto:security@getforma.dev\n",
+    "Expires: 2027-11-15T00:00:00.000Z\n",
+    "Preferred-Languages: en\n",
+    "Canonical: https://beta.getforma.dev/.well-known/security.txt\n",
+);
+
+/// APP-223: `GET /.well-known/security.txt`, public, as `text/plain` with the
+/// service's non-page headers (`http::secure`); `finish` adds HSTS. Merged
+/// into the product routes, so every other method is the uniform 404.
+pub fn security_txt() -> Router {
+    Router::new().route(SECURITY_TXT_PATH, get(security_txt_answer))
+}
+async fn security_txt_answer() -> Response {
+    let mut response = (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        SECURITY_TXT,
+    )
+        .into_response();
+    crate::http::secure(response.headers_mut());
+    response
+}
 
 /// Everything the product routes are built from.
 pub struct Product {
@@ -135,7 +168,9 @@ pub fn routes(product: Product) -> (Router, Vec<(&'static str, Router)>) {
             auth: auth.clone(),
             pages: org_admin_pages,
         })))
-        .merge(member_name::router(auth.clone()));
+        .merge(member_name::router(auth.clone()))
+        // APP-223: RFC 9116's security contact, public and static.
+        .merge(security_txt());
     let long = vec![
         // The canvas page reads every openable work (library pane).
         (canvas::PATH, canvas_routes),

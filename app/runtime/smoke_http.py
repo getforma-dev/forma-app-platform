@@ -88,6 +88,14 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
         try: urllib.request.urlopen(urllib.request.Request(origin+'/notice',data=b'',method='POST'),timeout=3)
         except urllib.error.HTTPError as error: assert error.code==404 and error.read()==b'{"code":"not_found","status":404}'
         else: raise AssertionError('POST /notice answered')
+        # APP-223: RFC 9116's security.txt from the product router, exact bytes.
+        with urllib.request.urlopen(origin+'/.well-known/security.txt',timeout=3) as response:
+            assert response.status==200 and response.headers['Content-Type']=='text/plain; charset=utf-8'
+            assert response.headers['X-Content-Type-Options']=='nosniff' and response.headers['Referrer-Policy']=='no-referrer'
+            assert response.read()==b'Contact: mailto:security@getforma.dev\nExpires: 2027-11-15T00:00:00.000Z\nPreferred-Languages: en\nCanonical: https://beta.getforma.dev/.well-known/security.txt\n'
+        try: urllib.request.urlopen(urllib.request.Request(origin+'/.well-known/security.txt',data=b'',method='POST'),timeout=3)
+        except urllib.error.HTTPError as error: assert error.code==404 and error.read()==b'{"code":"not_found","status":404}'
+        else: raise AssertionError('POST /.well-known/security.txt answered')
         for route in ('/workspace','/auth/pending','/v1/unknown','/invite/validate'):
             try: urllib.request.urlopen(origin+route,timeout=3)
             except urllib.error.HTTPError as error:
@@ -108,7 +116,7 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
         else: raise AssertionError('protected route answered without a session')
         with urllib.request.urlopen(origin+'/_assets/forma-isotope.svg',timeout=3) as response:
             assert response.status==200 and response.headers.get_content_type()=='image/svg+xml' and response.read().startswith(b'<svg')
-        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'notice_page':200,'protected_uniform_404':True,'navigation_error_page':404}))
+        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'notice_page':200,'security_txt':200,'protected_uniform_404':True,'navigation_error_page':404}))
     finally:
         process.terminate()
         try: process.communicate(timeout=5)

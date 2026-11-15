@@ -20,7 +20,7 @@ function Notice(props: NoticeProps) {
         <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
         <h1>Beta terms &amp; privacy</h1>
         <p class="lede">
-          This is the notice every member accepts when joining. Questions: <a href="mailto:feedback@getforma.dev">feedback@getforma.dev</a>.
+          This is the notice every member accepts when joining. Questions or data requests: <a href="mailto:privacy@getforma.dev">privacy@getforma.dev</a>.
         </p>
         <section class="beta-notice" aria-labelledby="notice-title" data-notice-version={props.noticeVersion}>
           <p class="page-eyebrow">Beta notice, version <span>{props.noticeVersion}</span></p>

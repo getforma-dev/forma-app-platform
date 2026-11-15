@@ -29,8 +29,9 @@ export function SiteFooter() {
         <div>
           <h2 class="site-footer-heading">Help &amp; legal</h2>
           <ul>
-            <li><a href="mailto:feedback@getforma.dev">Contact</a></li>
+            <li><a href="mailto:support@getforma.dev">Contact</a></li>
             <li><a href="/notice">Beta terms &amp; privacy</a></li>
+            <li><a href="/.well-known/security.txt">Security</a></li>
           </ul>
         </div>
       </nav>
