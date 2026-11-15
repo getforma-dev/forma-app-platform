@@ -761,7 +761,7 @@ The infra review of 2026-11-14 (H2, no WAF; H3, no CloudTrail trail or detector)
      --event-selectors '[{"ReadWriteType":"All","IncludeManagementEvents":true}]' --query 'EventSelectors[0].ReadWriteType' --output text
    ```
 
-   Expected notices in normal operation, so they are read correctly: one `PutEventSelectors` or `UpdateTrail` per update of this stack; `DeleteDBInstance` at the restore drill (11.2) and `DeleteDBSnapshot` at the purge (section 10, 11.4); `PutRolePolicy`, `AttachRolePolicy` or `AuthorizeSecurityGroupIngress` through CloudFormation when a release changes the stack's roles or groups; `PutAccountPublicAccessBlock` when the review's L1 is applied; a console sign-in without MFA until H4's device is registered. Anything else is a question.
+   Expected notices in normal operation, so they are read correctly: one `PutEventSelectors` or `UpdateTrail` per update of this stack; `DeleteDBInstance` and `DeleteDBSnapshot` at the restore drill (11.2; seen 2026-11-15 08:48 UTC) and `DeleteDBSnapshot` at the purge (section 10, 11.4); three `ScheduleKeyDeletion` on 2026-11-15 at 11:05 UTC (the cost cleanup, follow-up A14); `PutRolePolicy`, `AttachRolePolicy` or `AuthorizeSecurityGroupIngress` through CloudFormation when a release changes the stack's roles or groups; `PutAccountPublicAccessBlock` when the review's L1 is applied; a console sign-in without MFA until H4's device is registered. Anything else is a question.
 
 2. **WAF** (same identity; the alarms stack must exist, for `AlarmTopicArn`). Derive and look first:
 
