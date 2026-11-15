@@ -1281,6 +1281,92 @@ mod tests {
         );
     }
 
+    /// APP-224: which items the canvas top bar keeps, in order, and where the
+    /// collapsible ones go. Create app, Library, Help, the name menu and Sign
+    /// out are always in the bar (`canvas.css` never hides them above phone
+    /// width). Connected apps, Workspace and, for an admin, Admin are in the
+    /// bar and again in the name menu's panel, after its form, for the widths
+    /// where the bar's copy is hidden (`data-nav`); a non-admin gets no Admin
+    /// link in either place. The organization label carries its full name as
+    /// its title, so the ellipsis loses nothing.
+    #[tokio::test]
+    async fn canvas_top_bar_keeps_its_controls_and_its_menus_take_the_rest() {
+        use genui::query::canvas::{CanvasPages as _, CanvasProps};
+        let all = all_pages();
+        const ORG: &str = "Northwind Regional Community Health Cooperative of the Greater Valley";
+        for admin in [false, true] {
+            let props = CanvasProps {
+                csrf_signout: "S".repeat(43),
+                csrf_display_name: "N".repeat(43),
+                has_live: true,
+                live_events: "/v1/events".into(),
+                has_organization: true,
+                organization: ORG.into(),
+                member_label: "Maximiliana Konstantinopoulou-Villanueva".into(),
+                member_initials: "MK".into(),
+                is_org_admin: admin,
+                ..CanvasProps::default()
+            };
+            let (status, _, body) = html(all.canvas.canvas(&props)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                body.matches(&format!("<span class=\"cv-org\" title=\"{ORG}\">"))
+                    .count(),
+                1
+            );
+            let bar = &body[body.find("<div class=\"cv-top-status\">").expect("the bar")..];
+            let bar = &bar[..bar.find("</header>").unwrap()];
+            let admin_link = r#"<a class="cv-link" href="/admin" data-nav="admin">Admin</a>"#;
+            let menu_admin = r#"<a href="/admin" data-nav="admin">Admin</a>"#;
+            let mut order = vec![
+                "data-create-app>Create app</button>",
+                "id=\"cv-summary\"",
+                "id=\"cv-live\"",
+                "id=\"cv-library-toggle\"",
+                r#"<a class="cv-link" href="/shared" data-nav="shared">Connected apps</a>"#,
+                "role=\"status\" data-connected-status>",
+                r#"<a class="cv-link" href="/workspace" data-nav="workspace">Workspace</a>"#,
+            ];
+            if admin {
+                order.push(admin_link);
+            }
+            order.extend([
+                "<details class=\"cv-help-menu\">",
+                "<details class=\"cv-name-menu\">",
+                "<div class=\"cv-name-panel\">",
+                "action=\"/me/name\" class=\"cv-name-form\"",
+                "<div class=\"cv-name-nav\">",
+                r#"<a href="/shared" data-nav="shared">Connected apps</a>"#,
+                r#"<a href="/workspace" data-nav="workspace">Workspace</a>"#,
+            ]);
+            if admin {
+                order.push(menu_admin);
+            }
+            order.extend([
+                "class=\"cv-avatar\"",
+                "action=\"/auth/signout\" class=\"cv-signout\"",
+            ]);
+            let mut after = 0;
+            for marker in &order {
+                assert_eq!(
+                    bar.matches(marker).count(),
+                    1,
+                    "admin {admin}: once: {marker}"
+                );
+                let at = bar.find(marker).unwrap();
+                assert!(at >= after, "admin {admin}: in order: {marker}");
+                after = at;
+            }
+            assert_eq!(bar.matches("data-nav=").count(), if admin { 6 } else { 4 });
+            assert_eq!(
+                body.matches("href=\"/admin\"").count(),
+                if admin { 2 } else { 0 }
+            );
+            // The live chip keeps its words, for the dot's accessible label.
+            assert!(bar.contains("role=\"status\"") && bar.contains("data-live-text"));
+        }
+    }
+
     /// APP-223: the footer's links are exactly these, in this order: plain
     /// links, the three external ones with `rel="noopener"`, none opening a
     /// new tab, and nothing else in the footer is a link. Three labeled
