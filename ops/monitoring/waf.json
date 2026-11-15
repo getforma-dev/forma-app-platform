@@ -1,0 +1,207 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Forma beta web ACL (infra review 2026-11-14 H2, Victor's decision 2026-11-15: about $7 a month). A standalone stack beside GenuiSyntheticFoundation: one REGIONAL AWS WAF web ACL with two rate-based rules (a per-address flood limit on everything, and a per-address limit on the routes that call the model), its association with the beta's load balancer by ARN, and two CloudWatch alarms on blocked requests that publish to the trial alarm topic. The load balancer is referenced, never changed, so promotion's infrastructure digest is untouched. No managed rule groups and no logging configuration: both cost money (see Metadata.UpgradePath). Deploy and delete it by hand with the operator's own identity.",
+  "Metadata": {
+    "UpgradePath": {
+      "Note": "The paid upgrade, if a flood ever gets past the rate limits or the account outgrows a class of 25. Each managed rule group is $1 a month plus its WCU; logging is about $0.50 per GB to CloudWatch Logs. Add them as further Rules entries with a ManagedRuleGroupStatement and an OverrideAction, Count first, Block once the Count metric stays at zero for the class's own traffic.",
+      "ManagedRuleGroups": [
+        {"VendorName": "AWS", "Name": "AWSManagedRulesAmazonIpReputationList", "Suggested": "Block"},
+        {"VendorName": "AWS", "Name": "AWSManagedRulesKnownBadInputsRuleSet", "Suggested": "Block"},
+        {"VendorName": "AWS", "Name": "AWSManagedRulesCommonRuleSet", "Suggested": "Count first: it has false positives on JSON bodies and long cookies"}
+      ],
+      "Logging": "AWS::WAFv2::LoggingConfiguration to a log group named aws-waf-logs-*, 30 days."
+    },
+    "Sizing": {
+      "FloodLimit": "A member tab is tens of requests in five minutes (a 30 s access check, hint-driven refreshes with a 0-3 s spread and one retry, one SSE stream per session shared across tabs). A guest tab on /s/<share> is the heaviest client: an access poll every 2 s and a document poll every 3 s, about 250 requests in five minutes. The load balancer's own /health/ready checks do not pass through the web ACL. 2000 holds for seven guest tabs behind one address.",
+      "ModelRouteLimit": "The in-process limits are per member and per hour (compose 30, ask and shape 120, act 60, MCP 120 per token and 240 per member, widget customize 120, box explain 30); this rule is per address and per five minutes, so it caps what several sessions behind one address can spend on model calls. 30 is six a minute. Raise it with the parameter if students report 429s on these routes."
+    }
+  },
+  "Parameters": {
+    "LoadBalancerArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:elasticloadbalancing:[a-z0-9-]+:[0-9]{12}:loadbalancer/app/[A-Za-z0-9-]{1,32}/[0-9a-f]{16}$",
+      "ConstraintDescription": "An application load balancer ARN.",
+      "Description": "The beta load balancer's ARN (describe-load-balancers by the stack output LoadBalancerDnsName, as runbook 11.1 derives it)."
+    },
+    "AlarmTopicArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$",
+      "ConstraintDescription": "An SNS topic ARN.",
+      "Description": "The trial alarm topic (stack forma-beta-trial-alarms, output AlarmTopicArn). Its policy already lets CloudWatch alarms of this account publish."
+    },
+    "FloodLimit": {
+      "Type": "Number",
+      "Default": 2000,
+      "MinValue": 100,
+      "MaxValue": 20000,
+      "Description": "Requests per address per five minutes on any path before the address is answered 429."
+    },
+    "ModelRouteLimit": {
+      "Type": "Number",
+      "Default": 30,
+      "MinValue": 10,
+      "MaxValue": 1000,
+      "Description": "Requests per address per five minutes on the model-calling routes before the address is answered 429 there."
+    }
+  },
+  "Resources": {
+    "WebAcl": {
+      "Type": "AWS::WAFv2::WebACL",
+      "Properties": {
+        "Name": {"Fn::Sub": "${AWS::StackName}-web-acl"},
+        "Description": "Forma beta: per-address rate limits in front of the application load balancer.",
+        "Scope": "REGIONAL",
+        "DefaultAction": {"Allow": {}},
+        "VisibilityConfig": {
+          "SampledRequestsEnabled": true,
+          "CloudWatchMetricsEnabled": true,
+          "MetricName": {"Fn::Sub": "${AWS::StackName}-web-acl"}
+        },
+        "CustomResponseBodies": {
+          "too-many-requests": {
+            "ContentType": "TEXT_PLAIN",
+            "Content": "Too many requests from your network address. Wait five minutes and try again."
+          }
+        },
+        "Rules": [
+          {
+            "Name": "per-address-flood",
+            "Priority": 10,
+            "Action": {
+              "Block": {
+                "CustomResponse": {
+                  "ResponseCode": 429,
+                  "CustomResponseBodyKey": "too-many-requests",
+                  "ResponseHeaders": [{"Name": "Retry-After", "Value": "300"}]
+                }
+              }
+            },
+            "Statement": {
+              "RateBasedStatement": {
+                "Limit": {"Ref": "FloodLimit"},
+                "EvaluationWindowSec": 300,
+                "AggregateKeyType": "IP"
+              }
+            },
+            "VisibilityConfig": {
+              "SampledRequestsEnabled": true,
+              "CloudWatchMetricsEnabled": true,
+              "MetricName": "per-address-flood"
+            }
+          },
+          {
+            "Name": "per-address-model-routes",
+            "Priority": 20,
+            "Action": {
+              "Block": {
+                "CustomResponse": {
+                  "ResponseCode": 429,
+                  "CustomResponseBodyKey": "too-many-requests",
+                  "ResponseHeaders": [{"Name": "Retry-After", "Value": "300"}]
+                }
+              }
+            },
+            "Statement": {
+              "RateBasedStatement": {
+                "Limit": {"Ref": "ModelRouteLimit"},
+                "EvaluationWindowSec": 300,
+                "AggregateKeyType": "IP",
+                "ScopeDownStatement": {
+                  "OrStatement": {
+                    "Statements": [
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/compose", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/ask", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/shape", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/mcp", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/act", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/widgets/customize", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/boxes/explain/", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                      {"AndStatement": {"Statements": [
+                        {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/boxes/", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                        {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "ENDS_WITH", "SearchString": "/apps", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}}
+                      ]}},
+                      {"AndStatement": {"Statements": [
+                        {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/boxes/", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                        {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "ENDS_WITH", "SearchString": "/brief", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}}
+                      ]}},
+                      {"AndStatement": {"Statements": [
+                        {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "STARTS_WITH", "SearchString": "/v1/boxes/", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}},
+                        {"ByteMatchStatement": {"FieldToMatch": {"UriPath": {}}, "PositionalConstraint": "ENDS_WITH", "SearchString": "/ask", "TextTransformations": [{"Priority": 0, "Type": "NONE"}]}}
+                      ]}}
+                    ]
+                  }
+                }
+              }
+            },
+            "VisibilityConfig": {
+              "SampledRequestsEnabled": true,
+              "CloudWatchMetricsEnabled": true,
+              "MetricName": "per-address-model-routes"
+            }
+          }
+        ]
+      }
+    },
+    "WebAclAssociation": {
+      "Type": "AWS::WAFv2::WebACLAssociation",
+      "Properties": {
+        "ResourceArn": {"Ref": "LoadBalancerArn"},
+        "WebACLArn": {"Fn::GetAtt": ["WebAcl", "Arn"]}
+      }
+    },
+    "FloodBlockedAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-flood-blocked"},
+        "AlarmDescription": "The web ACL blocked at least one request in five minutes under the per-address flood rule: some address sent more than the flood limit in five minutes. Read the sampled requests (wafv2 get-sampled-requests) for the address and the paths; a student behind a busy shared network would show guest-page polls, a flood shows one path.",
+        "Namespace": "AWS/WAFV2",
+        "MetricName": "BlockedRequests",
+        "Dimensions": [
+          {"Name": "WebACL", "Value": {"Fn::Sub": "${AWS::StackName}-web-acl"}},
+          {"Name": "Region", "Value": {"Ref": "AWS::Region"}},
+          {"Name": "Rule", "Value": "per-address-flood"}
+        ],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "ModelRoutesBlockedAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-model-routes-blocked"},
+        "AlarmDescription": "The web ACL blocked at least one request in five minutes under the model-routes rule: some address sent more than the model-route limit of compose, ask, shape, act, MCP, widget customize or box build, brief, ask and explain calls in five minutes. Read the sampled requests for the address; compare with the app's own 429s in the service log group.",
+        "Namespace": "AWS/WAFV2",
+        "MetricName": "BlockedRequests",
+        "Dimensions": [
+          {"Name": "WebACL", "Value": {"Fn::Sub": "${AWS::StackName}-web-acl"}},
+          {"Name": "Region", "Value": {"Ref": "AWS::Region"}},
+          {"Name": "Rule", "Value": "per-address-model-routes"}
+        ],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    }
+  },
+  "Outputs": {
+    "WebAclArn": {
+      "Description": "The web ACL; `aws wafv2 get-web-acl-for-resource --resource-arn <load balancer ARN>` shows it once associated.",
+      "Value": {"Fn::GetAtt": ["WebAcl", "Arn"]}
+    },
+    "WebAclName": {
+      "Description": "The web ACL's name, the CloudWatch WebACL dimension of its metrics.",
+      "Value": {"Fn::Sub": "${AWS::StackName}-web-acl"}
+    }
+  }
+}
