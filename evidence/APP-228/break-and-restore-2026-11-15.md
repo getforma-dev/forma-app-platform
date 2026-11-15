@@ -81,3 +81,76 @@ the two renewal modules `Ran 17 tests ... OK` and `preflight_test.AlwaysOnPlan` 
   branch was cut; its "Branch / PR" row and log are updated once both land.
 - The `just check` log carries two `argparse` usage lines on stderr from the maintenance CLI tests;
   they are the tests' own refusals, not failures.
+
+## Review round, the same day: the pin set and the refresh deadlock
+
+The independent review of PR #159 said GO-after-fixes. Fixed on the same branch, no rebase, no force-push.
+
+- **BLOCKER, the pin set.** `MONTH = '2027-01'` would have refused every November release: a window
+  reaching into December needs December reconciled within 24 hours (`preflight.reserve`), `reconcile`
+  refreshes only the current month, and only `month_renewal` could refresh December (releases B to F
+  did). Now `MONTHS = {'2026-12': {'genui': 17500, 'project': 21300}, '2027-01': {'genui': 12000,
+  'project': 15800}}`: the month comes from the assessment, must be in the set and not yet begun, and
+  the projection, the ceiling and the receipt key are per month. December's ceiling is amendment 2's
+  row: `month_projection(…, '2026-12', …)` with the trial named is 5589 + 10360 (746 h × 0.1388676) +
+  1500 = 17449 GenUI, 21249 project, under 17500 / 21300 and under the caps.
+- **MAJOR, the stale-month deadlock.** `reconcile.apply` and `month_renewal` validated the live window
+  with `preflight.reserve`, which requires every spanned month fresh, so with both months more than a
+  day stale neither could run (the live basis of 2026-11-15 13:13Z would have reached that state a day
+  later). `reserve(..., refresh=False)` is unchanged; `refresh=True`, through the new
+  `reconcile.refresh_validator` both refreshes use, requires the spanned months to exist and be
+  well-formed (`reconciled <= now`, the floors, the fAuth figure, the caps, the bindings) but not
+  fresh, and refuses together with `activating`. Every reservation path (`runner.prepare`, the
+  activation check, the renewal projections) keeps the 24-hour rule.
+- MINOR: runbook 2.1 says the earliest day is Dec 2 (`reconcile observe` needs a completed day) and
+  gives the refresh order before Dec 2 (reconcile November, `month_renewal 2026-12`) and from Dec 2
+  (reconcile December, `month_renewal 2027-01`, `expiry_renewal`); ADR-019 amendment 2 describes the
+  pin set and gains "Refreshes and freshness". NIT: the `expiry_renewal` comment.
+
+### Checks
+
+| Command | Result |
+| --- | --- |
+| `just check py-promotion py-infra py-ops` | py-promotion `Ran 290 tests ... OK (skipped=5)`, py-infra `Ran 87 tests ... OK`, py-ops `Ran 40 tests ... OK`. The skips are the pre-existing "no scan disposition" one and four `test_schema_release` tests that skip "no schema release is pending": the branch now sits on `main` 136b8d38 (PR #158, the release-F close-out), which removed the spent `schema-release.json` |
+| `python3 -m unittest ops.promotion.test_expiry_renewal ops.promotion.test_month_renewal ops.promotion.test_reconcile` | `Ran 32 tests ... OK` |
+| `cd infra/test && python3 -m unittest preflight_test.AlwaysOnPlan` | `Ran 10 tests ... OK` |
+
+New tests: `test_refuses_any_month_outside_the_pin_set`,
+`test_december_is_reassessed_under_a_november_clock_at_the_amendment_row`,
+`test_from_a_fully_stale_ledger_reconcile_then_reassess_then_a_release_reserves` and
+`test_a_reservation_still_refuses_a_stale_month_that_a_refresh_accepted` (`test_month_renewal.py`; its
+refusal table gains "december begun", "december in the future" and "december below the floor" and
+drops "stale december", which a refresh now accepts), and
+`test_a_refresh_accepts_stale_spanned_months_but_a_reservation_refuses_them` (`preflight_test.py`).
+
+### The reviewer's probe
+
+`g_refusal.py` (the session scratchpad) builds release F's window with both months last reconciled
+Nov 15 13:14Z under a Nov 20 clock. As written, its lines 2 and 3 call `budget.reserve` directly, a
+bare reservation, which still refuses a stale month by design, and its last line reads the removed
+`MONTH` name. `g_probe_after.py` asks the same question through the real commands:
+
+```
+1. G prepare, both months last fresh Nov 15: refused: ledger must be reconciled within the last 24 hours
+2. reconcile apply November (default validator; December still stale): ADMITTED (reconciled)
+3. month_renewal 2026-12 (November fresh, December stale until this write): ADMITTED (applied)
+4. G prepare, both months fresh: ADMITTED (['2026-11', '2026-12'])
+5. G prepare with December stale again (must refuse): refused: ledger must be reconciled within the last 24 hours
+month_renewal.MONTHS = ['2026-12', '2027-01']
+```
+
+### Break-and-restore: the refresh validator (`infra/scripts/preflight.py`)
+
+Break: the refresh branch's `require(reconciled <= now, …)` made `now - 24 h <= reconciled <= now`,
+freshness back in the validator; a byte copy was taken before (`sha256 f1523eb5b72c1e72…`).
+
+- `python3 -m unittest ops.promotion.test_month_renewal.MonthRenewalTests.test_from_a_fully_stale_ledger_reconcile_then_reassess_then_a_release_reserves ops.promotion.test_month_renewal.MonthRenewalTests.test_a_reservation_still_refuses_a_stale_month_that_a_refresh_accepted`
+  → `Ran 2 tests ... FAILED (errors=2)`: the first errors at `reconcile.apply` with
+  `ValueError: ledger month reconciled in the future` (the refresh branch's message, now firing on
+  staleness), the second with `Refused: live window would refuse the updated ledger: ledger month reconciled in the future`.
+- `preflight_test.AlwaysOnPlan.test_a_refresh_accepts_stale_spanned_months_but_a_reservation_refuses_them`
+  → `FAILED (errors=3)`, one per stale subtest (`2026-11`, `2026-12`, `both`).
+- `g_probe_after.py` under the break: steps 2 and 3 refused, the deadlock reproduced.
+
+Restored: the byte copy put back (`cmp` equal, the same sha256); the three modules `Ran 32 tests ... OK`
+and `preflight_test.AlwaysOnPlan` `Ran 10 tests ... OK`.

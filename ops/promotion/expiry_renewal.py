@@ -84,7 +84,7 @@ def plan(runner, expected_state_sha256, revert=False):
         next_expiry = budget.timestamp(target) - timedelta(hours=shorten)
         require(next_expiry > clock + timedelta(hours=24), 'the next release would still refuse; renew later or shorten less')
         # The next release's own reservation, projected and discarded: it proves the
-        # December month exists, is fresh, and both months fit the unchanged caps.
+        # months it spans exist, are fresh, and both fit the unchanged caps.
         projection_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'forma:expiry-renewal:' + expected_state_sha256 + ':' + target))
         require(projection_id not in state['ledger']['windows'], 'projection identifier already exists')
         projection = copy.deepcopy(config)

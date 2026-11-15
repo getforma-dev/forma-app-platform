@@ -476,6 +476,39 @@ class AlwaysOnPlan(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, '45 days'):
                         preflight.reserve(config, ledger, now)
 
+    def test_a_refresh_accepts_stale_spanned_months_but_a_reservation_refuses_them(self):
+        """APP-228 review (ADR-019 amendment 2): a ledger refresh (reconcile apply, month_renewal) validates the live
+        window with `refresh=True`, which requires the spanned months to exist and be well-formed, not fresh, and
+        changes nothing else; a reservation keeps the 24-hour rule for every month it touches. Without this, two
+        months more than a day stale could never be refreshed one at a time."""
+        reserved_at = datetime(2026, 11, 15, 20, tzinfo=timezone.utc)
+        now = datetime(2026, 11, 20, 12, tzinfo=timezone.utc)
+        config, ledger = always_on(reserved_at)
+        config['deployment_expires_at_utc'] = '2026-12-11T20:00:00Z'
+        ledger['months']['2026-12'] = dict(ledger['months']['2026-11'])
+        ledger, _ = preflight.reserve(config, ledger, reserved_at, activating=True)
+        for stale in ('2026-11', '2026-12', 'both'):
+            with self.subTest(stale=stale):
+                book = copy.deepcopy(ledger)
+                for month in ('2026-11', '2026-12'):
+                    book['months'][month]['reconciled_at_utc'] = '2026-11-15T13:14:00Z' if stale in (month, 'both') else '2026-11-20T11:00:00Z'
+                with self.assertRaisesRegex(ValueError, 'reconciled within the last 24 hours'):
+                    preflight.reserve(config, book, now)
+                checked, report = preflight.reserve(config, book, now, refresh=True)
+                self.assertEqual(checked, book)  # the live window and every month unchanged
+                self.assertEqual(set(report['cost_by_month']), {'2026-11', '2026-12'})
+        future = copy.deepcopy(ledger); future['months']['2026-12']['reconciled_at_utc'] = '2026-11-20T12:00:01Z'
+        with self.assertRaisesRegex(ValueError, 'reconciled in the future'):
+            preflight.reserve(config, future, now, refresh=True)
+        with self.assertRaisesRegex(ValueError, 'never activates'):
+            preflight.reserve(config, ledger, now, refresh=True, activating=True)
+        missing = copy.deepcopy(ledger); del missing['months']['2026-12']
+        with self.assertRaisesRegex(ValueError, 'missing reconciled ledger month 2026-12'):
+            preflight.reserve(config, missing, now, refresh=True)
+        broken = copy.deepcopy(ledger); broken['months']['2026-12']['variable_reserve_cents'] = 999
+        with self.assertRaisesRegex(ValueError, 'retain at least'):
+            preflight.reserve(config, broken, now, refresh=True)
+
     def test_always_on_auth_reservation_and_genui_cap(self):
         for auth in [3299, 3801]:
             config, ledger = always_on(); ledger['months']['2026-11']['auth_spent_or_reserved_cents'] = auth

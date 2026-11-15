@@ -312,9 +312,15 @@ def plan_of(config):
     return plan
 
 
-def reserve(config, ledger, now, activating=False):
-    """Reserve (or reuse) the window; `activating` also records the activation request time."""
-    optional = [k for k in OPTIONAL_INPUTS if isinstance(config, dict) and k in config]
+def reserve(config, ledger, now, activating=False, refresh=False):
+    """Reserve (or reuse) the window; `activating` also records the activation request time.
+
+    `refresh` is the validator a ledger refresh (reconcile apply, month_renewal) runs on the
+    live window: every check below, except that the months the window spans must exist and be
+    well-formed rather than reconciled within 24 hours. A refresh never spends; the 24-hour
+    rule is this function's own at reservation time (ADR-019 amendment 2, 2026-11-15)."""
+    require(not (activating and refresh), 'a refresh never activates')
+    optional =[k for k in OPTIONAL_INPUTS if isinstance(config, dict) and k in config]
     exact_keys(config, ['window_id', 'account', 'region', 'hostname', 'operator', 'ingress_mode', 'operator_ipv4_cidr', 'deployment_expires_at_utc', 'tls_certificate_arn', 'image_digest', 'image_architecture', 'service_desired_count', 'extra_task_hours'] + optional, 'deployment')
     plan = plan_of(config)
     rules = PLANS[plan]
@@ -434,7 +440,11 @@ def reserve(config, ledger, now, activating=False):
         entry = ledger['months'][month]
         exact_keys(entry, ['reconciled_at_utc', 'basis', 'prior_extra_spend_cents', 'variable_reserve_cents', 'auth_spent_or_reserved_cents', 'unallocated_cents'], 'ledger month')
         reconciled = timestamp(entry['reconciled_at_utc'])
-        require(now - timedelta(hours=24) <= reconciled <= now, 'ledger must be reconciled within the last 24 hours')
+        if refresh:
+            # A refresh rewrites one month and spends nothing: the others need only exist.
+            require(reconciled <= now, 'ledger month reconciled in the future')
+        else:
+            require(now - timedelta(hours=24) <= reconciled <= now, 'ledger must be reconciled within the last 24 hours')
         require(isinstance(entry['basis'], str) and 0 < len(entry['basis'].strip()) <= 1000, 'ledger reconciliation basis required')
         require(all(integer(entry[k]) for k in ['prior_extra_spend_cents', 'variable_reserve_cents', 'auth_spent_or_reserved_cents', 'unallocated_cents']), 'ledger cents must be nonnegative integers')
         require(entry['variable_reserve_cents'] >= MIN_VARIABLE_RESERVE, 'retain at least $10 for probes, secrets, storage, logs and requests')
