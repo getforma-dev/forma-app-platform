@@ -389,9 +389,10 @@
         "APP-220",
         "APP-221",
         "APP-222",
-        "APP-223"
+        "APP-223",
+        "APP-224"
       ],
-      "ticket_count": 60,
+      "ticket_count": 61,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6914,6 +6915,34 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-217"
+      ]
+    },
+    {
+      "id": "APP-224",
+      "title": "Canvas top bar fits at every width",
+      "path": "0-backlog/APP-224.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "UX",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "226",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Coordinator, 2026-11-15: the canvas top bar clips Sign out at 1024\u20131400 px on main; fixed before the class in the APP-223 release.",
+      "Requirements": "C11, SR1",
+      "Depends on": "APP-223",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`feat/app-223-site-footer`, [PR #149](https://github.com/getforma-dev/forma-app-platform/pull/149), open",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-223"
       ]
     }
   ]

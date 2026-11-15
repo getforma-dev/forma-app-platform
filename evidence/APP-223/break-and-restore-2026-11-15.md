@@ -93,3 +93,69 @@ Local macOS, toolchains from `just setup` in the worktree `forma-footer`, Docker
 - The break-and-restore commands are in the table above.
 - `python3 Tickets/_tools/board.py render` and `check`: OK, 217 tickets before the last rebase. After it, the conflicting generated views were taken from `main` and rendered again: OK, 222 tickets. `just check py-promotion board` passed on the final base.
 - The **deployment contract digest** (`ops.promotion.candidate.deployment_contract_digest`) is `8578d6ac6fc95d40cda7055a3724b194a0a3314c7344bd295b8aeb2c324b6c48` at `origin/main` `7c65bf57` (and at `18d67818` and `b1c7fcd6`). At the branch head it is `79263fbbdbf4c59ced39902f76b2a352f443c3a35dfad6a926b7e23912f081b1`. The only contract file changed is the root `.dockerignore` (+7 lines). Nothing changed under `app/migrations`, `infra/src`, the Dockerfiles, `app/qualification/Dockerfile.dockerignore`, the operator context or `runtime.py`. The branch therefore needs a reviewed contract-only release (APP-210) to promote. This builder did not create one.
+
+## APP-224: the canvas top bar
+
+The coordinator's follow-up the same day ([APP-224](../../Tickets/0-backlog/APP-224.md)), on this branch after the Help menu: fit the bar at every desktop and tablet width. CSS and markup only, in `canvas/app.tsx` and `canvas.css`, in commit `658b615a`.
+
+### Measured
+
+The tool was the same pinned Playwright, on this worktree's dev stand (`just dev clean -d`, Alex Rivera), in the worst case the server can render, injected into the page before measuring:
+- a 69-character organization name and a 52-character member label;
+- an admin's two Admin links, as the server renders them;
+- the "Synthetic data" note;
+- the widest live state ("Reconnecting");
+- the longest connected-apps line ("12 connected apps · Live access checks active").
+
+Before the fix (the branch at the Help menu, `6056c14a`), the bar's `scrollWidth` against its `clientWidth`:
+
+| Width | Bar needs | Cut off |
+| --- | --- | --- |
+| 768 | 1241 | Workspace, Admin, Help, the name menu, the avatar, Sign out (and the status line) |
+| 1024 | 1278 | Admin, Help, the name menu, the avatar, Sign out |
+| 1280 | 1602 | Workspace, Admin, Help, the name menu, the avatar, Sign out |
+| 1366 | 1629 | Admin, Help, the name menu, the avatar, Sign out |
+| 1440 | 1651 | Help, the name menu, the avatar, Sign out |
+
+A development sweep then set the tiers at 20 widths from 761 to 1920 px. It found the organization label squeezed to 0–43 px just above three boundaries, so the boundaries moved until the label keeps about 90 px or more (88 px at 1025).
+
+The final pass, at commit `658b615a`:
+
+| Width | Bar `scrollWidth` ≤ `clientWidth` | Cut off | Create app, Library, Help, name menu, Sign out inside the bar | Each reached by focus | Name menu: open, in view, on top | Links in the name menu | Organization label |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 320 | 320 ≤ 320, page 320 ≤ 320 | the phone row scrolls, as before | scrolled within the row | yes | yes, yes, yes | none (phones keep the row) | hidden (as before) |
+| 375 | 375 ≤ 375, page 375 ≤ 375 | the phone row scrolls, as before | scrolled within the row | yes | yes, yes, yes | none | hidden (as before) |
+| 768 | 768 ≤ 768 | none | yes | yes | yes, yes, yes | Connected apps, Workspace, Admin | hidden (as before, ≤1024) |
+| 1024 | 1024 ≤ 1024 | none | yes | yes | yes, yes, yes | Connected apps, Workspace, Admin | hidden (as before, ≤1024) |
+| 1280 | 1280 ≤ 1280 | none | yes | yes | yes, yes, yes | Workspace, Admin | 195 px, ellipsis |
+| 1366 | 1366 ≤ 1366 | none | yes | yes | yes, yes, yes | Workspace, Admin | 230 px, ellipsis |
+| 1440 | 1440 ≤ 1440 | none | yes | yes | yes, yes, yes | none | 203 px, ellipsis |
+
+"In view and on top" means the name panel lies inside the viewport, and `elementFromPoint` at its Save button lands inside the panel, so neither the first-run name prompt nor the phone row covers it.
+
+| File | What it shows |
+| --- | --- |
+| [canvas-bar-1024.png](canvas-bar-1024.png) | The bar at 1024 wide, worst case |
+| [canvas-bar-1280.png](canvas-bar-1280.png) | The bar at 1280 wide: the organization label truncated, the live state as its dot |
+| [canvas-bar-1366.png](canvas-bar-1366.png) | The bar at 1366 wide |
+| [canvas-bar-menu-1024.png](canvas-bar-menu-1024.png) | The name menu open at 1024: the form, then Connected apps, Workspace and Admin |
+
+### Tests and break
+
+- `tests::canvas_top_bar_keeps_its_controls_and_its_menus_take_the_rest` pins, for a member and for an admin:
+  - the bar's items in order;
+  - the name panel's form, then its copies of the links;
+  - Admin in both places only for the admin;
+  - the organization's name as its label's title.
+- `app/admin/test/canvas-top-bar.test.ts` pins:
+  - what each width tier hides;
+  - that the name menu shows each link at the same widths as the bar hides it;
+  - that no rule in `canvas.css` above phone width hides Create app, Library, Help, the name menu, Sign out or the bar.
+- **Break:** `.cv-signout { display: none; }` added to the 1366 px tier. Both admin tests failed: the tier list changed, and the guard reported "@media (min-width: 761px) and (max-width: 1366px): .cv-signout hides a control the bar keeps". The saved file was copied back, and its SHA-256 matched before and after (`386263fe…`, before the comment reflow); both tests passed again.
+
+### Commands
+
+- `just check` at `658b615a` with the APP-224 ticket rendered: all 21 steps ok. The library had 514 passed and 40 ignored, the binary 16 passed and doctests 3 passed. The admin tests had 353 passed, including `canvas-top-bar.test.ts`.
+- `just campaign canvas` (the canvas campaign over a Docker fixture): exit 0.
+- `python3 Tickets/_tools/board.py render` and `check`: OK, 223 tickets.
+- No new source file, so the deployment contract digest stays `79263fbb…` (APP-223's).
