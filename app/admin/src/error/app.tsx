@@ -6,7 +6,9 @@ import { h, mount } from '@getforma/core';
 // variant, and which buttons to show. The path, query, ids and names never
 // reach these props, so an unknown path and a protected one stay one answer
 // (ADR-006). No script, no form, no cookie. The mascot's surge is CSS only:
-// a visually hidden checkbox, and a label around the mascot.
+// a visually hidden checkbox, and a label around the mascot. The checkbox
+// sits after the buttons, so the Tab order is the brand link, the buttons,
+// then the mascot toggle; the styles reach it with `.lab:has(...)`.
 type ErrorProps = {
   status: number;
   title: string;
@@ -18,7 +20,6 @@ type ErrorProps = {
 function ErrorPage(props: ErrorProps) {
   return (
     <div class="lab">
-      <input class="lab-surge-toggle" type="checkbox" id="lab-surge" aria-label="Start the reactor surge, just for fun" />
       <main class="lab-card" aria-labelledby="lab-title">
         <div class="lab-stripes" aria-hidden="true"></div>
         <a class="forma-brand" href="/" aria-label="Forma home"><span class="forma-mark-tile" aria-hidden="true"><span class="forma-mark"></span></span><span>forma<span class="forma-dot">.</span></span><span class="forma-product">canvas</span></a>
@@ -44,6 +45,7 @@ function ErrorPage(props: ErrorProps) {
                 <span class="lab-note">if your session ended</span>
               </p>
             ) : null}
+            <input class="lab-surge-toggle" type="checkbox" id="lab-surge" aria-label="Start the reactor surge, just for fun" />
           </div>
         </div>
         <div class="lab-stripes lab-stripes-end" aria-hidden="true"></div>

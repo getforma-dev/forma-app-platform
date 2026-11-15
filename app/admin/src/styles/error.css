@@ -1,8 +1,9 @@
 /* APP-217: the themed error page (src/error/app.tsx), in the getforma.dev
    labs containment style: the isotope mascot, the green capsule glow, the
    ☢ readout and the hazard stripes. Linked after app.css, on this page only.
-   CSS only: the surge plays from a visually hidden checkbox (`:checked ~`),
-   and every animation sits inside prefers-reduced-motion: no-preference. */
+   CSS only: the surge plays from a visually hidden checkbox placed after the
+   buttons (`.lab:has(.lab-surge-toggle:checked)`), and every animation sits
+   inside prefers-reduced-motion: no-preference. */
 
 :root {
   --lab-paper: #f4f4ed;
@@ -140,7 +141,7 @@ body {
   pointer-events: none;
 }
 
-.lab-surge-toggle:focus-visible ~ .lab-card .lab-mascot {
+.lab:has(.lab-surge-toggle:focus-visible) .lab-card .lab-mascot {
   outline: 2px solid var(--lab-accent);
   outline-offset: 6px;
 }
@@ -246,7 +247,7 @@ body {
   box-shadow: inset 0 0 100px rgb(183 255 57 / 30%);
 }
 
-.lab-surge-toggle:checked ~ .lab-surge {
+.lab:has(.lab-surge-toggle:checked) .lab-surge {
   display: block;
 }
 
@@ -292,16 +293,16 @@ body {
   line-height: 1;
 }
 
-.lab-surge-toggle:checked ~ .lab-card {
+.lab:has(.lab-surge-toggle:checked) .lab-card {
   border-color: var(--lab-lime-edge);
   box-shadow: inset 0 0 32px rgb(183 255 57 / 7%), 0 0 24px rgb(183 255 57 / 18%), var(--lab-shadow);
 }
 
-.lab-surge-toggle:checked ~ .lab-card .lab-mascot-image {
+.lab:has(.lab-surge-toggle:checked) .lab-card .lab-mascot-image {
   filter: drop-shadow(0 0 16px rgb(183 255 57 / 55%));
 }
 
-.lab-surge-toggle:checked ~ .lab-card .lab-capsule-glow {
+.lab:has(.lab-surge-toggle:checked) .lab-card .lab-capsule-glow {
   opacity: 0.95;
 }
 
@@ -309,16 +310,16 @@ body {
   .lab-capsule-glow {
     animation: lab-breathe 3.6s ease-in-out infinite alternate;
   }
-  .lab-surge-toggle:checked ~ .lab-card .lab-capsule-glow {
+  .lab:has(.lab-surge-toggle:checked) .lab-card .lab-capsule-glow {
     animation-duration: 0.6s;
   }
-  .lab-surge-toggle:checked ~ .lab-surge {
+  .lab:has(.lab-surge-toggle:checked) .lab-surge {
     animation: lab-surge-envelope 0.4s ease-out both;
   }
-  .lab-surge-toggle:checked ~ .lab-surge .lab-surge-ring {
+  .lab:has(.lab-surge-toggle:checked) .lab-surge .lab-surge-ring {
     animation: lab-shockwave 2.5s cubic-bezier(0.1, 0.5, 0.2, 1) both;
   }
-  .lab-surge-toggle:checked ~ .lab-surge .lab-surge-readout {
+  .lab:has(.lab-surge-toggle:checked) .lab-surge .lab-surge-readout {
     animation: lab-pulse 1.2s ease-in-out infinite alternate;
   }
   .lab-button {
