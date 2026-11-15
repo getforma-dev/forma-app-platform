@@ -38,27 +38,25 @@ from .state import Refused, no_duplicates, require
 SPEC = Path(__file__).with_name('schema-release.json')
 # Changing any of these needs a reviewed source change, not a JSON edit. The
 # JSON must equal it exactly; see the evidence record for how each digest was
-# computed. Release C (APP-209): a contract-only release at schema 24 (APP-210),
-# from release B's live baseline (evidence/APP-194/release-2026-11-14.md,
-# candidate 140a5a9f). Only the qualification image context changes
-# (app/qualification/Dockerfile.dockerignore); the schema manifest, its version
-# and the CDK source are release B's, so `from` and `to` share one schema digest.
-# It replaces release B's spent 22 -> 24 pin (evidence/APP-194/SCHEMA-RELEASE.md).
-# The expiry falls after the planned release (by 2026-11-25) and the rehearsal
-# (2026-11-26), and before the codes (2026-11-28) and the class (2026-11-29), so
-# no contract change can promote during the class. Release C went live on
-# 2026-11-14 (evidence/APP-209/release-2026-11-14.md) and its file was removed:
-# this pin is now an inert record, read only together with a committed file,
-# until the next release's values replace it.
+# computed. Release D (APP-217): a contract-only release at schema 24 (APP-210),
+# from the security release's live baseline (evidence/APP-215/release-2026-11-15.md,
+# candidate 0f8546bf, contract 3493b0a6, release C's `to`). Only the two image
+# allowlists change (.dockerignore and app/qualification/Dockerfile.dockerignore,
+# to admit the error page's sources); the schema manifest, its version and the
+# CDK source are unchanged, so `from` and `to` share one schema digest. It
+# replaces release C's spent pin (evidence/APP-209/CONTRACT-RELEASE.md). The
+# expiry falls after the planned release (2026-11-15) and before the codes
+# (2026-11-28) and the class (2026-11-29), so no contract change can promote
+# during the class.
 REVIEWED_SCHEMA_RELEASE = {
-    'evidence': 'evidence/APP-209/CONTRACT-RELEASE.md',
+    'evidence': 'evidence/APP-217/CONTRACT-RELEASE.md',
     'expires_at_utc': '2026-11-27T00:00:00Z',
     'from': {'database_version': 24,
              'schema_manifest_sha256': '176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1',
-             'deployment_contract_sha256': '88d17cb53bf77c2f2bfa0b4345953f9f74c0aa39b81b677d6105807a54bcc356'},
+             'deployment_contract_sha256': '3493b0a68b08b686a245be7ffa602817772895c0f5cc8983c06ad78b7a3e2dd9'},
     'to': {'database_version': 24,
            'schema_manifest_sha256': '176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1',
-           'deployment_contract_sha256': '3493b0a68b08b686a245be7ffa602817772895c0f5cc8983c06ad78b7a3e2dd9'},
+           'deployment_contract_sha256': '8578d6ac6fc95d40cda7055a3724b194a0a3314c7344bd295b8aeb2c324b6c48'},
     'infrastructure_sha256': 'e74b620e4d9749b5eb47819a1546be1adc00765008f042abbb0b747d9e549da1',
 }
 FIELDS = frozenset({'schema_version', 'evidence', 'from', 'to', 'infrastructure_sha256', 'expires_at_utc'})

@@ -1,10 +1,12 @@
 //! The binary's server-rendered APP-009/APP-013 pages (sign-in, invitation,
-//! pending, denied, workspace and record), shared by `main.rs` and the local
-//! dev binary (`genui::dev`, feature `dev-stand`) so both render the same pages.
+//! pending, denied, workspace and record) and APP-217's error page, shared by
+//! `main.rs` and the local dev binary (`genui::dev`, feature `dev-stand`) so
+//! both render the same pages.
 use crate::auth::{
     self, DeniedView, InviteView, PendingView, ResendResult, SigninView, WorkspaceView,
 };
 use crate::commands::{Notice, RecordPage, RecordView};
+use crate::http::errors::{ErrorPages, ErrorView, Refusal, Viewer};
 use axum::{
     http::{header, StatusCode},
     response::{IntoResponse, Response},
@@ -79,6 +81,86 @@ pub struct PendingProps {
 pub struct DeniedProps {
     pub csrf_signout: String,
 }
+/// APP-217: the themed error page (`admin/src/error/app.tsx`). The copy is a
+/// closed set chosen here from the refusal and the viewer variant; the only
+/// value from outside it is the 429 wait, already plain words.
+#[derive(PageProps)]
+pub struct ErrorProps {
+    pub status: u32,
+    pub title: String,
+    pub text: String,
+    /// 404, signed out: "Sign in" and "I have an invitation code".
+    pub sign_in: bool,
+    /// 404, a member: "Back to your workspace" and "Sign in again".
+    pub workspace: bool,
+}
+impl ErrorProps {
+    pub fn new(view: &ErrorView) -> Self {
+        let (title, text) = match (view.refusal, view.viewer) {
+            (Refusal::NotFound, Some(Viewer::Member)) => (
+                "Specimen not found",
+                "This page doesn't exist, or it isn't shared with you. Check the link, or ask the person who sent it.".to_owned(),
+            ),
+            (Refusal::NotFound, Some(Viewer::Guest)) => (
+                "Specimen not found",
+                "This shared link may have been turned off or may have expired. Ask the person who shared it for a new link.".to_owned(),
+            ),
+            (Refusal::NotFound, _) => (
+                "Specimen not found",
+                "Nothing is here, or it's behind the lab door. If someone sent you this link, sign in first, then open the link again.".to_owned(),
+            ),
+            (Refusal::CrossSite, _) => (
+                "Safety interlock tripped",
+                "This form was open too long, or it came from another site, so nothing was changed. Go back, refresh the page, and try again.".to_owned(),
+            ),
+            (Refusal::PayloadTooLarge, _) => (
+                "Sample too large",
+                "That upload is over the size limit, so nothing was saved. Try a smaller file.".to_owned(),
+            ),
+            (Refusal::TooManyRequests, _) => (
+                "Reactor cooling down",
+                format!(
+                    "Too many requests in a short time. Wait {}, then refresh this page.",
+                    view.wait
+                ),
+            ),
+            (Refusal::Unavailable, _) => (
+                "Containment field offline",
+                "Something on our side is down for a moment. Your data is safe. Try again in a minute.".to_owned(),
+            ),
+        };
+        let not_found = view.refusal == Refusal::NotFound;
+        Self {
+            status: u32::from(view.refusal.status().as_u16()),
+            title: title.into(),
+            text,
+            sign_in: not_found && matches!(view.viewer, None | Some(Viewer::SignedOut)),
+            workspace: not_found && view.viewer == Some(Viewer::Member),
+        }
+    }
+}
+/// APP-217: the error page renderer the uniform layer calls
+/// (`http::errors::ErrorPageLayer`). No route serves it: it answers in place
+/// of a refusal on any path, as `denied` answers for `/auth/callback`.
+pub struct SsrErrorPages {
+    pub page: PageHandle<ErrorProps>,
+}
+impl ErrorPages for SsrErrorPages {
+    /// A failed render is logged by code and answered with the original
+    /// refusal (the caller's), never `respond`'s 500.
+    fn render(&self, view: &ErrorView) -> Option<Response> {
+        let props = ErrorProps::new(view);
+        let ctx = RenderCtx::new().with_title(format!("{} · Forma", props.title));
+        match self.page.render(&props, &ctx) {
+            Ok(page) => Some(page.into_response()),
+            Err(error) => {
+                tracing::error!(code = error.code(), route = "/error", "{error}");
+                None
+            }
+        }
+    }
+}
+
 // APP-076 G9: the member's openable works, resolved by the auth route.
 #[derive(PageProps)]
 pub struct RecordLinkProps {

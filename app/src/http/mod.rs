@@ -6,6 +6,7 @@
 //! `payload_too_large`, and the 5 s handler deadline. APP-009 added what its
 //! routes need; APP-074 adds the invitation limits, the JSON bounds and the
 //! trusted-proxy restriction to the load balancer's peers.
+pub mod errors;
 pub mod limits;
 pub mod proxy;
 
@@ -153,6 +154,7 @@ pub fn uniform(router: Router) -> Router {
         .layer(middleware::from_fn(deadline));
     Router::new()
         .fallback_service(inner)
+        .layer(middleware::from_fn(errors::error_pages))
         .layer(middleware::map_response(finish))
 }
 /// APP-215 (infrastructure review M4): `Strict-Transport-Security` on every
@@ -193,10 +195,13 @@ pub fn uniform_with_many(router: Router, long: Vec<(&'static str, Router)>) -> R
     }
     outer
         .fallback_service(inner)
+        .layer(middleware::from_fn(errors::error_pages))
         .layer(middleware::map_response(finish))
 }
 /// The outermost pass over every answer: no `Allow` (G8) and the transport
-/// security header (APP-215).
+/// security header (APP-215). Just inside it, APP-217's `errors::error_pages`
+/// gives a browser navigation the themed page for a covered refusal; `finish`
+/// runs after it, so that page carries HSTS and no `Allow` like the JSON.
 async fn finish(mut response: Response) -> Response {
     response.headers_mut().remove(header::ALLOW);
     response.headers_mut().insert(

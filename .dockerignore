@@ -46,6 +46,8 @@ app/src/auth/**
 !app/src/auth/vault.rs
 !app/src/http/
 app/src/http/**
+# APP-217: the themed error page layer.
+!app/src/http/errors.rs
 !app/src/http/limits.rs
 !app/src/http/mod.rs
 !app/src/http/proxy.rs
@@ -207,6 +209,13 @@ app/admin/src/pending/**
 !app/admin/src/denied/
 app/admin/src/denied/**
 !app/admin/src/denied/app.tsx
+# APP-217: the themed error page and its mascot (copied into dist by build.ts).
+!app/admin/src/error/
+app/admin/src/error/**
+!app/admin/src/error/app.tsx
+!app/admin/src/brand/
+app/admin/src/brand/**
+!app/admin/src/brand/forma-isotope.svg
 !app/admin/src/workspace/
 app/admin/src/workspace/**
 !app/admin/src/workspace/app.tsx
@@ -335,6 +344,7 @@ app/admin/src/styles/**
 !app/admin/src/styles/app.css
 !app/admin/src/styles/ask.css
 !app/admin/src/styles/org-admin.css
+!app/admin/src/styles/error.css
 !app/admin/src/styles/sharing.css
 !app/admin/src/fonts/
 app/admin/src/fonts/**

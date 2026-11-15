@@ -382,9 +382,10 @@
         "APP-212",
         "APP-214",
         "APP-215",
-        "APP-216"
+        "APP-216",
+        "APP-217"
       ],
-      "ticket_count": 53,
+      "ticket_count": 54,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6711,6 +6712,34 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-188"
+      ]
+    },
+    {
+      "id": "APP-217",
+      "title": "Themed error pages for browser navigations",
+      "path": "0-backlog/APP-217.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P1",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "219",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: a helpful, fun 404 like production sites, in the getforma.dev labs containment style, aware of whether the person is signed in, signed out or on a guest link. The coordinator fixed the design the same day: one layer inside `finish`, navigations only, the viewer from cookie presence only, status codes and refusal headers unchanged, no redirect and no `return_to`.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-215",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`feat/app-217-error-pages`, [PR #143](https://github.com/getforma-dev/forma-app-platform/pull/143), open",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-215"
       ]
     }
   ]

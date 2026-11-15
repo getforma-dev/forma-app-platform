@@ -45,6 +45,22 @@ pub fn lifetime(name: &str) -> u64 {
     }
 }
 
+/// APP-217: which error page a browser navigation gets, from the session
+/// cookies' presence alone (read as everywhere else: a duplicated or
+/// malformed cookie is no cookie). No session is resolved and no store is
+/// called, so the page cannot tell a live session from an expired one, and
+/// says nothing a stranger with the same cookie would not see.
+pub fn viewer(headers: &HeaderMap) -> crate::http::errors::Viewer {
+    use crate::http::errors::Viewer;
+    if read(headers, SESSION).is_some() {
+        Viewer::Member
+    } else if read(headers, SHARED_SESSION).is_some() {
+        Viewer::Guest
+    } else {
+        Viewer::SignedOut
+    }
+}
+
 /// The single value of `name`, if it occurs exactly once among bounded
 /// `Cookie` headers and is a plain token of at most 128 characters.
 pub fn read(headers: &HeaderMap, name: &str) -> Option<String> {

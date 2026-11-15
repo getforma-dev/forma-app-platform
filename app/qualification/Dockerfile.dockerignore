@@ -51,6 +51,7 @@ app/src/bin/**
 !app/src/auth/synthetic_issuer.rs
 !app/src/auth/tests.rs
 !app/src/auth/vault.rs
+!app/src/http/errors.rs
 !app/src/http/limits.rs
 !app/src/http/mod.rs
 !app/src/http/proxy.rs
