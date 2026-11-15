@@ -381,9 +381,10 @@
         "APP-213",
         "APP-212",
         "APP-214",
-        "APP-215"
+        "APP-215",
+        "APP-216"
       ],
-      "ticket_count": 52,
+      "ticket_count": 53,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6682,6 +6683,34 @@
       "dependencies": [
         "APP-154",
         "APP-189"
+      ]
+    },
+    {
+      "id": "APP-216",
+      "title": "Reduce the beta's AWS cost: the readiness probe, the task size, and the after-class options",
+      "path": "0-backlog/APP-216.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "218",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "Victor, 2026-11-15: \"create a ticket for the cost audit for the readiness-probe fix and the shrinking the main task to act on it later and anything else that can save money that we can act on later.\" The account-side quick wins (leftover keys and secrets, the unused NAT) were done the same day (follow-up A14). Nothing here ships before the class: each needs a release, and a release takes 18 hours off the stop.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-188",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-188"
       ]
     }
   ]
