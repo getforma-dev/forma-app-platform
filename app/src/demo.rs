@@ -272,7 +272,7 @@ mod tests {
                     let demo = is_demo_org(ORG);
                     parses.push(
                         parser
-                            .parse(utterance, catalog, demo, TODAY)
+                            .parse(utterance, catalog, demo, TODAY, None)
                             .await
                             .map(|parse| parse.rehearsed),
                     );
@@ -280,7 +280,7 @@ mod tests {
                 let receipt = match rehearsed_receipt() {
                     Some(image) => Some(
                         parser
-                            .parse_receipt("", &image, catalog, is_demo_org(ORG), TODAY)
+                            .parse_receipt("", &image, catalog, is_demo_org(ORG), TODAY, None)
                             .await
                             .map(|parse| parse.rehearsed),
                     ),
@@ -288,7 +288,7 @@ mod tests {
                 };
                 // composer/routes.rs: `Composer::demo_for`.
                 let transform = composer
-                    .transform(REHEARSED_TRANSFORM, expenses, composer.demo_for(ORG))
+                    .transform(REHEARSED_TRANSFORM, expenses, composer.demo_for(ORG), None)
                     .await
                     .map(|(_, source)| source);
                 // widgets/routes.rs and composer/talk.rs: `demo::is_demo_org`.
@@ -298,6 +298,7 @@ mod tests {
                         &Widget::Calculator.default_state(),
                         REHEARSED_RESTYLE,
                         is_demo_org(ORG),
+                        None,
                     )
                     .await
                     .map(|outcome| outcome.source);

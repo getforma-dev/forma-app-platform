@@ -195,6 +195,7 @@ async fn customize_uses_the_model_outside_demo_and_keeps_state_on_refusal() {
             &base,
             "make it a TI-84 in Matrix style",
             true,
+            None,
         )
         .await
         .unwrap();
@@ -208,6 +209,7 @@ async fn customize_uses_the_model_outside_demo_and_keeps_state_on_refusal() {
             &base,
             "make it a TI-84 in Matrix style",
             false,
+            None,
         )
         .await
         .unwrap();
@@ -223,7 +225,7 @@ async fn customize_uses_the_model_outside_demo_and_keeps_state_on_refusal() {
         let customizer = Customizer::new(Some(Stub::new(Ok(reply)) as Arc<dyn Model>), "stub");
         assert_eq!(
             customizer
-                .customize(Widget::Calculator, &base, "go wild", false)
+                .customize(Widget::Calculator, &base, "go wild", false, None)
                 .await,
             Err(Failure::Refused("outside_closed_state"))
         );
@@ -234,18 +236,18 @@ async fn customize_uses_the_model_outside_demo_and_keeps_state_on_refusal() {
     );
     assert_eq!(
         failing
-            .customize(Widget::Calculator, &base, "make it glass", false)
+            .customize(Widget::Calculator, &base, "make it glass", false, None)
             .await,
         Err(Failure::Refused("model_timeout"))
     );
     // No model: rehearsed sentences still work in a demo organization only.
     let none = Customizer::new(None, "stub");
     assert!(none
-        .customize(Widget::Calculator, &base, "make it glass", true)
+        .customize(Widget::Calculator, &base, "make it glass", true, None)
         .await
         .is_ok());
     assert_eq!(
-        none.customize(Widget::Calculator, &base, "make it glass", false)
+        none.customize(Widget::Calculator, &base, "make it glass", false, None)
             .await,
         Err(Failure::Unavailable)
     );
@@ -359,7 +361,7 @@ async fn real_haiku_customize_smoke() {
     ] {
         let started = std::time::Instant::now();
         let outcome = customizer
-            .customize(widget, &widget.default_state(), sentence, false)
+            .customize(widget, &widget.default_state(), sentence, false, None)
             .await;
         let ms = started.elapsed().as_millis();
         match outcome {

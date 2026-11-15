@@ -233,6 +233,7 @@ impl Parser {
         catalog: &[prompt::CatalogApp],
         demo: bool,
         today: &str,
+        member: Option<&str>,
     ) -> Result<Parse, ParseFailure> {
         let started = std::time::Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -270,6 +271,7 @@ impl Parser {
             user: prompt::parse_user(utterance, catalog, today),
             max_tokens: PARSE_MAX_TOKENS,
             budget: PARSE_BUDGET,
+            member: member.map(str::to_owned),
         };
         let reply = model.complete(&request).await?;
         decode(&reply.text)

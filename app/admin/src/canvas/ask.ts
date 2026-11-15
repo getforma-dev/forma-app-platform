@@ -51,7 +51,7 @@ import { requestAsk, ASK_URL, type AskScope, type WidgetScope } from '../ask/cli
 import { mountAskPanel, type AskPanel } from '../ask/panel';
 import { setFocusAsk } from './focus';
 import { widgetOfItem } from './widgets/index';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, dailyLimitMessage, isDailyLimit } from './daily-limit';
 
 export { ASK_URL };
 const MAX_WORKS = 12;
@@ -369,7 +369,7 @@ async function askFolder(document_: Document, current: Extract<Scope, { kind: 'f
   const answer = response.ok ? folderAnswer(body) : null;
   if (!answer) {
     const code = typeof (body as { code?: unknown } | null)?.code === 'string' ? String((body as { code: string }).code) : '';
-    pending.textContent = (code === 'composer_unavailable' ? REFUSALS.folder_unavailable : REFUSALS[code]) ?? 'Ask could not answer right now. Nothing changed.';
+    pending.textContent = isDailyLimit(body) ? dailyLimitMessage(body) : (code === 'composer_unavailable' ? REFUSALS.folder_unavailable : REFUSALS[code]) ?? 'Ask could not answer right now. Nothing changed.';
     return;
   }
   pending.remove();

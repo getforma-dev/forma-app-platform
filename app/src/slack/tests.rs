@@ -195,6 +195,7 @@ fn a_folder_build_answer_is_one_escaped_line_linking_the_app_page() {
             "via": "folder", "kind": "build_from_box", "app_id": "a1", "work_id": "w1",
             "title": "Q3 <metrics> & co", "label": "Built from folder: Q3 board pack · 3 files"
         })),
+        None,
     );
     let text = built.to_string();
     assert!(
@@ -203,14 +204,15 @@ fn a_folder_build_answer_is_one_escaped_line_linking_the_app_page() {
     );
     assert!(text.contains("/w/a1/w1"), "{text}");
     assert!(!text.contains("<metrics>"), "{text}");
-    let empty =
-        super::flows::folder_message(&state, Answer::Refused(BuildRefusal::NoData)).to_string();
+    let empty = super::flows::folder_message(&state, Answer::Refused(BuildRefusal::NoData), None)
+        .to_string();
     assert!(
         empty.contains("has no CSV or XLSX data to build from yet"),
         "{empty}"
     );
     let missing =
-        super::flows::folder_message(&state, Answer::Refused(BuildRefusal::NotFound)).to_string();
+        super::flows::folder_message(&state, Answer::Refused(BuildRefusal::NotFound), None)
+            .to_string();
     assert!(
         !missing.contains("a1") && !missing.contains("Q3"),
         "{missing}"

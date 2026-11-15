@@ -225,7 +225,7 @@ async fn callback_floods_hit_class_and_global_limits_before_any_work() {
     // the limit precedes parsing.
     let malformed = flood.get(&app, "/auth/callback?code=x").await;
     assert_eq!(malformed.status, StatusCode::TOO_MANY_REQUESTS);
-    // Across the service: 800 an hour, whatever the classes.
+    // Across the service: 8,000 an hour (APP-215), whatever the classes.
     auth.limits.clear();
     let mut admitted = 0;
     'classes: for a in 0..=255u16 {
@@ -481,13 +481,14 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
         StatusCode::BAD_REQUEST,
         "another real client behind the balancer has its own budget"
     );
-    // Global: 200 per day across the service (11 counted above).
+    // Global: 2,000 per day across the service (APP-215; 11 counted above).
+    let global_limit = http::limits::INVITE_GLOBAL[0].limit;
     let mut admitted = 11;
     let mut peer = 0u32;
-    while admitted < 200 {
+    while admitted < global_limit {
         let mut b = Browser::new(&format!("100.64.{}.{}:1", peer / 250, peer % 250), &log);
         for _ in 0..5 {
-            if admitted == 200 {
+            if admitted == global_limit {
                 break;
             }
             let reply = b
@@ -513,7 +514,7 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
     assert_eq!(
         (global.status, global.body.as_str()),
         (StatusCode::TOO_MANY_REQUESTS, LIMITED_SERVICE),
-        "the 201st attempt of the day is refused from a fresh class, naming the service window"
+        "the 2,001st attempt of the day is refused from a fresh class, naming the service window"
     );
     // Sign-in: many handles from one class share the per-class window.
     let mut signin = Browser::new("198.51.100.32:4000", &log);
@@ -537,14 +538,15 @@ async fn invite_and_signin_floods_hit_class_and_global_limits_without_provider_c
         .iter()
         .all(|status| *status == 400));
     assert_eq!(signin_statuses[per_minute], 429);
-    // Sign-in global: 600 per hour across the service.
+    // Sign-in global: 6,000 per hour across the service (APP-215).
     auth.limits.clear();
+    let signin_limit = http::limits::SIGNIN_GLOBAL[0].limit;
     let mut count = 0;
     let mut peer = 0u32;
-    while count < 600 {
+    while count < signin_limit {
         let mut b = Browser::new(&format!("100.65.{}.{}:1", peer / 250, peer % 250), &log);
         for _ in 0..10 {
-            if count == 600 {
+            if count == signin_limit {
                 break;
             }
             let reply = b.post(&app, &format!("/signin/{UNKNOWN_HANDLE}"), "").await;

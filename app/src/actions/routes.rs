@@ -546,7 +546,14 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
             }
             let parse = state
                 .parser
-                .parse_receipt(&utterance, &receipt, &catalog, demo, &today)
+                .parse_receipt(
+                    &utterance,
+                    &receipt,
+                    &catalog,
+                    demo,
+                    &today,
+                    Some(&crate::composer::model::member_of(&member)),
+                )
                 .await;
             // The image leaves memory here, before resolution (DS-56).
             drop(receipt);
@@ -569,7 +576,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 }
                 Err(ParseFailure::DailyLimit) => {
                     log_refused(&member, "model_daily_cap", started);
-                    return crate::composer::model::daily_limit();
+                    return crate::composer::model::daily_limit_for(Some(
+                        &crate::composer::model::member_of(&member),
+                    ));
                 }
             }
         }
@@ -578,7 +587,17 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 log_refused(&member, "composer_unavailable", started);
                 return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
             }
-            match state.parser.parse(&utterance, &catalog, demo, &today).await {
+            match state
+                .parser
+                .parse(
+                    &utterance,
+                    &catalog,
+                    demo,
+                    &today,
+                    Some(&crate::composer::model::member_of(&member)),
+                )
+                .await
+            {
                 Ok(mut parse) => {
                     parse.parsed = ledger::with_range(parse.parsed, &utterance, &today);
                     (parse, utterance)
@@ -593,7 +612,9 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
                 }
                 Err(ParseFailure::DailyLimit) => {
                     log_refused(&member, "model_daily_cap", started);
-                    return crate::composer::model::daily_limit();
+                    return crate::composer::model::daily_limit_for(Some(
+                        &crate::composer::model::member_of(&member),
+                    ));
                 }
             }
         }

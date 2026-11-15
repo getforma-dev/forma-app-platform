@@ -6,7 +6,7 @@
 // through `refusalText`.
 import { amount } from './display';
 import { isUuid } from './ids';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, MEMBER_DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 /**
  * The member-facing noun (Victor, 2026-10-30): "Folder" everywhere on the
@@ -125,7 +125,11 @@ export type Lineage = { box_id: string; box_name: string; files: { file_id: stri
 
 /** A refusal: the server's code (or a local one) and the status. */
 export class BoxError extends Error {
-  constructor(readonly code: string, readonly status: number, readonly column = '', readonly reason = '') {
+  constructor(
+    readonly code: string, readonly status: number, readonly column = '', readonly reason = '',
+    /** APP-215: a `daily_limit` the server scoped to the member's own allowance. */
+    readonly memberLimit = false,
+  ) {
     super(code);
   }
 }
@@ -154,6 +158,7 @@ const REFUSALS: Record<string, string> = {
 export function refusalText(error: unknown): string {
   if (error instanceof BoxError) {
     if (error.code === 'sheet_unavailable') return fileReadRefusal(error.reason);
+    if (error.code === DAILY_LIMIT_CODE) return error.memberLimit ? MEMBER_DAILY_LIMIT_MESSAGE : DAILY_LIMIT_MESSAGE;
     if (error.code === 'data_refused' && error.column) return `Column “${error.column}” does not fit its type. Nothing was registered.`;
     return REFUSALS[error.code] ?? 'That could not be done right now.';
   }
@@ -270,7 +275,7 @@ export async function call(method: string, url: string, body?: unknown, key?: st
   }
   const json = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (!response.ok) {
-    throw new BoxError(str(json?.code) ? json.code : 'unavailable', response.status, str(json?.column) ? json.column : '', str(json?.reason) ? json.reason : '');
+    throw new BoxError(str(json?.code) ? json.code : 'unavailable', response.status, str(json?.column) ? json.column : '', str(json?.reason) ? json.reason : '', json?.scope === 'member');
   }
   if (!json) throw new BoxError('unavailable', response.status);
   return json;

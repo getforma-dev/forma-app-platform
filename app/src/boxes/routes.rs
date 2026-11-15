@@ -1256,9 +1256,14 @@ pub enum BuildRefusal {
 }
 impl BuildRefusal {
     pub fn response(&self) -> Response {
+        self.response_for(None)
+    }
+    /// `response` for `member` (APP-215, `model::member_key`): the
+    /// `daily_limit` answer names whose allowance is reached.
+    pub fn response_for(&self, member: Option<&str>) -> Response {
         match self {
             Self::TooMany(retry_after) => http::too_many_requests(*retry_after),
-            Self::DailyLimit => composer::model::daily_limit(),
+            Self::DailyLimit => composer::model::daily_limit_for(member),
             Self::NotFound => http::not_found(),
             Self::Unavailable => http::unavailable(),
             Self::ComposerUnavailable => {
@@ -1505,6 +1510,7 @@ async fn build_with(
                 member.organization(),
                 &authoring.app,
                 deadline,
+                Some(&composer::model::member_of(member)),
             )
             .await
             .map_err(|failure| match failure {
@@ -1794,7 +1800,7 @@ async fn apps(
         return http::not_found();
     };
     if let Err(refused) = admit_compose(&state, &member) {
-        return refused.response();
+        return refused.response_for(Some(&composer::model::member_of(&member)));
     }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
@@ -1858,7 +1864,7 @@ async fn apps(
     let Some(key) = key else {
         return match run.await {
             Ok(built) => document(StatusCode::CREATED, &built),
-            Err(refused) => refused.response(),
+            Err(refused) => refused.response_for(Some(&composer::model::member_of(&member))),
         };
     };
     let scope = format!(
@@ -1893,7 +1899,7 @@ async fn apps(
             *first = Some(built);
             response
         }
-        Err(refused) => refused.response(),
+        Err(refused) => refused.response_for(Some(&composer::model::member_of(&member))),
     }
 }
 
@@ -2217,7 +2223,13 @@ pub async fn explain_now(
         let bytes = input.len();
         match state
             .composer
-            .complete_fast(explain::SYSTEM, input, 800, EXPLAIN_BUDGET)
+            .complete_fast(
+                explain::SYSTEM,
+                input,
+                800,
+                EXPLAIN_BUDGET,
+                Some(&composer::model::member_of(member)),
+            )
             .await
         {
             Ok(reply) => (explain::judge(&reply.text, &results), "model", bytes),
@@ -2299,10 +2311,10 @@ async fn explain_post(
         return http::not_found();
     };
     if let Err(refused) = admit_explain(&state, &member) {
-        return refused.response();
+        return refused.response_for(Some(&composer::model::member_of(&member)));
     }
     match explain_now(&state, &member, &app, &work).await {
         Ok(value) => document(StatusCode::OK, &value),
-        Err(refused) => refused.response(),
+        Err(refused) => refused.response_for(Some(&composer::model::member_of(&member))),
     }
 }

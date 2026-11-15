@@ -7,14 +7,14 @@ import { openFocus } from './focus';
 import { announce, el, isUuid } from './render';
 import { setAppView } from './unite';
 import { appComponentVisible } from '../presentation/presentation';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, MEMBER_DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 const LABEL = 'AI summary';
 type Part = { text: string } | { value: string; exact: string; view_id: string; view_title: string; receipt_digest: string };
 type Explanation = { state: 'ready' | 'none'; label: string; generated_at: string | null; findings: Part[][] };
 
 class ExplainError extends Error {
-  constructor(readonly status: number, readonly code: string) {
+  constructor(readonly status: number, readonly code: string, readonly memberLimit = false) {
     super(code);
   }
 }
@@ -70,7 +70,7 @@ async function call(method: 'GET' | 'POST', app: string, work: string, signal: A
     throw new ExplainError(0, 'network');
   }
   const json = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!response.ok) throw new ExplainError(response.status, typeof json?.code === 'string' ? json.code : 'unavailable');
+  if (!response.ok) throw new ExplainError(response.status, typeof json?.code === 'string' ? json.code : 'unavailable', json?.scope === 'member');
   const explanation = parse(json);
   if (!explanation) throw new ExplainError(response.status, 'unavailable');
   return explanation;
@@ -100,7 +100,7 @@ export async function showValue(app: string, work: string, view: string, isCurre
 function message(error: unknown): string {
   if (error instanceof ExplainError && error.code === 'composer_unavailable') return 'Summaries are not available on this server right now.';
   if (error instanceof ExplainError && error.code === 'too_many_requests') return 'Too many summaries in a short time. Try again in a moment.';
-  if (error instanceof ExplainError && error.code === DAILY_LIMIT_CODE) return DAILY_LIMIT_MESSAGE;
+  if (error instanceof ExplainError && error.code === DAILY_LIMIT_CODE) return error.memberLimit ? MEMBER_DAILY_LIMIT_MESSAGE : DAILY_LIMIT_MESSAGE;
   return 'The summary could not be made right now.';
 }
 

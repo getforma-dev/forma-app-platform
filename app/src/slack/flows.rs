@@ -435,7 +435,11 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
     // Q3 metrics folder", `/forma folder 1 formation brief me`); Slack has no
     // selected folder, so the name or number is required.
     if let Some(answer) = crate::boxes::intent::act(&member, utterance, None).await {
-        return folder_message(state, answer);
+        return folder_message(
+            state,
+            answer,
+            Some(&crate::composer::model::member_of(&member)),
+        );
     }
     let context = match stores.workspace.composer_context(&member).await {
         Ok(context) => context,
@@ -449,13 +453,22 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
     // DS-43, DS-69: the rehearsed parse in Slack, demo organization only.
     let demo = demo::is_demo_org(member.organization());
     let today = crate::events::today();
-    let parse = match state.parser.parse(utterance, &catalog, demo, &today).await {
+    let member_key = crate::composer::model::member_of(&member);
+    let parse = match state
+        .parser
+        .parse(utterance, &catalog, demo, &today, Some(&member_key))
+        .await
+    {
         Ok(parse) => parse,
         Err(ParseFailure::Unavailable) => {
             return text::ephemeral("Forma's assistant isn't available right now.", None, false)
         }
         Err(ParseFailure::DailyLimit) => {
-            return text::ephemeral(crate::composer::model::DAILY_LIMIT_TEXT, None, false)
+            return text::ephemeral(
+                crate::composer::model::daily_limit_text_for(Some(&member_key)),
+                None,
+                false,
+            )
         }
         Err(ParseFailure::CouldNotParse(code)) => {
             tracing::info!(event = "slack.act_refused", code, "utterance not parsed");
@@ -1127,7 +1140,11 @@ pub(crate) fn approval_request(
 
 /// APP-108: a folder answer as an ephemeral Slack message (text only; every
 /// value is escaped; numbers come from receipts or page citations).
-pub(super) fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer) -> Value {
+pub(super) fn folder_message(
+    state: &Slack,
+    answer: crate::boxes::intent::Answer,
+    member: Option<&str>,
+) -> Value {
     use crate::boxes::intent::Answer;
     let noun = crate::boxes::NOUN_LOWER;
     let value = match answer {
@@ -1138,7 +1155,7 @@ pub(super) fn folder_message(state: &Slack, answer: crate::boxes::intent::Answer
                 crate::boxes::routes::BuildRefusal::NoData => format!("That {noun} has no CSV or XLSX data to build from yet."),
                 crate::boxes::routes::BuildRefusal::ComposerUnavailable => UNAVAILABLE.to_owned(),
                 crate::boxes::routes::BuildRefusal::TooMany(_) => "You're going fast. Try again in a few minutes.".to_owned(),
-                crate::boxes::routes::BuildRefusal::DailyLimit => crate::composer::model::DAILY_LIMIT_TEXT.to_owned(),
+                crate::boxes::routes::BuildRefusal::DailyLimit => crate::composer::model::daily_limit_text_for(member).to_owned(),
                 crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => format!("Forma could not build an app from that {noun}. Try saying what it should show."),
                 _ => REFUSED.to_owned(),
             };

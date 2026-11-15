@@ -437,6 +437,7 @@ impl Parser {
         catalog: &[CatalogApp],
         demo: bool,
         today: &str,
+        member: Option<&str>,
     ) -> Result<Parse, ParseFailure> {
         let started = std::time::Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -474,6 +475,7 @@ impl Parser {
             user: prompt::parse_user(utterance, catalog, today),
             max_tokens: RECEIPT_MAX_TOKENS,
             budget: RECEIPT_BUDGET,
+            member: member.map(str::to_owned),
         };
         let image = ImageInput {
             media_type: receipt.media_type,

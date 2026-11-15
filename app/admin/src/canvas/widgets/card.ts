@@ -10,7 +10,7 @@
 import { el } from '../render';
 import { showTiming } from '../timing';
 import { validState, type WidgetKind, type WidgetState } from './state';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from '../daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, dailyLimitMessage, isDailyLimit } from '../daily-limit';
 
 export const CUSTOMIZE_URL = '/v1/widgets/customize';
 
@@ -150,7 +150,7 @@ export async function customize(widget: WidgetCard, text: string): Promise<boole
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok) {
       const code = typeof body?.code === 'string' ? body.code : '';
-      widget.announce(REFUSALS[code] ?? 'The shape could not be applied right now. Nothing changed.');
+      widget.announce(isDailyLimit(body) ? dailyLimitMessage(body) : REFUSALS[code] ?? 'The shape could not be applied right now. Nothing changed.');
       return false;
     }
     const next = body && body.widget === widget.kind ? validState(widget.kind, body.state) : null;

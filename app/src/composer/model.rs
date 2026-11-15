@@ -17,6 +17,18 @@
 //! The count starts again at 00:00 UTC; a call refused by the cap sends
 //! nothing and is [`ModelError::DailyCap`], which every model route answers
 //! as 429 `daily_limit` ([`daily_limit`]).
+//!
+//! APP-215 (content M3): beside the process cap, every call made for a
+//! member first takes one slot of that member's own daily allowance
+//! ([`MemberDailyCap`], [`member_daily_cap`], 80 a day by default), so one or
+//! two people cannot spend the whole class's 1,000. The member travels in
+//! [`ModelRequest::member`], set by every route that calls a model for a
+//! signed-in member (the composer, Ask, Shape, the folders, the action path,
+//! the widget customizer, MCP and Slack, which act as the member). A request
+//! without a member (none in product code: the demo rehearsals call no model,
+//! and the stubs in tests do) counts against the process cap only. A member
+//! whose allowance is reached gets the same 429 `daily_limit`, with
+//! `"scope":"member"` so the canvas says it is theirs ([`daily_limit_for`]).
 use axum::{
     http::{header, HeaderValue, StatusCode},
     response::Response,
@@ -24,6 +36,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeMap,
     fmt,
     future::Future,
     pin::Pin,
@@ -60,6 +73,17 @@ pub const DEFAULT_DAILY_CALLS: u32 = 1000;
 /// The daily cap override (tests and dev), read once, at the first client.
 /// Not set in the managed deployment: there the code's default holds.
 pub const DAILY_CALLS_ENV: &str = "GENUI_MODEL_DAILY_CALLS";
+/// APP-215 (content M3): model calls one member may take per UTC day, unless
+/// [`MEMBER_DAILY_CALLS_ENV`] says otherwise. 80: about twenty compositions,
+/// or a long afternoon of Ask, for one person; twelve such people reach the
+/// process cap of 1,000, which stays the ceiling.
+pub const DEFAULT_MEMBER_DAILY_CALLS: u32 = 80;
+/// The per-member allowance override, read like [`DAILY_CALLS_ENV`].
+pub const MEMBER_DAILY_CALLS_ENV: &str = "GENUI_MODEL_DAILY_CALLS_PER_MEMBER";
+/// Members the allowance table holds for one day before a new member is
+/// refused (fail closed, like `http::limits::MAX_KEYS`); the table is emptied
+/// at the reset. An organization of 25 never nears it.
+pub const MAX_MEMBERS: usize = 20_000;
 const DAY_SECONDS: u64 = 86_400;
 
 /// Model calls taken per UTC day, against a limit. A call is one request to
@@ -110,11 +134,110 @@ impl DailyCap {
     }
 }
 
+/// APP-215 (content M3): model calls taken per UTC day per member, against
+/// one limit. The key is [`member_key`] (`organization:principal`). Memory is
+/// one entry per member who called today, at most [`MAX_MEMBERS`], emptied
+/// when the day turns.
+#[derive(Debug)]
+pub struct MemberDailyCap {
+    limit: u32,
+    /// The UTC day number and, for that day only, each member's calls.
+    used: Mutex<(u64, BTreeMap<String, u32>)>,
+}
+impl MemberDailyCap {
+    pub const fn new(limit: u32) -> Self {
+        Self {
+            limit,
+            used: Mutex::new((0, BTreeMap::new())),
+        }
+    }
+    pub fn limit(&self) -> u32 {
+        self.limit
+    }
+    /// Takes one call of `member` at `now`: `true` when their count was
+    /// below the limit (it is now one higher), `false` when it is reached, or
+    /// when the table is full and the member is new (nothing is taken). A
+    /// later day starts every member at zero and drops yesterday's entries.
+    pub fn take(&self, member: &str, now: u64) -> bool {
+        let day = now / DAY_SECONDS;
+        let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if day > used.0 {
+            *used = (day, BTreeMap::new());
+        }
+        match used.1.get_mut(member) {
+            Some(count) => {
+                if *count >= self.limit {
+                    return false;
+                }
+                *count += 1;
+                true
+            }
+            None => {
+                if self.limit == 0 || used.1.len() >= MAX_MEMBERS {
+                    return false;
+                }
+                used.1.insert(member.to_owned(), 1);
+                true
+            }
+        }
+    }
+    /// Gives back a call `take` admitted in the same day (the process cap
+    /// refused it afterwards, so nothing was sent). A later day gives back
+    /// nothing: the count it belonged to is gone.
+    pub fn release(&self, member: &str, now: u64) {
+        let day = now / DAY_SECONDS;
+        let mut used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if day != used.0 {
+            return;
+        }
+        if let Some(count) = used.1.get_mut(member) {
+            *count = count.saturating_sub(1);
+        }
+    }
+    /// Whether a call of `member` at `now` would be refused by their
+    /// allowance; takes nothing.
+    pub fn reached(&self, member: &str, now: u64) -> bool {
+        let day = now / DAY_SECONDS;
+        let used = self.used.lock().unwrap_or_else(PoisonError::into_inner);
+        if self.limit == 0 {
+            return true;
+        }
+        if day > used.0 {
+            return false;
+        }
+        used.1.get(member).is_some_and(|count| *count >= self.limit)
+    }
+    /// Members with a count today.
+    pub fn members(&self) -> usize {
+        self.used
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .1
+            .len()
+    }
+}
+
+/// The per-member key: a member's calls are counted within their
+/// organization (`organization:principal`).
+pub fn member_key(organization: &str, principal: &str) -> String {
+    format!("{organization}:{principal}")
+}
+/// [`member_key`] of a workspace request.
+pub fn member_of(request: &crate::storage::TrustedRequest) -> String {
+    member_key(request.organization(), request.principal())
+}
+
 /// The daily limit `value` names: a decimal count, else the default.
 pub fn limit_from(value: Option<&str>) -> u32 {
     value
         .and_then(|value| value.trim().parse::<u32>().ok())
         .unwrap_or(DEFAULT_DAILY_CALLS)
+}
+/// The per-member allowance `value` names: a decimal count, else the default.
+pub fn member_limit_from(value: Option<&str>) -> u32 {
+    value
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(DEFAULT_MEMBER_DAILY_CALLS)
 }
 
 /// The app's one cap, shared by every [`Anthropic`] client of the process.
@@ -128,6 +251,20 @@ pub fn daily_cap() -> &'static DailyCap {
             "daily model-call cap"
         );
         DailyCap::new(limit)
+    })
+}
+/// The app's one per-member allowance table (APP-215), shared by every
+/// [`Anthropic`] client of the process like [`daily_cap`].
+pub fn member_daily_cap() -> &'static MemberDailyCap {
+    static CAP: OnceLock<MemberDailyCap> = OnceLock::new();
+    CAP.get_or_init(|| {
+        let limit = member_limit_from(std::env::var(MEMBER_DAILY_CALLS_ENV).ok().as_deref());
+        tracing::info!(
+            event = "composer.model_member_daily_cap_set",
+            limit,
+            "daily model-call allowance per member"
+        );
+        MemberDailyCap::new(limit)
     })
 }
 
@@ -145,11 +282,45 @@ fn unix_now() -> u64 {
 
 /// What a person reads when the cap is reached (the canvas has its own copy).
 pub const DAILY_LIMIT_TEXT: &str = "Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working.";
+/// What a member reads when their own allowance is reached (APP-215; the
+/// canvas has its own copy in `daily-limit.ts`).
+pub const MEMBER_DAILY_LIMIT_TEXT: &str = "You've used your AI allowance for today. Building apps and Ask resume for you at 00:00 UTC; your apps and entries keep working.";
+
+/// The text for a `daily_limit` refusal of `member` (MCP and Slack): the
+/// member's own words when their allowance is what is reached, else the
+/// workspace's.
+pub fn daily_limit_text_for(member: Option<&str>) -> &'static str {
+    if member_limit_reached(member) {
+        MEMBER_DAILY_LIMIT_TEXT
+    } else {
+        DAILY_LIMIT_TEXT
+    }
+}
+fn member_limit_reached(member: Option<&str>) -> bool {
+    member.is_some_and(|member| member_daily_cap().reached(member, unix_now()))
+}
 
 /// The answer of every model route to [`ModelError::DailyCap`]: 429
 /// `daily_limit`, `Retry-After` the seconds until the count starts again.
 pub fn daily_limit() -> Response {
-    let mut response = crate::http::problem(StatusCode::TOO_MANY_REQUESTS, "daily_limit");
+    daily_limit_for(None)
+}
+/// [`daily_limit`] for `member` (APP-215): when their own allowance is what
+/// is reached, the body carries `"scope":"member"` so the canvas says so
+/// (`daily-limit.ts`); otherwise, or with no member, the body is the
+/// workspace's unchanged `{"code":"daily_limit","status":429}`. Both are
+/// judged on the live counts: a member whose allowance is reached is told so
+/// whatever the process cap says, since nothing of theirs is sent today.
+pub fn daily_limit_for(member: Option<&str>) -> Response {
+    let mut response = if member_limit_reached(member) {
+        crate::http::problem_with(
+            StatusCode::TOO_MANY_REQUESTS,
+            "daily_limit",
+            json!({"scope": "member"}),
+        )
+    } else {
+        crate::http::problem(StatusCode::TOO_MANY_REQUESTS, "daily_limit")
+    };
     response.headers_mut().insert(
         header::RETRY_AFTER,
         HeaderValue::from(seconds_to_reset(unix_now())),
@@ -175,6 +346,10 @@ pub struct ModelRequest {
     pub max_tokens: u32,
     /// The whole call, every attempt included.
     pub budget: Duration,
+    /// APP-215: the member this call is made for ([`member_key`]), who takes
+    /// one slot of their daily allowance before the process cap; `None`
+    /// counts against the process cap only.
+    pub member: Option<String>,
 }
 
 /// The text of a reply and its usage counts (counts only are logged).
@@ -281,6 +456,12 @@ pub trait Model: Send + Sync {
     fn daily_cap_reached(&self) -> bool {
         false
     }
+    /// APP-215: whether the next call of `member` would be refused by their
+    /// own allowance (a stub has none).
+    fn member_daily_cap_reached(&self, member: &str) -> bool {
+        let _ = member;
+        false
+    }
     /// `request` with `image` before the user text (one Messages image
     /// content block, base64). A model without vision refuses.
     fn complete_with_image<'a>(
@@ -309,6 +490,8 @@ pub struct Anthropic {
     http: reqwest::Client,
     /// [`daily_cap`] for every client the binary builds.
     cap: &'static DailyCap,
+    /// [`member_daily_cap`] for every client the binary builds (APP-215).
+    member_cap: &'static MemberDailyCap,
 }
 impl fmt::Debug for Anthropic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -334,6 +517,7 @@ impl Anthropic {
             endpoint: endpoint.to_owned(),
             http,
             cap: daily_cap(),
+            member_cap: member_daily_cap(),
         })
     }
     /// Tests and campaigns: this client counts against `cap` instead of the
@@ -343,10 +527,36 @@ impl Anthropic {
         self.cap = cap;
         self
     }
-    /// One slot of the daily cap for `request`, before anything is sent.
+    /// Tests: this client counts members against `cap` instead of the
+    /// process's table (APP-215).
+    #[cfg(test)]
+    pub(crate) fn with_member_daily_cap(mut self, cap: &'static MemberDailyCap) -> Self {
+        self.member_cap = cap;
+        self
+    }
+    /// One slot of the member's allowance, then one of the daily cap, for
+    /// `request`, before anything is sent (APP-215). A refusal takes nothing:
+    /// a member slot the process cap then refuses is given back.
     fn admit(&self, request: &ModelRequest) -> Result<(), ModelError> {
-        if self.cap.take(unix_now()) {
+        let now = unix_now();
+        if let Some(member) = &request.member {
+            if !self.member_cap.take(member, now) {
+                tracing::warn!(
+                    event = "composer.model_member_daily_cap",
+                    code = ModelError::DailyCap.code(),
+                    limit = self.member_cap.limit(),
+                    member,
+                    requested_model = request.model,
+                    "member's daily model-call allowance reached; nothing sent"
+                );
+                return Err(ModelError::DailyCap);
+            }
+        }
+        if self.cap.take(now) {
             return Ok(());
+        }
+        if let Some(member) = &request.member {
+            self.member_cap.release(member, now);
         }
         tracing::warn!(
             event = "composer.model_daily_cap",
@@ -496,6 +706,9 @@ fn parse_reply(bytes: &[u8]) -> Option<ModelReply> {
 impl Model for Anthropic {
     fn daily_cap_reached(&self) -> bool {
         self.cap.reached(unix_now())
+    }
+    fn member_daily_cap_reached(&self, member: &str) -> bool {
+        self.member_cap.reached(member, unix_now())
     }
     fn complete_with_documents<'a>(
         &'a self,
@@ -743,6 +956,105 @@ mod tests {
         assert!(!peek.reached(MIDNIGHT + DAY_SECONDS));
     }
 
+    /// APP-215 (content M3): each member has their own daily allowance,
+    /// counted within their organization; a refusal takes nothing, a slot
+    /// the process cap refuses goes back, the day turns at 00:00 UTC and
+    /// empties the table, and a full table refuses a new member.
+    #[test]
+    fn each_member_has_a_daily_allowance_that_resets_at_utc_midnight() {
+        let cap = MemberDailyCap::new(2);
+        let ana = member_key("org-a", "ana");
+        let bo = member_key("org-a", "bo");
+        let evening = MIDNIGHT - 60;
+        assert!(!cap.reached(&ana, evening));
+        assert!(cap.take(&ana, evening));
+        assert!(cap.take(&ana, evening + 1));
+        assert!(!cap.take(&ana, evening + 2), "the third call is refused");
+        assert!(cap.reached(&ana, evening + 2));
+        // Another member, and the same principal in another organization,
+        // have their own counts.
+        assert!(cap.take(&bo, evening + 2));
+        assert!(cap.take(&member_key("org-b", "ana"), evening + 2));
+        assert_eq!(cap.members(), 3);
+        // A slot the process cap refused goes back; a release in a later day
+        // gives back nothing.
+        cap.release(&ana, evening + 3);
+        assert!(!cap.reached(&ana, evening + 3));
+        assert!(cap.take(&ana, evening + 3));
+        assert!(!cap.take(&ana, evening + 4));
+        // 00:00 UTC: everyone starts at zero and yesterday's table is gone.
+        assert!(!cap.reached(&ana, MIDNIGHT));
+        assert!(cap.take(&ana, MIDNIGHT));
+        assert_eq!(cap.members(), 1);
+        cap.release(&ana, MIDNIGHT - 1);
+        assert!(
+            cap.take(&ana, MIDNIGHT + 1),
+            "the stale release changed nothing"
+        );
+        assert!(!cap.take(&ana, MIDNIGHT + 2));
+        // A zero allowance refuses everyone; the table is bounded.
+        let closed = MemberDailyCap::new(0);
+        assert!(!closed.take(&ana, MIDNIGHT) && closed.reached(&ana, MIDNIGHT));
+        assert_eq!(DEFAULT_MEMBER_DAILY_CALLS, 80);
+        assert_eq!(member_limit_from(None), 80);
+        assert_eq!(member_limit_from(Some(" 5 ")), 5);
+        assert_eq!(member_limit_from(Some("many")), 80);
+        assert_eq!(MAX_MEMBERS, 20_000);
+    }
+
+    /// APP-215: the client takes the member's slot before the process cap's
+    /// and gives it back when the process cap refuses, so neither cap is
+    /// spent by a refusal; a request without a member touches the member
+    /// table not at all.
+    #[tokio::test]
+    async fn the_client_admits_against_the_member_allowance_then_the_process_cap() {
+        static MEMBERS: MemberDailyCap = MemberDailyCap::new(1);
+        static PROCESS: DailyCap = DailyCap::new(2);
+        // An endpoint nothing listens on: an admitted call fails as
+        // `Unavailable` after it was counted; a refused one never connects.
+        let client = Anthropic::new("sk-ant-synthetic", "http://127.0.0.1:9/v1/messages")
+            .unwrap()
+            .with_daily_cap(&PROCESS)
+            .with_member_daily_cap(&MEMBERS);
+        let request = |member: Option<&str>| ModelRequest {
+            model: "m".into(),
+            system: String::new(),
+            user: String::new(),
+            max_tokens: 1,
+            budget: Duration::from_millis(200),
+            member: member.map(str::to_owned),
+        };
+        let now = unix_now();
+        let ana = member_key("org", "ana");
+        // An admitted call that never connects: `Unavailable`, or `Timeout`
+        // when the retry's pause does not fit the budget; never `DailyCap`.
+        let sent = |outcome: Result<ModelReply, ModelError>| {
+            matches!(outcome, Err(ModelError::Unavailable | ModelError::Timeout))
+        };
+        assert!(sent(client.complete(&request(Some(&ana))).await));
+        assert!(MEMBERS.reached(&ana, now));
+        assert!(!PROCESS.reached(now));
+        assert_eq!(
+            client.complete(&request(Some(&ana))).await,
+            Err(ModelError::DailyCap),
+            "the member's allowance refuses first"
+        );
+        assert!(!PROCESS.reached(now), "and the process cap was not spent");
+        assert!(client.member_daily_cap_reached(&ana));
+        // A call for nobody takes the process cap's last slot and no member's.
+        assert!(sent(client.complete(&request(None)).await));
+        assert_eq!(MEMBERS.members(), 1);
+        assert!(PROCESS.reached(now) && client.daily_cap_reached());
+        // Bo has allowance but the process cap is full: refused, and Bo's slot
+        // goes back.
+        let bo = member_key("org", "bo");
+        assert_eq!(
+            client.complete(&request(Some(&bo))).await,
+            Err(ModelError::DailyCap)
+        );
+        assert!(!MEMBERS.reached(&bo, now));
+    }
+
     #[test]
     fn the_daily_limit_is_the_default_unless_a_count_is_named() {
         assert_eq!(DEFAULT_DAILY_CALLS, 1000);
@@ -777,6 +1089,32 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(&body[..], br#"{"code":"daily_limit","status":429}"#);
+        // APP-215: a member whose own allowance is not reached reads the
+        // workspace's refusal, unchanged; one whose allowance is reached reads
+        // their own, same code and status, `scope` added.
+        let fresh = member_key("org", "fresh");
+        let body = axum::body::to_bytes(daily_limit_for(Some(&fresh)).into_body(), 1024)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], br#"{"code":"daily_limit","status":429}"#);
+        assert_eq!(daily_limit_text_for(Some(&fresh)), DAILY_LIMIT_TEXT);
+        let spent = member_key("org", "spent");
+        let table = member_daily_cap();
+        while table.take(&spent, unix_now()) {}
+        let response = daily_limit_for(Some(&spent));
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(response.headers().contains_key(header::RETRY_AFTER));
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            &body[..],
+            br#"{"code":"daily_limit","scope":"member","status":429}"#
+        );
+        assert_eq!(daily_limit_text_for(Some(&spent)), MEMBER_DAILY_LIMIT_TEXT);
+        assert!(MEMBER_DAILY_LIMIT_TEXT.contains("your AI allowance"));
+        assert!(MEMBER_DAILY_LIMIT_TEXT.contains("00:00 UTC"));
+        assert!(MEMBER_DAILY_LIMIT_TEXT.contains("apps and entries keep working"));
     }
 
     #[test]

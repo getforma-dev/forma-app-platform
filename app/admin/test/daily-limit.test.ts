@@ -2,12 +2,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { requestAsk, type RecordScope } from '../src/ask/client.ts';
-import { DAILY_LIMIT_MESSAGE } from '../src/canvas/daily-limit.ts';
+import { DAILY_LIMIT_MESSAGE, MEMBER_DAILY_LIMIT_MESSAGE, dailyLimitMessage, isDailyLimit } from '../src/canvas/daily-limit.ts';
 
 const app = '00000000-0000-4000-8000-000000001001', work = '00000000-0000-4000-8000-000000001004';
 const scope: RecordScope = { kind: 'app', address: 'books', works: [{ app_id: app, work_id: work, address: 'books' }] };
 const capped = () => new Response(JSON.stringify({ code: 'daily_limit', status: 429 }), { status: 429, headers: { 'retry-after': '3600' } });
 const windowed = () => new Response(JSON.stringify({ code: 'too_many_requests', status: 429 }), { status: 429, headers: { 'retry-after': '120' } });
+// APP-215: the member's own allowance is the same code with `scope: member`.
+const mine = () => new Response(JSON.stringify({ code: 'daily_limit', scope: 'member', status: 429 }), { status: 429, headers: { 'retry-after': '3600' } });
 
 test('the copy is the plain sentence of the plan', () => {
   assert.equal(DAILY_LIMIT_MESSAGE, "Today's AI limit for this workspace is reached. Building apps and Ask pause until midnight UTC; your apps and entries keep working.");
@@ -40,5 +42,35 @@ test('ask, shape and folders show the daily cap sentence', async () => {
   assert.equal(shapeRefusal('daily_limit', false), DAILY_LIMIT_MESSAGE);
   assert.equal(shapeRefusal('daily_limit', true), DAILY_LIMIT_MESSAGE);
   const { BoxError, refusalText } = await import('../src/canvas/box-api.ts');
+  assert.equal(refusalText(new BoxError('daily_limit', 429)), DAILY_LIMIT_MESSAGE);
+});
+
+test('APP-215: a daily limit scoped to the member says it is theirs, and the workspace words are unchanged', async () => {
+  assert.equal(MEMBER_DAILY_LIMIT_MESSAGE, "You've used your AI allowance for today. Building apps and Ask resume for you at 00:00 UTC; your apps and entries keep working.");
+  assert.ok(isDailyLimit({ code: 'daily_limit', status: 429 }) && isDailyLimit({ code: 'daily_limit', scope: 'member', status: 429 }));
+  assert.ok(!isDailyLimit({ code: 'too_many_requests', status: 429 }) && !isDailyLimit(null));
+  assert.equal(dailyLimitMessage({ code: 'daily_limit', status: 429 }), DAILY_LIMIT_MESSAGE);
+  assert.equal(dailyLimitMessage({ code: 'daily_limit', scope: 'member', status: 429 }), MEMBER_DAILY_LIMIT_MESSAGE);
+  assert.equal(dailyLimitMessage({ code: 'daily_limit', scope: 'workspace', status: 429 }), DAILY_LIMIT_MESSAGE);
+  const previous = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => mine();
+    assert.equal(await requestAsk('How many?', scope), MEMBER_DAILY_LIMIT_MESSAGE);
+    const { composeIntent, messageFor, ComposeError } = await import('../src/canvas/compose.ts');
+    const error = await composeIntent('track book loans').catch((caught: unknown) => caught);
+    assert.ok(error instanceof ComposeError);
+    assert.equal(error.code, 'daily_limit');
+    assert.equal(error.memberLimit, true);
+    assert.equal(messageFor(error), `${MEMBER_DAILY_LIMIT_MESSAGE} Nothing was placed.`);
+    globalThis.fetch = async () => capped();
+    const shared = await composeIntent('track book loans').catch((caught: unknown) => caught);
+    assert.ok(shared instanceof ComposeError && !shared.memberLimit);
+    assert.equal(messageFor(shared), `${DAILY_LIMIT_MESSAGE} Nothing was placed.`);
+  } finally { globalThis.fetch = previous; }
+  const { shapeRefusal } = await import('../src/canvas/shape.ts');
+  assert.equal(shapeRefusal('daily_limit', false, true), MEMBER_DAILY_LIMIT_MESSAGE);
+  assert.equal(shapeRefusal('daily_limit', false), DAILY_LIMIT_MESSAGE);
+  const { BoxError, refusalText } = await import('../src/canvas/box-api.ts');
+  assert.equal(refusalText(new BoxError('daily_limit', 429, '', '', true)), MEMBER_DAILY_LIMIT_MESSAGE);
   assert.equal(refusalText(new BoxError('daily_limit', 429)), DAILY_LIMIT_MESSAGE);
 });
