@@ -1386,6 +1386,9 @@ def set_role(c, args):
         c.commit()
         return {"principal_id": principal, "role": role, "changed": False, "membership_epoch": epoch}
     if before == "owner":
+        # The last-owner rule, serialized with the in-product definers (0025, review MAJOR-1):
+        # owner transitions of the organization queue on one advisory lock before the check.
+        c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("forma:owner-change:" + org,))
         others = c.execute("""SELECT count(*) FROM genui.memberships WHERE organization_id=%s AND role='owner' AND status='active'
               AND principal_id<>%s""", (org, principal)).fetchone()[0]
         require(others > 0, "last_owner")

@@ -1807,7 +1807,7 @@ class RoleMigrationTests(OperatorDatabase, unittest.TestCase):
     migrate_through = 24
 
     def test_the_earliest_admitted_admin_becomes_owner_and_the_others_admins(self):
-        orgs = {name: str(uuid.uuid4()) for name in ("none", "one", "many")}
+        orgs = {name: str(uuid.uuid4()) for name in ("none", "one", "many", "tie")}
         people = {}
         with self.connect("postgres") as c:
             self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(), (24,))
@@ -1837,7 +1837,7 @@ class RoleMigrationTests(OperatorDatabase, unittest.TestCase):
                     c.execute("""INSERT INTO genui.code_redemptions(organization_id,redemption_id,code_id,principal_id,pending_admission_id,entitlement_id,payload_digest,committed_at,audit_event_id)
                                  VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""", (org, str(uuid.uuid4()), code, principal, reservation, "0000e000-0000-4000-8000-" + principal[-12:],
                                                                       "sha256:" + "b" * 64, when, str(uuid.uuid4())))
-                holders = {"none": [], "one": ["p2"], "many": ["p1", "p2", "p3", "gone_admin"]}[name]
+                holders = {"none": [], "one": ["p2"], "many": ["p1", "p2", "p3", "gone_admin"], "tie": ["p1", "p2"]}[name]
                 for label in holders:
                     c.execute("INSERT INTO genui.organization_permissions VALUES (%s,%s,'admin_policy')", (org, members[label]))
                 if name == "many":
@@ -1863,9 +1863,14 @@ class RoleMigrationTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(roles["many"][many["p1"]], "admin", "no admission time sorts last")
         self.assertEqual(roles["many"][many["gone_admin"]], "member", "a revoked holder keeps member")
         self.assertEqual((roles["many"][many["plain"]], roles["many"][many["gone"]]), ("member", "member"))
-        # The tie: two holders with no admission time resolve by the smaller principal id.
+        # The tie: two operator-admitted holders (no redemption at all) resolve by the smaller principal id.
+        tie = people["tie"]
+        lower, higher = sorted([tie["p1"], tie["p2"]])
+        self.assertEqual((roles["tie"][lower], roles["tie"][higher]), ("owner", "admin"), "the smaller principal id is the owner")
+        self.assertEqual({roles["tie"][tie[l]] for l in ("p3", "plain", "gone_admin", "gone")}, {"member"})
         with self.connect("postgres") as c:
             self.assertEqual(c.execute("""SELECT count(*) FROM genui.memberships m WHERE m.organization_id=%s AND m.role='owner'""", (orgs["many"],)).fetchone(), (1,))
+            self.assertEqual(c.execute("""SELECT count(*) FROM genui.memberships m WHERE m.organization_id=%s AND m.role='owner'""", (orgs["tie"],)).fetchone(), (1,))
             self.assertEqual(c.execute("SELECT count(*) FROM genui.memberships WHERE role NOT IN ('owner','admin','manager','member','viewer')").fetchone(), (0,))
             self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui.memberships'::regclass").fetchone(), (True,))
             self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui.code_redemptions'::regclass").fetchone(), (True,))

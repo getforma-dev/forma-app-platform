@@ -1135,3 +1135,174 @@ impl Data {
         result
     }
 }
+
+#[cfg(test)]
+mod role_tests {
+    use super::{Capability, OrgRole};
+    use OrgRole::{Admin, Manager, Member, Owner, Viewer};
+
+    #[test]
+    fn the_capability_table_is_the_adr_021_table() {
+        for role in OrgRole::ALL {
+            assert!(role.can(Capability::Read), "{role:?} reads");
+            let builds = role != Viewer;
+            for capability in [
+                Capability::Build,
+                Capability::Write,
+                Capability::Share,
+                Capability::Connect,
+            ] {
+                assert_eq!(role.can(capability), builds, "{role:?} {capability:?}");
+            }
+            assert_eq!(
+                role.can(Capability::Admin),
+                matches!(role, Owner | Admin | Manager),
+                "{role:?} administers"
+            );
+        }
+    }
+
+    #[test]
+    fn manages_is_the_ceiling_each_role_sets_and_removes_up_to() {
+        assert_eq!(Owner.manages(), Some(Owner));
+        assert_eq!(Admin.manages(), Some(Manager));
+        assert_eq!(Manager.manages(), Some(Member));
+        assert_eq!(Member.manages(), None);
+        assert_eq!(Viewer.manages(), None);
+        for (caller, removable) in [
+            (Owner, vec![Owner, Admin, Manager, Member, Viewer]),
+            (Admin, vec![Manager, Member, Viewer]),
+            (Manager, vec![Member, Viewer]),
+            (Member, vec![]),
+            (Viewer, vec![]),
+        ] {
+            for target in OrgRole::ALL {
+                assert_eq!(
+                    caller.may_remove(target),
+                    removable.contains(&target),
+                    "{caller:?} removes {target:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn may_set_follows_the_ladder_and_never_raises_ones_own_role() {
+        // An owner sets any role on anyone, their own row included, but
+        // cannot raise it (owner is the top: every own change is a demotion).
+        for target in OrgRole::ALL {
+            for to in OrgRole::ALL {
+                assert!(
+                    Owner.may_set(target, to, false),
+                    "owner on {target:?} -> {to:?}"
+                );
+            }
+        }
+        for to in OrgRole::ALL {
+            assert!(Owner.may_set(Owner, to, true), "owner's own row -> {to:?}");
+        }
+        // An admin sets manager, member or viewer on managers, members and
+        // viewers; never owner or admin, never on an owner or an admin.
+        for target in [Manager, Member, Viewer] {
+            for to in [Manager, Member, Viewer] {
+                assert!(
+                    Admin.may_set(target, to, false),
+                    "admin on {target:?} -> {to:?}"
+                );
+            }
+            for to in [Owner, Admin] {
+                assert!(
+                    !Admin.may_set(target, to, false),
+                    "admin on {target:?} -> {to:?}"
+                );
+            }
+        }
+        for target in [Owner, Admin] {
+            for to in OrgRole::ALL {
+                assert!(
+                    !Admin.may_set(target, to, false),
+                    "admin on {target:?} -> {to:?}"
+                );
+            }
+        }
+        assert!(
+            !Admin.may_set(Admin, Owner, true),
+            "an admin raising themselves"
+        );
+        assert!(
+            !Admin.may_set(Admin, Member, true),
+            "an admin's own row is above the ceiling"
+        );
+        // A manager sets member or viewer on members and viewers only.
+        for target in [Member, Viewer] {
+            for to in [Member, Viewer] {
+                assert!(
+                    Manager.may_set(target, to, false),
+                    "manager on {target:?} -> {to:?}"
+                );
+            }
+            for to in [Owner, Admin, Manager] {
+                assert!(
+                    !Manager.may_set(target, to, false),
+                    "manager on {target:?} -> {to:?}"
+                );
+            }
+        }
+        for target in [Owner, Admin, Manager] {
+            for to in OrgRole::ALL {
+                assert!(
+                    !Manager.may_set(target, to, false),
+                    "manager on {target:?} -> {to:?}"
+                );
+            }
+        }
+        assert!(
+            !Manager.may_set(Manager, Admin, true),
+            "a manager raising themselves"
+        );
+        // Members and viewers set nothing.
+        for caller in [Member, Viewer] {
+            for target in OrgRole::ALL {
+                for to in OrgRole::ALL {
+                    assert!(!caller.may_set(target, to, false));
+                    assert!(!caller.may_set(target, to, true));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn assignable_lists_the_roles_a_caller_may_set_highest_first() {
+        assert_eq!(
+            Owner.assignable(Member, false),
+            [Owner, Admin, Manager, Member, Viewer]
+        );
+        assert_eq!(
+            Owner.assignable(Owner, true),
+            [Owner, Admin, Manager, Member, Viewer]
+        );
+        assert_eq!(Admin.assignable(Member, false), [Manager, Member, Viewer]);
+        assert_eq!(Admin.assignable(Viewer, false), [Manager, Member, Viewer]);
+        assert!(Admin.assignable(Owner, false).is_empty());
+        assert!(Admin.assignable(Admin, true).is_empty());
+        assert_eq!(Manager.assignable(Member, false), [Member, Viewer]);
+        assert_eq!(Manager.assignable(Viewer, false), [Member, Viewer]);
+        assert!(Manager.assignable(Manager, true).is_empty());
+        assert!(Manager.assignable(Admin, false).is_empty());
+        for caller in [Member, Viewer] {
+            for target in OrgRole::ALL {
+                assert!(caller.assignable(target, false).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn roles_round_trip_their_spelling_and_order_highest_first() {
+        for role in OrgRole::ALL {
+            assert_eq!(OrgRole::parse(role.as_str()), Some(role));
+        }
+        assert_eq!(OrgRole::parse("Owner"), None);
+        assert_eq!(OrgRole::parse("teacher"), None);
+        assert!(Owner > Admin && Admin > Manager && Manager > Member && Member > Viewer);
+    }
+}

@@ -29,8 +29,18 @@
 --   manager  sets member or viewer on a member or viewer, and removes them.
 -- Nobody raises their own role (`self`); nobody acts on a role above what
 -- their own role manages (`not_allowed`); an organization never loses its
--- last owner (`last_owner`). A helper (an assistant, a shift lead) is not a
--- role: a member, plus `record_review` on the apps they help with.
+-- last owner (`last_owner`). The last-owner check is serialized: every
+-- owner transition of an organization (an owner demoted or removed, by an
+-- admin's action or the operator's set-role) queues on the transaction
+-- advisory lock `forma:owner-change:<org>` before judging whether another
+-- active owner remains, so two owners stepping down at once end with one
+-- of them refused, never with no owner (review MAJOR-1). A helper (an
+-- assistant, a shift lead) is not a role: a member, plus `record_review`
+-- on the apps they help with.
+--
+-- Data mapping note: an operator-admitted admin has no redemption and so
+-- ranks after every code-redeemed admin (NULLS LAST); check the mapped
+-- owner after release and correct it with `set-role owner` if needed.
 --
 -- Definers (genui_admit, D7.1 A4 by column). `set_member_role` is new;
 -- `admin_remove_member` is replaced in place with the same table and the
@@ -280,7 +290,8 @@ BEGIN
 END $$;
 
 -- 0015's steward_card: the steward is the app's owner or an organization
--- owner or admin (the former admin_policy holder). Everything else is unchanged.
+-- owner or admin (the former admin_policy holder), never a viewer.
+-- Everything else is unchanged.
 CREATE OR REPLACE FUNCTION genui_private.steward_card(p_org uuid,p_actor uuid,p_card uuid,p_remove boolean)
  RETURNS TABLE(app_id uuid,work_id uuid,changed boolean)
  LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
@@ -296,6 +307,8 @@ BEGIN
  SELECT m.status,m.membership_epoch,m.role INTO m_status,m_epoch,m_role FROM genui.memberships m
   WHERE m.organization_id=p_org AND m.principal_id=p_actor FOR SHARE;
  IF NOT FOUND OR m_status<>'active' OR m_epoch::text IS DISTINCT FROM nullif(current_setting('genui.membership_epoch',true),'') THEN RETURN; END IF;
+ -- ADR-021: a viewer stewards nothing, the app's owner demoted to viewer included.
+ IF m_role='viewer' THEN RETURN; END IF;
  SELECT c.app_id,c.work_id,c.kind,c.everyone,c.removed_at INTO v_app,v_work,v_kind,v_everyone,v_removed
   FROM genui.member_cards c WHERE c.organization_id=p_org AND c.card_id=p_card FOR UPDATE;
  IF NOT FOUND OR v_kind<>'card' OR NOT v_everyone THEN RETURN; END IF;
@@ -378,7 +391,7 @@ CREATE FUNCTION genui_private.set_member_role(p_org uuid,p_caller uuid,p_princip
  SET search_path=pg_catalog,pg_temp AS $$
 #variable_conflict use_column
 DECLARE o_status text; c_status text; c_epoch bigint; c_role text; t_status text; t_role text; t_epoch bigint;
- v_manages integer; v_rank_caller integer; v_rank_target integer; v_rank_new integer; v_other_owners bigint;
+ v_manages integer; v_rank_caller integer; v_rank_target integer; v_rank_new integer;
  v_kind text:='membership.role_changed'; v_digest text; v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text;
 BEGIN
  IF nullif(current_setting('genui.organization_id',true),'') IS DISTINCT FROM p_org::text
@@ -404,9 +417,14 @@ BEGIN
  IF v_rank_target>v_manages OR v_rank_new>v_manages THEN RETURN QUERY SELECT 'not_allowed'::text,false,NULL::bigint; RETURN; END IF;
  IF t_role=p_role THEN RETURN QUERY SELECT 'unchanged'::text,false,t_epoch; RETURN; END IF;
  IF t_role='owner' THEN
-  SELECT count(*) INTO v_other_owners FROM genui.memberships m
-   WHERE m.organization_id=p_org AND m.role='owner' AND m.status='active' AND m.principal_id<>p_principal;
-  IF v_other_owners=0 THEN RETURN QUERY SELECT 'last_owner'::text,false,NULL::bigint; RETURN; END IF;
+  -- The last-owner rule, serialized (review MAJOR-1): owner transitions of
+  -- this organization queue here, so the check sees the previous one's
+  -- commit. Taken after the target's row lock; no row lock follows it.
+  PERFORM pg_advisory_xact_lock(hashtextextended('forma:owner-change:'||p_org::text,0));
+  IF NOT EXISTS (SELECT 1 FROM genui.memberships m
+   WHERE m.organization_id=p_org AND m.role='owner' AND m.status='active' AND m.principal_id<>p_principal) THEN
+   RETURN QUERY SELECT 'last_owner'::text,false,NULL::bigint; RETURN;
+  END IF;
  END IF;
  UPDATE genui.memberships SET role=p_role,membership_epoch=membership_epoch+1
   WHERE organization_id=p_org AND principal_id=p_principal RETURNING membership_epoch INTO t_epoch;
@@ -438,7 +456,7 @@ CREATE OR REPLACE FUNCTION genui_private.admin_remove_member(p_org uuid,p_caller
  LANGUAGE plpgsql SECURITY DEFINER STRICT VOLATILE PARALLEL UNSAFE
  SET search_path=pg_catalog,pg_temp AS $$
 #variable_conflict use_column
-DECLARE o_status text; c_status text; c_epoch bigint; c_role text; t_status text; t_role text; t_epoch bigint; v_other_owners bigint; v_revoked bigint;
+DECLARE o_status text; c_status text; c_epoch bigint; c_role text; t_status text; t_role text; t_epoch bigint; v_revoked bigint;
  v_manages integer; v_rank_target integer;
  v_kind text; v_digest text; v_seq bigint; v_prev text; v_event uuid; v_at timestamptz; v_body text; v_hash text;
 BEGIN
@@ -453,9 +471,12 @@ BEGIN
  IF c_role NOT IN ('owner','admin','manager') THEN RETURN; END IF;
  IF p_principal=p_caller THEN
   IF c_role='owner' THEN
-   SELECT count(*) INTO v_other_owners FROM genui.memberships m
-    WHERE m.organization_id=p_org AND m.role='owner' AND m.status='active' AND m.principal_id<>p_caller;
-   IF v_other_owners=0 THEN RETURN QUERY SELECT 'last_owner'::text,NULL::bigint; RETURN; END IF;
+   -- Serialized as in set_member_role (review MAJOR-1).
+   PERFORM pg_advisory_xact_lock(hashtextextended('forma:owner-change:'||p_org::text,0));
+   IF NOT EXISTS (SELECT 1 FROM genui.memberships m
+    WHERE m.organization_id=p_org AND m.role='owner' AND m.status='active' AND m.principal_id<>p_caller) THEN
+    RETURN QUERY SELECT 'last_owner'::text,NULL::bigint; RETURN;
+   END IF;
   END IF;
   RETURN QUERY SELECT 'self'::text,NULL::bigint; RETURN;
  END IF;
@@ -466,11 +487,13 @@ BEGIN
  v_manages:=CASE c_role WHEN 'owner' THEN 4 WHEN 'admin' THEN 2 ELSE 1 END;
  IF v_rank_target>v_manages THEN RETURN QUERY SELECT 'not_allowed'::text,NULL::bigint; RETURN; END IF;
  IF t_role='owner' THEN
-  -- Unreachable while the caller is itself an active owner; kept as the
-  -- guard the rule names.
-  SELECT count(*) INTO v_other_owners FROM genui.memberships m
-   WHERE m.organization_id=p_org AND m.role='owner' AND m.status='active' AND m.principal_id<>p_principal;
-  IF v_other_owners=0 THEN RETURN QUERY SELECT 'last_owner'::text,NULL::bigint; RETURN; END IF;
+  -- Serialized as in set_member_role (review MAJOR-1). Unreachable while
+  -- the caller is itself an active owner; kept as the guard the rule names.
+  PERFORM pg_advisory_xact_lock(hashtextextended('forma:owner-change:'||p_org::text,0));
+  IF NOT EXISTS (SELECT 1 FROM genui.memberships m
+   WHERE m.organization_id=p_org AND m.role='owner' AND m.status='active' AND m.principal_id<>p_principal) THEN
+   RETURN QUERY SELECT 'last_owner'::text,NULL::bigint; RETURN;
+  END IF;
  END IF;
  UPDATE genui.entitlements SET status='revoked',revoked_at=now()
   WHERE organization_id=p_org AND principal_id=p_principal AND status='active';

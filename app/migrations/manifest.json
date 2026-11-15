@@ -125,7 +125,7 @@
     {
       "version": 25,
       "file": "0025_organization_roles.sql",
-      "sha256": "5d237941e04eb24c2845ffb4fe7da7fe90bc91db49d99aaa17e28695570b3904"
+      "sha256": "612dcc7e1b128dfcb04bba27d5881edc5b87591626b3f64f8e4f151a7ffa8ac5"
     }
   ],
   "catalog": [
@@ -231,7 +231,7 @@
     },
     {
       "file": "catalog-v25.json",
-      "sha256": "3b43677da386fc8ee23ad2ea1d186089b5d71ff72cb03762889eb92e519f6cf8"
+      "sha256": "c06d8b742d76eb59ff65cfe636fd6cc339fdd2073af8eddddc3a2a032261b59c"
     }
   ]
 }

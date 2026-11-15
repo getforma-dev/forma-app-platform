@@ -610,6 +610,123 @@ async fn campaign() {
     assert_eq!(membership(&fixture, OWNER).await.0, "admin");
     // Restore the fixture's owners for what follows.
     execute(&fixture, &format!("UPDATE genui.memberships SET role='owner',membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id IN ('{OWNER}','{SEEDED_OWNER}','{T_OWNER}')")).await;
+
+    // --- the last owner under concurrency (review MAJOR-1) ------------------------
+    // Two owners step down at the same moment on two connections. The
+    // definer serializes owner transitions on the organization's advisory
+    // lock, so the second call blocks until the first commits, then sees
+    // one owner left and refuses `last_owner`: exactly one succeeds and one
+    // owner always remains. Without the lock both would see the other as an
+    // owner and the organization would end with none.
+    execute(&fixture, &format!("UPDATE genui.memberships SET role='admin' WHERE organization_id='{ORG}' AND principal_id='{SEEDED_OWNER}'")).await;
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.memberships WHERE organization_id='{ORG}' AND role='owner' AND status='active'")).await,
+        2
+    );
+    let events = role_events(&fixture).await;
+    {
+        let mut first = fixture.operator().await;
+        let mut second = fixture.operator().await;
+        let one = first.client.transaction().await.unwrap();
+        let two = second.client.transaction().await.unwrap();
+        for (transaction, principal) in [(&one, OWNER), (&two, T_OWNER)] {
+            transaction
+                .batch_execute("SET LOCAL ROLE genui_workspace")
+                .await
+                .unwrap();
+            transaction.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &principal]).await.unwrap();
+        }
+        let first_outcome: String = one
+            .query_one("SELECT outcome FROM genui_private.set_member_role($1::text::uuid,$2::text::uuid,$2::text::uuid,'admin')", &[&ORG, &OWNER])
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(
+            first_outcome, "changed",
+            "the first owner steps down (uncommitted)"
+        );
+        let second_outcome: String = {
+            let second_call = two.query_one("SELECT outcome FROM genui_private.set_member_role($1::text::uuid,$2::text::uuid,$2::text::uuid,'admin')", &[&ORG, &T_OWNER]);
+            tokio::pin!(second_call);
+            // The second owner's call waits on the first one's open transaction.
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(400), &mut second_call)
+                    .await
+                    .is_err(),
+                "the second owner's step-down is serialized behind the first one's open transaction"
+            );
+            one.commit().await.unwrap();
+            second_call.await.unwrap().get(0)
+        };
+        assert_eq!(
+            second_outcome, "last_owner",
+            "the second owner sees the first one's commit"
+        );
+        two.commit().await.unwrap();
+    }
+    assert_eq!(membership(&fixture, OWNER).await.0, "admin");
+    assert_eq!(
+        membership(&fixture, T_OWNER).await.0,
+        "owner",
+        "one owner always remains"
+    );
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui.memberships WHERE organization_id='{ORG}' AND role='owner' AND status='active'")).await,
+        1
+    );
+    assert_eq!(
+        role_events(&fixture).await,
+        events + 1,
+        "exactly one change"
+    );
+    // The same race on removal: the one owner left removing itself while
+    // another owner (restored first) steps down.
+    execute(&fixture, &format!("UPDATE genui.memberships SET role='owner',membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id IN ('{OWNER}','{T_OWNER}')")).await;
+    {
+        let mut first = fixture.operator().await;
+        let mut second = fixture.operator().await;
+        let one = first.client.transaction().await.unwrap();
+        let two = second.client.transaction().await.unwrap();
+        for (transaction, principal) in [(&one, OWNER), (&two, T_OWNER)] {
+            transaction
+                .batch_execute("SET LOCAL ROLE genui_workspace")
+                .await
+                .unwrap();
+            transaction.execute("SELECT set_config('genui.organization_id',$1,true),set_config('genui.principal_id',$2,true),set_config('genui.membership_epoch','1',true)", &[&ORG, &principal]).await.unwrap();
+        }
+        let first_outcome: String = one
+            .query_one("SELECT outcome FROM genui_private.set_member_role($1::text::uuid,$2::text::uuid,$2::text::uuid,'member')", &[&ORG, &OWNER])
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(first_outcome, "changed");
+        let second_outcome: String = {
+            let second_call = two.query_one("SELECT outcome FROM genui_private.admin_remove_member($1::text::uuid,$2::text::uuid,$2::text::uuid)", &[&ORG, &T_OWNER]);
+            tokio::pin!(second_call);
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(400), &mut second_call)
+                    .await
+                    .is_err()
+            );
+            one.commit().await.unwrap();
+            second_call.await.unwrap().get(0)
+        };
+        assert_eq!(
+            second_outcome, "last_owner",
+            "a sole owner's own removal is refused once the other has stepped down"
+        );
+        two.commit().await.unwrap();
+    }
+    assert_eq!(
+        membership(&fixture, T_OWNER).await,
+        ("owner".into(), 1, "active".into())
+    );
+    check(
+        &mut checks,
+        "the last owner under concurrency (review MAJOR-1): two owners stepping down at once on two connections are serialized on the organization's owner-change lock, the second call waits for the first one's commit and is refused last_owner (set and remove alike), exactly one change is audited and one owner always remains",
+    );
+    // Restore the fixture's owners again.
+    execute(&fixture, &format!("UPDATE genui.memberships SET role='owner',membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id IN ('{OWNER}','{SEEDED_OWNER}','{T_OWNER}')")).await;
     // The other refusal codes: a revoked member, a stranger, a malformed id,
     // an unknown role (the definer's own code, reached as the workspace role).
     assert_eq!(
@@ -1052,6 +1169,9 @@ async fn campaign() {
             )))
             .merge(crate::mcp::tokens::router(auth.clone()))
             .merge(crate::actions::routes::records_router(auth.clone()))
+            .merge(composer::labels::router(auth.clone()))
+            .merge(composer::commands::router(auth.clone()))
+            .merge(composer::cards::router(auth.clone()))
             .merge(boxes::routes::router(boxes_state.clone()))
             .merge(org_admin::router(Arc::new(org_admin::OrgAdmin {
                 auth: auth.clone(),
@@ -1257,6 +1377,85 @@ async fn campaign() {
         get(&viewer_cookie, "/v1/members").await.status,
         StatusCode::FORBIDDEN
     );
+    // The app's owner demoted to viewer keeps no content lever (review
+    // MINOR-3): the label write, "Save as /name" and the card steward path
+    // answer 403 viewer_read_only, never 503, and the stewardship clause is
+    // false for them while true for an organization owner.
+    assert_eq!(
+        stores
+            .workspace
+            .set_member_role(owner, BUILDER, OrgRole::Viewer)
+            .await
+            .unwrap(),
+        RoleOutcome::Changed
+    );
+    let label_path = composer::labels::LABELS_PATH.replace("{app}", WALK_APP);
+    let name_path = composer::commands::NAME_PATH
+        .replace("{app}", WALK_APP)
+        .replace("{work}", &work);
+    let card_remove =
+        composer::cards::REMOVE_PATH.replace("{card}", "00000000-0000-4000-8000-00000000c0de");
+    let card_everyone =
+        composer::cards::EVERYONE_PATH.replace("{card}", "00000000-0000-4000-8000-00000000c0de");
+    let before = footprint(&fixture).await;
+    for (name, uri, body) in [
+        (
+            "label",
+            label_path.as_str(),
+            json!({"name": "Renamed"}).to_string(),
+        ),
+        (
+            "name",
+            name_path.as_str(),
+            json!({"name": "renamed"}).to_string(),
+        ),
+        ("card-remove", card_remove.as_str(), json!({}).to_string()),
+        (
+            "card-everyone",
+            card_everyone.as_str(),
+            json!({}).to_string(),
+        ),
+    ] {
+        let reply = post_json(&builder_cookie, uri, body).await;
+        assert_eq!(
+            reply.status,
+            StatusCode::FORBIDDEN,
+            "{name} {uri}: {}",
+            reply.body
+        );
+        assert_eq!(
+            reply.body, r#"{"code":"viewer_read_only","status":403}"#,
+            "{name}"
+        );
+    }
+    assert_eq!(footprint(&fixture).await, before);
+    {
+        let operator = fixture.operator().await;
+        let steward = |principal: &'static str| {
+            let sql = format!("SELECT {} FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid", super::labels::OWNER_OR_ADMIN);
+            let client = &operator.client;
+            async move {
+                client
+                    .query_one(&sql, &[&ORG, &principal, &WALK_APP])
+                    .await
+                    .unwrap()
+                    .get::<_, bool>(0)
+            }
+        };
+        assert!(
+            !steward(BUILDER).await,
+            "the demoted app owner stewards nothing"
+        );
+        assert!(
+            steward(OWNER).await,
+            "an organization owner stewards every app"
+        );
+        assert!(
+            !steward(MEMBER).await,
+            "a plain member stewards an app they do not own"
+        );
+    }
+    execute(&fixture, &format!("UPDATE genui.memberships SET role='member' WHERE organization_id='{ORG}' AND principal_id='{BUILDER}'")).await;
     // A browser navigation to a refused route gets the themed page's sentence.
     let navigation = send(
         &app,
@@ -1274,7 +1473,7 @@ async fn campaign() {
     assert_eq!(navigation.status, StatusCode::FORBIDDEN);
     check(
         &mut checks,
-        "the viewer walk over the routes: /canvas renders for the viewer with the view-only sentence and without Create app, Ask, Shape, the composer bar or Share (the member's canvas has them), the record listing route answers 200, and compose, Ask, Shape, /v1/act, a command, a share, the organization share, an agent token, a folder, an upload plan, the folder build and the folder question each answer 403 viewer_read_only before any work while the member beside them is not refused for the role; the share dialog and the member list refuse too; the footprint is unchanged",
+        "the viewer walk over the routes: /canvas renders for the viewer with the view-only sentence and without Create app, Ask, Shape, the composer bar or Share (the member's canvas has them), the record listing route answers 200, and compose, Ask, Shape, /v1/act, a command, a share, the organization share, an agent token, a folder, an upload plan, the folder build and the folder question each answer 403 viewer_read_only before any work while the member beside them is not refused for the role; the share dialog and the member list refuse too; the app's owner demoted to viewer gets 403 (never 503) on the label write, Save as /name and the card steward and share paths, and the stewardship clause is false for them; the footprint is unchanged",
     );
 
     // --- 3. /admin over real rows -----------------------------------------------------
