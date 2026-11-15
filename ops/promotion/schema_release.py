@@ -38,26 +38,21 @@ from .state import Refused, no_duplicates, require
 SPEC = Path(__file__).with_name('schema-release.json')
 # Changing any of these needs a reviewed source change, not a JSON edit. The
 # JSON must equal it exactly; see the evidence record for how each digest was
-# computed. Release E (APP-223, APP-224, APP-219, APP-222 part A): a
-# contract-only release at schema 24 (APP-210), from release D's live baseline
-# (evidence/APP-217/release-2026-11-15.md, candidate b1c7fcd6, contract
-# 8578d6ac). Only the root .dockerignore changes (it admits the site footer's
-# and the notice page's sources); the schema manifest, its version and the CDK
-# source are unchanged, so `from` and `to` share one schema digest. It replaces
-# release D's spent pin. The expiry falls before the codes (2026-11-28) and the
-# class (2026-11-29), so no contract change can promote during the class.
-# Release E went live on 2026-11-15 (evidence/APP-223/release-2026-11-15.md)
-# and its file was removed: this pin is now an inert record, read only together
-# with a committed file, until the next release's values replace it.
+# computed. Release F (APP-225, APP-226): a schema release 24 -> 25 (migration
+# 0025, organization roles), from release E's live baseline
+# (evidence/APP-223/release-2026-11-15.md, candidate 4360a404, contract 79263fbb,
+# schema manifest 176d68cb). The CDK source is unchanged. It replaces release
+# E's spent pin. The expiry falls before the codes (2026-11-28) and the class
+# (2026-11-29), so no schema change can promote during the class.
 REVIEWED_SCHEMA_RELEASE = {
-    'evidence': 'evidence/APP-223/CONTRACT-RELEASE.md',
+    'evidence': 'evidence/APP-225/SCHEMA-RELEASE.md',
     'expires_at_utc': '2026-11-27T00:00:00Z',
     'from': {'database_version': 24,
              'schema_manifest_sha256': '176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1',
-             'deployment_contract_sha256': '8578d6ac6fc95d40cda7055a3724b194a0a3314c7344bd295b8aeb2c324b6c48'},
-    'to': {'database_version': 24,
-           'schema_manifest_sha256': '176d68cbc363a822a32b747b3a52f6a45809a946bed2649e93bd65f7d84208f1',
-           'deployment_contract_sha256': '79263fbbdbf4c59ced39902f76b2a352f443c3a35dfad6a926b7e23912f081b1'},
+             'deployment_contract_sha256': '79263fbbdbf4c59ced39902f76b2a352f443c3a35dfad6a926b7e23912f081b1'},
+    'to': {'database_version': 25,
+           'schema_manifest_sha256': '8e1e43b57e1bb41e4f3e5e4dfe54ef49bda51e7b7dcedb8172b74c7676d0eb9e',
+           'deployment_contract_sha256': 'bd3c6437682bcc295260b476e069fd6c49f21956ae383ea5acbe539df2c38d44'},
     'infrastructure_sha256': 'e74b620e4d9749b5eb47819a1546be1adc00765008f042abbb0b747d9e549da1',
 }
 FIELDS = frozenset({'schema_version', 'evidence', 'from', 'to', 'infrastructure_sha256', 'expires_at_utc'})
