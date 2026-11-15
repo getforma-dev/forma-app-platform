@@ -6734,7 +6734,7 @@
       "Depends on": "APP-215",
       "External dependencies": "None",
       "Assignee": "Claude \u2014 GenUI",
-      "Branch / PR": "`feat/app-217-error-pages`, PR pending",
+      "Branch / PR": "`feat/app-217-error-pages`, [PR #143](https://github.com/getforma-dev/forma-app-platform/pull/143), open",
       "Team": "GenUI",
       "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
