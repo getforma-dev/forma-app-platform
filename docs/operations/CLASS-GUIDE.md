@@ -27,6 +27,8 @@ What the two releases give you, in plain words:
 
 ## 1. Build day (Nov 24, and Nov 25 for the Release C apps)
 
+*2026-11-15:* Victor will merge a new app builder platform, so the class apps are not built on this platform now; the Nov 24 build day waits for that merge (the plan's calendar says the same). The words below stay as written for when it happens.
+
 For each app: the words to type, what the result should contain, how to check it with the helper account, what needs Release C, and the fallback. Type the words as written; swap the session names, question labels and choices for yours. Each check is "yes" before you move on; a "no" is a rebuild with clearer words, not a fix by hand (you cannot edit a definition).
 
 Two Release C details come from APP-211, which is being built for Release C: the entry chooser shows the student's name first, and a student who opens a card that scores entries against an answer key only reviewers can read (the quiz leaderboard) sees `Scores are shown to this app's reviewers.` instead of a number; counts of a student's own entries still show. The passages that depend on it are marked (Release C, APP-211).

@@ -150,7 +150,7 @@ After release A the live backstop is **2026-11-24 14:00 UTC**: release A's packe
 
 ## 3. Release B: migrations 0023 and 0024 and the trial capabilities (Sunday Nov 23)
 
-**Steps 1–4 done on 2026-11-14; do not re-run.** Release B executed on Nov 14, not Nov 23: read back on 2026-11-14, the stack's expiry parameter and schedule say `2026-12-15T14:00:00Z` and the release snapshot `forma-schema-release-<8 hex>-v24` exists beside release A's `-v22`. The record is APP-194's close-out. Steps 5–8 remain; [section 11](#11-nov-23-operator-checklist) is their checklist (step 5's Anthropic spend limit is item 11.1a; step 6, the FormaStack email, and step 8, a helper as reviewer, stay as written here). The steps are kept as written, for reference.
+**Steps 1–4 done on 2026-11-14; do not re-run.** Release B executed on Nov 14, not Nov 23: read back on 2026-11-14, the stack's expiry parameter and schedule say `2026-12-15T14:00:00Z` and the release snapshot `forma-schema-release-<8 hex>-v24` exists beside release A's `-v22`. The record is APP-194's close-out. Steps 5–8 remain; [section 11](#11-nov-23-operator-checklist) is their checklist (step 5's Anthropic spend limit is item 11.1a; step 6, rewritten 2026-11-15 as our own fAuth readback, and step 8, a helper as reviewer, stay here). The steps are kept as written, for reference.
 
 The release-B pull request (APP-194) commits `ops/promotion/schema-release.json` for 22 → 24 (migrations 0023 and 0024) with its pins, expiring 2026-11-26 00:00 UTC ([record](../../evidence/APP-194/SCHEMA-RELEASE.md)); W3's operator changes (`--note`, `admin_policy`, `list-box-files`, `stats`) ride the same operator image. Within 24 hours of section 2:
 
@@ -164,8 +164,25 @@ The release-B pull request (APP-194) commits `ops/promotion/schema-release.json`
    ```
 
    The expiry is in the live parameters of the state the apply wrote; `aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query "Stacks[0].Parameters[?ParameterKey=='DeploymentExpiresAtUtc'].ParameterValue" --output text` prints `2026-12-15T14:00:00Z`, and `aws scheduler get-schedule --group-name <DeploymentExpiryGroup output> --name <schedule>` shows `at(2026-12-15T14:00:00)`.
-5. **Deploy the alarms** (section 6), **set the Anthropic spend limit** (about $150 for the month, in the Anthropic console), and run the **restore drill** (section 9) while only Victor's account exists.
-6. **Write to FormaStack** (one email, kept with the trial's private evidence): raise the fAuth tenant's user limit to at least 30 by Nov 28, and **delete the tenant's users (or the tenant) by Dec 14** on your word, because the students' sign-in accounts and addresses live there, not in the beta's database (section 10 step 6). Ask for a written acknowledgement now and a written confirmation after the deletion; record both. Without the acknowledgement the notice's "deleted by December 14" is not true for the sign-in accounts, and the Nov 28 go/no-go says no.
+5. **Deploy the alarms** (section 6), **set the Anthropic spend limit** (item 11.1a: $1,000 a month, Victor's decision of 2026-11-15; it was "about $150"), and run the **restore drill** (section 9) while only Victor's account exists.
+6. **Read back our own fAuth tenant** (rewritten 2026-11-15; it was "write to FormaStack"). FormaStack is us: Victor and Claude. fAuth is our `getforma-dev/gatewasm` service at `https://auth-staging.getforma.dev`, on one EC2 host in this same AWS account, so there is nobody to write to; the record of the commands below is the acknowledgement. The students' sign-in accounts and addresses live there, not in the beta's database; their deletion is section 10 step 6.
+
+   **The user limit.** A tenant created through fAuth's platform API gets `max_users` 1000 unless the request says otherwise, and the trial tenant (`forma-trial-20261101`, created 2026-11-01 with the defaults) has no expiry. 1000 covers 25 students plus helpers. One read confirms it; the key is fAuth's platform-admin secret (the one gatewasm's host template loads into `PLATFORM_ADMIN_KEY`), read into a variable and never printed:
+
+   ```sh
+   TEN=$(out CleanTrialProviderTenant)
+   FAUTH=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation \
+     --query "Stacks[0].Parameters[?ParameterKey=='ProviderManagementUrl'].ParameterValue" --output text)
+   PLAT_KEY=$(aws secretsmanager get-secret-value --secret-id "<fAuth platform-admin secret id>" --query SecretString --output text)
+   curl -sS -H "Authorization: Bearer $PLAT_KEY" "$FAUTH/platform/tenants/$TEN" | tee "$TRIAL/fauth-tenant-before.json"
+   # only if max_users < 30 (a write; reversible with the same call):
+   # curl -sS -X PATCH -H "Authorization: Bearer $PLAT_KEY" -H 'content-type: application/json' -d '{"max_users": 50}' "$FAUTH/platform/tenants/$TEN" | tee "$TRIAL/fauth-tenant-after.json"
+   unset PLAT_KEY
+   ```
+
+   Expected: JSON with `"max_users": 1000`, `"status": "active"`, `"signup_mode": "invite_only"` and the current `user_count`. The file is the go/no-go's evidence (section 4). *As of 2026-11-15 this read has not been done.*
+
+   **Sign-in rate limits (done 2026-11-15, about 01:50 UTC).** fAuth's limiters share one bucket for every client behind Caddy, and a classroom shares one public IP anyway, so 25 sign-ins at once (three login hits each) would have run past the old burst of 60. The bursts were raised to login 200, register 60 and token 120 (refill rates unchanged) in gatewasm's host template `render-template.py` and on the live host (`/opt/fauth/start.sh` and `runtime.env`, then `fauth.service` restarted). Readback: the container env at 200/60/120, `/health` ok, beta's sign-in page 200. A `FauthBetaHost` stack update that changes only UserData stops and starts the instance; it does not replace it.
 7. **Victor's admin row** (Monday Nov 24, before building the class apps; the Admin page requires it). Your principal id is in `admission list`'s redemption of the owner code:
 
    ```sh
@@ -211,7 +228,7 @@ Release C changes the deployment contract (its qualification image context) and 
 
 ## 4. Codes by wave and the one announced restart (Friday Nov 28)
 
-**Go/no-go before the first wave**, each with its evidence: release B executed and `/health/ready` 200; the caps, December month and expiry applied (section 2) and the stop reads 2026-12-14 20:00 UTC (Release C's); the alarms stack deployed and the test email received; the restore drill's diff empty; FormaStack's written acknowledgement of the user-limit raise and the Dec 14 deletion (section 3 step 6); the purge path proven on the dev stand with no guest-linked share open, or the R1 decision taken (section 10); your `admin_policy` row granted and `/admin` opening; the rehearsal of Nov 26 done on Safari and a phone. Any "no" delays the codes, not the class date.
+**Go/no-go before the first wave**, each with its evidence: release B executed and `/health/ready` 200; the caps, December month and expiry applied (section 2) and the stop reads 2026-12-14 20:00 UTC (Release C's); the alarms stack deployed and the test email received; the restore drill's diff empty; the fAuth tenant readback showing `max_users` at least 30 (section 3 step 6; since 2026-11-15 our own read, not FormaStack's letter); the purge path proven on the dev stand with no guest-linked share open, or the R1 decision taken (section 10); your `admin_policy` row granted and `/admin` opening; the rehearsal of Nov 26 done on Safari and a phone. Any "no" delays the codes, not the class date.
 
 The back office is `ops/promotion/admission.py`. It mints the codes on your machine, writes the one-shot `OperatorInvitationInput` secret, runs one operator task per code (`admission issue --code-digest --provider-input-from-secret --authoring-only --note`), and **always empties the secret afterwards, even on failure**. The codes go only to the private `--output` file (0600). Nothing reaches the service until the restart: the service loads the capability secret once per task start (at most 128 entries), so one restart covers every code issued before it.
 
@@ -287,7 +304,7 @@ aws cloudformation deploy --stack-name forma-beta-trial-alarms --template-file o
 
 **Expected alarms.** `UnhealthyTargets` and `NoRunningTask` treat missing data as breaching, so by design they fire during every promotion outage (the stop-both-services step, a few minutes) and at the scheduled stop (2026-12-14 20:00 UTC since Release C; it was 2026-12-15 14:00 UTC after release B), and recover when the service is back. On a class day there is no deploy, so any of these is real. `LoadBalancer5xx` also fires briefly while targets drain during a promotion.
 
-Confirm the subscription from the email SNS sends, then the test email: `aws sns publish --topic-arn "$(aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query "$(printf "$OUT" AlarmTopicArn)" --output text)" --message "trial alarm test"` arrives within a minute. `aws cloudwatch describe-alarms --alarm-name-prefix forma-beta-trial-alarms --query "MetricAlarms[].{n:AlarmName,s:StateValue}"` shows every alarm `OK` once each has data (the free-storage and running-task alarms within ten minutes). On Dec 1 redeploy with `MonthlyBudgetUsd=118`; after the trial `aws cloudformation delete-stack --stack-name forma-beta-trial-alarms`.
+Confirm the subscription from the email SNS sends, then the test email: `aws sns publish --topic-arn "$(aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query "$(printf "$OUT" AlarmTopicArn)" --output text)" --message "trial alarm test"` arrives within a minute. `aws cloudwatch describe-alarms --alarm-name-prefix forma-beta-trial-alarms --query "MetricAlarms[].{n:AlarmName,s:StateValue}"` shows every alarm `OK` once each has data (the free-storage and running-task alarms within ten minutes). On Dec 1 redeploy with `MonthlyBudgetUsd=118`; after the trial `aws cloudformation delete-stack --stack-name forma-beta-trial-alarms`. To change `NotificationEmail` on a live stack, delete and recreate the stack; an in-place update rolls back (11.1, 2026-11-15).
 
 **Deny-all** (a bad image or an exposed route; [DEPLOY-RUNBOOK "Rollback"](../pitch/DEPLOY-RUNBOOK.md#rollback)). It is the stack's own deny-all revision on the same image: every sign-in fails and every protected route answers 404, data untouched, and it is reversible in one call. The `just deploy rollback-deny` recipe is fenced since the promotion cutover; use the call directly:
 
@@ -412,7 +429,29 @@ The charter promises the organization's data is deleted by Dec 14; the beta stop
    ```
 
    Record the snapshot ids and the date; seven days later the last automated backup containing the data is gone.
-6. **FormaStack.** Send the deletion request agreed on Nov 23 (section 3 step 6): delete the trial tenant's users, or the tenant, by Dec 14. The beta's `principals` rows (issuer, tenant, subject) and `provider_invitations` are gone with step 4; the sign-in accounts and addresses are FormaStack's. Record their written confirmation with the purge receipt; until it arrives the notice's "deleted by December 14" is not true for the accounts.
+6. **The sign-in accounts, in our own fAuth** (rewritten 2026-11-15; it was a request to FormaStack, which is us: section 3 step 6). The beta's `principals` rows (issuer, tenant, subject) and `provider_invitations` are gone with step 4; the accounts and addresses are in the fAuth tenant, and we delete them ourselves, after step 4 and before the stop (2026-12-14 20:00 UTC). `DELETE /manage/users/{usr_id}` is a hard delete: the row goes, and foreign-key cascades take the user's sessions, refresh tokens, credentials, codes and keys with it. It cannot be undone. `DELETE /platform/tenants/{id}` is only a soft delete (`status: deleted`, users and addresses left in place), so it does not count as deleting accounts; the tenant stays. The management key is the stack's attached management secret, JSON `{tenant_id, management_key}`; read the key into a variable, never print it.
+
+   ```sh
+   MGMT_ARN=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation \
+     --query "Stacks[0].Parameters[?ParameterKey=='ProviderManagementSecretArn'].ParameterValue" --output text)
+   FAUTH=$(aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation \
+     --query "Stacks[0].Parameters[?ParameterKey=='ProviderManagementUrl'].ParameterValue" --output text)
+   MGMT=$(aws secretsmanager get-secret-value --secret-id "$MGMT_ARN" --query SecretString --output text | jq -r .management_key)
+   H="Authorization: Bearer $MGMT"
+   curl -sS -H "$H" "$FAUTH/manage/stats" | tee "$TRIAL/fauth-stats-before.json"                 # total_users, verified_users
+   curl -sS -H "$H" "$FAUTH/manage/users?limit=100&offset=0" > "$TRIAL/fauth-users.json"          # ids and addresses: private, 0600
+   # To keep your own account, remove its row from fauth-users.json first (match your address).
+   for id in $(jq -r 'if type == "object" then .users else . end | .[].id' "$TRIAL/fauth-users.json"); do
+     curl -sS -o /dev/null -w "$id revoke %{http_code}\n" -X POST -H "$H" "$FAUTH/manage/users/$id/revoke-sessions"
+     curl -sS -o /dev/null -w "$id delete %{http_code}\n" -X DELETE -H "$H" "$FAUTH/manage/users/$id"
+   done | tee "$TRIAL/fauth-deletions.log"
+   curl -sS -H "$H" "$FAUTH/manage/stats" | tee "$TRIAL/fauth-stats-after.json"
+   unset MGMT H
+   ```
+
+   Expected: `fauth-stats-before.json` with the count seen on `/admin` before step 2; one `delete 204` line per user in the log; `fauth-stats-after.json` with `"total_users": 0` (or 1, if you kept your own). More than 100 users would need a second page with `offset=100`; the class has at most about 30. Record the log and the after-stats with the purge receipt: they are the confirmation the notice's "deleted by December 14" rests on for the accounts.
+
+   **Addresses outside the users table.** Two fAuth tables still hold student addresses after the users are gone: `tenant_user_invites.email` (the invitations the operator created; no delete endpoint) and `login_attempts.email` (swept by fAuth after 90 days). If the charter's promise is read to cover addresses, clear both with SQL on the fAuth database (an SSM session to the fAuth host, the database credentials from its host template's secret; gatewasm's `OPERATIONS.md` has the access steps): `DELETE FROM tenant_user_invites WHERE tenant_id = '<the tenant id, $(out CleanTrialProviderTenant)>'` and the same for `login_attempts`. fAuth's `audit_log` holds identifiers, kinds, times and IP addresses but no email, and matches the notice's "minimal security log"; keep it. Afterwards, on the GenUI side, clear `ProviderManagementSecretArn` and `ProviderManagementUrl` on the stack and schedule the management secret's deletion with a recovery window.
 7. **The capability secret.** `revoke` removes a code's capability; redeemed and exhausted codes leave theirs until the operator's reconcile sweep removes every capability that can no longer be handed off. Run it once, after step 4, so the secret names no code of the purged organization (the override takes the attached management secret, never argv):
 
    ```sh
@@ -446,6 +485,8 @@ LOG_GROUP=$(aws ecs describe-task-definition --task-definition "$(out OperatorTa
 ### 11.1 Alarms and the budget (Victor)
 
 Section 6's stack, with the checks it lacks. The template creates nothing inside the beta's stack and no IAM resource (`validate-template` reports no capability), and `ops/promotion/test_monitoring_alarms.py` pins it.
+
+**Done 2026-11-15, about 01:21 UTC.** The stack was recreated with `NotificationEmail=victor@getforma.dev`. Victor confirmed the SNS subscription and the AWS User Notifications contact, and all five alarms read `OK`. **Gotcha:** changing `NotificationEmail` on a live stack makes CloudFormation try to replace the named budget, which AWS refuses ("same name … different internalId"), and the update rolls back. To change the address, delete the stack (the roll-back command below) and deploy it again. A budget-amount-only change, such as the Dec 1 redeploy, updates in place.
 
 1. **Derive the parameters and look at them** before deploying. Each derivation was run against the live stack on 2026-11-14 and matches the template's `AllowedPattern`; the target group that is not port 3001 is the main service's on port 3000.
 
@@ -497,7 +538,7 @@ Section 6's stack, with the checks it lacks. The template creates nothing inside
 
 ### 11.1a The Anthropic spend limit (Victor; no command)
 
-Section 3 step 5 and the plan's D10. In the Anthropic console, set the organization's monthly spend limit to **$150 for November** with the 50% alert on, and on Dec 1 to **$100**; raise November to $200 if Nov 29 spends over $60. What you see: the limit and the alert address on the console's limits page. Nothing on AWS changes; no agent can do or read this. Record the date and the two amounts in the trial's private evidence.
+Section 3 step 5 and the plan's D10. **Victor's decision, 2026-11-15:** the organization's monthly spend limit in the Anthropic console is **$1,000**. November spend so far is about $6, Max gives a $200 API credit each month, and the app's own daily cap of 1,000 model calls is the working guard. This replaces the earlier "$150 for November and $100 for December with 50% alerts". He may add an email notification at about $100. What you see: the limit on the console's limits page. Nothing on AWS changes; no agent can do or read this. Record the date and the amount in the trial's private evidence.
 
 ### 11.2 The restore drill (the operator may run it; a few cents of RDS)
 
@@ -591,7 +632,7 @@ Steps (a fresh `--expected-state-sha256` for each `ops.promotion` command; secti
 3. **Suspend.** Victor: `admission suspend …` → `{"organization_id": "<org>", "status": "suspended", "changed": true, "audit_event": null, "receipts": […]}`. Reversible only by a reviewed change.
 4. **Purge.** Victor: `admission purge … --confirm "$TRIAL_ORG"` → `{"status": "purged", "organization_id": "<org>", "rows_deleted": R, "tables": T, "audit_events_kept": E, "kept": […], "counts_before": {…}, "counts_after": {every count 0}, "objects_deleted": O, "receipts": […], "next": "Delete the manual snapshots …"}`. Refusals, all before any object is deleted: `organization_unknown`, `organization_not_suspended`, `active_memberships_remain`, `purge_tables_differ`, `purge_foreign_children_unknown`, `purge_rls_state_refused`, `purge_rls_not_restored`, `guest_linked_shares_present` (before APP-212; after it, at schema 24, the organization's `linked_apps` rows are deleted and `share_events` kept), `purge_incomplete`, `purge_audit_changed`, or the generic `admission_operator_refused` (a statement outran the 5-second timeout; run it again off-hours). A repeat is harmless.
 5. **Snapshots.** Victor: `aws rds describe-db-snapshots --db-instance-identifier "$DB" --snapshot-type manual --query "DBSnapshots[].DBSnapshotIdentifier" --output text`, then `aws rds delete-db-snapshot --db-snapshot-identifier <each> --query 'DBSnapshot.Status'` → `"deleted"`; `aws rds describe-db-instances --db-instance-identifier "$DB" --query "DBInstances[0].BackupRetentionPeriod"` → `7`. Today the manual snapshots are `forma-schema-release-<8 hex>-v22` and `-v24`; the drill snapshot is gone with 11.2.
-6. **FormaStack.** Victor sends the deletion request agreed on Nov 23 (section 3 step 6); the written confirmation goes with the purge receipt.
+6. **The fAuth accounts.** Victor runs section 10 step 6 (our own fAuth; irreversible): `stats` → list → revoke sessions → `DELETE /manage/users/{id}` each → `stats` with `total_users` 0. The deletions log and the after-stats go with the purge receipt. The operator may run the two reads (`stats` and the list) into `$TRIAL`.
 7. **The capability secret.** Victor: the composed `admission-reconcile` override and `aws ecs run-task` (section 10 step 7), then the secret count → `… 0 for the trial organization`.
 8. **After the stop**, 2026-12-14 20:00 UTC. The operator may read `aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query "services[0].{desired:desiredCount,running:runningCount}"` → `0` and `0`. Victor deletes the alarms stack (11.1's roll-back command); `-no-running-task` and `-unhealthy-targets` are in `ALARM` from the stop until then, by design.
 
@@ -602,7 +643,7 @@ aws s3api list-object-versions --bucket "$(out EvidenceBucket)" --prefix "o/$TRI
   --query '{versions: length(Versions || `[]`), markers: length(DeleteMarkers || `[]`)}'
 ```
 
-Expected: `{"versions": 0, "markers": 0}`. Then the manual snapshot list empty, FormaStack's written confirmation in hand and the capability count `0`. Record all of it in the trial's private evidence and a sanitized note in `evidence/APP-188/`.
+Expected: `{"versions": 0, "markers": 0}`. Then the manual snapshot list empty, fAuth's after-stats reading `total_users` 0 and the capability count `0`. Record all of it in the trial's private evidence and a sanitized note in `evidence/APP-188/`.
 
 **Roll back.** None after step 3 (the suspension needs a reviewed change) and none after step 4 (the charter promises the deletion; the last automated backup holding the data lapses about Dec 21). Before step 3, stop at any refusal and investigate: a revoked code is reissued, a removed member re-invited.
 
