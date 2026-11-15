@@ -79,6 +79,7 @@ Every Markdown file under `docs/` is in the table below. Read this index before 
 | [planning/PHASE-2-HANDOFF.md](planning/PHASE-2-HANDOFF.md) | Historical | Transfer note from 2026-10-29. The ticket statuses in it are stale. | |
 | [planning/PIVOT-REVIEW-2026-11-01.md](planning/PIVOT-REVIEW-2026-11-01.md) | Historical | Review snapshot from 2026-11-01. | [planning/DIRECTION.md](planning/DIRECTION.md) |
 | [planning/POST-CLASS-FOLLOW-UPS.md](planning/POST-CLASS-FOLLOW-UPS.md) | Current | What is left for Victor's class and what we return to after it, with dates, owners, costs and the Dec 14 purge deadline (2026-11-15). | |
+| [planning/SAAS-PATTERNS-2026-11-15.md](planning/SAAS-PATTERNS-2026-11-15.md) | Current | Research: how mature workspace SaaS structures domains, landing, workspaces, invites and outside pages, compared with Forma Canvas, with a timed priority table and five open questions for Victor. | |
 | [planning/QUALITY-GATES.md](planning/QUALITY-GATES.md) | Current | Phase checks, trials and what counts as evidence. | |
 | [planning/ROADMAP.md](planning/ROADMAP.md) | Current | Phase map. Current work is DIRECTION.md, not the old first-ticket queue. | |
 | [planning/SOURCE-GUIDE.md](planning/SOURCE-GUIDE.md) | Current | Reading order for the frozen design and which later text outranks it. Some sentences describe the repository before the application existed. | |
