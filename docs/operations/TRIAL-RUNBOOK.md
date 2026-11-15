@@ -289,16 +289,17 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
 
 ## 6. Alarms, the deny-all switch and rollback
 
-**Alarms** (Nov 23, after release B). `ops/monitoring/alarms.json` is a standalone stack: an SNS topic with your email, alarms on load-balancer and target 5xx, unhealthy targets, no running task (the ECS metric sample count, since Container Insights is off) and database free storage under 2 GiB, plus an AWS Budget at the project ceiling. It references the beta's resources by identifier and changes none of them, so promotion's infrastructure digest is untouched.
+**Alarms** (Nov 23, after release B). `ops/monitoring/alarms.json` is a standalone stack: an SNS topic with your email, alarms on load-balancer and target 5xx, unhealthy targets, no running task (the ECS metric sample count, since Container Insights is off) and database free storage under 2 GiB, plus an AWS Budget at the project ceiling. Since 2026-11-15 (infra review M1, Victor's decision) it also alarms on load-balancer and target 4xx spikes, the service's CPU and memory, the database's CPU, connections and freeable memory, the account's SES bounce and complaint rates, and the fAuth host's status check and CPU; the host is a new parameter, `FauthInstanceId`. It references the beta's resources by identifier and changes none of them, so promotion's infrastructure digest is untouched. Section 11.1 is the checklist, with the update that adds the M1 alarms to the live stack.
 
 ```sh
 ALB_DNS=$(out LoadBalancerDnsName)
 ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$ALB_DNS'].LoadBalancerArn" --output text)
 # The main service's target group is the one that is not port 3001 (the broker's).
 TG_ARN=$(aws elbv2 describe-target-groups --load-balancer-arn "$ALB_ARN" --query "TargetGroups[?Port!=\`3001\`].TargetGroupArn" --output text)
+FAUTH_ID=$(aws cloudformation describe-stack-resources --stack-name FauthBetaHost --query "StackResources[?ResourceType=='AWS::EC2::Instance'].PhysicalResourceId" --output text)
 aws cloudformation deploy --stack-name forma-beta-trial-alarms --template-file ops/monitoring/alarms.json --no-fail-on-empty-changeset \
   --parameter-overrides NotificationEmail=<your address> LoadBalancerFullName="${ALB_ARN#*loadbalancer/}" TargetGroupFullName="${TG_ARN##*:}" \
-  ClusterName="$CLUSTER" ServiceName="$SERVICE" DBInstanceIdentifier=$(out DatabaseEndpoint | cut -d. -f1) \
+  ClusterName="$CLUSTER" ServiceName="$SERVICE" DBInstanceIdentifier=$(out DatabaseEndpoint | cut -d. -f1) FauthInstanceId="$FAUTH_ID" \
   MonthlyBudgetUsd=248
 ```
 
@@ -488,27 +489,40 @@ Section 6's stack, with the checks it lacks. The template creates nothing inside
 
 **Done 2026-11-15, about 01:21 UTC.** The stack was recreated with `NotificationEmail=victor@getforma.dev`. Victor confirmed the SNS subscription and the AWS User Notifications contact, and all five alarms read `OK`. **Gotcha:** changing `NotificationEmail` on a live stack makes CloudFormation try to replace the named budget, which AWS refuses ("same name … different internalId"), and the update rolls back. To change the address, delete the stack (the roll-back command below) and deploy it again. A budget-amount-only change, such as the Dec 1 redeploy, updates in place.
 
-1. **Derive the parameters and look at them** before deploying. Each derivation was run against the live stack on 2026-11-14 and matches the template's `AllowedPattern`; the target group that is not port 3001 is the main service's on port 3000.
+**M1 alarms, 2026-11-15 (APP-214).** Victor approved the attack-facing alarms of the infra review's M1 (about $0.80 a month: the account's 16 + 2 alarms less the 10 free ones). The template gained eleven alarms and one parameter, `FauthInstanceId`; `NotificationEmail`, the budget and its subscribers are byte-identical, and the test pins that no new resource references the address, so the update replaces nothing. Apply it as step 2a: an update that passes only the new parameter.
+
+1. **Derive the parameters and look at them** before deploying. Each derivation was run against the live stack on 2026-11-14 and matches the template's `AllowedPattern`; the target group that is not port 3001 is the main service's on port 3000. The fAuth host is the one `AWS::EC2::Instance` of stack `FauthBetaHost`.
 
    ```sh
    ALB_DNS=$(out LoadBalancerDnsName)
    ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$ALB_DNS'].LoadBalancerArn" --output text)
    TG_ARN=$(aws elbv2 describe-target-groups --load-balancer-arn "$ALB_ARN" --query "TargetGroups[?Port!=\`3001\`].TargetGroupArn" --output text)
-   printf '%s\n' "${ALB_ARN#*loadbalancer/}" "${TG_ARN##*:}" "$CLUSTER" "$SERVICE" "$DB"
+   FAUTH_ID=$(aws cloudformation describe-stack-resources --stack-name FauthBetaHost --query "StackResources[?ResourceType=='AWS::EC2::Instance'].PhysicalResourceId" --output text)
+   printf '%s\n' "${ALB_ARN#*loadbalancer/}" "${TG_ARN##*:}" "$CLUSTER" "$SERVICE" "$DB" "$FAUTH_ID"
    ```
 
-   Expected: five lines: `app/<name>/<16 hex>`, `targetgroup/<name>/<16 hex>`, the cluster name, the service name, the instance identifier. Two target groups would print on one line separated by a tab: stop and pick the port-3000 one by hand.
+   Expected: six lines: `app/<name>/<16 hex>`, `targetgroup/<name>/<16 hex>`, the cluster name, the service name, the instance identifier, `i-<17 hex>`. Two target groups would print on one line separated by a tab: stop and pick the port-3000 one by hand. An empty sixth line means the fAuth stack has another name: `aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query 'StackSummaries[].StackName'` and pick it; the id must match `^i-[0-9a-f]{8,17}$`.
 
-2. **Deploy**:
+2. **Deploy** (a new stack):
 
    ```sh
    aws cloudformation deploy --stack-name forma-beta-trial-alarms --template-file ops/monitoring/alarms.json --no-fail-on-empty-changeset \
      --parameter-overrides NotificationEmail=<your address> LoadBalancerFullName="${ALB_ARN#*loadbalancer/}" TargetGroupFullName="${TG_ARN##*:}" \
-     ClusterName="$CLUSTER" ServiceName="$SERVICE" DBInstanceIdentifier="$DB" MonthlyBudgetUsd=248
+     ClusterName="$CLUSTER" ServiceName="$SERVICE" DBInstanceIdentifier="$DB" FauthInstanceId="$FAUTH_ID" MonthlyBudgetUsd=248
    aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query 'Stacks[0].StackStatus' --output text
    ```
 
    Expected: `Waiting for changeset to be created..`, `Waiting for stack create/update to complete`, `Successfully created/updated stack - forma-beta-trial-alarms`; then `CREATE_COMPLETE`. The address becomes a stack parameter, readable by any identity with `cloudformation:DescribeStacks` in the account; it also lands in the shell history and in the budget's subscriber list. A `NoEcho` on `NotificationEmail` would be a one-line template change for APP-187, not for this checklist.
+
+   **2a. Update the live stack with the M1 alarms** (the stack of 2026-11-15 exists; do not repeat `NotificationEmail`):
+
+   ```sh
+   aws cloudformation deploy --stack-name forma-beta-trial-alarms --template-file ops/monitoring/alarms.json --no-fail-on-empty-changeset \
+     --parameter-overrides FauthInstanceId="$FAUTH_ID"
+   aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query 'Stacks[0].StackStatus' --output text
+   ```
+
+   Expected: the same three lines, then `UPDATE_COMPLETE`. `deploy` passes every parameter it is not given as "use previous value", so the address, the identifiers and the budget amount stay as they are and the budget is not replaced. `UPDATE_ROLLBACK_COMPLETE` with a budget event in `describe-stack-events` means a parameter changed under it: compare `describe-stacks --query 'Stacks[0].Parameters'` with the values of step 1 and run again with only `FauthInstanceId`.
 
 3. **Confirm the subscription** from the "AWS Notification - Subscription Confirmation" email SNS sends, then check it and send the test:
 
@@ -530,9 +544,9 @@ Section 6's stack, with the checks it lacks. The template creates nothing inside
      --query 'Notifications[].{t:NotificationType,pct:Threshold}'
    ```
 
-   Expected: five alarms, `forma-beta-trial-alarms-load-balancer-5xx`, `-target-5xx`, `-unhealthy-targets`, `-no-running-task` and `-database-free-storage`, `INSUFFICIENT_DATA` right after creation and `OK` within ten minutes; `{"limit": "248", "unit": "USD", "time": "MONTHLY", "type": "COST"}` (the amount may print as `248.0`); three notifications, `ACTUAL` 80, `ACTUAL` 100 and `FORECASTED` 100 (the API prints the thresholds as `80.0` and `100.0`, as it prints `248.0`; a forecast needs weeks of history and may stay silent in November).
+   Expected: sixteen alarms. The five of Nov 15, `forma-beta-trial-alarms-load-balancer-5xx`, `-target-5xx`, `-unhealthy-targets`, `-no-running-task` and `-database-free-storage`; and the eleven M1 alarms, `-load-balancer-4xx` (100 in 5 min; the balancer's own 4xx, which browsers never cause), `-target-4xx` (600 in 5 min, two a second: stuffing, scraping or many revoked pages; a class of 25 is tens, a revoked guest tab 150, the minute after an announced restart a few hundred), `-service-cpu` (80% for 10 min), `-service-memory` (85% for 10 min), `-database-cpu` (80% for 10 min), `-database-connections` (12 for 10 min: the service holds 8, two per role, an operator or migration task one or two more), `-database-freeable-memory` (under 256 MiB for 10 min), `-email-bounce-rate` (5%, where SES starts its review), `-email-complaint-rate` (0.1%, the same), `-fauth-status-check` (any failed check for 2 min; missing data is breaching, so a stopped or recreated host alarms) and `-fauth-cpu` (80% for 10 min). All `INSUFFICIENT_DATA` right after creation and `OK` within ten minutes; the two `-email-` alarms read `OK` without data (missing data is not breaching) and the `-fauth-status-check` needs the right instance id to leave `ALARM`. Then `{"limit": "248", "unit": "USD", "time": "MONTHLY", "type": "COST"}` (the amount may print as `248.0`); three notifications, `ACTUAL` 80, `ACTUAL` 100 and `FORECASTED` 100 (the API prints the thresholds as `80.0` and `100.0`, as it prints `248.0`; a forecast needs weeks of history and may stay silent in November).
 
-**Verify.** Step 3's test email in the inbox and every alarm `OK` in step 4. An alarm that stays `ALARM` while `/health/ready` answers 200 has a wrong dimension: compare the five values of step 1 with the stack's parameters. `-unhealthy-targets` and `-no-running-task` fire by design during a promotion outage and at the 2026-12-14 20:00 UTC stop (section 6).
+**Verify.** Step 3's test email in the inbox and every alarm `OK` in step 4. An alarm that stays `ALARM` while `/health/ready` answers 200 has a wrong dimension: compare the six values of step 1 with the stack's parameters; `-fauth-status-check` in `ALARM` while `https://auth-staging.getforma.dev/` answers is a wrong or stale `FauthInstanceId` (the host's stack was recreated: derive it again and run step 2a). `-unhealthy-targets` and `-no-running-task` fire by design during a promotion outage and at the 2026-12-14 20:00 UTC stop (section 6); `-target-4xx` may fire once in the minute after an announced restart (section 4) if many pages were open, and recovers on its own.
 
 **Roll back.** `aws cloudformation delete-stack --stack-name forma-beta-trial-alarms && aws cloudformation wait stack-delete-complete --stack-name forma-beta-trial-alarms` removes the topic, the subscription, the alarms and the budget and changes nothing of the beta. If the delete fails on a subscription that was never confirmed, repeat it with `--retain-resources EmailSubscription`; a pending subscription lapses by itself after three days. On Dec 1 the same deploy with `MonthlyBudgetUsd=118` is an update, and the confirmed subscription survives it.
 
@@ -694,9 +708,82 @@ Section 3 step 7. The Admin page needs the row; the grant needs Victor's princip
 Every command named below was compared with `main` at `140a5a9f` on 2026-11-14, and every AWS derivation with the live account, read-only.
 
 - **Sections 2 and 3 are done**, executed on Nov 14 rather than Nov 23 (the expiry parameter and schedule read `2026-12-15T14:00:00Z` after release B and `2026-12-14T20:00:00Z` after Release C, the live stop; the `-v24` release snapshot exists). Their headings keep the plan's dates; the status lines at their tops say so. The release record is APP-194's close-out. Section 1's status line names release A's expiry; the live one is in section 2's.
-- **Section 6 (alarms)**: every command and parameter is right, and `ops/promotion/test_monitoring_alarms.py` pins the template (5 tests). Missing: the subscription check before the test publish (11.1 step 3) and the budget readback (11.1 step 4).
+- **Section 6 (alarms)**: every command and parameter is right, and `ops/promotion/test_monitoring_alarms.py` pins the template (5 tests; 6 since the M1 alarms of 2026-11-15, which also add `FauthInstanceId` to section 6's command). Missing: the subscription check before the test publish (11.1 step 3) and the budget readback (11.1 step 4).
 - **Section 9 (drill)**: `window_requests.py operator-task --override admission-stats --set=--organization=…` exists exactly as written (`app/operator/overrides.json`, `admission-stats`; `infra/scripts/window_requests.py:490–497`); the log stream `genui-operator/operator/<task id>` matches the live task definition's `awslogs-stream-prefix` and container name; the restore and delete flags are valid. Incomplete: the expected stats line omits `audit_events`; the log group is a placeholder (derived in this section's setup); section 9 takes no snapshot although section 10 step 5 expects to delete "the drill snapshot" (11.2 takes one, so that the two counts are of the same bytes); section 9's restore names no parameter group, so the copy would get the engine default rather than the stack's `rds.force_ssl=1` group (11.2 passes it by name).
 - **Section 10 (purge)**: `admission-revoke-membership`, `admission-reconcile`, `admission-suspend-organization` and `admission-purge-organization` exist, and `admission.py suspend` and `purge --confirm` print the shapes section 10 shows. Stale by omission: "the fix is a follow-up after migration 0024 is live" describes APP-212 (in review), not yet on `main`; the purge refuses `guest_linked_shares_present` at every schema version today (11.4).
 - **Section 3 step 7 and section 4** (`grant-admin`, `issue`, `list`, `revoke`, `restart --announced`): as written; `--expires-days` accepts 1 to 30.
 - **The header's** "agents call no AWS API" is relaxed for exactly the steps this section marks "operator".
 - **The plan's scratch-RDS herd** is in TRIAL-25-READINESS, not in section 9, and has no runnable path on `main`; decided 2026-11-14: not attempted (11.3).
+
+### 11.7 Security events and WAF (Victor; about $7 a month)
+
+The infra review of 2026-11-14 (H2, no WAF; H3, no CloudTrail trail or detector) under Victor's decision of 2026-11-15: observability free or nearly free, so **no GuardDuty, Security Hub, Config or Inspector**; the WAF at about $7 a month; every alert by email to his address. Two standalone templates beside the alarms stack, pinned by `ops/promotion/test_monitoring_security.py` (APP-214 is the ticket). Neither creates an IAM resource (`validate-template` reports no capability), neither names an account id or an ARN, and neither touches `infra/src`: the beta is reached only through parameters, so promotion's infrastructure digest is unchanged.
+
+**What you get.**
+
+- `ops/monitoring/security-events.json`, about $0 a month (the first copy of management events is free, the bucket holds a few MB, rules on AWS events and email notices are free, the account Access Analyzer is free): one multi-region CloudTrail trail of management events, read and write, log-file validation on, into a private SSE-S3 bucket (public access blocked, TLS-only, versioned, Glacier Instant Retrieval after 30 days, expired after a year, retained when the stack is deleted); an SNS topic with your address; eleven EventBridge rules, each one email line naming who, what, when and from which address: root console sign-in; a root mutating API call (root's reads are left out on purpose, or a billing visit would mail dozens; the sign-in rule covers the visit); a console sign-in failure; a console sign-in without MFA by an IAM user or root; IAM changes (`CreateUser`, `CreateAccessKey`, `CreateLoginProfile`, Attach/Put/Detach of user, role and group policies, `UpdateAssumeRolePolicy`, `DeactivateMFADevice`, `DeleteVirtualMFADevice`); CloudTrail tampering (`StopLogging`, `DeleteTrail`, `UpdateTrail`, `PutEventSelectors`); `AuthorizeSecurityGroupIngress`; KMS `DisableKey` and `ScheduleKeyDeletion`; S3 `PutBucketPolicy`, `PutBucketAcl` and the bucket and account public-access-block puts and deletes; RDS `DeleteDBInstance`, `DeleteDBSnapshot` and `ModifyDBInstance` with `publiclyAccessible` true; a new active IAM Access Analyzer finding. No data events, Insights or CloudWatch Logs delivery. The promotion pipeline (`ops/promotion`: ECR pushes, ECS updates and tasks, change sets, state objects, a secret value, a schedule read) calls none of the operations the rules name, and the test pins that; a release whose change set touches the stack's roles or security groups mails one notice per changed resource through CloudFormation, which is right.
+- `ops/monitoring/waf.json`, about $7.20 a month (web ACL $5, two rules $2, requests $0.60 per million where the class is far under one, two alarms $0.20): a REGIONAL web ACL associated with the beta's load balancer, default Allow, metrics and sampled requests on, no logging and no managed rule groups (both cost; the paid upgrade path is written in the template's `Metadata`). Rule 1 blocks an address past **2000 requests in five minutes** on any path; rule 2 blocks an address past **30 requests in five minutes** on the model-calling routes: `/v1/compose`, `/v1/ask`, `/v1/shape`, `/v1/act`, `/v1/mcp`, `/v1/widgets/customize`, `/v1/boxes/explain/…` and `/v1/boxes/<box>/apps`, `/brief` and `/ask` (Slack's callbacks are left out: they come from Slack's addresses). Both answer `429` with a plain one-line body and `Retry-After: 300`, and a block lasts until the address's rate falls under the limit. Both limits are parameters (`FloodLimit`, `ModelRouteLimit`). Two alarms on `BlockedRequests` (one blocked request in five minutes, one per rule) publish to the trial alarm topic.
+
+  **Why those numbers hold for 25 students.** The load balancer's `/health/ready` checks go from the balancer to the targets and never pass the web ACL. A member tab is tens of requests in five minutes: one SSE stream per session shared across tabs with a 1 to 30 s reconnect backoff, a 30 s access check, and hint-driven refreshes spread over 0 to 3 s with one retry (APP-195). A guest tab on `/s/<share>` is the heaviest client, about 250 in five minutes (an access poll every 2 s and a document poll every 3 s), so one address reaches 2000 only with eight guest tabs open at once; the test pins these cadences against the client source. Static assets are tens of requests at the first load and served by the service worker afterwards. The model routes have per-member hourly limits in the app (compose 30, ask and shape 120, act 60, MCP 120 per token, widget customize 120, box explain 30); 30 per address per five minutes is six a minute, above any one member's use, and caps what several sessions behind one address can spend. A shared household or office of two or three students stays under both.
+
+1. **Security events** (deploy in us-east-1, the beta's region, where the global IAM and console sign-in events arrive; the rules see this region's API calls, which is where every beta resource lives):
+
+   ```sh
+   aws cloudformation deploy --stack-name forma-security-events --template-file ops/monitoring/security-events.json \
+     --no-fail-on-empty-changeset --parameter-overrides NotificationEmail=<your address>
+   aws cloudformation describe-stacks --stack-name forma-security-events --query 'Stacks[0].StackStatus' --output text
+   ```
+
+   Expected: `Waiting for changeset to be created..`, `Waiting for stack create/update to complete`, `Successfully created/updated stack - forma-security-events`; then `CREATE_COMPLETE` within about three minutes (the trail waits for the bucket policy). Confirm the "AWS Notification - Subscription Confirmation" email, then read back:
+
+   ```sh
+   SEC_TOPIC=$(aws cloudformation describe-stacks --stack-name forma-security-events --query "Stacks[0].Outputs[?OutputKey=='SecurityTopicArn'].OutputValue" --output text)
+   aws sns list-subscriptions-by-topic --topic-arn "$SEC_TOPIC" --query 'Subscriptions[].{p:Protocol,arn:SubscriptionArn}'
+   aws cloudtrail get-trail-status --name forma-security-events-management --query '{logging:IsLogging,delivered:LatestDeliveryTime,digest:LatestDigestDeliveryTime}'
+   aws events list-rules --name-prefix forma-security-events --query 'Rules[].{n:Name,s:State}' --output table
+   aws accessanalyzer list-analyzers --type ACCOUNT --query 'analyzers[].{n:name,s:status}'
+   ```
+
+   Expected: one `email` subscription with a subscription ARN (`PendingConfirmation` means the click has not happened and nothing is delivered); `logging: true`, with a delivery time within fifteen minutes of creation and a digest time within the hour; eleven rules, all `ENABLED`; one analyzer, `ACTIVE`. The stack's own creation may mail up to three notices (`PutBucketPolicy`, `PutBucketPublicAccessBlock`, `PutEventSelectors`, if the rules came up before the bucket and the trail), and the analyzer's first scan mails one notice per externally reachable resource: expect the two GitHub OIDC roles (`forma-beta-promotion-prepare` and `-execute` trust GitHub's issuer by design); read them, then archive them in the Access Analyzer console so they do not return. End-to-end check that changes nothing: re-apply the trail's own selectors, and the "CloudTrail change: PutEventSelectors by `<your ARN>`" email arrives within about five minutes:
+
+   ```sh
+   aws cloudtrail put-event-selectors --trail-name forma-security-events-management \
+     --event-selectors '[{"ReadWriteType":"All","IncludeManagementEvents":true}]' --query 'EventSelectors[0].ReadWriteType' --output text
+   ```
+
+   Expected notices in normal operation, so they are read correctly: one `PutEventSelectors` or `UpdateTrail` per update of this stack; `DeleteDBInstance` at the restore drill (11.2) and `DeleteDBSnapshot` at the purge (section 10, 11.4); `PutRolePolicy`, `AttachRolePolicy` or `AuthorizeSecurityGroupIngress` through CloudFormation when a release changes the stack's roles or groups; `PutAccountPublicAccessBlock` when the review's L1 is applied; a console sign-in without MFA until H4's device is registered. Anything else is a question.
+
+2. **WAF** (same identity; the alarms stack must exist, for `AlarmTopicArn`). Derive and look first:
+
+   ```sh
+   ALB_DNS=$(out LoadBalancerDnsName)
+   ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='$ALB_DNS'].LoadBalancerArn" --output text)
+   TOPIC=$(aws cloudformation describe-stacks --stack-name forma-beta-trial-alarms --query "$(printf "$OUT" AlarmTopicArn)" --output text)
+   printf '%s\n' "$ALB_ARN" "$TOPIC"
+   ```
+
+   Expected: two lines, `arn:aws:elasticloadbalancing:us-east-1:<account>:loadbalancer/app/<name>/<16 hex>` and `arn:aws:sns:us-east-1:<account>:forma-beta-trial-alarms-AlarmTopic-<suffix>`; each matches its parameter's `AllowedPattern`. Then:
+
+   ```sh
+   aws cloudformation deploy --stack-name forma-beta-waf --template-file ops/monitoring/waf.json --no-fail-on-empty-changeset \
+     --parameter-overrides LoadBalancerArn="$ALB_ARN" AlarmTopicArn="$TOPIC"
+   aws wafv2 get-web-acl-for-resource --resource-arn "$ALB_ARN" --query 'WebACL.{name:Name,rules:Rules[].Name,default:DefaultAction}'
+   curl -sS -o /dev/null -w '%{http_code}\n' https://beta.getforma.dev/health/ready
+   aws cloudwatch describe-alarms --alarm-name-prefix forma-beta-waf --query "MetricAlarms[].{n:AlarmName,s:StateValue}"
+   ```
+
+   Expected: `Successfully created/updated stack - forma-beta-waf`; `{"name": "forma-beta-waf-web-acl", "rules": ["per-address-flood", "per-address-model-routes"], "default": {"Allow": {}}}`; `200`; two alarms, `forma-beta-waf-flood-blocked` and `-model-routes-blocked`, `INSUFFICIENT_DATA` then `OK` within ten minutes. Then use the canvas and a shared page yourself for a few minutes: no `429`, and both alarms stay `OK`. When one fires, the sampled requests name the address and the paths:
+
+   ```sh
+   WEB_ACL=$(aws cloudformation describe-stacks --stack-name forma-beta-waf --query "Stacks[0].Outputs[?OutputKey=='WebAclArn'].OutputValue" --output text)
+   aws wafv2 get-sampled-requests --web-acl-arn "$WEB_ACL" --rule-metric-name per-address-flood --scope REGIONAL --max-items 100 \
+     --time-window StartTime=<ISO start>,EndTime=<ISO end> --query 'SampledRequests[].{ip:Request.ClientIP,path:Request.URI,at:Timestamp}'
+   ```
+
+   A student behind a busy shared network shows guest-page polls on `/v1/shared/…` from one address; a flood shows one path from one address. To loosen rather than remove, redeploy with `FloodLimit=4000` or `ModelRouteLimit=60`.
+
+**Verify.** Step 1: the subscription confirmed, `logging: true`, eleven rules `ENABLED`, and the `PutEventSelectors` test email. Step 2: `/health/ready` answers `200` behind the web ACL, your own browsing shows no `429`, both alarms `OK`. Nothing in `GenuiSyntheticFoundation` changed: `aws cloudformation describe-stacks --stack-name GenuiSyntheticFoundation --query 'Stacks[0].LastUpdatedTime'` is unchanged, and the next `maintenance inspect` shows the same infrastructure digest.
+
+**Roll back.** WAF, in an emergency (students answered `429` wrongly): `aws wafv2 disassociate-web-acl --resource-arn "$ALB_ARN"` takes effect within a minute and leaves the stack in place; then `aws cloudformation delete-stack --stack-name forma-beta-waf && aws cloudformation wait stack-delete-complete --stack-name forma-beta-waf` removes the web ACL and the two alarms (a `deploy` of the stack after a bare disassociation re-associates it). Security events: `aws cloudformation delete-stack --stack-name forma-security-events && aws cloudformation wait stack-delete-complete --stack-name forma-security-events` removes the trail, the rules, the topic and the analyzer; the bucket is retained with its logs (`DeletionPolicy: Retain`) and is emptied and deleted by hand when the record is no longer wanted. The trail's deletion mails one last `DeleteTrail` notice if its rule outlives it. Neither roll-back changes anything of the beta.
+
+**Cost.** Security events about $0 (S3, cents). WAF about $7.20. The M1 alarms of 11.1 and these two make 18 alarms in the account, 10 free, so $0.80. About $8 a month in all, inside the ADR-019 ceilings; the budget parameter needs no change.
