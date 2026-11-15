@@ -10,5 +10,9 @@
 .org-admin-table thead th { font-weight: 600; white-space: nowrap; }
 .org-admin-count { text-align: right; font-variant-numeric: tabular-nums; }
 .org-admin-role { display: block; font-size: 0.8rem; font-weight: 400; opacity: 0.75; }
-.org-admin-remove { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-.org-admin-remove label { display: flex; gap: 0.3rem; align-items: center; font-size: 0.85rem; }
+.org-admin-remove, .org-admin-role-form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.org-admin-remove label, .org-admin-role-form label { display: flex; gap: 0.3rem; align-items: center; font-size: 0.85rem; }
+.org-admin-role-form select { font: inherit; font-size: 0.9rem; padding: 0.2rem 0.3rem; }
+.org-admin-legend { margin: 0.5rem 0 1rem; padding: 0; list-style: none; display: grid; gap: 0.25rem; font-size: 0.9rem; }
+.org-admin-legend li { margin: 0; }
+.org-admin-helper { font-size: 0.9rem; opacity: 0.85; margin: 0 0 1rem; }

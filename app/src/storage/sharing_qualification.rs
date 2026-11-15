@@ -88,7 +88,7 @@ async fn footprint(fixture: &Fixture) -> [i64; 6] {
         "SELECT count(*) FROM genui.app_permissions",
         "SELECT count(*) FROM genui.work_permissions",
         "SELECT count(*) FROM genui.source_permissions",
-        "SELECT count(*) FROM genui.organization_permissions",
+        "SELECT count(*) FROM genui.memberships WHERE role IN ('owner','admin','manager')",
         "SELECT count(*) FROM genui.audit_events WHERE writer_role='admission' AND kind='permission.granted'",
         "SELECT count(*) FROM genui.work_shares",
     ]

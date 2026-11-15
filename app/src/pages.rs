@@ -134,6 +134,10 @@ impl ErrorProps {
                 "Safety interlock tripped",
                 "This form was open too long, or it came from another site, so nothing was changed. Go back, refresh the page, and try again.".to_owned(),
             ),
+            (Refusal::ViewerReadOnly, _) => (
+                "View-only access",
+                "You have view-only access in this workspace. Ask an admin for member access to build or edit.".to_owned(),
+            ),
             (Refusal::PayloadTooLarge, _) => (
                 "Sample too large",
                 "That upload is over the size limit, so nothing was saved. Try a smaller file.".to_owned(),
@@ -156,7 +160,8 @@ impl ErrorProps {
             title: title.into(),
             text,
             sign_in: not_found && matches!(view.viewer, None | Some(Viewer::SignedOut)),
-            workspace: not_found && view.viewer == Some(Viewer::Member),
+            workspace: (not_found && view.viewer == Some(Viewer::Member))
+                || view.refusal == Refusal::ViewerReadOnly,
         }
     }
 }

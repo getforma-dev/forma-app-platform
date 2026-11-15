@@ -386,8 +386,8 @@ async fn campaign() {
     let me = row(&overview, PRINCIPAL);
     assert!(me.apps >= 1 && me.records >= 1, "the seeded owner: {me:?}");
     assert_eq!(me.label, crate::directory::neutral_label(PRINCIPAL));
-    assert!(!me.is_admin && me.consent_version.is_none());
-    assert!(row(&overview, ADMIN).is_admin);
+    assert!(me.role == OrgRole::Member && me.consent_version.is_none());
+    assert_eq!(row(&overview, ADMIN).role, OrgRole::Owner);
     assert_eq!(row(&overview, REVOKED).status, "revoked");
     let fresh = row(&overview, &newcomer);
     assert_eq!(fresh.consent_version, Some(NOTICE_VERSION));
@@ -525,12 +525,13 @@ async fn campaign() {
             .admin_remove_member(&admin, ADMIN)
             .await
             .unwrap(),
-        RemoveOutcome::Refused("last_admin"),
-        "the sole admin removing itself"
+        RemoveOutcome::Refused("last_owner"),
+        "the sole owner removing itself"
     );
+    // A second owner, through the operator channel's stand-in (fixture SQL).
     fixture.sql(
         &format!(
-            "INSERT INTO genui.organization_permissions VALUES ('{ORG}','{PEER}','admin_policy')"
+            "UPDATE genui.memberships SET role='owner' WHERE organization_id='{ORG}' AND principal_id='{PEER}'"
         ),
         "genui",
     );
@@ -573,7 +574,7 @@ async fn campaign() {
     );
     check(
         &mut checks,
-        "removal refuses the caller itself (last_admin while it is the only active admin, self once another admin exists), an already revoked member and a stranger (not_member), and a malformed id (Denied); every refusal writes nothing",
+        "removal refuses the caller itself (last_owner while it is the only active owner, self once another owner exists), an already revoked member and a stranger (not_member), and a malformed id (Denied); every refusal writes nothing",
     );
 
     // --- removal: membership, entitlement, epoch, sessions, audit --------------

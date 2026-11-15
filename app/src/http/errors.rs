@@ -41,6 +41,8 @@ pub enum Refusal {
     NotFound,
     /// 403 `cross_site`: fetch metadata or the synchronizer token.
     CrossSite,
+    /// 403 `viewer_read_only` (ADR-021): a viewer on a write or AI route.
+    ViewerReadOnly,
     /// 413 `payload_too_large`.
     PayloadTooLarge,
     /// 429 `too_many_requests`, with `Retry-After`.
@@ -49,9 +51,10 @@ pub enum Refusal {
     Unavailable,
 }
 impl Refusal {
-    const ALL: [Refusal; 5] = [
+    const ALL: [Refusal; 6] = [
         Refusal::NotFound,
         Refusal::CrossSite,
+        Refusal::ViewerReadOnly,
         Refusal::PayloadTooLarge,
         Refusal::TooManyRequests,
         Refusal::Unavailable,
@@ -59,7 +62,7 @@ impl Refusal {
     pub fn status(self) -> StatusCode {
         match self {
             Refusal::NotFound => StatusCode::NOT_FOUND,
-            Refusal::CrossSite => StatusCode::FORBIDDEN,
+            Refusal::CrossSite | Refusal::ViewerReadOnly => StatusCode::FORBIDDEN,
             Refusal::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Refusal::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             Refusal::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
@@ -69,6 +72,7 @@ impl Refusal {
         match self {
             Refusal::NotFound => "not_found",
             Refusal::CrossSite => "cross_site",
+            Refusal::ViewerReadOnly => "viewer_read_only",
             Refusal::PayloadTooLarge => "payload_too_large",
             Refusal::TooManyRequests => "too_many_requests",
             Refusal::Unavailable => "unavailable",
@@ -230,8 +234,12 @@ async fn page_for(response: Response, viewer: Viewer, pages: &dyn ErrorPages) ->
         // did, its bytes are gone: answer the plain 503, never a partial body.
         return super::unavailable();
     };
-    let page = carries(&bytes, refusal)
-        .then(|| ErrorView {
+    // Two refusals share 403; the body's code names the one (ADR-021).
+    let page = Refusal::ALL
+        .into_iter()
+        .filter(|candidate| candidate.status() == refusal.status())
+        .find(|candidate| carries(&bytes, *candidate))
+        .map(|refusal| ErrorView {
             refusal,
             viewer: (refusal == Refusal::NotFound).then_some(viewer),
             wait: if refusal == Refusal::TooManyRequests {

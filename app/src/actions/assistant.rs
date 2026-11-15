@@ -416,6 +416,10 @@ async fn propose(
         Ok(value) => value,
         Err(response) => return response,
     };
+    // ADR-021 (APP-226): the assistant is AI; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let key = format!("act:{}:{}", member.organization(), member.principal());
     if let Err(retry) = state.auth.limits.admit(&[(&key, routes::ACT_MEMBER)]) {
         return http::too_many_requests(retry);

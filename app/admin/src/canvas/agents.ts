@@ -207,6 +207,8 @@ function buildPanel(document_: Document): HTMLDialogElement {
 export function startAgents(document_: Document): void {
   const bar = document_.querySelector<HTMLElement>('.cv-top-status');
   if (!bar || bar.querySelector('.cv-agent-open')) return;
+  // ADR-021: a viewer connects no agent; the server refuses the mint as well.
+  if (document_.getElementById('cv-shell')?.dataset.canBuild === 'false') return;
   const panel = buildPanel(document_);
   document_.body.append(panel);
   const open = el(document_, 'button', { type: 'button', class: 'cv-agent-open', 'aria-haspopup': 'dialog' }, 'Connect an agent');

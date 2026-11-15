@@ -1148,6 +1148,10 @@ async fn member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedRequest, Resp
     let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
     let live = |reference: &str| auth.vault.contains(reference);
     match stores.workspace.resolve_session(&cookie, &live).await {
+        // ADR-021 (APP-226): every composer route builds; a viewer is refused.
+        Ok(Lookup::Live(request)) if !request.can(crate::storage::Capability::Build) => {
+            Err(http::viewer_read_only())
+        }
         Ok(Lookup::Live(request)) => Ok(request),
         Ok(Lookup::Ended(ended)) => {
             auth.revoke(&ended).await;

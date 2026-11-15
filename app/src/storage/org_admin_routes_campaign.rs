@@ -315,8 +315,8 @@ async fn campaign() {
         form(&[("csrf", &token), ("confirm", "remove")]),
     )
     .await;
-    assert_eq!(location(&own), "/admin?notice=last_admin");
-    let shown = get(&admin, "/admin?notice=last_admin").await;
+    assert_eq!(location(&own), "/admin?notice=last_owner");
+    let shown = get(&admin, "/admin?notice=last_owner").await;
     assert!(
         shown
             .body

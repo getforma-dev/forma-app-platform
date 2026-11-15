@@ -434,6 +434,10 @@ async fn submit(
     let Some((cookie, trusted)) = session(auth, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a command commit is a write; a viewer is refused.
+    if !trusted.can(crate::storage::Capability::Write) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };

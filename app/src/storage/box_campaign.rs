@@ -522,6 +522,7 @@ async fn campaign() {
         provider_tenant: harness::NORTHSTAR_TENANT.into(),
         provider_subject: maya_subject.clone(),
         registry_sha256: stores.registry_identity().sha256.clone(),
+        role: crate::storage::OrgRole::Member,
     };
 
     // --- A folder with mixed files ---

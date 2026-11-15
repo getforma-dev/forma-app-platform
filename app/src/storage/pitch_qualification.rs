@@ -643,6 +643,7 @@ async fn campaign() {
         provider_tenant: harness::NORTHSTAR_TENANT.into(),
         provider_subject: maya_subject.clone(),
         registry_sha256: stores.registry_identity().sha256.clone(),
+        role: crate::storage::OrgRole::Member,
     };
     let context = stores
         .workspace
@@ -1582,6 +1583,7 @@ async fn campaign() {
         provider_tenant: harness::NORTHSTAR_TENANT.into(),
         provider_subject: mate_subject.clone(),
         registry_sha256: stores.registry_identity().sha256.clone(),
+        role: crate::storage::OrgRole::Member,
     };
     let compared = super::canvas_campaign::equivalent_reads(&stores, &maya_request).await;
     let mate_compared = super::canvas_campaign::equivalent_reads(&stores, &mate_request).await;
@@ -3091,7 +3093,7 @@ async fn campaign() {
     // An admin (here the teammate, for this part) adds their own card for everyone.
     c.fixture.sql(
         &format!(
-            "INSERT INTO genui.organization_permissions VALUES ('{ORG}','{mate_id}','admin_policy')"
+            "UPDATE genui.memberships SET role='admin' WHERE organization_id='{ORG}' AND principal_id='{mate_id}'"
         ),
         "genui",
     );

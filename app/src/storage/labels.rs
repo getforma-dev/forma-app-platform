@@ -5,7 +5,7 @@
 //! address and description, and each card's display name and description
 //! (the addresses an app had before a rename are kept automatically,
 //! `kept`; there are no other organization aliases), written only by the
-//! app's owner or a holder of `admin_policy` who can open the app
+//! app's owner or an organization owner or admin who can open the app
 //! (`discover`), audited `app.labeled`.
 //! **Personal labels** (`member_labels`): one member's own shortcuts (`/exp`
 //! → an app, `/q3` → a card) and own card names, written by that member on
@@ -208,8 +208,10 @@ pub(super) fn discover_clause() -> String {
 }
 /// The app is open to someone besides its owner (`discover`).
 const SHARED: &str = "EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.app_id=a.app_id AND p.permission='discover' AND p.principal_id IS DISTINCT FROM a.owner_principal_id)";
-/// The member owns the app or holds `admin_policy` in the organization.
-pub(super) const OWNER_OR_ADMIN: &str = "(a.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.organization_permissions o WHERE o.organization_id=a.organization_id AND o.principal_id=$2::text::uuid AND o.permission='admin_policy'))";
+/// The member owns the app or is an organization owner or admin (ADR-021:
+/// the roles that steward every app's names and cards; a manager runs the
+/// roster, not the content).
+pub(super) const OWNER_OR_ADMIN: &str = "(a.owner_principal_id=$2::text::uuid OR EXISTS(SELECT 1 FROM genui.memberships o WHERE o.organization_id=a.organization_id AND o.principal_id=$2::text::uuid AND o.status='active' AND o.role IN ('owner','admin')))";
 
 /// The organization's naming lock (transaction-scoped): every label write
 /// and every "Save as /name" judges its names under it.

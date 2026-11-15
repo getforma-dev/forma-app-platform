@@ -52,7 +52,7 @@ pub use agents::{
     agent_label_shaped, AgentAttribution, AgentToken, MintedAgentToken, AGENT_TOKEN_DAYS,
     MAX_LIVE_AGENT_TOKENS,
 };
-pub use authorization::{Action, Publication, Record, TrustedRequest};
+pub use authorization::{Action, Capability, OrgRole, Publication, Record, TrustedRequest};
 pub use boxes::{
     box_name, BoxFile, BoxRow, BoxView, Derivation, FileData, Lineage, NewFile, NewRegistration,
     MAX_BOX_FILES,
@@ -83,7 +83,7 @@ pub use labels::{
     address_shaped, card_shaped, label_description, label_name, merge_label, shortcut_shaped,
     Label, LabelChange, Labeled, Labels, MemberLabel, NameRules, MAX_LABEL_ALIASES,
 };
-pub use org_admin::{MemberRow, RemoveOutcome};
+pub use org_admin::{MemberRow, RemoveOutcome, RoleOutcome};
 pub use pool::{Control, Data, Settings, Stores, Worker, Workspace};
 pub use queries::QueryActor;
 pub use queries::{
@@ -215,6 +215,9 @@ mod org_admin_campaign;
 // Trial plan D4/D6: the /admin and /me/name routes over real rows (W2).
 #[cfg(test)]
 mod org_admin_routes_campaign;
+// ADR-021 (APP-225, APP-226): the role ladder, the viewer walk and /admin over real rows.
+#[cfg(test)]
+mod org_roles_campaign;
 #[cfg(test)]
 mod participation_campaign;
 #[cfg(test)]

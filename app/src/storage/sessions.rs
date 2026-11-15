@@ -32,7 +32,7 @@
 //! no member lock and therefore skips locked rows instead of waiting.
 use super::{
     admission::{binding_active, digest_shaped, domain_digest, Admission, VerifiedNonmember},
-    authorization::Transaction,
+    authorization::{OrgRole, Transaction},
     definitions::{append_as, Chain, Event},
     pool::Workspace,
     require, valid_id, Error, Result, TrustedRequest,
@@ -178,6 +178,10 @@ fn integer(row: &Row, index: usize) -> Result<i64> {
 }
 fn boolean(row: &Row, index: usize) -> Result<bool> {
     row.try_get(index).map_err(|_| Error::Unavailable)
+}
+/// ADR-021: the stored role; a spelling outside the CHECK is a store fault.
+fn role(row: &Row, index: usize) -> Result<OrgRole> {
+    OrgRole::parse(&text(row, index)?).ok_or(Error::Unavailable)
 }
 
 /// The two pre-login flow kinds (0006 `kind`). A signup flow is created by
@@ -345,6 +349,16 @@ impl AgentCaller {
     /// release build.
     #[cfg(test)]
     pub(crate) fn for_tests(organization: &str, principal: &str, token_id: &str) -> Self {
+        Self::for_tests_with_role(organization, principal, token_id, OrgRole::Member)
+    }
+    /// `for_tests` with the organization role the unit test needs (ADR-021).
+    #[cfg(test)]
+    pub(crate) fn for_tests_with_role(
+        organization: &str,
+        principal: &str,
+        token_id: &str,
+        role: OrgRole,
+    ) -> Self {
         Self {
             request: TrustedRequest {
                 organization: organization.into(),
@@ -354,6 +368,7 @@ impl AgentCaller {
                 provider_tenant: String::new(),
                 provider_subject: String::new(),
                 registry_sha256: String::new(),
+                role,
             },
             token_id: token_id.into(),
             label: "Claude".into(),
@@ -868,7 +883,7 @@ impl Workspace {
         let registry = &self.inner.registry;
         let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
         let result = async {
-            let rows = transaction.query("SELECT s.session_id::text,s.principal_id::text,s.registry_sha256,s.refresh_token_ref::text,(s.revoked_at IS NULL AND s.absolute_expires_at>now() AND s.last_seen_at>now()-interval '1 hour'),s.last_seen_at<=now()-interval '60 seconds',p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=s.organization_id AND e.principal_id=s.principal_id AND e.entitlement_id=s.entitlement_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.sessions s JOIN genui.principals p ON p.organization_id=s.organization_id AND p.principal_id=s.principal_id JOIN genui.memberships m ON m.organization_id=s.organization_id AND m.principal_id=s.principal_id WHERE s.organization_id=$1::text::uuid AND s.cookie_digest=$2", &[&organization,&digest(SESSION_DOMAIN,cookie)]).await?;
+            let rows = transaction.query("SELECT s.session_id::text,s.principal_id::text,s.registry_sha256,s.refresh_token_ref::text,(s.revoked_at IS NULL AND s.absolute_expires_at>now() AND s.last_seen_at>now()-interval '1 hour'),s.last_seen_at<=now()-interval '60 seconds',p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=s.organization_id AND e.principal_id=s.principal_id AND e.entitlement_id=s.entitlement_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active),m.role FROM genui.sessions s JOIN genui.principals p ON p.organization_id=s.organization_id AND p.principal_id=s.principal_id JOIN genui.memberships m ON m.organization_id=s.organization_id AND m.principal_id=s.principal_id WHERE s.organization_id=$1::text::uuid AND s.cookie_digest=$2", &[&organization,&digest(SESSION_DOMAIN,cookie)]).await?;
             let Some(row) = rows.first() else {
                 return Ok(Lookup::Absent);
             };
@@ -902,6 +917,7 @@ impl Workspace {
                 provider_tenant,
                 provider_subject: text(row, 8)?,
                 registry_sha256: registry.identity.sha256.clone(),
+                role: role(row, 12)?,
             }))
         }
         .await;
@@ -944,7 +960,7 @@ impl Workspace {
             let transaction =
                 Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
             let result = async {
-                let rows = transaction.query("SELECT l.principal_id::text,l.membership_epoch_at_link,p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=l.organization_id AND e.principal_id=l.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active) FROM genui.slack_links l JOIN genui.principals p ON p.organization_id=l.organization_id AND p.principal_id=l.principal_id JOIN genui.memberships m ON m.organization_id=l.organization_id AND m.principal_id=l.principal_id WHERE l.organization_id=$1::text::uuid AND l.team_id=$2 AND l.slack_user_id=$3 AND l.revoked_at IS NULL", &[&organization,&team,&user]).await?;
+                let rows = transaction.query("SELECT l.principal_id::text,l.membership_epoch_at_link,p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=l.organization_id AND e.principal_id=l.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active),m.role FROM genui.slack_links l JOIN genui.principals p ON p.organization_id=l.organization_id AND p.principal_id=l.principal_id JOIN genui.memberships m ON m.organization_id=l.organization_id AND m.principal_id=l.principal_id WHERE l.organization_id=$1::text::uuid AND l.team_id=$2 AND l.slack_user_id=$3 AND l.revoked_at IS NULL", &[&organization,&team,&user]).await?;
                 let Some(row) = rows.first() else {
                     return Ok(None);
                 };
@@ -970,6 +986,7 @@ impl Workspace {
                     provider_tenant,
                     provider_subject: text(row, 4)?,
                     registry_sha256: registry.identity.sha256.clone(),
+                    role: role(row, 8)?,
                 }))
             }
             .await;
@@ -1066,7 +1083,7 @@ impl Workspace {
         let registry = &self.inner.registry;
         let transaction = Transaction::begin_nonmember(&self.inner, Some(&organization)).await?;
         let result = async {
-            let rows = transaction.query(&format!("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,(t.revoked_at IS NULL AND t.expires_at>clock_timestamp()),(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active),{} FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", super::governance::SCOPE_COLUMNS), &[&organization,&agent_token_digest(token)]).await?;
+            let rows = transaction.query(&format!("SELECT t.token_id::text,t.principal_id::text,t.label,t.registry_sha256,t.membership_epoch_at_mint,(t.revoked_at IS NULL AND t.expires_at>clock_timestamp()),(t.last_used_at IS NULL OR t.last_used_at<=now()-interval '60 seconds'),p.issuer,p.provider_tenant_id,p.provider_subject,m.membership_epoch,m.role,EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=t.organization_id AND e.principal_id=t.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()),EXISTS(SELECT 1 FROM genui.provider_tenant_bindings b WHERE b.organization_id=p.organization_id AND b.issuer=p.issuer AND b.provider_tenant_id=p.provider_tenant_id AND b.active),{} FROM genui.agent_tokens t JOIN genui.principals p ON p.organization_id=t.organization_id AND p.principal_id=t.principal_id JOIN genui.memberships m ON m.organization_id=t.organization_id AND m.principal_id=t.principal_id WHERE t.organization_id=$1::text::uuid AND t.token_digest=$2", super::governance::SCOPE_COLUMNS), &[&organization,&agent_token_digest(token)]).await?;
             let Some(row) = rows.first() else {
                 return Ok(None);
             };
@@ -1080,8 +1097,8 @@ impl Workspace {
                 && organization_active
                 && member_active
                 && epoch == integer(row, 4)?
-                && boolean(row, 11)?
                 && boolean(row, 12)?
+                && boolean(row, 13)?
                 && text(row, 3)? == registry.identity.sha256
                 && registry.agrees(&issuer, &provider_tenant, &organization);
             if !valid {
@@ -1099,10 +1116,11 @@ impl Workspace {
                     provider_tenant,
                     provider_subject: text(row, 9)?,
                     registry_sha256: registry.identity.sha256.clone(),
+                    role: role(row, 11)?,
                 },
                 token_id,
                 label: text(row, 2)?,
-                scope: super::governance::AgentScope::from_row(row, 13)?,
+                scope: super::governance::AgentScope::from_row(row, 14)?,
             }))
         }
         .await;

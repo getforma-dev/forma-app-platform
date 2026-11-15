@@ -207,7 +207,7 @@ pub(super) async fn read_only_and_reuse(
         .await
         .unwrap();
     let pre = tx
-        .precheck(Action::AdminPolicy, Resource::Organization)
+        .precheck(Action::OrgAdmin, Resource::Organization)
         .await
         .unwrap();
     let _permit = tx.fence(pre).await.unwrap();
@@ -227,8 +227,7 @@ pub(super) async fn read_only_and_reuse(
         Err(Error::Denied)
     ));
     assert!(matches!(
-        tx.precheck(Action::AdminPolicy, Resource::Organization)
-            .await,
+        tx.precheck(Action::OrgAdmin, Resource::Organization).await,
         Err(Error::Denied)
     ));
     tx.finish(false).await.unwrap();

@@ -107,6 +107,11 @@ pub fn not_found() -> Response {
 pub fn cross_site() -> Response {
     problem(StatusCode::FORBIDDEN, "cross_site")
 }
+/// ADR-021 (APP-226): a viewer's request for a write, share, connect or AI
+/// route; the member is known and current, their role is read-only.
+pub fn viewer_read_only() -> Response {
+    problem(StatusCode::FORBIDDEN, "viewer_read_only")
+}
 pub fn payload_too_large() -> Response {
     problem(StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large")
 }

@@ -24,7 +24,7 @@
 //! answers retain original identity in their spec; listings and writes check
 //! that exact original's current access and app lineage in the same transaction.
 //! Removing is a soft delete by its maker ([`Workspace::remove_card`]); the app's owner or an
-//! `admin_policy` holder may also take a card added for everyone back to its
+//! organization owner or admin may also take a card added for everyone back to its
 //! maker or remove it, also when its maker left (the steward path: the
 //! genui_admit definer `genui_private.steward_card`, since the RESTRICTIVE
 //! `member_cards_principal` policy keeps the workspace's own writes to the
@@ -174,7 +174,7 @@ fn spec_digest(spec: &[u8]) -> String {
 const CARD_COLUMNS: &str = "c.card_id::text,c.kind,c.app_id::text,c.work_id::text,c.source,c.address,c.title,c.spec,c.everyone,c.principal_id=$2::text::uuid,to_char(c.created_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')";
 
 /// A card row as `reader` sees it; `steward`: the reader owns its app or
-/// holds `admin_policy`.
+/// is an organization owner or admin.
 fn card_row(row: &Row, steward: bool) -> Result<MemberCard> {
     let spec: Vec<u8> = row.try_get(7).map_err(|_| Error::Unavailable)?;
     let mine = flag(row, 9)?;

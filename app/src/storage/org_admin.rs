@@ -1,8 +1,9 @@
-//! Organization administration for the organization's own admins (D4 of the
-//! trial plan; ADR-008 amendment 2026-11-14): who has joined, their consent,
-//! activity and footprint, and member removal, through the `admin_policy`
-//! permission and two `genui_admit` definer functions (migration 0023,
-//! `genui_private.org_admin_overview` and
+//! Organization administration for the organization's own owners, admins
+//! and managers (D4 of the trial plan; ADR-008 amendment 2026-11-14; ADR-021
+//! organization roles, APP-225): who has joined, their role, consent,
+//! activity and footprint, role changes and member removal, through three
+//! `genui_admit` definer functions (migrations 0023 and 0025,
+//! `genui_private.org_admin_overview`, `genui_private.set_member_role` and
 //! `genui_private.admin_remove_member`). Member display names (D6) live
 //! here too: a member sets the name others see
 //! (`genui_private.set_display_name`, audited as `member.named`), and the
@@ -11,14 +12,17 @@
 //!
 //! Every operation begins a member transaction on the workspace pool, so the
 //! trusted request is the live session's. The admin operations precheck and
-//! fence `admin_policy` on the organization (`authorization::permissions`),
-//! and the definers re-check the same facts under that fence and return no
-//! row when they disagree, so no path reaches member data without
-//! `admin_policy` held at commit time. `Error::Denied` means "not an admin of
-//! this organization" (or not a current member at all); the routes answer it
-//! with the uniform 404.
+//! fence `Action::OrgAdmin` (the owner, admin and manager roles on the
+//! member's own active row, `authorization::permissions`), and the definers
+//! re-check the role under that fence and apply ADR-021's management ladder
+//! (who may set which role on whom, the last-owner rule, nobody raises their
+//! own role), returning no row when the caller may not administer at all, so
+//! no path reaches member data without the role held at commit time.
+//! `Error::Denied` means "not an owner, admin or manager of this
+//! organization" (or not a current member at all); the routes answer it with
+//! the uniform 404.
 use super::{
-    authorization::{Action, Resource, Transaction},
+    authorization::{Action, OrgRole, Resource, Transaction},
     pool::Workspace,
     require, valid_id, Error, Result, TrustedRequest,
 };
@@ -37,7 +41,8 @@ pub struct MemberRow {
     pub note: Option<String>,
     /// `active` or `revoked` (the membership row).
     pub status: String,
-    pub is_admin: bool,
+    /// ADR-021: the membership's organization role.
+    pub role: OrgRole,
     /// The latest notice version this member consented to, and when
     /// (RFC 3339, to the second).
     pub consent_version: Option<i32>,
@@ -54,10 +59,23 @@ pub struct MemberRow {
 }
 
 /// `admin_remove_member`'s answer: removed, or refused for one fixed reason
-/// (`self`, `last_admin`, `not_member`). Authority refusals are `Error::Denied`.
+/// (`self`, `last_owner`, `not_member`, `not_allowed`). Authority refusals
+/// are `Error::Denied`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RemoveOutcome {
     Removed,
+    Refused(&'static str),
+}
+
+/// `set_member_role`'s answer (ADR-021): the role changed (the epoch
+/// advanced, one `membership.role_changed` event), the same role again
+/// (nothing written), or refused for one fixed reason (`not_member`,
+/// `not_allowed`, `last_owner`, `self`, `unknown_role`). Authority refusals
+/// are `Error::Denied`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RoleOutcome {
+    Changed,
+    Unchanged,
     Refused(&'static str),
 }
 
@@ -76,18 +94,16 @@ fn optional(row: &Row, index: usize) -> Result<Option<String>> {
 fn integer(row: &Row, index: usize) -> Result<i64> {
     row.try_get(index).map_err(|_| Error::Unavailable)
 }
-fn boolean(row: &Row, index: usize) -> Result<bool> {
-    row.try_get(index).map_err(|_| Error::Unavailable)
-}
 
 impl Workspace {
-    /// Whether the request's member holds `admin_policy` in its organization
-    /// (current membership, epoch and entitlement included). `Ok(false)` for
-    /// every authority refusal; `Err` only for a store failure.
+    /// Whether the request's member administers its organization (ADR-021:
+    /// an active owner, admin or manager at the current epoch, with a live
+    /// entitlement). `Ok(false)` for every authority refusal; `Err` only for
+    /// a store failure.
     pub async fn is_org_admin(&self, request: &TrustedRequest) -> Result<bool> {
         let transaction = Transaction::begin(&self.inner, request).await?;
         let result = transaction
-            .precheck(Action::AdminPolicy, Resource::Organization)
+            .precheck(Action::OrgAdmin, Resource::Organization)
             .await;
         transaction.finish(false).await?;
         match result {
@@ -97,17 +113,17 @@ impl Workspace {
         }
     }
 
-    /// Every member of the admin's organization, as `MemberRow`s, ordered by
-    /// name. `Denied` unless the caller holds `admin_policy`.
+    /// Every member of the caller's organization, as `MemberRow`s, ordered by
+    /// name. `Denied` unless the caller is an owner, admin or manager.
     pub async fn org_admin_overview(&self, request: &TrustedRequest) -> Result<Vec<MemberRow>> {
         let mut transaction = Transaction::begin(&self.inner, request).await?;
         let result = async {
             let precheck = transaction
-                .precheck(Action::AdminPolicy, Resource::Organization)
+                .precheck(Action::OrgAdmin, Resource::Organization)
                 .await?;
             let permit = transaction.fence(precheck).await?;
             let sql = format!(
-                "SELECT principal_id::text,display_name,status,is_admin,consent_version,{},{},apps,works,records,uploads,code_status,code_note FROM genui_private.org_admin_overview($1::text::uuid,$2::text::uuid)",
+                "SELECT principal_id::text,display_name,status,role,consent_version,{},{},apps,works,records,uploads,code_status,code_note FROM genui_private.org_admin_overview($1::text::uuid,$2::text::uuid)",
                 rfc3339("consented_at"),
                 rfc3339("last_active")
             );
@@ -125,7 +141,7 @@ impl Workspace {
                 members.push(MemberRow {
                     label,
                     status: text(row, 2)?,
-                    is_admin: boolean(row, 3)?,
+                    role: OrgRole::parse(&text(row, 3)?).ok_or(Error::Unavailable)?,
                     consent_version: row.try_get(4).map_err(|_| Error::Unavailable)?,
                     consented_at: optional(row, 5)?,
                     last_active: optional(row, 6)?,
@@ -145,12 +161,50 @@ impl Workspace {
         result
     }
 
-    /// Removes a member of the admin's organization: membership revoked,
+    /// ADR-021: sets a member's organization role under the management
+    /// ladder (`genui_private.set_member_role`): the target's epoch advances
+    /// (every session of theirs re-reads authority at its next request) and
+    /// `membership.role_changed` is appended on the admission chain; the same
+    /// role again writes nothing. `Denied` unless the caller is an owner,
+    /// admin or manager; a malformed id is `Denied` too.
+    pub async fn set_member_role(
+        &self,
+        request: &TrustedRequest,
+        principal: &str,
+        role: OrgRole,
+    ) -> Result<RoleOutcome> {
+        require(valid_id(principal))?;
+        let mut transaction = Transaction::begin(&self.inner, request).await?;
+        let result = async {
+            let precheck = transaction
+                .precheck(Action::OrgAdmin, Resource::Organization)
+                .await?;
+            let permit = transaction.fence(precheck).await?;
+            let rows = permit.transaction().query("SELECT outcome FROM genui_private.set_member_role($1::text::uuid,$2::text::uuid,$3::text::uuid,$4)", &[&request.organization,&request.principal,&principal,&role.as_str()]).await?;
+            let row = rows.first().ok_or(Error::Denied)?;
+            Ok(match text(row, 0)?.as_str() {
+                "changed" => RoleOutcome::Changed,
+                "unchanged" => RoleOutcome::Unchanged,
+                "not_member" => RoleOutcome::Refused("not_member"),
+                "not_allowed" => RoleOutcome::Refused("not_allowed"),
+                "last_owner" => RoleOutcome::Refused("last_owner"),
+                "self" => RoleOutcome::Refused("self"),
+                "unknown_role" => RoleOutcome::Refused("unknown_role"),
+                _ => return Err(Error::Unavailable),
+            })
+        }
+        .await;
+        transaction.finish(result.is_ok()).await?;
+        result
+    }
+
+    /// Removes a member of the caller's organization: membership revoked,
     /// entitlements revoked, epoch advanced (every session dies at its next
     /// request), audited on the admission chain. Refuses the caller itself,
-    /// the last admin and anyone who is not an active member. `Denied`
-    /// unless the caller holds `admin_policy`; a malformed id is `Denied`
-    /// too.
+    /// the last owner, anyone who is not an active member, and (ADR-021) a
+    /// member whose role is above what the caller's role manages. `Denied`
+    /// unless the caller is an owner, admin or manager; a malformed id is
+    /// `Denied` too.
     pub async fn admin_remove_member(
         &self,
         request: &TrustedRequest,
@@ -160,7 +214,7 @@ impl Workspace {
         let mut transaction = Transaction::begin(&self.inner, request).await?;
         let result = async {
             let precheck = transaction
-                .precheck(Action::AdminPolicy, Resource::Organization)
+                .precheck(Action::OrgAdmin, Resource::Organization)
                 .await?;
             let permit = transaction.fence(precheck).await?;
             let rows = permit.transaction().query("SELECT outcome FROM genui_private.admin_remove_member($1::text::uuid,$2::text::uuid,$3::text::uuid)", &[&request.organization,&request.principal,&principal]).await?;
@@ -168,8 +222,9 @@ impl Workspace {
             Ok(match text(row, 0)?.as_str() {
                 "removed" => RemoveOutcome::Removed,
                 "self" => RemoveOutcome::Refused("self"),
-                "last_admin" => RemoveOutcome::Refused("last_admin"),
+                "last_owner" => RemoveOutcome::Refused("last_owner"),
                 "not_member" => RemoveOutcome::Refused("not_member"),
+                "not_allowed" => RemoveOutcome::Refused("not_allowed"),
                 _ => return Err(Error::Unavailable),
             })
         }

@@ -117,6 +117,10 @@ async fn resolve_member(auth: &Auth, headers: &HeaderMap) -> Result<TrustedReque
     let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
     let live = |reference: &str| auth.vault.contains(reference);
     match stores.workspace.resolve_session(&cookie, &live).await {
+        // ADR-021 (APP-226): Ask and Shape are AI; a viewer is refused.
+        Ok(Lookup::Live(request)) if !request.can(crate::storage::Capability::Build) => {
+            Err(http::viewer_read_only())
+        }
         Ok(Lookup::Live(request)) => Ok(request),
         Ok(Lookup::Ended(ended)) => {
             auth.revoke(&ended).await;

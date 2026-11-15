@@ -251,6 +251,10 @@ pub async fn confirm(State(state): State<Arc<Slack>>, request: Request) -> Respo
     let Some((_, member)) = crate::sharing::session(&state.auth, &parts.headers).await else {
         return sign_in_first();
     };
+    // ADR-021 (APP-226): connecting Slack is not a viewer's.
+    if !member.can(crate::storage::Capability::Connect) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
     };

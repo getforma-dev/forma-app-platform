@@ -445,7 +445,7 @@ async fn campaign() {
     // Removing the sponsor from the organization (the real `/admin` path,
     // `admin_remove_member`: membership and entitlement revoked, epoch
     // advanced) still ends every guest read of their shares.
-    fixture.sql(&format!("INSERT INTO genui.organization_permissions VALUES('{ORG}','{REVIEWER}','admin_policy') ON CONFLICT DO NOTHING"),"genui");
+    fixture.sql(&format!("UPDATE genui.memberships SET role='admin' WHERE organization_id='{ORG}' AND principal_id='{REVIEWER}'"),"genui");
     let admin = request(&stores, ORG, REVIEWER, 1);
     assert_eq!(
         stores

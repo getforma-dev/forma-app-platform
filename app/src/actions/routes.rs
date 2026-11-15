@@ -128,6 +128,10 @@ async fn notes_work(State(auth): State<Arc<Auth>>, request: Request) -> Response
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
+    // ADR-021 (APP-226): a note is a write; a viewer reads them only.
+    if creating && !member.can(crate::storage::Capability::Write) {
+        return http::viewer_read_only();
+    }
     if creating {
         if let Err(retry_after) = auth
             .limits
@@ -425,6 +429,10 @@ async fn act(State(state): State<Arc<Act>>, request: Request) -> Response {
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
+    // ADR-021 (APP-226): `/v1/act` is AI; a viewer is refused before the body.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let started = Instant::now();
     let key = format!("act:{}:{}", member.organization(), member.principal());
     let receipt_key = format!(

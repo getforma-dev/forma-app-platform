@@ -437,6 +437,7 @@ impl Fixture {
             provider_tenant: format!("ten_{organization}"),
             provider_subject: format!("usr_{principal}"),
             registry_sha256: stores.registry_identity().sha256.clone(),
+            role: crate::storage::OrgRole::Member,
         }
     }
     pub async fn operator(&self) -> Operator {
