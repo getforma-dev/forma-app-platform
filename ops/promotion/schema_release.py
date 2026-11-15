@@ -43,7 +43,10 @@ SPEC = Path(__file__).with_name('schema-release.json')
 # (evidence/APP-223/release-2026-11-15.md, candidate 4360a404, contract 79263fbb,
 # schema manifest 176d68cb). The CDK source is unchanged. It replaces release
 # E's spent pin. The expiry falls before the codes (2026-11-28) and the class
-# (2026-11-29), so no schema change can promote during the class.
+# (2026-11-29), so no schema change can promote during the class. Release F
+# went live on 2026-11-15 (evidence/APP-225/release-2026-11-15.md) and its file
+# was removed: this pin is now an inert record, read only together with a
+# committed file, until the next release's values replace it.
 REVIEWED_SCHEMA_RELEASE = {
     'evidence': 'evidence/APP-225/SCHEMA-RELEASE.md',
     'expires_at_utc': '2026-11-27T00:00:00Z',
