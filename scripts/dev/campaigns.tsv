@@ -50,4 +50,4 @@ smoke-folder	boxes::tests::real_haiku_folder_smoke	smoke	-	-	-	the real model; G
 smoke-open-meteo	widgets::tests::real_open_meteo_smoke	smoke	-	-	-	the public Open-Meteo endpoint
 managed-readonly-entry	storage::managed_qualification::managed_readonly_entry	helper	-	-	-	operator-only exact selector (APP-075)
 managed-child-entry	storage::managed_qualification::tests::child_entry	helper	-	-	-	child process of the managed campaign (APP-075)
-readiness-traffic	storage::readiness_traffic_campaign::native_readiness_traffic_campaign	campaign	-	GENUI_READINESS_TRAFFIC_REPORT	-	Docker, OpenSSL, runtime venv
+readiness-traffic	storage::qualification::readiness_traffic::native_readiness_traffic_campaign	campaign	-	GENUI_READINESS_TRAFFIC_REPORT	-	Docker, OpenSSL, runtime venv

@@ -30,6 +30,8 @@ pub(super) struct Catalog {
     sql: String,
     /// The same statement, hashed in the database: `sha256` of the UTF-8
     /// bytes of the document the full comparison would receive.
+    /// `pg_catalog.sha256(bytea)` exists from PostgreSQL 11; the beta and the
+    /// fixture run 16.
     digest_sql: String,
     expected: Value,
     /// `sha256` of `expected` in the database's own text form of the
@@ -88,8 +90,10 @@ impl Catalog {
         // the expected digest is the pinned document in that same text, so
         // equal digests mean the two texts are equal, and equal texts parse
         // to equal values: the verdict the full comparison would reach. A
-        // NULL (the document over its bound), a different digest or a driver
-        // error that is not a refusal all run the full comparison below.
+        // NULL (the document over its bound) or a different digest runs the
+        // full comparison below. A driver error on the digest statement is
+        // `Unavailable` at once, as it is on any statement here: the
+        // connection is discarded, and the next connection compares again.
         let digest: Option<Vec<u8>> = client
             .query_one(&self.digest_sql, &[])
             .await
@@ -130,11 +134,16 @@ impl Catalog {
 /// `value` as PostgreSQL 16 prints a `jsonb` (`jsonb_out`): object keys in
 /// jsonb's order (shorter first, then bytewise), `", "` between members and
 /// elements, `": "` after a key, strings escaped as `escape_json` does, and
-/// numbers as they are. The catalog statement builds its document with the
-/// jsonb functions and returns `::text`, so this is the text the full
-/// comparison receives. Parsing it back gives `value` again, which the unit
-/// test below holds for the pinned document: a digest match therefore means
-/// the live document equals the pinned value, not just some text of it.
+/// numbers in `serde_json`'s formatting, which is `numeric_out`'s for the
+/// integers the pinned document holds (a float in a future pin would print
+/// differently, so its digest would never match: every comparison would
+/// fall back to the full document, which the native campaign's "a healthy
+/// readiness run pulls no document" assertion catches). The catalog
+/// statement builds its document with the jsonb functions and returns
+/// `::text`, so this is the text the full comparison receives. Parsing it
+/// back gives `value` again, which the unit test below holds for the pinned
+/// document: a digest match therefore means the live document equals the
+/// pinned value, not just some text of it.
 pub(super) fn canonical(value: &Value) -> String {
     fn write(value: &Value, out: &mut String) {
         match value {

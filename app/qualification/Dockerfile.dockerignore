@@ -310,5 +310,3 @@ contracts/fixtures/impl-2026-11-14.1/stored/**
 !app/src/storage/record_query_campaign.rs
 !app/migrations/0025_organization_roles.sql
 !app/migrations/catalog-v25.json
-# APP-216 part 1: the readiness traffic probe (local evidence only).
-!app/src/storage/readiness_traffic_campaign.rs

@@ -4,7 +4,7 @@ By Claude (Opus 5.5), on branch `feat/app-216-readiness-digest` from `main` at `
 
 ## Measurement: bytes the database transmits per readiness run
 
-`storage::readiness_traffic_campaign::native_readiness_traffic_campaign` (`just campaign readiness-traffic`, new, not run in CI) starts the APP-008 Docker fixture (PostgreSQL 16.15), builds `Stores`, runs readiness once to create the four connections, then reads the container's `eth0` counters (`/proc/net/dev`), runs readiness 20 times and reads them again. The same probe ran on the code before the change (the full comparison on every probe) and after it.
+`storage::qualification::readiness_traffic::native_readiness_traffic_campaign` (`just campaign readiness-traffic`, new, not run in CI) starts the APP-008 Docker fixture (PostgreSQL 16.15), builds `Stores`, runs readiness once to create the four connections, then reads the container's `eth0` counters (`/proc/net/dev`), runs readiness 20 times and reads them again. The same probe ran on the code before the change (the full comparison on every probe) and after it.
 
 | | Before ([json](readiness-traffic-before-2026-11-15.json)) | After ([json](readiness-traffic-after-2026-11-15.json)) |
 | --- | --- | --- |
@@ -24,10 +24,10 @@ Commands:
 
 ```sh
 GENUI_READINESS_TRAFFIC_REPORT=$PWD/evidence/APP-216/readiness-traffic-before-2026-11-15.json \
-  cargo test --locked -p forma-app-platform --lib storage::readiness_traffic_campaign::native_readiness_traffic_campaign -- --ignored --exact --nocapture
+  cargo test --locked -p forma-app-platform --lib storage::qualification::readiness_traffic::native_readiness_traffic_campaign -- --ignored --exact --nocapture
 # (catalog.rs changed)
 GENUI_READINESS_TRAFFIC_REPORT=$PWD/evidence/APP-216/readiness-traffic-after-2026-11-15.json \
-  cargo test --locked -p forma-app-platform --lib storage::readiness_traffic_campaign::native_readiness_traffic_campaign -- --ignored --exact --nocapture
+  cargo test --locked -p forma-app-platform --lib storage::qualification::readiness_traffic::native_readiness_traffic_campaign -- --ignored --exact --nocapture
 ```
 
 Both: `test result: ok. 1 passed`.
