@@ -275,6 +275,8 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
 
 ## 5. Removing a member
 
+**Suspected stolen session (APP-215).** Signing out everywhere ends a member's sessions but no longer ends the guest shares they made. A member who suspects a compromise also revokes their guest shares in the share dialog. If they can't, remove them below: removal ends every share. They can then be re-admitted with a new code.
+
 1. On **`/admin`** (W2; requires your `admin_policy` row): the member's row, **Remove**, confirm. W1's `admin_remove_member` revokes the membership and entitlement, advances the epoch (their session ends at the next request) and audits; it refuses yourself and the last admin.
    Reading the audit afterwards: a removal from `/admin` writes `membership.revoked` and `entitlement.revoked` on the **admission** chain with the actor being you (the admin) and the target's digest in the outcome; the operator channel's `revoke-membership` and `revoke-entitlement` write the same kinds on the **operator** chain with the actor being the target and no digest. Branch on `writer_role` before reading the actor. Your own membership was operator-seeded, so `/admin` shows no consent row for you; that is expected, every student has one.
 2. If their code was never redeemed, `admission revoke --code <code_id>` instead.

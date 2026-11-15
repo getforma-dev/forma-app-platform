@@ -1552,13 +1552,13 @@ async fn campaign() {
     )
     .await;
     assert_eq!(not_an_id.status, StatusCode::NOT_FOUND);
-    // APP-215 (content M1): the route shares the member's write window
-    // (`MEMBER_WRITES`, 120 an hour). With the reviewer's window full, a
+    // APP-215 (content M1, recheck): the route has its own window per member
+    // (`COMMAND_WRITES`, 300 an hour). With the reviewer's window full, a
     // well-formed same-origin command is 429 too_many_requests with
     // Retry-After and reaches no storage (the footprint below is unchanged);
     // another member's window is separate (the limiter's own test); clearing
     // the window admits again.
-    while auth.limits.admit_member_write(ORG, REVIEWER).is_ok() {}
+    while auth.limits.admit_command_write(ORG, REVIEWER).is_ok() {}
     let limited = send(
         &app,
         "POST",

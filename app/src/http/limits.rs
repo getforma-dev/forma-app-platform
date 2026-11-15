@@ -70,6 +70,13 @@ pub const LOOKUP_FAILURE_ADDRESS: &[Window] = &[per(15, 60), per(80, 3600)];
 /// slash-command name) share this window.
 pub const MEMBER_WRITES: &[Window] = &[per(120, 3600)];
 
+/// APP-215 recheck (review of PR #137, MAJOR 1): the audited command route
+/// (`POST /v1/work/{app}/{work}/commands/{command}`) has its own window per
+/// member, separate from `MEMBER_WRITES`, so a teacher's dense class hour
+/// (posting and closing two dozen items, grading two dozen entries, editing
+/// the app) never shares a budget with composer saves, uploads and shares.
+pub const COMMAND_WRITES: &[Window] = &[per(300, 3600)];
+
 /// Which check refused (APP-074 review m4): the index of its key in the
 /// checks, the blocking window's period, and when that window frees a slot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,6 +105,14 @@ impl Limiter {
     /// One row-creating or row-changing request of a member (`MEMBER_WRITES`).
     pub fn admit_member_write(&self, organization: &str, principal: &str) -> Result<(), u64> {
         self.admit(&[(&format!("writes:{organization}:{principal}"), MEMBER_WRITES)])
+    }
+
+    /// One audited command of a member (`COMMAND_WRITES`).
+    pub fn admit_command_write(&self, organization: &str, principal: &str) -> Result<(), u64> {
+        self.admit(&[(
+            &format!("commands:{organization}:{principal}"),
+            COMMAND_WRITES,
+        )])
     }
     /// `admit`, naming which key and window refused.
     pub fn admit_blocked(&self, checks: &[(&str, &[Window])]) -> Result<(), Blocked> {
@@ -204,6 +219,24 @@ mod tests {
 
     /// APP-113 review: the row-creating routes had no window; they share
     /// one per member (another member is unaffected).
+    /// APP-215 recheck: commands have their own, larger window, separate
+    /// from the member's other writes and from other members.
+    #[test]
+    fn command_writes_are_limited_per_member_and_apart_from_other_writes() {
+        let limiter = Limiter::default();
+        let org = "00000000-0000-4000-8000-000000000001";
+        assert_eq!(COMMAND_WRITES[0].limit, 300);
+        for _ in 0..COMMAND_WRITES[0].limit {
+            assert!(limiter.admit_command_write(org, "a").is_ok());
+        }
+        assert!(limiter.admit_command_write(org, "a").is_err());
+        assert!(
+            limiter.admit_member_write(org, "a").is_ok(),
+            "other writes keep their own window"
+        );
+        assert!(limiter.admit_command_write(org, "b").is_ok());
+    }
+
     #[test]
     fn member_writes_are_limited_per_member() {
         let limiter = Limiter::default();
