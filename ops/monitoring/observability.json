@@ -111,7 +111,7 @@
         "DatapointsToAlarm": 3,
         "Threshold": 1,
         "ComparisonOperator": "LessThanThreshold",
-        "TreatMissingData": "breaching",
+        "TreatMissingData": "missing",
         "AlarmActions": [{"Ref": "AlarmTopicArn"}],
         "OKActions": [{"Ref": "AlarmTopicArn"}]
       }
@@ -130,7 +130,7 @@
         "DatapointsToAlarm": 3,
         "Threshold": 1,
         "ComparisonOperator": "LessThanThreshold",
-        "TreatMissingData": "breaching",
+        "TreatMissingData": "missing",
         "AlarmActions": [{"Ref": "AlarmTopicArn"}],
         "OKActions": [{"Ref": "AlarmTopicArn"}]
       }
