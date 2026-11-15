@@ -1684,8 +1684,10 @@ pub(super) mod refresh_herd {
     //! - Also measured alone: one page's three reads, one data-role
     //!   transaction, one catalog comparison, and the role transactions each
     //!   read takes.
-    //!   The gate's p95 bound is 8 s (test profile, 2-vCPU runner); the
-    //!   release measurement's stays 6 s.
+    //!   The gate's p95 bound is 8 s (test profile, a shared 4-vCPU runner);
+    //!   the release measurement's stays 6 s. The gate's log also carries
+    //!   the runner's own pace alone (`gate_summary`), because the p95
+    //!   follows it (follow-up A5, 2026-11-15).
     //!
     //! The workload is narrower than the class's (release B integration
     //! review, MINOR-2). The share is 25 personal Contributor shares
@@ -2064,6 +2066,74 @@ pub(super) mod refresh_herd {
             })
             .count();
         safe && full + 1 >= herds.len()
+    }
+
+    /// Gate A in one line for the CI log, and the assertion's message when it
+    /// fails (follow-up A5, 2026-11-15): each herd's p95 and slowest page
+    /// against the bounds, its first attempts answered 503 beside the run's
+    /// admission refusals (503s with none refused are the 5 s handler
+    /// deadline, `http::HANDLER_DEADLINE`, on the document's eleven serial
+    /// transactions), and this runner's own pace before any load. The runs
+    /// that passed on 2026-11-15 read one page alone in 420–580 ms and one
+    /// data transaction in 5–13 ms; the two that failed read them in 711–740
+    /// ms and 10.3 ms on a runner whose whole job ran 1.5× slower, with the
+    /// same code that passed three seconds earlier on another runner.
+    fn gate_summary(run: &Value, alone: &Value, costs: &Value) -> String {
+        let herds = run["per_herd"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let per_herd: Vec<String> = herds
+            .iter()
+            .map(|herd| {
+                format!(
+                    "herd {}: p95 {} ms, slowest {} ms, {} first attempts answered 503, criteria {}",
+                    herd["herd"],
+                    herd["current_p95_ms"],
+                    herd["current_after_send"]["max_ms"],
+                    herd["first_attempt"]["503"].as_u64().unwrap_or(0),
+                    if herd["passed"] == true { "met" } else { "missed" }
+                )
+            })
+            .collect();
+        let saturated = run["admission_saturated"]
+            .as_object()
+            .map(|roles| roles.values().filter_map(Value::as_u64).sum::<u64>())
+            .unwrap_or(0);
+        format!(
+            "{}; bounds p95 {} ms, every page {} ms, two herds of three; admission refused {saturated}; this runner alone: one page {} ms p50, one data transaction {} ms p50 (runs that passed on 2026-11-15: 420-580 and 5-13)",
+            per_herd.join("; "),
+            millis(GATE_P95_WITHIN),
+            millis(CURRENT_MAX),
+            alone["p50_ms"],
+            costs["data_transaction"]["p50_ms"],
+        )
+    }
+
+    #[test]
+    fn gate_summary_names_the_herds_the_deadline_503s_and_the_runners_pace() {
+        let run = json!({
+            "per_herd": [
+                {"herd": 0, "current_p95_ms": 7476.8, "current_after_send": {"max_ms": 7568.2}, "first_attempt": {"200": 48}, "passed": true},
+                {"herd": 1, "current_p95_ms": 9974.1, "current_after_send": {"max_ms": 13762.9}, "first_attempt": {"200": 43, "503": 5}, "passed": false}
+            ],
+            "admission_saturated": {"workspace": 0, "control": 0, "data": 0, "worker": 0},
+        });
+        let alone = json!({"p50_ms": 711.2});
+        let costs = json!({"data_transaction": {"p50_ms": 10.3}});
+        let summary = gate_summary(&run, &alone, &costs);
+        assert_eq!(
+            summary,
+            "herd 0: p95 7476.8 ms, slowest 7568.2 ms, 0 first attempts answered 503, criteria met; \
+             herd 1: p95 9974.1 ms, slowest 13762.9 ms, 5 first attempts answered 503, criteria missed; \
+             bounds p95 8000 ms, every page 10000 ms, two herds of three; admission refused 0; \
+             this runner alone: one page 711.2 ms p50, one data transaction 10.3 ms p50 \
+             (runs that passed on 2026-11-15: 420-580 and 5-13)"
+        );
+        // A report without the fields still summarizes.
+        let bare = gate_summary(&json!({}), &json!({}), &json!({}));
+        assert!(bare.starts_with("; bounds p95 8000 ms"), "{bare}");
+        assert!(bare.contains("one page null ms p50"), "{bare}");
     }
 
     /// The 26-page measurement's own criteria (APP-197, Fable advisor in lieu
@@ -2959,8 +3029,14 @@ pub(super) mod refresh_herd {
         };
         let (gate_a, every_herd) = run(&bench, gate, &operator).await;
         let passed_gate = gate_verdict(&gate_a);
+        let gate_summary = gate_summary(
+            &gate_a,
+            report.get("one_page_alone").unwrap_or(&Value::Null),
+            report.get("costs_alone").unwrap_or(&Value::Null),
+        );
         report.insert("gate_every_herd".into(), json!(every_herd));
         println!("APP195 gate A: {gate_a}");
+        println!("APP195 gate A summary: {gate_summary}");
         runs.push(gate_a);
         let gate_c = Plan {
             name: "gate C: 15 pages at one instant, no retry, admitted 8 per role (before APP-195)",
@@ -3084,7 +3160,7 @@ pub(super) mod refresh_herd {
         );
         assert!(
             passed_gate,
-            "gate A: every herd safe and at least two of three meet every APP-195 run A criterion with {GATE_PAGES} pages"
+            "gate A: every herd safe and at least two of three meet every APP-195 run A criterion with {GATE_PAGES} pages. {gate_summary}"
         );
     }
 }
