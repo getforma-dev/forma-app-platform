@@ -737,16 +737,17 @@ pub async fn ask_post(
         return http::problem(StatusCode::SERVICE_UNAVAILABLE, "composer_unavailable");
     }
     let (user, known) = user(&question, &tables);
+    let member_key = model::member_of(&member);
     let reply = match state
         .composer
-        .complete_fast(SYSTEM, user, ASK_MAX_TOKENS, ASK_BUDGET)
+        .complete_fast(SYSTEM, user, ASK_MAX_TOKENS, ASK_BUDGET, Some(&member_key))
         .await
     {
         Ok(reply) => reply,
         Err(error) => {
             log("model", error.code(), 0);
             if error == ModelError::DailyCap {
-                return model::daily_limit();
+                return model::daily_limit_for(Some(&member_key));
             }
             return http::problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_answer");
         }

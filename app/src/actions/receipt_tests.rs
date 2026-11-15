@@ -269,7 +269,7 @@ async fn a_receipt_with_instructions_yields_at_most_a_create_draft() {
     });
     let parser = Parser::new(Some(hostile.clone() as Arc<dyn Model>), "stub");
     let parse = parser
-        .parse_receipt("", &image, &catalog, false, TODAY)
+        .parse_receipt("", &image, &catalog, false, TODAY, None)
         .await
         .unwrap();
     assert_eq!(parse.parsed.kind, Kind::Create, "never a decision");
@@ -288,7 +288,7 @@ async fn a_receipt_with_instructions_yields_at_most_a_create_draft() {
     let parser = Parser::new(Some(Arc::new(TextOnly) as Arc<dyn Model>), "stub");
     assert_eq!(
         parser
-            .parse_receipt("", &image, &catalog, false, TODAY)
+            .parse_receipt("", &image, &catalog, false, TODAY, None)
             .await
             .unwrap_err(),
         ParseFailure::CouldNotParse("model_refused")
@@ -297,7 +297,7 @@ async fn a_receipt_with_instructions_yields_at_most_a_create_draft() {
     let parser = Parser::new(None, "stub");
     assert_eq!(
         parser
-            .parse_receipt("", &image, &catalog, false, TODAY)
+            .parse_receipt("", &image, &catalog, false, TODAY, None)
             .await
             .unwrap_err(),
         ParseFailure::Unavailable
@@ -325,6 +325,7 @@ async fn the_rehearsed_receipt_parses_without_a_model_in_the_demo_only() {
             &catalog,
             true,
             TODAY,
+            None,
         )
         .await
         .unwrap();
@@ -337,7 +338,7 @@ async fn the_rehearsed_receipt_parses_without_a_model_in_the_demo_only() {
     // Outside the demo the same bytes need the model.
     assert_eq!(
         parser
-            .parse_receipt("", &image, &catalog, false, TODAY)
+            .parse_receipt("", &image, &catalog, false, TODAY, None)
             .await
             .unwrap_err(),
         ParseFailure::Unavailable
@@ -389,7 +390,7 @@ async fn real_haiku_vision_smoke() {
         for words in ["", "Sweetgreen lunch with the design team, Sarah approves"] {
             let started = std::time::Instant::now();
             let parse = parser
-                .parse_receipt(words, &image, &catalog, false, TODAY)
+                .parse_receipt(words, &image, &catalog, false, TODAY, None)
                 .await;
             let ms = started.elapsed().as_millis();
             match parse {

@@ -266,6 +266,7 @@ async fn real_haiku_folder_smoke() {
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-00000000e0a1",
             tokio::time::Instant::now() + std::time::Duration::from_secs(100),
+            None,
         )
         .await;
     println!(
@@ -309,6 +310,7 @@ async fn real_haiku_folder_smoke() {
             input.clone(),
             800,
             std::time::Duration::from_secs(20),
+            None,
         )
         .await;
     let judged = reply
@@ -369,6 +371,7 @@ async fn real_haiku_folder_smoke() {
             &[crate::composer::model::DocumentInput { title: "q3_metrics_brief.pdf", bytes: &pdf }],
             700,
             std::time::Duration::from_secs(40),
+            None,
         )
         .await;
     let parts = cited

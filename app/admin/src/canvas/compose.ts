@@ -11,7 +11,7 @@ import { showTiming, type Chip, type Step } from './timing';
 import { showChooser } from './slash';
 import { isUuid } from './render';
 import { unite } from './unite';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, MEMBER_DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 /** The composer route (`app/src/composer/routes.rs` PATH). */
 export const COMPOSE_URL = '/v1/compose';
@@ -40,6 +40,8 @@ export class ComposeError extends Error {
   constructor(
     readonly code: ComposeCode,
     readonly retryAfterSeconds: number | null = null,
+    /** APP-215: a `daily_limit` the server scoped to the member's own allowance. */
+    readonly memberLimit = false,
   ) {
     super(code);
   }
@@ -52,10 +54,15 @@ function retryAfter(response: Response): number | null {
   return Math.min(Number(raw.trim()), 24 * 3600);
 }
 
-/** The stable `code` of a design §9 problem body (`http::problem`), or `null`. */
+/** A design §9 problem body (`http::problem`): its stable `code` and, for a daily limit, its `scope`; `null` otherwise. */
+async function refusalBody(response: Response): Promise<{ code: string; scope: string | null } | null> {
+  const body = (await response.json().catch(() => null)) as { code?: unknown; scope?: unknown } | null;
+  if (!body || typeof body.code !== 'string' || body.code.length > 64) return null;
+  return { code: body.code, scope: typeof body.scope === 'string' ? body.scope : null };
+}
+/** The stable `code` of a design §9 problem body, or `null`. */
 async function refusalCode(response: Response): Promise<string | null> {
-  const body = (await response.json().catch(() => null)) as { code?: unknown } | null;
-  return body && typeof body.code === 'string' && body.code.length <= 64 ? body.code : null;
+  return (await refusalBody(response))?.code ?? null;
 }
 
 export async function composeIntent(text: string, pin: Pin = null): Promise<ComposeAnswer> {
@@ -75,7 +82,9 @@ export async function composeIntent(text: string, pin: Pin = null): Promise<Comp
   if (response.status === 404) throw new ComposeError('not_connected');
   if (response.status === 429) {
     // D10: the app's daily model-call cap is its own 429; the wait is until midnight UTC.
-    if ((await refusalCode(response)) === DAILY_LIMIT_CODE) throw new ComposeError('daily_limit');
+    // APP-215: scoped to the member, it is their own allowance.
+    const refusal = await refusalBody(response);
+    if (refusal?.code === DAILY_LIMIT_CODE) throw new ComposeError('daily_limit', null, refusal.scope === 'member');
     throw new ComposeError('too_many', retryAfter(response));
   }
   if (response.status === 422 || response.status === 400 || response.status === 413) {
@@ -124,6 +133,7 @@ export function messageFor(error: unknown): string {
     const minutes = Math.max(1, Math.ceil(error.retryAfterSeconds / 60));
     return `You have composed a few apps recently. Please try again in about ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Nothing was placed.`;
   }
+  if (error.code === 'daily_limit' && error.memberLimit) return `${MEMBER_DAILY_LIMIT_MESSAGE} Nothing was placed.`;
   return MESSAGES[error.code];
 }
 

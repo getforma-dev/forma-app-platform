@@ -1,6 +1,7 @@
 // An app-owned conversation and explicit, confirmed data-change mode. Neither
 // enters the builder or global action router; all requests name this saved work.
 import { ASK_REFUSALS, requestAsk, type AskReply, type RecordScope } from '../ask/client';
+import { dailyLimitMessage, isDailyLimit } from './daily-limit';
 import { mountAppDataActions, type AppDataActions } from './app-data-actions';
 import type { RowReference } from './box-api';
 import { isUuid } from './ids';
@@ -278,6 +279,7 @@ export function mountAppChat(host: HTMLElement, options: AppChatOptions): AppCha
         if ([401, 403, 404].includes(response.status)) {deny(); return;}
         const result = response.ok ? fileAnswer(value, file) : null;
         answer = result?.answer ?? (response.ok ? couldNotAnswer
+          : isDailyLimit(value) ? dailyLimitMessage(value)
           : ASK_REFUSALS[object(value) && typeof value.code === 'string' ? value.code : ''] ?? 'Ask is unavailable right now. Try again.');
         if (result) result.answer.actions = options.renderAnswerActions?.({kind: 'file', question, reply: result.reply,
           source: {app: options.app, work: options.work, boxId: box, fileId: file.id, fileName: file.name, revisionId: file.revision}});

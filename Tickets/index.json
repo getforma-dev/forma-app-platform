@@ -380,9 +380,10 @@
         "APP-211",
         "APP-213",
         "APP-212",
-        "APP-214"
+        "APP-214",
+        "APP-215"
       ],
-      "ticket_count": 51,
+      "ticket_count": 52,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -6652,6 +6653,35 @@
       "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
       "dependencies": [
         "APP-187"
+      ]
+    },
+    {
+      "id": "APP-215",
+      "title": "Security release: limits, per-member AI allowance, guest names and links, HSTS (2026-11-15 reviews)",
+      "path": "0-backlog/APP-215.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P0",
+      "Type": "Task",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "217",
+      "Size": "M",
+      "Repos": "forma-app-platform",
+      "Decision": "The coordinator (Claude, in lieu of Victor), 2026-11-15, from five independent security reviews of `origin/main` (identity, sharing, content/AI/uploads, infrastructure, going public) run for the Nov 28\u201330 class of 25 remote adult students. Each fix below is the review's smallest fix as decided; the identity window change is recorded as an [ADR-006 amendment](../../docs/architecture/ADR-006-SIGNIN-AND-VERIFICATION-PENDING.md), the guest-share change as an [ADR-014 amendment](../../docs/architecture/ADR-014-LIVE-APP-SHARING.md#amendment-2026-11-15-a-sponsors-sign-out-no-longer-pauses-their-guest-shares-app-215). No migration and no deployment-contract change: this is an ordinary promotion.",
+      "Requirements": "SR1, SR8",
+      "Depends on": "APP-154, APP-189",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "`release/security-2026-11-15`, PR #137",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": [
+        "APP-154",
+        "APP-189"
       ]
     }
   ]

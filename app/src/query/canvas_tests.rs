@@ -765,3 +765,79 @@ fn library_sample_sources_and_the_sample_chip() {
         ("o2", "sample", "Sample data")
     );
 }
+
+/// APP-215 (sharing M1; ADR-020 §17.10): the records card of a shared page
+/// labels a creator with the neutral handle for a guest, and with the chosen
+/// name for a member, in the `filed by` cell and the row's `creator` alike.
+#[test]
+fn a_guest_records_card_never_carries_a_members_chosen_name() {
+    use crate::storage::{
+        CollectionSummary, RecordCommand, RecordField, RecordRow, RecordsListing,
+    };
+    let org = "00000000-0000-4000-8000-0000000000e1";
+    let app = "00000000-0000-4000-8000-0000000000e2";
+    let work = "00000000-0000-4000-8000-0000000000e3";
+    let collection = "00000000-0000-4000-8000-0000000000e4";
+    let creator = "c0000e05-0000-4000-8000-0000000000e5";
+    crate::directory::set_member_name(org, creator, Some("Dana Kim"));
+    let listing = RecordsListing {
+        app: app.into(),
+        work: work.into(),
+        publication: "00000000-0000-4000-8000-0000000000e6".into(),
+        definition_digest: String::new(),
+        work_version: 1,
+        can_write: false,
+        truncated: false,
+        collections: vec![CollectionSummary {
+            collection: collection.into(),
+            schema: "note".into(),
+            schema_version: 1,
+            fields: vec![RecordField {
+                id: "title".into(),
+                value_type: json!({"type":"text"}),
+                nullable: false,
+                value: serde_json::Value::Null,
+                writable: true,
+            }],
+            commands: vec![RecordCommand {
+                id: "add".into(),
+                operation: "create".into(),
+                writable_fields: vec!["title".into()],
+                transitions: vec![],
+                rules: Default::default(),
+            }],
+        }],
+        records: vec![RecordRow {
+            record_id: "00000000-0000-4000-8000-0000000000e7".into(),
+            collection: collection.into(),
+            schema: "note".into(),
+            version: 1,
+            commit_sequence: 1,
+            committed_at: "2026-11-15T10:00:00Z".into(),
+            creator: creator.into(),
+            updater: creator.into(),
+            values: json!([{"field_id":"title","value":{"type":"text","value":"hello"}}]),
+        }],
+    };
+    let labels = |guest: bool| -> (String, String) {
+        let cards = records_cards(org, app, work, &listing, "reader", guest);
+        let row = &cards[0].rows[0];
+        let filed_by = row
+            .cells
+            .iter()
+            .find(|c| c.id == "filed_by")
+            .map(|c| c.text.clone())
+            .unwrap();
+        (filed_by, row.creator.clone())
+    };
+    assert_eq!(labels(false), ("Dana Kim".into(), "Dana Kim".into()));
+    assert_eq!(
+        labels(true),
+        ("Member c0000e05".into(), "Member c0000e05".into())
+    );
+    crate::directory::set_member_name(org, creator, None);
+    assert_eq!(
+        labels(false),
+        ("Member c0000e05".into(), "Member c0000e05".into())
+    );
+}

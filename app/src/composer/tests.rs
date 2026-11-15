@@ -192,6 +192,7 @@ fn a_valid_generated_definition_is_admitted_and_labeled_generated() {
             ORG,
             APP,
             far(),
+            None,
         ))
         .unwrap();
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -257,6 +258,7 @@ fn a_simple_list_retry_names_the_required_empty_transition_array() {
             ORG,
             APP,
             far(),
+            None,
         ))
         .unwrap();
     assert_eq!(generated.refused, ["encoding"]);
@@ -302,6 +304,7 @@ fn hostile_outputs_are_refused_by_admission_and_retries_carry_codes_only() {
             ORG,
             APP,
             far(),
+            None,
         ))
         .unwrap_err();
     assert_eq!(
@@ -474,6 +477,7 @@ fn template_customization_passes_the_actual_admitted_starting_definition() {
             ORG,
             APP,
             far(),
+            None,
         ))
         .unwrap();
     let requests = script.requests();
@@ -509,7 +513,7 @@ fn a_clean_workspace_generates_a_records_app_from_a_sentence() {
     let script = Script::new(vec![Ok(first.to_string())]);
     let intent = "Track my team's book club reading list: title, author, who suggested it and whether we've read it";
     let generated = runtime()
-        .block_on(composer(&script).generate(intent, &[], ORG, APP, far()))
+        .block_on(composer(&script).generate(intent, &[], ORG, APP, far(), None))
         .unwrap();
     assert!(generated.refused.is_empty());
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -551,7 +555,7 @@ fn private_entries_and_reviewer_only_commands_are_generated_from_plain_words() {
     let script = Script::new(vec![Ok(prompt::private_entries_example().to_string())]);
     let intent = "Collect suggestions from everyone; each person sees only the suggestions they sent in, and only reviewers can accept one";
     let generated = runtime()
-        .block_on(composer(&script).generate(intent, &[], ORG, APP, far()))
+        .block_on(composer(&script).generate(intent, &[], ORG, APP, far(), None))
         .unwrap();
     assert!(generated.refused.is_empty());
     assert_eq!(generated.planned.origin, Origin::Generated);
@@ -822,7 +826,7 @@ fn plain_words_compose_participation_apps_through_admission() {
     ] {
         let script = Script::new(vec![Ok(reply.to_string())]);
         let generated = runtime()
-            .block_on(composer(&script).generate(sentence, &[], ORG, APP, far()))
+            .block_on(composer(&script).generate(sentence, &[], ORG, APP, far(), None))
             .unwrap();
         assert!(generated.refused.is_empty(), "{sentence}");
         assert_eq!(generated.planned.origin, Origin::Generated);
@@ -1289,7 +1293,7 @@ fn a_participation_refusal_retries_with_its_code_and_fix_and_no_value() {
         Ok(prompt::plain_words::quiz().to_string()),
     ]);
     let generated = runtime()
-        .block_on(composer(&script).generate(prompt::plain_words::QUIZ, &[], ORG, APP, far()))
+        .block_on(composer(&script).generate(prompt::plain_words::QUIZ, &[], ORG, APP, far(), None))
         .unwrap();
     let rule = "participation_rule: set_now field cannot be writable";
     assert_eq!(generated.refused, vec![rule]);
@@ -1399,26 +1403,26 @@ fn multi_enum_follows_app_208s_switch_and_ambiguous_records_inputs_are_refused()
 fn a_model_failure_ends_generation_and_an_absent_key_disables_it() {
     let script = Script::new(vec![Err(ModelError::Timeout)]);
     let failure = runtime()
-        .block_on(composer(&script).generate("abc", &sources(SPEND), ORG, APP, far()))
+        .block_on(composer(&script).generate("abc", &sources(SPEND), ORG, APP, far(), None))
         .unwrap_err();
     assert_eq!(failure, GenerationFailure::Model(ModelError::Timeout));
     assert_eq!(script.requests().len(), 1);
     let disabled = Composer::new(None, "r", "g");
     assert!(!disabled.enabled());
     let failure = runtime()
-        .block_on(disabled.generate("abc", &sources(SPEND), ORG, APP, far()))
+        .block_on(disabled.generate("abc", &sources(SPEND), ORG, APP, far(), None))
         .unwrap_err();
     assert_eq!(failure, GenerationFailure::Model(ModelError::Unavailable));
     let library = [library_app(SPEND, APP)];
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &library, None))
+            .block_on(disabled.route("abc", &library, None, None))
             .unwrap_err(),
         ModelError::Unavailable
     );
     assert_eq!(
         runtime()
-            .block_on(disabled.route("abc", &[], None))
+            .block_on(disabled.route("abc", &[], None, None))
             .unwrap(),
         (Decision::Generate, "empty_library")
     );
@@ -1499,7 +1503,7 @@ fn the_router_decides_only_within_the_catalog() {
         .block_on(
             composer(&script)
                 .with_matcher(false)
-                .route("review spend", &library, None),
+                .route("review spend", &library, None, None),
         )
         .unwrap();
     assert_eq!(routed, (Decision::Retrieve { index: 1 }, "high"));
@@ -1602,6 +1606,7 @@ fn the_client_retries_server_failures_once_each_and_never_a_client_refusal() {
             user: "u".into(),
             max_tokens: 10,
             budget: std::time::Duration::from_secs(20),
+            member: None,
         };
         let reply = client.complete(&request).await.unwrap();
         assert_eq!(reply.text, "{\"choice\":\"none\",\"confidence\":\"low\"}");
@@ -1658,6 +1663,7 @@ fn the_client_sends_nothing_once_its_daily_cap_is_reached() {
             user: "u".into(),
             max_tokens: 10,
             budget: std::time::Duration::from_secs(20),
+            member: None,
         };
         // One call is one slot, its retry included (503 then 200).
         client.complete(&request).await.unwrap();
@@ -1936,6 +1942,7 @@ fn the_budgets_fit_the_route_deadline_and_an_attempt_needs_room() {
         ORG,
         APP,
         tokio::time::Instant::now() + std::time::Duration::from_secs(12),
+        None,
     ));
     assert_eq!(outcome.unwrap_err(), GenerationFailure::OutOfTime);
     assert!(script.requests().is_empty());
@@ -1965,7 +1972,7 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
     runtime().block_on(async {
         // A title match is a confident pick with no model at all...
         assert_eq!(
-            disabled.route("spend review", &library, None).await,
+            disabled.route("spend review", &library, None, None).await,
             Ok((Decision::Retrieve { index: 1 }, "matched"))
         );
         // ...never the excluded authoring app...
@@ -1974,14 +1981,15 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
                 .route(
                     "spend review",
                     &library,
-                    Some("00000000-0000-4000-8000-0000000000c9")
+                    Some("00000000-0000-4000-8000-0000000000c9"),
+                    None,
                 )
                 .await,
             Err(ModelError::Unavailable)
         );
         // ...and no hit needs the model.
         assert_eq!(
-            disabled.route("zzz qqq", &library, None).await,
+            disabled.route("zzz qqq", &library, None, None).await,
             Err(ModelError::Unavailable)
         );
         let reply =
@@ -1989,12 +1997,12 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
         let script = Script::new(vec![Ok(reply.into()), Ok(reply.into())]);
         let with_model = composer(&script);
         assert_eq!(
-            with_model.route("spend review", &library, None).await,
+            with_model.route("spend review", &library, None, None).await,
             Ok((Decision::Retrieve { index: 1 }, "matched"))
         );
         assert!(script.requests().is_empty(), "no model call for a pick");
         assert_eq!(
-            with_model.route("zzz qqq", &library, None).await,
+            with_model.route("zzz qqq", &library, None, None).await,
             Ok((Decision::Retrieve { index: 0 }, "high"))
         );
         assert_eq!(script.requests().len(), 1);
@@ -2003,7 +2011,7 @@ fn the_instant_matcher_routes_before_the_model_in_every_organization() {
             with_model
                 .clone()
                 .with_matcher(false)
-                .route("spend review", &library, None)
+                .route("spend review", &library, None, None)
                 .await,
             Ok((Decision::Retrieve { index: 0 }, "high"))
         );
@@ -2094,7 +2102,7 @@ fn real_model_smoke() {
         // is recorded whatever the later steps do; judged at the end.
         let started = std::time::Instant::now();
         let participation = composer
-            .generate(prompt::plain_words::QUIZ, &[], ORG, APP, far())
+            .generate(prompt::plain_words::QUIZ, &[], ORG, APP, far(), None)
             .await;
         let features = match &participation {
             Ok(generated) => {
@@ -2132,6 +2140,7 @@ fn real_model_smoke() {
                 "Review expenses over $200 and record a decision on each",
                 &library,
                 None,
+                None,
             )
             .await;
         eprintln!("smoke: routed={routed:?} in {} ms", started.elapsed().as_millis());
@@ -2140,6 +2149,7 @@ fn real_model_smoke() {
             .route(
                 "Which destinations receive the most bytes each minute?",
                 &library,
+                None,
                 None,
             )
             .await;
@@ -2152,6 +2162,7 @@ fn real_model_smoke() {
                 ORG,
                 APP,
                 far(),
+                None,
             )
             .await;
         match &generated {
@@ -2176,7 +2187,7 @@ fn real_model_smoke() {
         // No persistence: only the admitted definition and counts are read.
         let started = std::time::Instant::now();
         let generated = composer.generate(
-            "Create a book club reading list", &[], ORG, APP, far(),
+            "Create a book club reading list", &[], ORG, APP, far(), None,
         ).await.expect("a clean workspace reading list must be admitted");
         let content = admission::decode(&generated.planned.admitted.canonical).unwrap();
         let inputs = content["inputs"].as_array().unwrap();
@@ -2222,19 +2233,19 @@ fn ds03_nearest_without_a_model_needs_the_demo_switch() {
         // Two identical titles: a near tie the matcher cannot settle.
         assert_eq!(
             disabled
-                .route_for("spend review", &library, None, false)
+                .route_for("spend review", &library, None, false, None)
                 .await,
             Err(ModelError::Unavailable),
             "switch off: no nearest answer"
         );
         assert_eq!(
-            disabled.route("spend review", &library, None).await,
+            disabled.route("spend review", &library, None, None).await,
             Err(ModelError::Unavailable),
             "route is the switch-off case"
         );
         assert_eq!(
             disabled
-                .route_for("spend review", &library, None, true)
+                .route_for("spend review", &library, None, true, None)
                 .await,
             Ok((Decision::Retrieve { index: 0 }, "nearest")),
             "switch on: the nearest candidate, labeled retrieved"

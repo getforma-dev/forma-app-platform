@@ -53,7 +53,7 @@ import { appComponentVisible } from '../presentation/presentation';
 import type { WidgetCard } from './widgets/card';
 import { widgetFor, widgetKind, widgetOfItem } from './widgets/index';
 import { validState, type WidgetKind, type WidgetState } from './widgets/state';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, MEMBER_DAILY_LIMIT_MESSAGE } from './daily-limit';
 
 export const SHAPE_URL = '/v1/shape';
 type Report = (message: string) => void;
@@ -210,7 +210,9 @@ const REFUSALS: Record<string, string> = {
  * sentences work without a model (APP-098 DS-53), so only there does the
  * no-model refusal suggest them.
  */
-export function shapeRefusal(code: string, demo: boolean): string | undefined {
+export function shapeRefusal(code: string, demo: boolean, memberLimit = false): string | undefined {
+  // APP-215: a daily limit scoped to the member is their own allowance.
+  if (code === DAILY_LIMIT_CODE && memberLimit) return MEMBER_DAILY_LIMIT_MESSAGE;
   if (code === 'composer_unavailable' && demo) {
     return `${REFUSALS.composer_unavailable} Try “only red invoices”, “total by month” or “highlight overdue in red”.`;
   }
@@ -229,7 +231,7 @@ async function requestShape(body: Record<string, unknown>): Promise<{ target: st
   }
   const answer = (await response.json().catch(() => null)) as Record<string, unknown> | null;
   if (response.status === 404) return 'You can’t open that app, so it can’t be shaped.';
-  if (!response.ok) return shapeRefusal(typeof answer?.code === 'string' ? answer.code : '', isDemoCanvas()) ?? 'The shape could not be made right now. Nothing changed.';
+  if (!response.ok) return shapeRefusal(typeof answer?.code === 'string' ? answer.code : '', isDemoCanvas(), answer?.scope === 'member') ?? 'The shape could not be made right now. Nothing changed.';
   if (!answer || typeof answer.target !== 'string') return REFUSALS.could_not_shape ?? '';
   return { target: answer.target, spec: answer.spec };
 }

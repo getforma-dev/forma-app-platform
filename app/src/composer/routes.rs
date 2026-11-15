@@ -234,6 +234,8 @@ pub(crate) async fn compose_instant(
         log_refused(member, code, origin, started);
         refusal
     };
+    // APP-215: every model call of this composition is the member's.
+    let member_key = super::model::member_of(member);
     // DS-53, DS-03: the demo flag for the rehearsed transform and for the
     // matcher's nearest candidate when no model is configured.
     let demo = composer.demo_for(member.organization());
@@ -294,6 +296,7 @@ pub(crate) async fn compose_instant(
                     member.organization(),
                     &authoring.app,
                     deadline,
+                    Some(&member_key),
                 )
                 .await
                 .map_err(|error| match error {
@@ -369,7 +372,7 @@ pub(crate) async fn compose_instant(
         Pin::Template(_) => unreachable!("template composition is handled above"),
         Pin::Free | Pin::Chooser => {
             composer
-                .route_for(intent, &context.library, exclude, demo)
+                .route_for(intent, &context.library, exclude, demo, Some(&member_key))
                 .await
         }
     };
@@ -426,7 +429,7 @@ pub(crate) async fn compose_instant(
                 && context.authoring.is_some()
                 && context.owner_publish_policy.is_some()
                 && !(demo && transform::rehearsed(intent).is_some());
-            if tailors && composer.enabled() && composer.daily_cap_reached() {
+            if tailors && composer.enabled() && composer.daily_cap_reached_for(&member_key) {
                 return Err(refused(
                     "model_daily_cap",
                     Some(Origin::Adapted),
@@ -523,6 +526,7 @@ pub(crate) async fn compose_instant(
                     member.organization(),
                     &authoring.app,
                     deadline,
+                    Some(&member_key),
                 )
                 .await
             {
@@ -957,7 +961,12 @@ impl Tailor {
     ) -> Result<Composed, (&'static str, &'static str)> {
         let organization = member.organization();
         let (parsed, source) = composer
-            .transform(&self.intent, &self.library, self.demo)
+            .transform(
+                &self.intent,
+                &self.library,
+                self.demo,
+                Some(&super::model::member_of(member)),
+            )
             .await
             .map_err(|failure| match failure {
                 TransformFailure::Model(error) => (error.code(), "model"),
@@ -1278,6 +1287,8 @@ async fn compose(State(state): State<Arc<Compose>>, request: Request) -> Respons
         Err(Refused::CouldNotCompose(_)) => {
             problem(StatusCode::UNPROCESSABLE_ENTITY, "could_not_compose")
         }
-        Err(Refused::DailyLimit) => super::model::daily_limit(),
+        Err(Refused::DailyLimit) => {
+            super::model::daily_limit_for(Some(&super::model::member_of(&member)))
+        }
     }
 }

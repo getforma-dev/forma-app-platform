@@ -236,10 +236,11 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
             "widget customization refused"
         );
     };
+    let member_key = crate::composer::model::member_of(&member);
     match state
         .customizer
         // DS-66: rehearsed restyles, demo organization only.
-        .customize(widget, &current, &text, demo)
+        .customize(widget, &current, &text, demo, Some(&member_key))
         .await
     {
         Ok(outcome) => {
@@ -273,7 +274,7 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
         }
         Err(Failure::DailyLimit) => {
             log_refused("model_daily_cap");
-            crate::composer::model::daily_limit()
+            crate::composer::model::daily_limit_for(Some(&member_key))
         }
     }
 }

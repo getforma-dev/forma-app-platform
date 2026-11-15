@@ -1443,7 +1443,7 @@ mod smoke {
             };
             let app = &library[index];
             let started = std::time::Instant::now();
-            let outcome = runtime.block_on(composer.transform(sentence, app, false));
+            let outcome = runtime.block_on(composer.transform(sentence, app, false, None));
             let model_ms = started.elapsed().as_millis();
             let decision = match outcome {
                 Ok((transform, _)) => match plan_transformed(

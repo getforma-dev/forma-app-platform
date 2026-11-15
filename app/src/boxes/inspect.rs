@@ -12,9 +12,33 @@ use crate::imports::sandbox::{
 };
 use serde_json::{json, Map, Value};
 use std::time::Duration;
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 /// A parse's deadline (well inside the guest's 120 s; demo files are small).
 pub const PARSE_DEADLINE: Duration = Duration::from_secs(30);
+/// APP-215 (content M2): parser hosts running at once across the whole
+/// server on this path. Every upload preview, data read and registration
+/// spawns one `parser-host --job` child with a 2.5 GiB RSS kill line
+/// (`imports::sandbox`); the editable-import path takes one slot and the
+/// original-file viewer two, but this hot path took none, so a handful of
+/// members importing spreadsheets at once could take the 8 GiB task down.
+/// Two fit the envelope.
+pub const PARSER_SLOTS: usize = 2;
+/// How long a caller past the slots waits for one before it is refused
+/// `parse_busy` (the upload itself is stored; only its preview says so). The
+/// folder routes run under the composer's 120 s deadline, so the wait plus
+/// `PARSE_DEADLINE` stays inside it.
+pub const PARSE_QUEUE_WAIT: Duration = Duration::from_secs(10);
+static PARSERS: Semaphore = Semaphore::const_new(PARSER_SLOTS);
+
+/// One parser slot within `wait`, else the `parse_busy` refusal (a closed
+/// semaphore, which never happens to a static one, is refused the same way).
+async fn parser_slot(wait: Duration) -> Result<SemaphorePermit<'static>, ParseRefusal> {
+    match tokio::time::timeout(wait, PARSERS.acquire()).await {
+        Ok(Ok(permit)) => Ok(permit),
+        _ => Err(ParseRefusal::Failure("parse_busy")),
+    }
+}
 /// Columns a box data file may have (the contract's field bound).
 pub const MAX_COLUMNS: usize = 32;
 
@@ -121,6 +145,8 @@ async fn run(
         bytes: bytes.len() as u64,
     };
     let config = ParseConfig { format, sheet };
+    // APP-215: the slot is held for the child's whole life and released here.
+    let _slot = parser_slot(PARSE_QUEUE_WAIT).await?;
     sandbox::parse_with(
         identity,
         std::io::Cursor::new(bytes.to_vec()),
@@ -1085,6 +1111,32 @@ mod tests {
         assert!(confirmed(&inferred, &json!([{"id": "b", "type": "text", "nullable": false}, {"id": "a", "type": "text", "nullable": false}])).is_none());
         assert!(confirmed(&inferred, &json!([{"id": "a", "type": "sql", "nullable": false}, {"id": "b", "type": "text", "nullable": false}])).is_none());
         assert!(confirmed(&inferred, &json!([{"id": "a", "type": "text", "nullable": false, "x": 1}, {"id": "b", "type": "text", "nullable": false}])).is_none());
+    }
+
+    /// APP-215 (content M2): two parses run at once; a third waits its
+    /// bounded time and is refused `parse_busy`, taking nothing; a freed slot
+    /// admits the next waiter; every slot comes back.
+    #[tokio::test]
+    async fn two_parsers_run_at_once_and_a_third_is_refused_busy_after_its_wait() {
+        assert_eq!(PARSER_SLOTS, 2);
+        let first = PARSERS.acquire().await.unwrap();
+        let second = PARSERS.acquire().await.unwrap();
+        assert_eq!(PARSERS.available_permits(), 0);
+        let started = std::time::Instant::now();
+        let refused = parser_slot(Duration::from_millis(50)).await;
+        assert_eq!(refused.err(), Some(ParseRefusal::Failure("parse_busy")));
+        assert!(started.elapsed() >= Duration::from_millis(50));
+        assert_eq!(PARSERS.available_permits(), 0, "a refusal takes nothing");
+        drop(first);
+        let third = parser_slot(Duration::from_millis(50)).await.unwrap();
+        assert_eq!(PARSERS.available_permits(), 0);
+        drop((second, third));
+        assert_eq!(PARSERS.available_permits(), PARSER_SLOTS);
+        assert_eq!(
+            refusal_code(&ParseRefusal::Failure("parse_busy")),
+            "parse_busy"
+        );
+        assert!(PARSE_QUEUE_WAIT + PARSE_DEADLINE < crate::composer::COMPOSE_DEADLINE);
     }
 
     #[test]

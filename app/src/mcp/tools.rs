@@ -719,7 +719,10 @@ async fn compose_app(
                 "could_not_compose",
                 "That could not be composed into an admitted app. Nothing was placed.",
             ),
-            Refused::DailyLimit => Output::error("daily_limit", composer::model::DAILY_LIMIT_TEXT),
+            Refused::DailyLimit => Output::error(
+                "daily_limit",
+                composer::model::daily_limit_text_for(Some(&composer::model::member_of(member))),
+            ),
         })?;
     attribute(stores, caller, &composed.app, &composed.work, None).await;
     let origin = composed.origin.as_str();
@@ -1583,10 +1586,11 @@ async fn folder_formation(
     match crate::boxes::intent::ask(&instruction) {
         Some(crate::boxes::intent::Ask::Brief) => {
             // The brief route's own per-member window, shared with the canvas.
-            crate::boxes::routes::admit_explain(&boxes, &caller.request).map_err(folder_refused)?;
+            crate::boxes::routes::admit_explain(&boxes, &caller.request)
+                .map_err(|r| folder_refused(r, &composer::model::member_of(&caller.request)))?;
             let brief = crate::boxes::brief::generate(&boxes, &caller.request, &box_id)
                 .await
-                .map_err(folder_refused)?;
+                .map_err(|r| folder_refused(r, &composer::model::member_of(&caller.request)))?;
             Ok(Output::ok(
                 "ok",
                 "Folder brief ready (numbers from receipts, PDF statements cited by page).".into(),
@@ -1595,7 +1599,8 @@ async fn folder_formation(
         }
         _ => {
             // The composer's per-member window, shared with the canvas.
-            crate::boxes::routes::admit_compose(&boxes, &caller.request).map_err(folder_refused)?;
+            crate::boxes::routes::admit_compose(&boxes, &caller.request)
+                .map_err(|r| folder_refused(r, &composer::model::member_of(&caller.request)))?;
             let purpose = crate::boxes::intent::purpose(&instruction);
             let built = crate::boxes::routes::build_from_box(
                 &boxes,
@@ -1613,7 +1618,7 @@ async fn folder_formation(
                 crate::boxes::routes::BuildRefusal::CouldNotCompose(_) => Output::invalid(
                     "Forma could not compose an app from this folder; rephrase the purpose.",
                 ),
-                other => folder_refused(other),
+                other => folder_refused(other, &composer::model::member_of(&caller.request)),
             })?;
             attribute(stores, caller, &built.placed.app, &built.placed.work, None).await;
             let mut value = crate::boxes::routes::built_json(&built);
@@ -1632,10 +1637,11 @@ async fn folder_formation(
 
 async fn folder_brief(caller: &AgentCaller, arguments: &Value) -> ToolResult {
     let (boxes, box_id, _) = resolve_folder(caller, arguments).await?;
-    crate::boxes::routes::admit_explain(&boxes, &caller.request).map_err(folder_refused)?;
+    crate::boxes::routes::admit_explain(&boxes, &caller.request)
+        .map_err(|r| folder_refused(r, &composer::model::member_of(&caller.request)))?;
     let brief = crate::boxes::brief::generate(&boxes, &caller.request, &box_id)
         .await
-        .map_err(folder_refused)?;
+        .map_err(|r| folder_refused(r, &composer::model::member_of(&caller.request)))?;
     Ok(Output::ok(
         "ok",
         "Folder brief ready (numbers from receipts, PDF statements cited by page).".into(),
@@ -1643,17 +1649,19 @@ async fn folder_brief(caller: &AgentCaller, arguments: &Value) -> ToolResult {
     ))
 }
 
-/// A folder refusal as a tool error (the folder routes' windows included).
-fn folder_refused(refused: crate::boxes::routes::BuildRefusal) -> Output {
+/// A folder refusal as a tool error (the folder routes' windows included);
+/// `member` (APP-215) says whose allowance a `daily_limit` is.
+fn folder_refused(refused: crate::boxes::routes::BuildRefusal, member: &str) -> Output {
     match refused {
         crate::boxes::routes::BuildRefusal::NotFound => Output::not_found(),
         crate::boxes::routes::BuildRefusal::TooMany(_) => Output::error(
             "too_many_requests",
             "Too many folder requests in the last hour. Try again later.",
         ),
-        crate::boxes::routes::BuildRefusal::DailyLimit => {
-            Output::error("daily_limit", composer::model::DAILY_LIMIT_TEXT)
-        }
+        crate::boxes::routes::BuildRefusal::DailyLimit => Output::error(
+            "daily_limit",
+            composer::model::daily_limit_text_for(Some(member)),
+        ),
         _ => Output::unavailable(),
     }
 }

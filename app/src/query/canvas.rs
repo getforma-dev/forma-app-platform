@@ -963,13 +963,17 @@ pub fn form_card(work: &str, view: &commands::RecordView) -> Option<FormCardProp
 
 /// A records card from a listing (ADR-011 scenarios), one per collection;
 /// none for a work without collections. `principal` is the reader (APP-104:
-/// a pending record they filed themselves is not waiting for them).
+/// a pending record they filed themselves is not waiting for them). `guest`
+/// is a reader outside the organization (a live share's guest, APP-215
+/// sharing M1): the `filed by` cells and `creator` carry the neutral handle
+/// and never a member's chosen name (ADR-020 §17.10, `directory::creator_label`).
 pub fn records_cards(
     organization: &str,
     app: &str,
     work: &str,
     listing: &RecordsListing,
     principal: &str,
+    guest: bool,
 ) -> Vec<RecordsCardProps> {
     let seeded = crate::composer::matcher::seeded_work(work);
     listing
@@ -1073,7 +1077,7 @@ pub fn records_cards(
                     }
                     cells.push(CellProps {
                         id: "filed_by".into(),
-                        text: crate::directory::label(organization, &record.creator),
+                        text: crate::directory::creator_label(guest, organization, &record.creator),
                         raw: String::new(),
                     });
                     RecordRowProps {
@@ -1087,7 +1091,11 @@ pub fn records_cards(
                         status,
                         pending: is_pending,
                         cells,
-                        creator: crate::directory::label(organization, &record.creator),
+                        creator: crate::directory::creator_label(
+                            guest,
+                            organization,
+                            &record.creator,
+                        ),
                         committed_at: record.committed_at.clone(),
                         commit_sequence: record.commit_sequence.to_string(),
                     }
@@ -1334,7 +1342,7 @@ fn library_source(organization: &str, listed: &OpenableWork, read: &WorkRead) ->
     if let Some(listing) = &read.listing {
         for card in page::automatic_records(
             &read.outline,
-            records_cards(organization, app, work, listing, ""),
+            records_cards(organization, app, work, listing, "", false),
         ) {
             cards.push(library_card(card.id, card.title, "records"));
         }
@@ -1514,6 +1522,7 @@ async fn assemble(
                     work,
                     listing,
                     member.principal(),
+                    false,
                 ),
             ),
             super::canvas_ledger::ledger_cards(member.organization(), app, work, listing)
@@ -1832,6 +1841,7 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
                 &listed.work,
                 listing,
                 member.principal(),
+                false,
             )
             .iter()
             .any(|r| r.waiting != "0")

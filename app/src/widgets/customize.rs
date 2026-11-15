@@ -301,6 +301,7 @@ impl Customizer {
         current: &Value,
         sentence: &str,
         demo: bool,
+        member: Option<&str>,
     ) -> Result<Outcome, Failure> {
         let started = Instant::now();
         let elapsed = || u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -324,6 +325,7 @@ impl Customizer {
             user: user(widget, current, sentence),
             max_tokens: MAX_TOKENS,
             budget: BUDGET,
+            member: member.map(str::to_owned),
         };
         let reply = model
             .complete(&request)

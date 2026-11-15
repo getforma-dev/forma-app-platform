@@ -1,0 +1,75 @@
+{
+  "head": "3db613ce",
+  "breaks": [
+    {
+      "id": "B2",
+      "fix": "2: the command route takes the member's write window",
+      "file": "app/src/commands/routes.rs",
+      "change": "the admit_member_write call before commit removed",
+      "command": "just campaign command",
+      "exit": 101,
+      "seconds": 44.0,
+      "caught": true,
+      "failed": "app/src/storage/command_qualification.rs:1571:5: assertion `left == right` failed: {\"code\":\"not_found\",\"status\":404}",
+      "restored": true,
+      "tree_clean": true,
+      "head": "3db613ce"
+    },
+    {
+      "id": "B3",
+      "fix": "3: two parser slots",
+      "file": "app/src/boxes/inspect.rs",
+      "change": "a third parser slot",
+      "command": "cargo test --locked -p forma-app-platform --lib -- boxes::inspect::tests::two_parsers_run_at_once_and_a_third_is_refused_busy_after_its_wait",
+      "exit": 101,
+      "seconds": 22.3,
+      "caught": true,
+      "failed": "app/src/boxes/inspect.rs:1124:9: assertion `left == right` failed",
+      "restored": true,
+      "tree_clean": true,
+      "head": "3db613ce"
+    },
+    {
+      "id": "B4",
+      "fix": "4: the member's allowance refuses before the process cap",
+      "file": "app/src/composer/model.rs",
+      "change": "the member's refusal never fires (the slot is still taken)",
+      "command": "cargo test --locked -p forma-app-platform --lib -- composer::model::tests::the_client_admits_against_the_member_allowance_then_the_process_cap",
+      "exit": 101,
+      "seconds": 20.9,
+      "caught": true,
+      "failed": "app/src/composer/model.rs:1037:9: assertion `left == right` failed: the member's allowance refuses first",
+      "restored": true,
+      "tree_clean": true,
+      "head": "3db613ce"
+    },
+    {
+      "id": "B5",
+      "fix": "5: a guest reads the neutral handle on the records card",
+      "file": "app/src/query/canvas.rs",
+      "change": "the filed-by cell ignores the guest flag",
+      "command": "cargo test --locked -p forma-app-platform --lib -- query::canvas::tests::a_guest_records_card_never_carries_a_members_chosen_name",
+      "exit": 101,
+      "seconds": 26.0,
+      "caught": true,
+      "failed": "app/src/query/canvas_tests.rs:834:5: assertion `left == right` failed",
+      "restored": true,
+      "tree_clean": true,
+      "head": "3db613ce"
+    },
+    {
+      "id": "B6",
+      "fix": "6: a sponsor's sign-out keeps the guest share live",
+      "file": "app/src/storage/shared_access.rs",
+      "change": "the sponsor-epoch equality put back",
+      "command": "just campaign live-sharing",
+      "exit": 101,
+      "seconds": 25.9,
+      "caught": true,
+      "failed": "app/src/storage/shared_campaign.rs:428:52: called `Result::unwrap()` on an `Err` value: Denied",
+      "restored": true,
+      "tree_clean": true,
+      "head": "3db613ce"
+    }
+  ]
+}

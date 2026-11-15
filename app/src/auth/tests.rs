@@ -357,6 +357,9 @@ impl Reply {
             && self.headers[header::CACHE_CONTROL] == "no-store"
             && self.headers[header::X_CONTENT_TYPE_OPTIONS] == "nosniff"
             && self.headers.get(header::SET_COOKIE).is_none()
+            // APP-215 (infra M4): HSTS on every answer, the uniform 404 too.
+            && self.headers[header::STRICT_TRANSPORT_SECURITY]
+                == http::STRICT_TRANSPORT_SECURITY
             // APP-076 G8: exactly the uniform header set; in particular no
             // `Allow`, so a method mismatch on a mounted route is
             // indistinguishable from an unknown path.
@@ -366,6 +369,7 @@ impl Reply {
                     header::CACHE_CONTROL,
                     header::X_CONTENT_TYPE_OPTIONS,
                     header::REFERRER_POLICY,
+                    header::STRICT_TRANSPORT_SECURITY,
                     header::CONTENT_LENGTH,
                 ]
                 .contains(name)

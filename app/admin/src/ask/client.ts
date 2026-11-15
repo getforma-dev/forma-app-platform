@@ -1,6 +1,6 @@
 // One read-only Ask transport for the board, focus and standalone document.
 import type { WidgetKind, WidgetState } from '../canvas/widgets/state';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from '../canvas/daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, dailyLimitMessage, isDailyLimit } from '../canvas/daily-limit';
 export type AskWork = { app_id: string; work_id: string; address: string; collection?: string };
 export type RecordScope = { kind: 'card' | 'app' | 'canvas'; address: string; works: AskWork[] };
 export type WidgetScope = { kind: 'widget'; address: string; works: []; widget_id: string; widget: WidgetKind; state: WidgetState };
@@ -51,6 +51,6 @@ export async function requestAsk(question: string, scope: AskScope, signal?: Abo
   } catch { return 'The question could not be sent. Check your connection.'; }
   const body: unknown = await response.json().catch(() => null);
   if (response.status === 404) return 'This context is no longer available to you. No answer was shown.';
-  if (!response.ok) return ASK_REFUSALS[object(body) && typeof body.code === 'string' ? body.code : ''] ?? 'Ask is unavailable. Nothing changed.';
+  if (!response.ok) return isDailyLimit(body) ? dailyLimitMessage(body) : ASK_REFUSALS[object(body) && typeof body.code === 'string' ? body.code : ''] ?? 'Ask is unavailable. Nothing changed.';
   return askReply(body, scope) ?? ASK_REFUSALS.could_not_answer!;
 }

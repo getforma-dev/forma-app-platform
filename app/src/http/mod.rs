@@ -153,8 +153,17 @@ pub fn uniform(router: Router) -> Router {
         .layer(middleware::from_fn(deadline));
     Router::new()
         .fallback_service(inner)
-        .layer(middleware::map_response(without_allow))
+        .layer(middleware::map_response(finish))
 }
+/// APP-215 (infrastructure review M4): `Strict-Transport-Security` on every
+/// answer of the service, one year with subdomains and no `preload`. The
+/// service is HTTPS-only behind the load balancer (no port-80 listener), but
+/// without this header a browser told `http://beta.getforma.dev` by a captive
+/// portal or a link tries plaintext first. It is set on the outermost layer
+/// so the uniform 404, every refusal, page, asset and JSON answer carries it;
+/// a browser ignores the header on a plain-HTTP answer, so the loopback dev
+/// listeners are unaffected.
+pub const STRICT_TRANSPORT_SECURITY: &str = "max-age=31536000; includeSubDomains";
 /// `uniform`, plus routes that wait on an external model and so run under
 /// `COMPOSE_DEADLINE` instead of the D7.14 handler deadline (APP-093's
 /// `POST /v1/compose`; ADR-011 §4 relaxes the deadline for that one route).
@@ -184,10 +193,16 @@ pub fn uniform_with_many(router: Router, long: Vec<(&'static str, Router)>) -> R
     }
     outer
         .fallback_service(inner)
-        .layer(middleware::map_response(without_allow))
+        .layer(middleware::map_response(finish))
 }
-async fn without_allow(mut response: Response) -> Response {
+/// The outermost pass over every answer: no `Allow` (G8) and the transport
+/// security header (APP-215).
+async fn finish(mut response: Response) -> Response {
     response.headers_mut().remove(header::ALLOW);
+    response.headers_mut().insert(
+        header::STRICT_TRANSPORT_SECURITY,
+        HeaderValue::from_static(STRICT_TRANSPORT_SECURITY),
+    );
     response
 }
 
@@ -316,6 +331,12 @@ mod tests {
         assert_eq!(unknown.0, StatusCode::NOT_FOUND);
         assert_eq!(unknown.2, &b"{\"code\":\"not_found\",\"status\":404}"[..]);
         assert!(unknown.1.get(header::ALLOW).is_none());
+        // APP-215 (infra M4): the uniform 404 carries HSTS, one year with
+        // subdomains and no preload.
+        assert_eq!(
+            unknown.1[header::STRICT_TRANSPORT_SECURITY],
+            "max-age=31536000; includeSubDomains"
+        );
         for (method, uri) in [
             ("GET", "/x/a/b"),
             ("PUT", "/x/a/b"),
@@ -328,7 +349,18 @@ mod tests {
         }
         let served = send("POST", "/x/a%20b/c").await;
         assert_eq!((served.0, &served.2[..]), (StatusCode::OK, &b"a b/c"[..]));
-        assert_eq!(send("GET", "/y").await.0, StatusCode::OK);
+        // A served answer carries HSTS as well, whatever the handler set.
+        assert_eq!(
+            served.1[header::STRICT_TRANSPORT_SECURITY],
+            STRICT_TRANSPORT_SECURITY
+        );
+        assert!(!STRICT_TRANSPORT_SECURITY.contains("preload"));
+        let y = send("GET", "/y").await;
+        assert_eq!(y.0, StatusCode::OK);
+        assert_eq!(
+            y.1[header::STRICT_TRANSPORT_SECURITY],
+            STRICT_TRANSPORT_SECURITY
+        );
     }
 
     #[tokio::test]

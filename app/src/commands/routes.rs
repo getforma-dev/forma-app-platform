@@ -1,10 +1,11 @@
 //! The command route, the outcome lookup and the record page (module notes
 //! in `commands`). Refusal order for the `POST`: fetch metadata (403), the
 //! session (uniform 404), the bounded body (413), the synchronizer token of a
-//! form (403), the body as forma-json-v1, the key and the shape (400), and
-//! only then storage. ADR-020: storage's typed refusals answer 422 with the
-//! code alone (`requirement_not_met`, `unchanged`); a form returns to the
-//! record page with the refused notice.
+//! form (403), the body as forma-json-v1, the key and the shape (400), the
+//! member's write window (429 with `Retry-After`; APP-215), and only then
+//! storage. ADR-020: storage's typed refusals answer 422 with the code alone
+//! (`requirement_not_met`, `unchanged`); a form returns to the record page
+//! with the refused notice.
 use super::{payload, Notice, RecordPage};
 use crate::{
     auth::{capability, cookies, csrf, Auth},
@@ -483,6 +484,22 @@ async fn submit(
     }
     if !request.well_formed() || payload::digest(&request).is_none() {
         return http::problem(StatusCode::BAD_REQUEST, "malformed_command");
+    }
+    // APP-215 (content M1): the audited command route had no per-member
+    // window, so a member could script record creation into a shared app up
+    // to the projection bound. It has its own window per member,
+    // `COMMAND_WRITES` (300 an hour; APP-215 recheck), apart from the
+    // `MEMBER_WRITES` the other row-creating routes share, taken after the
+    // request is shaped so a malformed request is refused for free and only
+    // a command that would reach storage counts; a replay of the same key
+    // counts too. Over the window: 429 `too_many_requests` with
+    // `Retry-After`, nothing written. The MCP and Slack commits keep their
+    // own windows.
+    if let Err(retry_after) = auth
+        .limits
+        .admit_command_write(trusted.organization(), trusted.principal())
+    {
+        return http::too_many_requests(retry_after);
     }
     let result = commit(stores, &trusted, &request).await;
     answer(&mode, &app, &work, &request.record, result)

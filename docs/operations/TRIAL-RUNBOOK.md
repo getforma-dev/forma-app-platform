@@ -275,9 +275,12 @@ The back office is `ops/promotion/admission.py`. It mints the codes on your mach
 
 ## 5. Removing a member
 
+**Suspected stolen session (APP-215).** Signing out everywhere ends a member's sessions but no longer ends the guest shares they made. A member who suspects a compromise also revokes their guest shares in the share dialog. Removing them below also ends every share, but removal is final for that sign-in identity: they cannot be re-admitted with a new code under the same account (`already_member`). As a last resort, the operator can revoke their rows in `live_work_shares` with SQL, with Victor's word.
+
 1. On **`/admin`** (W2; requires your `admin_policy` row): the member's row, **Remove**, confirm. W1's `admin_remove_member` revokes the membership and entitlement, advances the epoch (their session ends at the next request) and audits; it refuses yourself and the last admin.
    Reading the audit afterwards: a removal from `/admin` writes `membership.revoked` and `entitlement.revoked` on the **admission** chain with the actor being you (the admin) and the target's digest in the outcome; the operator channel's `revoke-membership` and `revoke-entitlement` write the same kinds on the **operator** chain with the actor being the target and no digest. Branch on `writer_role` before reading the actor. Your own membership was operator-seeded, so `/admin` shows no consent row for you; that is expected, every student has one.
 2. If their code was never redeemed, `admission revoke --code <code_id>` instead.
+   If they had shared an app **with everyone**, removal does not end that share; section 10 step 2 has the exact operator SQL that does (APP-215 interim, with Victor's word).
 3. **Their uploads**, with your own identity (the task lists, you delete every S3 version and delete marker):
 
    ```sh
@@ -405,6 +408,7 @@ The charter promises the organization's data is deleted by Dec 14; the beta stop
    ```
 
    Expected log line: `{"principal_id": ..., "changed": true, "membership_epoch": N}`. Every session is now dead.
+   **A removed member's organization-wide share (APP-215 interim for the 2026-11-15 sharing review's M2; operator, with Victor's word).** Removal does not end a share the member made "with everyone" (`genui.work_shares`, `grantee_id IS NULL`): the app stays in every member's Library, and no operator override touches that table, so until the migration-bearing fix the operator ends it with this exact SQL on the beta database as the migration identity, Victor's words for the action appended to `$PRIV/approvals.md` first, with Victor's own principal id as `revoked_by` (the foreign key needs a member): `UPDATE genui.work_shares SET revoked_at=clock_timestamp(), revoked_by='<Victor's principal id>', revoke_event_id=gen_random_uuid() WHERE organization_id='<the organization id>' AND sharer_id='<the removed member's principal id>' AND grantee_id IS NULL AND revoked_at IS NULL;` Expected: `UPDATE 1` per shared app (`0` means they shared nothing with everyone); every member's Library drops the app at its next read. This interim appends no `permission.revoked` event; record the statement and its count with the approval. The same statement during the class, from section 5, is what withdraws a disruptive student's shared app.
 3. **Suspend** (no sign-in, no share reads; reversible only by a reviewed change):
 
    ```sh

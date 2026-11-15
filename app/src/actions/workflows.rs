@@ -985,7 +985,7 @@ mod tests {
             ("Brightwater Foods wants 25% off their $90,000 renewal because of a competitor bid; Sarah decides", "discount_request"),
         ] {
             let started = std::time::Instant::now();
-            let parse = parser.parse(utterance, &catalog, false, "2026-10-30").await;
+            let parse = parser.parse(utterance, &catalog, false, "2026-10-30", None).await;
             let ms = started.elapsed().as_millis();
             match parse {
                 Ok(parse) => {

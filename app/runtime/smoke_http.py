@@ -56,6 +56,8 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
         for _ in range(2):
             with urllib.request.urlopen(origin,timeout=3) as response:
                 body=response.read();csp=response.headers['Content-Security-Policy'];assert 'no-store' in response.headers['Cache-Control']
+                # APP-215 (infra M4): HSTS on every answer, one year with subdomains, no preload.
+                assert response.headers['Strict-Transport-Security']=='max-age=31536000; includeSubDomains'
                 assert response.status==200 and b'<title>Forma Canvas</title>' in body and b'Your work.' in body
                 assert b'href="/invite"' in body and b'href="/signin"' in body
                 assert b'<script' not in body and b'data-forma-island' not in body
@@ -80,8 +82,9 @@ print(json.dumps({'generation':value['generation'],'file_sha256':hashlib.sha256(
             try: urllib.request.urlopen(origin+route,timeout=3)
             except urllib.error.HTTPError as error:
                 assert error.code==404 and error.read()==b'{"code":"not_found","status":404}' and error.headers['Content-Type']=='application/problem+json'
+                assert error.headers['Strict-Transport-Security']=='max-age=31536000; includeSubDomains'
             else: raise AssertionError('protected route answered without a session')
-        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True}))
+        print(json.dumps({'scope':'synthetic local HTTP denial smoke; not managed acceptance','live':200,'ready_without_native_registry':503,'positive_mock_helper_not_launched':True,'native_home_zero_js':True,'fresh_csp_nonces':True,'no_store':True,'hsts':True,'signin_page':200,'invite_page':200,'protected_uniform_404':True}))
     finally:
         process.terminate()
         try: process.communicate(timeout=5)

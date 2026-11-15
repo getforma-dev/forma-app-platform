@@ -231,12 +231,16 @@ impl Composer {
     }
     /// APP-108: one fast-model call (the router model) for a typed answer
     /// the caller judges (the box explanation); `Unavailable` without a model.
+    /// `member` (APP-215, `model::member_key`) is who the call is for: their
+    /// daily allowance is taken first; `None` counts against the process cap
+    /// only.
     pub async fn complete_fast(
         &self,
         system: &str,
         user: String,
         max_tokens: u32,
         budget: Duration,
+        member: Option<&str>,
     ) -> Result<model::ModelReply, ModelError> {
         let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
         model
@@ -246,6 +250,7 @@ impl Composer {
                 user,
                 max_tokens,
                 budget,
+                member: member.map(str::to_owned),
             })
             .await
     }
@@ -257,6 +262,7 @@ impl Composer {
         documents: &[model::DocumentInput<'_>],
         max_tokens: u32,
         budget: Duration,
+        member: Option<&str>,
     ) -> Result<model::CitedReply, ModelError> {
         let model = self.model.as_ref().ok_or(ModelError::Unavailable)?;
         let request = ModelRequest {
@@ -265,6 +271,7 @@ impl Composer {
             user,
             max_tokens,
             budget,
+            member: member.map(str::to_owned),
         };
         model.complete_with_documents(&request, documents).await
     }
@@ -276,6 +283,15 @@ impl Composer {
         self.model
             .as_ref()
             .is_some_and(|model| model.daily_cap_reached())
+    }
+    /// APP-215: whether the next model call for `member` would be refused,
+    /// by their own allowance or by the process cap.
+    pub fn daily_cap_reached_for(&self, member: &str) -> bool {
+        self.daily_cap_reached()
+            || self
+                .model
+                .as_ref()
+                .is_some_and(|model| model.member_daily_cap_reached(member))
     }
     pub fn generation_model(&self) -> &str {
         &self.generation_model
@@ -293,8 +309,10 @@ impl Composer {
         intent: &str,
         library: &[LibraryApp],
         exclude: Option<&str>,
+        member: Option<&str>,
     ) -> Result<(Decision, &'static str), ModelError> {
-        self.route_for(intent, library, exclude, false).await
+        self.route_for(intent, library, exclude, false, member)
+            .await
     }
 
     /// `route` for an organization. `demo` is [`Composer::demo_for`]: only
@@ -308,6 +326,7 @@ impl Composer {
         library: &[LibraryApp],
         exclude: Option<&str>,
         demo: bool,
+        member: Option<&str>,
     ) -> Result<(Decision, &'static str), ModelError> {
         if library.is_empty() {
             return Ok((Decision::Generate, "empty_library"));
@@ -337,6 +356,7 @@ impl Composer {
             user: prompt::router_user(intent, library),
             max_tokens: ROUTER_MAX_TOKENS,
             budget: ROUTER_BUDGET,
+            member: member.map(str::to_owned),
         };
         let reply = model.complete(&request).await?;
         Ok(plan::decide(&reply.text, library))
@@ -352,6 +372,7 @@ impl Composer {
         intent: &str,
         library: &LibraryApp,
         demo: bool,
+        member: Option<&str>,
     ) -> Result<(Transform, &'static str), TransformFailure> {
         if demo {
             // DS-53: the rehearsed transform, demo organization only.
@@ -369,6 +390,7 @@ impl Composer {
             user: transform::transform_user(intent, library),
             max_tokens: TRANSFORM_MAX_TOKENS,
             budget: TRANSFORM_BUDGET,
+            member: member.map(str::to_owned),
         };
         let reply = model
             .complete(&request)
@@ -393,14 +415,16 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
+        member: Option<&str>,
     ) -> Result<Generated, GenerationFailure> {
-        self.generate_with(intent, None, sources, organization, app, deadline)
+        self.generate_with(intent, None, sources, organization, app, deadline, member)
             .await
     }
 
     /// APP-108: generation with a box's capped context in the user message
     /// (`prompt::generation_user_with`); `sources` are the box's registered
     /// revisions only, so every source input is pinned to one of them.
+    #[allow(clippy::too_many_arguments)]
     pub async fn generate_with(
         &self,
         intent: &str,
@@ -409,11 +433,22 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
+        member: Option<&str>,
     ) -> Result<Generated, GenerationFailure> {
-        self.generate_using(intent, context, None, sources, organization, app, deadline)
-            .await
+        self.generate_using(
+            intent,
+            context,
+            None,
+            sources,
+            organization,
+            app,
+            deadline,
+            member,
+        )
+        .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn generate_from_template(
         &self,
         intent: &str,
@@ -422,6 +457,7 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
+        member: Option<&str>,
     ) -> Result<Generated, GenerationFailure> {
         self.generate_using(
             intent,
@@ -431,6 +467,7 @@ impl Composer {
             organization,
             app,
             deadline,
+            member,
         )
         .await
     }
@@ -445,6 +482,7 @@ impl Composer {
         organization: &str,
         app: &str,
         deadline: Instant,
+        member: Option<&str>,
     ) -> Result<Generated, GenerationFailure> {
         let model = self
             .model
@@ -473,6 +511,7 @@ impl Composer {
                 user: prompt::generation_user_from(intent, &contracts, feedback, context, template),
                 max_tokens: GENERATION_MAX_TOKENS,
                 budget,
+                member: member.map(str::to_owned),
             };
             let reply = model
                 .complete(&request)

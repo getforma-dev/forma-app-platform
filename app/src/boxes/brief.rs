@@ -257,6 +257,7 @@ pub async fn generate(
                     &documents,
                     700,
                     PDF_BUDGET,
+                    Some(&crate::composer::model::member_of(member)),
                 )
                 .await
             {
@@ -307,7 +308,13 @@ pub async fn generate(
         let input_bytes = input.len();
         let reply = state
             .composer
-            .complete_fast(SUMMARY_SYSTEM, input, 1200, SUMMARY_BUDGET)
+            .complete_fast(
+                SUMMARY_SYSTEM,
+                input,
+                1200,
+                SUMMARY_BUDGET,
+                Some(&crate::composer::model::member_of(member)),
+            )
             .await;
         tracing::info!(
             event = "box.brief_summary",
@@ -581,11 +588,11 @@ pub async fn brief_post(
         return http::not_found();
     };
     if let Err(refused) = routes::admit_explain(&state, &member) {
-        return refused.response();
+        return refused.response_for(Some(&crate::composer::model::member_of(&member)));
     }
     match generate(&state, &member, &box_id).await {
         Ok(value) => routes::document(StatusCode::OK, &value),
-        Err(refused) => refused.response(),
+        Err(refused) => refused.response_for(Some(&crate::composer::model::member_of(&member))),
     }
 }
 

@@ -253,15 +253,10 @@ fn within_payload_bound(payload: &Value) -> Result<()> {
     }
     Ok(())
 }
-/// ADR-020 C4: a creator's label as this viewer may see it. A member sees
-/// the organization's label (a display name, else the neutral handle); a
-/// guest is outside the organization and sees the neutral handle only.
+/// ADR-020 C4: a creator's label as this viewer may see it
+/// (`directory::creator_label`, shared with the records card since APP-215).
 fn creator_label(guest: bool, organization: &str, principal: &str) -> String {
-    if guest {
-        crate::directory::neutral_label(principal)
-    } else {
-        crate::directory::label(organization, principal)
-    }
+    crate::directory::creator_label(guest, organization, principal)
 }
 fn text(row: &tokio_postgres::Row, i: usize) -> Result<String> {
     row.try_get(i).map_err(|_| Error::Unavailable)

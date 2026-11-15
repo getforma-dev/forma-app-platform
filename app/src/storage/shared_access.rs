@@ -258,8 +258,19 @@ async fn audit_account(
 /// is delegation attenuation, not an actor substitution or recipient grant.
 /// The sponsor organization's state is a parameter: `live_clause` requires an
 /// active one, and the paused-link check (APP-178) asks about a suspended one.
+///
+/// APP-215 (sharing M3; ADR-014 amendment of 2026-11-15): the sponsor's
+/// membership epoch is no longer required to equal the share's pinned
+/// `sponsor_epoch`. Sign-out and sign-out-everywhere advance the epoch
+/// (ADR-006 D7.9), so every guest link died the evening its sponsor signed
+/// out. What the clause still requires fails closed on its own: the sponsor's
+/// active membership and live entitlement (both end on removal,
+/// `admin_remove_member`), their current `record_read`, and their share
+/// authority (unrevoked creator, or `share_work`). The pinned epoch is still
+/// part of the guest's resolved access (`check_guest`), where it binds the
+/// access to the share row, not to the sponsor's sessions.
 fn sponsor_clause_for(organization: &str) -> String {
-    format!("{organization} AND m.status='active' AND m.membership_epoch=s.sponsor_epoch AND EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()) AND ({}) AND ((w.created_by=s.sponsor_id AND w.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.principal_id=s.sponsor_id AND p.permission='share_work'))", record_read_clause("m.principal_id"))
+    format!("{organization} AND m.status='active' AND EXISTS(SELECT 1 FROM genui.entitlements e WHERE e.organization_id=m.organization_id AND e.principal_id=m.principal_id AND e.status='active' AND e.expires_at>clock_timestamp()) AND ({}) AND ((w.created_by=s.sponsor_id AND w.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.principal_id=s.sponsor_id AND p.permission='share_work'))", record_read_clause("m.principal_id"))
 }
 const SHARE_FROM: &str = "FROM genui.live_work_shares s JOIN genui.saved_work w ON (w.organization_id,w.app_id,w.work_id)=(s.organization_id,s.app_id,s.work_id) JOIN genui.publications p ON (p.organization_id,p.app_id,p.publication_id)=(w.organization_id,w.app_id,w.publication_id) JOIN genui.memberships m ON (m.organization_id,m.principal_id)=(s.organization_id,s.sponsor_id) JOIN genui.organizations o ON o.organization_id=s.organization_id";
 fn live_clause() -> String {

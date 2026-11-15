@@ -25,7 +25,7 @@ import { isDismissKey, showDockCard } from './dock-card';
 import { ledgerCardFor, setLedgerRange } from './ledger';
 import { RECEIPT_PROMPT, restoreReceipt, takeReceipt, type PendingReceipt } from './receipt';
 import { el, isUuid } from './render';
-import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE } from './daily-limit';
+import { DAILY_LIMIT_CODE, DAILY_LIMIT_MESSAGE, dailyLimitMessage, isDailyLimit } from './daily-limit';
 import { addShareRequest } from '../sharing/api';
 
 export const ACT_URL = '/v1/act';
@@ -125,7 +125,7 @@ async function post(body: Record<string, unknown> | FormData): Promise<ActAnswer
   if (response.status === 404) throw new Error(MESSAGES.not_connected);
   if (!response.ok) {
     const code = typeof json === 'object' && json !== null ? String((json as { code?: unknown }).code ?? '') : '';
-    throw new Error(MESSAGES[code] ?? MESSAGES.failed);
+    throw new Error(isDailyLimit(json) ? dailyLimitMessage(json) : MESSAGES[code] ?? MESSAGES.failed);
   }
   const answer = answerOf(json);
   if (!answer) throw new Error(MESSAGES.failed);
