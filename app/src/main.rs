@@ -85,6 +85,11 @@ async fn main() {
     // A render that fails comes back to `home` as a coded error, which `home`
     // logs through `tracing`; forma-server's own security events go there too.
     genui::config::logs::init().unwrap_or_else(|reason| refuse(reason));
+    // APP-222 (A13): the deployment's `GENUI_LIMIT_*` windows, validated
+    // before any limiter exists; a value outside 1 to 100,000 stops here.
+    genui::http::limits::install(
+        genui::http::limits::Deployment::from_env().unwrap_or_else(|reason| refuse(reason)),
+    );
     // The image names its parser bytes in parser-manifest.json and sets this
     // variable; startup refuses if the guest or host on disk differ (ADR-009
     // D9.1, integrity only). Without it no parse can run.

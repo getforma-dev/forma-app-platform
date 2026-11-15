@@ -5,15 +5,21 @@
 //! live keys a new key is refused (fail closed) until old windows lapse. A
 //! key is retained exactly as long as its own longest window (APP-009 review
 //! m4), so the fail-closed refusal never outlives the budgets it protects.
+//!
+//! APP-222 part A (follow-up A13, the abuse and infrastructure tier): the
+//! MCP and agent-token windows are deployment settings ([`Deployment`],
+//! `GENUI_LIMIT_*`), read once at startup and validated, with today's
+//! numbers as defaults; every other window here is a compiled constant.
 use std::{
     collections::{HashMap, VecDeque},
-    sync::Mutex,
+    ops::RangeInclusive,
+    sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
 const MAX_KEYS: usize = 20_000;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Window {
     pub limit: usize,
     pub period: Duration,
@@ -77,6 +83,104 @@ pub const MEMBER_WRITES: &[Window] = &[per(120, 3600)];
 /// the app) never shares a budget with composer saves, uploads and shares.
 pub const COMMAND_WRITES: &[Window] = &[per(300, 3600)];
 
+/// APP-099: per agent token, MCP messages an hour, unless
+/// [`MCP_TOKEN_ENV`] says otherwise.
+pub const MCP_TOKEN_PER_HOUR: usize = 120;
+pub const MCP_TOKEN_ENV: &str = "GENUI_LIMIT_MCP_TOKEN_PER_HOUR";
+/// APP-099 review: per member, across all their agent tokens, MCP messages
+/// an hour (minting more tokens does not raise a member's rate), unless
+/// [`MCP_MEMBER_ENV`] says otherwise.
+pub const MCP_MEMBER_PER_HOUR: usize = 240;
+pub const MCP_MEMBER_ENV: &str = "GENUI_LIMIT_MCP_MEMBER_PER_HOUR";
+/// Per member, agent-token mints an hour, unless [`AGENT_TOKEN_MINTS_ENV`]
+/// says otherwise.
+pub const AGENT_TOKEN_MINTS_PER_HOUR: usize = 10;
+pub const AGENT_TOKEN_MINTS_ENV: &str = "GENUI_LIMIT_AGENT_TOKEN_MINTS_PER_HOUR";
+/// The values a `GENUI_LIMIT_*` setting may hold; anything else stops the
+/// process at startup.
+pub const SETTING_RANGE: RangeInclusive<usize> = 1..=100_000;
+
+/// APP-222 (A13): the hourly windows a deployment sets. Every [`Limiter`]
+/// carries one: the process's, which `main` reads from the environment
+/// once and [`install`]s before any limiter exists, else the defaults.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Deployment {
+    mcp_token: [Window; 1],
+    mcp_member: [Window; 1],
+    agent_token_mints: [Window; 1],
+}
+impl Default for Deployment {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+impl Deployment {
+    /// Today's numbers: 120 and 240 MCP messages an hour, 10 mints an hour.
+    pub const DEFAULT: Self = Self {
+        mcp_token: [per(MCP_TOKEN_PER_HOUR, 3600)],
+        mcp_member: [per(MCP_MEMBER_PER_HOUR, 3600)],
+        agent_token_mints: [per(AGENT_TOKEN_MINTS_PER_HOUR, 3600)],
+    };
+    /// The settings `lookup` names (an unset or empty one keeps its
+    /// default); a value that is not a whole number in [`SETTING_RANGE`] is
+    /// refused, naming the setting.
+    pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
+        let hourly = |name: &str, default: usize| -> Result<[Window; 1], String> {
+            let value = lookup(name);
+            let value = value.as_deref().map(str::trim).filter(|v| !v.is_empty());
+            let limit = match value {
+                None => default,
+                Some(value) => value
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|limit| SETTING_RANGE.contains(limit))
+                    .ok_or_else(|| {
+                        format!(
+                            "{name} must be a whole number from {} to {}",
+                            SETTING_RANGE.start(),
+                            SETTING_RANGE.end()
+                        )
+                    })?,
+            };
+            Ok([per(limit, 3600)])
+        };
+        Ok(Self {
+            mcp_token: hourly(MCP_TOKEN_ENV, MCP_TOKEN_PER_HOUR)?,
+            mcp_member: hourly(MCP_MEMBER_ENV, MCP_MEMBER_PER_HOUR)?,
+            agent_token_mints: hourly(AGENT_TOKEN_MINTS_ENV, AGENT_TOKEN_MINTS_PER_HOUR)?,
+        })
+    }
+    /// [`Self::from_lookup`] over the process environment (a value that is
+    /// not text is refused like an out-of-range one).
+    pub fn from_env() -> Result<Self, String> {
+        for name in [MCP_TOKEN_ENV, MCP_MEMBER_ENV, AGENT_TOKEN_MINTS_ENV] {
+            if let Err(std::env::VarError::NotUnicode(_)) = std::env::var(name) {
+                return Err(format!("{name} must be text"));
+            }
+        }
+        Self::from_lookup(|name| std::env::var(name).ok())
+    }
+    /// Per agent token: MCP messages an hour.
+    pub fn mcp_token(&self) -> &[Window] {
+        &self.mcp_token
+    }
+    /// Per member, across all their agent tokens: MCP messages an hour.
+    pub fn mcp_member(&self) -> &[Window] {
+        &self.mcp_member
+    }
+    /// Per member: agent-token mints an hour.
+    pub fn agent_token_mints(&self) -> &[Window] {
+        &self.agent_token_mints
+    }
+}
+
+static DEPLOYMENT: OnceLock<Deployment> = OnceLock::new();
+/// The process's [`Deployment`], set once by `main` at startup (a second
+/// call changes nothing).
+pub fn install(deployment: Deployment) {
+    let _ = DEPLOYMENT.set(deployment);
+}
+
 /// Which check refused (APP-074 review m4): the index of its key in the
 /// checks, the blocking window's period, and when that window frees a slot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -92,11 +196,29 @@ struct Log {
     times: VecDeque<Instant>,
 }
 
-#[derive(Default)]
 pub struct Limiter {
     events: Mutex<HashMap<String, Log>>,
+    deployment: Deployment,
+}
+/// A limiter with the process's installed [`Deployment`] (else the defaults).
+impl Default for Limiter {
+    fn default() -> Self {
+        Self::with_deployment(DEPLOYMENT.get().copied().unwrap_or_default())
+    }
 }
 impl Limiter {
+    /// A limiter whose deployment windows are `deployment`'s (tests set
+    /// lowered values here).
+    pub fn with_deployment(deployment: Deployment) -> Self {
+        Self {
+            events: Mutex::default(),
+            deployment,
+        }
+    }
+    /// The deployment windows this limiter applies.
+    pub fn deployment(&self) -> &Deployment {
+        &self.deployment
+    }
     /// `Ok(())` admits and records one event under every key; `Err(seconds)`
     /// refuses, naming when the earliest blocking window frees a slot.
     pub fn admit(&self, checks: &[(&str, &[Window])]) -> Result<(), u64> {
@@ -216,6 +338,56 @@ impl Limiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// APP-222 (A13): the three deployment settings default to today's
+    /// numbers, follow a value from 1 to 100,000, and refuse anything else
+    /// by name (`main` then refuses to start).
+    #[test]
+    fn deployment_settings_default_to_todays_numbers_and_refuse_out_of_range() {
+        let none = Deployment::from_lookup(|_| None).unwrap();
+        assert_eq!(none, Deployment::DEFAULT);
+        assert_eq!(none.mcp_token()[0].limit, 120);
+        assert_eq!(none.mcp_member()[0].limit, 240);
+        assert_eq!(none.agent_token_mints()[0].limit, 10);
+        for window in [
+            none.mcp_token(),
+            none.mcp_member(),
+            none.agent_token_mints(),
+        ] {
+            assert_eq!(window.len(), 1);
+            assert_eq!(window[0].period, Duration::from_secs(3600));
+        }
+        assert_eq!(Limiter::with_deployment(none).deployment(), &none);
+        let set = |name: &'static str, value: &'static str| {
+            Deployment::from_lookup(move |asked| (asked == name).then(|| value.to_owned()))
+        };
+        assert_eq!(set(MCP_TOKEN_ENV, "7").unwrap().mcp_token()[0].limit, 7);
+        assert_eq!(set(MCP_MEMBER_ENV, " 3 ").unwrap().mcp_member()[0].limit, 3);
+        assert_eq!(
+            set(AGENT_TOKEN_MINTS_ENV, "100000")
+                .unwrap()
+                .agent_token_mints()[0]
+                .limit,
+            100_000
+        );
+        assert_eq!(set(MCP_MEMBER_ENV, "1").unwrap().mcp_token()[0].limit, 120);
+        assert_eq!(set(MCP_MEMBER_ENV, "").unwrap(), Deployment::DEFAULT);
+        for name in [MCP_TOKEN_ENV, MCP_MEMBER_ENV, AGENT_TOKEN_MINTS_ENV] {
+            for value in [
+                "0",
+                "100001",
+                "-1",
+                "12.5",
+                "many",
+                "1e3",
+                "99999999999999999999",
+            ] {
+                let refused = set(name, value).unwrap_err();
+                assert!(refused.contains(name), "{refused}");
+                assert!(refused.contains("1 to 100000"), "{refused}");
+            }
+        }
+    }
 
     /// APP-113 review: the row-creating routes had no window; they share
     /// one per member (another member is unaffected).

@@ -413,6 +413,7 @@ async fn run(env: Env, db: db::Database, epoch: String, started: Instant) -> Res
     // APP-219: the binary's logs; `scripts/dev/server.sh` sets
     // `GENUI_LOG_FORMAT=pretty` so the dev stand's files stay readable.
     crate::config::logs::init()?;
+    crate::http::limits::install(crate::http::limits::Deployment::from_env()?);
     let organization = env.profile.organization();
     let stores = Arc::new(Stores::new(db.settings()).map_err(|e| format!("stores: {e}"))?);
     stores

@@ -22,9 +22,10 @@
 //! foreign-organization or revoked token, a member whose epoch moved or who
 //! is no longer active, a store error) is the uniform 404, byte-identical.
 //! Cookies are never read: a browser cannot ride a session into this
-//! endpoint. Then the token's and the member's limits (`MCP_TOKEN`,
-//! `MCP_MEMBER`: minting more tokens does not raise a member's rate; 429
-//! with `Retry-After`),
+//! endpoint. Then the token's and the member's limits ([`admit`]: 120 and
+//! 240 messages an hour unless the deployment's `GENUI_LIMIT_MCP_*` settings
+//! say otherwise, APP-222; minting more tokens does not raise a member's
+//! rate; 429 with `Retry-After`),
 //! an `MCP-Protocol-Version` header naming an unsupported version (400), the
 //! body (at most `MCP_BODY_LIMIT`, read within the handler deadline; 413),
 //! and `Content-Type: application/json` (415). The route runs under the long
@@ -45,7 +46,7 @@ pub(crate) mod tests;
 use crate::{
     auth::Auth,
     composer::Composer,
-    http::{self, limits},
+    http,
     query::Work,
     storage::{AccessEntry, AgentCaller, MAX_TOUCHED},
 };
@@ -64,10 +65,6 @@ use std::{sync::Arc, time::Instant};
 pub const PATH: &str = "/v1/mcp";
 /// D7.14 JSON body bound.
 pub const MCP_BODY_LIMIT: usize = http::JSON_BODY_LIMIT;
-/// Per agent token: 120 messages an hour.
-pub const MCP_TOKEN: &[limits::Window] = &[limits::per(120, 3600)];
-/// Per member, across all their agent tokens: 240 messages an hour.
-pub const MCP_MEMBER: &[limits::Window] = &[limits::per(240, 3600)];
 /// Supported MCP protocol revisions, newest first.
 pub const PROTOCOL_VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
 
@@ -452,6 +449,18 @@ pub(crate) fn keys(caller: &AgentCaller) -> (String, String) {
     )
 }
 
+/// One message of `caller` against its token's and its member's windows
+/// (APP-222: the deployment's `GENUI_LIMIT_MCP_*` settings, else 120 and 240
+/// an hour); a refusal records nothing.
+pub(crate) fn admit(auth: &Auth, caller: &AgentCaller) -> Result<(), u64> {
+    let (token_key, member_key) = keys(caller);
+    let windows = auth.limits.deployment();
+    auth.limits.admit(&[
+        (&token_key, windows.mcp_token()),
+        (&member_key, windows.mcp_member()),
+    ])
+}
+
 /// `POST /v1/mcp` (order in the module notes).
 async fn handle(State(state): State<Arc<Mcp>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
@@ -464,11 +473,7 @@ async fn handle(State(state): State<Arc<Mcp>>, request: Request) -> Response {
         Err(refusal) => return refusal,
     };
     let started = Instant::now();
-    let (token_key, member_key) = keys(&caller);
-    if let Err(retry_after) = auth
-        .limits
-        .admit(&[(&token_key, MCP_TOKEN), (&member_key, MCP_MEMBER)])
-    {
+    if let Err(retry_after) = admit(&auth, &caller) {
         log(&caller, "", "", "too_many_requests", started);
         return http::too_many_requests(retry_after);
     }
