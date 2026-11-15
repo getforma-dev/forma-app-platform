@@ -133,7 +133,7 @@ const SEED_INPUTS: [(&str, &str, &str); 6] = [
     (
         "seed_program_sha256",
         "app/runtime/tenant_seed.py",
-        "b5c5770d02b55502390daec619e47db2b2707c9ba38274284eec8b8750ecc90c",
+        "3f93513b09bb963d22e14d40e1ef2129b901b6f1fc655ad25320df4c00d52f89",
     ),
     (
         "seed_validator_sha256",
@@ -158,7 +158,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v24.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v25.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -179,7 +179,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 237] = [
+const SOURCES: [(&str, &[u8]); 238] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -678,6 +678,10 @@ const SOURCES: [(&str, &[u8]); 237] = [
     (
         "app/src/storage/org_admin_routes_campaign.rs",
         include_bytes!("org_admin_routes_campaign.rs"),
+    ),
+    (
+        "app/src/storage/org_roles_campaign.rs",
+        include_bytes!("org_roles_campaign.rs"),
     ),
     (
         "app/src/storage/participation_campaign.rs",
@@ -1489,6 +1493,7 @@ async fn production_cases(stores: Arc<Stores>) -> CaseResult {
                 provider_tenant: format!("ten_{organization}"),
                 provider_subject: format!("usr_{principal}"),
                 registry_sha256: registry_sha256.clone(),
+                role: crate::storage::OrgRole::Member,
             },
             &mut checks,
         )

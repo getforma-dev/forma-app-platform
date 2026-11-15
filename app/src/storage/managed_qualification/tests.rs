@@ -1402,6 +1402,7 @@ fn request(stores: &Stores) -> TrustedRequest {
         provider_tenant: format!("ten_{ORG}"),
         provider_subject: format!("usr_{PRINCIPAL}"),
         registry_sha256: stores.registry_identity().sha256.clone(),
+        role: crate::storage::OrgRole::Member,
     }
 }
 /// Server-side proof: no application-role backend survives the close.

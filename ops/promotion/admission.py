@@ -16,8 +16,9 @@ issue           mint N codes locally (the task never sees a secret), write the o
                 hands every capability issued so far to the service, up to 128.
 list            codes, status, notes and redemptions of the organization (identifiers only).
 revoke          revoke one code by id; the task drops its capability and provider invitation.
-grant-admin     the organization's admin_policy row for one member (the Admin page).
-revoke-admin    remove that row (the reviewed undo of a grant to the wrong member).
+set-role        one member's organization role (ADR-021: owner, admin, manager, member or
+                viewer); needs migration 0025 in the database. grant-admin and revoke-admin
+                remain as the runbook's aliases for `set-role admin` and `set-role member`.
 grant-reviewer  a member's record_review on one app's saved work (a helper who reviews
                 every entry); needs release B's migration 0024 in the database.
 revoke-reviewer remove that row and advance the member's epoch (W4 review M1).
@@ -59,6 +60,8 @@ OVERRIDES = ROOT / 'app/operator/overrides.json'
 WINDOW_REQUESTS = ROOT / 'infra/scripts/window_requests.py'
 EMPTY_INPUT = '{}'
 PROVIDER_ROLE = 'user'
+# ADR-021 (migration 0025): the organization roles set-role may name.
+ROLES = ('owner', 'admin', 'manager', 'member', 'viewer')
 TASK_WAIT_SECONDS = 900
 RESTART_WAIT_SECONDS = 900
 LOG_EVENT_BYTES_MAX = 1024 * 1024
@@ -293,19 +296,22 @@ class Trial:
         require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict), 'revoke task did not succeed')
         return dict(outcome['result'], status='revoked', receipts=self.receipts)
 
-    def grant_admin(self, principal):
+    def set_role(self, principal, role):
+        """ADR-021: one member's organization role through the documented set-role override."""
         require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
-        outcome = self.operator_task('admission-grant-admin', [('--organization', self.organization), ('--principal', principal)], 'grant-admin')
-        require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict) and outcome['result'].get('permission') == 'admin_policy',
-                'grant-admin task did not succeed')
-        return dict(outcome['result'], status='granted', receipts=self.receipts)
+        require(role in ROLES, 'role must be one of ' + ', '.join(ROLES))
+        outcome = self.operator_task('admission-set-role', [('--organization', self.organization), ('--principal', principal), ('--role', role)], 'set-role')
+        require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict) and outcome['result'].get('role') == role,
+                'set-role task did not succeed: ' + str((outcome['result'] or {}).get('refused') or 'no result'))
+        return dict(outcome['result'], status='role-set', receipts=self.receipts)
+
+    def grant_admin(self, principal):
+        """The runbook's alias: `set-role admin`."""
+        return dict(self.set_role(principal, 'admin'), status='granted')
 
     def revoke_admin(self, principal):
-        require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
-        outcome = self.operator_task('admission-revoke-admin', [('--organization', self.organization), ('--principal', principal)], 'revoke-admin')
-        require(outcome['exit_code'] == 0 and isinstance(outcome['result'], dict) and outcome['result'].get('permission') == 'admin_policy',
-                'revoke-admin task did not succeed')
-        return dict(outcome['result'], status='revoked-admin', receipts=self.receipts)
+        """The runbook's alias: `set-role member` (the reviewed undo of an admin grant to the wrong member)."""
+        return dict(self.set_role(principal, 'member'), status='revoked-admin')
 
     def reviewer(self, grant, principal, app, work):
         for value in (principal, app, work):
@@ -474,7 +480,7 @@ def _unique(pairs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'grant-admin', 'revoke-admin', 'grant-reviewer', 'revoke-reviewer',
+    parser.add_argument('command', choices=['issue', 'list', 'revoke', 'set-role', 'grant-admin', 'revoke-admin', 'grant-reviewer', 'revoke-reviewer',
                                             'delete-uploads', 'restart', 'suspend', 'purge'])
     parser.add_argument('--state-bucket', required=True)
     parser.add_argument('--state-prefix', default='beta')
@@ -487,7 +493,8 @@ def main(argv=None):
     parser.add_argument('--expires-days', type=int, default=14, help='issue: code expiry, 1 to 30 days')
     parser.add_argument('--without-notes', action='store_true', help='issue: before migration 0023 (no access_codes.note column)')
     parser.add_argument('--code', help='revoke: the code id')
-    parser.add_argument('--principal', help='grant-admin, revoke-admin, grant-reviewer, revoke-reviewer, delete-uploads: the member\'s principal id')
+    parser.add_argument('--principal', help='set-role, grant-admin, revoke-admin, grant-reviewer, revoke-reviewer, delete-uploads: the member\'s principal id')
+    parser.add_argument('--role', help='set-role: owner, admin, manager, member or viewer')
     parser.add_argument('--app', help='grant-reviewer, revoke-reviewer: the app id')
     parser.add_argument('--work', help='grant-reviewer, revoke-reviewer: the saved work id')
     parser.add_argument('--announced', action='store_true', help='restart: the members were told the service restarts now')
@@ -497,8 +504,10 @@ def main(argv=None):
         parser.error('issue needs --count, --notes-file and --identifiers')
     if args.command == 'revoke' and not args.code:
         parser.error('revoke needs --code')
-    if args.command in ('grant-admin', 'revoke-admin', 'delete-uploads') and not args.principal:
+    if args.command in ('set-role', 'grant-admin', 'revoke-admin', 'delete-uploads') and not args.principal:
         parser.error(args.command + ' needs --principal')
+    if args.command == 'set-role' and not args.role:
+        parser.error('set-role needs --role')
     if args.command in ('grant-reviewer', 'revoke-reviewer') and not (args.principal and args.app and args.work):
         parser.error(args.command + ' needs --principal, --app and --work')
     if args.command == 'purge' and not args.confirm:
@@ -522,6 +531,8 @@ def main(argv=None):
             result = trial.list_codes()
         elif args.command == 'revoke':
             result = trial.revoke(args.code)
+        elif args.command == 'set-role':
+            result = trial.set_role(args.principal, args.role)
         elif args.command == 'grant-admin':
             result = trial.grant_admin(args.principal)
         elif args.command == 'revoke-admin':

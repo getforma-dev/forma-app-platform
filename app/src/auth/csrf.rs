@@ -38,6 +38,8 @@ pub enum Form {
     SharedSignOut,
     /// Trial plan D4: an organization admin's Remove form (`org_admin`).
     OrgAdminRemove,
+    /// ADR-021 (APP-225): the Change role form (`org_admin`).
+    OrgAdminRole,
     /// Trial plan D6: the member's display-name form (`member_name`).
     DisplayName,
 }
@@ -52,6 +54,7 @@ impl Form {
             Self::SharedStart => b"shared-start",
             Self::SharedSignOut => b"shared-signout",
             Self::OrgAdminRemove => b"org-admin-remove",
+            Self::OrgAdminRole => b"org-admin-role",
             Self::DisplayName => b"display-name",
         }
     }

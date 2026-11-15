@@ -388,6 +388,11 @@ async fn name(
     let Some((_, member)) = crate::sharing::session(&auth, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (review MINOR-3): "Save as /name" writes the organization's
+    // names; a viewer is refused before storage.
+    if !member.can(crate::storage::Capability::Write) {
+        return http::viewer_read_only();
+    }
     if let Err(retry_after) = auth
         .limits
         .admit_member_write(member.organization(), member.principal())

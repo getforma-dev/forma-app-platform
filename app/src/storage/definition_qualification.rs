@@ -70,6 +70,19 @@ pub(super) fn request(
     principal: &str,
     epoch: i64,
 ) -> TrustedRequest {
+    request_as(stores, organization, principal, epoch, OrgRole::Member)
+}
+
+/// `request` with the organization role the fixture row carries (ADR-021);
+/// storage judges the stored role again, so a mismatch here changes nothing
+/// but the Rust-side `can` gate the campaigns exercise.
+pub(super) fn request_as(
+    stores: &Stores,
+    organization: &str,
+    principal: &str,
+    epoch: i64,
+    role: OrgRole,
+) -> TrustedRequest {
     TrustedRequest {
         organization: organization.into(),
         principal: principal.into(),
@@ -78,6 +91,7 @@ pub(super) fn request(
         provider_tenant: format!("ten_{organization}"),
         provider_subject: format!("usr_{principal}"),
         registry_sha256: stores.registry_identity().sha256.clone(),
+        role,
     }
 }
 

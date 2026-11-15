@@ -73,14 +73,42 @@ ADMIT_FUNCTIONS = {
     # when the member owns no eligible app.
     'ensure_authoring_shell': ('p_org uuid, p_principal uuid', 'uuid'),
     # Migration 0023 (trial plan D6, D4): the member's own display name, and
-    # the organization admin's overview and member removal under admin_policy.
+    # the organization admin's overview and member removal. Migration 0025
+    # (ADR-021): the overview answers the member's role (recreated: the return
+    # type changed), removal applies the role ladder, and set_member_role
+    # changes a member's role under it.
     'set_display_name': ('p_org uuid, p_principal uuid, p_name text', 'TABLE(changed boolean)'),
     'org_admin_overview': ('p_org uuid, p_caller uuid',
-                           'TABLE(principal_id uuid, display_name text, status text, is_admin boolean, consent_version integer, '
+                           'TABLE(principal_id uuid, display_name text, status text, role text, consent_version integer, '
                            'consented_at timestamp with time zone, last_active timestamp with time zone, apps bigint, works bigint, '
                            'records bigint, uploads bigint, code_status text, code_note text)'),
     'admin_remove_member': ('p_org uuid, p_caller uuid, p_principal uuid', 'TABLE(outcome text, membership_epoch bigint)'),
+    'set_member_role': ('p_org uuid, p_caller uuid, p_principal uuid, p_role text', 'TABLE(outcome text, changed boolean, membership_epoch bigint)'),
 }
+# ADR-021 (0025): the tables a viewer's member transaction may not write (the
+# RESTRICTIVE viewer_read_only_{insert,update,delete} policies, one expression).
+VIEWER_TABLES = ('apps','definition_revisions','definition_inputs','definition_record_schemas','publications','publication_inputs',
+                 'publication_record_schemas','publication_policies','app_labels',
+                 'saved_work','work_bindings','work_source_dependencies','work_data_copies','record_collections',
+                 'internal_records','internal_record_revisions','record_source_dependencies',
+                 'command_claims','command_outcomes',
+                 'work_shares','live_work_shares','app_permissions','work_permissions','source_permissions','box_shares','box_file_grants',
+                 'sources','source_revisions','boxes','box_files','box_file_sources','box_derivations','box_explanations','box_briefs',
+                 'agent_tokens','agent_attributions','slack_links')
+VIEWER_ROLES = ['genui_admit','genui_control','genui_data','genui_workspace']
+VIEWER_CLAUSE = ("((NULLIF(current_setting('genui.principal_id'::text, true), ''::text) IS NULL) OR (NOT (EXISTS ( SELECT 1\n"
+                 "   FROM genui.memberships vr\n"
+                 "  WHERE ((vr.organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid) "
+                 "AND (vr.principal_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid) AND (vr.role = 'viewer'::text))))))")
+
+
+def viewer_policies(table, named=False):
+    """The three viewer_read_only rows of one table, in pg_policies' (tablename[,policyname],permissive,roles,cmd,qual,with_check) shape, policyname order."""
+    rows = [(table,'viewer_read_only_delete','RESTRICTIVE',VIEWER_ROLES,'DELETE',VIEWER_CLAUSE,None),
+            (table,'viewer_read_only_insert','RESTRICTIVE',VIEWER_ROLES,'INSERT',None,VIEWER_CLAUSE),
+            (table,'viewer_read_only_update','RESTRICTIVE',VIEWER_ROLES,'UPDATE',VIEWER_CLAUSE,VIEWER_CLAUSE)]
+    return rows if named else [(r[0],)+r[2:] for r in rows]
+
 # Relations migration 0003 adds to genui (D7.3: each states RLS, FORCE and tenant_scope).
 ADMISSION_TABLES = ('access_codes','audit_events','audit_heads','code_grant_templates','code_redemptions',
                     'code_reservations','entitlements','provider_invitations')
@@ -95,15 +123,18 @@ CHAIN_KINDS = {
     # admin's removal (the two operator kinds on a second chain, as 0008 did).
     # 0024 widens it once more: set_work_everyone revokes an organization-wide
     # share (permission.revoked, recorded ADR-007 amendment 2026-11-14).
+    # 0025 (ADR-021): an admin's role change on the admission chain, the
+    # operator's set-role on the operator chain.
     'genui_admit': ('admission', ('admission.pending','admission.redeemed','admission.denied_for_reconciliation',
                                   'session.sign_out','session.sign_out_all','permission.granted',
-                                  'admission.consented','member.named','membership.revoked','entitlement.revoked','permission.revoked')),
+                                  'admission.consented','member.named','membership.revoked','entitlement.revoked','permission.revoked',
+                                  'membership.role_changed')),
     # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
                                  'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
                                  'creator_authority.revoked','provider.invitation.created','provider.invitation.reconciled',
                                  'provider.invitation.revoked','source_revision.registered','work.seeded',
-                                 'provider_tenant.bound','app.seeded')),
+                                 'provider_tenant.bound','app.seeded','membership.role_changed')),
 }
 
 
@@ -116,7 +147,7 @@ ADMIT_GRANTS = set().union(
     _columns('organizations','SELECT','organization_id','status'), _columns('organizations','UPDATE','status'),
     _columns('code_index','SELECT','code_digest','organization_id'),
     _columns('handle_index','SELECT','handle_digest','organization_id','retired_at'),
-    _columns('access_codes','SELECT','organization_id','code_id','code_digest','kind','status','max_redemptions','redeemed_count','expires_at'),
+    _columns('access_codes','SELECT','organization_id','code_id','code_digest','kind','status','max_redemptions','redeemed_count','expires_at','role'),
     _columns('access_codes','UPDATE','redeemed_count','status'),
     _columns('code_grant_templates','SELECT','organization_id','code_id','permission','app_id','work_id','source_id'),
     _columns('code_reservations','SELECT','organization_id','reservation_id','code_id','kind','context_digest','issuer',
@@ -128,16 +159,15 @@ ADMIT_GRANTS = set().union(
     _columns('principals','SELECT','organization_id','issuer','provider_tenant_id','provider_subject'),
     _columns('principals','INSERT','organization_id','principal_id','issuer','provider_tenant_id','provider_subject'),
     # 0008 adds status (share_work judges the grantee's membership).
-    _columns('memberships','SELECT','organization_id','principal_id','status','membership_epoch','display_name'),
+    _columns('memberships','SELECT','organization_id','principal_id','status','membership_epoch','display_name','role'),
     # 0008 (APP-095): the reads share_work needs to copy the sharer's subset.
     _columns('saved_work','SELECT','organization_id','app_id','work_id','created_by','creator_revoked_at'),
     _columns('work_source_dependencies','SELECT','organization_id','app_id','work_id','source_id'),
     _columns('app_permissions','SELECT','organization_id','principal_id','app_id','permission'),
     _columns('work_permissions','SELECT','organization_id','principal_id','app_id','work_id','permission'),
     _columns('source_permissions','SELECT','organization_id','principal_id','source_id','permission'),
-    _columns('memberships','INSERT','organization_id','principal_id','status','membership_epoch'),
-    _columns('memberships','UPDATE','membership_epoch','display_name','status'),
-    _columns('organization_permissions','INSERT','organization_id','principal_id','permission'),
+    _columns('memberships','INSERT','organization_id','principal_id','status','membership_epoch','role'),
+    _columns('memberships','UPDATE','membership_epoch','display_name','status','role'),
     _columns('app_permissions','INSERT','organization_id','principal_id','app_id','permission'),
     _columns('work_permissions','INSERT','organization_id','principal_id','app_id','work_id','permission'),
     _columns('source_permissions','INSERT','organization_id','principal_id','source_id','permission'),
@@ -177,7 +207,6 @@ ADMIT_GRANTS = set().union(
     _columns('apps','INSERT','organization_id','app_id','space_id','owner_principal_id'),
     _columns('publications','SELECT','organization_id','app_id'),
     _columns('spaces','SELECT','organization_id','space_id'),
-    _columns('organization_permissions','SELECT','organization_id','principal_id','permission'),
 )
 
 
@@ -522,7 +551,7 @@ def admission_checks(pg, passed, denied):
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(SHARING_TABLES),)).fetchall()
         # 0024 (review n2): the application roles read the organization-wide rows only.
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES]+[
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SHARING_TABLES]+viewer_policies('work_shares')+[
             ('work_shares','RESTRICTIVE',['genui_control','genui_data','genui_workspace'],'SELECT','(grantee_id IS NULL)',None)],rows
         shares=c.execute("""SELECT grantee,privilege_type,count(*) FROM information_schema.column_privileges
           WHERE table_schema='genui' AND table_name='work_shares' AND grantee<>'genui_owner' GROUP BY 1,2 ORDER BY 1,2""").fetchall()
@@ -542,8 +571,8 @@ def admission_checks(pg, passed, denied):
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND c.relkind='r' ORDER BY c.relname""",(list(SLACK_TABLES),)).fetchall()
         assert rows==[(t,True,True,'genui_owner') for t in SLACK_TABLES],rows
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
-          AND tablename = ANY(%s) ORDER BY tablename""",(list(SLACK_TABLES),)).fetchall()
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SLACK_TABLES],rows
+          AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(SLACK_TABLES),)).fetchall()
+        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in SLACK_TABLES]+viewer_policies('slack_links'),rows
         links=set(c.execute("""SELECT grantee,privilege_type,column_name FROM information_schema.column_privileges
           WHERE table_schema='genui' AND table_name='slack_links' AND grantee<>'genui_owner'""").fetchall())
         assert links=={(r,p,col) for (r,_,p,col) in SLACK_GRANTS},links
@@ -567,6 +596,8 @@ def admission_checks(pg, passed, denied):
         expected={(r[2],r[1],r[3],None) for r in previous['table_acl'] if r[2] in acl_roles}
         expected|={(r[3],r[1],r[4],r[2]) for r in previous['column_acl'] if r[3] in acl_roles}
         expected|=ADMIT_GRANTS|ENTITLEMENT_READS|DEFINITION_WORK_GRANTS|SESSION_GRANTS|COMMAND_GRANTS|SLACK_GRANTS|AGENT_GRANTS|BOX_GRANTS|LABEL_GRANTS|CARD_GRANTS|LIVE_SHARING_GRANTS|KIND_GRANTS|ORGANIZATION_SHARE_READS
+        # 0025 (ADR-021) drops organization_permissions: the 0002 table-level SELECT of the application roles goes with it.
+        expected={r for r in expected if r[1]!='organization_permissions'}
         assert actual==expected,{'unexpected':sorted(actual-expected,key=str),'missing':sorted(expected-actual,key=str)}
         # Application roles reach 0003's relations only through 0004's entitlement
         # reads, 0005's and 0007's own-chain audit append (D7.8) and 0006's narrow
@@ -610,7 +641,7 @@ def admission_checks(pg, passed, denied):
         writes=[r[0] for r in functions if re.search(r'\b(update|insert\s+into|delete\s+from)\s+genui\.organizations\b',r[7],re.I)]
         assert writes==[] and all(re.search(r'genui\.organizations\s+o\s+where\s+o\.organization_id\s*=\s*p_org\s+for\s+share',r[7],re.I)
                                   for r in functions if r[0] not in ('resolve_code','resolve_handle','expire_shared_identity')),writes
-    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; fifteen exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work as 0024 replaced it, the 0011 register_box_source, the 0015 steward_card, the 0016 ensure_authoring_shell, the 0024 set_work_everyone and revoke_work_share and the three 0023 name and admin definers) with fixed search_path and no organizations write',
+    passed('genui_admit is NOLOGIN NOINHERIT with no memberships, only the operator SET grant, no CREATE; sixteen exact STRICT VOLATILE definers (six of D7.1, the 0008 share_work as 0024 replaced it, the 0011 register_box_source, the 0015 steward_card, the 0016 ensure_authoring_shell, the 0024 set_work_everyone and revoke_work_share, the three 0023 name and admin definers and the 0025 set_member_role) with fixed search_path and no organizations write',
            incoming=[list(r) for r in incoming])
 
     # --- RESTRICTIVE audit bindings: INSERT holders equal policy targets (D7.8) ---
@@ -877,7 +908,8 @@ def admission_checks(pg, passed, denied):
         assert sorted(c.execute('SELECT app_id::text,permission FROM genui.app_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchall())==[(APP,'discover'),(APP,'run')]
         assert c.execute('SELECT app_id::text,work_id::text,permission FROM genui.work_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchall()==[(APP,WORK,'record_read')]
         assert c.execute('SELECT source_id::text,permission FROM genui.source_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchall()==[(source0,'source_read')]
-        assert c.execute('SELECT count(*) FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchone()==(0,)
+        # 0025 (ADR-021): a code admits with its role; the default is member.
+        assert c.execute('SELECT role FROM genui.memberships WHERE organization_id=%s AND principal_id=%s',(org0,principal_a)).fetchone()==('member',)
         assert c.execute("""SELECT entitlement_id::text,status,kind,expires_at-starts_at,revoked_at FROM genui.entitlements
           WHERE organization_id=%s AND principal_id=%s""",(org0,principal_a)).fetchone()[:4]==(entitlement_a,'active','trial',
             c.execute("SELECT interval '30 days'").fetchone()[0])
@@ -1169,9 +1201,10 @@ def definition_work_checks(pg, passed, denied):
         assert keys==[('genui.publications','u','UNIQUE (organization_id, app_id, publication_sequence)'),
                       ('genui.saved_work','f','FOREIGN KEY (organization_id, created_by) REFERENCES genui.memberships(organization_id, principal_id)')],keys
         creator=c.execute("""SELECT policyname::text,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
-          AND tablename='saved_work' AND policyname<>'tenant_scope'""").fetchall()
+          AND tablename='saved_work' AND policyname<>'tenant_scope' ORDER BY policyname""").fetchall()
         assert creator==[('saved_work_creator','RESTRICTIVE',['genui_workspace'],'INSERT',None,
-                          "(created_by = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")],creator
+                          "(created_by = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")]+[
+                          r[1:] for r in viewer_policies('saved_work',named=True)],creator
     passed('0005 creator authority and publication order (ADR-007 amendment): saved_work.created_by/creator_revoked_at with the composite memberships key and the workspace RESTRICTIVE creator check; publications.publication_sequence NOT NULL and unique per app')
     pub_row=("INSERT INTO genui.publications(organization_id,app_id,publication_id,definition_revision_id,definition_digest,policy_id,policy_version,policy_kind,author_id,approver_id,approver_epoch,renderer_version,operator_version,admission_digest,published_at,canonical_envelope) VALUES (%s,%s,%s,%s,%s,%s,1,'owner_publish',%s,%s,1,1,1,%s,now(),%s)",
              (org0,APP,str(uuid.uuid4()),'00000000-0000-4000-8000-000000000067',sha('d'),OWNER_PUBLISH_POLICY,P,P,sha('d'),b'{}'))
@@ -1263,7 +1296,7 @@ def session_checks(pg, passed, denied):
         assert rows==[(t,True,True,'genui_owner') for t in AGENT_TABLES],rows
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(AGENT_TABLES),)).fetchall()
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in AGENT_TABLES],rows
+        assert rows==[row for t in AGENT_TABLES for row in [(t,'PERMISSIVE',['public'],'ALL',policy,policy)]+(viewer_policies(t) if t in VIEWER_TABLES else [])],rows
         digests=c.execute("""SELECT a.attname,format_type(a.atttypid,a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname='agent_tokens' AND a.attnum>0 AND a.attname LIKE 'token%%'
           ORDER BY 1""").fetchall()
@@ -1278,7 +1311,7 @@ def session_checks(pg, passed, denied):
         assert rows==[(t,True,True,'genui_owner') for t in sorted(BOX_TABLES)],rows
         rows=c.execute("""SELECT tablename,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(BOX_TABLES),)).fetchall()
-        assert rows==[(t,'PERMISSIVE',['public'],'ALL',policy,policy) for t in sorted(BOX_TABLES)],rows
+        assert rows==[row for t in sorted(BOX_TABLES) for row in [(t,'PERMISSIVE',['public'],'ALL',policy,policy)]+viewer_policies(t)],rows
     passed('0011 folder relations (boxes, files, registrations, derivations, shares, file grants, explanations, briefs) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy',
            tables=list(BOX_TABLES))
     # 0014 (APP-121): the naming relations, likewise owner-held under FORCE RLS.
@@ -1290,7 +1323,7 @@ def session_checks(pg, passed, denied):
         rows=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND tablename = ANY(%s) ORDER BY tablename,policyname""",(list(LABEL_TABLES),)).fetchall()
         principal="(principal_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)"
-        assert rows==[('app_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy),
+        assert rows==[('app_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy)]+viewer_policies('app_labels',named=True)+[
                       ('member_labels','member_labels_principal','RESTRICTIVE',['genui_workspace'],'ALL',principal,principal),
                       ('member_labels','tenant_scope','PERMISSIVE',['public'],'ALL',policy,policy)],rows
     passed('0014 naming relations (organization labels, personal labels) are owner-held with ENABLE+FORCE RLS and the exact tenant_scope policy; the workspace reads and writes only the scoped principal\'s personal labels (RESTRICTIVE member_labels_principal)',
@@ -1374,11 +1407,11 @@ def command_checks(pg, passed, denied):
         bindings=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies WHERE schemaname='genui'
           AND tablename IN ('command_claims','command_outcomes','internal_record_revisions') AND policyname<>'tenant_scope' ORDER BY tablename,policyname""").fetchall()
         assert bindings==[('command_claims','command_principal','RESTRICTIVE',['genui_data'],'INSERT',None,principal),
-                          ('command_claims','command_principal_read','RESTRICTIVE',['genui_data'],'SELECT',principal,None),
+                          ('command_claims','command_principal_read','RESTRICTIVE',['genui_data'],'SELECT',principal,None)]+viewer_policies('command_claims',named=True)+[
                           ('command_outcomes','command_principal','RESTRICTIVE',['genui_data'],'INSERT',None,principal),
-                          ('command_outcomes','command_principal_read','RESTRICTIVE',['genui_data'],'SELECT',principal,None),
+                          ('command_outcomes','command_principal_read','RESTRICTIVE',['genui_data'],'SELECT',principal,None)]+viewer_policies('command_outcomes',named=True)+[
                           ('internal_record_revisions','record_updater','RESTRICTIVE',['genui_data'],'INSERT',None,
-                           "(updater_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")],bindings
+                           "(updater_id = (NULLIF(current_setting('genui.principal_id'::text, true), ''::text))::uuid)")]+viewer_policies('internal_record_revisions',named=True),bindings
         typed=c.execute("""SELECT c.relname,a.attname,format_type(a.atttypid,a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
           JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='genui' AND c.relname = ANY(%s) AND a.attnum>0 AND NOT a.attisdropped
           AND (a.attname LIKE '%%digest' OR a.attname LIKE '%%sequence' OR a.attname LIKE '%%version' OR a.attname='command_id') ORDER BY 1,2""",
@@ -1671,7 +1704,7 @@ def qualify():
         passed(name+' refuses without repairing drift')
     report['committed_drift_containers_removed']=[]
     for label, statement, legacy in (
-        ('missing real table', 'SET LOCAL ROLE genui_owner; DROP TABLE genui.organization_permissions', False),
+        ('missing real table', 'SET LOCAL ROLE genui_owner; DROP TABLE genui.member_consents', False),
         ('disabled tenant RLS', 'SET LOCAL ROLE genui_owner; ALTER TABLE genui.organizations DISABLE ROW LEVEL SECURITY', False),
         ('extra application UPDATE', 'SET LOCAL ROLE genui_owner; GRANT UPDATE ON genui.publications TO genui_workspace', False),
         ('preexisting history1 with role drift', 'ALTER ROLE genui_workspace INHERIT', True),
@@ -2034,7 +2067,7 @@ def qualify():
                 c.execute('UPDATE genui_meta.schema_migrations SET sha256=%s WHERE version=%s',(sources[-1][1],latest))
             passed('altered recorded checksum refuses without altering database')
             for label, statements in (
-                ('missing real table',["SET LOCAL ROLE genui_owner", "DROP TABLE genui.organization_permissions"]),
+                ('missing real table',["SET LOCAL ROLE genui_owner", "DROP TABLE genui.member_consents"]),
                 ('missing real column',["SET LOCAL ROLE genui_owner", "ALTER TABLE genui.organizations DROP COLUMN display_name"]),
                 ('changed column default',["SET LOCAL ROLE genui_owner", "ALTER TABLE genui.organizations ALTER COLUMN status SET DEFAULT 'active'"]),
                 ('missing check constraint',["SET LOCAL ROLE genui_owner", "ALTER TABLE genui.organizations DROP CONSTRAINT organizations_status_check"]),
@@ -2149,10 +2182,15 @@ def qualify():
                   AND NOT (permissive='RESTRICTIVE' AND tablename='member_cards' AND policyname='member_cards_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='work_artifact_kinds' AND policyname='work_artifact_kinds_principal')
                   AND NOT (permissive='RESTRICTIVE' AND tablename='work_shares' AND policyname='work_shares_everyone')
-                  AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""").fetchone()==(0,)
+                  AND NOT (permissive='RESTRICTIVE' AND policyname LIKE 'viewer_read_only_%%' AND tablename = ANY(%s))
+                  AND NOT (permissive='RESTRICTIVE' AND tablename IN ('command_claims','command_outcomes','internal_record_revisions'))""",(list(VIEWER_TABLES),)).fetchone()==(0,)
+                # 0025 (ADR-021): exactly the three viewer_read_only policies on each write table, one expression.
+                viewer=c.execute("""SELECT tablename,policyname,permissive,roles::text[],cmd,qual,with_check FROM pg_policies
+                  WHERE schemaname='genui' AND policyname LIKE 'viewer_read_only_%%' ORDER BY tablename,policyname""").fetchall()
+                assert viewer==[r for t in sorted(VIEWER_TABLES) for r in viewer_policies(t,named=True)],viewer
                 # 0007's RESTRICTIVE principal bindings, exactly (checked in detail by command_checks).
                 assert set(c.execute("""SELECT tablename,policyname,cmd FROM pg_policies WHERE schemaname='genui' AND permissive='RESTRICTIVE'
-                  AND tablename IN ('command_claims','command_outcomes','internal_record_revisions')""").fetchall())==COMMAND_POLICIES
+                  AND tablename IN ('command_claims','command_outcomes','internal_record_revisions') AND policyname NOT LIKE 'viewer_read_only_%%'""").fetchall())==COMMAND_POLICIES
                 lock=c.execute("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolcanlogin,rolinherit FROM pg_roles WHERE rolname='genui_lock'").fetchone()
                 assert lock==(False,)*7
                 assert c.execute("SELECT count(*) FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname='genui_lock')").fetchone()==(0,)

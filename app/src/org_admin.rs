@@ -1,32 +1,42 @@
-//! `GET /admin` and `POST /admin/members/{principal}/remove` (D4 of the
-//! trial plan): the organization's own admin area, in the product, beside
-//! the operator's audited back office. Server-rendered (`orgAdmin` in
-//! `admin/build.ts`), no script.
+//! `GET /admin`, `POST /admin/members/{principal}/role` and `POST
+//! /admin/members/{principal}/remove` (D4 of the trial plan; ADR-021
+//! organization roles, APP-225): the organization's own admin area, in the
+//! product, beside the operator's audited back office. Server-rendered
+//! (`orgAdmin` in `admin/build.ts`), no script.
 //!
-//! Order, both routes: (`POST`: fetch metadata, else 403 `cross_site`) → a
+//! Order, all routes: (`POST`: fetch metadata, else 403 `cross_site`) → a
 //! live workspace session (`query::routes::member`; else the uniform 404) →
 //! the query string (`GET`: none, or exactly `notice=<code>` from the closed
 //! set below; `POST`: none; else the uniform 404) → `is_org_admin` (false,
 //! or any authority refusal: the uniform 404, before any member data is read;
-//! a store outage 503) → `POST`: the form body (at most 4 KiB, `csrf` and
-//! `confirm` only; a missing or wrong synchronizer token 403 `cross_site`,
-//! tied to the session cookie and `csrf::Form::OrgAdminRemove`) → the
-//! storage call.
+//! a store outage 503) → `POST`: the form body (at most 4 KiB, the form's
+//! own fields only; a missing or wrong synchronizer token 403 `cross_site`,
+//! tied to the session cookie and the form's `csrf::Form`) → the storage
+//! call.
 //!
-//! Remove answers `303` to `/admin?notice=<code>`: `removed`, `unconfirmed`
-//! (the confirmation box was not ticked; nothing was called), the refusal
-//! storage named (`self`, `last_admin`, `not_member`), or `unavailable` (a
-//! storage outage, a concurrent removal that PostgreSQL aborted, or an
-//! unknown outcome; recheck N6), each shown in plain words on the page. A
-//! storage outage on `GET /admin` itself is the same page with that notice
-//! and no member data (503), never a raw JSON body. A removal ends the member's sessions at their next
-//! request (storage advances the epoch). Logs carry identities and codes;
-//! never a name or a note.
+//! Change role (`csrf::Form::OrgAdminRole`; fields `csrf`, `role`, `from`
+//! and `confirm`) answers `303` to `/admin?notice=<code>`: `role_changed`,
+//! `role_unchanged`, `role_unconfirmed` (the chosen or the current role is
+//! owner or admin and the confirmation box was not ticked; nothing was
+//! called), the refusal storage named (`role_not_allowed`, `role_last_owner`,
+//! `role_self`, `role_not_member`, `role_unknown`), or `unavailable`. The
+//! page offers each row only the roles the caller may set on it
+//! (`OrgRole::assignable`); the server enforces the ladder regardless, in
+//! Rust and again in the definer. Remove (`csrf::Form::OrgAdminRemove`;
+//! `csrf` and `confirm`) answers `removed`, `unconfirmed`, the refusal
+//! storage named (`self`, `last_owner`, `not_member`, `not_allowed`), or
+//! `unavailable` (a storage outage, a concurrent change that PostgreSQL
+//! aborted, or an unknown outcome; recheck N6), each shown in plain words
+//! on the page. A storage outage on `GET /admin` itself is the same page
+//! with that notice and no member data (503), never a raw JSON body. A role
+//! change or a removal ends the member's sessions at their next request
+//! (storage advances the epoch). Logs carry identities and codes; never a
+//! name or a note.
 use crate::{
     auth::{csrf, Auth},
     http::{self, UniformPath},
     query::routes::member,
-    storage::{self, MemberRow, RemoveOutcome, TrustedRequest, Workspace},
+    storage::{self, MemberRow, OrgRole, RemoveOutcome, RoleOutcome, TrustedRequest, Workspace},
 };
 use axum::{
     extract::{Request, State},
@@ -40,6 +50,7 @@ use forma_server::{PageHandle, RenderCtx};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 pub const PATH: &str = "/admin";
+pub const ROLE_PATH: &str = "/admin/members/{principal}/role";
 pub const REMOVE_PATH: &str = "/admin/members/{principal}/remove";
 
 /// The page (`admin/src/org-admin/app.tsx`).
@@ -67,20 +78,47 @@ pub struct AdminMemberProps {
     pub label: String,
     pub note: String,
     pub status: String,
-    /// "Admin", "Member", with " · you" on the viewer's own row.
+    /// "Owner", "Admin", "Manager", "Member", "Viewer", with " · you" on the
+    /// viewer's own row.
     pub role: String,
+    /// The stored role (`owner` … `viewer`): the Change role form's `from`.
+    pub role_code: String,
+    /// The caller may set a role on this active member: the select and the
+    /// Change role form are offered (storage judges the ladder again).
+    pub changeable: bool,
+    /// The inverse of `changeable` (the role is shown as text).
+    pub fixed_role: bool,
+    /// The roles the caller may set on this row, highest first, the current
+    /// one selected.
+    pub options: Vec<RoleOptionProps>,
+    /// The confirmation box is shown: the row's role or an offered role is
+    /// owner or admin (the server requires it for those changes).
+    pub confirm_role: bool,
+    /// "Role for <name>": the select's accessible name.
+    pub role_select_label: String,
+    pub role_action: String,
+    pub csrf_role: String,
     pub consent: String,
     pub last_active: String,
     pub apps: String,
     pub works: String,
     pub records: String,
     pub uploads: String,
-    /// An active member other than the viewer: the Remove form is offered
-    /// (storage still judges `self` and `last_admin`).
+    /// An active member other than the viewer whose role the caller manages:
+    /// the Remove form is offered (storage still judges `self`, `last_owner`
+    /// and `not_allowed`).
     pub removable: bool,
     pub action: String,
     pub csrf: String,
     pub confirm_label: String,
+}
+
+/// One `<option>` of a row's role select.
+#[derive(PageProps, Clone, Debug, Default, Eq, PartialEq)]
+pub struct RoleOptionProps {
+    pub value: String,
+    pub label: String,
+    pub selected: bool,
 }
 
 /// What `?notice=` may name, and the words the page shows for it.
@@ -88,7 +126,13 @@ pub struct AdminMemberProps {
 pub enum Notice {
     Removed,
     Unconfirmed,
+    /// A removal refusal storage named.
     Refused(&'static str),
+    RoleChanged,
+    RoleUnchanged,
+    RoleUnconfirmed,
+    /// A role-change refusal storage named.
+    RoleRefused(&'static str),
     /// Recheck N6: storage could not complete or confirm the request.
     Unavailable,
 }
@@ -98,8 +142,17 @@ impl Notice {
             "removed" => Some(Self::Removed),
             "unconfirmed" => Some(Self::Unconfirmed),
             "self" => Some(Self::Refused("self")),
-            "last_admin" => Some(Self::Refused("last_admin")),
+            "last_owner" => Some(Self::Refused("last_owner")),
             "not_member" => Some(Self::Refused("not_member")),
+            "not_allowed" => Some(Self::Refused("not_allowed")),
+            "role_changed" => Some(Self::RoleChanged),
+            "role_unchanged" => Some(Self::RoleUnchanged),
+            "role_unconfirmed" => Some(Self::RoleUnconfirmed),
+            "role_not_allowed" => Some(Self::RoleRefused("not_allowed")),
+            "role_last_owner" => Some(Self::RoleRefused("last_owner")),
+            "role_self" => Some(Self::RoleRefused("self")),
+            "role_not_member" => Some(Self::RoleRefused("not_member")),
+            "role_unknown" => Some(Self::RoleRefused("unknown_role")),
             "unavailable" => Some(Self::Unavailable),
             _ => None,
         }
@@ -109,6 +162,14 @@ impl Notice {
             Self::Removed => "removed",
             Self::Unconfirmed => "unconfirmed",
             Self::Refused(code) => code,
+            Self::RoleChanged => "role_changed",
+            Self::RoleUnchanged => "role_unchanged",
+            Self::RoleUnconfirmed => "role_unconfirmed",
+            Self::RoleRefused("not_allowed") => "role_not_allowed",
+            Self::RoleRefused("last_owner") => "role_last_owner",
+            Self::RoleRefused("self") => "role_self",
+            Self::RoleRefused("not_member") => "role_not_member",
+            Self::RoleRefused(_) => "role_unknown",
             Self::Unavailable => "unavailable",
         }
     }
@@ -123,14 +184,40 @@ impl Notice {
                 "refused",
             ),
             Self::Refused("self") => (
-                "You can't remove yourself. Another admin of this organization can.",
+                "You can't remove yourself. Another owner or admin of this organization can.",
                 "refused",
             ),
-            Self::Refused("last_admin") => (
-                "You can't remove the last admin of this organization.",
+            Self::Refused("last_owner") => (
+                "You can't remove the last owner of this organization.",
+                "refused",
+            ),
+            Self::Refused("not_allowed") => (
+                "You can't remove that member: their role is above what your role manages.",
                 "refused",
             ),
             Self::Refused(_) => ("That person is no longer an active member.", "refused"),
+            Self::RoleChanged => (
+                "The role was changed. Their open sessions pick it up at their next request.",
+                "done",
+            ),
+            Self::RoleUnchanged => ("That member already has that role. Nothing changed.", "done"),
+            Self::RoleUnconfirmed => (
+                "Nothing changed. Tick the confirmation box to change an owner or admin role.",
+                "refused",
+            ),
+            Self::RoleRefused("not_allowed") => (
+                "You can't set that role: it, or the member's current role, is above what your role manages.",
+                "refused",
+            ),
+            Self::RoleRefused("last_owner") => (
+                "You can't change the last owner's role. Make someone else an owner first.",
+                "refused",
+            ),
+            Self::RoleRefused("self") => ("You can't raise your own role.", "refused"),
+            Self::RoleRefused("not_member") => {
+                ("That person is no longer an active member.", "refused")
+            }
+            Self::RoleRefused(_) => ("That is not a role here.", "refused"),
             Self::Unavailable => (
                 "That could not be completed or confirmed just now. Reload this page in a minute to see the current list.",
                 "refused",
@@ -147,6 +234,12 @@ pub trait AdminStore: Send + Sync {
     fn is_org_admin<'a>(&'a self, request: &'a TrustedRequest) -> Pending<'a, bool>;
     fn organization_name<'a>(&'a self, request: &'a TrustedRequest) -> Pending<'a, String>;
     fn overview<'a>(&'a self, request: &'a TrustedRequest) -> Pending<'a, Vec<MemberRow>>;
+    fn set_role<'a>(
+        &'a self,
+        request: &'a TrustedRequest,
+        principal: &'a str,
+        role: OrgRole,
+    ) -> Pending<'a, RoleOutcome>;
     fn remove<'a>(
         &'a self,
         request: &'a TrustedRequest,
@@ -162,6 +255,14 @@ impl AdminStore for Workspace {
     }
     fn overview<'a>(&'a self, request: &'a TrustedRequest) -> Pending<'a, Vec<MemberRow>> {
         Box::pin(self.org_admin_overview(request))
+    }
+    fn set_role<'a>(
+        &'a self,
+        request: &'a TrustedRequest,
+        principal: &'a str,
+        role: OrgRole,
+    ) -> Pending<'a, RoleOutcome> {
+        Box::pin(self.set_member_role(request, principal, role))
     }
     fn remove<'a>(
         &'a self,
@@ -213,6 +314,7 @@ pub struct OrgAdmin {
 pub fn router(state: Arc<OrgAdmin>) -> Router {
     Router::new()
         .route(PATH, get(show_route))
+        .route(ROLE_PATH, post(role_route))
         .route(REMOVE_PATH, post(remove_route))
         .with_state(state)
 }
@@ -245,8 +347,8 @@ async fn show_route(State(state): State<Arc<OrgAdmin>>, request: Request) -> Res
     .await
 }
 
-/// The members table for an organization admin; the uniform 404 for anyone
-/// else, decided before any member data is read.
+/// The members table for an organization owner, admin or manager; the
+/// uniform 404 for anyone else, decided before any member data is read.
 pub(crate) async fn show(
     store: &dyn AdminStore,
     pages: &dyn AdminPages,
@@ -270,11 +372,65 @@ pub(crate) async fn show(
         event = "org_admin.viewed",
         organization_id = member.organization(),
         principal_id = member.principal(),
+        role = member.role().as_str(),
         members = rows.len(),
         notice = notice.map(Notice::code),
         "organization admin page"
     );
     pages.page(&props(csrf, cookie, member, organization, &rows, notice))
+}
+
+/// The common front of both `POST` routes: fetch metadata, the session, the
+/// path, the standing, then the form body.
+async fn post_front(
+    state: &OrgAdmin,
+    principal: &str,
+    request: Request,
+) -> Result<(String, TrustedRequest, Vec<(String, String)>), Response> {
+    let (parts, body) = request.into_parts();
+    if !csrf::same_origin(&parts.headers, state.auth.origin()) {
+        return Err(http::cross_site());
+    }
+    let (cookie, member) = member(&state.auth, &parts.headers).await?;
+    if parts.uri.query().is_some() || !storage::valid_identifier(principal) {
+        return Err(http::not_found());
+    }
+    let Some(stores) = state.auth.stores.as_ref() else {
+        return Err(http::not_found());
+    };
+    match admin(&stores.workspace, &member).await {
+        Standing::Admin => {}
+        Standing::Stranger => return Err(http::not_found()),
+        Standing::Outage => return Err(notice(Notice::Unavailable)),
+    }
+    let Some(fields) = http::form(body).await else {
+        return Err(http::payload_too_large());
+    };
+    Ok((cookie, member, fields))
+}
+
+/// `POST /admin/members/{principal}/role`.
+async fn role_route(
+    State(state): State<Arc<OrgAdmin>>,
+    UniformPath(principal): UniformPath<String>,
+    request: Request,
+) -> Response {
+    let (cookie, member, fields) = match post_front(&state, &principal, request).await {
+        Ok(front) => front,
+        Err(refusal) => return refusal,
+    };
+    let Some(stores) = state.auth.stores.as_ref() else {
+        return http::not_found();
+    };
+    set_role(
+        &stores.workspace,
+        &state.auth.csrf,
+        &cookie,
+        &member,
+        &principal,
+        &fields,
+    )
+    .await
 }
 
 /// `POST /admin/members/{principal}/remove`.
@@ -283,27 +439,12 @@ async fn remove_route(
     UniformPath(principal): UniformPath<String>,
     request: Request,
 ) -> Response {
-    let (parts, body) = request.into_parts();
-    if !csrf::same_origin(&parts.headers, state.auth.origin()) {
-        return http::cross_site();
-    }
-    let (cookie, member) = match member(&state.auth, &parts.headers).await {
-        Ok(member) => member,
+    let (cookie, member, fields) = match post_front(&state, &principal, request).await {
+        Ok(front) => front,
         Err(refusal) => return refusal,
     };
-    if parts.uri.query().is_some() || !storage::valid_identifier(&principal) {
-        return http::not_found();
-    }
     let Some(stores) = state.auth.stores.as_ref() else {
         return http::not_found();
-    };
-    match admin(&stores.workspace, &member).await {
-        Standing::Admin => {}
-        Standing::Stranger => return http::not_found(),
-        Standing::Outage => return notice(Notice::Unavailable),
-    }
-    let Some(fields) = http::form(body).await else {
-        return http::payload_too_large();
     };
     remove(
         &stores.workspace,
@@ -316,7 +457,107 @@ async fn remove_route(
     .await
 }
 
-/// The removal of `principal` by an admin already judged (`admin`): the
+/// One form's fields: every name from the closed set, `csrf` exactly once,
+/// the others at most once.
+fn shaped(fields: &[(String, String)], names: &[&str]) -> bool {
+    let count = |field: &str| fields.iter().filter(|(name, _)| name == field).count();
+    fields
+        .iter()
+        .all(|(name, _)| names.contains(&name.as_str()))
+        && count("csrf") == 1
+        && names.iter().all(|name| count(name) <= 1)
+}
+fn value<'a>(fields: &'a [(String, String)], field: &str) -> Option<&'a str> {
+    fields
+        .iter()
+        .find(|(name, _)| name == field)
+        .map(|(_, value)| value.as_str())
+}
+
+/// ADR-021: the role change of `principal` by a caller already judged
+/// (`admin`): the token, the role, the confirmation for an owner or admin
+/// change, the Rust-side ladder (`OrgRole::may_set`, judged again by the
+/// definer), then storage; a `303` to the page with the outcome's notice.
+pub(crate) async fn set_role(
+    store: &dyn AdminStore,
+    csrf: &csrf::CsrfKey,
+    cookie: &str,
+    member: &TrustedRequest,
+    principal: &str,
+    fields: &[(String, String)],
+) -> Response {
+    let token = value(fields, "csrf").unwrap_or("");
+    if !shaped(fields, &["csrf", "role", "from", "confirm"])
+        || !csrf.verify(csrf::Form::OrgAdminRole, cookie, token)
+    {
+        return http::cross_site();
+    }
+    let log = |code: &str| {
+        tracing::info!(
+            event = "org_admin.set_role",
+            code,
+            organization_id = member.organization(),
+            principal_id = member.principal(),
+            member_id = principal,
+            role = value(fields, "role").unwrap_or(""),
+            "organization admin role change"
+        );
+    };
+    let Some(role) = value(fields, "role").and_then(OrgRole::parse) else {
+        log("unknown_role");
+        return notice(Notice::RoleRefused("unknown_role"));
+    };
+    // The row's role as rendered (a hint for the confirmation only; the
+    // definer reads the stored role).
+    let from = value(fields, "from").and_then(OrgRole::parse);
+    let sensitive = |role: OrgRole| matches!(role, OrgRole::Owner | OrgRole::Admin);
+    if (sensitive(role) || from.is_some_and(sensitive)) && value(fields, "confirm") != Some("role")
+    {
+        log("role_unconfirmed");
+        return notice(Notice::RoleUnconfirmed);
+    }
+    // ADR-021 in Rust first: the ladder as the caller's resolved role knows
+    // it (the definer judges the stored roles under the fence).
+    if let Some(from) = from {
+        if !member
+            .role()
+            .may_set(from, role, principal == member.principal())
+        {
+            log("not_allowed");
+            return notice(Notice::RoleRefused("not_allowed"));
+        }
+    }
+    match store.set_role(member, principal, role).await {
+        Ok(RoleOutcome::Changed) => {
+            log("changed");
+            notice(Notice::RoleChanged)
+        }
+        Ok(RoleOutcome::Unchanged) => {
+            log("unchanged");
+            notice(Notice::RoleUnchanged)
+        }
+        Ok(RoleOutcome::Refused(code)) => {
+            log(code);
+            notice(Notice::RoleRefused(match code {
+                "not_allowed" => "not_allowed",
+                "last_owner" => "last_owner",
+                "self" => "self",
+                "not_member" => "not_member",
+                _ => "unknown_role",
+            }))
+        }
+        Err(storage::Error::Denied) => http::not_found(),
+        Err(error) => {
+            log(match error {
+                storage::Error::UnknownOutcome => "unknown_outcome",
+                _ => "unavailable",
+            });
+            notice(Notice::Unavailable)
+        }
+    }
+}
+
+/// The removal of `principal` by a caller already judged (`admin`): the
 /// token, the confirmation, then storage; a `303` to the page with the
 /// outcome's notice.
 pub(crate) async fn remove(
@@ -327,23 +568,13 @@ pub(crate) async fn remove(
     principal: &str,
     fields: &[(String, String)],
 ) -> Response {
-    let count = |field: &str| fields.iter().filter(|(name, _)| name == field).count();
-    let value = |field: &str| {
-        fields
-            .iter()
-            .find(|(name, _)| name == field)
-            .map(|(_, value)| value.as_str())
-    };
-    let shaped = fields
-        .iter()
-        .all(|(name, _)| name == "csrf" || name == "confirm")
-        && count("csrf") == 1
-        && count("confirm") <= 1;
-    let token = value("csrf").unwrap_or("");
-    if !shaped || !csrf.verify(csrf::Form::OrgAdminRemove, cookie, token) {
+    let token = value(fields, "csrf").unwrap_or("");
+    if !shaped(fields, &["csrf", "confirm"])
+        || !csrf.verify(csrf::Form::OrgAdminRemove, cookie, token)
+    {
         return http::cross_site();
     }
-    let confirmed = value("confirm") == Some("remove");
+    let confirmed = value(fields, "confirm") == Some("remove");
     let log = |code: &str| {
         tracing::info!(
             event = "org_admin.remove",
@@ -371,9 +602,9 @@ pub(crate) async fn remove(
         }
         Err(storage::Error::Denied) => http::not_found(),
         Err(error) => {
-            // Recheck N6: an outage, a concurrent removal PostgreSQL aborted
-            // (the two admins' locks), or an unknown outcome. The database
-            // is as storage left it; the page says to reload and look.
+            // Recheck N6: an outage, a concurrent change PostgreSQL aborted
+            // (two admins' locks), or an unknown outcome. The database is as
+            // storage left it; the page says to reload and look.
             log(match error {
                 storage::Error::UnknownOutcome => "unknown_outcome",
                 _ => "unavailable",
@@ -386,7 +617,7 @@ pub(crate) async fn remove(
 /// Where the request's member stands in its organization.
 enum Standing {
     Admin,
-    /// Not an admin, or any authority refusal: the uniform 404.
+    /// Not an owner, admin or manager, or any authority refusal: the uniform 404.
     Stranger,
     /// The store could not say.
     Outage,
@@ -400,7 +631,7 @@ async fn admin(store: &dyn AdminStore, member: &TrustedRequest) -> Standing {
 }
 
 /// The page with the outage notice and no member data (503): the same
-/// for every member, since the store could not say who is an admin.
+/// for every member, since the store could not say who administers.
 fn outage(pages: &dyn AdminPages, csrf: &csrf::CsrfKey, cookie: &str) -> Response {
     let (words, kind) = Notice::Unavailable.words();
     let mut response = pages.page(&AdminProps {
@@ -422,6 +653,17 @@ fn notice(notice: Notice) -> Response {
     http::see_other(&format!("{PATH}?notice={}", notice.code()))
 }
 
+/// The role's word on the page.
+pub(crate) fn role_word(role: OrgRole) -> &'static str {
+    match role {
+        OrgRole::Owner => "Owner",
+        OrgRole::Admin => "Admin",
+        OrgRole::Manager => "Manager",
+        OrgRole::Member => "Member",
+        OrgRole::Viewer => "Viewer",
+    }
+}
+
 /// The page props from storage's rows (every value is text the page shows
 /// as is; names and notes are escaped by the renderer).
 pub(crate) fn props(
@@ -433,17 +675,35 @@ pub(crate) fn props(
     notice: Option<Notice>,
 ) -> AdminProps {
     let remove_token = csrf.token(csrf::Form::OrgAdminRemove, cookie);
+    let role_token = csrf.token(csrf::Form::OrgAdminRole, cookie);
     let active = rows.iter().filter(|row| row.status == "active").count();
+    let caller = member.role();
     let members: Vec<AdminMemberProps> = rows
         .iter()
         .map(|row| {
             let mine = row.principal == member.principal();
-            let role = match (row.is_admin, mine) {
-                (true, true) => "Admin · you",
-                (true, false) => "Admin",
-                (false, true) => "Member · you",
-                (false, false) => "Member",
+            let live = row.status == "active";
+            let options: Vec<RoleOptionProps> = if live {
+                caller
+                    .assignable(row.role, mine)
+                    .into_iter()
+                    .map(|role| RoleOptionProps {
+                        value: role.as_str().into(),
+                        label: role_word(role).into(),
+                        selected: role == row.role,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
             };
+            // One role to offer besides the current one, else no form.
+            let changeable = options.iter().any(|option| !option.selected);
+            let sensitive = |role: OrgRole| matches!(role, OrgRole::Owner | OrgRole::Admin);
+            let confirm_role = changeable
+                && (sensitive(row.role)
+                    || options
+                        .iter()
+                        .any(|option| OrgRole::parse(&option.value).is_some_and(sensitive)));
             AdminMemberProps {
                 id: row.principal.clone(),
                 label: row.label.clone(),
@@ -453,7 +713,19 @@ pub(crate) fn props(
                     "revoked" => "Removed".into(),
                     other => other.to_owned(),
                 },
-                role: role.into(),
+                role: if mine {
+                    format!("{} · you", role_word(row.role))
+                } else {
+                    role_word(row.role).into()
+                },
+                role_code: row.role.as_str().into(),
+                changeable,
+                fixed_role: !changeable,
+                options,
+                confirm_role,
+                role_select_label: format!("Role for {}", row.label),
+                role_action: format!("/admin/members/{}/role", row.principal),
+                csrf_role: role_token.clone(),
                 consent: match (row.consent_version, row.consented_at.as_deref()) {
                     (Some(version), Some(at)) => format!("Notice v{version}, {}", day(at)),
                     (Some(version), None) => format!("Notice v{version}"),
@@ -468,7 +740,7 @@ pub(crate) fn props(
                 works: row.works.to_string(),
                 records: row.records.to_string(),
                 uploads: row.uploads.to_string(),
-                removable: row.status == "active" && !mine,
+                removable: live && !mine && caller.may_remove(row.role),
                 action: format!("/admin/members/{}/remove", row.principal),
                 csrf: remove_token.clone(),
                 confirm_label: format!("Yes, remove {}", row.label),
@@ -537,18 +809,25 @@ mod tests {
         /// The overview's own outage (recheck N6).
         listing: Option<storage::Error>,
         outcome: Result<RemoveOutcome, storage::Error>,
+        role_outcome: Result<RoleOutcome, storage::Error>,
         overviews: AtomicUsize,
         removed: Mutex<Vec<String>>,
+        roles: Mutex<Vec<(String, OrgRole)>>,
     }
     impl Fake {
         fn new(admin: Result<bool, storage::Error>) -> Self {
             Self {
                 admin,
-                rows: vec![row(ADMIN, "Victor", true), row(STUDENT, "Ana <b>", false)],
+                rows: vec![
+                    row(ADMIN, "Victor", OrgRole::Owner),
+                    row(STUDENT, "Ana <b>", OrgRole::Member),
+                ],
                 listing: None,
                 outcome: Ok(RemoveOutcome::Removed),
+                role_outcome: Ok(RoleOutcome::Changed),
                 overviews: AtomicUsize::new(0),
                 removed: Mutex::new(Vec::new()),
+                roles: Mutex::new(Vec::new()),
             }
         }
     }
@@ -566,6 +845,19 @@ mod tests {
             let listing = self.listing;
             Box::pin(async move { listing.map_or(Ok(rows), Err) })
         }
+        fn set_role<'a>(
+            &'a self,
+            _: &'a TrustedRequest,
+            principal: &'a str,
+            role: OrgRole,
+        ) -> Pending<'a, RoleOutcome> {
+            self.roles
+                .lock()
+                .unwrap()
+                .push((principal.to_owned(), role));
+            let outcome = self.role_outcome;
+            Box::pin(async move { outcome })
+        }
         fn remove<'a>(
             &'a self,
             _: &'a TrustedRequest,
@@ -577,13 +869,13 @@ mod tests {
         }
     }
 
-    fn row(principal: &str, label: &str, is_admin: bool) -> MemberRow {
+    fn row(principal: &str, label: &str, role: OrgRole) -> MemberRow {
         MemberRow {
             principal: principal.into(),
             label: label.into(),
-            note: is_admin.then(|| "teacher".to_owned()),
+            note: (role == OrgRole::Owner).then(|| "teacher".to_owned()),
             status: "active".into(),
-            is_admin,
+            role,
             consent_version: Some(1),
             consented_at: Some("2026-11-29T09:12:40Z".into()),
             last_active: Some("2026-11-29T14:03:12Z".into()),
@@ -605,7 +897,10 @@ mod tests {
     }
 
     fn admin_request() -> TrustedRequest {
-        storage::AgentCaller::for_tests(ORG, ADMIN, "t").request
+        request_as(OrgRole::Owner)
+    }
+    fn request_as(role: OrgRole) -> TrustedRequest {
+        storage::AgentCaller::for_tests_with_role(ORG, ADMIN, "t", role).request
     }
     fn fields(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
         pairs
@@ -621,7 +916,7 @@ mod tests {
     async fn an_admin_sees_every_member_and_anyone_else_the_uniform_404_before_any_read() {
         let key = csrf::CsrfKey::new().unwrap();
         let member = admin_request();
-        // The admin: every row, typed as text, with the Remove form's token.
+        // The owner: every row, typed as text, with both forms' tokens.
         let store = Fake::new(Ok(true));
         let pages = Recorded::default();
         let response = show(&store, &pages, &key, COOKIE, &member, None).await;
@@ -633,15 +928,35 @@ mod tests {
         let mine = &props.members[0];
         assert_eq!(
             (mine.label.as_str(), mine.role.as_str(), mine.note.as_str()),
-            ("Victor", "Admin · you", "teacher")
+            ("Victor", "Owner · you", "teacher")
         );
-        assert!(!mine.removable, "no Remove on the admin's own row");
+        assert!(!mine.removable, "no Remove on the owner's own row");
+        // The owner may lower their own role (another owner must remain,
+        // which storage judges), never raise it: the select offers every
+        // role at or below owner, the current one selected.
+        assert!(mine.changeable && mine.confirm_role);
+        assert_eq!(
+            mine.options
+                .iter()
+                .map(|o| (o.value.as_str(), o.selected))
+                .collect::<Vec<_>>(),
+            [
+                ("owner", true),
+                ("admin", false),
+                ("manager", false),
+                ("member", false),
+                ("viewer", false)
+            ]
+        );
         let student = &props.members[1];
         assert_eq!(
             student.label, "Ana <b>",
             "the renderer escapes; props stay text"
         );
-        assert_eq!(student.role, "Member");
+        assert_eq!(
+            (student.role.as_str(), student.role_code.as_str()),
+            ("Member", "member")
+        );
         assert_eq!(student.status, "Active");
         assert_eq!(student.consent, "Notice v1, 2026-11-29");
         assert_eq!(student.last_active, "2026-11-29 14:03 UTC");
@@ -654,9 +969,15 @@ mod tests {
             ),
             ("2", "3", "41", "1")
         );
-        assert!(student.removable);
+        assert!(student.removable && student.changeable && student.confirm_role);
         assert_eq!(student.action, format!("/admin/members/{STUDENT}/remove"));
+        assert_eq!(
+            student.role_action,
+            format!("/admin/members/{STUDENT}/role")
+        );
         assert!(key.verify(csrf::Form::OrgAdminRemove, COOKIE, &student.csrf));
+        assert!(key.verify(csrf::Form::OrgAdminRole, COOKIE, &student.csrf_role));
+        assert!(!key.verify(csrf::Form::OrgAdminRole, COOKIE, &student.csrf));
         assert!(!key.verify(csrf::Form::SignOut, COOKIE, &student.csrf));
         assert!(key.verify(csrf::Form::SignOut, COOKIE, &props.csrf_signout));
         // A member who is not an admin, and an authority refusal: the uniform
@@ -701,6 +1022,364 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
+    /// ADR-021: the select offers each caller only the roles it may set on
+    /// each row; a row it cannot manage has no form.
+    #[test]
+    fn the_select_offers_only_the_roles_the_caller_may_set() {
+        let key = csrf::CsrfKey::new().unwrap();
+        let rows = [
+            row(
+                "00000000-0000-4000-8000-000000000001",
+                "Owner O",
+                OrgRole::Owner,
+            ),
+            row(ADMIN, "Me", OrgRole::Admin),
+            row(
+                "00000000-0000-4000-8000-000000000003",
+                "Manager M",
+                OrgRole::Manager,
+            ),
+            row(STUDENT, "Member S", OrgRole::Member),
+            row(
+                "00000000-0000-4000-8000-000000000005",
+                "Viewer V",
+                OrgRole::Viewer,
+            ),
+        ];
+        let offered = |caller: OrgRole| -> Vec<(String, Vec<String>, bool, bool)> {
+            props(
+                &key,
+                COOKIE,
+                &request_as(caller),
+                String::new(),
+                &rows,
+                None,
+            )
+            .members
+            .into_iter()
+            .map(|m| {
+                (
+                    m.label,
+                    m.options.into_iter().map(|o| o.value).collect(),
+                    m.removable,
+                    m.confirm_role,
+                )
+            })
+            .collect()
+        };
+        let roles = |names: &[&str]| names.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        // An admin (the caller's own row is `Me`): managers, members and
+        // viewers among manager/member/viewer; nothing on the owner, nothing
+        // on their own row (an admin manages below admin), no confirmation box.
+        assert_eq!(
+            offered(OrgRole::Admin),
+            vec![
+                ("Owner O".into(), roles(&[]), false, false),
+                ("Me".into(), roles(&[]), false, false),
+                (
+                    "Manager M".into(),
+                    roles(&["manager", "member", "viewer"]),
+                    true,
+                    false
+                ),
+                (
+                    "Member S".into(),
+                    roles(&["manager", "member", "viewer"]),
+                    true,
+                    false
+                ),
+                (
+                    "Viewer V".into(),
+                    roles(&["manager", "member", "viewer"]),
+                    true,
+                    false
+                ),
+            ]
+        );
+        // A manager: member and viewer on members and viewers only.
+        assert_eq!(
+            offered(OrgRole::Manager),
+            vec![
+                ("Owner O".into(), roles(&[]), false, false),
+                ("Me".into(), roles(&[]), false, false),
+                ("Manager M".into(), roles(&[]), false, false),
+                ("Member S".into(), roles(&["member", "viewer"]), true, false),
+                ("Viewer V".into(), roles(&["member", "viewer"]), true, false),
+            ]
+        );
+        // An owner: every role on everyone, with the confirmation box; never
+        // Remove on their own row.
+        let all = roles(&["owner", "admin", "manager", "member", "viewer"]);
+        assert_eq!(
+            offered(OrgRole::Owner),
+            vec![
+                ("Owner O".into(), all.clone(), true, true),
+                ("Me".into(), all.clone(), false, true),
+                ("Manager M".into(), all.clone(), true, true),
+                ("Member S".into(), all.clone(), true, true),
+                ("Viewer V".into(), all, true, true),
+            ]
+        );
+        // A removed member gets no form at all.
+        let gone = [MemberRow {
+            status: "revoked".into(),
+            ..row(STUDENT, "Gone", OrgRole::Member)
+        }];
+        let m = &props(
+            &key,
+            COOKIE,
+            &request_as(OrgRole::Owner),
+            String::new(),
+            &gone,
+            None,
+        )
+        .members[0];
+        assert!(!m.changeable && !m.removable && m.options.is_empty());
+    }
+
+    /// ADR-021: the Change role form needs its own token, a known role, the
+    /// confirmation for an owner or admin change, and the ladder holds
+    /// server-side before storage; a forged form for a disallowed role never
+    /// reaches storage.
+    #[tokio::test]
+    async fn change_role_needs_the_token_the_confirmation_and_the_ladder() {
+        let key = csrf::CsrfKey::new().unwrap();
+        let token = key.token(csrf::Form::OrgAdminRole, COOKIE);
+        let remove_token = key.token(csrf::Form::OrgAdminRemove, COOKIE);
+        let owner = request_as(OrgRole::Owner);
+        let store = Fake::new(Ok(true));
+        // A missing, wrong, other-form or other-session token, an unknown
+        // field or a repeated one is 403; storage is never called.
+        let other_session = key.token(csrf::Form::OrgAdminRole, "another-cookie");
+        for bad in [
+            fields(&[("role", "admin")]),
+            fields(&[
+                ("csrf", &remove_token),
+                ("role", "admin"),
+                ("confirm", "role"),
+            ]),
+            fields(&[
+                ("csrf", &other_session),
+                ("role", "admin"),
+                ("confirm", "role"),
+            ]),
+            fields(&[("csrf", &token), ("role", "admin"), ("principal", STUDENT)]),
+            fields(&[("csrf", &token), ("csrf", &token), ("role", "admin")]),
+            fields(&[("csrf", &token), ("role", "admin"), ("role", "viewer")]),
+        ] {
+            let response = set_role(&store, &key, COOKIE, &owner, STUDENT, &bad).await;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{bad:?}");
+        }
+        assert!(store.roles.lock().unwrap().is_empty());
+        // An unknown role, and an owner or admin change without the box.
+        let response = set_role(
+            &store,
+            &key,
+            COOKIE,
+            &owner,
+            STUDENT,
+            &fields(&[("csrf", &token), ("role", "teacher")]),
+        )
+        .await;
+        assert_eq!(location(&response), "/admin?notice=role_unknown");
+        for unconfirmed in [
+            fields(&[("csrf", &token), ("role", "admin"), ("from", "member")]),
+            fields(&[
+                ("csrf", &token),
+                ("role", "owner"),
+                ("from", "member"),
+                ("confirm", "yes"),
+            ]),
+            fields(&[("csrf", &token), ("role", "member"), ("from", "admin")]),
+        ] {
+            let response = set_role(&store, &key, COOKIE, &owner, STUDENT, &unconfirmed).await;
+            assert_eq!(location(&response), "/admin?notice=role_unconfirmed");
+        }
+        assert!(store.roles.lock().unwrap().is_empty());
+        // Member to viewer needs no box; admin with the box goes through.
+        let response = set_role(
+            &store,
+            &key,
+            COOKIE,
+            &owner,
+            STUDENT,
+            &fields(&[("csrf", &token), ("role", "viewer"), ("from", "member")]),
+        )
+        .await;
+        assert_eq!(location(&response), "/admin?notice=role_changed");
+        let response = set_role(
+            &store,
+            &key,
+            COOKIE,
+            &owner,
+            STUDENT,
+            &fields(&[
+                ("confirm", "role"),
+                ("role", "admin"),
+                ("from", "member"),
+                ("csrf", &token),
+            ]),
+        )
+        .await;
+        assert_eq!(location(&response), "/admin?notice=role_changed");
+        assert_eq!(
+            store.roles.lock().unwrap().as_slice(),
+            [
+                (STUDENT.to_owned(), OrgRole::Viewer),
+                (STUDENT.to_owned(), OrgRole::Admin)
+            ]
+        );
+        // The forged form: a manager posting `admin`, an admin posting
+        // `owner` or acting on an admin, a manager raising themselves; the
+        // Rust ladder refuses before storage.
+        for (caller, body) in [
+            (
+                OrgRole::Manager,
+                fields(&[
+                    ("csrf", &token),
+                    ("role", "admin"),
+                    ("from", "member"),
+                    ("confirm", "role"),
+                ]),
+            ),
+            (
+                OrgRole::Admin,
+                fields(&[
+                    ("csrf", &token),
+                    ("role", "owner"),
+                    ("from", "member"),
+                    ("confirm", "role"),
+                ]),
+            ),
+            (
+                OrgRole::Admin,
+                fields(&[
+                    ("csrf", &token),
+                    ("role", "member"),
+                    ("from", "admin"),
+                    ("confirm", "role"),
+                ]),
+            ),
+            (
+                OrgRole::Manager,
+                fields(&[("csrf", &token), ("role", "viewer"), ("from", "manager")]),
+            ),
+        ] {
+            let store = Fake::new(Ok(true));
+            let response =
+                set_role(&store, &key, COOKIE, &request_as(caller), STUDENT, &body).await;
+            assert_eq!(
+                location(&response),
+                "/admin?notice=role_not_allowed",
+                "{caller:?} {body:?}"
+            );
+            assert!(store.roles.lock().unwrap().is_empty());
+        }
+        let store = Fake::new(Ok(true));
+        let response = set_role(
+            &store,
+            &key,
+            COOKIE,
+            &request_as(OrgRole::Admin),
+            ADMIN,
+            &fields(&[
+                ("csrf", &token),
+                ("role", "owner"),
+                ("from", "admin"),
+                ("confirm", "role"),
+            ]),
+        )
+        .await;
+        assert_eq!(location(&response), "/admin?notice=role_not_allowed");
+        assert!(store.roles.lock().unwrap().is_empty());
+        // Without a `from` hint the definer decides: every storage outcome
+        // comes back as its plain notice; authority as 404; outages as the
+        // reload notice.
+        for (outcome, expected) in [
+            (Ok(RoleOutcome::Unchanged), "/admin?notice=role_unchanged"),
+            (
+                Ok(RoleOutcome::Refused("not_allowed")),
+                "/admin?notice=role_not_allowed",
+            ),
+            (
+                Ok(RoleOutcome::Refused("last_owner")),
+                "/admin?notice=role_last_owner",
+            ),
+            (Ok(RoleOutcome::Refused("self")), "/admin?notice=role_self"),
+            (
+                Ok(RoleOutcome::Refused("not_member")),
+                "/admin?notice=role_not_member",
+            ),
+            (
+                Ok(RoleOutcome::Refused("unknown_role")),
+                "/admin?notice=role_unknown",
+            ),
+            (
+                Err(storage::Error::Unavailable),
+                "/admin?notice=unavailable",
+            ),
+            (
+                Err(storage::Error::UnknownOutcome),
+                "/admin?notice=unavailable",
+            ),
+        ] {
+            let store = Fake {
+                role_outcome: outcome,
+                ..Fake::new(Ok(true))
+            };
+            let response = set_role(
+                &store,
+                &key,
+                COOKIE,
+                &owner,
+                STUDENT,
+                &fields(&[("csrf", &token), ("role", "viewer")]),
+            )
+            .await;
+            assert_eq!(location(&response), expected, "{outcome:?}");
+        }
+        let store = Fake {
+            role_outcome: Err(storage::Error::Denied),
+            ..Fake::new(Ok(true))
+        };
+        let response = set_role(
+            &store,
+            &key,
+            COOKIE,
+            &owner,
+            STUDENT,
+            &fields(&[("csrf", &token), ("role", "viewer")]),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        // The notices, in plain words, from a closed set.
+        let words = |query: &str| Notice::parse(query).map(|n| n.words().0);
+        assert_eq!(
+            words("notice=role_self"),
+            Some("You can't raise your own role.")
+        );
+        assert_eq!(
+            words("notice=role_last_owner"),
+            Some("You can't change the last owner's role. Make someone else an owner first.")
+        );
+        assert_eq!(Notice::parse("notice=role_<script>"), None);
+        for code in [
+            "role_changed",
+            "role_unchanged",
+            "role_unconfirmed",
+            "role_not_allowed",
+            "role_last_owner",
+            "role_self",
+            "role_not_member",
+            "role_unknown",
+        ] {
+            assert_eq!(
+                Notice::parse(&format!("notice={code}")).map(Notice::code),
+                Some(code)
+            );
+        }
+    }
+
     #[tokio::test]
     async fn remove_needs_the_token_and_the_confirmation_and_shows_refusals_plainly() {
         let key = csrf::CsrfKey::new().unwrap();
@@ -710,11 +1389,13 @@ mod tests {
         // A missing, wrong, other-form or other-session token is 403, and
         // storage is never called; so is an unknown field.
         let other_form = key.token(csrf::Form::SignOut, COOKIE);
+        let role_form = key.token(csrf::Form::OrgAdminRole, COOKIE);
         let other_session = key.token(csrf::Form::OrgAdminRemove, "another-cookie");
         for bad in [
             fields(&[("confirm", "remove")]),
             fields(&[("csrf", "x".repeat(43).as_str()), ("confirm", "remove")]),
             fields(&[("csrf", &other_form), ("confirm", "remove")]),
+            fields(&[("csrf", &role_form), ("confirm", "remove")]),
             fields(&[("csrf", &other_session), ("confirm", "remove")]),
             fields(&[
                 ("csrf", &token),
@@ -750,12 +1431,16 @@ mod tests {
         for (outcome, expected) in [
             (Ok(RemoveOutcome::Refused("self")), "/admin?notice=self"),
             (
-                Ok(RemoveOutcome::Refused("last_admin")),
-                "/admin?notice=last_admin",
+                Ok(RemoveOutcome::Refused("last_owner")),
+                "/admin?notice=last_owner",
             ),
             (
                 Ok(RemoveOutcome::Refused("not_member")),
                 "/admin?notice=not_member",
+            ),
+            (
+                Ok(RemoveOutcome::Refused("not_allowed")),
+                "/admin?notice=not_allowed",
             ),
         ] {
             let store = Fake {
@@ -797,12 +1482,13 @@ mod tests {
         let words = |query: &str| Notice::parse(query).map(|n| n.words().0);
         assert_eq!(
             words("notice=self"),
-            Some("You can't remove yourself. Another admin of this organization can.")
+            Some("You can't remove yourself. Another owner or admin of this organization can.")
         );
         assert_eq!(
-            words("notice=last_admin"),
-            Some("You can't remove the last admin of this organization.")
+            words("notice=last_owner"),
+            Some("You can't remove the last owner of this organization.")
         );
+        assert_eq!(Notice::parse("notice=last_admin"), None);
         assert_eq!(Notice::parse("notice=<script>"), None);
         assert_eq!(Notice::parse("notice=removed&x=1"), None);
         let props = props(
@@ -811,7 +1497,7 @@ mod tests {
             &member,
             String::new(),
             &[],
-            Notice::parse("notice=last_admin"),
+            Notice::parse("notice=last_owner"),
         );
         assert!(props.has_notice && props.notice_kind == "refused");
         assert_eq!(props.organization, "Your organization");
@@ -861,23 +1547,27 @@ mod tests {
             }
         };
         let remove = format!("/admin/members/{STUDENT}/remove");
+        let role = format!("/admin/members/{STUDENT}/role");
         let form = [
             ("sec-fetch-site", "same-origin"),
             ("content-type", "application/x-www-form-urlencoded"),
         ];
-        let (status, cross) = send(
-            "POST",
-            &remove,
-            &[("sec-fetch-site", "cross-site")],
-            "csrf=x&confirm=remove",
-        )
-        .await;
-        assert_eq!(status, StatusCode::FORBIDDEN);
-        assert_eq!(&cross[..], br#"{"code":"cross_site","status":403}"#);
+        for uri in [remove.as_str(), role.as_str()] {
+            let (status, cross) = send(
+                "POST",
+                uri,
+                &[("sec-fetch-site", "cross-site")],
+                "csrf=x&confirm=remove",
+            )
+            .await;
+            assert_eq!(status, StatusCode::FORBIDDEN);
+            assert_eq!(&cross[..], br#"{"code":"cross_site","status":403}"#);
+        }
         let (_, unknown) = send("GET", "/elsewhere", &[], "").await;
         for (method, uri, headers, body) in [
             ("GET", PATH, &[][..], ""),
             ("GET", "/admin?notice=removed", &[][..], ""),
+            ("GET", "/admin?notice=role_changed", &[][..], ""),
             (
                 "GET",
                 PATH,
@@ -885,6 +1575,12 @@ mod tests {
                 "",
             ),
             ("POST", remove.as_str(), &form[..], "csrf=x&confirm=remove"),
+            (
+                "POST",
+                role.as_str(),
+                &form[..],
+                "csrf=x&role=admin&confirm=role",
+            ),
             ("POST", PATH, &form[..], ""),
         ] {
             let (status, body) = send(method, uri, headers, body).await;

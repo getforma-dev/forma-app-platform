@@ -336,7 +336,7 @@ class AdmissionTests(unittest.TestCase):
         code = '00000000-0000-4000-8000-0000000000c1'
         self.aws.results = [(0, {'organization_id': ORG, 'codes': [{'code_id': code, 'status': 'active', 'note': 'Ada L.'}], 'truncated': False}),
                             (0, {'code_id': code, 'status': 'revoked', 'changed': True, 'provider_revocations_pending': 1, 'capability_phase': 'completed'}),
-                            (0, {'principal_id': PRINCIPAL, 'permission': 'admin_policy', 'changed': True, 'membership_epoch': 1})]
+                            (0, {'principal_id': PRINCIPAL, 'role': 'admin', 'role_before': 'member', 'changed': True, 'membership_epoch': 2})]
         listed = trial.list_codes()
         self.assertEqual((listed['status'], listed['count'], listed['by_status']), ('listed', 1, {'active': 1}))
         self.assertEqual(self.aws.run_requests[0]['overrides']['containerOverrides'][0]['command'], ['admission', 'list', '--organization', ORG])
@@ -344,28 +344,36 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual((revoked['status'], revoked['changed'], revoked['capability_phase']), ('revoked', True, 'completed'))
         self.assertEqual(self.aws.run_requests[1]['overrides']['containerOverrides'][0]['command'], ['admission', 'revoke', '--organization', ORG, '--code-id', code])
         granted = trial.grant_admin(PRINCIPAL)
-        self.assertEqual((granted['status'], granted['permission']), ('granted', 'admin_policy'))
+        self.assertEqual((granted['status'], granted['role'], granted['role_before']), ('granted', 'admin', 'member'))
         self.assertEqual(self.aws.run_requests[2]['overrides']['containerOverrides'][0]['command'],
-                         ['admission', 'grant-permission', '--organization', ORG, '--principal', PRINCIPAL, '--permission', 'admin_policy'])
-        self.aws.results = [(0, {'principal_id': PRINCIPAL, 'permission': 'admin_policy', 'changed': True, 'membership_epoch': 2})]
+                         ['admission', 'set-role', '--organization', ORG, '--principal', PRINCIPAL, '--role', 'admin'])
+        self.aws.results = [(0, {'principal_id': PRINCIPAL, 'role': 'member', 'role_before': 'admin', 'changed': True, 'membership_epoch': 3})]
         ungranted = trial.revoke_admin(PRINCIPAL)
-        self.assertEqual((ungranted['status'], ungranted['permission'], ungranted['membership_epoch']), ('revoked-admin', 'admin_policy', 2))
+        self.assertEqual((ungranted['status'], ungranted['role'], ungranted['membership_epoch']), ('revoked-admin', 'member', 3))
         self.assertEqual(self.aws.run_requests[3]['overrides']['containerOverrides'][0]['command'],
-                         ['admission', 'revoke-permission', '--organization', ORG, '--principal', PRINCIPAL, '--permission', 'admin_policy'])
+                         ['admission', 'set-role', '--organization', ORG, '--principal', PRINCIPAL, '--role', 'member'])
+        # ADR-021: set-role names any of the five roles; the task's answer must carry the role asked for.
+        self.aws.results = [(0, {'principal_id': PRINCIPAL, 'role': 'viewer', 'role_before': 'member', 'changed': True, 'membership_epoch': 4})]
+        viewer = trial.set_role(PRINCIPAL, 'viewer')
+        self.assertEqual((viewer['status'], viewer['role'], viewer['membership_epoch']), ('role-set', 'viewer', 4))
+        self.assertEqual(self.aws.run_requests[4]['overrides']['containerOverrides'][0]['command'],
+                         ['admission', 'set-role', '--organization', ORG, '--principal', PRINCIPAL, '--role', 'viewer'])
         self.assertEqual(self.aws.puts, [])  # none of these touches the input secret
         for request in self.aws.run_requests:
             self.assertEqual(request['startedBy'][:7], 'app078-')
             self.assertEqual(len(request['clientToken']), 64)
-        self.assertEqual(len({r['clientToken'] for r in self.aws.run_requests}), 4)
-        # A failed task, a malformed id and a foreign organization in the override refuse.
-        self.aws.results = [(1, {'refused': 'code_unknown'})]
+        self.assertEqual(len({r['clientToken'] for r in self.aws.run_requests}), 5)
+        # A failed task, a refused role change, a malformed id, an unknown role and a foreign organization in the override refuse.
+        self.aws.results = [(1, {'refused': 'code_unknown'}), (1, {'refused': 'last_owner'})]
         with self.assertRaises(Refused): trial.revoke(code)
+        with self.assertRaises(Refused): trial.set_role(PRINCIPAL, 'member')
         with self.assertRaises(Refused): trial.revoke('not-a-uuid')
         with self.assertRaises(Refused): trial.grant_admin(PRINCIPAL.upper())
         with self.assertRaises(Refused): trial.revoke_admin('x')
+        with self.assertRaises(Refused): trial.set_role(PRINCIPAL, 'teacher')
         with self.assertRaises(Refused): trial.compose('admission-list-northstar', [])
         with self.assertRaises(Refused): trial.compose('migrate', [])
-        self.assertEqual(len(self.aws.run_requests), 5)
+        self.assertEqual(len(self.aws.run_requests), 7)
 
     def test_grant_and_revoke_reviewer_run_their_documented_overrides(self):
         trial = self.trial()
@@ -495,7 +503,7 @@ class AdmissionTests(unittest.TestCase):
     def test_overrides_file_names_no_private_organization(self):
         document = json.loads(admission.OVERRIDES.read_text())
         trial_entries = [e for e in document['overrides'] if e['name'] in set(admission.ISSUE_OVERRIDES.values())
-                         | {'admission-list-trial', 'admission-revoke-trial', 'admission-grant-admin', 'admission-revoke-admin', 'admission-list-box-files',
+                         | {'admission-list-trial', 'admission-revoke-trial', 'admission-set-role', 'admission-issue-trial-viewer-invitation', 'admission-list-box-files',
                             'admission-stats', 'admission-suspend-organization', 'admission-purge-organization',
                             'admission-grant-reviewer', 'admission-revoke-reviewer'}]
         self.assertEqual(len(trial_entries), 12)

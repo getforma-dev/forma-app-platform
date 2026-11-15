@@ -16,7 +16,7 @@
 //! the scoped organization (both membership rows `FOR SHARE`), and **copies**
 //! exactly the subset of the sharer's own permissions (never more; no
 //! `edit_definition`, `review_publish`, `share_work`, `export` or
-//! `admin_policy`): the teammate then opens the work under the sharer's
+//! organization role): the teammate then opens the work under the sharer's
 //! permissions, copied, not under grants of its own (ADR-011 amendment
 //! 2026-10-30, review M3). `source_read` is copied for every dependency the
 //! sharer holds because the teammate needs it to open the work, and it is
@@ -940,6 +940,7 @@ mod tests {
             provider_tenant: String::new(),
             provider_subject: String::new(),
             registry_sha256: String::new(),
+            role: crate::storage::OrgRole::Member,
         };
         assert_eq!(judgment.standing(&request("a", 3)), Standing::Open);
         assert_eq!(judgment.standing(&request("a", 2)), Standing::NotCurrent);

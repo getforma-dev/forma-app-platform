@@ -88,29 +88,28 @@ class PureTests(unittest.TestCase):
 
     def test_permission_commands_are_a_closed_set(self):
         """ADR-007 amendment (APP-010 review M2): grant/revoke take only the permissions the tables allow,
-        never share_work or export, and each permission names exactly its resource. admin_policy (the
-        real-user trial, D2/D4) names the organization alone: no app, work or source; record_review (W4, migration
+        never share_work or export, and each permission names exactly its resource. admin_policy is no
+        permission since migration 0025 (ADR-021: the membership's role, set by set-role); record_review (W4, migration
         0024) names a work like record_read, and its grant is gated on schema 24."""
         app, work, source, principal = (str(uuid.uuid4()) for _ in range(4))
         parser = op.parser()
         base = ["--organization", ORG, "--principal", principal]
         self.assertEqual(op.GRANTABLE, {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
-                                        "record_read": "work", "record_write": "work", "record_review": "work", "source_read": "source",
-                                        "admin_policy": "organization"})
+                                        "record_read": "work", "record_write": "work", "record_review": "work", "source_read": "source"})
         self.assertEqual(op.GATED_PERMISSIONS, {"record_review": 24})
         self.assertEqual(op.OPERATOR_KINDS[:10], ("organization.provisioned", "handle.rotated", "code.issued", "code.revoked",
                                                   "code.extended", "membership.revoked", "entitlement.revoked",
                                                   "permission.granted", "permission.revoked", "creator_authority.revoked"))
         self.assertEqual(op.OPERATOR_KINDS[10:], ("provider.invitation.created", "provider.invitation.reconciled",
                                                   "provider.invitation.revoked", "source_revision.registered", "work.seeded",
-                                                  "provider_tenant.bound", "app.seeded"))
+                                                  "provider_tenant.bound", "app.seeded", "membership.role_changed"))
         for command in ("grant-permission", "revoke-permission"):
             for good in (["--permission", "run", "--app", app], ["--permission", "review_publish", "--app", app],
                          ["--permission", "record_write", "--app", app, "--work", work], ["--permission", "source_read", "--source", source],
-                         ["--permission", "record_review", "--app", app, "--work", work], ["--permission", "admin_policy"]):
+                         ["--permission", "record_review", "--app", app, "--work", work]):
                 with self.subTest(command=command, good=good[1]):
                     op.validate(parser.parse_args([command, *base, *good]))
-            for bad in (["--permission", "admin_policy", "--app", app], ["--permission", "admin_policy", "--source", source],
+            for bad in (["--permission", "admin_policy"], ["--permission", "admin_policy", "--app", app], ["--permission", "admin_policy", "--source", source],
                         ["--permission", "share_work", "--app", app, "--work", work],
                         ["--permission", "export", "--app", app, "--work", work], ["--permission", "owner", "--app", app],
                         ["--permission", "run"], ["--permission", "run", "--app", app, "--work", work],
@@ -233,7 +232,8 @@ class PureTests(unittest.TestCase):
                 c = Connection()
                 with mock.patch.object(op, "begin"), mock.patch.object(op, "lock_organization"), \
                         mock.patch.object(op, "claim_provider_tenants"), mock.patch.object(op, "append"), \
-                        mock.patch.object(op, "note_column_present", return_value=present):
+                        mock.patch.object(op, "note_column_present", return_value=present), \
+                        mock.patch.object(op, "role_column_present", return_value=False):
                     if not present:
                         with self.assertRaises(op.Refused) as refused:
                             op.issue(c, args)
@@ -456,6 +456,22 @@ def run(args, check=True, **kw):
     return p
 
 
+def apply_through(c, through):
+    """The runner's own steps up to migration `through`, for a test that then applies the next one
+    (as app/runtime/generate_schema_catalog.py builds each catalog); the ledger and version row end at
+    `through`, so runtime.apply_migrations resumes from there."""
+    sources = runtime.migration_sources(runtime.migration_directory())
+    c.execute("SET LOCAL search_path=pg_catalog, pg_temp")
+    c.execute(sources[0][2])
+    for version, digest, source in sources[1:through]:
+        if version == runtime.LEDGER_VERSION:
+            runtime.initialize_migration_history(c, sources[0][1])
+        c.execute(source)
+        c.execute("INSERT INTO genui_meta.schema_migrations(version,sha256) VALUES (%s,%s)", (version, digest))
+        c.execute("UPDATE genui_meta.schema_version SET version=%s WHERE singleton", (version,))
+    c.commit()
+
+
 class OperatorDatabase:
     """One disposable PostgreSQL 16.15 container with a throwaway TLS CA, shared by a TestCase class.
 
@@ -503,7 +519,11 @@ class OperatorDatabase:
                 c.execute("GRANT rds_iam TO genui_migration WITH ADMIN TRUE")
                 c.execute("CREATE DATABASE genui OWNER genui_migration")
             with cls.connect() as c:
-                runtime.apply_migrations(c, runtime.migration_directory())
+                through = getattr(cls, "migrate_through", None)
+                if through is None:
+                    runtime.apply_migrations(c, runtime.migration_directory())
+                else:
+                    apply_through(c, through)
             # Fixture rows an existing (pre-0003) organization would have: no audit heads.
             with cls.connect("postgres") as c:
                 c.execute("INSERT INTO genui.organizations VALUES (%s,'Operator test legacy','active')", (ORG,))
@@ -622,7 +642,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(uuid.UUID(policies[0][0]).version, 4)
         for table in ("principals", "memberships", "entitlements", "apps", "saved_work", "sources",
                       "definition_revisions", "publications", "internal_records", "app_permissions",
-                      "work_permissions", "source_permissions", "organization_permissions"):
+                      "work_permissions", "source_permissions"):
             self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
         self.assertEqual(self.operator_events(org), [("organization.provisioned",)])
         self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
@@ -654,7 +674,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual(epoch, 1)
         self.assertEqual(self.query("SELECT status FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (org, principal)), [("active",)])
         self.assertEqual(self.query("SELECT status,kind,expires_at>now() FROM genui.entitlements WHERE organization_id=%s AND entitlement_id=%s", (org, entitlement)), [("active", "member_invite", True)])
-        for table in ("apps", "saved_work", "internal_records", "publications", "app_permissions", "work_permissions", "source_permissions", "organization_permissions"):
+        for table in ("apps", "saved_work", "internal_records", "publications", "app_permissions", "work_permissions", "source_permissions"):
             self.assertEqual(self.query(f"SELECT count(*) FROM genui.{table} WHERE organization_id=%s", (org,)), [(0,)], table)
         self.assertEqual(self.cli("verify", "--organization", org)["verified"], True)
 
@@ -756,7 +776,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
     def test_issue_prints_the_secret_once_and_stores_only_its_digest(self):
         out = self.issue("--max-redemptions", "2", "--expires-days", "7")
         code = out["code"]
-        self.assertEqual(set(out), {"code_id", "code", "kind", "max_redemptions", "expires_at"})
+        self.assertEqual(set(out), {"code_id", "code", "kind", "max_redemptions", "expires_at", "role"})
         raw = op.normalize_code(code)
         self.assertIsNotNone(raw)
         digest = op.code_digest(raw)
@@ -789,7 +809,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         raw = os.urandom(32)
         code, digest = op.encode_code(raw), op.code_digest(raw)
         out = self.issue("--code-digest", digest)
-        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at"})
+        self.assertEqual(set(out), {"code_id", "code_digest", "kind", "max_redemptions", "expires_at", "role"})
         self.assertEqual(out["code_digest"], digest)
         self.assertEqual(self.query("SELECT organization_id::text FROM genui_private.code_index WHERE code_digest=%s", (digest,)), [(ORG,)])
         self.assertEqual(self.query("SELECT code_digest::text,status FROM genui.access_codes WHERE organization_id=%s AND code_id=%s",
@@ -836,31 +856,73 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         entry = next(item for item in self.cli("list", "--organization", ORG)["codes"] if item["code_id"] == out["code_id"])
         self.assertEqual(entry["note"], "Ada L.")
 
-    def test_grant_and_revoke_admin_policy_are_operator_events(self):
-        """The real-user trial (D2, D4): admin_policy is one organization_permissions row for an active member,
-        granted and revoked like any closed permission; a repeat changes nothing; a revoked member refuses."""
+    def test_set_role_is_an_operator_event_and_keeps_the_last_owner(self):
+        """ADR-021 (migration 0025): set-role changes an active member's role, advances the epoch and appends one
+        membership.role_changed event with a recomputable digest; the same role again changes nothing; a revoked
+        or unknown member, an unknown role and admin_policy as a permission refuse with nothing written; the
+        organization never loses its last active owner."""
         self.ensure_backfill()
         admin, revoked = self.member(), self.member("revoked")
         epoch = self.epoch(admin)
-        granted = self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy")
-        self.assertEqual(granted, {"principal_id": admin, "permission": "admin_policy", "changed": True, "membership_epoch": epoch})
-        self.assertEqual(self.query("SELECT permission FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s",
-                                    (ORG, admin)), [("admin_policy",)])
-        self.assertEqual(self.last_operator_event(), ("permission.granted", admin, None, None))
+        self.assertEqual(self.query("SELECT role FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, admin)), [("member",)])
+        promoted = self.cli("set-role", "--organization", ORG, "--principal", admin, "--role", "admin")
+        self.assertEqual(promoted, {"principal_id": admin, "role": "admin", "role_before": "member", "changed": True, "membership_epoch": epoch + 1})
+        self.assertEqual(self.query("SELECT role,membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, admin)),
+                         [("admin", epoch + 1)])
+        self.assertEqual(self.last_operator_event(), ("membership.role_changed", admin, None, None))
+        digest = "sha256:" + hashlib.sha256(b"forma:member-role:v1\x00" + admin.encode() + b"\x00member\x00admin").hexdigest()
+        self.assertEqual(self.query("""SELECT outcome_digest::text FROM genui.audit_events WHERE organization_id=%s AND writer_role='operator'
+                                       AND kind='membership.role_changed' ORDER BY chain_sequence DESC LIMIT 1""", (ORG,)), [(digest,)])
         events = len(self.operator_events())
-        again = self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy")
-        self.assertEqual((again["changed"], len(self.operator_events())), (False, events))
+        again = self.cli("set-role", "--organization", ORG, "--principal", admin, "--role", "admin")
+        self.assertEqual((again["changed"], again["membership_epoch"], len(self.operator_events())), (False, epoch + 1, events))
         before = self.dump()
         for principal in (revoked, str(uuid.uuid4())):
-            self.cli("grant-permission", "--organization", ORG, "--principal", principal, "--permission", "admin_policy", expect=1)
-        self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy", "--app", str(uuid.uuid4()), expect=1)
+            self.cli("set-role", "--organization", ORG, "--principal", principal, "--role", "member", expect=1)
+        for bad in ("teacher", "ADMIN", "owner "):
+            self.cli("set-role", "--organization", ORG, "--principal", admin, "--role", bad, expect=1)
+        self.cli("grant-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy", expect=1)
+        self.cli("revoke-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy", expect=1)
         self.assertEqual(self.dump(), before)
-        gone = self.cli("revoke-permission", "--organization", ORG, "--principal", admin, "--permission", "admin_policy")
-        self.assertEqual(gone, {"principal_id": admin, "permission": "admin_policy", "changed": True, "membership_epoch": epoch + 1})
-        self.assertEqual(self.query("SELECT count(*) FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s",
-                                    (ORG, admin)), [(0,)])
-        self.assertEqual(self.last_operator_event(), ("permission.revoked", admin, None, None))
+        # The last owner: the first owner cannot be demoted until a second one exists.
+        owner = self.cli("set-role", "--organization", ORG, "--principal", admin, "--role", "owner")
+        self.assertEqual((owner["role_before"], owner["role"], owner["membership_epoch"]), ("admin", "owner", epoch + 2))
+        p = self.cli("set-role", "--organization", ORG, "--principal", admin, "--role", "member", expect=1)
+        self.assertEqual(json.loads(p.stderr), {"refused": "last_owner"})
+        second = self.member()
+        self.cli("set-role", "--organization", ORG, "--principal", second, "--role", "owner")
+        demoted = self.cli("set-role", "--organization", ORG, "--principal", admin, "--role", "viewer")
+        self.assertEqual((demoted["role_before"], demoted["role"], demoted["membership_epoch"]), ("owner", "viewer", epoch + 3))
+        self.assertEqual(self.operator_events()[-3:], [("membership.role_changed",)] * 3)
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
+
+    def test_issue_with_a_role_admits_a_viewer_and_list_shows_each_role(self):
+        """ADR-021: issue --role viewer (default member) is stored on the code and admits with it; list names
+        the redeemer's role; another role or admin_policy as a grant refuses."""
+        self.ensure_backfill()
+        out = self.issue("--role", "viewer")
+        self.assertEqual(out["role"], "viewer")
+        self.assertEqual(self.query("SELECT role FROM genui.access_codes WHERE organization_id=%s AND code_id=%s", (ORG, out["code_id"])), [("viewer",)])
+        self.assertEqual(self.issue()["role"], "member")
+        for bad in (["--role", "admin"], ["--role", "owner"], ["--role", "Viewer"]):
+            self.cli("issue", "--organization", ORG, "--issued-by", "unit-operator", "--grant", "source_read:" + self.source, *bad, expect=1)
+        digest = op.code_digest(op.normalize_code(out["code"]))
+        outcome, pending, _, _ = self.pending_for(digest, "usr_viewer_" + uuid.uuid4().hex[:8], "7")
+        self.assertEqual(outcome, "pending")
+        with self.workspace() as c:
+            principal, member_epoch, _, _, outcome = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
+                                                               (ORG, pending, ISSUER, TENANT, "usr_viewer_" + uuid.uuid4().hex[:8], "sha256:" + "7" * 64)).fetchone()
+            self.assertEqual(outcome, "mismatch")  # the subject must match the pending admission
+        subject = self.query("SELECT provider_subject FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s", (ORG, pending))[0][0]
+        with self.workspace() as c:
+            principal, member_epoch, _, _, outcome = c.execute("SELECT * FROM genui_private.admit_redemption(%s,%s,%s,%s,%s,%s)",
+                                                               (ORG, pending, ISSUER, TENANT, subject, "sha256:" + "7" * 64)).fetchone()
+            c.commit()
+        self.assertEqual((outcome, member_epoch), ("admitted", 1))
+        self.assertEqual(self.query("SELECT role,status FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, principal)),
+                         [("viewer", "active")])
+        entry = next(item for item in self.cli("list", "--organization", ORG)["codes"] if item["code_id"] == out["code_id"])
+        self.assertEqual([(r["principal_id"], r["membership_role"]) for r in entry["redemptions"]], [(str(principal), "viewer")])
 
     def test_list_box_files_names_only_the_members_uploads(self):
         """The real-user trial (deletion): the keys of one member's uploads, read-only, in a stable order;
@@ -931,10 +993,10 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                       (org, box, file, "sha256:" + "cd" * 32, "o/%s/b/%s/f/%s" % (org, box, file), members[0]))
         app = str(uuid.uuid4())
         self.cli("create-app", "--organization", org, "--app", app, "--space", space, "--owner", members[0])
-        self.cli("grant-permission", "--organization", org, "--principal", members[1], "--permission", "admin_policy")
+        self.cli("set-role", "--organization", org, "--principal", members[1], "--role", "admin")
         populated = self.cli("stats", "--organization", org)["counts"]
         for table, expected in (("principals", 2), ("memberships", 2), ("access_codes", 1), ("apps", 1), ("app_permissions", 1),
-                                ("organization_permissions", 1), ("boxes", 1), ("box_files", 1), ("spaces", 1)):
+                                ("boxes", 1), ("box_files", 1), ("spaces", 1)):
             self.assertEqual(populated[table], expected, table)
         self.assertEqual(self.query("SELECT count(*) FROM genui_private.code_index WHERE organization_id=%s", (org,)), [(1,)])
         # Refusals, each writing nothing: active organization, then an active member.
@@ -1256,7 +1318,7 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
                                  (other, ["--permission", "run", "--app", str(uuid.uuid4())]),
                                  (other, ["--permission", "record_read", "--app", app, "--work", str(uuid.uuid4())]),
                                  (other, ["--permission", "source_read", "--source", str(uuid.uuid4())]),
-                                 (other, ["--permission", "admin_policy", "--app", app])):  # the organization permission names no app
+                                 (other, ["--permission", "admin_policy"])):  # no organization permission since 0025 (ADR-021)
             with self.subTest(extra=extra[1]):
                 self.cli("grant-permission", "--organization", ORG, "--principal", principal, *extra, expect=1)
         self.cli("grant-permission", "--organization", str(uuid.uuid4()), "--principal", other, "--permission", "run", "--app", app, expect=1)
@@ -1430,7 +1492,8 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
         self.assertEqual((entry["status"], entry["redeemed_count"]), ("exhausted", 1))
         self.assertEqual(len(entry["redemptions"]), 1)
         shown = entry["redemptions"][0]
-        self.assertEqual(set(shown), {"redemption_id", "principal_id", "entitlement_id", "redeemed_at", "membership_status", "entitlement_status"})
+        self.assertEqual(set(shown), {"redemption_id", "principal_id", "entitlement_id", "redeemed_at", "membership_status", "membership_role", "entitlement_status"})
+        self.assertEqual(shown["membership_role"], "member")
         self.assertEqual((shown["redemption_id"], shown["principal_id"], shown["entitlement_id"], shown["membership_status"], shown["entitlement_status"]),
                          (str(redemption), str(principal), str(entitlement), "active", "active"))
         # Identifiers only: no provider subject, address or secret in the listing.
@@ -1735,3 +1798,79 @@ class DatabaseTests(OperatorDatabase, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("docker") and shutil.which("openssl"), "requires local Docker and OpenSSL")
+class RoleMigrationTests(OperatorDatabase, unittest.TestCase):
+    """ADR-021 (migration 0025): the data migration from admin_policy rows, on a database stopped at
+    schema 24 and then migrated by the runner. Zero, one and two (here three) holders per organization."""
+    migrate_through = 24
+
+    def test_the_earliest_admitted_admin_becomes_owner_and_the_others_admins(self):
+        orgs = {name: str(uuid.uuid4()) for name in ("none", "one", "many", "tie")}
+        people = {}
+        with self.connect("postgres") as c:
+            self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(), (24,))
+            self.assertEqual(c.execute("SELECT count(*) FROM pg_attribute a JOIN pg_class t ON t.oid=a.attrelid JOIN pg_namespace n ON n.oid=t.relnamespace "
+                                       "WHERE n.nspname='genui' AND t.relname='memberships' AND a.attname='role'").fetchone(), (0,))
+            for name, org in orgs.items():
+                c.execute("INSERT INTO genui.organizations VALUES (%s,%s,'active')", (org, "Role migration " + name))
+                c.execute("INSERT INTO genui.provider_tenant_bindings VALUES (%s,%s,%s,true)", (org, ISSUER, "ten_" + org[-12:]))
+                code = str(uuid.uuid4())
+                c.execute("""INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,
+                             redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at) VALUES (%s,%s,%s,'member_invite','active',%s,10,0,now(),now()+interval '1 day',30,'test',NULL)""",
+                          (org, code, "sha256:" + hashlib.sha256(org.encode()).hexdigest(), org))
+                members = {}
+                # Six members per organization: three would-be admins, a plain member, a revoked holder, a revoked member.
+                for label, status in (("p1", "active"), ("p2", "active"), ("p3", "active"), ("plain", "active"), ("gone_admin", "revoked"), ("gone", "revoked")):
+                    principal = str(uuid.uuid4()); members[label] = principal
+                    c.execute("INSERT INTO genui.principals VALUES (%s,%s,%s,%s,%s)", (org, principal, ISSUER, "ten_" + org[-12:], "usr_" + principal))
+                    c.execute("INSERT INTO genui.memberships(organization_id,principal_id,status,membership_epoch) VALUES (%s,%s,%s,1)", (org, principal, status))
+                    c.execute("""INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at)
+                                 VALUES (%s,%s,%s,'active','member_invite',now(),now()+interval '30 days')""", (org, principal, "0000e000-0000-4000-8000-" + principal[-12:]))
+                # Admission times: p2 redeemed first, p3 an hour later, p1 never (an operator-admitted member).
+                def redeemed(label, when):
+                    principal = members[label]; reservation = str(uuid.uuid4())
+                    c.execute("""INSERT INTO genui.code_reservations(organization_id,reservation_id,code_id,kind,context_digest,issuer,provider_tenant_id,provider_subject,state,expires_at,consumed_at)
+                                 VALUES (%s,%s,%s,'pending',%s,%s,%s,%s,'consumed',now()+interval '1 day',now())""",
+                              (org, reservation, code, "sha256:" + "a" * 64, ISSUER, "ten_" + org[-12:], "usr_" + principal))
+                    c.execute("""INSERT INTO genui.code_redemptions(organization_id,redemption_id,code_id,principal_id,pending_admission_id,entitlement_id,payload_digest,committed_at,audit_event_id)
+                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""", (org, str(uuid.uuid4()), code, principal, reservation, "0000e000-0000-4000-8000-" + principal[-12:],
+                                                                      "sha256:" + "b" * 64, when, str(uuid.uuid4())))
+                holders = {"none": [], "one": ["p2"], "many": ["p1", "p2", "p3", "gone_admin"], "tie": ["p1", "p2"]}[name]
+                for label in holders:
+                    c.execute("INSERT INTO genui.organization_permissions VALUES (%s,%s,'admin_policy')", (org, members[label]))
+                if name == "many":
+                    redeemed("p2", "2026-11-01T10:00:00Z")
+                    redeemed("p3", "2026-11-01T11:00:00Z")
+                    redeemed("gone_admin", "2026-10-01T09:00:00Z")  # the earliest, but revoked: never an owner
+                people[name] = members
+        # The runner resumes from 24 and applies 0025.
+        with self.connect() as c:
+            runtime.apply_migrations(c, runtime.migration_directory())
+            c.commit()
+        with self.connect("postgres") as c:
+            self.assertEqual(c.execute("SELECT version FROM genui_meta.schema_version").fetchone(), (25,))
+            self.assertEqual(c.execute("SELECT to_regclass('genui.organization_permissions')").fetchone(), (None,))
+            roles = {name: dict(c.execute("SELECT principal_id::text,role FROM genui.memberships WHERE organization_id=%s", (org,)).fetchall())
+                     for name, org in orgs.items()}
+        none, one, many = (people[n] for n in ("none", "one", "many"))
+        self.assertEqual(set(roles["none"].values()), {"member"}, "no holder: no owner, everyone a member")
+        self.assertEqual(roles["one"][one["p2"]], "owner")
+        self.assertEqual({roles["one"][one[l]] for l in ("p1", "p3", "plain", "gone_admin", "gone")}, {"member"})
+        self.assertEqual(roles["many"][many["p2"]], "owner", "the earliest admitted active holder")
+        self.assertEqual(roles["many"][many["p3"]], "admin", "admitted later")
+        self.assertEqual(roles["many"][many["p1"]], "admin", "no admission time sorts last")
+        self.assertEqual(roles["many"][many["gone_admin"]], "member", "a revoked holder keeps member")
+        self.assertEqual((roles["many"][many["plain"]], roles["many"][many["gone"]]), ("member", "member"))
+        # The tie: two operator-admitted holders (no redemption at all) resolve by the smaller principal id.
+        tie = people["tie"]
+        lower, higher = sorted([tie["p1"], tie["p2"]])
+        self.assertEqual((roles["tie"][lower], roles["tie"][higher]), ("owner", "admin"), "the smaller principal id is the owner")
+        self.assertEqual({roles["tie"][tie[l]] for l in ("p3", "plain", "gone_admin", "gone")}, {"member"})
+        with self.connect("postgres") as c:
+            self.assertEqual(c.execute("""SELECT count(*) FROM genui.memberships m WHERE m.organization_id=%s AND m.role='owner'""", (orgs["many"],)).fetchone(), (1,))
+            self.assertEqual(c.execute("""SELECT count(*) FROM genui.memberships m WHERE m.organization_id=%s AND m.role='owner'""", (orgs["tie"],)).fetchone(), (1,))
+            self.assertEqual(c.execute("SELECT count(*) FROM genui.memberships WHERE role NOT IN ('owner','admin','manager','member','viewer')").fetchone(), (0,))
+            self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui.memberships'::regclass").fetchone(), (True,))
+            self.assertEqual(c.execute("SELECT relforcerowsecurity FROM pg_class WHERE oid='genui.code_redemptions'::regclass").fetchone(), (True,))

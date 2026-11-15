@@ -261,6 +261,10 @@ async fn create(State(state): State<Arc<Boxes>>, request: Request) -> Response {
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     if let Err(retry) = admit_write(&state, &member) {
         return http::too_many_requests(retry);
     }
@@ -305,6 +309,10 @@ async fn uploads(State(state): State<Arc<Boxes>>, request: Request) -> Response 
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     if let Err(retry) = admit_write(&state, &member) {
         return http::too_many_requests(retry);
     }
@@ -471,6 +479,10 @@ async fn upload(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let key = format!(
         "box-upload:{}:{}",
         member.organization(),
@@ -723,6 +735,10 @@ async fn sheet(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &state.auth.stores else {
         return http::not_found();
     };
@@ -1066,6 +1082,10 @@ async fn data(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let object = match json_of(body, &parts.headers).await {
         Ok(object) => object,
         Err(response) => return response,
@@ -1113,6 +1133,10 @@ async fn attach(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let value = match json_of(body, &parts.headers).await {
         Ok(value) => value,
         Err(response) => return response,
@@ -1816,6 +1840,10 @@ async fn apps(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     if let Err(refused) = admit_compose(&state, &member) {
         return refused.response_for(&Caller::member(&member));
     }
@@ -1999,6 +2027,10 @@ async fn rename(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     if let Err(retry) = admit_write(&state, &member) {
         return http::too_many_requests(retry);
     }
@@ -2040,6 +2072,10 @@ async fn share(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     if let Err(retry) = admit_write(&state, &member) {
         return http::too_many_requests(retry);
     }
@@ -2336,6 +2372,10 @@ async fn explain_post(
     let Some(member) = session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder write, upload, build or AI call; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     if let Err(refused) = admit_explain(&state, &member) {
         return refused.response_for(&Caller::member(&member));
     }

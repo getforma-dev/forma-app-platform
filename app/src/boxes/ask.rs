@@ -651,6 +651,10 @@ pub async fn ask_post(
     let Some(member) = routes::session(&state, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): a folder question is AI; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     // DS-79: a demo organization's rehearsed folder questions need no model.
     let demo = demo::is_demo_org(member.organization());
     if !state.composer.enabled() && !demo {

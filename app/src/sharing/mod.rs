@@ -254,6 +254,10 @@ async fn members(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     let Some((_, trusted)) = session(&auth, request.headers()).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): sharing is not a viewer's; the dialog's reads included.
+    if !trusted.can(crate::storage::Capability::Share) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
@@ -285,6 +289,10 @@ async fn share_request(
     let Some((_, trusted)) = session(auth, &parts.headers).await else {
         return Err(http::not_found());
     };
+    // ADR-021 (APP-226): a viewer shares nothing.
+    if !trusted.can(crate::storage::Capability::Share) {
+        return Err(http::viewer_read_only());
+    }
     if let Err(retry_after) = auth
         .limits
         .admit_member_write(trusted.organization(), trusted.principal())
@@ -350,6 +358,10 @@ async fn sharing(
     let Some((_, trusted)) = session(&auth, request.headers()).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): sharing is not a viewer's; the dialog's reads included.
+    if !trusted.can(crate::storage::Capability::Share) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };

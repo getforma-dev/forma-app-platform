@@ -1301,6 +1301,8 @@ mod tests {
         const ORG: &str = "Northwind Regional Community Health Cooperative of the Greater Valley";
         for admin in [false, true] {
             let props = CanvasProps {
+                can_build: true,
+                can_build_mode: "true".into(),
                 csrf_signout: "S".repeat(43),
                 csrf_display_name: "N".repeat(43),
                 has_live: true,
@@ -2984,6 +2986,8 @@ mod tests {
         second.forms = canvas::form_card(spend, &record).into_iter().collect();
         let groups = vec![first, second];
         let props = canvas::CanvasProps {
+            can_build: true,
+            can_build_mode: "true".into(),
             csrf_signout: "S".repeat(43),
             has_groups: true,
             summary: canvas::summary(&groups),
@@ -3043,6 +3047,8 @@ mod tests {
             },
         ]);
         let props = canvas::CanvasProps {
+            can_build: true,
+            can_build_mode: "true".into(),
             has_library: true,
             library_summary: canvas::library_summary(&library),
             library,
@@ -3250,6 +3256,8 @@ mod tests {
         // An empty canvas offers creation intents that require no installed
         // apps, so a new customer is not sent to an absent Expense app.
         let empty = canvas::CanvasProps {
+            can_build: true,
+            can_build_mode: "true".into(),
             csrf_signout: "S".repeat(43),
             summary: canvas::summary(&[]),
             ..canvas::CanvasProps::default()
@@ -3364,6 +3372,29 @@ mod tests {
             note: "front row".into(),
             status: if removable { "Active" } else { "Removed" }.into(),
             role: "Member".into(),
+            role_code: "member".into(),
+            changeable: removable,
+            fixed_role: !removable,
+            options: if removable {
+                vec![
+                    genui::org_admin::RoleOptionProps {
+                        value: "member".into(),
+                        label: "Member".into(),
+                        selected: true,
+                    },
+                    genui::org_admin::RoleOptionProps {
+                        value: "viewer".into(),
+                        label: "Viewer".into(),
+                        selected: false,
+                    },
+                ]
+            } else {
+                Vec::new()
+            },
+            confirm_role: false,
+            role_select_label: format!("Role for {label}"),
+            role_action: format!("/admin/members/{id}/role"),
+            csrf_role: "Q".repeat(43),
             consent: "Notice v1, 2026-11-29".into(),
             last_active: "2026-11-29 14:03 UTC".into(),
             apps: "2".into(),
@@ -3379,7 +3410,7 @@ mod tests {
             organization: "Weekend <class>".into(),
             summary: "2 members · 1 active".into(),
             has_notice: true,
-            notice: "You can't remove the last admin of this organization.".into(),
+            notice: "You can't remove the last owner of this organization.".into(),
             notice_kind: "refused".into(),
             has_members: true,
             empty: false,
@@ -3399,7 +3430,7 @@ mod tests {
         assert!(!body.contains("<script src"));
         assert!(body.contains("Weekend &lt;class&gt;"));
         assert!(body.contains("Ana &lt;b&gt;bold&lt;/b&gt;") && !body.contains("<b>bold"));
-        assert!(body.contains("You can't remove the last admin of this organization."));
+        assert!(body.contains("You can't remove the last owner of this organization."));
         for cell in [
             "front row",
             "Notice v1, 2026-11-29",
@@ -3416,6 +3447,42 @@ mod tests {
         );
         assert!(body.contains("name=\"confirm\"") && body.contains("value=\"remove\""));
         assert!(body.contains("required"));
+        // ADR-021: the Role column, the legend and the helper line; the
+        // select on the active row only, with exactly the offered roles, the
+        // current one selected; no confirmation box when no owner or admin
+        // role is in play.
+        assert!(body.contains("<th scope=\"col\">Role</th>"));
+        assert!(body.contains("Helpers such as assistants: make them Members and give them Reviewer on the apps they help with."));
+        for word in [
+            "<strong>Owner</strong>",
+            "<strong>Admin</strong>",
+            "<strong>Manager</strong>",
+            "<strong>Member</strong>",
+            "<strong>Viewer</strong>",
+        ] {
+            assert!(body.contains(word), "{word}");
+        }
+        assert!(body.contains(&format!("action=\"/admin/members/{student}/role\"")));
+        assert_eq!(
+            body.matches("<select name=\"role\"").count(),
+            1,
+            "only the active row"
+        );
+        assert_eq!(body.matches(&"Q".repeat(43)).count(), 1);
+        assert!(
+            body.contains("<option value=\"member\" selected")
+                || body.contains("<option selected value=\"member\"")
+                || body.contains("value=\"member\" selected=\"\""),
+            "{}",
+            &body[body.find("<select").unwrap()..body.find("</select>").unwrap()]
+        );
+        assert!(body.contains("<option value=\"viewer\""));
+        assert!(!body.contains("<option value=\"owner\""));
+        assert!(
+            !body.contains("value=\"role\""),
+            "no confirmation box for a member/viewer change"
+        );
+        assert!(body.contains("Change role"));
         assert!(body.contains("href=\"mailto:feedback@getforma.dev\""));
         assert!(body.contains("action=\"/auth/signout\""));
         let (_, _, empty) = html(ssr.page(&AdminProps {

@@ -743,6 +743,10 @@ async fn everyone(
         Ok(front) => front,
         Err(refusal) => return refusal,
     };
+    // ADR-021 (review MINOR-3): adding a card for everyone is a share.
+    if !member.can(crate::storage::Capability::Share) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };
@@ -773,6 +777,11 @@ async fn remove(
         Ok(front) => front,
         Err(refusal) => return refusal,
     };
+    // ADR-021 (review MINOR-3): removing or taking back a card (the steward
+    // path included) is a write; a viewer is refused before storage.
+    if !member.can(crate::storage::Capability::Write) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };

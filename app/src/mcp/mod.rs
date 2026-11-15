@@ -134,6 +134,11 @@ async fn caller(auth: &Auth, headers: &HeaderMap) -> Result<AgentCaller, Respons
     let token = bearer(headers).ok_or_else(http::not_found)?;
     let stores = auth.stores.as_ref().ok_or_else(http::not_found)?;
     match stores.workspace.resolve_agent_token(token).await {
+        // ADR-021 (APP-226): a token minted before a demotion to viewer
+        // resolves the new role at its next call and is refused.
+        Ok(Some(caller)) if !caller.request.can(crate::storage::Capability::Build) => {
+            Err(http::viewer_read_only())
+        }
         Ok(Some(caller)) => Ok(caller),
         Ok(None) => Err(http::not_found()),
         Err(error) => {

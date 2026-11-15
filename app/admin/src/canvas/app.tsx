@@ -250,6 +250,12 @@ type CanvasProps = {
   artifactKindsLoaded: boolean;
   /** Trial plan D4: the member is an admin of the organization (the Admin link). */
   isOrgAdmin: boolean;
+  /** ADR-021: the member's role builds, writes, shares and connects (false for a viewer). */
+  canBuild: boolean;
+  /** `canBuild` as the shell's `data-can-build` text ("true" or "false"). */
+  canBuildMode: string;
+  /** The inverse of `canBuild`: the view-only sentence replaces the intent bar. */
+  viewOnly: boolean;
   /** Trial plan D6: no display name yet (or a refused one), so the canvas asks. */
   needsName: boolean;
   /** `POST /me/name` refused the name: the plain words. */
@@ -317,7 +323,7 @@ function IntentBar(props: IntentProps) {
 
 function Canvas(props: CanvasProps) {
   return (
-    <div id="cv-shell" class="cv-shell">
+    <div id="cv-shell" class="cv-shell" data-can-build={props.canBuildMode}>
       <header class="cv-top">
         <div class="cv-identity">
           <a class="cv-brand" href="/canvas" aria-label="Forma canvas">
@@ -333,7 +339,9 @@ function Canvas(props: CanvasProps) {
           ))}
         </div>
         <div class="cv-top-status">
-          <button type="button" class="cv-secondary" data-create-app="">Create app</button>
+          {createShow(() => props.canBuild, () => (
+            <button type="button" class="cv-secondary" data-create-app="">Create app</button>
+          ))}
           <span id="cv-summary" class="cv-count">{props.summary}</span>
           {createShow(() => props.hasLive, () => (
             <span id="cv-live" class="cv-live" data-state="connecting" role="status" hidden>
@@ -934,15 +942,22 @@ function Canvas(props: CanvasProps) {
               <button type="button" role="menuitem" data-tool="remove"><span>Take off the canvas</span><span class="cv-kbd-group">Del</span></button>
               <span class="cv-zoom-sep" aria-hidden="true"></span>
               <p class="cv-menu-label" aria-hidden="true">Ask and Shape</p>
-              <button type="button" role="menuitem" data-tool="ask-about"><span>Ask about this</span><span class="cv-kbd-group">?</span></button>
-              <button type="button" role="menuitem" data-tool="shape"><span>Shape…</span><span class="cv-kbd-group">/shape</span></button>
+              {createShow(() => props.canBuild, () => (
+                <button type="button" role="menuitem" data-tool="ask-about"><span>Ask about this</span><span class="cv-kbd-group">?</span></button>
+              ))}
+              {createShow(() => props.canBuild, () => (
+                <button type="button" role="menuitem" data-tool="shape"><span>Shape…</span><span class="cv-kbd-group">/shape</span></button>
+              ))}
               <span class="cv-zoom-sep" aria-hidden="true"></span>
               <button type="button" role="menuitem" data-tool="help"><span>Shortcuts and commands</span><span class="cv-kbd-group">/shortcuts</span></button>
             </div>
           </div>
         </div>
         <span class="cv-dock-brand" aria-hidden="true">YOUR NEXT MOVE <span>↗</span></span>
-        <IntentBar placeholder="Describe an app, ask a question, or type /" />
+        {createShow(() => props.canBuild, () => <IntentBar placeholder="Describe an app, ask a question, or type /" />)}
+        {createShow(() => props.viewOnly, () => (
+          <p class="cv-view-only" role="status">You have view-only access in this workspace. Ask an admin for member access to build or edit.</p>
+        ))}
         <div class="cv-dock-end">
           <div class="cv-look" role="group" aria-label="Canvas look">
             <div class="cv-look-scheme" role="group" aria-label="Day or dark">
@@ -1024,6 +1039,9 @@ mount(
       memberKey: '',
       artifactKindsLoaded: false,
       isOrgAdmin: false,
+      canBuild: true,
+      canBuildMode: 'true',
+      viewOnly: false,
       needsName: false,
       hasNameNotice: false,
       nameNotice: '',

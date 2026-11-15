@@ -9,16 +9,126 @@ use std::sync::{
 use tokio::time::{timeout_at, Instant};
 use tokio_postgres::{error::SqlState, types::ToSql, Row};
 
+/// ADR-021 (APP-225): a member's organization role, one per active
+/// membership (`genui.memberships.role`, migration 0025), highest first. The
+/// role is a ceiling: effective access in an app is the lower of the role's
+/// capabilities and the share or resource grant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub enum OrgRole {
+    Viewer,
+    Member,
+    Manager,
+    Admin,
+    Owner,
+}
+
+/// What a route asks of the member's role before any resource grant is
+/// judged ([`OrgRole::can`]). The closed set of ADR-021's capability table.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Capability {
+    /// Build or create apps and use any AI: compose, Ask, Shape, folders,
+    /// `/v1/act`, the customizer, MCP compose, Slack.
+    Build,
+    /// Open and read apps and records the member is allowed to see.
+    Read,
+    /// Write records or commands, upload sources, export.
+    Write,
+    /// Share apps, including organization-wide and guest links.
+    Share,
+    /// Mint agent (MCP) tokens or connect Slack.
+    Connect,
+    /// See `/admin` (members, roles, usage) and manage members.
+    Admin,
+}
+
+impl OrgRole {
+    /// The five roles, highest first.
+    pub const ALL: [OrgRole; 5] = [
+        OrgRole::Owner,
+        OrgRole::Admin,
+        OrgRole::Manager,
+        OrgRole::Member,
+        OrgRole::Viewer,
+    ];
+    /// The stored spelling (the `memberships.role` CHECK).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::Admin => "admin",
+            Self::Manager => "manager",
+            Self::Member => "member",
+            Self::Viewer => "viewer",
+        }
+    }
+    /// The role a stored or submitted spelling names; `None` for anything else.
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "owner" => Self::Owner,
+            "admin" => Self::Admin,
+            "manager" => Self::Manager,
+            "member" => Self::Member,
+            "viewer" => Self::Viewer,
+            _ => return None,
+        })
+    }
+    /// The one capability function (ADR-021's table): a viewer reads only;
+    /// every other role builds, writes, shares and connects; owner, admin and
+    /// manager see `/admin`.
+    pub fn can(self, capability: Capability) -> bool {
+        match capability {
+            Capability::Read => true,
+            Capability::Build | Capability::Write | Capability::Share | Capability::Connect => {
+                self != Self::Viewer
+            }
+            Capability::Admin => matches!(self, Self::Owner | Self::Admin | Self::Manager),
+        }
+    }
+    /// The highest role this role manages (sets or removes), or `None`: an
+    /// owner manages everyone (owners and admins included), an admin manages
+    /// managers, members and viewers, a manager manages members and viewers.
+    pub fn manages(self) -> Option<OrgRole> {
+        match self {
+            Self::Owner => Some(Self::Owner),
+            Self::Admin => Some(Self::Manager),
+            Self::Manager => Some(Self::Member),
+            Self::Member | Self::Viewer => None,
+        }
+    }
+    /// Whether this role may set `target`'s role to `to` (the server's rule;
+    /// storage judges it again under the member fence): both the target's
+    /// current role and the new role are within what this role manages, and
+    /// nobody raises their own role.
+    pub fn may_set(self, target: OrgRole, to: OrgRole, own_row: bool) -> bool {
+        let Some(ceiling) = self.manages() else {
+            return false;
+        };
+        target <= ceiling && to <= ceiling && !(own_row && to > self)
+    }
+    /// Whether this role may remove a member holding `target`.
+    pub fn may_remove(self, target: OrgRole) -> bool {
+        self.manages().is_some_and(|ceiling| target <= ceiling)
+    }
+    /// The roles this role may offer for a member holding `target` (the
+    /// `/admin` select), highest first; empty when it manages none of them.
+    pub fn assignable(self, target: OrgRole, own_row: bool) -> Vec<OrgRole> {
+        Self::ALL
+            .into_iter()
+            .filter(|&to| self.may_set(target, to, own_row))
+            .collect()
+    }
+}
+
 /// No public constructor, deserializer or clone. In production only
 /// `storage::sessions::resolve_session` (APP-009) constructs one, from a live
-/// workspace session row, the member's current epoch and the registry.
+/// workspace session row, the member's current epoch, role and the registry.
 ///
 /// ```compile_fail
-/// use genui::storage::TrustedRequest;
+/// use genui::storage::{OrgRole, TrustedRequest};
 /// let request = TrustedRequest {
 ///     organization: String::new(), principal: String::new(), epoch: 1,
 ///     issuer: String::new(), provider_tenant: String::new(),
 ///     provider_subject: String::new(), registry_sha256: String::new(),
+///     role: OrgRole::Member,
 /// };
 /// ```
 pub struct TrustedRequest {
@@ -29,6 +139,10 @@ pub struct TrustedRequest {
     pub(super) provider_tenant: String,
     pub(super) provider_subject: String,
     pub(super) registry_sha256: String,
+    /// ADR-021: the membership's role as the session, Slack link or agent
+    /// token resolved it, under the member fence; a role change advances the
+    /// epoch, so every later request resolves the new one.
+    pub(super) role: OrgRole,
 }
 impl TrustedRequest {
     /// The organization the session resolved to (read-only; for the
@@ -42,6 +156,16 @@ impl TrustedRequest {
     /// structured log, APP-093). Authority still comes only from storage.
     pub fn principal(&self) -> &str {
         &self.principal
+    }
+    /// ADR-021: the member's organization role at resolution.
+    pub fn role(&self) -> OrgRole {
+        self.role
+    }
+    /// ADR-021: whether the member's role allows `capability`; every write,
+    /// share, connect and AI route refuses `viewer_read_only` when it does
+    /// not, before any resource grant is judged.
+    pub fn can(&self, capability: Capability) -> bool {
+        self.role.can(capability)
     }
 }
 
@@ -60,7 +184,10 @@ pub enum Action {
     ReviewPublish,
     ShareWork,
     Export,
-    AdminPolicy,
+    /// ADR-021 (0025): organization administration, held by the roles that
+    /// see `/admin` (owner, admin, manager) on their active membership row;
+    /// no permission row exists for it.
+    OrgAdmin,
 }
 impl TryFrom<&str> for Action {
     type Error = Error;
@@ -76,7 +203,7 @@ impl TryFrom<&str> for Action {
             "review_publish" => Self::ReviewPublish,
             "share_work" => Self::ShareWork,
             "export" => Self::Export,
-            "admin_policy" => Self::AdminPolicy,
+            "org_admin" => Self::OrgAdmin,
             _ => return Err(Error::Denied),
         })
     }
@@ -94,7 +221,7 @@ impl Action {
             Self::ReviewPublish => "review_publish",
             Self::ShareWork => "share_work",
             Self::Export => "export",
-            Self::AdminPolicy => "admin_policy",
+            Self::OrgAdmin => "org_admin",
         }
     }
 }
@@ -598,8 +725,10 @@ impl<'a> Transaction<'a> {
         let principal = &request.principal;
         let action = precheck.action.permission();
         let rows = match precheck.resource {
-            Resource::Organization if precheck.action == Action::AdminPolicy => self.query(
-                "SELECT 1 FROM genui.organization_permissions WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND permission=$3", &[org,principal,&action]).await?,
+            // ADR-021: the roles that administer the organization, on the
+            // member's own active row (the fence re-reads it under lock).
+            Resource::Organization if precheck.action == Action::OrgAdmin => self.query(
+                "SELECT 1 FROM genui.memberships WHERE organization_id=$1::text::uuid AND principal_id=$2::text::uuid AND status='active' AND role IN ('owner','admin','manager')", &[org,principal]).await?,
             // APP-192 (D9): `discover` and `run` on an app are also held by
             // every active member while a live organization-wide share of a
             // work of that app exists (the app-level rows a personal share
@@ -608,9 +737,11 @@ impl<'a> Transaction<'a> {
                 require(valid_id(app))?;
                 self.query(&format!("SELECT 1 FROM genui.apps a WHERE a.organization_id=$1::text::uuid AND a.app_id=$3::text::uuid AND (EXISTS(SELECT 1 FROM genui.app_permissions p WHERE p.organization_id=a.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=a.app_id AND p.permission=$4) OR {})", organization_share("a.app_id", None, "$2::text::uuid", None)), &[org,principal,&app,&action]).await?
             }
+            // ADR-021 (APP-226): building and publishing are writes; a
+            // viewer's grant does not reach them (`not_viewer`).
             Resource::App(app) if matches!(precheck.action, Action::EditDefinition | Action::ReviewPublish) => {
                 require(valid_id(app))?;
-                self.query("SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=$3::text::uuid AND p.permission=$4", &[org,principal,&app,&action]).await?
+                self.query(&format!("SELECT 1 FROM genui.app_permissions p JOIN genui.apps a USING(organization_id,app_id) WHERE p.organization_id=$1::text::uuid AND p.principal_id=$2::text::uuid AND p.app_id=$3::text::uuid AND p.permission=$4 AND {}", not_viewer("$2::text::uuid")), &[org,principal,&app,&action]).await?
             }
             Resource::Source(source) if precheck.action == Action::SourceRead => {
                 require(valid_id(source))?;
@@ -635,9 +766,11 @@ impl<'a> Transaction<'a> {
                 require(valid_id(app) && valid_id(work))?;
                 self.query(&format!("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND {} AND {}", work_clause("$2::text::uuid", "record_read"), reviewer_clause("w.app_id", "w.work_id", "$2::text::uuid")), &[org,principal,&app,&work]).await?
             }
+            // ADR-021 (APP-226): sharing and export are writes of the
+            // member's role as well (`not_viewer`).
             Resource::Work { app, work } if matches!(precheck.action, Action::ShareWork | Action::Export) => {
                 require(valid_id(app) && valid_id(work))?;
-                self.query("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND (EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission=$5) OR ($5 IN ('record_read','record_write') AND w.created_by=$2::text::uuid AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=$2::text::uuid AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=$2::text::uuid AND s.source_id=d.source_id AND s.permission='source_read')))", &[org,principal,&app,&work,&action]).await?
+                self.query(&format!("SELECT 1 FROM genui.saved_work w WHERE w.organization_id=$1::text::uuid AND w.app_id=$3::text::uuid AND w.work_id=$4::text::uuid AND (EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id=$2::text::uuid AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission=$5) OR ($5 IN ('record_read','record_write') AND w.created_by=$2::text::uuid AND w.creator_revoked_at IS NULL)) AND EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id=$2::text::uuid AND a.app_id=w.app_id AND a.permission='run') AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id=$2::text::uuid AND s.source_id=d.source_id AND s.permission='source_read'))) AND {}", not_viewer("$2::text::uuid")), &[org,principal,&app,&work,&action]).await?
             }
             _ => return Err(Error::Denied),
         };
@@ -689,7 +822,26 @@ pub(super) fn work_clause(principal: &str, permission: &'static str) -> String {
     debug_assert!(matches!(permission, "record_read" | "record_write"));
     let shared = organization_share("w.app_id", Some("w.work_id"), principal, Some(permission));
     let run = organization_share("w.app_id", Some("w.work_id"), principal, None);
-    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='{permission}') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL) OR {shared}) AND (EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') OR {run}) AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read')))")
+    // ADR-021 (APP-226): `record_write` is a write of the member's role as
+    // well; a viewer with a contributor grant or share reads but cannot write.
+    let role = if permission == "record_write" {
+        format!(" AND {}", not_viewer(principal))
+    } else {
+        String::new()
+    };
+    format!("(EXISTS(SELECT 1 FROM genui.work_permissions p WHERE p.organization_id=w.organization_id AND p.principal_id={principal} AND p.app_id=w.app_id AND p.work_id=w.work_id AND p.permission='{permission}') OR (w.created_by={principal} AND w.creator_revoked_at IS NULL) OR {shared}) AND (EXISTS(SELECT 1 FROM genui.app_permissions a WHERE a.organization_id=w.organization_id AND a.principal_id={principal} AND a.app_id=w.app_id AND a.permission='run') OR {run}) AND NOT EXISTS(SELECT 1 FROM genui.work_source_dependencies d JOIN genui.source_revisions r ON r.organization_id=d.organization_id AND r.source_id=d.source_id AND r.revision_id=d.source_revision_id AND r.normalized_digest=d.source_digest WHERE d.organization_id=w.organization_id AND d.app_id=w.app_id AND d.work_id=w.work_id AND (r.deleted_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM genui.source_permissions s WHERE s.organization_id=d.organization_id AND s.principal_id={principal} AND s.source_id=d.source_id AND s.permission='source_read'))){role}")
+}
+
+/// ADR-021 (APP-226): the one SQL clause of the viewer ceiling, over
+/// `{principal}` (an SQL expression): an active membership of the scoped
+/// organization whose role is not `viewer`. Every clause that grants a write,
+/// a review, a share, an export, a build or an upload carries it
+/// (`work_clause` for `record_write`, `reviewer_clause`, the
+/// `edit_definition`, `review_publish`, `share_work` and `export` branches of
+/// `permissions`); the RESTRICTIVE `viewer_read_only` policies of migration
+/// 0025 hold the same rule at the tables. Alias private (`nv`).
+pub(super) fn not_viewer(principal: &str) -> String {
+    format!("EXISTS(SELECT 1 FROM genui.memberships nv WHERE nv.organization_id={SCOPED_ORG} AND nv.principal_id={principal} AND nv.status='active' AND nv.role<>'viewer')")
 }
 
 /// APP-192 (D9): a live organization-wide share (`genui.work_shares` with no
@@ -801,10 +953,11 @@ pub(super) fn hidden(app: &str, work: &str, principal: &str) -> String {
 /// `{app}`: an active member of the scoped organization who is the app's
 /// owner, the work's unrevoked creator (Victor, 2026-11-14), a holder of
 /// `record_review` on the work, or covered by a live organization-wide share
-/// with the reviewer role. Arguments are SQL expressions. Aliases are private
+/// with the reviewer role. ADR-021 (APP-226): never a viewer (a reviewer
+/// changes every entry). Arguments are SQL expressions. Aliases are private
 /// (`rm`, `ra`, `rw`, `rp`, `rs`), so the clause composes inside any statement.
 pub(super) fn reviewer_clause(app: &str, work: &str, principal: &str) -> String {
-    format!("(EXISTS(SELECT 1 FROM genui.memberships rm WHERE rm.organization_id={SCOPED_ORG} AND rm.principal_id={principal} AND rm.status='active') AND (EXISTS(SELECT 1 FROM genui.apps ra WHERE ra.organization_id={SCOPED_ORG} AND ra.app_id={app} AND ra.owner_principal_id={principal}) OR EXISTS(SELECT 1 FROM genui.saved_work rw WHERE rw.organization_id={SCOPED_ORG} AND rw.app_id={app} AND rw.work_id={work} AND rw.created_by={principal} AND rw.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions rp WHERE rp.organization_id={SCOPED_ORG} AND rp.principal_id={principal} AND rp.app_id={app} AND rp.work_id={work} AND rp.permission='record_review') OR EXISTS(SELECT 1 FROM genui.work_shares rs WHERE rs.organization_id={SCOPED_ORG} AND rs.app_id={app} AND rs.work_id={work} AND rs.grantee_id IS NULL AND rs.revoked_at IS NULL AND rs.role='reviewer')))")
+    format!("(EXISTS(SELECT 1 FROM genui.memberships rm WHERE rm.organization_id={SCOPED_ORG} AND rm.principal_id={principal} AND rm.status='active' AND rm.role<>'viewer') AND (EXISTS(SELECT 1 FROM genui.apps ra WHERE ra.organization_id={SCOPED_ORG} AND ra.app_id={app} AND ra.owner_principal_id={principal}) OR EXISTS(SELECT 1 FROM genui.saved_work rw WHERE rw.organization_id={SCOPED_ORG} AND rw.app_id={app} AND rw.work_id={work} AND rw.created_by={principal} AND rw.creator_revoked_at IS NULL) OR EXISTS(SELECT 1 FROM genui.work_permissions rp WHERE rp.organization_id={SCOPED_ORG} AND rp.principal_id={principal} AND rp.app_id={app} AND rp.work_id={work} AND rp.permission='record_review') OR EXISTS(SELECT 1 FROM genui.work_shares rs WHERE rs.organization_id={SCOPED_ORG} AND rs.app_id={app} AND rs.work_id={work} AND rs.grantee_id IS NULL AND rs.revoked_at IS NULL AND rs.role='reviewer')))")
 }
 
 /// How many collections of work `work` of app `app` are declared `own`
@@ -980,5 +1133,176 @@ impl Data {
         .await;
         transaction.finish(result.is_ok()).await?;
         result
+    }
+}
+
+#[cfg(test)]
+mod role_tests {
+    use super::{Capability, OrgRole};
+    use OrgRole::{Admin, Manager, Member, Owner, Viewer};
+
+    #[test]
+    fn the_capability_table_is_the_adr_021_table() {
+        for role in OrgRole::ALL {
+            assert!(role.can(Capability::Read), "{role:?} reads");
+            let builds = role != Viewer;
+            for capability in [
+                Capability::Build,
+                Capability::Write,
+                Capability::Share,
+                Capability::Connect,
+            ] {
+                assert_eq!(role.can(capability), builds, "{role:?} {capability:?}");
+            }
+            assert_eq!(
+                role.can(Capability::Admin),
+                matches!(role, Owner | Admin | Manager),
+                "{role:?} administers"
+            );
+        }
+    }
+
+    #[test]
+    fn manages_is_the_ceiling_each_role_sets_and_removes_up_to() {
+        assert_eq!(Owner.manages(), Some(Owner));
+        assert_eq!(Admin.manages(), Some(Manager));
+        assert_eq!(Manager.manages(), Some(Member));
+        assert_eq!(Member.manages(), None);
+        assert_eq!(Viewer.manages(), None);
+        for (caller, removable) in [
+            (Owner, vec![Owner, Admin, Manager, Member, Viewer]),
+            (Admin, vec![Manager, Member, Viewer]),
+            (Manager, vec![Member, Viewer]),
+            (Member, vec![]),
+            (Viewer, vec![]),
+        ] {
+            for target in OrgRole::ALL {
+                assert_eq!(
+                    caller.may_remove(target),
+                    removable.contains(&target),
+                    "{caller:?} removes {target:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn may_set_follows_the_ladder_and_never_raises_ones_own_role() {
+        // An owner sets any role on anyone, their own row included, but
+        // cannot raise it (owner is the top: every own change is a demotion).
+        for target in OrgRole::ALL {
+            for to in OrgRole::ALL {
+                assert!(
+                    Owner.may_set(target, to, false),
+                    "owner on {target:?} -> {to:?}"
+                );
+            }
+        }
+        for to in OrgRole::ALL {
+            assert!(Owner.may_set(Owner, to, true), "owner's own row -> {to:?}");
+        }
+        // An admin sets manager, member or viewer on managers, members and
+        // viewers; never owner or admin, never on an owner or an admin.
+        for target in [Manager, Member, Viewer] {
+            for to in [Manager, Member, Viewer] {
+                assert!(
+                    Admin.may_set(target, to, false),
+                    "admin on {target:?} -> {to:?}"
+                );
+            }
+            for to in [Owner, Admin] {
+                assert!(
+                    !Admin.may_set(target, to, false),
+                    "admin on {target:?} -> {to:?}"
+                );
+            }
+        }
+        for target in [Owner, Admin] {
+            for to in OrgRole::ALL {
+                assert!(
+                    !Admin.may_set(target, to, false),
+                    "admin on {target:?} -> {to:?}"
+                );
+            }
+        }
+        assert!(
+            !Admin.may_set(Admin, Owner, true),
+            "an admin raising themselves"
+        );
+        assert!(
+            !Admin.may_set(Admin, Member, true),
+            "an admin's own row is above the ceiling"
+        );
+        // A manager sets member or viewer on members and viewers only.
+        for target in [Member, Viewer] {
+            for to in [Member, Viewer] {
+                assert!(
+                    Manager.may_set(target, to, false),
+                    "manager on {target:?} -> {to:?}"
+                );
+            }
+            for to in [Owner, Admin, Manager] {
+                assert!(
+                    !Manager.may_set(target, to, false),
+                    "manager on {target:?} -> {to:?}"
+                );
+            }
+        }
+        for target in [Owner, Admin, Manager] {
+            for to in OrgRole::ALL {
+                assert!(
+                    !Manager.may_set(target, to, false),
+                    "manager on {target:?} -> {to:?}"
+                );
+            }
+        }
+        assert!(
+            !Manager.may_set(Manager, Admin, true),
+            "a manager raising themselves"
+        );
+        // Members and viewers set nothing.
+        for caller in [Member, Viewer] {
+            for target in OrgRole::ALL {
+                for to in OrgRole::ALL {
+                    assert!(!caller.may_set(target, to, false));
+                    assert!(!caller.may_set(target, to, true));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn assignable_lists_the_roles_a_caller_may_set_highest_first() {
+        assert_eq!(
+            Owner.assignable(Member, false),
+            [Owner, Admin, Manager, Member, Viewer]
+        );
+        assert_eq!(
+            Owner.assignable(Owner, true),
+            [Owner, Admin, Manager, Member, Viewer]
+        );
+        assert_eq!(Admin.assignable(Member, false), [Manager, Member, Viewer]);
+        assert_eq!(Admin.assignable(Viewer, false), [Manager, Member, Viewer]);
+        assert!(Admin.assignable(Owner, false).is_empty());
+        assert!(Admin.assignable(Admin, true).is_empty());
+        assert_eq!(Manager.assignable(Member, false), [Member, Viewer]);
+        assert_eq!(Manager.assignable(Viewer, false), [Member, Viewer]);
+        assert!(Manager.assignable(Manager, true).is_empty());
+        assert!(Manager.assignable(Admin, false).is_empty());
+        for caller in [Member, Viewer] {
+            for target in OrgRole::ALL {
+                assert!(caller.assignable(target, false).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn roles_round_trip_their_spelling_and_order_highest_first() {
+        for role in OrgRole::ALL {
+            assert_eq!(OrgRole::parse(role.as_str()), Some(role));
+        }
+        assert_eq!(OrgRole::parse("Owner"), None);
+        assert_eq!(OrgRole::parse("teacher"), None);
+        assert!(Owner > Admin && Admin > Manager && Manager > Member && Member > Viewer);
     }
 }

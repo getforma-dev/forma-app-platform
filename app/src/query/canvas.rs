@@ -102,9 +102,21 @@ pub struct CanvasProps {
     /// unavailable: the page still renders, every row without a kind, and the
     /// island keeps this browser's choices unchanged.
     pub artifact_kinds_loaded: bool,
-    /// Trial plan D4: the member holds `admin_policy` in the organization;
-    /// the top bar links the admin area (`/admin`). False when unknown.
+    /// Trial plan D4, ADR-021: the member's role administers the
+    /// organization (owner, admin or manager); the top bar links the admin
+    /// area (`/admin`). False when unknown.
     pub is_org_admin: bool,
+    /// ADR-021 (APP-226): the member's role builds, writes, shares and
+    /// connects (every role but viewer). A viewer's canvas shows no Create
+    /// app, Connect an agent, Share or AI entry point; the routes refuse a
+    /// viewer who reaches one anyway (`viewer_read_only`).
+    pub can_build: bool,
+    /// `can_build` as the shell's `data-can-build` text, read by the scripts
+    /// that add entry points (Connect an agent).
+    pub can_build_mode: String,
+    /// The inverse of `can_build`: the view-only sentence in place of the
+    /// intent bar.
+    pub view_only: bool,
     /// Trial plan D6: the member has no display name yet, so the canvas
     /// asks "What should others call you?" (false when it cannot be read);
     /// also true after a refused name, to ask again.
@@ -1597,11 +1609,13 @@ async fn assemble(
             .can_edit_presentation(member, app, work)
             .await
             .map_err(|e| routes::storage_refusal(&e))?;
-    let can_share = stores
-        .workspace
-        .can_share_live_work(member, app, work)
-        .await
-        .map_err(|e| routes::storage_refusal(&e))?;
+    // ADR-021 (APP-226): a viewer shares nothing, whatever the work grants.
+    let can_share = member.can(crate::storage::Capability::Share)
+        && stores
+            .workspace
+            .can_share_live_work(member, app, work)
+            .await
+            .map_err(|e| routes::storage_refusal(&e))?;
     // Forms and queries can wait. Do not release records under stale work
     // authority or a publication that changed while this group assembled.
     let current = stores
@@ -1892,6 +1906,14 @@ async fn canvas_page(State(canvas): State<Arc<Canvas>>, request: Request) -> Res
         member_key: member_key(member.organization(), principal),
         artifact_kinds_loaded: kinds.is_some(),
         is_org_admin,
+        can_build: member.can(crate::storage::Capability::Build),
+        can_build_mode: if member.can(crate::storage::Capability::Build) {
+            "true"
+        } else {
+            "false"
+        }
+        .to_owned(),
+        view_only: !member.can(crate::storage::Capability::Build),
         needs_name: name_notice.is_some()
             || crate::member_name::asks_for_name(
                 display_name.as_ref().map(Option::as_deref),

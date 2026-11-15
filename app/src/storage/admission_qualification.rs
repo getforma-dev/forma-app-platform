@@ -63,6 +63,7 @@ fn member(stores: &Stores, label: &str, principal: &str, epoch: i64) -> TrustedR
         provider_tenant: format!("ten_{ORG}"),
         provider_subject: format!("usr_admission_{label}"),
         registry_sha256: stores.registry_identity().sha256.clone(),
+        role: crate::storage::OrgRole::Member,
     }
 }
 

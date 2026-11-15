@@ -30,6 +30,9 @@ pub const VIA: &str = "Slack";
 
 const HELP: &str = "Tell Forma what you need, for example:\n• `/forma I spent $86 on a client dinner at Nobu last night, Sarah approves my expenses`\n• `/forma what's waiting for my approval`\n• `/forma link` to connect your Slack account, `/forma unlink` to disconnect it";
 const LINK_PROMPT: &str = "Connect your Slack account to Forma first: run `/forma link` and open the link while signed in to Forma.";
+/// ADR-021 (APP-226): a viewer's Slack request for an action, a confirmation or a decision.
+const VIEW_ONLY: &str =
+    "You have view-only access in this workspace. Ask an admin for member access to build or edit.";
 /// The one answer for anything this member may not see or do (uniform).
 const REFUSED: &str = "Forma couldn't do that. It may not exist, or it isn't yours to act on.";
 const UNAVAILABLE: &str = "Forma is unavailable right now. Try again in a moment.";
@@ -420,6 +423,9 @@ async fn act_message(state: &Slack, team: &str, user: &str, utterance: &str) -> 
     let Some(member) = member(state, team, user).await else {
         return text::ephemeral(LINK_PROMPT, None, false);
     };
+    if !member.can(crate::storage::Capability::Build) {
+        return text::ephemeral(VIEW_ONLY, None, false);
+    }
     let Some(stores) = state.auth.stores.as_ref() else {
         return text::ephemeral(UNAVAILABLE, None, false);
     };
@@ -643,6 +649,14 @@ async fn confirm(state: Arc<Slack>, team: String, user: String, id: String, resp
         )
         .await;
     };
+    if !member.can(crate::storage::Capability::Write) {
+        return respond(
+            &state,
+            &response_url,
+            text::ephemeral(VIEW_ONLY, None, false),
+        )
+        .await;
+    }
     let Some(draft) = held(&state, &member, &team, &user, &id) else {
         return respond(
             &state,
@@ -990,6 +1004,14 @@ async fn decide(
         )
         .await;
     };
+    if !member.can(crate::storage::Capability::Write) {
+        return respond(
+            &state,
+            &response_url,
+            text::ephemeral(VIEW_ONLY, None, false),
+        )
+        .await;
+    }
     let refuse = |state: Arc<Slack>, message: &'static str| {
         let response_url = response_url.clone();
         async move { respond(&state, &response_url, text::ephemeral(message, None, false)).await }

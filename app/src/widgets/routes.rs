@@ -204,6 +204,10 @@ async fn customize_route(State(state): State<Arc<Widgets>>, request: Request) ->
         Ok(member) => member,
         Err(refusal) => return refusal,
     };
+    // ADR-021 (APP-226): the customizer is AI; a viewer is refused.
+    if !member.can(crate::storage::Capability::Build) {
+        return http::viewer_read_only();
+    }
     let bytes =
         match http::read_bounded(body_stream, CUSTOMIZE_BODY_LIMIT, http::HANDLER_DEADLINE).await {
             Ok(bytes) => bytes,

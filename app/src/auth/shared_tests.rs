@@ -35,7 +35,6 @@ async fn footprint(fixture: &Fixture) -> Vec<i64> {
         "principals",
         "memberships",
         "entitlements",
-        "organization_permissions",
         "app_permissions",
         "work_permissions",
         "source_permissions",

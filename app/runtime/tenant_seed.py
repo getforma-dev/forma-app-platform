@@ -157,12 +157,12 @@ def seed(connection, bundles, changes=None):
                   '00000000-0000-4000-8000-0000000000ca': ('active',1)}
         for principal, (status, epoch) in actors.items():
             put('principals', ('organization_id','principal_id','issuer','provider_tenant_id','provider_subject'), (o,principal,ISSUER,tenant,'usr_'+principal), 2)
-            put('memberships', ('organization_id','principal_id','status','membership_epoch'), (o,principal,status,epoch), 2)
+            # ADR-021 (0025): the seeded organization's one owner (the former admin_policy holder); everyone else a member.
+            role = 'owner' if principal == '00000000-0000-4000-8000-000000000f00' else 'member'
+            put('memberships', ('organization_id','principal_id','status','membership_epoch','role'), (o,principal,status,epoch,role), 2)
             if status == 'active':
                 put('entitlements', ('organization_id','principal_id','entitlement_id','status','kind','starts_at','expires_at','revoked_at'),
                     (o,principal,'0000e000-0000-4000-8000-'+principal[-12:],'active','member_invite',*ENTITLEMENT_WINDOW,None), 3)
-        put('organization_permissions', ('organization_id','principal_id','permission'),
-            (o,'00000000-0000-4000-8000-000000000f00','admin_policy'), 3)
         put('spaces', ('organization_id','space_id','display_name'), (o,SPACE,'Synthetic fixture space'), 2)
         put('publication_policies', ('organization_id','policy_id','policy_version','kind'), (o,OWNER_PUBLISH_POLICY,1,'owner_publish'), 3)
         put('apps', ('organization_id','app_id','space_id','owner_principal_id'), (o,a,SPACE,p), 2)

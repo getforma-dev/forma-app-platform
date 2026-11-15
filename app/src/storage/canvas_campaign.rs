@@ -155,6 +155,7 @@ fn maya_request(c: &Campaign, subject: &str, principal: &str) -> TrustedRequest 
         provider_tenant: harness::NORTHSTAR_TENANT.into(),
         provider_subject: subject.into(),
         registry_sha256: c.stores.registry_identity().sha256.clone(),
+        role: OrgRole::Member,
     }
 }
 
@@ -582,6 +583,7 @@ async fn campaign() {
         provider_tenant: harness::CANARY_TENANT.into(),
         provider_subject: canary_subject,
         registry_sha256: c.stores.registry_identity().sha256.clone(),
+        role: OrgRole::Member,
     };
     assert!(
         agreed_outline(&stores, &stranger, APP, CANVAS_WORK)

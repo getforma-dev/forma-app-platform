@@ -166,6 +166,10 @@ async fn mint(State(auth): State<Arc<Auth>>, request: Request) -> Response {
     let Some((_, member)) = sharing::session(&auth, &parts.headers).await else {
         return http::not_found();
     };
+    // ADR-021 (APP-226): connecting an agent is not a viewer's.
+    if !member.can(crate::storage::Capability::Connect) {
+        return http::viewer_read_only();
+    }
     let Some(stores) = &auth.stores else {
         return http::not_found();
     };

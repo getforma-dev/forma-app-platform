@@ -17,6 +17,12 @@ the closed GRANTABLE set (a revocation advances the member's epoch);
 appends `permission.granted`, `permission.revoked` or
 `creator_authority.revoked` to the operator chain.
 
+Organization roles (ADR-021, migration 0025): `set-role` sets an active
+member's role (owner, admin, manager, member or viewer), advances the member's
+epoch and appends `membership.role_changed`; it refuses to demote the last
+active owner. `issue --role` names the role a code admits with (member or
+viewer). `list` shows each redeemer's role.
+
 Source revisions and their saved work (APP-012; ADR-007 D7.10, ADR-009 D9.3;
 APP-077 review M2): `register-source-revision --record` inserts one NEW
 `source_revisions` row from `upload-sources`' printed record, with the real
@@ -161,26 +167,28 @@ OPERATOR_KINDS = ("organization.provisioned", "handle.rotated", "code.issued", "
                   "membership.revoked", "entitlement.revoked", "permission.granted", "permission.revoked",
                   "creator_authority.revoked", "provider.invitation.created", "provider.invitation.reconciled",
                   "provider.invitation.revoked", "source_revision.registered", "work.seeded", "provider_tenant.bound",
-                  "app.seeded")
+                  "app.seeded", "membership.role_changed")
 # ADR-007 amendment (APP-010 review M2, m7): what grant-permission/revoke-permission
 # may write, and the resource each permission names. A closed subset of what the
 # 0002 permission tables allow: never share_work or export (no Phase 1 path uses
-# them). admin_policy (the organization's governance row, 0002 organization_permissions)
-# is grantable since the real-user trial decision of 2026-11-14 (D2, D4: the
-# organization's admin is a member the operator names); it takes no app, work or
-# source, and an access code still never carries it (parse_grant). record_review
-# (W4's work-level reviewer permission, in the work_permissions CHECK from
-# migration 0024) is grantable and revocable from the same date (W4 review M1:
-# a personal reviewer grant must be revocable from the operator channel); a
-# grant refuses permission_unsupported below schema 24, a revoke needs no gate.
+# them). record_review (W4's work-level reviewer permission, in the
+# work_permissions CHECK from migration 0024) is grantable and revocable from
+# 2026-11-14 (W4 review M1: a personal reviewer grant must be revocable from the
+# operator channel); a grant refuses permission_unsupported below schema 24, a
+# revoke needs no gate. The organization's admin standing is no permission row
+# since migration 0025 (ADR-021): it is the membership's role, set by `set-role`.
 GRANTABLE = {"discover": "app", "run": "app", "edit_definition": "app", "review_publish": "app",
-             "record_read": "work", "record_write": "work", "record_review": "work", "source_read": "source",
-             "admin_policy": "organization"}
+             "record_read": "work", "record_write": "work", "record_review": "work", "source_read": "source"}
 # Permissions whose table CHECK admits them only from a schema version: a grant below it refuses.
 GATED_PERMISSIONS = {"record_review": 24}
 # The (app, work, source) arguments each resource takes, exactly.
-RESOURCE_SHAPE = {"app": (True, False, False), "work": (True, True, False), "source": (False, False, True),
-                  "organization": (False, False, False)}
+RESOURCE_SHAPE = {"app": (True, False, False), "work": (True, True, False), "source": (False, False, True)}
+# ADR-021 (migration 0025): the organization roles, highest first, and the two an
+# access code may admit with (a manager, admin or owner is promoted after joining).
+ROLES = ("owner", "admin", "manager", "member", "viewer")
+CODE_ROLES = ("member", "viewer")
+ROLE_SCHEMA_VERSION = 25
+ROLE_DOMAIN = b"forma:member-role:v1"
 # `issue --note`: the operator's own label for a code (who it is for), stored in
 # access_codes.note once migration 0023 adds that column (the real-user trial, W1).
 # Before it, a note refuses `note_unsupported` before any write. Never an address.
@@ -361,6 +369,8 @@ def parser():
     q.add_argument("--provider-input-from-secret", action="store_true")
     # The real-user trial (W3): the operator's label for the code, kept in access_codes.note (0023).
     q.add_argument("--note")
+    # ADR-021 (0025): the role the code admits with, member (default) or viewer.
+    q.add_argument("--role", default="member")
     for name in ("revoke", "extend"):
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
@@ -373,6 +383,10 @@ def parser():
         q = sub.add_parser(name)
         q.add_argument("--organization", required=True)
         q.add_argument("--principal", required=True)
+    # ADR-021 (0025): an active member's organization role, audited on the operator chain.
+    q = sub.add_parser("set-role")
+    for arg in ("--organization", "--principal", "--role"):
+        q.add_argument(arg, required=True)
     # ADR-007 amendment 2026-10-29 (APP-010 review M2, m7): app shells, their
     # grants and creator-authority revocation are operator actions in Phase 1.
     for name in ("grant-permission", "revoke-permission"):
@@ -479,6 +493,9 @@ def validate(args):
         if args.note is not None:
             require(isinstance(args.note, str) and 1 <= len(args.note.encode("utf-8")) <= NOTE_BYTES_MAX
                     and args.note.isprintable() and args.note == args.note.strip(), "malformed_note")
+        require(args.role in CODE_ROLES, "role_refused")
+    if args.command == "set-role":
+        require(args.role in ROLES, "role_refused")
     if args.command == "extend":
         require(1 <= args.expires_days <= DEFAULTS["code_expiry_days_max"], "expiry_out_of_range")
     if args.command in ("issue-handle", "rotate-handle", "retire-handle"):
@@ -859,13 +876,24 @@ def note_column_present(c):
                         WHERE n.nspname='genui' AND t.relname='access_codes' AND a.attname='note' AND NOT a.attisdropped""").fetchone() is not None
 
 
-def access_code_insert(with_note):
-    """The one INSERT of a new code, with or without the 0023 note column; parameters follow issue()."""
+def role_column_present(c):
+    """True once migration 0025's memberships.role exists (the catalog proof in begin() already
+    bound the whole schema; this only chooses the statement). Read from pg_catalog."""
+    return c.execute("""SELECT 1 FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class t ON t.oid=a.attrelid
+                        JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+                        WHERE n.nspname='genui' AND t.relname='memberships' AND a.attname='role' AND NOT a.attisdropped""").fetchone() is not None
+
+
+def access_code_insert(with_note, with_role=False):
+    """The one INSERT of a new code, with or without the 0023 note and 0025 role columns; parameters follow issue()."""
     columns = ("organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,"
                "redeemed_count,issued_at,expires_at,trial_days,issued_by,revoked_at")
     values = "%s,%s,%s,%s,'active',%s,%s,0,now(),now()+make_interval(days=>%s),%s,%s,NULL"
     if with_note:
         columns += ",note"
+        values += ",%s"
+    if with_role:
+        columns += ",role"
         values += ",%s"
     return "INSERT INTO genui.access_codes(" + columns + ") VALUES (" + values + ")"
 
@@ -879,6 +907,9 @@ def issue(c, args):
     # Before any lock or write: a note needs 0023's column, or the command refuses whole.
     with_note = note is not None and note_column_present(c)
     require(note is None or with_note, "note_unsupported")
+    # Likewise a role other than the default needs 0025's column (ADR-021).
+    with_role = role_column_present(c)
+    require(args.role == "member" or with_role, "role_unsupported")
     if invited:
         # After the operator identity proof and before any lock or write: the
         # management key's tenant must be the code's bound, invite-only provider
@@ -909,9 +940,10 @@ def issue(c, args):
     digest = args.code_digest if raw is None else code_digest(raw)
     code_id = str(uuid.uuid4())
     c.execute("INSERT INTO genui_private.code_index(code_digest,organization_id) VALUES (%s,%s)", (digest, org))
-    c.execute(access_code_insert(with_note),
+    c.execute(access_code_insert(with_note, with_role),
               (org, code_id, digest, args.kind, org, args.max_redemptions, args.expires_days,
-               DEFAULTS["trial_entitlement_days"], "genui_migration:" + args.issued_by) + ((note,) if with_note else ()))
+               DEFAULTS["trial_entitlement_days"], "genui_migration:" + args.issued_by)
+              + ((note,) if with_note else ()) + ((args.role,) if with_role else ()))
     for permission, app, work, source in args.templates:
         c.execute("""INSERT INTO genui.code_grant_templates(organization_id,code_id,permission,app_id,work_id,source_id)
                      VALUES (%s,%s,%s,%s,%s,%s)""", (org, code_id, permission, app, work, source))
@@ -931,6 +963,8 @@ def issue(c, args):
     result = {"code_id": code_id, "kind": args.kind, "max_redemptions": args.max_redemptions, "expires_at": timestamp(expires)}
     if with_note:
         result["note"] = note
+    if with_role:
+        result["role"] = args.role
     if raw is None:
         result["code_digest"] = digest
     else:
@@ -986,15 +1020,17 @@ def list_codes(c, args):
     # `revoke-membership` can name the redeemer; with the member's and entitlement's
     # current status (never a provider subject, address or token). APP-078 review M5: LEFT
     # JOINs, so a redemption is never hidden; an absent row shows as a null status.
+    # ADR-021 (0025): the member's organization role, NULL before the column exists.
+    role = "m.role" if role_column_present(c) else "NULL::text"
     redemptions = {}
-    for code, redemption, principal, entitlement, committed, member_status, entitlement_status in c.execute("""SELECT d.code_id::text,
-          d.redemption_id::text,d.principal_id::text,d.entitlement_id::text,d.committed_at,m.status,e.status
+    for code, redemption, principal, entitlement, committed, member_status, entitlement_status, member_role in c.execute("""SELECT d.code_id::text,
+          d.redemption_id::text,d.principal_id::text,d.entitlement_id::text,d.committed_at,m.status,e.status,""" + role + """
           FROM genui.code_redemptions d LEFT JOIN genui.memberships m ON m.organization_id=d.organization_id AND m.principal_id=d.principal_id
           LEFT JOIN genui.entitlements e ON e.organization_id=d.organization_id AND e.principal_id=d.principal_id AND e.entitlement_id=d.entitlement_id
           WHERE d.organization_id=%s ORDER BY d.committed_at,d.redemption_id""", (org,)).fetchall():
         redemptions.setdefault(code, []).append({"redemption_id": redemption, "principal_id": principal, "entitlement_id": entitlement,
                                                  "redeemed_at": timestamp(committed), "membership_status": member_status,
-                                                 "entitlement_status": entitlement_status})
+                                                 "membership_role": member_role, "entitlement_status": entitlement_status})
     c.commit()
     codes = [{"code_id": r[0], "kind": r[1], "status": r[2], "max_redemptions": r[3], "redeemed_count": r[4],
               "live_pending_admissions": r[5], "lapsed_pending_admissions": r[10], "denied_for_reconciliation": r[11],
@@ -1028,7 +1064,7 @@ def list_box_files(c, args):
 # between the live database and a restored snapshot, and what the end-of-trial purge proves empty.
 # The audit chain is counted apart: the purge keeps it (PURGE_KEEPS). member_consents is 0023's consent
 # record (release B integration review, NIT-5); begin() proves the latest catalog, so it always exists here.
-STATS_TABLES = ("principals", "memberships", "member_consents", "entitlements", "organization_permissions", "access_codes",
+STATS_TABLES = ("principals", "memberships", "member_consents", "entitlements", "access_codes",
                 "code_redemptions", "provider_invitations", "spaces", "apps", "app_permissions", "definition_revisions",
                 "publications", "saved_work", "work_permissions", "work_shares", "live_work_shares", "sources",
                 "source_permissions", "boxes", "box_files", "internal_records", "member_cards", "sessions")
@@ -1331,6 +1367,39 @@ def lock_active_member(c, org, principal):
     return epoch
 
 
+def set_role(c, args):
+    """ADR-021 (0025): an active member's organization role from the operator channel.
+
+    Organization (active) FOR SHARE, the member FOR UPDATE, the role, membership_epoch + 1
+    (every session re-reads authority at its next request) and one
+    `membership.role_changed` event whose digest is recomputable from the member id and
+    the roles before and after. The same role again changes nothing and is not audited.
+    The organization never loses its last active owner (`last_owner`); the operator is
+    not a member, so the in-product management ladder does not apply to it.
+    """
+    org, principal, role = args.organization, args.principal, args.role
+    begin(c, org)
+    require(schema_version(c) >= ROLE_SCHEMA_VERSION, "role_unsupported")
+    epoch = lock_active_member(c, org, principal)
+    before = c.execute("SELECT role FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (org, principal)).fetchone()[0]
+    if before == role:
+        c.commit()
+        return {"principal_id": principal, "role": role, "changed": False, "membership_epoch": epoch}
+    if before == "owner":
+        # The last-owner rule, serialized with the in-product definers (0025, review MAJOR-1):
+        # owner transitions of the organization queue on one advisory lock before the check.
+        c.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("forma:owner-change:" + org,))
+        others = c.execute("""SELECT count(*) FROM genui.memberships WHERE organization_id=%s AND role='owner' AND status='active'
+              AND principal_id<>%s""", (org, principal)).fetchone()[0]
+        require(others > 0, "last_owner")
+    epoch = c.execute("""UPDATE genui.memberships SET role=%s,membership_epoch=membership_epoch+1 WHERE organization_id=%s AND principal_id=%s
+          RETURNING membership_epoch""", (role, org, principal)).fetchone()[0]
+    outcome = "sha256:" + hashlib.sha256(ROLE_DOMAIN + b"\x00" + principal.encode() + b"\x00" + before.encode() + b"\x00" + role.encode()).hexdigest()
+    append(c, org, "membership.role_changed", actor=principal, outcome=outcome)
+    c.commit()
+    return {"principal_id": principal, "role": role, "role_before": before, "changed": True, "membership_epoch": epoch}
+
+
 def permission_statements(args):
     """The fixed (exists, insert, delete) statements of one closed permission; never caller SQL."""
     org, principal, permission = args.organization, args.principal, args.permission
@@ -1347,13 +1416,6 @@ def permission_statements(args):
                     ON CONFLICT DO NOTHING""", (org, principal, args.app, args.work, permission)),
                 ("""DELETE FROM genui.work_permissions WHERE organization_id=%s AND principal_id=%s AND app_id=%s AND work_id=%s
                     AND permission=%s""", (org, principal, args.app, args.work, permission)))
-    if resource == "organization":
-        # The organization row itself is the resource; lock_active_member has already proved it exists.
-        return (("SELECT 1 FROM genui.organizations WHERE organization_id=%s", (org,)),
-                ("""INSERT INTO genui.organization_permissions(organization_id,principal_id,permission) VALUES (%s,%s,%s)
-                    ON CONFLICT DO NOTHING""", (org, principal, permission)),
-                ("""DELETE FROM genui.organization_permissions WHERE organization_id=%s AND principal_id=%s AND permission=%s""",
-                 (org, principal, permission)))
     return (("SELECT 1 FROM genui.sources WHERE organization_id=%s AND source_id=%s", (org, args.source)),
             ("""INSERT INTO genui.source_permissions(organization_id,principal_id,source_id,permission) VALUES (%s,%s,%s,%s)
                 ON CONFLICT DO NOTHING""", (org, principal, args.source, permission)),
@@ -2420,7 +2482,7 @@ def retire_handle(c, args):
 
 
 COMMANDS = {"provision": provision, "bind-provider-tenant": bind_provider_tenant, "backfill": backfill, "issue": issue, "list": list_codes, "revoke": revoke,
-            "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "verify": verify,
+            "extend": extend, "revoke-entitlement": revoke_entitlement, "revoke-membership": revoke_membership, "set-role": set_role, "verify": verify,
             "reconcile": reconcile, "grant-permission": grant_permission, "revoke-permission": revoke_permission,
             "create-app": create_app, "revoke-creator-authority": revoke_creator_authority,
             "issue-handle": issue_handle, "rotate-handle": rotate_handle, "retire-handle": retire_handle,
