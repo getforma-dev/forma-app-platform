@@ -1,0 +1,224 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Forma beta observability, the outside-in golden signals (2026-11-15). A standalone stack beside GenuiSyntheticFoundation, deployed in us-east-1, where Route 53 publishes health-check metrics: two Route 53 HTTPS health checks probing the app and fAuth from three regions, an alarm on each, two SLO alarms on the beta's load balancer (5xx rate, median response time) and one CloudWatch dashboard. The alarms publish to the topic of stack forma-beta-trial-alarms by parameter. It creates no IAM resource and references the beta only by identifier, so it needs no app release and promotion's infrastructure digest is untouched. No string matching, fast interval or latency measurement, no CloudWatch Logs and no canaries: those cost money. Deploy and delete it by hand (docs/operations/TRIAL-RUNBOOK.md 11.8).",
+  "Parameters": {
+    "AlarmTopicArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$",
+      "ConstraintDescription": "An SNS topic ARN.",
+      "Description": "The trial alarm topic (stack forma-beta-trial-alarms, output AlarmTopicArn). Its policy already lets CloudWatch alarms of this account publish."
+    },
+    "LoadBalancerFullName": {
+      "Type": "String",
+      "AllowedPattern": "^app/[A-Za-z0-9-]{1,64}/[0-9a-f]{16}$",
+      "ConstraintDescription": "The CloudWatch dimension form app/<name>/<id>, the part of the load balancer ARN after loadbalancer/.",
+      "Description": "The beta load balancer's CloudWatch dimension value (describe-load-balancers: LoadBalancerArn after 'loadbalancer/')."
+    },
+    "TargetGroupFullName": {
+      "Type": "String",
+      "AllowedPattern": "^targetgroup/[A-Za-z0-9-]{1,64}/[0-9a-f]{16}$",
+      "ConstraintDescription": "The CloudWatch dimension form targetgroup/<name>/<id>, the last part of the target group ARN.",
+      "Description": "The main service's target group CloudWatch dimension value (describe-target-groups: TargetGroupArn after ':')."
+    },
+    "ClusterName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,255}$",
+      "Description": "The ECS cluster (stack output ClusterName)."
+    },
+    "ServiceName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,255}$",
+      "Description": "The main ECS service (stack output ServiceName)."
+    },
+    "DBInstanceIdentifier": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z][a-z0-9-]{0,62}$",
+      "Description": "The RDS instance identifier (the host part of stack output DatabaseEndpoint before the first dot)."
+    },
+    "FauthInstanceId": {
+      "Type": "String",
+      "AllowedPattern": "^i-[0-9a-f]{8,17}$",
+      "ConstraintDescription": "An EC2 instance id.",
+      "Description": "The fAuth host's EC2 instance id (stack FauthBetaHost, its AWS::EC2::Instance resource). It changes when that stack is recreated: redeploy this one with the new id."
+    },
+    "WebAclName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,128}$",
+      "ConstraintDescription": "A web ACL name: letters, digits, hyphens and underscores.",
+      "Description": "The beta's web ACL (stack forma-beta-waf, output WebAclName: forma-beta-waf-web-acl), the WebACL dimension of its metrics."
+    },
+    "AppHostname": {
+      "Type": "String",
+      "Default": "beta.getforma.dev",
+      "MaxLength": 253,
+      "AllowedPattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$",
+      "ConstraintDescription": "A lowercase DNS hostname, no scheme, port or path.",
+      "Description": "The app's public hostname; the probe asks https://<this>/health/ready."
+    },
+    "FauthHostname": {
+      "Type": "String",
+      "Default": "auth-staging.getforma.dev",
+      "MaxLength": 253,
+      "AllowedPattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$",
+      "ConstraintDescription": "A lowercase DNS hostname, no scheme, port or path.",
+      "Description": "fAuth's public hostname; the probe asks https://<this>/health."
+    }
+  },
+  "Resources": {
+    "AppHealthCheck": {
+      "Type": "AWS::Route53::HealthCheck",
+      "Properties": {
+        "HealthCheckConfig": {
+          "Type": "HTTPS",
+          "FullyQualifiedDomainName": {"Ref": "AppHostname"},
+          "Port": 443,
+          "ResourcePath": "/health/ready",
+          "EnableSNI": true,
+          "RequestInterval": 30,
+          "FailureThreshold": 3,
+          "Regions": ["us-east-1", "us-west-2", "eu-west-1"]
+        },
+        "HealthCheckTags": [{"Key": "Name", "Value": {"Fn::Sub": "${AWS::StackName}-app"}}]
+      }
+    },
+    "FauthHealthCheck": {
+      "Type": "AWS::Route53::HealthCheck",
+      "Properties": {
+        "HealthCheckConfig": {
+          "Type": "HTTPS",
+          "FullyQualifiedDomainName": {"Ref": "FauthHostname"},
+          "Port": 443,
+          "ResourcePath": "/health",
+          "EnableSNI": true,
+          "RequestInterval": 30,
+          "FailureThreshold": 3,
+          "Regions": ["us-east-1", "us-west-2", "eu-west-1"]
+        },
+        "HealthCheckTags": [{"Key": "Name", "Value": {"Fn::Sub": "${AWS::StackName}-fauth"}}]
+      }
+    },
+    "AppUnreachableAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-app-unreachable"},
+        "AlarmDescription": "Route 53's probes from three regions got no healthy answer from the app's /health/ready over HTTPS for three minutes in a row, so students cannot reach the beta either (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "AWS/Route53",
+        "MetricName": "HealthCheckStatus",
+        "Dimensions": [{"Name": "HealthCheckId", "Value": {"Ref": "AppHealthCheck"}}],
+        "Statistic": "Minimum",
+        "Period": 60,
+        "EvaluationPeriods": 3,
+        "DatapointsToAlarm": 3,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "FauthUnreachableAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-fauth-unreachable"},
+        "AlarmDescription": "Route 53's probes from three regions got no healthy answer from fAuth's /health over HTTPS for three minutes in a row, so nobody can sign in (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "AWS/Route53",
+        "MetricName": "HealthCheckStatus",
+        "Dimensions": [{"Name": "HealthCheckId", "Value": {"Ref": "FauthHealthCheck"}}],
+        "Statistic": "Minimum",
+        "Period": 60,
+        "EvaluationPeriods": 3,
+        "DatapointsToAlarm": 3,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "ErrorRateAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-error-rate"},
+        "AlarmDescription": "More than 2% of the load balancer's requests were answered 5xx, by the service or by the balancer itself, in two of three five-minute periods, a period with fewer than 50 requests counting as none (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Metrics": [
+          {
+            "Id": "target5xx",
+            "MetricStat": {
+              "Metric": {"Namespace": "AWS/ApplicationELB", "MetricName": "HTTPCode_Target_5XX_Count", "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}]},
+              "Period": 300,
+              "Stat": "Sum"
+            },
+            "ReturnData": false
+          },
+          {
+            "Id": "elb5xx",
+            "MetricStat": {
+              "Metric": {"Namespace": "AWS/ApplicationELB", "MetricName": "HTTPCode_ELB_5XX_Count", "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}]},
+              "Period": 300,
+              "Stat": "Sum"
+            },
+            "ReturnData": false
+          },
+          {
+            "Id": "requests",
+            "MetricStat": {
+              "Metric": {"Namespace": "AWS/ApplicationELB", "MetricName": "RequestCount", "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}]},
+              "Period": 300,
+              "Stat": "Sum"
+            },
+            "ReturnData": false
+          },
+          {"Id": "errors", "Expression": "FILL(target5xx, 0) + FILL(elb5xx, 0)", "Label": "5xx answers", "ReturnData": false},
+          {"Id": "rate", "Expression": "IF(requests >= 50, errors/requests*100, 0)", "Label": "5xx percent of requests", "ReturnData": true}
+        ],
+        "EvaluationPeriods": 3,
+        "DatapointsToAlarm": 2,
+        "Threshold": 2,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "SlowMedianAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": {"Fn::Sub": "${AWS::StackName}-slow-median"},
+        "AlarmDescription": "The service's median response time stayed above 2 seconds for fifteen minutes; it watches the median because model calls make p95 legitimately slow (tens of seconds), so a slow median means ordinary pages are slow (docs/operations/TRIAL-RUNBOOK.md §11.8).",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "TargetResponseTime",
+        "Dimensions": [{"Name": "LoadBalancer", "Value": {"Ref": "LoadBalancerFullName"}}],
+        "ExtendedStatistic": "p50",
+        "Period": 300,
+        "EvaluationPeriods": 3,
+        "DatapointsToAlarm": 3,
+        "Threshold": 2,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [{"Ref": "AlarmTopicArn"}],
+        "OKActions": [{"Ref": "AlarmTopicArn"}]
+      }
+    },
+    "GoldenSignalsDashboard": {
+      "Type": "AWS::CloudWatch::Dashboard",
+      "Properties": {
+        "DashboardName": "forma-beta-golden-signals",
+        "DashboardBody": {"Fn::Sub": "{\"start\":\"-PT6H\",\"periodOverride\":\"inherit\",\"widgets\":[{\"type\":\"text\",\"x\":0,\"y\":0,\"width\":24,\"height\":7,\"properties\":{\"markdown\":\"## Forma beta golden signals\\nEach row answers one question about the beta, from the outside in.\\n* **Traffic**: how many requests reach the load balancer, and how many the web ACL allowed or blocked.\\n* **Errors**: 4xx and 5xx answers from the service and the balancer, and the 5xx share the error-rate alarm watches (over 2% of at least 50 requests).\\n* **Latency**: how long the service takes to answer; the alarm watches the median, because model calls make the slowest few percent take tens of seconds.\\n* **Saturation**: how busy the service task, the database and the fAuth host are.\\n* **Health**: whether Route 53 reaches the app and fAuth from three regions (1 up, 0 down), and how many targets the balancer sees healthy.\\n* **Email**: what SES sent, and what bounced or was marked as spam.\\n\\nWhat each alarm means and what to check first: [runbook 11.8](https://github.com/getforma-dev/forma-app-platform/blob/main/docs/operations/TRIAL-RUNBOOK.md#118-uptime-probes-slo-alarms-and-the-golden-signals-dashboard-about-360-a-month).\"}},{\"type\":\"metric\",\"x\":0,\"y\":7,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Traffic: load balancer requests\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":12,\"y\":7,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Traffic: web ACL allowed and blocked\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/WAFV2\",\"AllowedRequests\",\"WebACL\",\"${WebAclName}\",\"Region\",\"us-east-1\",\"Rule\",\"ALL\"],[\"AWS/WAFV2\",\"BlockedRequests\",\"WebACL\",\"${WebAclName}\",\"Region\",\"us-east-1\",\"Rule\",\"ALL\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":13,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Errors: 4xx and 5xx answers\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"HTTPCode_Target_4XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_4XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":12,\"y\":13,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Errors: 5xx percent of requests (alarm above 2)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"HTTPCode_Target_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"target5xx\",\"visible\":false}],[\"AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"elb5xx\",\"visible\":false}],[\"AWS/ApplicationELB\",\"RequestCount\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"id\":\"requests\",\"visible\":false}],[{\"expression\":\"FILL(target5xx, 0) + FILL(elb5xx, 0)\",\"id\":\"errors\",\"label\":\"5xx answers\",\"visible\":false}],[{\"expression\":\"IF(requests >= 50, errors/requests*100, 0)\",\"id\":\"rate\",\"label\":\"5xx percent of requests\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"error-rate alarm\",\"value\":2}]}}},{\"type\":\"metric\",\"x\":0,\"y\":19,\"width\":24,\"height\":6,\"properties\":{\"title\":\"Latency: target response time (seconds)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"p50\",\"period\":300,\"metrics\":[[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p50\",\"label\":\"p50\"}],[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p90\",\"label\":\"p90\"}],[\"AWS/ApplicationELB\",\"TargetResponseTime\",\"LoadBalancer\",\"${LoadBalancerFullName}\",{\"stat\":\"p99\",\"label\":\"p99\"}]],\"annotations\":{\"horizontal\":[{\"label\":\"slow-median alarm (p50)\",\"value\":2}]}}},{\"type\":\"metric\",\"x\":0,\"y\":25,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: service task CPU and memory (%)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/ECS\",\"CPUUtilization\",\"ClusterName\",\"${ClusterName}\",\"ServiceName\",\"${ServiceName}\"],[\"AWS/ECS\",\"MemoryUtilization\",\"ClusterName\",\"${ClusterName}\",\"ServiceName\",\"${ServiceName}\"]]}},{\"type\":\"metric\",\"x\":8,\"y\":25,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: database CPU, connections and freeable memory\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/RDS\",\"CPUUtilization\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Average\"}],[\"AWS/RDS\",\"DatabaseConnections\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Maximum\"}],[\"AWS/RDS\",\"FreeableMemory\",\"DBInstanceIdentifier\",\"${DBInstanceIdentifier}\",{\"stat\":\"Minimum\",\"yAxis\":\"right\"}]]}},{\"type\":\"metric\",\"x\":16,\"y\":25,\"width\":8,\"height\":6,\"properties\":{\"title\":\"Saturation: fAuth host CPU (%)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Average\",\"period\":300,\"metrics\":[[\"AWS/EC2\",\"CPUUtilization\",\"InstanceId\",\"${FauthInstanceId}\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":31,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Health: uptime probes (1 up, 0 down)\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Minimum\",\"period\":60,\"metrics\":[[\"AWS/Route53\",\"HealthCheckStatus\",\"HealthCheckId\",\"${AppHealthCheck}\",{\"label\":\"app /health/ready\"}],[\"AWS/Route53\",\"HealthCheckStatus\",\"HealthCheckId\",\"${FauthHealthCheck}\",{\"label\":\"fAuth /health\"}]],\"yAxis\":{\"left\":{\"min\":0,\"max\":1}}}},{\"type\":\"metric\",\"x\":12,\"y\":31,\"width\":12,\"height\":6,\"properties\":{\"title\":\"Health: healthy targets of the main service\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Minimum\",\"period\":60,\"metrics\":[[\"AWS/ApplicationELB\",\"HealthyHostCount\",\"TargetGroup\",\"${TargetGroupFullName}\",\"LoadBalancer\",\"${LoadBalancerFullName}\"]]}},{\"type\":\"metric\",\"x\":0,\"y\":37,\"width\":24,\"height\":6,\"properties\":{\"title\":\"Email: SES sent, bounced and complained\",\"region\":\"us-east-1\",\"view\":\"timeSeries\",\"stacked\":false,\"stat\":\"Sum\",\"period\":300,\"metrics\":[[\"AWS/SES\",\"Send\"],[\"AWS/SES\",\"Bounce\"],[\"AWS/SES\",\"Complaint\"]]}}]}"}
+      }
+    }
+  },
+  "Outputs": {
+    "AppHealthCheckId": {
+      "Description": "The app's probe; `aws route53 get-health-check-status --health-check-id <this>` shows each checker's last answer.",
+      "Value": {"Ref": "AppHealthCheck"}
+    },
+    "FauthHealthCheckId": {
+      "Description": "fAuth's probe; `aws route53 get-health-check-status --health-check-id <this>` shows each checker's last answer.",
+      "Value": {"Ref": "FauthHealthCheck"}
+    },
+    "DashboardUrl": {
+      "Description": "The golden-signals dashboard in the CloudWatch console.",
+      "Value": {"Fn::Sub": "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${GoldenSignalsDashboard}"}
+    }
+  }
+}
