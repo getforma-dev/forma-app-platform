@@ -1252,13 +1252,33 @@ mod tests {
                 "{name}"
             );
         }
-        // The canvas keeps its state: the notice and About open a new tab.
-        for link in [
-            r#"<a class="cv-link" href="/notice" target="_blank" rel="noopener">Beta terms</a>"#,
-            r#"<a class="cv-link" href="/about" target="_blank" rel="noopener">About</a>"#,
-        ] {
-            assert_eq!(canvas.2.matches(link).count(), 1, "{link}");
-        }
+        // The canvas's Help menu: Feedback, then the notice and About in a
+        // new tab, so the canvas keeps its state. One menu in place of the
+        // Feedback link keeps the top bar no wider than before.
+        let help = canvas
+            .2
+            .split("<details class=\"cv-help-menu\">")
+            .nth(1)
+            .expect("the Help menu");
+        let help = &help[..help.find("</details>").unwrap()];
+        assert_eq!(
+            help,
+            concat!(
+                r#"<summary class="cv-link" title="Feedback, the beta terms and About">Help</summary>"#,
+                r#"<div class="cv-help-list">"#,
+                r#"<a href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>"#,
+                r#"<a href="/notice" target="_blank" rel="noopener">Beta terms</a>"#,
+                r#"<a href="/about" target="_blank" rel="noopener">About</a>"#,
+                "</div>",
+            )
+        );
+        assert_eq!(
+            canvas
+                .2
+                .matches("href=\"mailto:feedback@getforma.dev\"")
+                .count(),
+            1
+        );
     }
 
     /// APP-223: the footer's links are exactly these, in this order: plain

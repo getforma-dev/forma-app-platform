@@ -363,10 +363,16 @@ function Canvas(props: CanvasProps) {
           {createShow(() => props.isOrgAdmin, () => (
             <a class="cv-link" href="/admin">Admin</a>
           ))}
-          <a class="cv-link" href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
-          {/* APP-223: the full-screen canvas has no site footer; these open a new tab so the canvas keeps its state. */}
-          <a class="cv-link" href="/notice" target="_blank" rel="noopener">Beta terms</a>
-          <a class="cv-link" href="/about" target="_blank" rel="noopener">About</a>
+          {/* APP-223: the full-screen canvas has no site footer. Feedback, the beta terms and About share one menu so the
+              top bar is no wider than before; the two pages open a new tab so the canvas keeps its state. */}
+          <details class="cv-help-menu">
+            <summary class="cv-link" title="Feedback, the beta terms and About">Help</summary>
+            <div class="cv-help-list">
+              <a href="mailto:feedback@getforma.dev" title="Send feedback to feedback@getforma.dev">Feedback</a>
+              <a href="/notice" target="_blank" rel="noopener">Beta terms</a>
+              <a href="/about" target="_blank" rel="noopener">About</a>
+            </div>
+          </details>
           <details class="cv-name-menu">
             <summary class="cv-link" title="The name others see">Your name</summary>
             <form method="post" action="/me/name" class="cv-name-form">
