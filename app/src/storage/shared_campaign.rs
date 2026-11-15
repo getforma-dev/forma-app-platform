@@ -475,7 +475,7 @@ async fn campaign() {
         .resolve_guest_access(&guest, &share.key)
         .await
         .is_err());
-    fixture.sql(&format!("UPDATE genui.memberships SET status='active',membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'; UPDATE genui.entitlements SET status='active',revoked_at=NULL WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'; DELETE FROM genui.organization_permissions WHERE organization_id='{ORG}' AND principal_id='{REVIEWER}' AND permission='admin_policy'"),"genui");
+    fixture.sql(&format!("UPDATE genui.memberships SET status='active',membership_epoch=1 WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'; UPDATE genui.entitlements SET status='active',revoked_at=NULL WHERE organization_id='{ORG}' AND principal_id='{PRINCIPAL}'; UPDATE genui.memberships SET role='member' WHERE organization_id='{ORG}' AND principal_id='{REVIEWER}'"),"genui");
     stores.data.guest_work_reads(&view_only).await.unwrap();
     check(&mut checks,"APP-215: the sponsor's sign-out everywhere advances their epoch and the guest still reads, queries and releases while management reports the share active; removing the sponsor through admin_remove_member denies every guest read, release, query and resolution");
     let flow = stores

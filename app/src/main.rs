@@ -1301,6 +1301,8 @@ mod tests {
         const ORG: &str = "Northwind Regional Community Health Cooperative of the Greater Valley";
         for admin in [false, true] {
             let props = CanvasProps {
+                can_build: true,
+                can_build_mode: "true".into(),
                 csrf_signout: "S".repeat(43),
                 csrf_display_name: "N".repeat(43),
                 has_live: true,
@@ -2984,6 +2986,8 @@ mod tests {
         second.forms = canvas::form_card(spend, &record).into_iter().collect();
         let groups = vec![first, second];
         let props = canvas::CanvasProps {
+            can_build: true,
+            can_build_mode: "true".into(),
             csrf_signout: "S".repeat(43),
             has_groups: true,
             summary: canvas::summary(&groups),
@@ -3043,6 +3047,8 @@ mod tests {
             },
         ]);
         let props = canvas::CanvasProps {
+            can_build: true,
+            can_build_mode: "true".into(),
             has_library: true,
             library_summary: canvas::library_summary(&library),
             library,
@@ -3250,6 +3256,8 @@ mod tests {
         // An empty canvas offers creation intents that require no installed
         // apps, so a new customer is not sent to an absent Expense app.
         let empty = canvas::CanvasProps {
+            can_build: true,
+            can_build_mode: "true".into(),
             csrf_signout: "S".repeat(43),
             summary: canvas::summary(&[]),
             ..canvas::CanvasProps::default()

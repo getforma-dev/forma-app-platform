@@ -306,8 +306,8 @@ async fn campaign() {
     assert_eq!(by_peer.body, unknown.body);
     let unconfirmed = post(&admin, &remove_peer, form(&[("csrf", &token)])).await;
     assert_eq!(location(&unconfirmed), "/admin?notice=unconfirmed");
-    // The seeded admin is the organization's only admin: storage names
-    // that refusal (last_admin) for its own removal; the "self" notice is
+    // The seeded owner is the organization's only owner: storage names
+    // that refusal (last_owner) for its own removal; the "self" notice is
     // the unit tests'.
     let own = post(
         &admin,
@@ -320,14 +320,14 @@ async fn campaign() {
     assert!(
         shown
             .body
-            .contains("remove the last admin of this organization."),
+            .contains("remove the last owner of this organization."),
         "{}",
         shown.body
     );
     assert_eq!(members(&fixture).await, before, "nothing changed yet");
     check(
         &mut checks,
-        "POST /admin/members/{principal}/remove over real rows: another session's token and a cross-site post are 403, a member without admin_policy gets the uniform 404, an unticked confirmation and the only admin's own removal answer 303 with their notices (the page then says the last admin cannot be removed), and no membership changed",
+        "POST /admin/members/{principal}/remove over real rows: another session's token and a cross-site post are 403, a member without admin_policy gets the uniform 404, an unticked confirmation and the only admin's own removal answer 303 with their notices (the page then says the last owner cannot be removed), and no membership changed",
     );
 
     // --- The name: prompt, POST /me/name, shown to the admin ----------------

@@ -72,7 +72,7 @@ async fn scalar(fixture: &Fixture, sql: &str) -> i64 {
 async fn permissions(fixture: &Fixture, s05: &SpendReview, principal: &str) -> Vec<String> {
     let operator = fixture.operator().await;
     let work = &s05.work;
-    operator.client.query(&format!("SELECT * FROM (SELECT 'app:'||app_id::text||':'||permission AS p FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}' AND app_id='{SPEND_APP}' UNION ALL SELECT 'work:'||work_id::text||':'||permission FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}' AND work_id='{work}' UNION ALL SELECT 'source:'||source_id::text||':'||permission FROM genui.source_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}' AND source_id='{EXPENSES}' UNION ALL SELECT 'org:'||permission FROM genui.organization_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}') x ORDER BY p"), &[])
+    operator.client.query(&format!("SELECT * FROM (SELECT 'app:'||app_id::text||':'||permission AS p FROM genui.app_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}' AND app_id='{SPEND_APP}' UNION ALL SELECT 'work:'||work_id::text||':'||permission FROM genui.work_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}' AND work_id='{work}' UNION ALL SELECT 'source:'||source_id::text||':'||permission FROM genui.source_permissions WHERE organization_id='{ORG}' AND principal_id='{principal}' AND source_id='{EXPENSES}' UNION ALL SELECT 'org:'||role FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{principal}' AND role<>'member') x ORDER BY p"), &[])
         .await
         .unwrap()
         .iter()
