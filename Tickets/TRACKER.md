@@ -237,3 +237,4 @@ Generated from ticket Markdown. Edit the tickets, then run `python3 Tickets/_too
 | 232 | [APP-230: Per-member deletion on request (`erase-member`)](0-backlog/APP-230.md) | [PH09](phases/PH09.md) | S15 | IAM | P1 | L | Backlog | APP-212, APP-229 |
 | 233 | [APP-231: The free-plan AI switch at class end (allowances as data)](0-backlog/APP-231.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-222, APP-227 |
 | 234 | [APP-232: The production-move decision by Jan 1 (park, renew or production)](0-backlog/APP-232.md) | [PH09](phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-216, APP-228 |
+| 235 | [APP-233: Readiness answers 503 for up to 15 s after every credential refresh](0-backlog/APP-233.md) | [PH09](phases/PH09.md) | S15 | OPS | P2 | S | Backlog | None |

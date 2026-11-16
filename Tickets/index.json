@@ -398,9 +398,10 @@
         "APP-229",
         "APP-230",
         "APP-231",
-        "APP-232"
+        "APP-232",
+        "APP-233"
       ],
-      "ticket_count": 69,
+      "ticket_count": 70,
       "done_count": 8,
       "blocked_count": 0
     }
@@ -423,7 +424,8 @@
     "APP-171",
     "APP-176",
     "APP-201",
-    "APP-221"
+    "APP-221",
+    "APP-233"
   ],
   "tickets": [
     {
@@ -7180,6 +7182,32 @@
         "APP-216",
         "APP-228"
       ]
+    },
+    {
+      "id": "APP-233",
+      "title": "Readiness answers 503 for up to 15 s after every credential refresh",
+      "path": "0-backlog/APP-233.md",
+      "Field": "Value",
+      "---": "---",
+      "Epic": "OPS",
+      "Status": "Backlog",
+      "Priority": "P2",
+      "Type": "Bug",
+      "Sprint": "S15",
+      "Phase": "PH09",
+      "Order": "235",
+      "Size": "S",
+      "Repos": "forma-app-platform",
+      "Decision": "Coordinator (Claude), 2026-11-16: the monitoring side was fixed the same night without an app release (the uptime probe moved to `/health/live` and the server-error filter leaves out `/health/ready`). The code fix rides the next app release; it does not justify a release of its own. **When: with the next app release.**",
+      "Requirements": "SR1, SR8",
+      "Depends on": "None",
+      "External dependencies": "None",
+      "Assignee": "Claude \u2014 GenUI",
+      "Branch / PR": "Not started",
+      "Team": "GenUI",
+      "Blocked by": "None \u2014 normal predecessor waiting stays Backlog",
+      "Unblock evidence": "Not applicable; satisfy listed predecessors and record acceptance evidence before selection.",
+      "dependencies": []
     }
   ]
 }

@@ -78,7 +78,7 @@
           "Type": "HTTPS",
           "FullyQualifiedDomainName": {"Ref": "AppHostname"},
           "Port": 443,
-          "ResourcePath": "/health/ready",
+          "ResourcePath": "/health/live",
           "EnableSNI": true,
           "RequestInterval": 30,
           "FailureThreshold": 3,
@@ -237,7 +237,7 @@
       "Properties": {
         "FilterName": {"Fn::Sub": "${AWS::StackName}-server-error"},
         "LogGroupName": {"Ref": "AppLogGroupName"},
-        "FilterPattern": "{ $.event = \"http.server_error\" }",
+        "FilterPattern": "{ $.event = \"http.server_error\" && $.route != \"/health/ready\" }",
         "MetricTransformations": [{"MetricNamespace": "Forma/Beta", "MetricName": "ServerError", "MetricValue": "1", "DefaultValue": 0}]
       }
     },
