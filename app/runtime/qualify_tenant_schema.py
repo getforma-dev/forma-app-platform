@@ -2169,12 +2169,14 @@ def qualify():
                 assert len(policies)==5 and all(r[1:4]==('account_scope','PERMISSIVE','ALL') and 'genui.account_id' in r[4] and r[4]==r[5] for r in policies)
                 assert all(('flow_id' if r[0]=='shared_auth_flows' else 'account_id') in r[4] for r in policies)
                 cleanup=c.execute("""SELECT tablename,roles::text[],cmd,qual,with_check FROM pg_policies
-                  WHERE schemaname='genui_identity' AND policyname<>'account_scope' ORDER BY tablename""").fetchall()
-                # 0026 (APP-230): the operator's organization-scoped reach into the guests' links,
-                # under FORCE, for the erasure of a member's live shares (never a lifted FORCE).
+                  WHERE schemaname='genui_identity' AND policyname<>'account_scope' ORDER BY tablename,policyname""").fetchall()
+                # 0026 (APP-230): the operator's organization-scoped reach into the guests' links and the
+                # share sign-in flows, under FORCE, for the erasure of a member's live shares (never a lifted FORCE).
                 operator_policy="(organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
+                flows_policy="(owner_organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
                 assert cleanup==[('accounts',['genui_admit'],'SELECT','true',None),('linked_apps',['genui_owner'],'ALL',operator_policy,operator_policy),
-                                 ('shared_auth_flows',['genui_admit'],'ALL','true','false'),('shared_sessions',['genui_admit'],'ALL','true','false')],cleanup
+                                 ('shared_auth_flows',['genui_admit'],'ALL','true','false'),('shared_auth_flows',['genui_owner'],'ALL',flows_policy,flows_policy),
+                                 ('shared_sessions',['genui_admit'],'ALL','true','false')],cleanup
                 assert c.execute("""SELECT count(*) FROM information_schema.column_privileges
                   WHERE table_schema='genui_identity' AND grantee IN ('genui_control','genui_worker')""").fetchone()==(0,)
                 assert c.execute("""SELECT count(*) FROM information_schema.column_privileges

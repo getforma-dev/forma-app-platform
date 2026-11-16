@@ -36,14 +36,14 @@ extend-entitlement  one member's (--principal) or every active member's (--all-a
                 entitlements moved later to --until (RFC 3339 UTC), never earlier; a lapsed
                 member comes back; needs migration 0026 (APP-229). One receipt pair per task.
 erase-member    deletion on request (APP-230, migration 0026), behind --confirm <principal>,
-                for a member already removed: delete-uploads first (the member's own S3
-                uploads, with an intent), then the erase-member task (the member's apps,
+                for a member already removed: the erase-member task first (the member's apps,
                 folders, files, sources, sessions, tokens, links, cards, labels, grants and
                 shares in one transaction; the principal, membership, consent, redemption and
                 audit rows stay, as does every entry made in someone else's app, nameless),
-                then every remaining S3 version the task's result names (files that were in
-                the member's folders, the normalized objects of the deleted sources), each
-                sweep with an intent first. The result's `next` is the fAuth deletion of the
+                and only once it has committed every S3 version its result names (every file
+                the member uploaded or kept in their folders, the normalized objects of the
+                deleted sources), with an intent first: a refused task deletes no object. The
+                result's `next` is the fAuth deletion of the
                 member's sign-in account (runbook §10a): the task does not call fAuth, because
                 the hard delete of a user crosses a second trust boundary and is recorded with
                 stats before and after by the operator's own identity, as the purge does.
@@ -347,35 +347,33 @@ class Trial:
         return dict(result, status='extended', receipts=self.receipts)
 
     def erase_member(self, principal, confirm):
-        """APP-230 (migration 0026): deletion on request. The member's own uploads first (delete_uploads, with its
-        intent), then the erase-member task, then every remaining object the task's result names, with an intent."""
+        """APP-230 (migration 0026): deletion on request. The erase-member task decides first; only after it has
+        committed are the objects it names swept (every file the member uploaded or kept in their folders, the
+        deleted sources' normalized objects), behind an intent. A refusal deletes no object (review MAJOR-3)."""
         require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
         require(confirm == principal, '--confirm must repeat the principal id exactly')
-        uploads = self.delete_uploads(principal)
         outcome = self.operator_task('admission-erase-member', [('--organization', self.organization), ('--principal', principal), ('--confirm', principal)], 'erase-member')
         result = outcome['result'] if isinstance(outcome['result'], dict) else {}
         require(outcome['exit_code'] == 0 and result.get('status') == 'erased' and result.get('principal_id') == principal
                 and isinstance(result.get('object_keys'), list) and isinstance(result.get('source_revisions'), list),
                 'erase-member task did not succeed: ' + str(result.get('refused') or 'no result'))
         bucket = self.outputs['EvidenceBucket']
-        # Files that were in the member's folders but not among their own uploads (already swept), and the
-        # normalized objects of the deleted sources: every key must be exactly this organization's.
-        swept = set(uploads['keys'])
+        # Every key must be exactly this organization's box-file key; every source revision a pair of UUIDs.
         file_pattern = re.compile(r'o/' + re.escape(self.organization) + r'/b/' + UUID_RE.pattern + r'/f/' + UUID_RE.pattern)
         keys = []
         for key in result['object_keys']:
             require(isinstance(key, str) and file_pattern.fullmatch(key), 'object key outside this organization\'s box files: refused')
-            if key not in swept:
-                keys.append(key)
+            keys.append(key)
         prefixes = []
         for pair in result['source_revisions']:
             require(isinstance(pair, list) and len(pair) == 2 and all(isinstance(v, str) and UUID_RE.fullmatch(v) for v in pair), 'source revision ids malformed: refused')
             prefixes.append('o/%s/s/%s/r/%s/' % (self.organization, pair[0], pair[1]))
-        require(len(keys) + len(prefixes) <= 100, 'more than 100 remaining objects; inspect the task result before sweeping')
+        require(len(keys) + len(prefixes) <= 100, 'more than 100 objects named by the task; inspect its result before sweeping')
         planned = [{'key': key, 'versions': self.versions(bucket, key)} for key in keys]
         for prefix in prefixes:
             for item in self.prefix_versions(bucket, prefix):
                 planned.append({'key': item['Key'], 'versions': [{'VersionId': item['VersionId'], 'kind': item['kind']}]})
+        # The intent, in the journal pattern, before the first deletion: what will be deleted and why.
         self.receipt('erase-objects-intent', {'bucket': bucket, 'principal_id': principal, 'files': planned, 'source_prefixes': prefixes,
                                               'versions': sum(len(f['versions']) for f in planned), 'rows_deleted': result.get('rows_deleted'),
                                               'audit_event': result.get('audit_event')})
@@ -390,9 +388,10 @@ class Trial:
         subject = result.get('provider_subject')
         return {'status': 'erased', 'principal_id': principal, 'changed': result.get('changed'), 'audit_event': result.get('audit_event'),
                 'rows_deleted': result.get('rows_deleted'), 'deleted': result.get('deleted'), 'kept': result.get('kept'),
-                'apps': result.get('apps'), 'boxes': result.get('boxes'), 'sources': result.get('sources'), 'sources_kept': result.get('sources_kept'),
-                'uploads': {'files': uploads['files'], 'versions': uploads['versions'], 'keys': uploads['keys']},
-                'objects_deleted': deleted, 'provider_subject': subject, 'receipts': self.receipts,
+                'apps': result.get('apps'), 'boxes': result.get('boxes'), 'boxes_detached': result.get('boxes_detached'),
+                'sources': result.get('sources'), 'sources_kept': result.get('sources_kept'),
+                'objects': {'files': len(keys), 'source_prefixes': len(prefixes), 'versions_deleted': deleted},
+                'provider_subject': subject, 'receipts': self.receipts,
                 'next': ('Delete the sign-in account in fAuth with your own identity (runbook §10a): POST /manage/users/%s/revoke-sessions, '
                          'then DELETE /manage/users/%s, with /manage/stats before and after; record both with this receipt.' % (subject, subject))
                         if subject else 'Already erased on a previous run: the fAuth user id is in that run\'s receipt; nothing to repeat here.'}

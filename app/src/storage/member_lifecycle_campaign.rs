@@ -320,8 +320,12 @@ INSERT INTO genui.agent_access_log(organization_id,entry_id,chain_sequence,token
  VALUES ('{ORG}','00000000-0000-4000-8000-000000000d42',1,'{TOKEN}','{ERASED}','my laptop','forma_list_apps','{{}}','{{}}','{{}}','{{}}','{{}}','allowed',NULL,NULL,NULL,1,now(),'sha256:{zeros}','sha256:{ab}');
 INSERT INTO genui.slack_links(organization_id,link_id,principal_id,team_id,slack_user_id,membership_epoch_at_link,linked_at) VALUES ('{ORG}','00000000-0000-4000-8000-000000000d80','{ERASED}','T1','U1',1,now());
 INSERT INTO genui.member_cards(organization_id,card_id,principal_id,kind,app_id,work_id,source,address,title,spec,everyone,created_at,updated_at) VALUES ('{ORG}','00000000-0000-4000-8000-000000000d90','{ERASED}','card','{THEIR_APP}','{THEIR_WORK}','cards','','A card','\x7b7d',true,now(),now());
+INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,redeemed_count,issued_at,expires_at,trial_days,issued_by) VALUES ('{ORG}','00000000-0000-4000-8000-000000000da0','sha256:{da}','member_invite','exhausted','{ORG}',1,1,now()-interval '2 days',now()+interval '10 days',30,'campaign');
+INSERT INTO genui.code_reservations(organization_id,reservation_id,code_id,kind,context_digest,issuer,provider_tenant_id,provider_subject,state,expires_at,consumed_at,notice_version) VALUES ('{ORG}','00000000-0000-4000-8000-000000000da1','00000000-0000-4000-8000-000000000da0','pending','sha256:{cd}','app008-fixture-only','ten_{ORG}','usr_{ERASED}','consumed',now()+interval '1 day',now()-interval '1 day',1);
+INSERT INTO genui.live_work_shares(organization_id,share_id,app_id,work_id,sponsor_id,sponsor_epoch,recipient_email,publication_id,definition_digest,work_version,view_ids,collection_ids,title,allow_add_to_canvas,version,idempotency_key,request_digest,created_at,expires_at) VALUES ('{ORG}','00000000-0000-4000-8000-000000000db0','{MY_APP}','{MY_WORK}','{ERASED}',1,'guest@example.test','00000000-0000-4000-8000-000000000d13','{digest64}',1,'{{}}','{{}}','Shared',false,1,'idem-00000000-0000-4000-8000-0db0','{digest64}',now(),now()+interval '7 days');
+INSERT INTO genui_identity.shared_auth_flows(flow_id,owner_organization_id,share_id,provider_organization_id,cookie_digest,state_digest,sealed_verifier,created_at,expires_at) VALUES ('00000000-0000-4000-8000-000000000db1','{ORG}','00000000-0000-4000-8000-000000000db0','{ORG}','sha256:{da}','sha256:{ef}','\x01',now()-interval '1 day',now()-interval '1 day'+interval '5 minutes');
 UPDATE genui.memberships SET display_name='Erin' WHERE organization_id='{ORG}' AND principal_id='{ERASED}';
-COMMIT;"#, cd = "cd".repeat(32), ab = "ab".repeat(32), ef = "ef".repeat(32), zeros = "0".repeat(64)), "genui");
+COMMIT;"#, cd = "cd".repeat(32), ab = "ab".repeat(32), ef = "ef".repeat(32), da = "da".repeat(32), zeros = "0".repeat(64)), "genui");
     let footprint = |table: &'static str, column: &'static str, value: &'static str| {
         let fixture = &fixture;
         async move {
@@ -413,6 +417,18 @@ COMMIT;"#, cd = "cd".repeat(32), ab = "ab".repeat(32), ef = "ef".repeat(32), zer
         "erased:true"
     );
     assert_eq!(footprint("agent_access_log", "token_id", TOKEN).await, 1);
+    // Review MAJOR-2 and MAJOR-1: the abandoned guest sign-in flow and the live share it named are gone;
+    // the consumed pending admission names the tombstone.
+    assert_eq!(out["deleted"]["genui_identity.shared_auth_flows"], 1);
+    assert_eq!(
+        scalar(&fixture, &format!("SELECT count(*) FROM genui_identity.shared_auth_flows WHERE owner_organization_id='{ORG}' AND share_id='00000000-0000-4000-8000-000000000db0'")).await,
+        0
+    );
+    assert_eq!(footprint("live_work_shares", "sponsor_id", ERASED).await, 0);
+    assert_eq!(
+        text(&fixture, &format!("SELECT provider_subject FROM genui.code_reservations WHERE organization_id='{ORG}' AND reservation_id='00000000-0000-4000-8000-000000000da1'")).await,
+        format!("erased:{ERASED}")
+    );
     assert_eq!(
         text(&fixture, &format!("SELECT status||':'||coalesce(display_name,'<none>')||':'||role FROM genui.memberships WHERE organization_id='{ORG}' AND principal_id='{ERASED}'")).await,
         "revoked:<none>:member"
@@ -455,7 +471,7 @@ COMMIT;"#, cd = "cd".repeat(32), ab = "ab".repeat(32), ef = "ef".repeat(32), zer
     );
     check(
         &mut checks,
-        "erase-member after revoke-membership: the member's own app, work, entry, share, folder, upload, session, agent attribution, Slack link, card and grants are gone; the agent token is revoked and relabelled, its log row stays; the membership is revoked, nameless, a member; the provider subject is a tombstone; the entitlement is revoked; the other member's app and the entry the erased member made in it still read, authored by a principal with no name; exactly one member.erased event with a recomputable digest",
+        "erase-member after revoke-membership: the member's own app, work, entry, share, live share with its abandoned guest sign-in flow, folder, upload, session, agent attribution, Slack link, card and grants are gone; the agent token is revoked and relabelled, its log row stays; the membership is revoked, nameless, a member; the provider subject and the consumed admission's subject are the tombstone; the entitlement is revoked; the other member's app and the entry the erased member made in it still read, authored by a principal with no name; exactly one member.erased event with a recomputable digest",
     );
 
     // A repeat is harmless; an active member and a wrong confirmation refuse.
@@ -506,7 +522,7 @@ COMMIT;"#, cd = "cd".repeat(32), ab = "ab".repeat(32), ef = "ef".repeat(32), zer
     );
     check(
         &mut checks,
-        "a repeat finds nothing to do and appends nothing; a confirmation that is not the principal id refuses before any connection",
+        "a repeat finds nothing to do and appends nothing (the tombstoned admission is not matched again, review MAJOR-1); a confirmation that is not the principal id refuses before any connection",
     );
 
     // The last owner: with the seeded owner demoted, the sole revoked owner refuses until another owner exists.

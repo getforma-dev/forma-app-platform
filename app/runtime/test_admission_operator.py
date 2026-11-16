@@ -2058,10 +2058,10 @@ class LifecycleTests(OperatorDatabase, LifecycleFixture, unittest.TestCase):
             c.execute("""INSERT INTO genui_identity.share_events(account_id,event_id,sequence,organization_id,share_id,kind,share_version,canonical,previous_hash,hash,occurred_at)
                          VALUES (%s,%s,1,%s,%s,'share.accepted',1,'\\x7b7d',%s,%s,now())""", (ids["guest"], str(uuid.uuid4()), ORG, ids["live"], "sha256:" + "0" * 64, "sha256:" + "1" * 64))
             # The folder, two uploads, and the sources registered from them: one bound by the other's work.
-            ids["box"], ids["files"], ids["sources"] = str(uuid.uuid4()), [str(uuid.uuid4()) for _ in range(2)], [str(uuid.uuid4()) for _ in range(2)]
-            ids["revisions"] = [str(uuid.uuid4()) for _ in range(2)]
+            ids["box"], ids["files"], ids["sources"] = str(uuid.uuid4()), [str(uuid.uuid4()) for _ in range(3)], [str(uuid.uuid4()) for _ in range(3)]
+            ids["revisions"] = [str(uuid.uuid4()) for _ in range(3)]
             put("boxes", (ORG, ids["box"], erased, "Uploads", "uploads", None, datetime.datetime.now(datetime.timezone.utc)))
-            for n in range(2):
+            for n in range(3):
                 normalized = "sha256:" + ("%02x" % (0xa0 + n)) * 32
                 c.execute("INSERT INTO genui.box_files VALUES (%s,%s,%s,%s,'csv','text/csv',12,%s,%s,%s,now())",
                           (ORG, ids["box"], ids["files"][n], "data%d.csv" % n, "sha256:" + ("%02x" % (0xc0 + n)) * 32, "o/%s/b/%s/f/%s" % (ORG, ids["box"], ids["files"][n]), erased))
@@ -2075,6 +2075,31 @@ class LifecycleTests(OperatorDatabase, LifecycleFixture, unittest.TestCase):
                          VALUES (%s,%s,%s,%s,'data','source',%s,%s,%s,%s)""", (ORG, ids["theirs"]["app"], ids["theirs"]["work"], ids["theirs"]["publication"], digest,
                                                                            ids["sources"][1], ids["revisions"][1], "sha256:" + "a1" * 32))
             put("source_permissions", (ORG, other, ids["sources"][1], "source_read"))
+            # The third source is bound only by a saved work the erased member created inside the other's app (review MINOR-4):
+            # the work stays (an entry in someone else's app), the source and its binding go.
+            ids["my_work_in_theirs"] = str(uuid.uuid4())
+            c.execute("INSERT INTO genui.saved_work(organization_id,app_id,work_id,publication_id,version,context,created_by) VALUES (%s,%s,%s,%s,1,'',%s)",
+                      (ORG, ids["theirs"]["app"], ids["my_work_in_theirs"], ids["theirs"]["publication"], erased))
+            c.execute("""INSERT INTO genui.work_bindings(organization_id,app_id,work_id,publication_id,input_id,kind,contract_digest,source_id,source_revision_id,source_digest)
+                         VALUES (%s,%s,%s,%s,'data','source',%s,%s,%s,%s)""", (ORG, ids["theirs"]["app"], ids["my_work_in_theirs"], ids["theirs"]["publication"], digest,
+                                                                           ids["sources"][2], ids["revisions"][2], "sha256:" + "a2" * 32))
+            # Someone else's folder for the erased member's app, with that person's file: detached, never deleted (review MINOR-3).
+            ids["foreign_box"], ids["foreign_file"] = str(uuid.uuid4()), str(uuid.uuid4())
+            put("boxes", (ORG, ids["foreign_box"], other, "Their folder", "app", ids["mine"]["app"], datetime.datetime.now(datetime.timezone.utc)))
+            c.execute("INSERT INTO genui.box_files VALUES (%s,%s,%s,'theirs.csv','csv','text/csv',12,%s,%s,%s,now())",
+                      (ORG, ids["foreign_box"], ids["foreign_file"], "sha256:" + "d9" * 32, "o/%s/b/%s/f/%s" % (ORG, ids["foreign_box"], ids["foreign_file"]), other))
+            # The admission the member came in through: a consumed pending reservation naming their subject (review MAJOR-1),
+            # and an abandoned guest sign-in flow for the live share, never swept (review MAJOR-2).
+            ids["code"], ids["reservation"] = str(uuid.uuid4()), str(uuid.uuid4())
+            c.execute("""INSERT INTO genui.access_codes(organization_id,code_id,code_digest,kind,status,destination_organization_id,max_redemptions,redeemed_count,
+                         issued_at,expires_at,trial_days,issued_by) VALUES (%s,%s,%s,'member_invite','exhausted',%s,1,1,now()-interval '2 days',now()+interval '10 days',30,'test')""",
+                      (ORG, ids["code"], "sha256:" + hashlib.sha256(ids["code"].encode()).hexdigest(), ORG))
+            c.execute("""INSERT INTO genui.code_reservations(organization_id,reservation_id,code_id,kind,context_digest,issuer,provider_tenant_id,provider_subject,state,expires_at,consumed_at,notice_version)
+                         VALUES (%s,%s,%s,'pending',%s,%s,%s,%s,'consumed',now()+interval '1 day',now()-interval '1 day',1)""",
+                      (ORG, ids["reservation"], ids["code"], "sha256:" + "c" * 64, ISSUER, TENANT, "usr_" + erased))
+            c.execute("""INSERT INTO genui_identity.shared_auth_flows(flow_id,owner_organization_id,share_id,provider_organization_id,cookie_digest,state_digest,sealed_verifier,created_at,expires_at)
+                         VALUES (%s,%s,%s,%s,%s,%s,'\\x01',now()-interval '1 day',now()-interval '1 day'+interval '5 minutes')""",
+                      (str(uuid.uuid4()), ORG, ids["live"], ORG, "sha256:" + uuid.uuid4().hex * 2, "sha256:" + "5" * 64))
             # Sessions, tokens, links, cards, labels, kinds, a name, a role, a consent.
             ids["entitlement"] = self_entitlement = str(uuid.uuid4())
             c.execute("INSERT INTO genui.entitlements(organization_id,principal_id,entitlement_id,status,kind,starts_at,expires_at) VALUES (%s,%s,%s,'active','member_invite',now()-interval '1 day',now()+interval '30 days')",
@@ -2145,18 +2170,27 @@ class LifecycleTests(OperatorDatabase, LifecycleFixture, unittest.TestCase):
         events = self.query("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (ORG,))[0][0]
         out = self.cli("erase-member", "--organization", ORG, "--principal", erased, "--confirm", erased)
         self.assertEqual((out["status"], out["changed"], out["principal_id"], out["membership_epoch"]), ("erased", True, erased, epoch + 1))
-        self.assertEqual((out["apps"], out["boxes"], out["sources"], out["sources_kept"], out["live_shares"]), (1, 1, 1, 1, 1))
+        self.assertEqual((out["apps"], out["boxes"], out["boxes_detached"], out["sources"], out["sources_kept"], out["live_shares"]), (1, 1, 1, 2, 1, 1))
         self.assertEqual(sorted(out["object_keys"]), sorted("o/%s/b/%s/f/%s" % (ORG, ids["box"], f) for f in ids["files"]))
-        self.assertEqual(out["source_revisions"], [[ids["sources"][0], ids["revisions"][0]]])
+        self.assertEqual(out["source_revisions"], sorted([[ids["sources"][0], ids["revisions"][0]], [ids["sources"][2], ids["revisions"][2]]]))
         self.assertEqual((out["agent_tokens_revoked"], out["agent_tokens_kept"], out["entitlements_revoked"], out["provider_subject"]), (1, 1, 1, "usr_" + erased))
-        self.assertEqual((out["audit_events_kept"], out["deleted"]["apps"], out["deleted"]["boxes"], out["deleted"]["box_files"], out["deleted"]["sources"]), (events, 1, 1, 2, 1))
-        self.assertEqual((out["deleted"]["genui_identity.linked_apps"], out["deleted"]["live_work_shares"], out["deleted"]["work_shares"], out["deleted"]["sessions"],
-                          out["deleted"]["pre_access_sessions"], out["deleted"]["slack_links"], out["deleted"]["agent_attributions"], out["deleted"]["internal_record_revisions"]),
-                         (1, 1, 2, 1, 1, 1, 1, 1))
+        self.assertEqual((out["audit_events_kept"], out["deleted"]["apps"], out["deleted"]["boxes"], out["deleted"]["box_files"], out["deleted"]["sources"]), (events, 1, 1, 3, 2))
+        self.assertEqual((out["deleted"]["genui_identity.shared_auth_flows"], out["deleted"]["genui_identity.linked_apps"], out["deleted"]["live_work_shares"], out["deleted"]["work_shares"],
+                          out["deleted"]["sessions"], out["deleted"]["pre_access_sessions"], out["deleted"]["slack_links"], out["deleted"]["agent_attributions"],
+                          out["deleted"]["internal_record_revisions"], out["deleted"]["work_bindings"]), (1, 1, 1, 2, 1, 1, 1, 1, 1, 1))
+        # The reservation names the tombstone, never the subject; the abandoned flow is gone; the foreign folder is detached with its file.
+        self.assertEqual(self.query("SELECT provider_subject FROM genui.code_reservations WHERE organization_id=%s AND reservation_id=%s", (ORG, ids["reservation"])), [("erased:" + erased,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui_identity.shared_auth_flows WHERE owner_organization_id=%s AND share_id=%s", (ORG, ids["live"])), [(0,)])
+        self.assertEqual(self.query("SELECT kind,app_id::text,owner_principal_id::text FROM genui.boxes WHERE organization_id=%s AND box_id=%s", (ORG, ids["foreign_box"])), [("box", None, other)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.box_files WHERE organization_id=%s AND box_id=%s AND file_id=%s", (ORG, ids["foreign_box"], ids["foreign_file"])), [(1,)])
+        # The member's own saved work inside the other's app stays, unbound; its source went.
+        self.assertEqual(self.query("SELECT count(*) FROM genui.saved_work WHERE organization_id=%s AND work_id=%s", (ORG, ids["my_work_in_theirs"])), [(1,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.work_bindings WHERE organization_id=%s AND work_id=%s", (ORG, ids["my_work_in_theirs"])), [(0,)])
+        self.assertEqual(self.query("SELECT count(*) FROM genui.sources WHERE organization_id=%s AND source_id=%s", (ORG, ids["sources"][2])), [(0,)])
         # What names the member now: exactly the kept set.
         self.assertEqual(self.naming(erased), {"memberships.principal_id": 1, "member_consents.principal_id": 1,
                                                "entitlements.principal_id": 1, "agent_tokens.principal_id": 1, "internal_record_revisions.creator_id": 1,
-                                               "internal_record_revisions.updater_id": 1, "app_labels.updated_by": 1})
+                                               "internal_record_revisions.updater_id": 1, "app_labels.updated_by": 1, "saved_work.created_by": 1})
         self.assertEqual(self.query("SELECT status,display_name,role,membership_epoch FROM genui.memberships WHERE organization_id=%s AND principal_id=%s", (ORG, erased)),
                          [("revoked", None, "member", epoch + 1)])
         self.assertEqual(self.query("SELECT provider_subject FROM genui.principals WHERE organization_id=%s AND principal_id=%s", (ORG, erased)), [("erased:" + erased,)])
@@ -2185,11 +2219,13 @@ class LifecycleTests(OperatorDatabase, LifecycleFixture, unittest.TestCase):
         digest = "sha256:" + hashlib.sha256(b"forma:member-erased:v1\x00" + erased.encode()).hexdigest()
         self.assertEqual(self.query("SELECT outcome_digest::text FROM genui.audit_events WHERE organization_id=%s AND event_id=%s", (ORG, out["audit_event"])), [(digest,)])
         self.assertEqual(self.cli("verify", "--organization", ORG)["verified"], True)
-        # A repeat is harmless: nothing to do, nothing written.
-        before = self.dump()
+        # A repeat is harmless (review MAJOR-1: the consumed reservation now names the tombstone and must not match again):
+        # nothing to do, no epoch move, no second member.erased, every byte the same.
+        before, erased_events = self.dump(), self.operator_kind_count("member.erased")
         again = self.cli("erase-member", "--organization", ORG, "--principal", erased, "--confirm", erased)
         self.assertEqual((again["changed"], again["rows_deleted"], again["audit_event"], again["provider_subject"], again["membership_epoch"]), (False, 0, None, None, epoch + 1))
         self.assertEqual(self.dump(), before)
+        self.assertEqual(self.operator_kind_count("member.erased"), erased_events)
 
     def test_erase_member_refuses_the_last_owner_unless_the_organization_is_being_purged(self):
         """APP-230: a revoked owner with no other active owner refuses last_owner while the organization is active;

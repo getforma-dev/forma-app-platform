@@ -130,7 +130,7 @@
     {
       "version": 26,
       "file": "0026_member_lifecycle.sql",
-      "sha256": "5d8cd9985d17f87ea30746fdd5b737af9503bc792dcb15ffb427515a4938abaf"
+      "sha256": "5e62751e0f4945eaddce801d32988bcdc157aeed76059a98bbdebc65f8f00c7b"
     }
   ],
   "catalog": [
@@ -240,7 +240,7 @@
     },
     {
       "file": "catalog-v26.json",
-      "sha256": "f642958bdcf073aca8312a1314916e0359c2b396a499d9f704c3b9cdad624de7"
+      "sha256": "08a418561676edffac5423905d1ba172fafbdf3667b8bfdf69bc63f8b62aa076"
     }
   ]
 }

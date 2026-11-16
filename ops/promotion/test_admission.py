@@ -506,11 +506,11 @@ class AdmissionTests(unittest.TestCase):
             with self.assertRaises(Refused): trial.extend_entitlement(**bad)
         self.assertEqual(len(self.aws.run_requests), 4)
 
-    def test_erase_member_sweeps_uploads_runs_the_task_then_sweeps_what_the_task_names_with_intents(self):
-        """APP-230 (migration 0026): delete-uploads first (the member's own uploads), the erase-member task behind
-        --confirm, then every remaining object the result names (a file that was in the member's folder but not
-        their upload, the deleted source's normalized objects), with an intent receipt; the result carries the
-        fAuth follow-up for the subject the task printed; refusals delete nothing beyond the uploads step they reached."""
+    def test_erase_member_runs_the_task_first_then_sweeps_what_it_names_with_an_intent(self):
+        """APP-230 (migration 0026, review MAJOR-3): the erase-member task decides behind --confirm; only after it
+        has committed are the objects its result names swept (every file the member uploaded or kept in their
+        folders, the deleted source's normalized objects), with an intent receipt; the result carries the fAuth
+        follow-up for the subject the task printed; a refused task deletes no object at all."""
         trial = self.trial()
         box, mine, theirs = '33333333-4444-4555-8666-777777777777', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee1', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee2'
         source, revision = 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeee3', 'cccccccc-bbbb-4ccc-8ddd-eeeeeeeeeee4'
@@ -519,49 +519,50 @@ class AdmissionTests(unittest.TestCase):
         foreign = 'o/%s/b/%s/f/%s' % (OTHER_ORG, box, mine)
         self.aws.objects = {(BUCKET, my_key): ['v1', 'dm-1'], (BUCKET, their_key): ['v2'], (BUCKET, prefix + 'original'): ['v3'], (BUCKET, prefix + 'part.parquet'): ['v4'],
                             (BUCKET, foreign): ['v9']}
-        listing = {'organization_id': ORG, 'principal_id': PRINCIPAL, 'count': 1, 'truncated': False, 'files': [
-            {'box_id': box, 'file_id': mine, 'object_key': my_key, 'byte_length': 10, 'content_digest': 'sha256:' + 'a' * 64, 'kind': 'csv'}]}
         erased = {'principal_id': PRINCIPAL, 'status': 'erased', 'changed': True, 'membership_epoch': 3, 'audit_event': '00000000-0000-4000-8000-0000000000ee',
-                  'rows_deleted': 12, 'deleted': {'apps': 1}, 'apps': 1, 'boxes': 1, 'sources': 1, 'sources_kept': 0, 'live_shares': 0,
+                  'rows_deleted': 12, 'deleted': {'apps': 1}, 'apps': 1, 'boxes': 1, 'boxes_detached': 0, 'sources': 1, 'sources_kept': 0, 'live_shares': 0,
                   'object_keys': [my_key, their_key], 'source_revisions': [[source, revision]], 'agent_tokens_revoked': 0, 'agent_tokens_kept': 0,
                   'entitlements_revoked': 1, 'provider_subject': 'usr_abc', 'kept': ['principals'], 'audit_events_kept': 5}
         with self.assertRaises(Refused): trial.erase_member(PRINCIPAL, OTHER_ORG)
         self.assertEqual(self.aws.run_requests, [])
-        self.aws.results = [(0, listing), (0, erased)]
+        self.aws.results = [(0, erased)]
         result = trial.erase_member(PRINCIPAL, PRINCIPAL)
-        self.assertEqual((result['status'], result['changed'], result['rows_deleted'], result['objects_deleted'], result['provider_subject']), ('erased', True, 12, 3, 'usr_abc'))
-        self.assertEqual((result['uploads']['files'], result['uploads']['versions'], result['uploads']['keys']), (1, 2, [my_key]))
+        self.assertEqual((result['status'], result['changed'], result['rows_deleted'], result['provider_subject']), ('erased', True, 12, 'usr_abc'))
+        self.assertEqual(result['objects'], {'files': 2, 'source_prefixes': 1, 'versions_deleted': 5})
         self.assertIn('POST /manage/users/usr_abc/revoke-sessions', result['next'])
+        # One task only: no list-box-files, no deletion before the task's answer.
         self.assertEqual([r['overrides']['containerOverrides'][0]['command'] for r in self.aws.run_requests],
-                         [['admission', 'list-box-files', '--organization', ORG, '--principal', PRINCIPAL],
-                          ['admission', 'erase-member', '--organization', ORG, '--principal', PRINCIPAL, '--confirm', PRINCIPAL]])
+                         [['admission', 'erase-member', '--organization', ORG, '--principal', PRINCIPAL, '--confirm', PRINCIPAL]])
         self.assertEqual(sorted(self.aws.deleted), sorted([(BUCKET, my_key, 'v1'), (BUCKET, my_key, 'dm-1'), (BUCKET, their_key, 'v2'),
                                                            (BUCKET, prefix + 'original', 'v3'), (BUCKET, prefix + 'part.parquet', 'v4')]))
         self.assertEqual(self.aws.objects[BUCKET, foreign], ['v9'])
         receipts = self.receipts()
+        self.assertEqual(sorted(k.rsplit('/', 1)[-1] for k in receipts), ['erase-member-1-run.json', 'erase-member-1-stopped.json', 'erase-objects-done.json', 'erase-objects-intent.json'])
         intent = next(v for k, v in receipts.items() if k.endswith('erase-objects-intent.json'))
         self.assertEqual((intent['principal_id'], intent['versions'], sorted(f['key'] for f in intent['files']), intent['source_prefixes'], intent['audit_event']),
-                         (PRINCIPAL, 3, sorted([their_key, prefix + 'original', prefix + 'part.parquet']), [prefix], erased['audit_event']))
+                         (PRINCIPAL, 5, sorted([my_key, their_key, prefix + 'original', prefix + 'part.parquet']), [prefix], erased['audit_event']))
         done = next(v for k, v in receipts.items() if k.endswith('erase-objects-done.json'))
-        self.assertEqual((done['deleted'], done['remaining']), (3, []))
-        self.assertTrue(any(k.endswith('delete-uploads-intent.json') for k in receipts))
+        self.assertEqual((done['deleted'], done['remaining']), (5, []))
         # A repeat on an already erased member: the task answers changed false with nothing to sweep, no subject.
         self.setUp(); trial = self.trial()
-        self.aws.results = [(0, dict(listing, count=0, files=[])), (0, dict(erased, changed=False, rows_deleted=0, object_keys=[], source_revisions=[], provider_subject=None, audit_event=None))]
+        self.aws.results = [(0, dict(erased, changed=False, rows_deleted=0, object_keys=[], source_revisions=[], provider_subject=None, audit_event=None))]
         again = trial.erase_member(PRINCIPAL, PRINCIPAL)
-        self.assertEqual((again['changed'], again['objects_deleted'], again['provider_subject']), (False, 0, None))
+        self.assertEqual((again['changed'], again['objects']['versions_deleted'], again['provider_subject']), (False, 0, None))
         self.assertIn('Already erased', again['next'])
-        # Refusals after the uploads step: a refused task, a foreign key or a malformed revision in the result, more than 100 objects.
-        for name, task in [('member active', (1, {'refused': 'member_active'})),
+        self.assertEqual(self.aws.deleted, [])
+        # A refused task deletes nothing (review MAJOR-3); so does a foreign key, a source key as a file, a malformed revision, or more than 100 objects in the result.
+        for name, task in [('member active', (1, {'refused': 'member_active'})), ('last owner', (1, {'refused': 'last_owner'})),
+                           ('incomplete', (1, {'refused': 'erase_incomplete'})), ('no result', (1, None)),
                            ('foreign key', (0, dict(erased, object_keys=[foreign]))),
                            ('source key as file', (0, dict(erased, object_keys=[prefix + 'original']))),
                            ('malformed revision', (0, dict(erased, source_revisions=[[source, '../x']]))),
                            ('too many', (0, dict(erased, object_keys=['o/%s/b/%s/f/%s' % (ORG, box, 'aaaaaaaa-bbbb-4ccc-8ddd-%012x' % n) for n in range(101)])))]:
             with self.subTest(case=name):
-                self.setUp(); trial = self.trial(); self.aws.objects = {(BUCKET, their_key): ['v2']}
-                self.aws.results = [(0, dict(listing, count=0, files=[])), task]
+                self.setUp(); trial = self.trial(); self.aws.objects = {(BUCKET, my_key): ['v1'], (BUCKET, their_key): ['v2']}
+                self.aws.results = [task]
                 with self.assertRaises(Refused): trial.erase_member(PRINCIPAL, PRINCIPAL)
                 self.assertEqual(self.aws.deleted, [])
+                self.assertEqual(self.aws.objects[BUCKET, my_key], ['v1'])
                 self.assertFalse(any(k.endswith('erase-objects-intent.json') for k in self.receipts()))
 
     def test_suspend_runs_its_override(self):

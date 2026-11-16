@@ -30,10 +30,12 @@ entitlements later, never earlier (a lapsed entitlement, active with a past
 expires_at, comes back; a revoked one is untouched; no epoch advances), one
 `entitlement.extended` event per changed member. `erase-member --principal <id>
 --confirm <id>` is deletion on request for an already revoked member: the
-genui_owner definer walks the member's own apps, folders, files, sources,
-sessions, tokens, links, cards, labels, grants and shares (children before
-parents), revokes the entitlements, clears the name and role and tombstones the
-provider subject; the command then proves against pg_catalog that no content
+genui_owner definer walks the member's own apps, folders, files, sources (unless
+a saved work created by someone else binds them), sessions, tokens, links, cards,
+labels, grants and shares with the guests' links and flows (children before
+parents), detaches someone else's folder for one of the member's apps, revokes the
+entitlements, clears the name and role and tombstones the provider subject, each
+only while not yet so; the command then proves against pg_catalog that no content
 row names the member, their former apps, folders or sources, that the chains
 did not move, and appends one `member.erased` event; a repeat changes nothing.
 Both do their database work in migration 0026's SECURITY DEFINER functions,
@@ -194,6 +196,9 @@ LIFECYCLE_SCHEMA_VERSION = 26
 EXTEND_MAX_DAYS = 400
 EXTEND_DOMAIN = b"forma:entitlement-extended:v1"
 ERASE_DOMAIN = b"forma:member-erased:v1"
+# erase-member's own statement timeout (connect() sets 5 s for every other command): the walk is one
+# definer call over every table of the member's world; 120 s bounds it on a live database.
+ERASE_STATEMENT_TIMEOUT = "120s"
 UNTIL = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 # Columns that may still name an erased member afterwards (every one a foreign key to principals or
 # memberships, read from pg_catalog by erase_proofs): the identity and legal rows, and the authorship
@@ -207,7 +212,9 @@ ERASE_KEEPS = frozenset({("principals", "principal_id"), ("memberships", "princi
                          ("work_data_copies", "actor_principal_id"), ("app_labels", "updated_by"),
                          ("box_file_sources", "registered_by"), ("box_derivations", "created_by"), ("box_explanations", "created_by"),
                          ("box_briefs", "created_by"), ("box_shares", "granted_by"), ("box_file_grants", "granted_by"),
-                         ("work_shares", "revoked_by"), ("command_claims", "principal_id"), ("command_outcomes", "principal_id")})
+                         ("work_shares", "revoked_by"), ("command_claims", "principal_id")})
+# command_outcomes.principal_id is not listed: its key is the composite one to command_claims, not to
+# memberships, so principal_columns() never names it; the claim row is the kept key it follows.
 # Tables with an app_id, box_id or source_id column that keep rows naming an erased member's former
 # resources: the audit chain (identifiers and hashes) and the agent access log's array columns.
 ERASE_RESOURCE_KEEPS = frozenset({"audit_events", "agent_access_log"})
@@ -1579,6 +1586,11 @@ def erase_member(c, args):
     org, principal = args.organization, args.principal
     begin(c, org)
     require(schema_version(c) >= LIFECYCLE_SCHEMA_VERSION, "kind_refused")
+    # The walk is one statement (the definer) under connect()'s 5-second statement timeout, which a
+    # member with thousands of entries would outrun: this transaction alone gets ERASE_STATEMENT_TIMEOUT.
+    # Bounded, so a runaway statement still ends; the 3-second lock timeout stays, so a row another
+    # member's transaction holds fails closed instead of queueing (review MINOR-5).
+    c.execute("SELECT set_config('statement_timeout',%s,true)", (ERASE_STATEMENT_TIMEOUT,))
     lock_organization(c, org)
     events = c.execute("SELECT count(*) FROM genui.audit_events WHERE organization_id=%s", (org,)).fetchone()[0]
     heads = c.execute("SELECT writer_role,chain_sequence,head_hash FROM genui.audit_heads WHERE organization_id=%s ORDER BY 1", (org,)).fetchall()
@@ -1601,13 +1613,14 @@ def erase_member(c, args):
     return {"principal_id": principal, "status": "erased", "changed": bool(changed), "membership_epoch": epoch, "audit_event": event,
             "rows_deleted": sum(int(v) for v in deleted.values()), "deleted": deleted,
             "apps": len(report.get("app_ids") or []), "boxes": len(report.get("box_ids") or []), "sources": len(report.get("source_ids") or []),
-            "sources_kept": report.get("sources_kept"), "live_shares": len(report.get("share_ids") or []),
+            "sources_kept": report.get("sources_kept"), "boxes_detached": report.get("boxes_detached"), "live_shares": len(report.get("share_ids") or []),
             "object_keys": report.get("object_keys") or [], "source_revisions": report.get("source_revisions") or [],
             "agent_tokens_revoked": report.get("agent_tokens_revoked"), "agent_tokens_kept": report.get("agent_tokens_kept"),
             "entitlements_revoked": report.get("entitlements_revoked"), "provider_subject": report.get("provider_subject"),
             "kept": ["principals (provider_subject erased:<id>)", "memberships (revoked, no name, role member)", "member_consents", "code_redemptions",
                      "code_reservations (subject erased)", "entitlements (revoked)", "audit_events", "agent_access_log", "agent_tokens (revoked, label erased)",
-                     "entries, publications, works, copies, labels, folder work and shares in resources someone else owns (authored by the nameless principal)"],
+                     "entries, publications, works, copies, labels, folder work and shares in resources someone else owns (authored by the nameless principal)",
+                     "sources a saved work created by someone else binds (sources_kept)", "someone else's folder for one of the member's apps, detached (boxes_detached)"],
             "audit_events_kept": events}
 
 
