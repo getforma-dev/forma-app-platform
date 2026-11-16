@@ -23,7 +23,7 @@ FILTERS = {
     'ModelUsageWarningFilter': ('model-usage-warning', '{ $.event = "model.usage_threshold" && $.percent = 80 }', 'ModelUsageWarning'),
     'ModelUsageReachedFilter': ('model-usage-reached', '{ $.event = "model.usage_threshold" && $.percent = 100 }', 'ModelUsageReached'),
     'ModelCallFailedFilter': ('model-call-failed', '{ $.event = "model.call_failed" }', 'ModelCallFailed'),
-    'ServerErrorFilter': ('server-error', '{ $.event = "http.server_error" }', 'ServerError'),
+    'ServerErrorFilter': ('server-error', '{ $.event = "http.server_error" && $.route != "/health/ready" }', 'ServerError'),
     'ParserKilledFilter': ('parser-killed', '{ $.event = "parser.killed" }', 'ParserKilled'),
 }
 # The alarms on them: resource -> (alarm name suffix, metric, threshold, operator, evaluation periods, datapoints to alarm).
@@ -165,7 +165,7 @@ class ObservabilityTemplateTests(unittest.TestCase):
         self.assertIn('${GoldenSignalsDashboard}', self.template['Outputs']['DashboardUrl']['Value']['Fn::Sub'])
 
     def test_each_health_check_probes_https_from_exactly_three_regions_with_no_paid_optional_feature(self):
-        expected = {'AppHealthCheck': ('AppHostname', '/health/ready', 'app'), 'FauthHealthCheck': ('FauthHostname', '/health', 'fauth')}
+        expected = {'AppHealthCheck': ('AppHostname', '/health/live', 'app'), 'FauthHealthCheck': ('FauthHostname', '/health', 'fauth')}
         for name, (hostname, path, tag) in expected.items():
             with self.subTest(health_check=name):
                 properties = self.resources[name]['Properties']
@@ -189,7 +189,9 @@ class ObservabilityTemplateTests(unittest.TestCase):
         for paid in ('HTTPS_STR_MATCH', 'HTTP_STR_MATCH', 'SearchString', 'MeasureLatency'):
             self.assertNotIn(paid, text)
         # The paths the probes ask are the ones the app and fAuth serve (the app's route; fAuth answered 200 at /health on 2026-11-15).
-        self.assertIn('"/health/ready"', (ROOT / 'app' / 'src' / 'main.rs').read_text())
+        # /health/live through the balancer: the balancer answers 503 itself when no target is healthy, so an outage
+        # still fails the probe, while readiness's 4-minute credential-rotation blip (APP-233) no longer counts as 5xx.
+        self.assertIn('"/health/live"', (ROOT / 'app' / 'src' / 'main.rs').read_text())
 
     def test_the_unreachable_alarms_fire_after_three_failed_minutes_and_keep_state_on_gaps(self):
         expected = {'AppUnreachableAlarm': ('AppHealthCheck', 'app-unreachable'), 'FauthUnreachableAlarm': ('FauthHealthCheck', 'fauth-unreachable')}
@@ -270,7 +272,8 @@ class ObservabilityTemplateTests(unittest.TestCase):
         patterns = [r['Properties']['FilterPattern'] for r in self.resources.values() if r['Type'] == 'AWS::Logs::MetricFilter']
         self.assertEqual(len(patterns), 5)
         for pattern in patterns:
-            self.assertRegex(pattern, r'^\{ \$\.event = "[a-z_.]+"( && \$\.[a-z_]+ = [0-9]+)? \}$')
+            # The one exclusion: readiness's 503 is a state the balancer acts on (-unhealthy-targets), not a fault (APP-233).
+            self.assertRegex(pattern, r'^\{ \$\.event = "[a-z_.]+"( && \$\.[a-z_]+ = [0-9]+| && \$\.route != "/health/ready")? \}$')
         self.assertEqual({re.search(r'\$\.event = "([^"]+)"', p).group(1) for p in patterns}, set(sources))
         # `percent` is a u32 (a JSON number), so the usage patterns compare a number, never a quoted string, and they name exactly
         # the service's thresholds (USAGE_THRESHOLDS: once per UTC day per scope at each).

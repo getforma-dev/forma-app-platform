@@ -58,3 +58,4 @@ Jobs, release controls, recovery, retention, support and pilot operations.
 | 230 | [APP-228: Renew the beta to Jan 15, 2027 and reserve January](../0-backlog/APP-228.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-194, APP-227 |
 | 233 | [APP-231: The free-plan AI switch at class end (allowances as data)](../0-backlog/APP-231.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-222, APP-227 |
 | 234 | [APP-232: The production-move decision by Jan 1 (park, renew or production)](../0-backlog/APP-232.md) | [PH09](../phases/PH09.md) | S15 | OPS | P1 | S | Backlog | APP-216, APP-228 |
+| 235 | [APP-233: Readiness answers 503 for up to 15 s after every credential refresh](../0-backlog/APP-233.md) | [PH09](../phases/PH09.md) | S15 | OPS | P2 | S | Backlog | None |
