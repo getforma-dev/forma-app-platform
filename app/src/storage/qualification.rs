@@ -892,6 +892,18 @@ async fn campaign() {
     assert!(empty.readiness().await.is_err());
     fixture.sql("ALTER ROLE genui_worker NOCREATEDB", "genui");
     empty.readiness().await.unwrap();
+    // ADR-004 A6 (APP-216 part 1): readiness compares by digest, and a
+    // drift is refused through that path (a changed digest runs the full
+    // comparison, which names the refusal). The digest's own consistency
+    // with the service is checked after the drifts.
+    let pulled = super::catalog::compared_fully;
+    let before = pulled();
+    empty.readiness().await.unwrap();
+    assert_eq!(
+        pulled(),
+        before,
+        "a healthy readiness run pulls no document"
+    );
     for (mutate, restore) in [
         (
             "ALTER TABLE genui.internal_records DISABLE ROW LEVEL SECURITY",
@@ -910,11 +922,76 @@ async fn campaign() {
         ),
     ] {
         fixture.sql(mutate, "genui");
-        assert!(empty.readiness().await.is_err());
+        let before = pulled();
+        assert!(empty.readiness().await.is_err(), "{mutate}");
+        // A6: the drift changed the digest, so the full comparison ran and
+        // named the refusal; a digest that ignored the drift would have
+        // admitted it without pulling the document.
+        assert!(
+            pulled() > before,
+            "{mutate}: refused by the full comparison after a digest mismatch"
+        );
         fixture.sql(restore, "genui");
+        let before = pulled();
         empty.readiness().await.unwrap();
+        assert_eq!(
+            pulled(),
+            before,
+            "{restore}: the restored catalog matches by digest"
+        );
     }
-    check(&mut checks,"canonical catalog comparison rejects disabled RLS, extra UPDATE and missing named relation before reuse");
+    // A6: the digest the database computes is the SHA-256 of the document
+    // the full comparison would receive, and the service's expected digest,
+    // computed from the pinned document in the server's own jsonb text, is
+    // that same value on a healthy database; the text form the service
+    // writes is the server's, byte for byte, on the live document and on
+    // the characters `escape_json` treats specially. The two sides cannot
+    // diverge silently: a divergence fails here, not just in the traffic.
+    {
+        use sha2::{Digest, Sha256};
+        let embedded = super::catalog::Catalog::embedded().unwrap();
+        let (full_sql, digest_sql) = embedded.statements();
+        let operator = fixture.operator().await;
+        operator
+            .client
+            .batch_execute("BEGIN READ ONLY; SET LOCAL search_path=pg_catalog,pg_temp")
+            .await
+            .unwrap();
+        let body: String = operator
+            .client
+            .query_one(full_sql, &[])
+            .await
+            .unwrap()
+            .get(0);
+        let digest: Vec<u8> = operator
+            .client
+            .query_one(digest_sql, &[])
+            .await
+            .unwrap()
+            .get(0);
+        operator.client.batch_execute("ROLLBACK").await.unwrap();
+        assert_eq!(digest, Sha256::digest(body.as_bytes()).to_vec());
+        assert_eq!(digest, embedded.expected_digest().to_vec());
+        let parsed: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(super::catalog::canonical(&parsed), body);
+        let specimen = json!({
+            "b": {},
+            "aa": [[], {"k": "v"}, {"two": 2, "one": 1, "三": 3}],
+            "a": [1, -2, 0, 9007199254740993u64, true, false, null],
+            "Z": "q\"\\/\n\r\t\u{8}\u{c}\u{1}\u{1f}\u{7f}é\u{20ac}",
+        });
+        let server: String = operator
+            .client
+            .query_one(
+                "SELECT ($1::pg_catalog.text)::pg_catalog.jsonb::pg_catalog.text",
+                &[&specimen.to_string()],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(super::catalog::canonical(&specimen), server);
+    }
+    check(&mut checks,"canonical catalog comparison rejects disabled RLS, extra UPDATE and missing named relation before reuse; a healthy readiness run pulls no document, each drift is refused after a digest mismatch, and the database's digest equals the service's digest of the pinned document (ADR-004 A6)");
     readiness_hooks.arm("recycle");
     let started = WallInstant::now();
     assert_eq!(empty.readiness().await, Err(Error::Deadline));
@@ -3085,6 +3162,122 @@ pub(super) mod refresh_herd {
         assert!(
             passed_gate,
             "gate A: every herd safe and at least two of three meet every APP-195 run A criterion with {GATE_PAGES} pages"
+        );
+    }
+}
+
+pub(super) mod readiness_traffic {
+    //! APP-216 part 1 `readiness-traffic` campaign: the bytes the database
+    //! transmits for one readiness run, read from the local Docker fixture's
+    //! network interface, with the number of catalog comparisons that ran and
+    //! how many of them pulled the whole document. The same probe measured
+    //! the code before and after ADR-004 amendment A6 (the catalog digest);
+    //! both reports are in `evidence/APP-216/`. Local evidence only, not run
+    //! in CI: the beta's figure is the RDS `NetworkTransmitThroughput` metric
+    //! after the release.
+    use super::{docker, Fixture, Stores, IMAGE};
+    use crate::storage::catalog;
+    use serde_json::json;
+    use std::time::Instant;
+
+    /// `(rx_bytes, tx_bytes)` of the container's `eth0`, from `/proc/net/dev`:
+    /// what the database received from and transmitted to the service.
+    fn interface_bytes(container: &str) -> (u64, u64) {
+        let text = docker(
+            &["exec", container, "cat", "/proc/net/dev"],
+            b"",
+            "interface counters",
+        );
+        for line in text.lines() {
+            let Some((name, rest)) = line.split_once(':') else {
+                continue;
+            };
+            if name.trim() != "eth0" {
+                continue;
+            }
+            let fields: Vec<u64> = rest
+                .split_whitespace()
+                .map(|field| field.parse().expect("a /proc/net/dev counter"))
+                .collect();
+            // receive: bytes packets errs drop fifo frame compressed multicast;
+            // then transmit: bytes ...
+            return (fields[0], fields[8]);
+        }
+        panic!("no eth0 in /proc/net/dev:\n{text}");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn native_readiness_traffic_campaign() {
+        const RUNS: u64 = 20;
+        let fixture = Fixture::new();
+        let stores = Stores::new(fixture.settings()).unwrap();
+        // The first run creates the four connections (TLS, admission); the
+        // measured runs reuse them, as the beta's probe does every 15 s.
+        stores.readiness().await.unwrap();
+        let embedded = catalog::Catalog::embedded().unwrap();
+        let (full_sql, digest_sql) = embedded.statements();
+        let operator = fixture.operator().await;
+        operator
+            .client
+            .batch_execute("BEGIN READ ONLY; SET LOCAL search_path=pg_catalog,pg_temp")
+            .await
+            .unwrap();
+        let body: String = operator
+            .client
+            .query_one(full_sql, &[])
+            .await
+            .unwrap()
+            .get(0);
+        let digest: Vec<u8> = operator
+            .client
+            .query_one(digest_sql, &[])
+            .await
+            .unwrap()
+            .get(0);
+        operator.client.batch_execute("ROLLBACK").await.unwrap();
+        let (rx_before, tx_before) = interface_bytes(&fixture.name);
+        let verified_before = catalog::verifications();
+        let full_before = catalog::compared_fully();
+        let started = Instant::now();
+        for _ in 0..RUNS {
+            stores.readiness().await.unwrap();
+        }
+        let elapsed = started.elapsed();
+        let (rx_after, tx_after) = interface_bytes(&fixture.name);
+        let comparisons = catalog::verifications() - verified_before;
+        let full = catalog::compared_fully() - full_before;
+        stores.close().await.unwrap();
+        let report = json!({
+            "schema_version": 1,
+            "scope": "APP-216 part 1: database bytes per readiness run on the local Docker fixture",
+            "postgres_image": IMAGE,
+            "server_version": fixture.server_version,
+            "runs": RUNS,
+            "catalog_document_octets": body.len(),
+            "catalog_digest_octets": digest.len(),
+            "comparisons": comparisons,
+            "comparisons_pulling_the_document": full,
+            "db_transmit_bytes_total": tx_after - tx_before,
+            "db_transmit_bytes_per_run": (tx_after - tx_before) / RUNS,
+            "db_receive_bytes_total": rx_after - rx_before,
+            "db_receive_bytes_per_run": (rx_after - rx_before) / RUNS,
+            "db_transmit_bytes_per_second_at_15s": (tx_after - tx_before) / RUNS / 15,
+            "db_transmit_bytes_per_day_at_15s": (tx_after - tx_before) / RUNS * 5760,
+            "elapsed_ms_per_run": elapsed.as_millis() as u64 / RUNS,
+            "limits": [
+                "Bytes are the container interface's counters: TLS records and protocol framing included, four role pools per run.",
+                "A local Docker PostgreSQL on a shared macOS host, not the beta's RDS instance; the beta's figure is its NetworkTransmitThroughput metric.",
+            ],
+        });
+        println!("APP216 report: {report}");
+        if let Some(path) = std::env::var_os("GENUI_READINESS_TRAFFIC_REPORT") {
+            std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
+        }
+        assert_eq!(
+            comparisons,
+            4 * RUNS as usize,
+            "readiness compares every pool on every run"
         );
     }
 }
