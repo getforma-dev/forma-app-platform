@@ -310,3 +310,6 @@ contracts/fixtures/impl-2026-11-14.1/stored/**
 !app/src/storage/record_query_campaign.rs
 !app/migrations/0025_organization_roles.sql
 !app/migrations/catalog-v25.json
+!app/migrations/0026_member_lifecycle.sql
+!app/migrations/catalog-v26.json
+!app/src/storage/member_lifecycle_campaign.rs

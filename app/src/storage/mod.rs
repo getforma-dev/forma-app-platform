@@ -207,8 +207,11 @@ mod composer_qualification;
 mod definition_qualification;
 #[cfg(test)]
 mod managed_qualification;
+// Migration 0026 (APP-229, APP-230): the entitlement extension and the member erasure.
 #[cfg(test)]
 mod mcp_campaign;
+#[cfg(test)]
+mod member_lifecycle_campaign;
 // Trial plan D4/D5/D6: consent, names and the organization admin definers.
 #[cfg(test)]
 mod org_admin_campaign;

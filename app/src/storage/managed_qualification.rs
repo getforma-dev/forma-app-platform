@@ -158,7 +158,7 @@ const CHECKS: [&str; 6] = [
     "same-backend commit/error-rollback reuse clears poisoned role/settings, listeners and advisory locks",
 ];
 const QUERY: &[u8] = include_bytes!("../../migrations/catalog-query.json");
-const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v25.json");
+const CATALOG: &[u8] = include_bytes!("../../migrations/catalog-v26.json");
 const MIGRATIONS: &[u8] = include_bytes!("../../migrations/manifest.json");
 const MANIFEST_LIMIT: u64 = 8192;
 const REGISTRY_LIMIT: u64 = 16384;
@@ -179,7 +179,7 @@ const RESULT_LIMIT: usize = 8192;
 /// tests embed). Only the embedded catalog/migration resources are pinned
 /// separately below. This is a binding of compiled inputs, not a whole-image
 /// or Git-revision attestation.
-const SOURCES: [(&str, &[u8]); 238] = [
+const SOURCES: [(&str, &[u8]); 239] = [
     ("Cargo.lock", include_bytes!("../../../Cargo.lock")),
     ("Cargo.toml", include_bytes!("../../../Cargo.toml")),
     ("app/Cargo.toml", include_bytes!("../../Cargo.toml")),
@@ -665,6 +665,10 @@ const SOURCES: [(&str, &[u8]); 238] = [
     (
         "app/src/storage/mcp_campaign.rs",
         include_bytes!("mcp_campaign.rs"),
+    ),
+    (
+        "app/src/storage/member_lifecycle_campaign.rs",
+        include_bytes!("member_lifecycle_campaign.rs"),
     ),
     ("app/src/storage/mod.rs", include_bytes!("mod.rs")),
     (

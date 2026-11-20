@@ -248,3 +248,5 @@ parser/vendor/zip-9.1.3/src/write/**
 !app/migrations/catalog-v24.json
 !app/migrations/0025_organization_roles.sql
 !app/migrations/catalog-v25.json
+!app/migrations/0026_member_lifecycle.sql
+!app/migrations/catalog-v26.json

@@ -32,6 +32,21 @@ purge           step two, behind --confirm <organization>: stats, the operator's
                 purge-organization task (every content row, in one transaction, keeping the
                 audit chains), stats again proving zero, then every S3 version and delete
                 marker under o/<org>/ (box files and source objects), with an intent first.
+extend-entitlement  one member's (--principal) or every active member's (--all-active)
+                entitlements moved later to --until (RFC 3339 UTC), never earlier; a lapsed
+                member comes back; needs migration 0026 (APP-229). One receipt pair per task.
+erase-member    deletion on request (APP-230, migration 0026), behind --confirm <principal>,
+                for a member already removed: the erase-member task first (the member's apps,
+                folders, files, sources, sessions, tokens, links, cards, labels, grants and
+                shares in one transaction; the principal, membership, consent, redemption and
+                audit rows stay, as does every entry made in someone else's app, nameless),
+                and only once it has committed every S3 version its result names (every file
+                the member uploaded or kept in their folders, the normalized objects of the
+                deleted sources), with an intent first: a refused task deletes no object. The
+                result's `next` is the fAuth deletion of the
+                member's sign-in account (runbook §10a): the task does not call fAuth, because
+                the hard delete of a user crosses a second trust boundary and is recorded with
+                stats before and after by the operator's own identity, as the purge does.
 
 Not here: changing the organization's display name (the operator has only `provision
 --display-name`, which creates), membership removal (the in-product Admin page), and
@@ -62,6 +77,8 @@ EMPTY_INPUT = '{}'
 PROVIDER_ROLE = 'user'
 # ADR-021 (migration 0025): the organization roles set-role may name.
 ROLES = ('owner', 'admin', 'manager', 'member', 'viewer')
+# APP-229 (migration 0026): extend-entitlement's --until, RFC 3339 UTC to the second (the task bounds it).
+UNTIL_RE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z')
 TASK_WAIT_SECONDS = 900
 RESTART_WAIT_SECONDS = 900
 LOG_EVENT_BYTES_MAX = 1024 * 1024
@@ -313,6 +330,72 @@ class Trial:
         """The runbook's alias: `set-role member` (the reviewed undo of an admin grant to the wrong member)."""
         return dict(self.set_role(principal, 'member'), status='revoked-admin')
 
+    def extend_entitlement(self, until, principal=None, all_active=False):
+        """APP-229 (migration 0026): one member's or every active member's entitlements moved later, never earlier."""
+        require(isinstance(until, str) and UNTIL_RE.fullmatch(until), '--until must be RFC 3339 UTC to the second, for example 2027-02-15T00:00:00Z')
+        require((principal is not None) != bool(all_active), 'extend-entitlement takes exactly one of --principal and --all-active')
+        if all_active:
+            override, sets = 'admission-extend-entitlement-all', [('--organization', self.organization), ('--until', until)]
+        else:
+            require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
+            override, sets = 'admission-extend-entitlement', [('--organization', self.organization), ('--principal', principal), ('--until', until)]
+        outcome = self.operator_task(override, sets, 'extend-entitlement')
+        result = outcome['result'] if isinstance(outcome['result'], dict) else {}
+        require(outcome['exit_code'] == 0 and result.get('until') == until and result.get('organization_id') == self.organization
+                and isinstance(result.get('entries'), list),
+                'extend-entitlement task did not succeed: ' + str(result.get('refused') or 'no result'))
+        return dict(result, status='extended', receipts=self.receipts)
+
+    def erase_member(self, principal, confirm):
+        """APP-230 (migration 0026): deletion on request. The erase-member task decides first; only after it has
+        committed are the objects it names swept (every file the member uploaded or kept in their folders, the
+        deleted sources' normalized objects), behind an intent. A refusal deletes no object (review MAJOR-3)."""
+        require(isinstance(principal, str) and UUID_RE.fullmatch(principal), 'principal must be a canonical UUID')
+        require(confirm == principal, '--confirm must repeat the principal id exactly')
+        outcome = self.operator_task('admission-erase-member', [('--organization', self.organization), ('--principal', principal), ('--confirm', principal)], 'erase-member')
+        result = outcome['result'] if isinstance(outcome['result'], dict) else {}
+        require(outcome['exit_code'] == 0 and result.get('status') == 'erased' and result.get('principal_id') == principal
+                and isinstance(result.get('object_keys'), list) and isinstance(result.get('source_revisions'), list),
+                'erase-member task did not succeed: ' + str(result.get('refused') or 'no result'))
+        bucket = self.outputs['EvidenceBucket']
+        # Every key must be exactly this organization's box-file key; every source revision a pair of UUIDs.
+        file_pattern = re.compile(r'o/' + re.escape(self.organization) + r'/b/' + UUID_RE.pattern + r'/f/' + UUID_RE.pattern)
+        keys = []
+        for key in result['object_keys']:
+            require(isinstance(key, str) and file_pattern.fullmatch(key), 'object key outside this organization\'s box files: refused')
+            keys.append(key)
+        prefixes = []
+        for pair in result['source_revisions']:
+            require(isinstance(pair, list) and len(pair) == 2 and all(isinstance(v, str) and UUID_RE.fullmatch(v) for v in pair), 'source revision ids malformed: refused')
+            prefixes.append('o/%s/s/%s/r/%s/' % (self.organization, pair[0], pair[1]))
+        require(len(keys) + len(prefixes) <= 100, 'more than 100 objects named by the task; inspect its result before sweeping')
+        planned = [{'key': key, 'versions': self.versions(bucket, key)} for key in keys]
+        for prefix in prefixes:
+            for item in self.prefix_versions(bucket, prefix):
+                planned.append({'key': item['Key'], 'versions': [{'VersionId': item['VersionId'], 'kind': item['kind']}]})
+        # The intent, in the journal pattern, before the first deletion: what will be deleted and why.
+        self.receipt('erase-objects-intent', {'bucket': bucket, 'principal_id': principal, 'files': planned, 'source_prefixes': prefixes,
+                                              'versions': sum(len(f['versions']) for f in planned), 'rows_deleted': result.get('rows_deleted'),
+                                              'audit_event': result.get('audit_event')})
+        deleted = 0
+        for plan in planned:
+            for version in plan['versions']:
+                self.aws.call('s3', 'delete_object', Bucket=bucket, Key=plan['key'], VersionId=version['VersionId'])
+                deleted += 1
+        remaining = [k for k in keys if self.versions(bucket, k)] + [p for p in prefixes if self.prefix_versions(bucket, p)]
+        self.receipt('erase-objects-done', {'bucket': bucket, 'principal_id': principal, 'deleted': deleted, 'remaining': remaining})
+        require(not remaining, 'object versions remain after the erasure sweep: inspect the receipt')
+        subject = result.get('provider_subject')
+        return {'status': 'erased', 'principal_id': principal, 'changed': result.get('changed'), 'audit_event': result.get('audit_event'),
+                'rows_deleted': result.get('rows_deleted'), 'deleted': result.get('deleted'), 'kept': result.get('kept'),
+                'apps': result.get('apps'), 'boxes': result.get('boxes'), 'boxes_detached': result.get('boxes_detached'),
+                'sources': result.get('sources'), 'sources_kept': result.get('sources_kept'),
+                'objects': {'files': len(keys), 'source_prefixes': len(prefixes), 'versions_deleted': deleted},
+                'provider_subject': subject, 'receipts': self.receipts,
+                'next': ('Delete the sign-in account in fAuth with your own identity (runbook §10a): POST /manage/users/%s/revoke-sessions, '
+                         'then DELETE /manage/users/%s, with /manage/stats before and after; record both with this receipt.' % (subject, subject))
+                        if subject else 'Already erased on a previous run: the fAuth user id is in that run\'s receipt; nothing to repeat here.'}
+
     def reviewer(self, grant, principal, app, work):
         for value in (principal, app, work):
             require(isinstance(value, str) and UUID_RE.fullmatch(value), 'principal, app and work must be canonical UUIDs')
@@ -481,7 +564,7 @@ def _unique(pairs):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('command', choices=['issue', 'list', 'revoke', 'set-role', 'grant-admin', 'revoke-admin', 'grant-reviewer', 'revoke-reviewer',
-                                            'delete-uploads', 'restart', 'suspend', 'purge'])
+                                            'delete-uploads', 'restart', 'suspend', 'purge', 'extend-entitlement', 'erase-member'])
     parser.add_argument('--state-bucket', required=True)
     parser.add_argument('--state-prefix', default='beta')
     parser.add_argument('--expected-state-sha256', required=True)
@@ -498,8 +581,14 @@ def main(argv=None):
     parser.add_argument('--app', help='grant-reviewer, revoke-reviewer: the app id')
     parser.add_argument('--work', help='grant-reviewer, revoke-reviewer: the saved work id')
     parser.add_argument('--announced', action='store_true', help='restart: the members were told the service restarts now')
-    parser.add_argument('--confirm', help='purge: the organization id again, typed, for the irreversible deletion')
+    parser.add_argument('--confirm', help='purge: the organization id again; erase-member: the principal id again, typed, for the irreversible deletion')
+    parser.add_argument('--until', help='extend-entitlement: the new expiry, RFC 3339 UTC, for example 2027-02-15T00:00:00Z')
+    parser.add_argument('--all-active', action='store_true', help='extend-entitlement: every active member of the organization instead of --principal')
     args = parser.parse_args(argv)
+    if args.command == 'extend-entitlement' and not (args.until and (bool(args.principal) != args.all_active)):
+        parser.error('extend-entitlement needs --until and exactly one of --principal and --all-active')
+    if args.command == 'erase-member' and not (args.principal and args.confirm):
+        parser.error('erase-member needs --principal and --confirm <principal>')
     if args.command == 'issue' and not (args.count and args.notes_file and args.identifiers):
         parser.error('issue needs --count, --notes-file and --identifiers')
     if args.command == 'revoke' and not args.code:
@@ -547,6 +636,10 @@ def main(argv=None):
             result = trial.suspend()
         elif args.command == 'purge':
             result = trial.purge(args.confirm)
+        elif args.command == 'extend-entitlement':
+            result = trial.extend_entitlement(args.until, args.principal, args.all_active)
+        elif args.command == 'erase-member':
+            result = trial.erase_member(args.principal, args.confirm)
         else:
             result = trial.restart(args.announced)
         if args.command != 'issue':

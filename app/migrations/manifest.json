@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "database_version": 25,
+  "database_version": 26,
   "migrations": [
     {
       "version": 1,
@@ -126,6 +126,11 @@
       "version": 25,
       "file": "0025_organization_roles.sql",
       "sha256": "612dcc7e1b128dfcb04bba27d5881edc5b87591626b3f64f8e4f151a7ffa8ac5"
+    },
+    {
+      "version": 26,
+      "file": "0026_member_lifecycle.sql",
+      "sha256": "5e62751e0f4945eaddce801d32988bcdc157aeed76059a98bbdebc65f8f00c7b"
     }
   ],
   "catalog": [
@@ -232,6 +237,10 @@
     {
       "file": "catalog-v25.json",
       "sha256": "c06d8b742d76eb59ff65cfe636fd6cc339fdd2073af8eddddc3a2a032261b59c"
+    },
+    {
+      "file": "catalog-v26.json",
+      "sha256": "08a418561676edffac5423905d1ba172fafbdf3667b8bfdf69bc63f8b62aa076"
     }
   ]
 }

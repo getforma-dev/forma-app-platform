@@ -130,11 +130,20 @@ CHAIN_KINDS = {
                                   'admission.consented','member.named','membership.revoked','entitlement.revoked','permission.revoked',
                                   'membership.role_changed')),
     # 0005 widens the operator list in place (ALTER POLICY): ADR-007 amendment 2026-10-29 (APP-010 review M2).
+    # 0026 (APP-229, APP-230): the operator's entitlement extension and member erasure.
     'genui_owner': ('operator', ('organization.provisioned','handle.rotated','code.issued','code.revoked','code.extended',
                                  'membership.revoked','entitlement.revoked','permission.granted','permission.revoked',
                                  'creator_authority.revoked','provider.invitation.created','provider.invitation.reconciled',
                                  'provider.invitation.revoked','source_revision.registered','work.seeded',
-                                 'provider_tenant.bound','app.seeded','membership.role_changed')),
+                                 'provider_tenant.bound','app.seeded','membership.role_changed','entitlement.extended','member.erased')),
+}
+# Migration 0026 (CLASS-CONTINUATION-PLAN §2.2/§2.3; APP-229, APP-230): the two operator
+# definers, owned by genui_owner (NOLOGIN, the tenant relations' owner, no BYPASSRLS), called
+# by the operator channel under organization scope and FORCE RLS; EXECUTE revoked from PUBLIC.
+OPERATOR_FUNCTIONS = {
+    'extend_entitlement': ('p_org uuid, p_principal uuid, p_until timestamp with time zone',
+                           'TABLE(outcome text, changed boolean, expires_at timestamp with time zone, expires_before timestamp with time zone)'),
+    'erase_member': ('p_org uuid, p_principal uuid', 'TABLE(outcome text, changed boolean, report jsonb)'),
 }
 
 
@@ -2160,8 +2169,14 @@ def qualify():
                 assert len(policies)==5 and all(r[1:4]==('account_scope','PERMISSIVE','ALL') and 'genui.account_id' in r[4] and r[4]==r[5] for r in policies)
                 assert all(('flow_id' if r[0]=='shared_auth_flows' else 'account_id') in r[4] for r in policies)
                 cleanup=c.execute("""SELECT tablename,roles::text[],cmd,qual,with_check FROM pg_policies
-                  WHERE schemaname='genui_identity' AND policyname<>'account_scope' ORDER BY tablename""").fetchall()
-                assert cleanup==[('accounts',['genui_admit'],'SELECT','true',None),('shared_auth_flows',['genui_admit'],'ALL','true','false'),('shared_sessions',['genui_admit'],'ALL','true','false')],cleanup
+                  WHERE schemaname='genui_identity' AND policyname<>'account_scope' ORDER BY tablename,policyname""").fetchall()
+                # 0026 (APP-230): the operator's organization-scoped reach into the guests' links and the
+                # share sign-in flows, under FORCE, for the erasure of a member's live shares (never a lifted FORCE).
+                operator_policy="(organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
+                flows_policy="(owner_organization_id = (NULLIF(current_setting('genui.organization_id'::text, true), ''::text))::uuid)"
+                assert cleanup==[('accounts',['genui_admit'],'SELECT','true',None),('linked_apps',['genui_owner'],'ALL',operator_policy,operator_policy),
+                                 ('shared_auth_flows',['genui_admit'],'ALL','true','false'),('shared_auth_flows',['genui_owner'],'ALL',flows_policy,flows_policy),
+                                 ('shared_sessions',['genui_admit'],'ALL','true','false')],cleanup
                 assert c.execute("""SELECT count(*) FROM information_schema.column_privileges
                   WHERE table_schema='genui_identity' AND grantee IN ('genui_control','genui_worker')""").fetchone()==(0,)
                 assert c.execute("""SELECT count(*) FROM information_schema.column_privileges
@@ -2201,7 +2216,14 @@ def qualify():
                 # functions (checked in detail by admission_checks) are genui_admit's.
                 assert sorted(r for r in functions if r[1]=='genui_lock')==[(name,'genui_lock',True,['search_path=pg_catalog, genui, pg_temp'])
                     for name in ('lock_member_authority','lock_work_revision')]
-                assert sorted(r[0] for r in functions if r[1]!='genui_lock')==sorted(ADMIT_FUNCTIONS)
+                assert sorted(r[0] for r in functions if r[1]=='genui_admit')==sorted(ADMIT_FUNCTIONS)
+                # 0026 (APP-229, APP-230): the two operator definers are genui_owner's, STRICT, SECURITY
+                # DEFINER with the fixed search_path, EXECUTE revoked from PUBLIC (checked for every function below).
+                assert sorted(r for r in functions if r[1]=='genui_owner')==[(name,'genui_owner',True,['search_path=pg_catalog, pg_temp']) for name in sorted(OPERATOR_FUNCTIONS)],functions
+                assert {r[1] for r in functions}=={'genui_lock','genui_admit','genui_owner'},functions
+                operator_functions=c.execute("""SELECT p.proname,pg_get_function_identity_arguments(p.oid),pg_get_function_result(p.oid),p.provolatile::text
+                  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='genui_private' AND pg_get_userbyid(p.proowner)='genui_owner' ORDER BY p.proname""").fetchall()
+                assert {r[0]:(r[1],r[2]) for r in operator_functions}==OPERATOR_FUNCTIONS and all(r[3]=='v' for r in operator_functions),operator_functions
                 assert c.execute("""SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace,
                   LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
                   WHERE n.nspname='genui_private' AND a.grantee=0 AND a.privilege_type='EXECUTE'""").fetchone()==(0,)
