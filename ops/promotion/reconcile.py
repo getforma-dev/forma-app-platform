@@ -98,6 +98,16 @@ def assessed_ledger(state, assessment, observation, clock):
     return updated
 
 
+def refresh_validator(config, ledger, clock):
+    """The live window checked against a refreshed ledger (reconcile apply, month_renewal): caps,
+    reserve floors, expiry, bindings and all historical money exactly as a reservation checks them,
+    with every month the window spans present and well-formed but not required fresh. Freshness is
+    `preflight.reserve`'s own rule at reservation time, where money is committed; a refresh never
+    spends, and requiring it here let two months more than a day stale block each other, so that
+    neither could be refreshed and no release could prepare (APP-228 review, 2026-11-15)."""
+    return preflight().reserve(config, ledger, clock, refresh=True)
+
+
 def apply(store, assessment, observation, clock, verified_observation, validator=None):
     state = store.load()
     require(state.get('active') is None, 'deployment or recovery holds the canonical lock')
@@ -113,7 +123,7 @@ def apply(store, assessment, observation, clock, verified_observation, validator
         + digest(verified_observation) + '; operator assessment: ' + assessment['rationale'])
     # The actual existing window checks unchanged caps, reserve floors, expiry,
     # schema/trial bindings and all historical money. Discard its proposed ledger.
-    validator = validator or preflight().reserve
+    validator = validator or refresh_validator
     checked, _ = validator(state['live']['config'], ledger, clock)
     require(checked == ledger, 'reconciliation would change a deployment window')
     receipt = 'promotions/reconciliation-' + str(uuid.uuid4()) + '/assessment.json'

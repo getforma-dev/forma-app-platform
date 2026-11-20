@@ -46,7 +46,7 @@
       "Default": 248,
       "MinValue": 1,
       "MaxValue": 1000,
-      "Description": "The whole-account monthly cost budget in USD. ADR-019 amendment (2026-11-14): the trial ceiling is $248 for November (GenUI $210 plus fAuth $38) and $118 for December to the Dec 16 stop; change the parameter at the month boundary. Notices at 80% and 100% actual and 100% forecast."
+      "Description": "The whole-account monthly cost budget in USD. ADR-019 amendment (2026-11-14) and amendment 2 (2026-11-15): the ceiling is $248 for November and for December (GenUI $210 plus fAuth $38) and about $160 for January to the Jan 15 stop; change only the amount, at the month boundary, never the email. Notices at 80% and 100% actual and 100% forecast."
     }
   },
   "Resources": {

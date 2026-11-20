@@ -4,13 +4,14 @@ Only AWS transport, current GitHub reads and public TLS transport are synthetic.
 No cloud API is called. Failures occur after accepted mutations to model lost ACKs.
 """
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import uuid
 from infra.test.preflight_test import always_on
 from ops.promotion import guards
 from ops.promotion.runner import Runner, preflight
@@ -52,6 +53,35 @@ def fixture(manifest):
         live=dict(candidate_sha='f'*40,window_id=config['window_id'],config=config,parameters=reserved['cloudformation_parameters'],
             outputs=outputs,stack_execution_role_arn=f'arn:aws:iam::{guards.ACCOUNT}:role/old-cfn',
             registry={r:dict(index_digest='sha256:'+c*64,manifest_digest='sha256:'+c*64,findings=[]) for r,c in zip(guards.REPOS,'abc')}))
+
+
+# The always-on reserves of the real-user trial and the class continuation (ADR-019 amendments).
+RESERVES = {'prior_extra_spend_cents': 0, 'variable_reserve_cents': 1500, 'auth_spent_or_reserved_cents': 3800, 'unallocated_cents': 0}
+
+
+def reconciled(ledger, name, when, basis='Synthetic fixture month, not AWS billing evidence'):
+    """Add or refresh a ledger month, reconciled an hour before `when` (fresh for a reservation at `when`)."""
+    entry = ledger['months'].setdefault(name, dict(RESERVES, basis=basis))
+    entry['reconciled_at_utc'] = (when - timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return entry
+
+
+def live_window(state, expires_at, reserved_at):
+    """Move the fixture's live window forward: a window superseding the live one, reserved at
+    `reserved_at` with the stop `expires_at` and activated, with the stack parameters and both stop
+    schedules reading it (what FakeAWS records after an execute). Every month the window touches is
+    reconciled an hour before the reservation. Build FakeAWS and the store after calling this."""
+    budget = preflight()
+    config = copy.deepcopy(state['live']['config'])
+    config.update(window_id=str(uuid.uuid5(uuid.NAMESPACE_URL, 'forma:fixture:live-window:' + expires_at)),
+                  supersedes_window_id=state['live']['window_id'], deployment_expires_at_utc=expires_at)
+    for name in budget.months_between(reserved_at, budget.timestamp(expires_at) + timedelta(hours=1)):
+        reconciled(state['ledger'], name, reserved_at)
+    state['ledger'], reserved = budget.reserve(config, state['ledger'], reserved_at, activating=True)
+    state['live'].update(window_id=config['window_id'], config=config, parameters=reserved['cloudformation_parameters'])
+    for schedule in state['baseline']['schedules'].values():
+        schedule['ScheduleExpression'] = 'at(' + expires_at[:-1] + ')'
+    return config
 
 
 class FakeAWS:

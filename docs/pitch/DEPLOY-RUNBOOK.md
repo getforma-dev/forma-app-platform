@@ -119,7 +119,7 @@ Steps 2.1–2.2: **`just deploy push <window-id> --approved "…"`** (digests in
   | `supersedes_window_id` | the live window: the head of the chain, `34e746fa-…` at the last deploy. Never the earlier ones. |
   | `image_digest`, `qualification_image_digest`, `operator_image_digest` | the three digests from 2.2 |
   | `service_desired_count` | `0` |
-  | `deployment_expires_at_utc` | the always-on backstop: whole-second UTC with `Z`, between 10 minutes and 32 days from now. Keep the live window's value while it is still more than a day away; otherwise renew it. |
+  | `deployment_expires_at_utc` | the always-on backstop: whole-second UTC with `Z`, between 10 minutes and 45 days from now (ADR-019 amendment 2; it was 32 days). Keep the live window's value while it is still more than a day away; otherwise renew it. |
 
   All other fields keep the live window's values. Before running the preflight, check the ledger's month-to-date. The reservation caps are the code's: $210 GenUI and $248 project since the 2026-11-14 amendment of [ADR-019](../architecture/ADR-019-MAIN-TRUNK-AND-RESERVATION-CAP.md) (the real-user trial; $180 / $218 from November 3, and $170 / $208 before that).
 
